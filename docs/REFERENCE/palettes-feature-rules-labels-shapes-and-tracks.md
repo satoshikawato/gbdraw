@@ -261,6 +261,11 @@ Supported feature renderings include directional `arrow`, nondirectional
 `rectangle`, and full-band `underlay`. Underlays require an enabled feature
 anchor and render behind foreground glyphs. Block strokes, connector strokes,
 fill, width, visibility, and overlap resolution are separate controls.
+A partial end is drawn open: no arrowhead and no block stroke on that edge, so
+the feature reads as continuing past it. This covers ends written as partial in
+the source location (`<1..1635`, `48045..>48169`, `complement(<1..242)`), ends
+cut by a region crop, and a record's display-start seam. Only the outer ends of
+a multi-part location can be partial.
 Overlap resolution may add drawing lanes but does not crop a feature or change
 comparison results. Separate-strand placement and overlap resolution can be enabled together in
 both modes. Undefined-strand features share the nominal negative pool with

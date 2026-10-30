@@ -259,17 +259,15 @@ class FeaturePathGenerator:
                 separate_strands=self.separate_strands,
             ).positions
 
-        for coord_index, coord in enumerate(coords):
+        for coord in coords:
             coord_dict = {
                 "feat_type": coord.kind,
                 "feat_strand": coord.strand,
                 "feat_start": coord.start,
                 "feat_end": coord.end,
+                "open_start": coord.open_start,
+                "open_end": coord.open_end,
             }
-            if gene_object.display_parts is not None:
-                fragment = gene_object.display_parts[coord_index].fragment
-                coord_dict.update(display_fragment=True, open_start=fragment.artificial_start,
-                                  open_end=fragment.artificial_end)
             feat_type = coord_dict["feat_type"]
 
             if feat_type == "line":

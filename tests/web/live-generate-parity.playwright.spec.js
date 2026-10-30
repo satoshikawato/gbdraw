@@ -1142,10 +1142,11 @@ test('a stroke and a palette change reach a Session 30 Result loaded without a f
   });
   await settleLive(page);
   // A 0.13.0 Result has no part or label records, so it is compared with
-  // Generate by the fill of each feature.
+  // Generate by the fill of each feature. It also has no stroke-only outline
+  // (fill none) on a partial feature, which Generate now draws.
   expect(await fills(), 'the palette change reaches the Result').not.toEqual(before);
   const featureFills = async () => Object.fromEntries(Object.entries((await semanticSnapshot(page)).features)
-    .map(([id, { fill }]) => [id, fill]));
+    .map(([id, { fill }]) => [id, fill.filter((value) => value !== 'none')]));
   const live = await featureFills();
   await generate(page);
   // OV-401: Generate writes the source-record hash into the IDs of the

@@ -26,6 +26,14 @@ write-up of a release.
   it, on a Circular Result drawn with a custom stack or track widths or radii, applies on
   Generate, with every track it would hide or show, instead of leaving the stack and hiding
   tracks from it.
+- Changed: partial feature ends are drawn open in Linear and Circular diagrams: no arrowhead
+  and no block stroke on that edge. This covers ends written as partial in the file
+  (`<1..1635`, `48045..>48169`, `complement(<1..242)`) and ends cut by `--region` or a
+  records-table `region` (OV-2272).
+- Fixed: a region crop marks every cut end as partial. A minus-strand feature cut by the
+  region kept no `<`/`>` marker (OV-2273), and partial markers written in the file were
+  dropped by any crop (OV-2274).
+- Fixed: a block outline with one open end joins its corners at the closed end (OV-2275).
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-30
 

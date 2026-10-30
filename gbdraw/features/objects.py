@@ -4,14 +4,17 @@
 """
 Core feature data models.
 
-`FeatureObject.location` is a list of 6-tuples:
-  (kind, segment_id, strand, start, end, is_last)
+`FeatureObject.location` is a list of FeatureLocationPart tuples:
+  (kind, segment_id, strand, start, end, is_last, open_start, open_end)
 
 - kind: "block" (exon / feature block) or "line" (intron / connector)
 - segment_id: zero-padded id string (e.g. "001")
 - strand: "positive" / "negative" / "undefined"
 - start/end: 0/1-based-ish coordinates depending on upstream parsing (kept as-is for compatibility)
-- is_last: True only for the last exon block in a multi-part feature
+- is_last: True only for the last block when its 3' end is a known biological
+  end (not partial); the arrowhead is drawn there
+- open_start/open_end: the feature continues past `start`/`end` (a partial end or
+  a display seam); the glyph draws no cap or edge stroke there
 """
 
 from __future__ import annotations
@@ -72,6 +75,8 @@ class FeatureLocationPart(NamedTuple):
     start: int
     end: int
     is_last: bool
+    open_start: bool = False
+    open_end: bool = False
 FeatureLocation = list[FeatureLocationPart]
 
 
@@ -88,6 +93,7 @@ class FeatureDisplayPart(NamedTuple):
         return FeatureLocationPart(
             self.kind, str(fragment.part_index + 1).zfill(3), self.strand,
             fragment.display_start, fragment.display_end, fragment.biological_end,
+            fragment.open_start, fragment.open_end,
         )
 
 

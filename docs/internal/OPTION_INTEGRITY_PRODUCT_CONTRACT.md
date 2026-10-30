@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `104`
+- Contract revision: `105`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -41,7 +41,7 @@ Status: active Product authority
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
   `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
   `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, `PD-OI-106`,
-  `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, and `PD-OI-110`
+  `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, `PD-OI-110`, and `PD-OI-111`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -3852,6 +3852,32 @@ Status: active Product authority
   - This change is Contract-only: the Contract is the only changed path, and
     the Review is `REQUIRED`. The runtime that implements it follows in a
     separate pull request, which cites this authority on its base.
+- Revision 105 change: `PD-OI-111` is added (concern
+  `features.partial-ends-open`, scenario revision `1`; the outcome
+  `PARTIAL-END-OPEN`). A feature end that is a partial end (`<` or `>` in the
+  file, or an end cut by a gbdraw crop) is drawn without an arrowhead and
+  without the stroke on that edge, in Linear and Circular. It comes from the
+  Product Decision Owner `satoshikawato`'s replies of `2026-10-30` in the
+  Claude Code session of the campaign `linear-wrap-1428-20261030`
+  (`DECISIONS.md` `W-15`, `W-16`, and `W-30`). Each reply is quoted as
+  written.
+  - W-15 (`2026-10-30`), on a feature cut at a row boundary of a wrapped
+    Linear diagram getting a second arrowhead there. Reply:
+    「これは直しとかないとね」
+  - W-16 (`2026-10-30`), on partial ends written in the GenBank file.
+    Reply:
+    「GenBank ファイルにもともと書かれている部分配列も矢じりなしにする。その辺のストロークを消して(まだ続きがあることを意味する)」
+  - W-30 (`2026-10-30`). The session showed the receipt below. Reply:
+    「receipt 文案（/home/kawato/gbdraw-baselines/linear-wrap-1428-20261030/receipts/PD-partial-ends-DRAFT.txt）を承認」
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-111` scenario revision `1`
+    `f270b71834799c7874c786be2d24fb0fedad97ebe97605321342f75443708fa7`.
+  - No other record is amended or retired. No earlier record governs how
+    partial feature ends are drawn.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -10422,6 +10448,57 @@ Decision date: 2026-10-28
   "acceptedResidualRisk": "10 色は 11 本目から繰り返し、隣り合わない組（例: 緑と桃）は 2 型色覚でほぼ同じ色（ΔE 1.1）。5 本ごとに 1 色は組の中が同じ色で 31 本目から繰り返す。ホバーは印刷と SVG 書き出しに残らない",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-28"
+}
+```
+
+### PD-OI-111: Partial feature ends drawn open
+
+- Concern key: `features.partial-ends-open`
+- Scenario revision: `1`
+- Supersedes: none. No earlier record fixed how a partial feature end is
+  drawn.
+- Status: `ACCEPTED`
+- Selected outcome: `PARTIAL-END-OPEN`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-30` quoted in the Revision 105
+  entry above (W-15, W-16, and W-30). The receipt and JSON below reproduce all
+  nine fields of the approved receipt without translation or additional
+  terms. The runtime that implements it merges with it (static Product
+  Contract co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `f270b71834799c7874c786be2d24fb0fedad97ebe97605321342f75443708fa7`.
+
+```text
+PRODUCT_DECISION
+Concern: features.partial-ends-open（部分配列の feature の端の描き方）
+Scenario revision: 1
+Choice: PARTIAL-END-OPEN
+  - feature の端が部分配列の端（GenBank の `<` / `>`、または gbdraw のクロップ `--region`・records table の region で切れた端）のとき、その端に矢じりを描かず、その辺の線（ストローク）も描かない。続きがあることを示す。
+  - 元のファイルに書かれた部分配列も、gbdraw が切った端も同じ扱い。Linear と Circular の両方。
+  - join の内側の部分の印は対象外。対象は feature の外側の端だけ。
+  - 逆相補（`--reverse_complement`、region の `:rc`）では、印は向きに従って反対側の端に移る。
+  - 部分でない端は今までどおり矢じりと線を描く。
+  - クロップは、マイナス鎖で切れた端にも、元のファイルの部分配列の印にも `<` / `>` を残す。そのため、クロップで部分配列になった CDS は、クロップしない部分配列の CDS と同じ扱いになる（Web のポップアップにアミノ酸配列を出さない。LOSATP の比較で先頭の残基を M に置き換えない）。
+Rationale: 部分配列の端は feature の本当の端ではないので、矢じりや線で「そこで終わる」と示すのは誤り。
+Must preserve: 完全な端の矢じりと線。起点をずらしたときの切れ目の描き方。feature の色・ラベル・識別子。部分配列でない CDS のポップアップとアミノ酸配列。クロップの範囲の意味
+May retire: 部分配列の端（元のファイルの `<` / `>` の端と、クロップで切れた端）に描いていた矢じりと線。クロップで部分配列になった CDS について、今まで出していたアミノ酸配列（Web のポップアップ）と先頭残基の M への置き換え（LOSATP）
+Accepted residual risk: Gallery の Session、GUI のスクリーンショット、examples/ の図のうち部分配列を含むものは、次の更新まで古い描き方のまま。GFF3 の部分配列の属性（partial、start_range / end_range）はまだ読まない
+Owner: satoshikawato
+Decision date: 2026-10-30
+```
+
+```json
+{
+  "concern": "features.partial-ends-open（部分配列の feature の端の描き方）",
+  "scenarioRevision": 1,
+  "choice": "PARTIAL-END-OPEN\n  - feature の端が部分配列の端（GenBank の `<` / `>`、または gbdraw のクロップ `--region`・records table の region で切れた端）のとき、その端に矢じりを描かず、その辺の線（ストローク）も描かない。続きがあることを示す。\n  - 元のファイルに書かれた部分配列も、gbdraw が切った端も同じ扱い。Linear と Circular の両方。\n  - join の内側の部分の印は対象外。対象は feature の外側の端だけ。\n  - 逆相補（`--reverse_complement`、region の `:rc`）では、印は向きに従って反対側の端に移る。\n  - 部分でない端は今までどおり矢じりと線を描く。\n  - クロップは、マイナス鎖で切れた端にも、元のファイルの部分配列の印にも `<` / `>` を残す。そのため、クロップで部分配列になった CDS は、クロップしない部分配列の CDS と同じ扱いになる（Web のポップアップにアミノ酸配列を出さない。LOSATP の比較で先頭の残基を M に置き換えない）。",
+  "rationale": "部分配列の端は feature の本当の端ではないので、矢じりや線で「そこで終わる」と示すのは誤り。",
+  "mustPreserve": "完全な端の矢じりと線。起点をずらしたときの切れ目の描き方。feature の色・ラベル・識別子。部分配列でない CDS のポップアップとアミノ酸配列。クロップの範囲の意味",
+  "mayRetire": "部分配列の端（元のファイルの `<` / `>` の端と、クロップで切れた端）に描いていた矢じりと線。クロップで部分配列になった CDS について、今まで出していたアミノ酸配列（Web のポップアップ）と先頭残基の M への置き換え（LOSATP）",
+  "acceptedResidualRisk": "Gallery の Session、GUI のスクリーンショット、examples/ の図のうち部分配列を含むものは、次の更新まで古い描き方のまま。GFF3 の部分配列の属性（partial、start_range / end_range）はまだ読まない",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-30"
 }
 ```
 

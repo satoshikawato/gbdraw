@@ -170,5 +170,11 @@ def block_path_with_open_caps(
         cap = re.search(re.escape(end_cap) + r"(?![\d.eE])", outline)
         if cap is None:
             raise ValueError(f"The end-cap command {end_cap!r} is not in the path")
-        outline = outline[: cap.start()] + "M" + end_cap[1:] + outline[cap.end():]
+        before, after = outline[: cap.start()], outline[cap.end():]
+        if open_tail:
+            outline = before + "M" + end_cap[1:] + after
+        else:
+            # The tail cap returns to the first point, so the stroke after the open
+            # end continues into the one before it: one subpath, joined corners.
+            outline = "M" + end_cap[1:] + after + " " + re.sub(r"^M\s*\S+\s*", "", before).rstrip()
     return ["block", path, outline]
