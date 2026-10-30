@@ -4,11 +4,12 @@
 
 gbdraw `0.14.4` is a patch release of [0.14.3](./RELEASE_NOTES_0.14.3.md). It
 fixes LOSATP comparisons of circular records that have a CDS across the
-origin, which were drawn over the whole record. It also adds similarity-ring
-color schemes to the command line and the Python API, and applies more Web app
-settings to the shown Result as soon as you commit a value. Sessions are still
-saved as session version 49 (the canonical `renderRequest` schema stays 9):
-Sessions saved by 0.14.3 open as before.
+origin, which were drawn over the whole record. It also draws partial feature
+ends open (no arrowhead, no edge stroke), adds similarity-ring color schemes to
+the command line and the Python API, and applies more Web app settings to the
+shown Result as soon as you commit a value. Sessions are still saved as session
+version 49 (the canonical `renderRequest` schema stays 9): Sessions saved by
+0.14.3 open as before.
 [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases) gives the
 publication date, [PyPI](https://pypi.org/project/gbdraw/) lists the published
 packages, and [Installation](./INSTALL.md) explains each install route.
@@ -60,6 +61,10 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   shows a Legend color of its own, for example a feature type's Legend color
   that a **Legend name** given in the feature popup kept on the new row. 0.14.3
   refused every such edit, and a Legend item color change showed no message.
+- In the Web app, **Save Session** refuses, before it downloads anything, a
+  Session that would expand beyond the 512 MiB that **Load Session** opens, and
+  a Session whose gzip file is over the 200 MiB that **Load Session** opens. The
+  message names the Session's size and its largest inputs.
 
 ## Changed behavior
 
@@ -82,12 +87,45 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   **Show GC Content**, **Show GC Skew**, **Show Depth**, **Hide GC Content**,
   **Hide GC Skew**, the on/off switch and removal of a GC content, GC skew, or
   Depth row of the custom stack, and **Use custom stack** redraw the shown
-  Result at once, as Generate would, also for a track the Result does not draw
+  Result at once (a track that other stack rows reach asks first, see
+  below), as Generate would, also for a track the Result does not draw
   yet; the track comes back as the last Generate built it. These wait for
   Generate: a track the Result did not draw when its Session was loaded, a
   Depth file change, a row added since the last Generate, and **Use custom
   stack** after a Session load or while Region Annotation sets wait for
   Generate.
+- **Turning off a track that other stack rows reach.** Turning off a track that
+  another custom stack row starts at or extends to (an Overlay row's anchor or
+  **Extend to**) with the row's switch (Circular and Linear), or with **Hide GC
+  Content** or **Hide GC Skew** while **Use custom stack** is on (Circular),
+  asks first. The dialog names those rows and offers to turn the track and those
+  rows off as one **Undo** step, or to cancel. Before, the track hid alone into
+  a stack that **Generate Diagram** refuses.
+- **Use custom stack after a Session load.** On a Circular Result drawn with a
+  custom stack or track widths or radii, **Use custom stack** set the other way
+  than the Session saved it applies on Generate, with every track it would hide
+  or show. Before, the tracks it hides left at once and the stack stayed drawn.
+- **Smaller Session files.** **Save Session** stores an input file that the
+  Session uses more than once (for example one Depth file shown as two series)
+  only once; only files with equal bytes, kind, and original file name are
+  merged. Such a Session file is smaller. Sessions are still saved as version
+  49 and the file format does not change.
+- **Partial feature ends.** A feature end that its location marks as partial
+  is drawn open in Linear and Circular diagrams: no arrowhead and no stroke on
+  that edge, the way a record's display-start seam is already drawn. This covers
+  ends written in the file (`<1..1635`, `48045..>48169`,
+  `complement(<1..242)`) and ends cut by `--region` or a records-table
+  `region`. A feature whose 5' end is partial keeps its arrowhead and has no
+  stroke on its tail edge. Only the outer ends of a multi-part location count.
+  The figures of records with such features change, in the command line, the
+  Python API, and the Web app (**Generate Diagram** and Session replay draw
+  them the same way). A region crop now marks every cut end as partial: a
+  minus-strand feature cut by the region kept no `<`/`>` marker, and any crop
+  dropped the markers written in the file. Because of this, a CDS that a crop
+  made partial no longer shows its translation in the Web feature popup, and
+  a minus-strand CDS cut at its 5' end by a crop no longer gets its first
+  residue replaced with M in LOSATP. A block outline with one open end joins
+  its corners at the closed end.
 
 ## Added
 
@@ -112,6 +150,9 @@ and 0.14.4 saves Sessions as version 49, as 0.14.3 does. See
 
 ## Known issues
 
+- After **Reset Settings** on one diagram mode, the other mode's Result keeps its
+  hidden labels and edited label text until the next **Generate Diagram**. Since
+  0.14.3 at least.
 - A Similarity group member popup and the Similarity alignment panel still show
   the coordinates of a CDS across the origin as `1..` the record length. The
   drawing is correct; only this text is wrong.

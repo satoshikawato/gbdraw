@@ -12,29 +12,6 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Changed: in the Web app, **Save Session** stores an input file that the Session uses more than once (for example
-  one Depth file shown as two series) only once, so such a Session file is smaller (D-220).
-- Fixed: in the Web app, **Save Session** refuses, before downloading anything, a Session that would expand beyond the 512 MiB that **Load Session** opens, and names its size and its largest inputs (OV-2240).
-- Fixed: in the Web app, **Save Session** also refuses, before downloading anything, a Session whose gzip file is over the 200 MiB that **Load Session** opens, and names its size and its largest inputs (OV-2245).
-- Changed: in the Web app, turning off a track that another custom stack row starts at or
-  extends to (an Overlay row's anchor or **Extend to**) with the row's switch (Circular and
-  Linear), or with **Hide GC Content** or **Hide GC Skew** while **Use custom stack** is on
-  (Circular), asks first: the dialog names those rows and offers to turn the track and those
-  rows off as one Undo step, or Cancel. The track no longer hides alone into a stack that
-  **Generate Diagram** refuses.
-- Changed: after a Session load, **Use custom stack** set the other way than the Session saved
-  it, on a Circular Result drawn with a custom stack or track widths or radii, applies on
-  Generate, with every track it would hide or show, instead of leaving the stack and hiding
-  tracks from it.
-- Changed: partial feature ends are drawn open in Linear and Circular diagrams: no arrowhead
-  and no block stroke on that edge. This covers ends written as partial in the file
-  (`<1..1635`, `48045..>48169`, `complement(<1..242)`) and ends cut by `--region` or a
-  records-table `region` (OV-2272).
-- Fixed: a region crop marks every cut end as partial. A minus-strand feature cut by the
-  region kept no `<`/`>` marker (OV-2273), and partial markers written in the file were
-  dropped by any crop (OV-2274).
-- Fixed: a block outline with one open end joins its corners at the closed end (OV-2275).
-
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-30
 
 - Patch release of 0.14.3. Sessions are still saved as Session version 49; Sessions saved by
@@ -90,6 +67,34 @@ write-up of a release.
   and each record popup and File card name field show their own **Live edit**
   or **Applies on Generate** note: an item with a Legend label, an item added
   since the last Generate, and a features or Depth row apply on Generate.
+- Changed: in the Web app, **Save Session** stores an input file that the Session uses more than once (for example
+  one Depth file shown as two series) only once, so such a Session file is smaller.
+- Changed: in the Web app, turning off a track that another custom stack row starts at or
+  extends to (an Overlay row's anchor or **Extend to**) with the row's switch (Circular and
+  Linear), or with **Hide GC Content** or **Hide GC Skew** while **Use custom stack** is on
+  (Circular), asks first: the dialog names those rows and offers to turn the track and those
+  rows off as one Undo step, or Cancel. The track no longer hides alone into a stack that
+  **Generate Diagram** refuses.
+- Changed: after a Session load, **Use custom stack** set the other way than the Session saved
+  it, on a Circular Result drawn with a custom stack or track widths or radii, applies on
+  Generate, with every track it would hide or show, instead of leaving the stack and hiding
+  tracks from it.
+- Changed: in the Web app, **Save Session** stores an input file that the Session uses more than once (for example
+  one Depth file shown as two series) only once, so such a Session file is smaller.
+- Changed: in the Web app, turning off a track that another custom stack row starts at or
+  extends to (an Overlay row's anchor or **Extend to**) with the row's switch (Circular and
+  Linear), or with **Hide GC Content** or **Hide GC Skew** while **Use custom stack** is on
+  (Circular), asks first: the dialog names those rows and offers to turn the track and those
+  rows off as one Undo step, or Cancel. The track no longer hides alone into a stack that
+  **Generate Diagram** refuses.
+- Changed: after a Session load, **Use custom stack** set the other way than the Session saved
+  it, on a Circular Result drawn with a custom stack or track widths or radii, applies on
+  Generate, with every track it would hide or show, instead of leaving the stack and hiding
+  tracks from it.
+- Changed: partial feature ends are drawn open in Linear and Circular diagrams: no arrowhead
+  and no block stroke on that edge. This covers ends written as partial in the file
+  (`<1..1635`, `48045..>48169`, `complement(<1..242)`) and ends cut by `--region` or a
+  records-table `region` (OV-2272).
 - Fixed: in the Web app, a color picked without a pointer first (a picker
   opened from the keyboard) is now one **Undo** step and applies as its
   setting does; before, Undo skipped it (OV-2243).
@@ -106,6 +111,14 @@ write-up of a release.
   Legend name given in the feature popup; 0.14.3 refused every such edit without a message (OV-2265).
 - Fixed: on a Result loaded from a Session saved without a render request (Session versions 27
   to 30), settings no longer say **Live edit** while nothing applies until Generate.
+- Fixed: in the Web app, **Save Session** refuses, before downloading anything, a Session that would expand beyond the 512 MiB that **Load Session** opens, and names its size and its largest inputs (OV-2240).
+- Fixed: in the Web app, **Save Session** also refuses, before downloading anything, a Session whose gzip file is over the 200 MiB that **Load Session** opens, and names its size and its largest inputs (OV-2245).
+- Fixed: in the Web app, **Save Session** refuses, before downloading anything, a Session that would expand beyond the 512 MiB that **Load Session** opens, and names its size and its largest inputs (OV-2240).
+- Fixed: in the Web app, **Save Session** also refuses, before downloading anything, a Session whose gzip file is over the 200 MiB that **Load Session** opens, and names its size and its largest inputs (OV-2245).
+- Fixed: a region crop marks every cut end as partial. A minus-strand feature cut by the
+  region kept no `<`/`>` marker (OV-2273), and partial markers written in the file were
+  dropped by any crop (OV-2274).
+- Fixed: a block outline with one open end joins its corners at the closed end (OV-2275).
 
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
 
