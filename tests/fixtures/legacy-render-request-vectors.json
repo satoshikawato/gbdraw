@@ -20562,7 +20562,7 @@
         "maxUnitGap": 4,
         "maxDiagonalDrift": 5,
         "maxConflicts": 6,
-        "mergeOrientation": "either"
+        "mergeOrientation": "strand"
        }
       }
      ],
@@ -20629,7 +20629,7 @@
         "maxUnitGap": 4,
         "maxDiagonalDrift": 5,
         "maxConflicts": 6,
-        "mergeOrientation": "either"
+        "mergeOrientation": "strand"
        }
       }
      ],

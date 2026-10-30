@@ -1,6 +1,7 @@
 // @ts-check
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { readSpelling } from '../utils/contract-shape.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 /** @import { CanonicalLosslessCollinearityParameters, CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
 /** @import { FieldReader } from '../utils/field-reading.js' */
 /** @import { LiteralShape, ObjectShape } from '../utils/contract-shape.js' */
@@ -83,10 +84,6 @@ const readMergeOrientationSpelling = (value) => (
   // `readSpelling` returns one of the literal's values, which the typedef lists.
   /** @type {CollinearMergeOrientation | null} */ (readSpelling(value, MERGE_ORIENTATION))
 );
-// The names a writer writes: the stored values without their old spellings.
-const WRITTEN_MERGE_ORIENTATIONS = MERGE_ORIENTATION.values.filter(
-  (value) => !Object.hasOwn(MERGE_ORIENTATION.spellings?.aliases ?? {}, String(value))
-);
 const DEFAULT_MERGE_ORIENTATION = /** @type {CollinearMergeOrientation} */ (readMergeOrientationSpelling(null));
 /** @type {FieldReader<CollinearMergeOrientation>} */
 export const readCollinearMergeOrientation = (value) => {
@@ -100,7 +97,7 @@ export const readCollinearMergeOrientation = (value) => {
  */
 export const requireCollinearMergeOrientation = (value) => {
   const read = readMergeOrientationSpelling(value);
-  if (read === null) throw new Error(`Collinear merge orientation must be one of: ${WRITTEN_MERGE_ORIENTATIONS.join(', ')}.`);
+  if (read === null) throw diagnosticError('INPUT_INVALID', { field: 'collinear_merge_orientation', reason: 'COLLINEAR_MERGE_ORIENTATION' });
   return read;
 };
 

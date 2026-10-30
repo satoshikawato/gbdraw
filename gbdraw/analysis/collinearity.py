@@ -228,7 +228,8 @@ class LosslessCollinearityParameters:
         if str(self.merge_orientation) not in COLLINEARITY_MERGE_ORIENTATIONS:
             raise ValidationError(
                 "collinear_merge_orientation must be one of: "
-                + ", ".join(COLLINEARITY_MERGE_ORIENTATIONS)
+                + ", ".join(COLLINEARITY_MERGE_ORIENTATIONS),
+                diagnostic={"code": "INPUT_INVALID", "field": "collinear_merge_orientation", "reason": "COLLINEAR_MERGE_ORIENTATION"},
             )
 
 
