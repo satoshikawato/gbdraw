@@ -26,6 +26,7 @@ import {
   withImportedBlacklistWords,
   importedDefaultColors
 } from './file-imports.js';
+/** @import { UndoneTrackHide } from './setting-application.js' */
 /** @import { FileImports } from './file-imports.js' */
 import {
   buildBulkLabelProjection,
@@ -1792,7 +1793,7 @@ export const liveSettingInputsOf = (sources) => ({ linearSeqs: sources.linearSeq
  * @typedef {{ readonly setId: string, readonly itemId: string } | { readonly slotId: string }} LiveSettingItem
  */
 /**
- * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources }} LiveSettingContext
+ * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources, undoneHides?: ReadonlySet<UndoneTrackHide> }} LiveSettingContext
  * @typedef {(drawing: RequestDrawing, request: CanonicalRenderRequest, context: LiveSettingContext) => LiveSettingWrite[]} LiveSettingProjector
  */
 /** @param {string} path @param {unknown} value @returns {LiveSettingWrite[]} */
@@ -2126,6 +2127,7 @@ const trackPlanProjection = (request, drawing, context) => {
           { renderer: kept_.renderer, params: { nt: slotNt } }, drawing.form, nt)) waiting.add(kept_.id);
         continue;
       }
+      if (kind !== 'depth' && context.undoneHides?.has(kind)) waiting.delete(kept_.id);
       if (committedSlot) present.push(committedSlot);
       else if (kept && !hidesOnly && !waiting.has(kept_.id) && (kind !== 'depth' || depthShowable)) present.push(kept_);
       else complete = false;
@@ -2210,7 +2212,7 @@ const trackPlanProjection = (request, drawing, context) => {
     ? [] : [configWrite(key, flags[key])]);
   // 3. The kept parts after this apply: completed after a Load, with the rows a live suppress removed.
   const keptAfter = !kept ? { ...committedTrackParts(request, committedPlan, resources, webFiles), waiting }
-    : waiting.size !== kept.waiting.size ? { ...kept, waiting } : kept;
+    : waiting.size !== kept.waiting.size || [...waiting].some((id) => !kept.waiting.has(id)) ? { ...kept, waiting } : kept;
   /** @type {LiveSettingWrite[]} */
   const slotWrites = [
     [['diagramOptions', 'tracks', requestSlotsKey], slots],
@@ -2434,12 +2436,12 @@ export const liveSettingApplies = (request, requestPath, drawing, inputs, resour
 // once for its five keys.
 /** @type {WeakMap<LiveSettingInputs, LiveSettingContext>} */
 const noteContexts = new WeakMap();
-/** @param {LiveSettingInputs} inputs @param {LiveSettingResources} resources @returns {LiveSettingContext} */
-const noteContextOf = (inputs, resources) => {
+/** @param {LiveSettingInputs} inputs @param {LiveSettingResources} resources @param {ReadonlySet<UndoneTrackHide>} [undoneHides] @returns {LiveSettingContext} */
+const noteContextOf = (inputs, resources, undoneHides) => {
   const memo = noteContexts.get(inputs);
-  if (memo && memo.resources === resources) return memo;
+  if (memo && memo.resources === resources && memo.undoneHides === undoneHides) return memo;
   /** @type {LiveSettingContext} */
-  const context = { inputs, webFiles: {}, resources };
+  const context = { inputs, webFiles: {}, resources, undoneHides };
   noteContexts.set(inputs, context);
   return context;
 };
@@ -2451,14 +2453,15 @@ const noteContextOf = (inputs, resources) => {
  * @param {CanonicalRenderRequest} request @param {string} requestPath @param {RequestDrawing} drawing
  * @param {LiveSettingInputs} inputs @param {LiveSettingResources} [resources]
  * @param {LiveSettingItem | null} [item]
+ * @param {ReadonlySet<UndoneTrackHide>} [undoneHides] The hides an Undo took back, as its rerender projects them.
  */
-export const liveSettingNoteApplies = (request, requestPath, drawing, inputs, resources = null, item = null) => {
+export const liveSettingNoteApplies = (request, requestPath, drawing, inputs, resources = null, item = null, undoneHides = undefined) => {
   const mode = LIVE_SETTING_MODES[requestPath];
   if (Boolean(mode) && request.mode !== mode) return true;
   // A GT key applies while its projection leaves no show pending and is not
   // refused; a Linear row's Height note keeps its own answer (G2).
   if (GT_REQUEST_PATH_SET.has(requestPath) && !item) {
-    return projectTrackPlan(request, drawing, noteContextOf(inputs, resources)).complete;
+    return projectTrackPlan(request, drawing, noteContextOf(inputs, resources, undoneHides)).complete;
   }
   return liveSettingApplies(request, requestPath, drawing, inputs, resources, item);
 };
@@ -2485,16 +2488,17 @@ const valueAtPath = (root, path) => path.reduce(
  * The writes that apply the draft values of `requestPaths` to the committed
  * Session, without those already equal to it. Throws `INPUT_INVALID` for a
  * value Generate would refuse.
- * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs }} input
+ * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs, undoneHides?: ReadonlySet<UndoneTrackHide> }} input
+ *   `undoneHides`: the hides an Undo took back (`state.undoneTrackHides`).
  * @returns {LiveSettingWrite[]}
  */
-export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs }) => {
+export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs, undoneHides }) => {
   const request = requireCurrentCommittedRequest(committed);
   const webFiles = committed.webFiles || {};
   const { resources } = committed;
   // One context per call: the track projection runs once for its five keys.
   /** @type {LiveSettingContext} */
-  const context = { inputs, webFiles, resources };
+  const context = { inputs, webFiles, resources, undoneHides };
   let trackWrites = 0;
   const writes = [...new Set(requestPaths)].flatMap((requestPath) => {
     const project = LIVE_SETTING_PROJECTORS[requestPath];
@@ -4001,7 +4005,8 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
  *   the other one, every GC, skew and Depth row on except a row Hide GC Content or Hide GC Skew hid (PQ-4 A).
  * @property {KeptDepth | null} depth
  * @property {ReadonlySet<string>} waiting The Circular rows a live Hide GC Content or Hide GC Skew removed: they
- *   wait for Generate (PQ-4 A).
+ *   wait for Generate when the hide is turned off by hand (PQ-4 A); an Undo of a step that changed the hide
+ *   takes them out (`state.undoneTrackHides`), so it returns them at once.
  */
 /** @type {WeakMap<object, KeptTrackParts>} */
 const keptTrackParts = new WeakMap();

@@ -365,7 +365,11 @@ test('History reports each step, checkpoint, Undo and Redo with its changes, and
     buildCheckpoint: () => structuredClone(value),
     applyCheckpoint: (checkpoint) => { value = checkpoint; }
   });
-  history.setSettingsStepListener((changes) => steps.push(changes && changes.map((change) => change.path.join('.'))));
+  const directions = [];
+  history.setSettingsStepListener((changes, direction) => {
+    steps.push(changes && changes.map((change) => change.path.join('.')));
+    directions.push(direction);
+  });
   await history.captureBaseline('initial');
   await history.runUndoable('Legend font size', () => { value.config.adv.legend_font_size = 14; });
   assert.deepEqual(steps, [['config.adv.legend_font_size']]);
@@ -373,6 +377,7 @@ test('History reports each step, checkpoint, Undo and Redo with its changes, and
   await history.redo();
   assert.deepEqual(steps, [['config.adv.legend_font_size'], ['config.adv.legend_font_size'], ['config.adv.legend_font_size']],
     'an Undo and a Redo name the paths of the step they restore');
+  assert.deepEqual(directions, [undefined, 'undo', 'redo'], 'only a restore of an intent step says which way it went');
   steps.length = 0;
   await history.runUndoableCheckpoint('Reset', () => { value.config.adv.legend_font_size = 8; });
   assert.deepEqual(steps, [['config.adv.legend_font_size']], 'a committed checkpoint names the settings it changed');

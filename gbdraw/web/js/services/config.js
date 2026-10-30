@@ -3962,7 +3962,8 @@ export const committedSettingNotePredicate = (item = null) => {
   const drawing = state.drawingOfMode(request.mode);
   const inputs = liveSettingInputsOf(state);
   const resources = committedCanonicalSession?.resources;
-  return (requestPath) => liveSettingNoteApplies(request, requestPath, drawing, inputs, resources, item);
+  const undoneHides = state.undoneTrackHides.value.get(drawing.id);
+  return (requestPath) => liveSettingNoteApplies(request, requestPath, drawing, inputs, resources, item, undoneHides);
 };
 
 /**

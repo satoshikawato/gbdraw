@@ -117,7 +117,7 @@ export const TRANSIENT_KEYS = Object.freeze([
   'previewFeatureSearchError', 'previewFeatureSearchRenderedCount', 'previewFeatureSearchVisible', 'featureListScrollTop',
   'featureListViewportHeight', 'featureListExpandedId', 'isFeatureDrawerMounted', 'visibleFeatureRows', 'featureRecordPickerVisible',
   'featureListTopSpacerPx', 'featureListBottomSpacerPx', 'labelSearch', 'labelReflowProcessing',
-  'labelReflowRequestSeq', 'labelReflowForceRequestSeq', 'labelReflowLastError', 'svgContainer',
+  'labelReflowRequestSeq', 'labelReflowForceRequestSeq', 'labelReflowLastError', 'undoneTrackHides', 'svgContainer',
   'clickedFeature', 'clickedFeaturePos', 'clickedPairwiseMatch', 'clickedPairwiseMatchPos',
   'pairwiseMatchPopupRef', 'pairwiseMatchPopupDrag', 'pairwiseMatchPopupSize', 'pairwiseMatchPopupResize',
   'featurePopupRef', 'featurePopupDrag', 'featurePopupSize', 'featurePopupResize', 'clickedLabel',

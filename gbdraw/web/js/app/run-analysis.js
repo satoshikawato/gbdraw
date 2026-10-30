@@ -18,6 +18,7 @@ import { validateAnnotationWarnings } from '../services/session-feature-metadata
 import { msg, t, tm } from '../utils/i18n.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
+import { trackHidesOn } from '../services/setting-application.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
 import { keepResultNames } from '../services/result-normalization.js';
 import { regionWithinRecord } from '../services/record-options.js';
@@ -436,6 +437,7 @@ export const buildLosatCachePayload = ({
 
 /** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
 /** @import { LiveSettingWrite } from '../services/session-request.js' */
+/** @import { UndoneTrackHide } from '../services/setting-application.js' */
 
 /**
  * A LOSAT search Generate queues: the fields the pool reads (`LosatJob`) and what Generate keeps on it to
@@ -1726,6 +1728,19 @@ export const createRunAnalysis = ({
     const pending = pendingLiveSettings.get(drawing) || new Set();
     pendingLiveSettings.set(drawing, pending);
     return pending;
+  };
+  // The GC and skew hides an Undo took back, per drawing (`state.undoneTrackHides`):
+  // named until the rerender that applied them ends, a later step or Redo
+  // changes that hide, or that hide is on, so a rerender that is replaced
+  // leaves them to the next.
+  /** @param {DrawingState} drawing @returns {ReadonlySet<UndoneTrackHide>} */
+  const undoneHidesOf = (drawing) => state.undoneTrackHides.value.get(drawing.id) ?? new Set();
+  /** @param {DrawingState} drawing @param {ReadonlySet<UndoneTrackHide>} hides @param {boolean} named */
+  const setUndoneHides = (drawing, hides, named) => {
+    const next = new Set(undoneHidesOf(drawing));
+    hides.forEach((hide) => { if (named) next.add(hide); else next.delete(hide); });
+    if (next.size === undoneHidesOf(drawing).size) return;
+    state.undoneTrackHides.value = new Map(state.undoneTrackHides.value).set(drawing.id, next);
   };
   // Whether a request since the last iteration began asked for more than the
   // live setting values (an editor edit's rerender).
@@ -5975,11 +5990,12 @@ export const createRunAnalysis = ({
   // named (R1(c), N-16); no other draft setting reaches the Result.
   /**
    * @param {DrawingState} drawing
-   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean }} options
-   *   `settings`: the live setting request paths it applies; `editor`: an editor edit asked for it too.
+   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean, undoneHides: ReadonlySet<UndoneTrackHide> }} options
+   *   `settings`: the live setting request paths it applies; `editor`: an editor edit asked for it too;
+   *   `undoneHides`: the hides an Undo took back.
    * @returns {Promise<{ status: string, rerun?: boolean, error?: UserFacingError | null }>}
    */
-  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor }) => {
+  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor, undoneHides }) => {
     const committed = getCommittedCanonicalSession?.();
     if (!committed) {
       labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
@@ -5992,7 +6008,7 @@ export const createRunAnalysis = ({
     /** @type {LiveSettingWrite[]} */
     let liveSettingWrites;
     try {
-      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf({ linearSeqs: allLinearSeqs, files }) });
+      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf({ linearSeqs: allLinearSeqs, files }), undoneHides });
     } catch (e) {
       const error = formatError(e, 'generate', 'render');
       labelReflowLastError.value = liveEditFailure(error);
@@ -6160,19 +6176,24 @@ export const createRunAnalysis = ({
         const pending = pendingLiveSettingsOf(drawing);
         const settings = [...pending];
         activeLiveSettings = settings;
+        const undoneHides = undoneHidesOf(drawing);
         const outcome = await runLabelReflowCandidate(drawing, {
           decorationContinuity,
           requestId: activeReflowRequestId,
           historyRequestedAt,
           settings,
-          editor
+          editor,
+          undoneHides
         });
         // A stale iteration leaves its values and its editor request to the
         // next one; an applied, failed or empty one is done with them (a
         // failed value waits for its next change or Generate, PD-OI-102).
-        if (outcome.status === 'stale' || outcome.status === 'canceled') editorRerenderRequested ||= editor;
+        const replaced = outcome.status === 'stale' || outcome.status === 'canceled';
+        if (replaced) editorRerenderRequested ||= editor;
         else settings.forEach((path) => pending.delete(path));
         if (outcome.rerun && !processing.value && !state.sessionOperationAvailability?.()) pendingReflowRequestId += 1;
+        // A Cancel can end a rerender with no iteration after it: that Undo did not apply, and its track waits.
+        if (!replaced || activeReflowRequestId === pendingReflowRequestId) setUndoneHides(drawing, undoneHides, false);
       }
       if (reflowWaits() && activeReflowRequestId < pendingReflowRequestId) {
         reflowDeferred = true;
@@ -6205,17 +6226,25 @@ export const createRunAnalysis = ({
     }
   };
   // A Load replaces both drawings' committed Sessions and applies nothing (6.7).
-  const discardLiveSettingRequests = () => { pendingLiveSettings.clear(); };
+  const discardLiveSettingRequests = () => { pendingLiveSettings.clear(); state.undoneTrackHides.value = new Map(); };
 
   // R1 (c), PD-OI-102: an action committed the values of these live setting
   // request paths in the drawing of `mode` (the shown one). Its Result shows
   // them after the automatic rerender applies them; a mode without a Result
   // applies nothing until its Generate (R15).
-  /** @param {readonly string[]} requestPaths @param {'circular' | 'linear'} mode */
-  const requestLiveSettingApply = (requestPaths, mode) => {
+  /**
+   * @param {readonly string[]} requestPaths @param {'circular' | 'linear'} mode
+   * @param {ReadonlySet<UndoneTrackHide>} [changedHides] The hides the step changed (`changedTrackHides`).
+   * @param {boolean} [undone] The step is an Undo: it names them; any other step drops their names.
+   */
+  const requestLiveSettingApply = (requestPaths, mode, changedHides = new Set(), undone = false) => {
     const committed = getCommittedCanonicalSession?.();
-    if (requestPaths.length === 0 || !committed || committed.renderRequest?.mode !== mode) return false;
-    const pending = pendingLiveSettingsOf(displayedArtifactDrawing());
+    const drawing = displayedArtifactDrawing();
+    const applies = requestPaths.length > 0 && committed && committed.renderRequest?.mode === mode;
+    if (applies) setUndoneHides(drawing, changedHides, undone);
+    setUndoneHides(drawing, trackHidesOn(drawing.form), false);
+    if (!applies) return false;
+    const pending = pendingLiveSettingsOf(drawing);
     requestPaths.forEach((path) => pending.add(path));
     labelReflowLastError.value = null;
     void runLabelReflow({ settings: requestPaths });
