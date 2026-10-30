@@ -27,7 +27,10 @@ write-up of a release.
 - Fixed: in the Web app, Undo of a track row's switch that also turned off an Overlay row starting
   at or extending to that row brought the Overlay row back in the settings but not in the Result,
   and a Save then wrote a Session without it. Undo and Redo now return it to the Result, and a Save
-  after the Undo holds it.
+  after the Undo holds it. Two related cases follow the same rule and now match the next Generate:
+  such an Overlay row turned back on by hand, while its track is back, returns at once with the
+  values of the last Generate; and a row that left when **Use custom stack** changed returns when
+  it changes back.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-30
 

@@ -1216,7 +1216,7 @@ test('L3 (review 4): the rows a hide reaches come from Generate\'s Overlay check
 
 // A row that left with the slot it names (`overlayReferenceIssues`) returns
 // with it: Undo of the choice restores the draft, and the live apply gives the
-// committed request back what it held, also in a spec string's form. A row
+// committed request back what it held. A row
 // whose own switch stays off stays out, and one the draft draws while the slot
 // it names stays hidden does not refuse the apply that holds it out.
 test('A row that left with its anchor returns when the draft draws both again', () => {
