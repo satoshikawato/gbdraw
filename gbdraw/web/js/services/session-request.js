@@ -2088,6 +2088,11 @@ const trackPlanProjection = (request, drawing, context) => {
   /** @param {'content' | 'skew' | 'depth'} kind @param {string | null} slotId @param {string | null} slotNt */
   const hidden = (kind, slotId, slotNt) => drawnTrackHidden({ slotId, kind, nt: slotNt }, request, judged);
   const waiting = new Set(kept?.waiting || []);
+  const draftRows = /** @type {readonly unknown[]} */ (stackOn && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
+  /** @param {string} id The draft row that draws this slot, by id; -1 when none does. */
+  const drawnDraftRow = (id) => draftRows.findIndex((row) => trackSlotRowEnabled(row) && String(/** @type {{ id?: unknown }} */ (row).id) === id);
+  /** @type {Set<OverlayCheckRow>} */
+  const returning = new Set();
   /** @type {TrackSlotEntry[] | null} */
   let slots = null;
   /** @type {number | null} */
@@ -2100,11 +2105,18 @@ const trackPlanProjection = (request, drawing, context) => {
       const kind = trackKindOf(kept_.renderer);
       const inCommitted = committedIds.has(kept_.id) && !baseIsOther;
       const committedSlot = inCommitted ? (committedSlots || []).find((slot) => slot.id === kept_.id) : undefined;
-      // A features, ticks or spacer row stays as the committed stack has it; a
-      // stack the committed request does not draw (Use custom stack turned on
-      // again, or the other kept plan) returns whole from the kept parts.
+      // A features, ticks, spacer or Overlay row stays as the committed stack
+      // has it; a stack the committed request does not draw (Use custom stack
+      // turned on again, or the other kept plan) returns whole from the kept
+      // parts. A row a live apply took out with the slot it names (the check
+      // below) returns from them when the draft draws it again (an Undo of
+      // that choice), unless the slot it names stays out.
       if (!kind) {
         if (inCommitted || baseIsOther || !committedSlots) present.push(committedSlot ?? kept_);
+        else if (kept && !hidesOnly && (!stackOn || drawnDraftRow(kept_.id) >= 0)) {
+          present.push(kept_);
+          returning.add(kept_.read);
+        }
         continue;
       }
       const slotNt = kind === 'depth' ? null : normalizeNt(kept_.nt, nt);
@@ -2136,10 +2148,8 @@ const trackPlanProjection = (request, drawing, context) => {
     // the draft does not draw that row either (`trackSlotRowEnabled`), and
     // one the draft draws refuses the apply with the issue Generate gives
     // that draft row.
-    const draftRows = /** @type {readonly unknown[]} */ (stackOn && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
-    const issues = overlayReferenceIssues(present.map((slot) => slot.read), request.mode, (read) => draftRows.findIndex((row) => (
-      trackSlotRowEnabled(row) && String(/** @type {{ id?: unknown }} */ (row).id) === String(read.id))));
-    const refused = issues.filter(({ issue }) => issue.rowIndex >= 0).map(({ issue }) => issue);
+    const issues = overlayReferenceIssues(present.map((slot) => slot.read), request.mode, (read) => drawnDraftRow(String(read.id)));
+    const refused = issues.filter(({ issue, row }) => issue.rowIndex >= 0 && !returning.has(row)).map(({ issue }) => issue);
     if (refused.length > 0) return { ...TRACK_PLAN_WAITS, refused: new CustomTrackPlanValidationError(refused) };
     const leaving = new Set(issues.map(({ row }) => row));
     present.splice(0, present.length, ...present.filter((slot) => !leaving.has(slot.read)));

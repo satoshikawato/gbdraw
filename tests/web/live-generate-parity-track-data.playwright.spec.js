@@ -1379,3 +1379,132 @@ test('GT B10 (OV-2237): on a Result loaded without a request a hide waits for Ge
     await page.context().close();
   }
 });
+
+// Undo of a row switch's choice: the row switched off and the Overlay row that
+// reaches it leave the Result and the committed request together, and Undo and
+// Redo return both to what they were. A Save after the Undo holds the row.
+const UNDO_SESSIONS = {
+  circular: { session: 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json', record: 'NC_001879.2', set: 'plastome_tint', tint: 'plastome_tint' },
+  linear: { session: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', record: 'NC_001416.1', set: 'marks', tint: 'tint' }
+};
+// A stack with one Depth row, `mark` anchored on it, and a tint row that
+// extends to the GC content row, generated.
+const openReachingRows = async (browser, mode) => {
+  const { session, record, set } = UNDO_SESSIONS[mode];
+  const page = await load(browser, session);
+  if (mode === 'linear') {
+    await page.locator('[data-setting="region-annotations"] input[type=file]').first().setInputFiles({
+      name: 'regions.tsv', mimeType: 'text/tab-separated-values',
+      buffer: Buffer.from(`set_id\tid\tmark\trecord\tstart\tend\nmarks\tm1\thighlight\t${record}\t100\t900\n`)
+    });
+    await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().annotationSets.length)).toBe(1);
+    await page.evaluate(() => window.__GBDRAW_APP__.setLinearTrackSlotsEnabled(true));
+  }
+  await evaluateWithRetainedPromise(page, async ({ stackMode, tsv, setId }) => {
+    const { state } = await import('./js/state.js');
+    const app = window.__GBDRAW_APP__;
+    const file = new File([tsv], 's1.tsv', { type: 'text/tab-separated-values' });
+    await window.__GBDRAW_HISTORY__.runUndoable('Setup', () => {
+      if (stackMode === 'circular') app.setCircularDepthFile(0, file);
+      else app.setLinearDepthFile(app.linearSeqs[0], 0, file);
+    });
+    await window.__GBDRAW_HISTORY__.runUndoable('Setup', () => {
+      const rows = state.activeDrawing().adv[`${stackMode}_track_slots`];
+      const row = (id, params) => ({ id, renderer: 'annotations', enabled: true, side: 'overlay', z: params.to_slot ? -1 : 1,
+        ...(stackMode === 'linear' ? { height: '', spacing: '' } : {}),
+        params: { set_id: setId, marks: ['highlight'], ...params } });
+      rows.push(row('mark', { anchor_slot: 'depth', layer: 'foreground' }));
+      if (stackMode === 'linear') rows.push(row('tint', { anchor_slot: 'features', to_slot: 'gc_content', layer: 'underlay' }));
+    });
+    await app.runAnalysis();
+  }, { stackMode: mode, tsv: [0, 1, 2, 3].map((index) => `${record}\t${index * 700 + 1}\t${10 + index}`).join('\n'), setId: set });
+  await settleLive(page);
+  return page;
+};
+const savedUndoSession = async (page, file) => {
+  const titled = await page.evaluate(async () => Boolean((await import('./js/state.js')).state.sessionTitle?.value));
+  await download(page, 'Save Session', file, titled ? {} : { title: 'undo' });
+  return JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
+};
+const committedSlots = (page, mode) => page.evaluate(async (stackMode) => {
+  const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+  const tracks = getCommittedCanonicalSession().renderRequest.diagramOptions.tracks;
+  return JSON.parse(JSON.stringify(tracks[`${stackMode}TrackSlots`]));
+}, mode);
+const overlayElements = (page, id) => page.evaluate((slotId) => window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+  .querySelectorAll(`[data-gbdraw-slot-id="${slotId}"] > *`).length, id);
+const slotIds = (slots) => slots.map((slot) => (typeof slot === 'string' ? slot.split(':')[0] : slot.id));
+const chooseToHide = async (page) => {
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="hide"]').click();
+  await settleLive(page);
+};
+for (const mode of ['circular', 'linear']) {
+  for (const [target, reacher] of [['depth', 'mark'], ['gc_content', UNDO_SESSIONS[mode].tint]]) {
+    for (const after of ['Generate', 'Load']) {
+      test(`Undo and Redo of a row switch's choice return the Overlay row to the Result and the committed request (${mode}, ${target} row, after ${after})`, async ({ browser }, testInfo) => {
+        test.setTimeout(420_000);
+        let page = await openReachingRows(browser, mode);
+        try {
+          if (after === 'Load') {
+            const file = testInfo.outputPath('reached.gbdraw-session.json');
+            await savedUndoSession(page, file);
+            await page.context().close();
+            page = await load(browser, file);
+          }
+          const drawnBefore = await overlayElements(page, reacher);
+          const slotsBefore = await committedSlots(page, mode);
+          expect(drawnBefore, 'the Result draws the Overlay row').toBeGreaterThan(0);
+          expect(slotIds(slotsBefore)).toContain(reacher);
+          expect((await semanticSnapshot(page)).overlays).toContain(reacher);
+
+          await page.evaluate(async ({ stackMode, id }) => {
+            const { state } = await import('./js/state.js');
+            const app = window.__GBDRAW_APP__;
+            const row = state.activeDrawing().adv[`${stackMode}_track_slots`].find((each) => each.id === id);
+            void app[stackMode === 'circular' ? 'setCircularTrackSlotEnabled' : 'setLinearTrackSlotEnabled'](row, false);
+          }, { stackMode: mode, id: target });
+          await chooseToHide(page);
+          expect(await overlayElements(page, reacher), 'the choice takes it out').toBe(0);
+          const slotsHidden = await committedSlots(page, mode);
+          expect(slotIds(slotsHidden)).not.toContain(reacher);
+
+          await history(page, 'undo');
+          expect(await overlayElements(page, reacher), 'Undo draws it again').toBe(drawnBefore);
+          expect(await committedSlots(page, mode), 'Undo gives the committed request back').toEqual(slotsBefore);
+          const saved = await savedUndoSession(page, testInfo.outputPath('after-undo.gbdraw-session.json'));
+          expect(slotIds(saved.renderRequest.diagramOptions.tracks[`${mode}TrackSlots`]), 'a Save after the Undo holds the row').toContain(reacher);
+
+          await history(page, 'redo');
+          expect(await overlayElements(page, reacher), 'Redo takes it out again').toBe(0);
+          expect(await committedSlots(page, mode)).toEqual(slotsHidden);
+
+          await history(page, 'undo');
+          await expectLiveEqualsGenerate(page, { label: `${mode} ${target} after ${after}: Undo of the choice` });
+        } finally { await page.context().close(); }
+      });
+    }
+  }
+}
+
+// Turning Hide GC Content off waits for Generate in a Circular custom stack,
+// also as its Undo (PD-OI-104 May retire): the track and the row that names it
+// return there, with the note.
+test('Undo of Hide GC Content in a Circular stack waits for Generate, with the row that extends to it (tobacco, after Load)', async ({ browser }) => {
+  test.setTimeout(420_000);
+  const page = await load(browser, UNDO_SESSIONS.circular.session);
+  try {
+    const before = await committedSlots(page, 'circular');
+    expect(await overlayElements(page, 'plastome_tint')).toBeGreaterThan(0);
+    await clickTrackCheckbox(page, 'Hide GC Content');
+    await chooseToHide(page);
+    expect(await overlayElements(page, 'plastome_tint')).toBe(0);
+    await history(page, 'undo');
+    const waiting = slotIds(await committedSlots(page, 'circular'));
+    expect(waiting).not.toContain('gc_content');
+    expect(waiting).not.toContain('plastome_tint');
+    await expect.poll(() => trackScopeText(page), 'the note names the wait').toContain('Showing a track applies on Generate');
+    await generate(page);
+    expect(slotIds(await committedSlots(page, 'circular'))).toEqual(slotIds(before));
+    expect(await overlayElements(page, 'plastome_tint')).toBeGreaterThan(0);
+  } finally { await page.context().close(); }
+});
