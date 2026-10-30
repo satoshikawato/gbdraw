@@ -5209,3 +5209,82 @@ def test_raw_protein_tsv_validation_checks_each_text_and_pair_once(
     assert matches(comment)
     assert parse_calls == 3  # A distinct text parses once, even without rows.
 
+
+def _proteins_record(record_id: str, lengths: dict[str, int]) -> SeqRecord:
+    """One record whose CDS translate to the named proteins of the given lengths."""
+
+    features = [
+        _cds(
+            index * 1200,
+            index * 1200 + 3 * length + 3,
+            qualifiers={"translation": ["M" * length + "*"], "protein_id": [protein_id]},
+        )
+        for index, (protein_id, length) in enumerate(lengths.items())
+    ]
+    return _record(record_id, sequence="ATG" * (400 * len(lengths) + 200), features=features)
+
+
+@pytest.mark.linear
+def test_self_hits_do_not_set_the_normalization_scale(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OV-2299 (D-07 A): the expected-bitscore fit leaves out self hits.
+
+    Twelve reciprocal pairs P_i/Q_i of different lengths across two records,
+    and PX, an in-paralog of P0 in record r0. Only the self-hit bitscores
+    differ between the runs; they say nothing about any relationship, so
+    PX's normalized score, role and confidence must not change.
+    """
+
+    lengths = {f"P{index}": 60 + 10 * index for index in range(12)}
+    record_r0 = {**lengths, "PX": lengths["P0"]}
+    record_r1 = {f"Q{index}": 60 + 10 * index for index in range(12)}
+    records = [_proteins_record("r0", record_r0), _proteins_record("r1", record_r1)]
+    extraction = extract_cds_proteins(records)
+    all_lengths = {**record_r0, **record_r1}
+
+    def hit(query: str, subject: str, bitscore: float, evalue: float = 1e-30) -> dict[str, object]:
+        length = min(all_lengths[query], all_lengths[subject])
+        return _hit_row(
+            query, subject, alignment_length=length, qend=all_lengths[query], send=all_lengths[subject],
+            bitscore=bitscore, evalue=evalue,
+        )
+
+    def frame(rows: list[dict[str, object]]) -> pd.DataFrame:
+        return pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
+
+    cross = [
+        hit(f"P{index}", f"Q{index}", 1.8 * lengths[f"P{index}"]) for index in range(12)
+    ]
+    reverse = [hit(f"Q{index}", f"P{index}", 1.8 * lengths[f"P{index}"]) for index in range(12)]
+    paralog = [hit("P0", "PX", 1.7 * lengths["P0"]), hit("PX", "P0", 1.7 * lengths["P0"])]
+
+    def tables(self_factor: float) -> dict[tuple[int, int], pd.DataFrame]:
+        def selfs(proteins: dict[str, int]) -> list[dict[str, object]]:
+            return [hit(protein, protein, self_factor * length, evalue=0.0) for protein, length in proteins.items()]
+
+        return {
+            (0, 0): frame([*paralog, *selfs(record_r0)]),
+            (1, 1): frame(selfs(record_r1)),
+            (0, 1): frame(cross),
+            (1, 0): frame(reverse),
+        }
+
+    observed = []
+    for self_factor in (2.0, 4.0):
+        directional = tables(self_factor)
+        within = protein_colinearity_module._normalize_directional_hit_table(
+            directional[(0, 0)], extraction.protein_map, min_coverage=0.0
+        )
+        score = within.loc[(within["query"] == "P0") & (within["subject"] == "PX"), "normalized_score"]
+        member = select_rbh_orthogroup_edges_from_directional_hits(
+            directional, extraction.protein_map
+        ).orthogroups.member_by_protein_id["PX"]
+        observed.append((round(float(score.iloc[0]), 9), member.role, member.confidence))
+    assert observed[0] == observed[1]
+    assert observed[0][1:] == ("inparalog", "high")
+
+    # A cross-record table holds no self hits, so its fit is unchanged.
+    between = protein_colinearity_module._normalize_directional_hit_table(
+        frame(cross), extraction.protein_map, min_coverage=0.0
+    )
+    assert set(between["record_pair_normalization_source"]) == {"fit"}
+    assert between["normalized_score"].tolist() == pytest.approx([1.0] * 12)

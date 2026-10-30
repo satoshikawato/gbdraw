@@ -4063,8 +4063,11 @@ def _normalize_directional_hit_table(
     if normalized_hits.empty:
         return _empty_normalized_hit_table(tuple(coerced_hits.columns))
 
+    # The fit reads hits between two proteins only: a self hit scores the
+    # protein against itself, so it would set a within-record table's scale
+    # (OV-2299). Self rows stay in the table until the directed hits drop them.
     model = _fit_expected_bitscore_model(
-        normalized_hits,
+        normalized_hits.loc[~_self_hit_mask(normalized_hits)],
         top_fraction=top_fraction,
     )
     fallback = model is None
