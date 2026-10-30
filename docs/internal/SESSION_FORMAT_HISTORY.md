@@ -35,6 +35,18 @@ current one, so Session 48 keeps its settings-only form. The Gallery and
 test-input Sessions were refreshed to 49 (`tools/refresh_gallery_sessions.py`).
 Positive fixtures of Session 48: `tests/fixtures/sessions/*.v48.*`.
 
+## Unreleased: derived LOSATP token v4 for chained Collinear blocks
+
+No Session, request, or derived envelope version changes. Collinear blocks are
+now the longest compatible chains of anchors (OV-2294..2296), and the block
+rows no longer carry `collinearity_block_evalue` (OV-2300), so a derived entry
+written before would replay the old blocks. The derived LOSATP identity token
+becomes `derived-option-conformance-v4`: earlier derived entries are cache
+misses and are recomputed once from the raw cache; no search runs again and no
+reader reads them. Saved `collinearity-result` resources keep their shape:
+`CollinearityBlock` still has `blockEvalue`, `label`, and the `syntenic` kind,
+which the block caller no longer writes.
+
 ## Unreleased: LOSAT runtime records without `cli` or `bundled`
 
 No Session or request version changes. The source tree no longer holds a LOSAT
