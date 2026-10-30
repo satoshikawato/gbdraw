@@ -506,7 +506,6 @@ for (const [label, field, options] of [
   ['Collinear search scope', 'collinear_search_scope', 'adjacent, all'],
   ['Collinear unit mode', 'collinear_unit_mode', 'auto, cds, locus'],
   ['Collinear anchor mode', 'collinear_anchor_mode', 'all, rbh'],
-  ['Collinear merge orientation', 'collinear_merge_orientation', 'strand, order'],
   ['Collinear color mode', 'collinear_color_mode', 'average_identity, orientation, orientation_identity'],
   ['Protein BLASTP orthogroup membership mode', 'orthogroup_membership_mode', 'anchor_core_v1']
 ]) {

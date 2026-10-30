@@ -31,7 +31,7 @@ import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadat
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
-import { readCollinearMergeOrientation } from '../services/losat-normalization.js';
+import { DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION, readCollinearMergeOrientation } from '../services/losat-normalization.js';
 import {
   losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
 } from '../services/linear-sources.js';
@@ -95,6 +95,7 @@ import {
 import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-info.js';
 import {
   buildLosatJobSpecs,
+  effectiveCollinearSearchScope,
   canonicalGridDisplayPairs,
   numberLosatDisplayPairs,
   resolveLinearComparisonPlan
@@ -229,7 +230,7 @@ import {
 /** @import { FeatureFill, LegendRow } from '../services/drawing/paint.js' */
 /** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 /** @import { RequestCanonicalComparison } from '../services/session-request.js' */
-/** @import { CanonicalFeatureOverride, CanonicalGeneratedProteinComparison, CanonicalLosslessCollinearityParameters, CanonicalRecordSource, CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { CanonicalFeatureOverride, CanonicalGeneratedProteinComparison, CanonicalLosslessCollinearityParameters, CanonicalProteinComparisonSettings, CanonicalRecordSource, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
@@ -716,7 +717,7 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  * @property {string} anchorMode
  * @property {string} mergeOrientation
  * @property {boolean} inferOrthogroups
- * @property {string} searchScope
+ * @property {CanonicalProteinComparisonSettings['collinearitySearchScope']} searchScope
  */
 
 /**
@@ -807,6 +808,7 @@ const canReuseResolvedProteinArtifacts = ({
 
   /** @type {Partial<CanonicalLosslessCollinearityParameters>} */
   const parameters = settings.collinearityParams?.parameters || {};
+  const committedInference = settings.collinearInferOrthogroups ?? true;
   return (
     sameNumber(parameters.minAnchors ?? 1, active.minAnchors)
     && sameNumber(parameters.maxUnitGap ?? 0, active.maxUnitGap)
@@ -814,9 +816,11 @@ const canReuseResolvedProteinArtifacts = ({
     && sameNumber(parameters.maxConflicts ?? 1, active.maxConflicts)
     && readCollinearMergeOrientation(parameters.mergeOrientation).value === active.mergeOrientation
     && String(settings.collinearityUnitMode || 'auto') === active.unitMode
-    && String(settings.collinearityAnchorMode || 'rbh') === active.anchorMode
-    && (settings.collinearInferOrthogroups ?? true) === active.inferOrthogroups
-    && String(settings.collinearitySearchScope || 'adjacent') === active.searchScope
+    && String(settings.collinearityAnchorMode || DEFAULT_COLLINEAR_ANCHOR_MODE) === active.anchorMode
+    && committedInference === active.inferOrthogroups
+    // The scope the run searched: without inference it is adjacent whatever is stored (Search between).
+    && effectiveCollinearSearchScope(active.mode, committedInference, settings.collinearitySearchScope || 'adjacent')
+      === effectiveCollinearSearchScope(active.mode, active.inferOrthogroups, active.searchScope)
     && String(settings.collinearityColorMode || 'orientation') === active.colorMode
   );
 };
@@ -3492,12 +3496,12 @@ export const createRunAnalysis = ({
           : 'auto';
         const collinearAnchorMode = useCollinearBlastp
           ? requireCurrentCollinearAnchorMode(drawing.losat.blastp?.collinearAnchorMode)
-          : 'rbh';
+          : DEFAULT_COLLINEAR_ANCHOR_MODE;
         const collinearMergeOrientation = useCollinearBlastp
           ? requireCurrentCollinearMergeOrientation(
               drawing.losat.blastp?.collinearMergeOrientation
             )
-          : 'strand';
+          : DEFAULT_MERGE_ORIENTATION;
         const collinearInferOrthogroups = requireCurrentCollinearInferOrthogroups(drawing.losat.blastp?.collinearInferOrthogroups);
         const collinearSearchScope = useCollinearBlastp
           ? requireCurrentCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope)

@@ -1245,8 +1245,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     collinear_search_scope="adjacent",
     orthogroup_membership_mode="anchor_core_v1",
     orthogroup_member_max_hits=None,
-    collinear_merge_orientation="strand",
-    collinear_infer_orthogroups=True,
+    collinear_merge_orientation=None,
+    collinear_infer_orthogroups=None,
     canonical_resource_path=None,
     explicit_display_pairs=False,
 ):

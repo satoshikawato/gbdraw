@@ -559,7 +559,8 @@ def normalize_derived_losatp_settings(
             max_conflicts=_setting_int(max_conflicts, 1),
             # The parameters read the old spelling "either" as "strand".
             merge_orientation=cast(
-                "CollinearityMergeOrientation", _setting_text(merge_orientation, "strand")
+                "CollinearityMergeOrientation",
+                _setting_text(merge_orientation, LosslessCollinearityParameters.merge_orientation),
             ),
         )
         params.validate()

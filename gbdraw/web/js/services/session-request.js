@@ -3364,7 +3364,7 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
           : nonNegativeInteger(blastp.collinearMaxConflictsInMergeGap, 1),
         mergeOrientation: blastpMode === 'collinear'
           ? requireCurrentCollinearMergeOrientation(blastp.collinearMergeOrientation)
-          : (baselineParameters.mergeOrientation || 'strand')
+          : readCollinearMergeOrientation(baselineParameters.mergeOrientation).value
       }
     },
     collinearityUnitMode,

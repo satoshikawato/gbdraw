@@ -178,11 +178,6 @@ def test_member_top_best_and_reciprocity_independent_oracle(ids, limit):
     actual = pc.select_best_hits_per_query(members)
     assert_frame_equal(actual, numeric_frame(members).iloc[query_best].reset_index(drop=True), check_exact=True)
     assert_frame_equal(actual, frozen.select_best_hits_per_query(members), check_exact=True)
-    subject_best = hit_ordinals(members, subject_first=True)
-    reciprocal = {(str(members['query'].iloc[i]), str(members['subject'].iloc[i])) for i in subject_best}
-    mutual = [i for i in query_best if (str(members['query'].iloc[i]), str(members['subject'].iloc[i])) in reciprocal]
-    assert_frame_equal(pc.select_reciprocal_best_hits(members),
-                       numeric_frame(members).iloc[mutual].reset_index(drop=True), check_exact=True)
     reverse = members.rename(columns={'query': 'subject', 'subject': 'query'}).iloc[::-1].copy()
     reverse_best = hit_ordinals(reverse)
     back = {str(reverse['query'].iloc[i]): str(reverse['subject'].iloc[i]) for i in reverse_best}
@@ -229,7 +224,6 @@ def test_public_numeric_rejection_exact_type_message(column, bad):
         ('select_top_hits_per_query', (hits,), {'max_hits': 5}),
         ('_select_member_candidate_hits_per_query', (hits,), {'max_hits': 1}),
         ('select_best_hits_per_query', (hits,), {}),
-        ('select_reciprocal_best_hits', (hits,), {}),
         ('select_reciprocal_best_hit_edges', (hits, member_frame()), {}),
         ('select_reciprocal_best_hit_edges', (member_frame(), hits), {}),
     ]:
@@ -251,7 +245,7 @@ def test_selector_empty_and_validation_order(shape):
     if 'missing_columns' in shape:
         hits = hits.drop(columns='bitscore')
     for name in ['select_top_hits_per_query', '_select_member_candidate_hits_per_query',
-                 'select_best_hits_per_query', 'select_reciprocal_best_hits', 'select_reciprocal_best_hit_edges']:
+                 'select_best_hits_per_query', 'select_reciprocal_best_hit_edges']:
         limits = [1, 5, None, 0, -1, 'bad'] if 'per_query' in name and name != 'select_best_hits_per_query' else [None]
         for limit in limits:
             kwargs = {'max_hits': limit} if name in ['select_top_hits_per_query', '_select_member_candidate_hits_per_query'] else {}
@@ -285,8 +279,7 @@ def test_removed_member_copies_pair_dedup_and_full_row_conversion():
     assert counts(frozen, 1)[1].count(('query', 'subject')) == 2
     assert counts(pc, 1)[1].count(('query', 'subject')) == 0
     original_dedupe = pd.DataFrame.drop_duplicates
-    for name, expected_removed in [('select_best_hits_per_query', 1), ('select_reciprocal_best_hits', 2),
-                                    ('select_reciprocal_best_hit_edges', 2)]:
+    for name, expected_removed in [('select_best_hits_per_query', 1), ('select_reciprocal_best_hit_edges', 2)]:
         observed = []
         for module in [frozen, pc]:
             calls = []
@@ -299,7 +292,6 @@ def test_removed_member_copies_pair_dedup_and_full_row_conversion():
             observed.append(len(calls))
         assert observed[0] - observed[1] == expected_removed
     with patch.object(pd.DataFrame, 'itertuples', side_effect=AssertionError('full row conversion')):
-        pc.select_reciprocal_best_hits(hits)
         pc.select_reciprocal_best_hit_edges(hits, hits)
 
 

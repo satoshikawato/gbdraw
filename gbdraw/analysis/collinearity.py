@@ -271,19 +271,22 @@ def iter_collinearity_search_pairs(
     *,
     scope: CollinearitySearchScope | str,
 ) -> tuple[tuple[int, int], ...]:
-    """Return unordered record pairs searched for Collinear evidence.
+    """Return the unordered record pairs that ``scope`` searches for Collinear evidence.
 
     A view of the LOSAT job plan (:func:`gbdraw.comparisons.losat_jobs.losatp_job_specs`)
-    for consecutive records.
+    for consecutive records with similarity-group inference on, the only case
+    in which Search between applies.
     """
 
     specs = losatp_job_specs(
         "collinear",
         record_count=record_count,
-        infer_orthogroups=False,
+        infer_orthogroups=True,
         search_scope=normalize_collinearity_search_scope(str(scope)),
     )
-    return tuple(dict.fromkeys(cast(tuple[int, int], tuple(sorted(pair))) for pair in specs))
+    return tuple(dict.fromkeys(
+        cast(tuple[int, int], tuple(sorted(pair))) for pair in specs if pair[0] != pair[1]
+    ))
 
 
 def _float_from_row(row: object, column: str, default: float = 0.0) -> float:
@@ -1245,7 +1248,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
     search_scope: CollinearitySearchScope | str = "adjacent",
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int | None = None,
-    infer_orthogroups: bool = True,
+    infer_orthogroups: bool,
     max_paralog_links_per_orthogroup: int = 2,
     comparison_pairs: Sequence[tuple[int, int]] | None = None,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
@@ -1376,7 +1379,7 @@ def build_orthogroup_collinearity_blocks(
     candidate_limit: int | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int | None = None,
-    infer_orthogroups: bool = True,
+    infer_orthogroups: bool,
     max_paralog_links_per_orthogroup: int = 2,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
@@ -1487,7 +1490,7 @@ def build_collinearity_blocks_from_hits(
     search_scope: CollinearitySearchScope | str = "adjacent",
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int | None = None,
-    infer_orthogroups: bool = True,
+    infer_orthogroups: bool,
     max_paralog_links_per_orthogroup: int = 2,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
 ) -> CollinearityResult:

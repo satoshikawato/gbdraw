@@ -846,6 +846,7 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
         record.annotations["organism"] = "synthetic construct"
     groups = build_orthogroup_collinearity_blocks_from_hits(
         hits, extraction, records=records, search_scope=search_scope,
+        infer_orthogroups=True,
     )
     request = LinearDiagramRequest(
         records=tuple(RecordInput(source=InMemoryRecordSource(record), record_key=record.id) for record in records),
@@ -905,6 +906,7 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
     geometry_only = build_orthogroup_collinearity_blocks_from_hits(
         {pair: table for pair, table in hits.items() if pair[0] != pair[1]},
         extraction, records=records, search_scope=search_scope,
+        infer_orthogroups=True,
     )
     baseline = render_request(replace(
         request,

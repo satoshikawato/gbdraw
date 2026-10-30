@@ -59,8 +59,10 @@ write-up of a release.
 - Changed: in the Web app, **Search between** shows only while **Build
   similarity groups with within-record searches** is on, and **Max hits per
   protein for groups** only while it is on or **Anchor mode** is All hits.
-  Collinear block rows built without similarity groups no longer name a group
-  scope in their popup.
+  Without similarity groups, Collinear searches only the displayed pairs on
+  every surface, whatever **Search between** or `--collinear_search_scope`
+  holds; the drawn blocks are the same. Collinear block rows built without
+  similarity groups no longer name a group scope in their popup.
 - Fixed: the help text of the Collinear options and the Collinear tutorial
   describe what each setting changes, and the tutorial commands state
   `--collinear_infer_orthogroups on` (OV-2302).

@@ -68,6 +68,8 @@ export const readCollinearAnchorMode = comparisonSettingReader('collinearityAnch
 export const readCollinearSearchScope = comparisonSettingReader('collinearitySearchScope');
 export const readCollinearColorMode = comparisonSettingReader('collinearityColorMode');
 export const readOrthogroupMembershipMode = comparisonSettingReader('orthogroupMembershipMode');
+// The default anchor mode: the setting's blank spelling.
+export const DEFAULT_COLLINEAR_ANCHOR_MODE = readCollinearAnchorMode(null).value;
 
 /** @typedef {CanonicalLosslessCollinearityParameters['mergeOrientation']} CollinearMergeOrientation */
 // The merge orientation of the Collinear parameters, a literal with spellings
@@ -84,7 +86,8 @@ const readMergeOrientationSpelling = (value) => (
   // `readSpelling` returns one of the literal's values, which the typedef lists.
   /** @type {CollinearMergeOrientation | null} */ (readSpelling(value, MERGE_ORIENTATION))
 );
-const DEFAULT_MERGE_ORIENTATION = /** @type {CollinearMergeOrientation} */ (readMergeOrientationSpelling(null));
+// The default merge orientation: the literal's blank spelling.
+export const DEFAULT_MERGE_ORIENTATION = /** @type {CollinearMergeOrientation} */ (readMergeOrientationSpelling(null));
 /** @type {FieldReader<CollinearMergeOrientation>} */
 export const readCollinearMergeOrientation = (value) => {
   const read = readMergeOrientationSpelling(value);

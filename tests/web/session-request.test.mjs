@@ -2964,6 +2964,22 @@ assert.equal(
   projectCanonicalSessionRequest(losatPairCanonical).files.linearComparisons[0].source,
   'losat'
 );
+// Outside Collinear the writer keeps the stored merge orientation as read: a
+// 0.14.3 request's "either" is written as "strand" (OV-2301: writers write strand).
+linearFilesData.linearCanonicalComparisons = [{
+  kind: 'generatedProteinComparison', mode: 'collinear', pairs: [],
+  settings: { collinearityParams: { kind: 'lossless', parameters: { mergeOrientation: 'either' } } }
+}];
+assert.equal(
+  // Raw: this request stays out of the characterized corpus below.
+  buildCanonicalRenderRequestRaw({
+    state, filesData: linearFilesData, comparisonPlanSnapshot: comparisonSnapshotForState(state, linearFilesData)
+  }).renderRequest.comparisons.find(
+    (comparison) => comparison.kind === 'generatedProteinComparison'
+  ).settings.collinearityParams.parameters.mergeOrientation,
+  'strand'
+);
+linearFilesData.linearCanonicalComparisons = [];
 const resolvedPlanReference = {
   recordKey: 'first', biologicalFeatureId: 'feature-first',
   sourceFeatureIndex: 1, stableFeatureSvgId: 'stable-first'

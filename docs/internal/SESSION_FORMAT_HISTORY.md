@@ -47,14 +47,19 @@ No Session or request version changes; the generated request description and
   and which drew as `strand`; its spellings read it as `strand` with no row
   (`LosslessCollinearityParameters.__post_init__`,
   `readCollinearMergeOrientation` in `services/losat-normalization.js`).
-  Writers write `strand`. The schema 1-2 `standard` reading uses `strand`.
+  Writers write `strand`, in every LOSATP mode: outside Collinear the Web
+  writer writes the stored value as read. The schema 1-2 `standard` reading
+  uses `strand`.
 - Anchor mode: `one_to_one` and its spellings (`top1`, `mutual_best`, ...) are
   removed from `collinearityAnchorMode`. A stored one reads as `rbh`
   (`RETIRED_COLLINEARITY_ANCHOR_MODES`): Python logs a warning
   (`_read_retired_anchor_mode`, applied before the schema 9 description check
   by `_as_decoded_settings`); the Web request repair takes the description
   default `rbh` with a `setting-replaced` row, and the Web draft reader
-  (`readCollinearAnchorMode`) does the same.
+  (`readCollinearAnchorMode`) does the same. That description default is the
+  repair target, not a writer's empty form: the Web repair replaces every
+  unreadable stored anchor mode (an unknown word as well) by `rbh` with the
+  row, where Python refuses an unknown word.
 - Inference: the CLI and Python default of `collinear_infer_orthogroups`
   becomes off, as on the Web. A request without `collinearInferOrthogroups`
   still reads it as on (`_ABSENT_PROTEIN_SETTINGS`). A Session below 31
@@ -62,6 +67,15 @@ No Session or request version changes; the generated request description and
   added when it names Collinear without the flag
   (`_keep_recorded_collinear_inference`), and a pre-canonical Web Session
   replays with the flag written from its draft.
+- Search between: Collinear with inference off searches the displayed pairs
+  whatever `collinearitySearchScope` holds (`effective_collinear_search_scope`
+  in `gbdraw/comparisons/losat_jobs.py`, `effectiveCollinearSearchScope` in
+  `services/linear-comparisons.js`), because without similarity groups the
+  blocks read only those pairs. The stored value is unchanged and written as
+  before. Raw cache keys hold no scope, so the raw entries of those pairs are
+  reused; the derived identity keeps the stored scope and names the searches
+  of the run, so a derived entry of an inference-off **All records** run is
+  recomputed once from the raw cache. The drawn result is the same.
 - Hit limits: the Web Collinear defaults of `hitLimitsByMode.collinear` become
   unbounded (`null`), as on the CLI; a draft that stores a limit keeps it.
 - Derived entries: the default merge orientation text is now `strand`, so a
@@ -72,6 +86,9 @@ Positive fixtures: the Gallery Sessions that store `either`
 (`gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json` and
 others); `tests/test_collinear_option_surfaces.py` and
 `tests/web/stored-request-read.test.mjs` set `one_to_one` in that Session.
+Release tag `v0.14.3` offered `one_to_one` (`gbdraw/web/index.html`,
+`<option value="one_to_one">`; the request literal listed it), so a released
+writer could store it; no stored file holds it.
 
 ## Unreleased: derived LOSATP token v4 for chained Collinear blocks
 

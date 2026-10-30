@@ -51,7 +51,6 @@ from gbdraw.analysis.protein_colinearity import (
     promote_legacy_protein_raw_cache_entries,
     select_best_hits_per_query,
     select_reciprocal_best_hit_edges,
-    select_reciprocal_best_hits,
     select_rbh_orthogroup_edges_from_directional_hits,
     select_top_hits_per_query,
     validate_protein_identity_manifest,
@@ -1568,23 +1567,6 @@ def test_select_best_hits_per_query_avoids_secondary_paralog_merge() -> None:
 
     assert selected[["query", "subject"]].to_records(index=False).tolist() == [
         ("a", "b1")
-    ]
-
-
-@pytest.mark.linear
-def test_select_reciprocal_best_hits_rejects_many_to_one_nonreciprocal_hit() -> None:
-    hits = pd.DataFrame.from_records(
-        [
-            _hit_row("a1", "b", bitscore=300),
-            _hit_row("a2", "b", bitscore=250),
-        ],
-        columns=COMPARISON_COLUMNS,
-    )
-
-    selected = select_reciprocal_best_hits(hits)
-
-    assert selected[["query", "subject"]].to_records(index=False).tolist() == [
-        ("a1", "b")
     ]
 
 

@@ -219,9 +219,10 @@ const openCollinearGrid = async (page, sessionPath) => {
     ({ row, canonicalRow, canonicalColumn }) => [row, canonicalRow, canonicalColumn]
   )), { timeout: 60000 }).toEqual([[1, 1, 1], [1, 1, 2], [2, 2, 1]]);
   await chooseLosatp(page, 'collinear');
-  // Search between shows only with similarity groups (OV-2302); the hidden
-  // draft value still widens the searched pairs.
-  await page.evaluate(() => { window.__GBDRAW_APP__.losat.blastp.collinearSearchScope = 'all'; });
+  // Search between applies only with similarity groups (OV-2302): All records
+  // searches every record pair, so a change of the displayed pairs reuses them.
+  await page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches', exact: true }).check();
+  await page.getByRole('combobox', { name: 'Collinear search between' }).selectOption('all');
 };
 
 test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fresh ribbons', async ({ page, browser }, testInfo) => {
@@ -229,9 +230,8 @@ test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fr
   const sessionPath = saveCliGridSession(testInfo);
   await openCollinearGrid(page, sessionPath);
   const grid = await generate(page);
-  // Fresh Collinear leaves within-record inference off: the six cross-record
-  // searches of three records run, no self searches.
-  expect(grid.cache).toEqual({ cacheHits: 0, cacheMisses: 6, derivedHits: 0, derivedMisses: 1 });
+  // The three within-record searches and the six cross-record searches of three records run.
+  expect(grid.cache).toEqual({ cacheHits: 0, cacheMisses: 9, derivedHits: 0, derivedMisses: 1 });
   expect(grid.links).toEqual(['0->2 1-330 61-360', '1->2 31-360 61-360']);
 
   // One record per row: the displayed pairs become 0-1 and 1-2; the searches do not change.
@@ -242,11 +242,11 @@ test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fr
     await openCollinearGrid(freshPage, sessionPath);
     await turnOffRows(freshPage);
   });
-  expect(fresh.cache).toEqual({ cacheHits: 0, cacheMisses: 6, derivedHits: 0, derivedMisses: 1 });
+  expect(fresh.cache).toEqual({ cacheHits: 0, cacheMisses: 9, derivedHits: 0, derivedMisses: 1 });
   expect(fresh.links).toEqual(['0->1 1-330 31-360', '1->2 31-360 61-360']);
 
   expect(rows.executorCalls).toBe(grid.executorCalls);
-  expect(rows.cache).toEqual({ cacheHits: 6, cacheMisses: 0, derivedHits: 0, derivedMisses: 1 });
+  expect(rows.cache).toEqual({ cacheHits: 9, cacheMisses: 0, derivedHits: 0, derivedMisses: 1 });
   expect(rows.links).toEqual(fresh.links);
   expect(rows.paths).toEqual(fresh.paths);
 });

@@ -802,9 +802,9 @@ export const createAppSetup = () => {
       adjacentEdgeKeys: adjacentRowPairs(drawing.drawnLinearSeqs.value, effectiveLinearComparisonLayout(drawing), true)
         .map(([queryUid, subjectUid]) => linearComparisonEdgeKey(queryUid, subjectUid)),
       losatProgram: drawing.losatProgram.value,
-      blastpMode: drawing.losat.blastp?.mode,
-      inferOrthogroups: drawing.losat.blastp?.collinearInferOrthogroups === true,
-      anchorMode: drawing.losat.blastp?.collinearAnchorMode,
+      blastpMode: drawing.losat.blastp.mode,
+      inferOrthogroups: drawing.losat.blastp.collinearInferOrthogroups === true,
+      anchorMode: drawing.losat.blastp.collinearAnchorMode,
       filters: {
         min_bitscore: drawing.adv.min_bitscore,
         evalue: drawing.adv.evalue,

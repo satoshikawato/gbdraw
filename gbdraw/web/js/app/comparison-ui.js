@@ -9,6 +9,8 @@ import {
 import { comparisonStateForMode } from '../mode-profiles.js';
 import { joinSentences, listText, msg, t, tm, tn } from '../utils/i18n.js';
 /** @import { ComparisonState } from '../mode-profiles.js' */
+/** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
+import { DEFAULT_COLLINEAR_ANCHOR_MODE } from '../services/losat-normalization.js';
 
 const LINEAR_COMPARISON_INTENT_KEYS = Object.freeze({
   NONE: 'none',
@@ -350,7 +352,7 @@ const projectLosatpModes = (plan, activeKey) => Object.freeze(LOSATP_MODES.map((
  * @property {string} losatpModeKey
  * @property {boolean} selectedTopology
  * @property {boolean} inferOrthogroups Collinear builds similarity groups.
- * @property {string} anchorMode The Collinear anchor mode.
+ * @property {CanonicalProteinComparisonSettings['collinearityAnchorMode']} anchorMode The Collinear anchor mode.
  */
 
 /** @param {SettingsSectionInput} input */
@@ -616,7 +618,7 @@ export const projectLinearComparisonLosatpModeSelection = ({
  *   losatProgram?: string,
  *   blastpMode?: string,
  *   inferOrthogroups?: boolean,
- *   anchorMode?: string,
+ *   anchorMode?: CanonicalProteinComparisonSettings['collinearityAnchorMode'],
  *   filters?: ComparisonFilterValues
  * }} [options]
  */
@@ -627,7 +629,7 @@ export const projectLinearComparisonUi = ({
   losatProgram = 'blastn',
   blastpMode = 'orthogroup',
   inferOrthogroups = false,
-  anchorMode = 'rbh',
+  anchorMode = DEFAULT_COLLINEAR_ANCHOR_MODE,
   filters = {}
 } = {}) => {
   const normalizedPlan = normalizeLinearComparisonPlan(plan);

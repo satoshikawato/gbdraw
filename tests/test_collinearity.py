@@ -190,6 +190,7 @@ def test_collinear_record_local_mixed_fixture(search_scope, edge_mode):
     records, extraction, hits = _record_local_mixed_fixture()
     result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
         hits, extraction, records=records, search_scope=search_scope, edge_mode=edge_mode,
+        infer_orthogroups=True,
     )
     groups = result.orthogroups
     assert groups is not None
@@ -208,6 +209,7 @@ def test_collinear_record_local_mixed_fixture(search_scope, edge_mode):
     geometry_only = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
         {pair: table for pair, table in hits.items() if pair[0] != pair[1]},
         extraction, records=records, search_scope=search_scope, edge_mode=edge_mode,
+        infer_orthogroups=True,
     )
     assert len(result.blocks) == len(geometry_only.blocks) == 1
     anchor = result.blocks[0].anchors[0]
@@ -259,6 +261,7 @@ def test_collinear_scope_partitions_table_identity(monkeypatch, search_scope, ed
     monkeypatch.setattr(collinearity_module, "_select_orthogroup_edges", capture_geometry)
     collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
         hits, extraction, records=records, search_scope=search_scope, edge_mode=edge_mode,
+        infer_orthogroups=True,
     )
     cross_pairs = {(0, 1), (1, 0), (1, 2), (2, 1)}
     if search_scope == "all":
@@ -549,6 +552,7 @@ def test_build_blocks_from_hits_rbh_removes_query_to_many_noise() -> None:
         params=params,
         anchor_mode="all",
         reverse_hits_by_pair=[reverse_hits],
+        infer_orthogroups=True,
     )
     rbh = build_collinearity_blocks_from_hits(
         [hits],
@@ -557,6 +561,7 @@ def test_build_blocks_from_hits_rbh_removes_query_to_many_noise() -> None:
         params=params,
         anchor_mode="rbh",
         reverse_hits_by_pair=[reverse_hits],
+        infer_orthogroups=True,
     )
 
     assert len(all_hits.blocks) == 2
@@ -604,6 +609,7 @@ def test_build_blocks_from_hits_rbh_uses_reverse_best_hits() -> None:
         records=records,
         params=params,
         anchor_mode="all",
+        infer_orthogroups=True,
     )
     rbh = build_collinearity_blocks_from_hits(
         [forward_hits],
@@ -612,6 +618,7 @@ def test_build_blocks_from_hits_rbh_uses_reverse_best_hits() -> None:
         params=params,
         anchor_mode="rbh",
         reverse_hits_by_pair=[reverse_hits],
+        infer_orthogroups=True,
     )
 
     assert sum(len(block.anchors) for block in all_hits.blocks) == 2
@@ -1239,6 +1246,7 @@ def test_build_blocks_from_hits_maps_proteins_to_units() -> None:
         params=LosslessCollinearityParameters(min_anchors=3, max_unit_gap=1),
         anchor_mode="rbh",
         reverse_hits_by_pair=[reverse_hits],
+        infer_orthogroups=True,
     )
     comparisons = convert_collinearity_blocks_to_comparisons(result, records=records, color_mode="orientation")
 
@@ -1279,6 +1287,7 @@ def test_true_global_singleton_orthogroup_does_not_create_link() -> None:
         params=LosslessCollinearityParameters(min_anchors=1),
         anchor_mode="rbh",
         reverse_hits_by_pair=[reverse_hits],
+        infer_orthogroups=True,
     )
 
     assert len(result.blocks) == 1
@@ -1324,6 +1333,7 @@ def test_anchor_core_membership_adds_strong_non_rbh_member_without_new_anchor() 
         edge_mode="rbh",
         orthogroup_membership_mode="anchor_core_v1",
         orthogroup_member_max_hits=2,
+        infer_orthogroups=True,
     )
 
     assert result.orthogroups is not None
@@ -1384,6 +1394,7 @@ def test_anchor_core_unions_connected_near_reciprocal_groups() -> None:
         edge_mode="rbh",
         orthogroup_membership_mode="anchor_core_v1",
         orthogroup_member_max_hits=2,
+        infer_orthogroups=True,
     )
 
     assert result.orthogroups is not None
@@ -1980,6 +1991,7 @@ def test_shared_node_paths_are_serialized_without_collapsing_to_one_to_one() -> 
         edge_mode="rbh",
         orthogroup_membership_mode="anchor_core_v1",
         orthogroup_member_max_hits=2,
+        infer_orthogroups=True,
     )
 
     assert result.orthogroups is not None
@@ -2008,6 +2020,7 @@ def test_build_blocks_from_hits_adjacent_scope_ignores_non_adjacent_tables() -> 
         params=LosslessCollinearityParameters(),
         edge_mode="all",
         search_scope="adjacent",
+        infer_orthogroups=True,
     )
 
     assert result.blocks == ()
@@ -2035,6 +2048,7 @@ def test_build_blocks_from_hits_adjacent_scope_uses_explicit_adjacent_row_pairs(
         edge_mode="all",
         search_scope="adjacent",
         comparison_pairs=((0, 2),),
+        infer_orthogroups=True,
     )
 
     assert len(result.blocks) == 1
@@ -2064,6 +2078,7 @@ def test_build_blocks_from_hits_all_scope_uses_non_adjacent_connectivity_only_as
         params=LosslessCollinearityParameters(),
         edge_mode="all",
         search_scope="all",
+        infer_orthogroups=True,
     )
     comparisons = convert_collinearity_blocks_to_comparisons(
         result,
@@ -2105,6 +2120,7 @@ def test_build_blocks_from_hits_can_render_selected_non_adjacent_pairs() -> None
         edge_mode="all",
         search_scope="all",
         comparison_pairs=((0, 2),),
+        infer_orthogroups=True,
     )
     comparisons = convert_collinearity_blocks_to_pair_comparisons(
         result,
@@ -2150,6 +2166,7 @@ def test_orthogroup_collinearity_rbh_search_defaults_to_uncapped_candidates(monk
         records,
         params=LosslessCollinearityParameters(),
         edge_mode="rbh",
+        infer_orthogroups=True,
     )
 
     assert observed_limits == [None, None, None, None, None, None, None]
@@ -2200,6 +2217,7 @@ def test_orthogroup_collinearity_member_hit_depth_is_post_search(monkeypatch) ->
         edge_mode="rbh",
         orthogroup_membership_mode="anchor_core_v1",
         orthogroup_member_max_hits=3,
+        infer_orthogroups=True,
     )
 
     assert observed_limits == [None, None, None, None, None, None, None]
@@ -2240,6 +2258,7 @@ def test_orthogroup_collinearity_all_hits_keeps_uncapped_search(monkeypatch) -> 
         params=LosslessCollinearityParameters(),
         edge_mode="all",
         search_scope="all",
+        infer_orthogroups=True,
     )
 
     assert observed_limits == [None, None, None, None, None, None, None, None, None]
@@ -2292,6 +2311,7 @@ def test_orthogroup_collinearity_all_scope_rbh_searches_every_direction(monkeypa
         params=LosslessCollinearityParameters(),
         edge_mode="rbh",
         search_scope="all",
+        infer_orthogroups=True,
     )
 
     assert observed_pairs == [
@@ -2652,6 +2672,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
         2,
         "adjacent",
         "rbh",
+        collinear_infer_orthogroups=True,
     )
     result = json.loads(str(raw_result))
 
@@ -2807,6 +2828,7 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
         "anchor_core_v1",
         5,
         merge_orientation,
+        collinear_infer_orthogroups=True,
     )
     result = json.loads(str(raw_result))
 
@@ -2838,6 +2860,7 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
             25,
             1,
             2,
+            collinear_infer_orthogroups=True,
         )
         min_two = json.loads(str(raw_min_two))
 
@@ -3891,7 +3914,9 @@ def test_collinearity_match_group_draws_inversions_above_plus_blocks() -> None:
     )
 
 
-@pytest.mark.parametrize("scope,pair_count", [("adjacent", 4), ("all", 6)])
+# Without inference Search between changes nothing: both scopes search the edges
+# and draw the same blocks (effective_collinear_search_scope).
+@pytest.mark.parametrize("scope,pair_count", [("adjacent", 4), ("all", 4)])
 @pytest.mark.parametrize("anchor_mode", ["rbh", "all"])
 def test_collinear_without_orthogroups_skips_self_search_and_inference(
     monkeypatch, scope, pair_count, anchor_mode,

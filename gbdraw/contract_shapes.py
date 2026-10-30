@@ -174,7 +174,9 @@ def obj(
 
     ``defaults`` maps a field to the JSON value its reader uses in its place:
     when an optional field is absent, and when a stored value is unreadable
-    (a required field's default is the writer's empty form of its part). A
+    (a required field's default is the writer's empty form of its part, or
+    the repair target of a retired value: ``collinearityAnchorMode`` takes
+    ``rbh`` for every unreadable stored value, ``one_to_one`` among them). A
     field whose absence means "unset" has none.
     """
 
