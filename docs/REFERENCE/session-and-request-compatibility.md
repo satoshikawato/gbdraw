@@ -54,6 +54,14 @@ palette as `herbal_garden`. Until the next **Generate**, a Session it saves
 keeps the former name in the palette of the shown Result and in its render
 request; both still draw `herbal_garden`.
 
+Two Collinear values were removed after gbdraw 0.14.4. The merge orientation
+`either`, which drew as `strand`, reads as `strand` with no change to the
+drawing. The anchor mode `one_to_one` (or a spelling of it such as `top1`)
+reads as `rbh`: the web app lists the change when it loads the Session, and
+the CLI and the Python API log a warning. Collinear similarity-group inference
+is now off by default on every surface; a Session, request or recorded command
+that names Collinear without it replays with inference on, as it was drawn.
+
 Session 44 documents written with canonical request schema 7 or 8 remain
 readable. Current saves promote that request to schema 9 and the Session to 49,
 and keep the saved preview until the next Generate. Schema 9 adds
@@ -826,7 +834,8 @@ record their upstream raw keys and requested settings. Collinear results
 also record the effective `cds` or `locus` unit kinds produced by `auto` and
 whether orthogroup inference was enabled. Sessions preserve each LOSATP mode's
 hit-limit drafts. A saved Collinear pipeline without `collinearInferOrthogroups`
-uses its historical inference behavior (ON); new Web state defaults to OFF.
+uses its historical inference behavior (ON); new state defaults to OFF on the
+Web, the CLI and the Python API.
 In the Web, any derived result read from a Session loads unchanged and is
 recomputed once from the raw search rows when the analysis runs again.
 The Web, the CLI, and the Python API compute the cache key of a derived result

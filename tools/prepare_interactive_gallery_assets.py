@@ -194,7 +194,8 @@ BGC_COMMAND = (
 )
 
 HEPATOPLASMATACEAE_COLLINEAR_COMMAND = (
-    "gbdraw linear --losat_threads 32 --losat losatp --losatp_mode collinear -f interactive_svg "
+    "gbdraw linear --losat_threads 32 --losat losatp --losatp_mode collinear "
+    "--collinear_infer_orthogroups on -f interactive_svg "
     "--gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb "
     "--align_center --separate_strands --pairwise_match_style curve --scale_style ruler "
     "--gc --skew --palette ajisai --collinear_color_mode orientation_identity "
@@ -235,7 +236,8 @@ VIBRIO_HARVEYI_GROUP_COMMAND = (
     "--scale_interval 750000 --separate_strands --hide_accession --hide_length "
     "--definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' "
     "--definition_line_style 'subtitle:size=16' --keep_definition_left_aligned "
-    "--losat losatp --losatp_mode collinear --collinear_search_scope adjacent "
+    "--losat losatp --losatp_mode collinear --collinear_infer_orthogroups on "
+    "--collinear_search_scope adjacent "
     "--losatp_max_target_seqs 5 --collinear_min_anchors 3 "
     "--collinear_max_unit_gap 2 --collinear_max_diagonal_drift 2 "
     "--collinear_color_mode orientation_identity --pairwise_match_style curve "

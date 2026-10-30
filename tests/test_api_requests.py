@@ -433,12 +433,12 @@ def test_linear_losat_search_rejects_invalid_values(
 
 def test_linear_options_normalize_supported_mode_aliases() -> None:
     options = LinearDiagramOptions(
-        collinearity_anchor_mode="top1",
+        collinearity_anchor_mode="raw",
         collinearity_color_mode="identity",
         orthogroup_membership_mode="rbh",
     )
 
-    assert options.collinearity_anchor_mode == "one_to_one"
+    assert options.collinearity_anchor_mode == "all"
     assert options.collinearity_color_mode == "average_identity"
     assert options.orthogroup_membership_mode == "anchor_core_v1"
 
@@ -477,7 +477,7 @@ def test_linear_protein_option_defaults_match_explicit_typed_values() -> None:
         max_unit_gap=0,
         max_diagonal_drift=0,
         max_conflicts=1,
-        merge_orientation="either",
+        merge_orientation="strand",
     )
 
 

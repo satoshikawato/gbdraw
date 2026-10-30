@@ -78,9 +78,14 @@ Display filters are e-value, bit score, identity, and alignment length. Values
 must be finite and non-negative; identity is limited to 0 through 100, and
 alignment length is an integer. Protein modes can also limit candidates or
 hits per query. Collinear mode adds anchor, unit-gap, diagonal-drift, scope,
-and conflict rules. Its unit mode is `auto`, `cds`, or `locus`; anchor mode is
-`all`, `one_to_one`, or `rbh`; and merge orientation is `strand`, `order`, or
-`either`. For each record pair and orientation, gbdraw takes the longest chain
+and conflict rules. Its unit mode is `auto`, `cds`, or `locus`
+(`--collinear_unit_mode`); anchor mode is `rbh` or `all`
+(`--collinear_anchor_mode`); and merge orientation is `strand` or `order`
+(`--collinear_merge_orientation`). `strand` requires the anchor strands to
+follow the block orientation as well as the gene order; `order` reads the gene
+order only. A saved `either`, an earlier name that behaved as `strand`, reads
+as `strand`. A saved `one_to_one` anchor mode, which was removed, reads as
+`rbh`, and Web Load lists the replacement. For each record pair and orientation, gbdraw takes the longest chain
 of compatible anchors (most anchors, then the highest summed bit score), removes
 it, and repeats; each anchor left over is a singleton block. Two neighbouring
 anchors of a chain may have at most `max_unit_gap` units between them, on both
@@ -88,7 +93,11 @@ records; at `0` they must be adjacent units.
 `max_conflicts` defaults to `1` and limits how many other anchors may lie
 strictly inside both order intervals between two neighbouring anchors of a
 chain, so it has no effect when `max_unit_gap` is `0`. Those other anchors stay
-in the result in their own blocks.
+in the result in their own blocks. `max_diagonal_drift` limits the
+difference between the two unit gaps of neighbouring anchors, so at its
+default `0` a gap is bridged only when both records skip the same number of
+units; the drift can never exceed `max_unit_gap`, so it also has no effect when
+`max_unit_gap` is `0`.
 
 Filters apply to display or derived results after raw search rows exist. A raw
 TSV can therefore contain more rows than the finished diagram. Record the
@@ -111,19 +120,25 @@ In Web **Settings**, **Max target seqs** sets the raw LOSATP
 A blank value leaves the search unbounded. In a within-record search, the
 protein's hit to itself counts toward this limit, so a limit of N leaves at
 most N - 1 other proteins of the same record for each query protein. Both
-**Max target seqs** and **Max hits per protein for groups** initially use `5` in
-Collinear blocks and are unbounded in Similarity groups. Each LOSATP mode
-remembers its own values when switching modes, including after a Session
-round trip. An explicitly blank Collinear value stays unbounded.
+**Max target seqs** and **Max hits per protein for groups** are unbounded by
+default in every LOSATP mode, on the Web, the command line, and in Python.
+Each LOSATP mode remembers its own values when switching modes, including after
+a Session round trip; a Session keeps the values it saved.
 
-Web Collinear blocks defaults **Build similarity groups with within-record
-searches** to OFF. OFF searches between records and builds blocks from the
-selected anchors without similarity groups. ON adds within-record searches and
-groups proteins, paralogs included, into similarity groups before blocks are
-built (the CLI option `--collinear_infer_orthogroups`). Similarity groups
-always builds these groups. Older Collinear Sessions that lack the checkbox setting keep ON
-for reproducibility. The Python and CLI defaults when the setting is omitted keep their previous
-behavior; typed requests can explicitly set `collinear_infer_orthogroups=False`.
+Collinear blocks builds no similarity groups by default: **Build similarity
+groups with within-record searches** on the Web, `--collinear_infer_orthogroups
+off` on the command line, `collinear_infer_orthogroups=False` in typed requests,
+and `collinearity_infer_orthogroups=False` in `LinearComparisonOptions`. OFF
+searches between records only and builds blocks from the selected anchors. ON
+adds within-record searches and groups proteins, paralogs included, into
+similarity groups before blocks are built. Similarity groups always builds
+these groups. A saved Collinear Session or request without the setting, and a
+recorded Collinear command line without the flag, keep ON, the behavior they
+were made with. **Search between** (`--collinear_search_scope`) and **Max hits
+per protein for groups** (`--losatp_member_max_hits`) change the group evidence:
+with groups OFF, **Search between** changes nothing, and the member limit
+changes the anchors only with the `all` anchor mode, so the Web shows each only
+when it can change the result.
 
 The Web app, the CLI, and the Python API treat one source file as one genome
 when they run LOSATN, TLOSATX, or LOSATP. Records from two different files are

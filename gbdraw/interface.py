@@ -390,6 +390,9 @@ class LinearComparisonOptions:
     only); without it, records in adjacent rows are compared.
     ``max_hits``, ``max_target_seqs``, and ``member_max_hits`` apply to
     LOSATP; the runtime fields apply when ``losat`` is set.
+    ``collinearity_infer_orthogroups`` adds within-record searches to
+    ``losatp_mode="collinear"`` and groups proteins into similarity groups
+    before blocks are built (off by default).
     """
 
     blast_files: Sequence[str] | None = None
@@ -415,6 +418,9 @@ class LinearComparisonOptions:
     )
     collinearity_color: CollinearityColorMode | str = (
         _LINEAR_DIAGRAM_DEFAULTS.collinearity_color_mode
+    )
+    collinearity_infer_orthogroups: bool = (
+        _LINEAR_DIAGRAM_DEFAULTS.collinear_infer_orthogroups
     )
     max_hits: int = 5
     max_target_seqs: int | None = None
@@ -1094,6 +1100,7 @@ def _linear_options(
         collinearity_anchor_mode=comparisons.collinearity_anchor,
         collinearity_search_scope=comparisons.collinearity_scope,
         collinearity_color_mode=comparisons.collinearity_color,
+        collinear_infer_orthogroups=comparisons.collinearity_infer_orthogroups,
         orthogroup_membership_mode=comparisons.orthogroup_membership,
         collinear_max_paralog_links_per_orthogroup=comparisons.max_paralog_links,
     )

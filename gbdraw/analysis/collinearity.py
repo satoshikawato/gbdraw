@@ -46,7 +46,6 @@ from gbdraw.analysis.protein_colinearity import (
     filter_protein_hits_by_thresholds,
     normalize_orthogroup_membership_mode,
     select_reciprocal_best_hit_edges,
-    select_reciprocal_best_hits,
     select_rbh_orthogroup_edges_from_directional_hits,
 )
 from gbdraw.comparisons.losat_jobs import losatp_job_specs
@@ -58,7 +57,8 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 CollinearityOrientation = Literal["plus", "minus"]
 CollinearityBlockKind = Literal["syntenic", "cluster", "singleton"]
 CollinearityColorMode = Literal["average_identity", "orientation", "orientation_identity"]
-CollinearityAnchorMode = Literal["all", "one_to_one", "rbh"]
+CollinearityAnchorMode = Literal["all", "rbh"]
+CollinearityMergeOrientation = Literal["strand", "order"]
 CollinearitySearchScope = Literal["adjacent", "all"]
 
 COLLINEARITY_METADATA_COLUMNS = (
@@ -99,6 +99,7 @@ COLLINEARITY_COMPARISON_COLUMNS = tuple(COMPARISON_COLUMNS) + COLLINEARITY_METAD
 COLLINEARITY_COLOR_MODES: tuple[CollinearityColorMode, ...] = get_args(CollinearityColorMode)
 COLLINEARITY_ANCHOR_MODES: tuple[CollinearityAnchorMode, ...] = get_args(CollinearityAnchorMode)
 COLLINEARITY_SEARCH_SCOPES: tuple[CollinearitySearchScope, ...] = get_args(CollinearitySearchScope)
+COLLINEARITY_MERGE_ORIENTATIONS: tuple[CollinearityMergeOrientation, ...] = get_args(CollinearityMergeOrientation)
 # The other spellings each normalizer below reads (gbdraw.contract_shapes.read_spelling);
 # the request description names them for the Web's Session Load.
 COLLINEARITY_COLOR_MODE_SPELLINGS: Spellings = {
@@ -110,11 +111,6 @@ COLLINEARITY_ANCHOR_MODE_SPELLINGS: Spellings = {
         "raw": "all",
         "top_n": "all",
         "topn": "all",
-        "one2one": "one_to_one",
-        "one_to_ones": "one_to_one",
-        "mutual_best": "one_to_one",
-        "top1": "one_to_one",
-        "top_1": "one_to_one",
         "reciprocal_best": "rbh",
         "strict_rbh": "rbh",
     },
@@ -122,6 +118,16 @@ COLLINEARITY_ANCHOR_MODE_SPELLINGS: Spellings = {
     "blank": "rbh",
 }
 COLLINEARITY_SEARCH_SCOPE_SPELLINGS: Spellings = {"foldHyphens": True, "blank": "adjacent"}
+# "either" was a third value that behaved as "strand" (OV-2301).
+COLLINEARITY_MERGE_ORIENTATION_SPELLINGS: Spellings = {"aliases": {"either": "strand"}, "blank": "strand"}
+# The anchor mode "one_to_one" (forward mutual best hits) was removed.
+# A stored request or Web draft that holds it, or one of its spellings that
+# requests before schema 9 hold, is read as "rbh", the default, and its reader
+# reports the replacement.
+RETIRED_COLLINEARITY_ANCHOR_MODES: Mapping[str, CollinearityAnchorMode] = {
+    spelling: "rbh"
+    for spelling in ("one_to_one", "one2one", "one_to_ones", "mutual_best", "top1", "top_1")
+}
 
 
 @dataclass(frozen=True)
@@ -198,7 +204,17 @@ class LosslessCollinearityParameters:
     max_unit_gap: int = 0
     max_diagonal_drift: int = 0
     max_conflicts: int = 1
-    merge_orientation: Literal["strand", "order", "either"] = "either"
+    merge_orientation: CollinearityMergeOrientation = "strand"
+
+    def __post_init__(self) -> None:
+        # Every reader of the parameters reads the old spelling "either" as "strand".
+        normalized = read_spelling(
+            self.merge_orientation,
+            COLLINEARITY_MERGE_ORIENTATIONS,
+            COLLINEARITY_MERGE_ORIENTATION_SPELLINGS,
+        )
+        if normalized is not None:
+            object.__setattr__(self, "merge_orientation", normalized)
 
     def validate(self) -> None:
         if int(self.min_anchors) <= 0:
@@ -209,8 +225,12 @@ class LosslessCollinearityParameters:
             raise ValidationError("collinear_max_diagonal_drift must be >= 0")
         if int(self.max_conflicts) < 0:
             raise ValidationError("collinear_max_conflicts must be >= 0")
-        if str(self.merge_orientation) not in {"strand", "order", "either"}:
-            raise ValidationError("collinear_merge_orientation must be one of: strand, order, either")
+        if str(self.merge_orientation) not in COLLINEARITY_MERGE_ORIENTATIONS:
+            raise ValidationError(
+                "collinear_merge_orientation must be one of: "
+                + ", ".join(COLLINEARITY_MERGE_ORIENTATIONS),
+                diagnostic={"code": "INPUT_INVALID", "field": "collinear_merge_orientation", "reason": "COLLINEAR_MERGE_ORIENTATION"},
+            )
 
 
 def normalize_collinearity_color_mode(mode: str | None) -> CollinearityColorMode:
@@ -251,19 +271,22 @@ def iter_collinearity_search_pairs(
     *,
     scope: CollinearitySearchScope | str,
 ) -> tuple[tuple[int, int], ...]:
-    """Return unordered record pairs searched for Collinear evidence.
+    """Return the unordered record pairs that ``scope`` searches for Collinear evidence.
 
     A view of the LOSAT job plan (:func:`gbdraw.comparisons.losat_jobs.losatp_job_specs`)
-    for consecutive records.
+    for consecutive records with similarity-group inference on, the only case
+    in which Search between applies.
     """
 
     specs = losatp_job_specs(
         "collinear",
         record_count=record_count,
-        infer_orthogroups=False,
+        infer_orthogroups=True,
         search_scope=normalize_collinearity_search_scope(str(scope)),
     )
-    return tuple(dict.fromkeys(cast(tuple[int, int], tuple(sorted(pair))) for pair in specs))
+    return tuple(dict.fromkeys(
+        cast(tuple[int, int], tuple(sorted(pair))) for pair in specs if pair[0] != pair[1]
+    ))
 
 
 def _float_from_row(row: object, column: str, default: float = 0.0) -> float:
@@ -1209,8 +1232,6 @@ def _select_orthogroup_edges(
                 forward_hits,
                 reverse_hits,
             )
-        elif normalized_edge_mode == "one_to_one":
-            selected[(query_index, subject_index)] = select_reciprocal_best_hits(forward_hits)
         else:
             selected[(query_index, subject_index)] = forward_hits.copy()
     return selected
@@ -1227,7 +1248,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
     search_scope: CollinearitySearchScope | str = "adjacent",
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int | None = None,
-    infer_orthogroups: bool = True,
+    infer_orthogroups: bool,
     max_paralog_links_per_orthogroup: int = 2,
     comparison_pairs: Sequence[tuple[int, int]] | None = None,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
@@ -1358,7 +1379,7 @@ def build_orthogroup_collinearity_blocks(
     candidate_limit: int | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int | None = None,
-    infer_orthogroups: bool = True,
+    infer_orthogroups: bool,
     max_paralog_links_per_orthogroup: int = 2,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
@@ -1469,7 +1490,7 @@ def build_collinearity_blocks_from_hits(
     search_scope: CollinearitySearchScope | str = "adjacent",
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int | None = None,
-    infer_orthogroups: bool = True,
+    infer_orthogroups: bool,
     max_paralog_links_per_orthogroup: int = 2,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
 ) -> CollinearityResult:
@@ -1603,6 +1624,9 @@ def convert_collinearity_blocks_to_pair_comparisons(
     The native TSV keeps anchor-level details, but the diagram should display a
     collinear block as one continuous span ribbon.  The existing comparison
     renderer can draw that block ribbon when we pass it one span row per block.
+    The rows name the scope of their similarity groups (``search_scope``) only
+    when an anchor belongs to a group: blocks built without inferred groups
+    have none to name (OV-2302).
     """
 
     normalized_color_mode = normalize_collinearity_color_mode(str(color_mode))
@@ -1708,7 +1732,8 @@ def convert_collinearity_blocks_to_pair_comparisons(
         pair: pd.DataFrame.from_records(rows, columns=COLLINEARITY_COMPARISON_COLUMNS)
         for pair, rows in sorted(rows_by_pair.items())
     }
-    if search_scope is not None:
+    has_groups = any(anchor.orthogroup_id for block in result.blocks for anchor in block.anchors)
+    if search_scope is not None and has_groups:
         normalized_search_scope = normalize_collinearity_search_scope(
             str(search_scope)
         )
@@ -1766,6 +1791,7 @@ __all__ = [
     "COLLINEARITY_ANCHOR_MODES",
     "COLLINEARITY_COLOR_MODES",
     "COLLINEARITY_COMPARISON_COLUMNS",
+    "COLLINEARITY_MERGE_ORIENTATIONS",
     "COLLINEARITY_METADATA_COLUMNS",
     "COLLINEARITY_SEARCH_SCOPES",
     "CollinearityAnchor",
@@ -1773,6 +1799,7 @@ __all__ = [
     "CollinearityBlock",
     "CollinearityBlockKind",
     "CollinearityColorMode",
+    "CollinearityMergeOrientation",
     "CollinearityResult",
     "CollinearitySearchScope",
     "LosslessCollinearityParameters",

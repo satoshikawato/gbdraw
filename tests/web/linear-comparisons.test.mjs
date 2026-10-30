@@ -759,9 +759,11 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
   assert.deepEqual(resolution.edges.map((edge) => [edge.edgeKey, edge.ordinal]), [['b->c', 0], ['c->a', 1]]);
   const specs = buildLosatJobSpecs({
     resolution, recordCount: 3, recordUids: ['a', 'b', 'c'], program: 'blastp', blastpMode: 'collinear',
-    collinearInferOrthogroups: false, collinearSearchScope: 'all'
+    collinearInferOrthogroups: true, collinearSearchScope: 'all'
   });
-  assert.deepEqual(specs.map((spec) => [`${spec.queryUid}->${spec.subjectUid}`, spec.edgeKey, spec.ordinal]), [
+  // Search between applies with inference on; the within-record searches come first.
+  const betweenRecords = specs.filter((spec) => spec.queryIndex !== spec.subjectIndex);
+  assert.deepEqual(betweenRecords.map((spec) => [`${spec.queryUid}->${spec.subjectUid}`, spec.edgeKey, spec.ordinal]), [
     ['a->b', 'b->c', 0], ['b->a', 'b->c', 0],
     ['a->c', 'c->a', 1], ['c->a', 'c->a', 1],
     ['b->c', 'b->c', 0], ['c->b', 'b->c', 0]

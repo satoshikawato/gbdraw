@@ -237,24 +237,22 @@ def _configure_all_record_collinear(
     losatp_mode.select_option("collinear")
     expect(losatp_mode).to_have_value("collinear")
 
-    # Since 65f231af (#533), fresh Web Collinear leaves self-comparison
-    # orthogroup inference off and caps raw LOSATP hits at 5. The Gallery
-    # request and the CLI/Python recipes use inference with an unbounded raw
-    # search, so this Gallery reproduction selects those values explicitly.
+    # Fresh Web Collinear leaves within-record inference off and both hit
+    # limits unbounded. The Gallery request uses inference, an
+    # unbounded raw search and 5 hits per protein for groups, so this Gallery
+    # reproduction selects those values explicitly.
     infer_orthogroups = settings.get_by_role(
         "checkbox", name="Build similarity groups with within-record searches", exact=True
     )
     expect(infer_orthogroups).not_to_be_checked()
     infer_orthogroups.check()
     expect(infer_orthogroups).to_be_checked()
-    max_target_seqs = settings.get_by_label("LOSATP Max target seqs", exact=True)
-    expect(max_target_seqs).to_have_value("5")
-    max_target_seqs.fill("")
-    max_target_seqs.press("Tab")
-    expect(max_target_seqs).to_have_value("")
-    expect(
-        settings.get_by_label("Max hits per protein for groups", exact=True)
-    ).to_have_value("5")
+    expect(settings.get_by_label("LOSATP Max target seqs", exact=True)).to_have_value("")
+    member_max_hits = settings.get_by_label("Max hits per protein for groups", exact=True)
+    expect(member_max_hits).to_have_value("")
+    member_max_hits.fill("5")
+    member_max_hits.press("Tab")
+    expect(member_max_hits).to_have_value("5")
 
     settings.get_by_label("Collinear max unit gap", exact=True).fill("0")
     settings.get_by_label(

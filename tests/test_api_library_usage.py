@@ -109,8 +109,7 @@ def test_api_diagram_options_forward_collinearity_search_scope(monkeypatch: pyte
     ("requested", "expected"),
     [
         ("all", "all"),
-        ("one_to_one", "one_to_one"),
-        ("top1", "one_to_one"),
+        ("raw", "all"),
         ("rbh", "rbh"),
     ],
 )
@@ -153,13 +152,11 @@ def test_linear_assembler_forwards_normalized_collinearity_anchor_mode(
         ("collinearity_unit_mode", "cds", "unit_mode"),
         ("collinearity_unit_mode", "locus", "unit_mode"),
         ("collinearity_anchor_mode", "all", "edge_mode"),
-        ("collinearity_anchor_mode", "one_to_one", "edge_mode"),
         ("collinearity_anchor_mode", "rbh", "edge_mode"),
         ("collinearity_search_scope", "adjacent", "search_scope"),
         ("collinearity_search_scope", "all", "search_scope"),
         ("merge_orientation", "strand", "params"),
         ("merge_orientation", "order", "params"),
-        ("merge_orientation", "either", "params"),
     ],
 )
 def test_each_collinearity_enum_reaches_real_analysis_helper(
@@ -822,7 +819,7 @@ _LINEAR_ONLY_FORWARDING_CASES = [
     ("pairwise_match_style", "curve", "pairwise_match_style", "curve"),
     ("collinearity_blocks", object(), "collinearity_blocks", None),
     ("collinearity_unit_mode", "cds", "collinearity_unit_mode", "cds"),
-    ("collinearity_anchor_mode", "top1", "collinearity_anchor_mode", "one_to_one"),
+    ("collinearity_anchor_mode", "raw", "collinearity_anchor_mode", "all"),
     ("collinearity_search_scope", "all", "collinearity_search_scope", "all"),
     (
         "collinearity_color_mode",

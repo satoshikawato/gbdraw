@@ -2098,7 +2098,7 @@ def assemble_linear_diagram_from_records(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
-    collinear_infer_orthogroups: bool = True,
+    collinear_infer_orthogroups: bool = LinearDiagramOptions.collinear_infer_orthogroups,
     collinear_max_paralog_links_per_orthogroup: int = 2,
     similarity_alignment: SimilarityAlignmentPlan | None = None,
     color_table: Optional[DataFrame] = None,

@@ -21,7 +21,7 @@ import { IMPORTED_COMPARISON_ACTIONS } from './imported-comparison-intent.js';
 import { readCircularPlotTitlePosition } from './layout-preferences.js';
 import { isPlainObject } from './losat-cache.js';
 import {
-  readCollinearAnchorMode, readCollinearColorMode, readCollinearSearchScope, readCollinearUnitMode, readOrthogroupMembershipMode
+  readCollinearAnchorMode, readCollinearColorMode, readCollinearMergeOrientation, readCollinearSearchScope, readCollinearUnitMode, readOrthogroupMembershipMode
 } from './losat-normalization.js';
 import { normalizeOrthogroupDormantOverrides } from './orthogroup-feature-metadata.js';
 import {
@@ -662,7 +662,7 @@ const LOSAT_SEARCH_ROWS = Object.freeze([
   row('collinearColorMode', readCollinearColorMode),
   row('collinearUnitMode', readCollinearUnitMode),
   row('collinearAnchorMode', readCollinearAnchorMode),
-  row('collinearMergeOrientation', textChoice(['strand', 'order', 'either'], 'either')),
+  row('collinearMergeOrientation', readCollinearMergeOrientation),
   row('collinearSearchScope', readCollinearSearchScope),
   { field: 'collinearBlockMergeGap', read: retiredField, retired: true },
   { field: 'collinearSingletonMergeGap', read: retiredField, retired: true },

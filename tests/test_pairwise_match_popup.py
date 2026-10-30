@@ -136,7 +136,8 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "services" / "losat-normalization.js")
         .read_text(encoding="utf-8")
         .replace("../contracts/request-shape.generated.js", "./request-shape.generated.mjs")
-        .replace("../utils/contract-shape.js", "./contract-shape.mjs"),
+        .replace("../utils/contract-shape.js", "./contract-shape.mjs")
+        .replace("../utils/error-normalization.js", "./error-normalization.mjs"),
         encoding="utf-8",
     )
     (tmp_path / "contract-shape.mjs").write_text(

@@ -219,6 +219,9 @@ const openCollinearGrid = async (page, sessionPath) => {
     ({ row, canonicalRow, canonicalColumn }) => [row, canonicalRow, canonicalColumn]
   )), { timeout: 60000 }).toEqual([[1, 1, 1], [1, 1, 2], [2, 2, 1]]);
   await chooseLosatp(page, 'collinear');
+  // Search between applies only with similarity groups (OV-2302): All records
+  // searches every record pair, so a change of the displayed pairs reuses them.
+  await page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches', exact: true }).check();
   await page.getByRole('combobox', { name: 'Collinear search between' }).selectOption('all');
 };
 
@@ -227,6 +230,7 @@ test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fr
   const sessionPath = saveCliGridSession(testInfo);
   await openCollinearGrid(page, sessionPath);
   const grid = await generate(page);
+  // The three within-record searches and the six cross-record searches of three records run.
   expect(grid.cache).toEqual({ cacheHits: 0, cacheMisses: 9, derivedHits: 0, derivedMisses: 1 });
   expect(grid.links).toEqual(['0->2 1-330 61-360', '1->2 31-360 61-360']);
 

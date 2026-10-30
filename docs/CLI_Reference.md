@@ -1050,11 +1050,16 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               --ncbi_blast_bin PATH] [--losat_threads N] [--losatp_max_hits N]
               [--losatp_max_target_seqs N] [--losatp_member_max_hits N]
               [--losat_output_dir DIR] [--similarity_alignment_feature ID]
+              [--collinear_unit_mode {auto,cds,locus}]
               [--collinear_search_scope {adjacent,all}]
               [--collinear_infer_orthogroups {on,off}]
+              [--collinear_anchor_mode {all,rbh}]
+              [--collinear_merge_orientation {strand,order}]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
               [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
               [--collinear_max_diagonal_drift COLLINEAR_MAX_DIAGONAL_DRIFT]
+              [--collinear_max_conflicts_in_merge_gap COLLINEAR_MAX_CONFLICTS_IN_MERGE_GAP]
+              [--collinear_max_paralog_links_per_orthogroup COLLINEAR_MAX_PARALOG_LINKS_PER_ORTHOGROUP]
               [--collinear_color_mode {average_identity,orientation,orientation_identity}]
               [-t TABLE] [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT]
               [--overwrite] [-n NT] [-w WINDOW] [-s STEP] [--separate_strands]
@@ -1232,26 +1237,62 @@ options:
                         or protein ID; Similarity Group IDs are not accepted.
                         Requires --losat losatp with --losatp_mode
                         similarity_groups.
+  --collinear_unit_mode {auto,cds,locus}
+                        Units that order Collinear anchors: auto (the CDSs
+                        that share a locus ID form one unit; any other CDS is
+                        a unit of its own), cds (one unit per CDS), or locus
+                        (one unit per locus ID; every CDS needs one) (default:
+                        auto).
   --collinear_search_scope {adjacent,all}
-                        Collinear protein blastp scope: adjacent displayed
-                        records/rows or all record pairs. With multi-record
-                        rows, adjacent searches every cross-record pair
-                        between neighboring rows; all uses every pair as
-                        grouping evidence but renders only pairs across
-                        adjacent rows (default: adjacent).
+                        Record pairs whose protein searches supply Collinear
+                        similarity-group evidence: adjacent (records in
+                        neighboring rows) or all (every record pair). It
+                        changes the group evidence only, never the blocks,
+                        which always connect adjacent rows, so it has an
+                        effect only with --collinear_infer_orthogroups on
+                        (default: adjacent).
   --collinear_infer_orthogroups {on,off}
-                        Infer Similarity groups from the Collinear evidence
-                        and color blocks by group (default: on).
+                        Add within-record protein searches and group proteins,
+                        paralogs included, into Similarity groups before
+                        Collinear blocks are built (default: off).
+  --collinear_anchor_mode {all,rbh}
+                        Between-record hits that become Collinear anchors: rbh
+                        (reciprocal best hits; with
+                        --collinear_infer_orthogroups on, the links of the
+                        Similarity groups) or all (every hit that passes the
+                        filters) (default: rbh).
+  --collinear_merge_orientation {strand,order}
+                        How neighboring anchors of a Collinear block must
+                        agree: strand (the anchor strands follow the block
+                        orientation and the gene order) or order (the gene
+                        order only) (default: strand).
   --collinear_min_anchors COLLINEAR_MIN_ANCHORS
                         Minimum anchors/genes required for a rendered
                         Collinear block; 1 allows singleton links (default:
                         1).
   --collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP
-                        Maximum unit gap between neighboring collinear anchors
+                        Maximum number of units (see --collinear_unit_mode)
+                        between two neighboring anchors of a Collinear block,
+                        on both records; 0 joins adjacent units only. With
+                        --collinear_max_diagonal_drift 0, a gap is bridged
+                        only when both records skip the same number of units
                         (default: 0).
   --collinear_max_diagonal_drift COLLINEAR_MAX_DIAGONAL_DRIFT
-                        Maximum order-space diagonal drift allowed within or
-                        between collinear runs (default: 0).
+                        Maximum difference between the unit gaps on the two
+                        records for two neighboring anchors of a Collinear
+                        block. It needs --collinear_max_unit_gap 1 or more; a
+                        value above that gap acts as the gap (default: 0).
+  --collinear_max_conflicts_in_merge_gap COLLINEAR_MAX_CONFLICTS_IN_MERGE_GAP
+                        Maximum other anchors that may lie strictly inside the
+                        gap between two neighboring anchors of a Collinear
+                        block, on both records; those anchors stay in blocks
+                        of their own. It needs --collinear_max_unit_gap 1 or
+                        more (default: 1).
+  --collinear_max_paralog_links_per_orthogroup COLLINEAR_MAX_PARALOG_LINKS_PER_ORTHOGROUP
+                        Maximum paralog links kept for each Similarity group,
+                        in --losatp_mode similarity_groups and with
+                        --collinear_infer_orthogroups on; it does not change
+                        Collinear blocks (default: 2).
   --collinear_color_mode {average_identity,orientation,orientation_identity}
                         Collinear ribbon color mode: average_identity,
                         orientation, or orientation_identity (default:

@@ -2964,6 +2964,22 @@ assert.equal(
   projectCanonicalSessionRequest(losatPairCanonical).files.linearComparisons[0].source,
   'losat'
 );
+// Outside Collinear the writer keeps the stored merge orientation as read: a
+// 0.14.3 request's "either" is written as "strand" (OV-2301: writers write strand).
+linearFilesData.linearCanonicalComparisons = [{
+  kind: 'generatedProteinComparison', mode: 'collinear', pairs: [],
+  settings: { collinearityParams: { kind: 'lossless', parameters: { mergeOrientation: 'either' } } }
+}];
+assert.equal(
+  // Raw: this request stays out of the characterized corpus below.
+  buildCanonicalRenderRequestRaw({
+    state, filesData: linearFilesData, comparisonPlanSnapshot: comparisonSnapshotForState(state, linearFilesData)
+  }).renderRequest.comparisons.find(
+    (comparison) => comparison.kind === 'generatedProteinComparison'
+  ).settings.collinearityParams.parameters.mergeOrientation,
+  'strand'
+);
+linearFilesData.linearCanonicalComparisons = [];
 const resolvedPlanReference = {
   recordKey: 'first', biologicalFeatureId: 'feature-first',
   sourceFeatureIndex: 1, stableFeatureSvgId: 'stable-first'
@@ -5224,7 +5240,7 @@ const inactiveProteinDefaults = {
   collinearMaxConflicts: 1,
   collinearityUnitMode: 'auto',
   collinearityAnchorMode: 'rbh',
-  collinearityMergeOrientation: 'either',
+  collinearityMergeOrientation: 'strand',
   collinearitySearchScope: 'adjacent',
   collinearityColorMode: 'orientation'
 };
@@ -5582,7 +5598,8 @@ assert.deepEqual(resolvedProteinMarker.pairs, []);
 // other 81 requests are the 83 recorded before, byte for byte.
 assert.equal(characterizedRequests.length, 81);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  '9f0a68dde640b4645bbbef3813fbdce3d59072167910543562c539ca3bbbfea3',
+  // Re-recorded when the default merge orientation became "strand" (OV-2301).
+  '226ee05fe6c482311ca894941631c6f1e22590b494cbc79970024f1ad9e156dd',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 const projectSessionIndex = process.argv.indexOf('--project-session');

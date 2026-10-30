@@ -1011,7 +1011,7 @@ await exercisePairLoop({failure: 'cancel'});
   });
   const specs = buildLosatJobSpecs({
     resolution: comparisonResolution, recordCount: 3, recordUids: ['a', 'b', 'c'], program: 'blastp',
-    blastpMode: 'collinear', collinearInferOrthogroups: false, collinearSearchScope: 'all'
+    blastpMode: 'collinear', collinearInferOrthogroups: true, collinearSearchScope: 'all'
   });
   const context = {
     useProteinBlastp: false, useCollinearBlastp: true,

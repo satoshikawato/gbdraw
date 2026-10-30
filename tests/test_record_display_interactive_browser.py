@@ -313,7 +313,7 @@ def collinear_cluster_fixture(search_scope=None):
         (0, 1): pd.DataFrame.from_records([_hit_row(f"a{i}", f"b{i}", 300) for i in range(3)], columns=COMPARISON_COLUMNS),
         (1, 0): pd.DataFrame.from_records([_hit_row(f"b{i}", f"a{i}", 300) for i in range(3)], columns=COMPARISON_COLUMNS),
     }
-    result = build_orthogroup_collinearity_blocks_from_hits(hits, extract_cds_proteins(items), records=items)
+    result = build_orthogroup_collinearity_blocks_from_hits(hits, extract_cds_proteins(items), records=items, infer_orthogroups=True)
     frame = convert_collinearity_blocks_to_comparisons(result, records=items, search_scope=search_scope)[0]
     plan, root = svg(request("linear", items, [None, None], linear_comparisons=[LinearComparison(0, 1, frame)]))
     context = build_interactive_svg_context(

@@ -804,12 +804,16 @@ plan is reported as an error instead.
 LOSATP, its presentation. LOSATN shows **LOSATN task**. TLOSATX keeps each record's
 active genetic code in that record's **Record options**. LOSATP **Pairwise
 matches** shows **Max hits per protein**; **Similarity groups** shows **Max
-hits per protein for groups**; **Collinear blocks** shows its primary block, scope, and
+hits per protein for groups**; **Collinear blocks** shows its primary block and
 color controls. **Result filters** and **Comparison appearance** follow, then
 **Search limits** and **Performance**. **Max target seqs** is visible under
 **Search limits** for every LOSATP mode and controls the raw search limit. Both it and **Max hits per protein for groups**
-initially use `5` in Collinear and are unbounded in Similarity groups. Each mode
-remembers its own edited values. Blank means unbounded.
+are unbounded by default in every mode, as on the command line. Each mode
+remembers its own edited values. Blank means unbounded. In Collinear blocks,
+**Search between** shows only while **Build similarity groups with within-record
+searches** is on, and **Max hits per protein for groups** only while it is on or
+**Anchor mode** is **All hits**: elsewhere they cannot change the result. A
+hidden value stays in the settings and is saved.
 
 Collinear also shows **Build similarity groups with within-record searches**,
 initially OFF. Enable it to add within-record searches and group proteins,
@@ -830,11 +834,12 @@ A Curve or Ribbon saved explicitly stays as saved.
 
 Similarity groups always runs an all-vs-all protein search across
 the loaded records and has no **Search between** selector. Collinear blocks
-uses **Search between** to choose the record pairs that LOSATP searches:
-**Adjacent pairs** or **All records**. Fresh pages and **Reset Settings**
-default it to **Adjacent pairs**. A session that explicitly saved **All
-records** restores that value. **Search between** controls how far the search
-expands, not which record pairs get displayed links.
+uses **Search between** to choose the record pairs that LOSATP searches for
+similarity-group evidence: **Adjacent pairs** or **All records**. Fresh pages
+and **Reset Settings** default it to **Adjacent pairs**. A session that
+explicitly saved **All records** restores that value. **Search between** changes
+the group evidence only: the blocks and the record pairs that get displayed
+links stay the same.
 
 **Advanced comparison and layout** is closed by default. It holds **Record Layout**, cache controls,
 and advanced Collinear search details. Each pair's raw result file is in its

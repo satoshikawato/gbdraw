@@ -291,7 +291,7 @@ def test_unit_allocation_and_removed_work(mode):
 @pytest.mark.parametrize('infer', [False, True])
 @pytest.mark.parametrize('limit', [1, 5, None])
 @pytest.mark.parametrize('mode', ['auto', 'cds', 'locus'])
-@pytest.mark.parametrize('anchor', ['rbh', 'one_to_one', 'all'])
+@pytest.mark.parametrize('anchor', ['rbh', 'all'])
 @pytest.mark.parametrize('scenario,reverse', [('sparse-2', False), ('dense-4', True), ('support-edges', False)])
 def test_complete_collinear_outputs_with_frozen_units(scope, infer, limit, mode, anchor, scenario, reverse):
     from gbdraw.analysis import collinearity as cc

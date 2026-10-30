@@ -158,7 +158,7 @@ test('UX-B01: a collinear block leads with one summary and lists gene pairs by g
     'Average identity': '76.06%',
     'Aligned length': '5,831 aa',
     'Block score': '8448',
-    Anchor: '1 / 15'
+    Anchors: '15'
   });
   assert.match(block.note, /^Block envelopes may include/);
   assert.equal(block.pairsCopyText.split('\n').length, 2);

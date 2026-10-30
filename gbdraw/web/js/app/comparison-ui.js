@@ -9,6 +9,8 @@ import {
 import { comparisonStateForMode } from '../mode-profiles.js';
 import { joinSentences, listText, msg, t, tm, tn } from '../utils/i18n.js';
 /** @import { ComparisonState } from '../mode-profiles.js' */
+/** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
+import { DEFAULT_COLLINEAR_ANCHOR_MODE } from '../services/losat-normalization.js';
 
 const LINEAR_COMPARISON_INTENT_KEYS = Object.freeze({
   NONE: 'none',
@@ -45,6 +47,7 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
     BLASTP_MAX_HITS: 'blastp-max-hits',
     MEMBER_HITS: 'member-hits',
     COLLINEAR_PRIMARY: 'collinear-primary',
+    COLLINEAR_SEARCH_SCOPE: 'collinear-search-scope',
     RESULT_FILTERS: 'result-filters',
     COMPARISON_APPEARANCE: 'comparison-appearance'
   }),
@@ -348,6 +351,8 @@ const projectLosatpModes = (plan, activeKey) => Object.freeze(LOSATP_MODES.map((
  * @property {string} losatModeKey
  * @property {string} losatpModeKey
  * @property {boolean} selectedTopology
+ * @property {boolean} inferOrthogroups Collinear builds similarity groups.
+ * @property {CanonicalProteinComparisonSettings['collinearityAnchorMode']} anchorMode The Collinear anchor mode.
  */
 
 /** @param {SettingsSectionInput} input */
@@ -356,7 +361,9 @@ const projectSettingsSectionKeys = ({
   planned,
   losatModeKey,
   losatpModeKey,
-  selectedTopology
+  selectedTopology,
+  inferOrthogroups,
+  anchorMode
 }) => {
   if (intentKey === LINEAR_COMPARISON_INTENT_KEYS.NONE) return Object.freeze([]);
 
@@ -383,7 +390,12 @@ const projectSettingsSectionKeys = ({
       searchLimits.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.MEMBER_HITS);
     } else if (!selectedTopology && losatpModeKey === LINEAR_COMPARISON_LOSATP_MODE_KEYS.COLLINEAR_BLOCKS) {
       keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.COLLINEAR_PRIMARY);
-      searchLimits.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.MEMBER_HITS);
+      // Shown only where they can change the result (OV-2302): the searched
+      // pairs feed the similarity groups only, and the member limit reaches
+      // the anchors through the groups or All hits. Hidden values stay in
+      // the draft.
+      if (inferOrthogroups) keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.COLLINEAR_SEARCH_SCOPE);
+      if (inferOrthogroups || anchorMode === 'all') searchLimits.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.MEMBER_HITS);
     }
   }
   keys.push(
@@ -395,7 +407,7 @@ const projectSettingsSectionKeys = ({
   return Object.freeze(keys);
 };
 
-/** @param {SettingsSectionInput & { dormantDraftCount: number, inferOrthogroups: boolean }} input */
+/** @param {SettingsSectionInput & { dormantDraftCount: number }} input */
 const projectSectionKeys = ({
   intentKey,
   planned,
@@ -403,14 +415,17 @@ const projectSectionKeys = ({
   losatpModeKey,
   selectedTopology,
   dormantDraftCount,
-  inferOrthogroups
+  inferOrthogroups,
+  anchorMode
 }) => {
   const settings = projectSettingsSectionKeys({
     intentKey,
     planned,
     losatModeKey,
     losatpModeKey,
-    selectedTopology
+    selectedTopology,
+    inferOrthogroups,
+    anchorMode
   });
   const selectedPairs = [];
   if (intentKey !== LINEAR_COMPARISON_INTENT_KEYS.NONE || dormantDraftCount > 0) {
@@ -603,6 +618,7 @@ export const projectLinearComparisonLosatpModeSelection = ({
  *   losatProgram?: string,
  *   blastpMode?: string,
  *   inferOrthogroups?: boolean,
+ *   anchorMode?: CanonicalProteinComparisonSettings['collinearityAnchorMode'],
  *   filters?: ComparisonFilterValues
  * }} [options]
  */
@@ -613,6 +629,7 @@ export const projectLinearComparisonUi = ({
   losatProgram = 'blastn',
   blastpMode = 'orthogroup',
   inferOrthogroups = false,
+  anchorMode = DEFAULT_COLLINEAR_ANCHOR_MODE,
   filters = {}
 } = {}) => {
   const normalizedPlan = normalizeLinearComparisonPlan(plan);
@@ -637,7 +654,8 @@ export const projectLinearComparisonUi = ({
     losatpModeKey,
     selectedTopology,
     dormantDraftCount,
-    inferOrthogroups
+    inferOrthogroups,
+    anchorMode
   });
   const issues = projectIssues(resolution?.errors, activeEdges);
 

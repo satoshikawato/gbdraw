@@ -166,12 +166,30 @@ def losat_record_uids(records: Sequence[SeqRecord]) -> tuple[str, ...]:
 LosatpSpecMode = Literal["pairwise", "orthogroup", "collinear"]
 
 
+def effective_collinear_search_scope(
+    mode: LosatpSpecMode | str,
+    *,
+    infer_orthogroups: bool,
+    search_scope: str,
+) -> str:
+    """The Search between scope a LOSATP run uses (Web ``effectiveCollinearSearchScope``).
+
+    Search between widens only the similarity-group evidence: Collinear blocks
+    without inferred groups read the displayed edges alone, so Collinear with
+    inference off searches the edges whatever the stored scope holds.
+    """
+
+    if mode == "collinear" and not infer_orthogroups:
+        return "adjacent"
+    return str(search_scope)
+
+
 def losatp_job_specs(
     mode: LosatpSpecMode | str,
     *,
     record_count: int,
     pairs: Sequence[RecordPair] | None = None,
-    infer_orthogroups: bool = True,
+    infer_orthogroups: bool,
     search_scope: str = "adjacent",
 ) -> tuple[RecordPair, ...]:
     """The directed record-pair searches of one LOSATP run (Web ``buildLosatJobSpecs``).
@@ -179,8 +197,9 @@ def losatp_job_specs(
     ``pairs`` are the displayed comparison edges; omitted, they are the
     consecutive records. Pairwise searches each edge. Similarity groups search
     every record against every record, itself included. Collinear searches
-    each edge in both directions (every record pair with ``search_scope="all"``)
-    and adds the within-record searches when inference is on.
+    each edge in both directions and, with inference on, adds the
+    within-record searches and searches every record pair when
+    ``search_scope="all"`` (:func:`effective_collinear_search_scope`).
     """
 
     count = max(0, int(record_count))
@@ -210,7 +229,10 @@ def losatp_job_specs(
         )
     if infer_orthogroups:
         specs.extend((index, index) for index in range(count))
-    if str(search_scope) == "all":
+    scope = effective_collinear_search_scope(
+        mode, infer_orthogroups=infer_orthogroups, search_scope=search_scope
+    )
+    if scope == "all":
         every_pair(False)
     else:
         for query, subject in edges:
@@ -469,6 +491,7 @@ __all__ = [
     "LosatJob",
     "LosatpSpecMode",
     "NUCLEOTIDE_LOSAT_CACHE_SCHEMA",
+    "effective_collinear_search_scope",
     "losat_entry_filename",
     "losat_fasta_text",
     "losat_pair_filename",

@@ -3606,14 +3606,6 @@ def _sort_hits_for_query_best(hits: DataFrame) -> DataFrame:
     )
 
 
-def _sort_hits_for_subject_best(hits: DataFrame) -> DataFrame:
-    return hits.sort_values(
-        ["subject", "bitscore", "evalue", "identity", "alignment_length", "query"],
-        ascending=[True, False, True, False, False, True],
-        kind="mergesort",
-    )
-
-
 def select_top_hits_per_query(
     hits: DataFrame,
     *,
@@ -3671,34 +3663,6 @@ def _select_member_candidate_hits_per_query(
     pair_index = pd.MultiIndex.from_arrays([selected_pairs["query"], selected_pairs["subject"]])
     hit_index = pd.MultiIndex.from_arrays([hits["query"], hits["subject"]])
     return hits.loc[self_hit | hit_index.isin(pair_index)].reset_index(drop=True)
-
-
-def select_reciprocal_best_hits(hits: DataFrame) -> DataFrame:
-    """Keep query-subject pairs that are mutual best hits in one adjacent-pair table."""
-
-    if hits.empty:
-        return hits.copy()
-    _validate_comparison_columns(hits)
-
-    coerced_hits = _coerce_outfmt6_numeric_columns(hits)
-    query_best = (
-        _sort_hits_for_query_best(coerced_hits)
-        .drop_duplicates("query", keep="first")
-    )
-    subject_best = (
-        _sort_hits_for_subject_best(coerced_hits)
-        .drop_duplicates("subject", keep="first")
-    )
-    reciprocal_pairs = {
-        (str(query), str(subject))
-        for query, subject in zip(subject_best["query"], subject_best["subject"])
-    }
-    return query_best.loc[
-        [
-            (str(query), str(subject)) in reciprocal_pairs
-            for query, subject in zip(query_best["query"], query_best["subject"])
-        ]
-    ].reset_index(drop=True)
 
 
 def select_best_hits_per_query(
@@ -6696,7 +6660,9 @@ def build_pairwise_protein_blastp_comparisons(
         records,
         feature_visibility_rules=feature_visibility_rules,
     )
-    specs = losatp_job_specs("pairwise", record_count=len(records), pairs=pairs)
+    specs = losatp_job_specs(
+        "pairwise", record_count=len(records), pairs=pairs, infer_orthogroups=False
+    )
     searched = sorted({index for pair in specs for index in pair})
     _validate_extraction_has_proteins(
         [records[index] for index in searched],
@@ -6793,7 +6759,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
         option_name="protein_blastp_mode='orthogroup'",
     )
 
-    specs = losatp_job_specs("orthogroup", record_count=len(records))
+    specs = losatp_job_specs("orthogroup", record_count=len(records), infer_orthogroups=True)
     display_pairs: tuple[RecordPair, ...] = (
         tuple(comparison_pairs)
         if comparison_pairs is not None
@@ -6911,7 +6877,6 @@ __all__ = [
     "select_best_hits_per_query",
     "select_rbh_orthogroup_edges_from_directional_hits",
     "select_reciprocal_best_hit_edges",
-    "select_reciprocal_best_hits",
     "select_top_hits_per_query",
     "is_legacy_protein_losat_cache_entry",
     "is_protein_losat_cache_entry",

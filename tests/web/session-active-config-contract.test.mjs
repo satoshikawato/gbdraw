@@ -63,7 +63,7 @@ assert.equal(createDefaultLosat().blastp.candidateLimit, null);
 assert.equal(Object.hasOwn(createDefaultLosat(), 'executionMode'), false);
 assert.equal(createDefaultLosatExecution().executionMode, 'threaded');
 assert.equal(createDefaultLosat().blastp.collinearSearchScope, 'adjacent');
-assert.equal(createDefaultLosat().blastp.collinearMergeOrientation, 'either');
+assert.equal(createDefaultLosat().blastp.collinearMergeOrientation, 'strand');
 assert.equal(createDefaultAdv('circular').pairwise_match_style, 'ribbon');
 assert.equal(createDefaultAdv('linear').pairwise_match_style, 'curve');
 assert.equal(normalizeCurrentPairwiseMatchStyle('curve', 'ribbon'), 'curve');
