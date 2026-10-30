@@ -4221,9 +4221,12 @@ test('Collinear inference checkbox skips self searches and reuses matching evide
   for (const job of snapshot.jobs.flat()) {
     expect(job.query.some((record) => job.subject.includes(record))).toBe(false);
   }
+  // Without inference the stored All records changes nothing (D-17): only the
+  // displayed pairs between the two rows are searched, in both directions.
   const pairs = snapshot.jobs.flat().flatMap((job) => job.pairs);
-  expect(pairs).toHaveLength(20);
-  expect(pairs.every(([query, subject]) => query !== subject)).toBe(true);
+  const displayed = [0, 1].flatMap((upper) => [2, 3, 4].flatMap((lower) => [[upper, lower], [lower, upper]]));
+  const byPair = (left, right) => left[0] - right[0] || left[1] - right[1];
+  expect([...pairs].sort(byPair)).toEqual(displayed.sort(byPair));
   await checkbox.check();
   const on = await run();
   expect(on.status, JSON.stringify(on.error)).toEqual({ status: 'ok' });
