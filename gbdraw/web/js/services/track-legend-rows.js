@@ -1,5 +1,7 @@
 // @ts-check
-import { normalizeCircularTrackSlot, normalizeNt, parseCircularTrackSlotSpec } from './circular-track-slot-model.js';
+import {
+  GLOBAL_SUPPRESS_PARAM, circularTrackSlotHiddenBySuppressForm, normalizeCircularTrackSlot, normalizeNt, parseCircularTrackSlotSpec
+} from './circular-track-slot-model.js';
 import { parseLinearTrackSlotSpecs } from './linear-track-slot-model.js';
 import { defaultDepthSeriesLabel } from './depth-track-state.js';
 import { normalizeOptionalText } from './track-slot-display.js';
@@ -11,7 +13,7 @@ import { samePaint } from '../utils/color-utils.js';
 // rows Python drew for them in a Result, each with the track slot that draws it
 // and the color that fills it. The live compile and the Legend list also read
 // here which rows leave with a track the draft hides (`hiddenTrackLegendKeys`,
-// OV-1198, OV-1215), by the predicate the track hide reads (`drawnTrackHidden`). The Legend panel, the live compile and the feature
+// OV-1198, OV-1215), by the one hide answer the live track projection reads (`drawnTrackHidden`). The Legend panel, the live compile and the feature
 // popup read a track row's color here (`trackLegendRows`), and the palette's
 // track painter a skew track's (`skewTrackColor`), so neither is read from the
 // shape of a row's caption. A content track has no color of its own: every
@@ -49,6 +51,8 @@ import { samePaint } from '../utils/color-utils.js';
  * @property {string | null} slotId The track slot that draws it; null: a default track, which no explicit slot
  *   draws (Python tags its group with a preset slot id of its own), or a Depth series without Depth slots.
  * @property {'content' | 'skew' | 'depth'} kind A Depth track has one row, in its series' own fill.
+ * @property {string | null} nt The dinucleotide a content or skew track draws (its slot's own, else the
+ *   request's); null for a Depth track.
  * @property {string} label The label of its Legend rows.
  * @property {string | null} positiveColor A skew slot's own `positive_color`; null: the palette's.
  * @property {string | null} negativeColor A skew slot's own `negative_color`; null: the palette's.
@@ -83,6 +87,7 @@ import { samePaint } from '../utils/color-utils.js';
  * @property {PythonLegendKey} key
  * @property {string | null} slotId The track slot that draws the row; null: a default track.
  * @property {DrawnTrack['kind']} kind
+ * @property {DrawnTrack['nt']} nt
  * @property {TrackPaletteKey | null} paletteKey The palette key that fills the row unless the slot has its own
  *   color; null: a Depth row, filled by its series.
  * @property {string | null} ownColor The slot's own color, which wins over the palette; null: the palette's.
@@ -142,6 +147,7 @@ const slotTracks = (mode, defaultNt, slots, depth = []) => {
     return {
       slotId: slot?.id ?? null,
       kind,
+      nt: kind === 'depth' ? null : normalizeNt(slot?.params?.nt, defaultNt),
       label: normalizeOptionalText(Object.hasOwn(params, 'legend_label') ? params.legend_label : params.label) || fallback,
       positiveColor: kind === 'skew' ? normalizeOptionalText(params.positive_color) : null,
       negativeColor: kind === 'skew' ? normalizeOptionalText(params.negative_color) : null
@@ -171,15 +177,41 @@ const slotTracks = (mode, defaultNt, slots, depth = []) => {
 export const drawnTracks = (request) => {
   const view = trackRequestView(request);
   if (!view) return [];
-  const { mode, defaultNt, entries, depth } = view;
   try {
-    return slotTracks(mode, defaultNt, entries && (mode === 'linear'
-      ? parseLinearTrackSlotSpecs(entries, defaultNt)
-      : entries.map((entry, index) => (typeof entry === 'string'
-          ? parseCircularTrackSlotSpec(entry, index, defaultNt) : normalizeCircularTrackSlot(entry, index, defaultNt)))), depth);
+    const slots = view.entries ? entrySlots(view.mode, view.defaultNt, view.entries) : null;
+    return view.entries && !slots ? [] : slotTracks(view.mode, view.defaultNt, slots, view.depth);
   } catch {
     return [];
   }
+};
+/**
+ * A request's slot entries, each read by the slot parsers, in entry order; null when the Linear parser
+ * drops an entry, so no slot is read under another entry's place. The parsers throw for an entry they reject.
+ * @param {'circular' | 'linear'} mode @param {string} defaultNt @param {ReadonlyArray<string | Record<string, unknown>>} entries
+ * @returns {readonly TrackRowSlot[] | null}
+ */
+const entrySlots = (mode, defaultNt, entries) => {
+  const slots = mode === 'linear'
+    ? parseLinearTrackSlotSpecs(entries, defaultNt)
+    : entries.map((entry, index) => (typeof entry === 'string'
+        ? parseCircularTrackSlotSpec(entry, index, defaultNt) : normalizeCircularTrackSlot(entry, index, defaultNt)));
+  return slots.length === entries.length ? slots : null;
+};
+/**
+ * The explicit track slots of the request that drew a Result, as the slot
+ * parsers read them (a spec string of a Python API request and a slot object
+ * alike), beside the entries the request states, in entry order: the live
+ * track projection finds a committed row by the id read here and keeps its
+ * entry as the request states it. Null: no explicit slots (the default
+ * tracks) or a value that is no request; `slots` null: an entry was not
+ * read. Throws for an entry the parsers reject (as Session load would).
+ * @param {unknown} request
+ * @returns {{ readonly entries: ReadonlyArray<string | Record<string, unknown>>, readonly slots: readonly TrackRowSlot[] | null } | null}
+ */
+export const requestTrackSlots = (request) => {
+  const view = trackRequestView(request);
+  if (!view || !view.entries) return null;
+  return { entries: view.entries, slots: entrySlots(view.mode, view.defaultNt, view.entries) };
 };
 
 /**
@@ -251,7 +283,7 @@ export const trackLegendRows = (tracks, pythonRows, sharedLegendKeys = new Set()
     drawers.forEach((drawer, index) => {
       const key = numberedKey(preferred, offset + index);
       if (!drawnKeys.has(key)) return;
-      const row = { key, slotId: drawer.slotId, kind: drawer.kind, ...trackSideFill(drawer, side) };
+      const row = { key, slotId: drawer.slotId, kind: drawer.kind, nt: drawer.nt, ...trackSideFill(drawer, side) };
       if (drawer.saved && row.ownColor && !samePaint(row.ownColor, pythonRows.get(key)?.color)) return;
       rows.set(key, row);
     });
@@ -314,35 +346,76 @@ export const draftDrawsDepth = (mode, { form, adv }) => {
   return Array.isArray(slots) && slots.some((slot) => isRecord(slot) && slot.enabled !== false && slot.renderer === 'depth');
 };
 
+/** @type {Readonly<Record<'content' | 'skew', string>>} */
+const RENDERER_OF_KIND = Object.freeze({ content: 'dinucleotide_content', skew: 'dinucleotide_skew' });
+
 /**
- * Whether the draft hides the drawn tracks of a kind (`app/svg-styles.js` `applyTrackVisibility`): a track
- * the draft's request does not draw. Depth follows `draftDrawsDepth`. A Linear custom stack draws its
- * content and skew slots whatever Show GC Content and Show GC Skew say (Python's
- * `default_linear_track_slots` is only the fallback); Circular reads Hide GC Content and Hide GC Skew,
- * which its slot editor keeps in step with the slots.
- * @param {DrawnTrack['kind']} kind
- * @param {'circular' | 'linear'} mode
+ * Whether the draft hides a track the committed request draws: the one answer
+ * the live track projection, the Legend list and the setting note read
+ * (PD-OI-104). `request` gives the mode and the dinucleotide; the draft's
+ * Use custom stack switch of that mode, its rows, toggles and Depth say
+ * whether the track is drawn.
+ * - With the stack on, a track of a slot is found by its slot id: a row the
+ *   draft lacks (removed, or of the other plan) hides it. A Depth row and a
+ *   Linear content or skew row hide it when off; a Circular content or skew
+ *   row when off by its own switch, or when Hide GC Content or Hide GC Skew
+ *   hides it.
+ * - Otherwise Depth follows `draftDrawsDepth`; Circular content and skew
+ *   follow Hide GC Content and Hide GC Skew, which reach only the tracks of
+ *   the drawing's dinucleotide (an AT skew track stays, TK-09); Linear ones
+ *   Show GC Content and Show GC Skew.
+ * @param {Pick<DrawnTrack, 'slotId' | 'kind' | 'nt'>} track
+ * @param {unknown} request The committed request that draws the track.
  * @param {TrackVisibilityDrawing} drawing
  * @returns {boolean}
  */
-export const drawnTrackHidden = (kind, mode, drawing) => {
-  if (kind === 'depth') return !draftDrawsDepth(mode, drawing);
+export const drawnTrackHidden = (track, request, drawing) => {
+  const view = trackRequestView(request);
+  if (!view) return false;
+  const { mode, defaultNt } = view;
   const { form, adv } = drawing;
-  if (mode === 'circular') return Boolean(kind === 'content' ? form.suppress_gc : form.suppress_skew);
-  return !adv.linear_track_slots_enabled && !(kind === 'content' ? form.show_gc : form.show_skew);
+  const linear = mode === 'linear';
+  /** @param {DrawnTrack['kind']} kind @param {string | null} nt */
+  const suppressed = (kind, nt) => kind !== 'depth' && circularTrackSlotHiddenBySuppressForm(
+    { renderer: RENDERER_OF_KIND[kind], params: { nt: nt ?? defaultNt } }, /** @type {Record<string, unknown>} */ (form), defaultNt
+  );
+  const stackOn = Boolean(linear ? adv.linear_track_slots_enabled : adv.circular_track_slots_enabled);
+  if (stackOn && track.slotId !== null) {
+    const rows = linear ? adv.linear_track_slots : adv.circular_track_slots;
+    const row = Array.isArray(rows) ? rows.find((candidate) => isRecord(candidate) && candidate.id === track.slotId) : undefined;
+    if (!isRecord(row)) return true;
+    if (track.kind === 'depth' || linear) return row.enabled === false;
+    const params = isRecord(row.params) ? row.params : {};
+    return (row.enabled === false && !Object.hasOwn(params, GLOBAL_SUPPRESS_PARAM)) || suppressed(track.kind, track.nt);
+  }
+  if (track.kind === 'depth') return !draftDrawsDepth(mode, drawing);
+  if (!linear) return suppressed(track.kind, track.nt);
+  return !stackOn && !(track.kind === 'content' ? form.show_gc : form.show_skew);
 };
 
 /**
- * The keys of a Result's Legend rows whose drawn track the draft hides: each
- * leaves the live Result and the Legend list with its track and returns with
- * it (OV-1198, OV-1215, PD-OI-104). Generate draws none of them.
+ * The keys of a Result's Legend rows whose drawn track the draft hides
+ * (`drawnTrackHidden`): each leaves the Legend list with its track and
+ * returns with it (OV-1198, OV-1215, PD-OI-104). The live track projection
+ * applies every hide this answer gives to a track the request draws (D-212),
+ * read with the drawing it judges hides with (the draft, or the draft with
+ * the drawn Use custom stack switch while that switch waits), so while that
+ * apply succeeds a row leaves only with a track it removes from the Result.
+ * None while nothing applies (`drawing` null: a refused apply, as Generate
+ * refuses the draft, keeps the Result's tracks), and none for a Result
+ * without a request (a Session 27 to 30): its tracks change only at
+ * Generate, so the list keeps the rows it draws. A live redraw that fails
+ * after the projection, and a Session loaded with a draft that hides a drawn
+ * track (PD-OI-104 Accepted residual risk), still leave such a row out while
+ * the Result draws its track.
  * @param {TrackLegendRows} rows `trackLegendRows` of the displayed Result.
- * @param {'circular' | 'linear'} mode
- * @param {TrackVisibilityDrawing} drawing
+ * @param {unknown} request The request that drew the displayed Result, or null.
+ * @param {TrackVisibilityDrawing | null} drawing The drawing the live track apply judges hides with
+ *   (`liveTrackHideDrawing`), or null.
  * @returns {PythonLegendKey[]}
  */
-export const hiddenTrackLegendKeys = (rows, mode, drawing) => (
-  [...rows.values()].filter((row) => drawnTrackHidden(row.kind, mode, drawing)).map((row) => row.key)
+export const hiddenTrackLegendKeys = (rows, request, drawing) => (
+  request && drawing ? [...rows.values()].filter((row) => drawnTrackHidden(row, request, drawing)).map((row) => row.key) : []
 );
 
 /**

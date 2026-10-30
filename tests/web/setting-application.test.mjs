@@ -291,20 +291,23 @@ test('every row renders its note or its class text', () => {
   assert.ok(component, 'components.js defines SettingNote');
   // A live setting row says Applies on Generate while the committed request
   // cannot draw one of its request paths (review F2 of #1145).
-  assert.match(component[1], /const applies = .*\(inject\(SETTING_NOTE_APPLIES, \(\) => true\)\);\n\s*return \{ note: computed\(\(\) => settingApplicationNote\(props\.setting, \(requestPath\) => applies\(requestPath, props\.item\)\)\) \};/);
+  assert.match(component[1], /const appliesFor = .*\(inject\(SETTING_NOTE_APPLIES, \(\) => \(\) => true\)\);\n\s*return \{ note: computed\(\(\) => settingApplicationNote\(props\.setting, appliesFor\(props\.item\)\)\) \};/);
   // The app setup provides the predicate of the committed request.
   const setup = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'app', 'app-setup.js'), 'utf8');
-  assert.match(setup, /provide\(SETTING_NOTE_APPLIES, committedLiveSettingApplies\);/);
+  assert.match(setup, /provide\(SETTING_NOTE_APPLIES, committedSettingNotePredicate\);/);
   assert.match(component[1], /:data-applies-on-generate="note\.application === 'generate' \? setting : null"/);
   assert.match(component[1], /\{\{ note\.text \}\}/);
 });
 
-test('the GC, skew and Depth toggles state today\'s split timing (OV-1036)', () => {
+test('the GC, skew and Depth toggles are live, and the waits name Generate (OV-1036, PD-OI-104 rev 5)', () => {
   const toggles = settingsControls.filter((element) => /show_gc|show_skew|setTrackShown|setCircularGcSuppressed|setCircularSkewSuppressed/
     .test(`${element.attributes.get('v-model') || ''} ${element.attributes.get('@change') || ''}`));
   assert.equal(toggles.length, 6, toggles.map(describe).join('\n'));
   for (const toggle of toggles) assert.equal(scopeOf(toggle).attributes.get('data-setting'), 'track-visibility', describe(toggle));
-  assert.match(settingApplicationNote('track-visibility').text, /at once.*Generate/);
+  const note = settingApplicationNote('track-visibility');
+  assert.equal(note.application, 'live');
+  assert.equal(note.text, 'Live edit');
+  assert.match(SETTING_APPLICATION.find((row) => row.id === 'track-visibility').partialNote, /^Live edit\. Showing a track applies on Generate if the Result did not draw it when its Session was loaded/);
 });
 
 test('adding a Depth file or series shows and removing the last Depth file or its File hides the drawn Depth track at once, and the Depth blocks and the removal dialog say so (OV-1041, OV-1043)', () => {

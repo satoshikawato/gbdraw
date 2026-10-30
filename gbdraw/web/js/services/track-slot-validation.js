@@ -312,6 +312,15 @@ const OVERLAY_SLOT_REFERENCES = Object.freeze([
     ineligible: msg("Extend to slot '{target}' has no drawable band.")
   } }
 ]);
+/**
+ * The slot id a slot's params name as its Overlay anchor or Extend to slot,
+ * '' for none: the one reader of both references (an empty, missing or falsy
+ * value names none, as the request leaves it out, `canonicalAnnotationParams`).
+ * @param {unknown} params @param {OverlaySlotReference} key @returns {string}
+ */
+export const overlaySlotReference = (params, key) => (
+  params && typeof params === 'object' ? String(/** @type {Record<string, unknown>} */ (params)[key] || '').trim() : ''
+);
 /** The params only an Overlay annotation slot keeps: leaving Overlay drops them. */
 export const OVERLAY_ANNOTATION_PARAMS = Object.freeze(['anchor_slot', 'to_slot', 'cover_anchor']);
 
@@ -345,7 +354,7 @@ export const overlayAnnotationZ = (slot, slots) => {
   const layer = normalizedString(params.layer || 'foreground');
   const z = rowZ(slot.z);
   const targetZs = OVERLAY_SLOT_REFERENCES.flatMap(({ key }) => {
-    const targetId = String(params[key] || '').trim();
+    const targetId = overlaySlotReference(params, key);
     const target = targetId
       ? slots.find((candidate) => candidate && candidate !== slot && String(candidate.id || '').trim() === targetId)
       : null;
@@ -425,7 +434,7 @@ export const canonicalAnnotationParams = (params) => {
   if (next.show_labels !== false) delete next.show_labels;
   if (String(next.layer || '').trim().toLowerCase() === 'foreground') delete next.layer;
   OVERLAY_SLOT_REFERENCES.forEach(({ key }) => {
-    if (!String(next[key] || '').trim()) delete next[key];
+    if (!overlaySlotReference(next, key)) delete next[key];
   });
   return next;
 };
@@ -700,13 +709,13 @@ export const validateTrackSlotBindingInvariants = (
     }
 
     if (enabled && renderer === 'annotations') {
-      const anchorId = String(params.anchor_slot || '').trim();
+      const anchorId = overlaySlotReference(params, 'anchor_slot');
       if (side === 'overlay' && !anchorId) {
         throw diagnosticError('TRACK_INVALID', { reason: 'OVERLAY_ANCHOR', field: 'anchor_slot', slotIndex: index });
       }
       const offOverlay = side === 'overlay'
         ? undefined
-        : OVERLAY_SLOT_REFERENCES.find(({ key }) => String(params[key] || '').trim());
+        : OVERLAY_SLOT_REFERENCES.find(({ key }) => overlaySlotReference(params, key));
       if (offOverlay) {
         throw diagnosticError('TRACK_INVALID', { reason: 'OVERLAY_SIDE', field: 'side', slotIndex: index });
       }
@@ -743,13 +752,13 @@ export const validateTrackSlotBindingInvariants = (
   );
   normalized.forEach((slot, slotIndex) => {
     if (!slot.enabled || slot.renderer !== 'annotations' || slot.side !== 'overlay') return;
-    const toSlot = String(slot.params.to_slot || '').trim();
-    if (toSlot && toSlot === String(slot.params.anchor_slot || '').trim()) {
+    const toSlot = overlaySlotReference(slot.params, 'to_slot');
+    if (toSlot && toSlot === overlaySlotReference(slot.params, 'anchor_slot')) {
       throw diagnosticError('TRACK_INVALID', { reason: 'OVERLAY_SPAN', field: 'to_slot', slotIndex });
     }
     const layer = normalizedString(slot.params.layer || 'foreground');
     for (const { key } of OVERLAY_SLOT_REFERENCES) {
-      const targetId = String(slot.params[key] || '').trim();
+      const targetId = overlaySlotReference(slot.params, key);
       if (key === 'to_slot' && !targetId) continue;
       const target = enabledById.get(targetId);
       if (!target) {
@@ -893,10 +902,104 @@ const globalIssue = ({ code, field, message, parts }) => ({
  * @param {RowIssueInput} issue
  * @returns {void}
  */
-const addRowIssue = (rowIssues, index, issue) => {
-  const current = rowIssues.get(index) || [];
-  current.push(issueForRow({ ...issue, rowIndex: index }));
-  rowIssues.set(index, current);
+const addRowIssue = (rowIssues, index, issue) => pushRowIssue(rowIssues, issueForRow({ ...issue, rowIndex: index }));
+/**
+ * @param {Map<number, TrackSlotRowIssue[]>} rowIssues
+ * @param {TrackSlotRowIssue} issue
+ * @returns {void}
+ */
+const pushRowIssue = (rowIssues, issue) => {
+  const current = rowIssues.get(issue.rowIndex) || [];
+  current.push(issue);
+  rowIssues.set(issue.rowIndex, current);
+};
+
+/**
+ * A row a stack draws, as the Overlay check reads it.
+ * @typedef {{ readonly id?: unknown, readonly renderer?: unknown, readonly side?: unknown, readonly z?: unknown,
+ *   readonly params?: unknown }} OverlayCheckRow
+ */
+/**
+ * The checks of Python's validate_overlay_annotation_anchors over the rows a
+ * stack draws, in its order; like Python, a row reports its first fault.
+ * Generate's plan check reads it for the draft (`collectCustomTrackIssues`),
+ * and the live track projection for the stack it would draw, so both refuse
+ * a stack with the same issue.
+ * @template {OverlayCheckRow} Row
+ * @param {readonly Row[]} rows The rows the stack draws (enabled), in its order.
+ * @param {string} mode 'circular' or 'linear'.
+ * @param {(row: Row) => number} rowIndexOf The row index an issue names.
+ * @returns {{ row: Row, issue: TrackSlotRowIssue }[]}
+ */
+export const overlayReferenceIssues = (rows, mode, rowIndexOf) => {
+  const modeLabel = customTrackModeLabel(mode);
+  /** @param {Row} row */
+  const idOf = (row) => String(row.id ?? '');
+  /** @param {Row} row @returns {Record<string, unknown>} */
+  const paramsOf = (row) => (row.params && typeof row.params === 'object' ? /** @type {Record<string, unknown>} */ (row.params) : {});
+  const enabledById = new Map(rows.filter((row) => idOf(row)).map((row) => [idOf(row), row]));
+  /** @type {{ row: Row, issue: TrackSlotRowIssue }[]} */
+  const issues = [];
+  rows.forEach((row) => {
+    if (row.renderer !== 'annotations' || row.side !== 'overlay') return;
+    const params = paramsOf(row);
+    const id = idOf(row);
+    const anchorId = overlaySlotReference(params, 'anchor_slot');
+    if (!anchorId) return;
+    /** @param {RowIssueInput} issue */
+    const report = (issue) => { issues.push({ row, issue: issueForRow({ ...issue, rowIndex: rowIndexOf(row) }) }); };
+    if (overlaySlotReference(params, 'to_slot') === anchorId) {
+      report({
+        code: 'annotation_to_slot_same',
+        field: 'params.to_slot',
+        slotId: id || null,
+        message: `${modeLabel} Annotation track '${id}' extends to its own anchor '${anchorId}'; choose another slot or None.`,
+        parts: sentence(msg("This row extends to its own anchor '{anchor}'; choose another slot or None."), { anchor: anchorId })
+      });
+      return;
+    }
+    const layer = normalizedString(params.layer || 'foreground');
+    const z = rowZ(row.z);
+    for (const { key, code, label, text } of OVERLAY_SLOT_REFERENCES) {
+      const targetId = overlaySlotReference(params, key);
+      if (!targetId) continue;
+      const target = enabledById.get(targetId);
+      /** @type {RowIssueInput | null} */
+      let issue = null;
+      if (!target) {
+        issue = {
+          code: `annotation_${code}_unknown`,
+          field: `params.${key}`,
+          slotId: id || null,
+          message: `${modeLabel} Annotation track '${id}' references missing or disabled ${label} '${targetId}'.`,
+          parts: sentence(text.unknown, { target: targetId })
+        };
+      } else if (INELIGIBLE_ANCHOR_RENDERERS.has(String(target.renderer))) {
+        issue = {
+          code: `annotation_${code}_ineligible`,
+          field: `params.${key}`,
+          slotId: id || null,
+          message: `${modeLabel} Annotation track '${id}' ${label} '${targetId}' has no eligible drawable band.`,
+          parts: sentence(text.ineligible, { target: targetId })
+        };
+      } else if (!overlayLayerZHolds(layer, z, rowZ(target.z))) {
+        issue = {
+          code: `annotation_${layer}_z`,
+          field: 'z',
+          slotId: id || null,
+          message: `${modeLabel} Annotation ${layer} '${id}' must have z ${layer === 'underlay' ? 'below' : 'above'} ${label} '${targetId}'.`,
+          parts: sentence(layer === 'underlay'
+            ? msg("As an underlay, this row must be drawn below '{target}'.")
+            : msg("As a foreground annotation, this row must be drawn above '{target}'."), { target: targetId })
+        };
+      }
+      if (issue) {
+        report(issue);
+        return;
+      }
+    }
+  });
+  return issues;
 };
 
 /** @param {string} mode */
@@ -1194,7 +1297,7 @@ const collectCustomTrackIssues = ({
         parts: sentence(msg('Enabled must be true or false.'))
       });
     }
-    if (slot.enabled !== false) enabledIndexes.push(index);
+    if (trackSlotRowEnabled(slot)) enabledIndexes.push(index);
   });
   if (mode === 'linear' && enabledIndexes.length === 0) {
     globalIssues.push(globalIssue({
@@ -1226,10 +1329,7 @@ const collectCustomTrackIssues = ({
   }
   const emittedAxisIndex = resolvedAxisIndex === null
     ? null
-    : draftSlots
-        .slice(0, resolvedAxisIndex)
-        .filter((slot) => slot && typeof slot === 'object' && slot.enabled !== false)
-        .length;
+    : emittedCustomTrackAxisIndex(draftSlots, resolvedAxisIndex);
 
   /** @type {Map<string, number[]>} */
   const idsToIndexes = new Map();
@@ -1551,7 +1651,7 @@ const collectCustomTrackIssues = ({
           parts: sentence(msg('This row has an invalid layer.'))
         });
       }
-      const anchorId = String(params.anchor_slot || '').trim();
+      const anchorId = overlaySlotReference(params, 'anchor_slot');
       if (side === 'overlay' && !anchorId) {
         addRowIssue(rowIssues, index, {
           code: 'annotation_anchor_required',
@@ -1561,7 +1661,7 @@ const collectCustomTrackIssues = ({
           parts: sentence(msg('This row needs an anchor.'))
         });
       } else if (side !== 'overlay') {
-        OVERLAY_SLOT_REFERENCES.filter(({ key }) => String(params[key] || '').trim()).forEach(({ key, code, label, text }) => {
+        OVERLAY_SLOT_REFERENCES.filter(({ key }) => overlaySlotReference(params, key)).forEach(({ key, code, label, text }) => {
           addRowIssue(rowIssues, index, {
             code: `annotation_${code}_without_overlay`,
             field: `params.${key}`,
@@ -1632,68 +1732,8 @@ const collectCustomTrackIssues = ({
   // record's features, which only Python reads; it reports TRACK_INVALID
   // FEATURES_COUNT, as the CLI does (TK-13).
 
-  const enabledById = new Map(
-    normalizedEnabled
-      .filter((slot) => slot.id)
-      .map((slot) => [slot.id, slot])
-  );
-  normalizedEnabled.forEach((slot) => {
-    if (slot.renderer !== 'annotations' || slot.side !== 'overlay') return;
-    const rowIndex = rowIndexByNormalizedSlot.get(slot) ?? 0;
-    const anchorId = String(slot.params.anchor_slot || '').trim();
-    if (!anchorId) return;
-    // The checks of Python's validate_overlay_annotation_anchors, in its
-    // order; like Python, a row reports its first fault.
-    if (String(slot.params.to_slot || '').trim() === anchorId) {
-      addRowIssue(rowIssues, rowIndex, {
-        code: 'annotation_to_slot_same',
-        field: 'params.to_slot',
-        slotId: slot.id || null,
-        message: `${modeLabel} Annotation track '${slot.id}' extends to its own anchor '${anchorId}'; choose another slot or None.`,
-        parts: sentence(msg("This row extends to its own anchor '{anchor}'; choose another slot or None."), { anchor: anchorId })
-      });
-      return;
-    }
-    const layer = normalizedString(slot.params.layer || 'foreground');
-    for (const { key, code, label, text } of OVERLAY_SLOT_REFERENCES) {
-      const targetId = String(slot.params[key] || '').trim();
-      if (!targetId) continue;
-      const target = enabledById.get(targetId);
-      /** @type {RowIssueInput | null} */
-      let issue = null;
-      if (!target) {
-        issue = {
-          code: `annotation_${code}_unknown`,
-          field: `params.${key}`,
-          slotId: slot.id || null,
-          message: `${modeLabel} Annotation track '${slot.id}' references missing or disabled ${label} '${targetId}'.`,
-          parts: sentence(text.unknown, { target: targetId })
-        };
-      } else if (INELIGIBLE_ANCHOR_RENDERERS.has(target.renderer)) {
-        issue = {
-          code: `annotation_${code}_ineligible`,
-          field: `params.${key}`,
-          slotId: slot.id || null,
-          message: `${modeLabel} Annotation track '${slot.id}' ${label} '${targetId}' has no eligible drawable band.`,
-          parts: sentence(text.ineligible, { target: targetId })
-        };
-      } else if (!overlayLayerZHolds(layer, slot.z, target.z)) {
-        issue = {
-          code: `annotation_${layer}_z`,
-          field: 'z',
-          slotId: slot.id || null,
-          message: `${modeLabel} Annotation ${layer} '${slot.id}' must have z ${layer === 'underlay' ? 'below' : 'above'} ${label} '${targetId}'.`,
-          parts: sentence(layer === 'underlay'
-            ? msg("As an underlay, this row must be drawn below '{target}'.")
-            : msg("As a foreground annotation, this row must be drawn above '{target}'."), { target: targetId })
-        };
-      }
-      if (issue) {
-        addRowIssue(rowIssues, rowIndex, issue);
-        return;
-      }
-    }
-  });
+  overlayReferenceIssues(normalizedEnabled, mode, (slot) => rowIndexByNormalizedSlot.get(slot) ?? 0)
+    .forEach(({ issue }) => pushRowIssue(rowIssues, issue));
 
   if (emittedAxisIndex !== null) {
     normalizedEnabled.forEach((slot, slotIndex) => {
@@ -1747,6 +1787,27 @@ const collectCustomTrackIssues = ({
     globalIssues
   };
 };
+
+/**
+ * Whether a stack row is drawn by its own switch: Generate's enabled filter
+ * (a Circular row Hide GC Content or Hide GC Skew hides is off too, its
+ * suppress mark set). The live track projection reads a draft row with it.
+ * @param {unknown} row @returns {boolean}
+ */
+export const trackSlotRowEnabled = (row) => Boolean(row) && typeof row === 'object'
+  && /** @type {{ enabled?: unknown }} */ (row).enabled !== false;
+
+/**
+ * The Axis boundary a request carries for a stack: the rows before the
+ * draft's boundary that the request draws (enabled ones). The live track
+ * projection reads it with its own presence answer.
+ * @param {readonly unknown[]} slots @param {number} axisIndex
+ * @returns {number}
+ */
+export const emittedCustomTrackAxisIndex = (slots, axisIndex) => slots
+  .slice(0, axisIndex)
+  .filter(trackSlotRowEnabled)
+  .length;
 
 /**
  * Validate the Web Custom Track draft without mutating it or throwing.

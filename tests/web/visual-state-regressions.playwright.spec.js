@@ -26,7 +26,7 @@ for (const mode of ['circular', 'linear']) {
 }
 
 for (const mode of ['circular', 'linear']) {
-  test(`B-04 ${mode} depth OFF and ON publish parent visibility`, async ({ browser }, info) => {
+  test(`B-04 ${mode} depth OFF and ON publish the redrawn Result`, async ({ browser }, info) => {
     test.setTimeout(300000);
     const page = await load(browser, seeds[mode]);
     try {
@@ -37,9 +37,15 @@ for (const mode of ['circular', 'linear']) {
       for (const enabled of [false, true]) {
         await check(page, 'Show Depth', enabled);
         await agree(page, info, `depth-${enabled}`);
+        // PD-OI-104 rev 5: Show Depth redraws the Result without or with the
+        // Depth track (no hidden group is left in it).
         const displays = await page.locator('.origin-top svg g[id="depth"]').evaluateAll(groups => groups.map(group => group.getAttribute('display')));
-        expect(displays.length).toBeGreaterThan(0);
-        expect(displays.every(display => enabled ? display !== 'none' : display === 'none')).toBe(true);
+        if (enabled) {
+          expect(displays.length).toBeGreaterThan(0);
+          expect(displays.every(display => display !== 'none')).toBe(true);
+        } else {
+          expect(displays).toEqual([]);
+        }
       }
     } finally { await page.context().close(); }
   });

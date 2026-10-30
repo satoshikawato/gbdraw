@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const { load, generate, download } = require('./helpers/mode-transition.cjs');
-const { reveal, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { reveal, getDiagramWorkerActivity, settleLive } = require('./helpers/app-lifecycle.cjs');
 
 const inspect = (page, mode) => page.evaluate(async mode => {
   const { state: s } = await import('./js/state.js');
@@ -232,15 +232,22 @@ for (const width of [1440, 390]) {
         for (const id of [...linked, 'gc_content']) {
           await page.locator(`[data-capture="${mode}-track-slot-${id}"]`).getByTitle('Enabled', { exact: true }).uncheck();
         }
+        // Turning the GC content row off hides its track live (PD-OI-104 rev 5,
+        // D-201): the saved Result and request are the live ones, the last
+        // Generate's without the GC content slot and the rows that name it.
+        await settleLive(page);
+        const hidden = await inspect(page, mode);
+        expect(hidden.request.diagramOptions.tracks[`${mode}TrackSlots`].map(slot => slot.id)).toEqual(
+          final.request.diagramOptions.tracks[`${mode}TrackSlots`].map(slot => slot.id).filter(id => id !== 'gc_content' && !linked.includes(id)));
         const sessionPath = testInfo.outputPath('combined-disabled.gbdraw-session.json.gz');
         const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', sessionPath)));
         expect(saved.runMetadata.annotationWarnings).toEqual(final.warnings);
-        expect(saved.renderRequest).toEqual(final.request);
+        expect(saved.renderRequest).toEqual(hidden.request);
         expect(saved.modes[mode].config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content').enabled).toBe(false);
         expect(JSON.stringify(saved.modes[mode].config.annotationSets)).not.toContain('PRIVATE-AUX-CELL');
         restored = await load(browser, sessionPath, { width, height: 1000 });
         const loaded = await inspect(restored, mode);
-        expect(artifact(loaded)).toEqual(artifact(final)); expect(loaded.rules).toEqual(final.rules);
+        expect(artifact(loaded)).toEqual(artifact(hidden)); expect(loaded.rules).toEqual(final.rules);
         expect((await getDiagramWorkerActivity(restored)).runs).toBe(0);
         await openStack(restored, mode);
         for (const id of ['gc_content', ...linked]) {

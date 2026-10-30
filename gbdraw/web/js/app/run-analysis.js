@@ -9,6 +9,7 @@
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
+/** @import { LiveRedrawLegend } from './legend/entry-actions.js' */
 /** @import { LabelCapacityNotice } from '../services/label-fit.js' */
 /** @import { ConvertedResource } from '../services/main-session-comparison-frame.js' */
 /** @import { RedrawnArtifact } from '../services/history-snapshot.js' */
@@ -56,6 +57,7 @@ import {
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectLiveSettingWrites,
+  liveSettingInputsOf,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount,
   readCanonicalResourceText,
@@ -63,20 +65,13 @@ import {
   requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
-import { applyCircularSuppressControlsToSlots } from './circular-track-slots.js';
-import {
-  clampCircularTrackAxisIndex,
-  placeCircularTrackStack
-} from '../services/circular-track-slot-model.js';
+import { placeCircularStackForGenerate } from '../services/circular-track-slot-model.js';
 import {
   normalizeFileList,
   orderedConservationSources
 } from '../services/conservation-series.js';
 import {
-  applyLinearTrackOrderPlacements,
-  clampLinearTrackAxisIndex,
-  normalizeLinearTrackSlots,
-  resolveLinearTrackAxisIndex
+  placeLinearStackForGenerate
 } from '../services/linear-track-slot-model.js';
 import {
   activeDepthTrackIndices,
@@ -214,8 +209,7 @@ import {
 /** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
-/** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
-/** @import { DepthSlotRow, RawDepthTrackConfig } from '../services/depth-track-state.js' */
+/** @import { DepthSlotRow } from '../services/depth-track-state.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
 /** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
@@ -1490,6 +1484,9 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {() => number} [readCommittedCanonicalRevision] The Session owner's count of committed Session replacements.
  * @property {(writes: readonly LiveSettingWrite[]) => void} [commitLiveSettingValues]
  *   The Session owner's commit of the live setting values an automatic rerender drew (R1 (c)).
+ * @property {(drawing: DrawingState) => LiveRedrawLegend} [readLiveRedrawLegend]
+ *   The Legend owner's rows of the displayed Result's inventory that an automatic rerender requested now keeps
+ *   though it stops drawing them (`liveRedrawLegend`).
  * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any, drawing: Record<string, any>) => any} [captureDecorationContinuity]
  *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
  * @property {(drawing: DrawingState) => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact, with the edits of `drawing`.
@@ -1550,6 +1547,7 @@ export const createRunAnalysis = ({
   getCommittedCanonicalSession = null,
   readCommittedCanonicalRevision = () => 0,
   commitLiveSettingValues = () => {},
+  readLiveRedrawLegend = () => ({ keep: [] }),
   captureDecorationContinuity = () => null,
   captureGeneratedArtifactHandle,
   displayedArtifactDrawing,
@@ -2863,6 +2861,8 @@ export const createRunAnalysis = ({
         filesData: { linearSeqs: [...linearSeqs], c_gb: files.c_gb, c_gff: files.c_gff, c_fasta: files.c_fasta }
       }) : null;
       if (identitySources && nextRecordPlan) {
+        // A committed request without kept identities reads them again from the current files.
+        if (!previousRecordIdentities && previousRequestRecords.length > 0) recordStructuralMetric('recordIdentityFallbackCount');
         recordMoves = recordKeyMoves(
           previousRecordIdentities ?? drawnRecordIdentities(previousRequestRecords, identitySources),
           drawnRecordIdentities(nextRecordPlan, identitySources),
@@ -3013,12 +3013,6 @@ export const createRunAnalysis = ({
           if (Number(drawing.adv.depth_tick_font_size) <= 0) throw new Error('Depth tick font size must be greater than 0.');
         }
       };
-      /** @param {unknown} value */
-      const normalizeDepthTrackValue = (value) => {
-        if (value === null || value === undefined || value === '') return null;
-        const numeric = Number(value);
-        return Number.isFinite(numeric) && numeric > 0 ? String(numeric) : null;
-      };
       /** @param {(FileLike | null)[][]} rows */
       const depthTrackEntriesFromRows = (rows) => Array.from(
         { length: depthTrackMatrixWidth(rows) },
@@ -3045,20 +3039,6 @@ export const createRunAnalysis = ({
        */
       const syncDepthSlotLegendLabelsFromTrackConfigs = (slots, seriesCount) => {
         syncDepthSlotLabels({ slots, depthTracks: drawing.adv.depth_tracks, activeCount: seriesCount });
-      };
-      // A Depth row draws its series' stored height, read without writing: a
-      // series without settings, or one the drawing does not have, leaves the
-      // row its own height (TK-03).
-      /** @param {LinearTrackSlot | null | undefined} slot */
-      const syncLinearDepthSlotHeightFromTrackConfig = (slot) => {
-        if (!slot || String(slot.renderer || '') !== 'depth') return;
-        const rawTrackIndex = Number(slot.params?.track_index);
-        const trackIndex = Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0 ? rawTrackIndex : 0;
-        /** @type {unknown} */
-        const config = Array.isArray(drawing.adv.depth_tracks) ? drawing.adv.depth_tracks[trackIndex] : null;
-        if (!config || typeof config !== 'object') return;
-        const configuredHeight = normalizeDepthTrackValue(/** @type {RawDepthTrackConfig} */ (config).height);
-        if (configuredHeight) slot.height = configuredHeight;
       };
       const normalizeGcContentPercentState = () => {
         drawing.adv.gc_content_mode = String(drawing.adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
@@ -3108,22 +3088,18 @@ export const createRunAnalysis = ({
         const normalizedCircularPlotTitle = String(drawing.form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position);
         const useCircularTrackSlots = drawing.adv.circular_track_slots_enabled === true;
-        const circularTrackAxisIndex = clampCircularTrackAxisIndex(
-          drawing.adv.circular_track_slots_axis_index,
-          Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots.length : 0
-        );
-        // The rows' sides follow one Axis index, and Generate stores that index (OV-1263).
+        // The rows' sides follow one Axis index, and Generate stores that index
+        // (OV-1263); the Depth rows take their series (one placement owner).
         const placedCircularTrackStack = useCircularTrackSlots
-          ? placeCircularTrackStack(
-              drawing.adv.circular_track_slots,
-              drawing.adv.nt,
-              drawing.form.track_type,
-              circularTrackAxisIndex
-            )
+          ? placeCircularStackForGenerate({
+              slots: drawing.adv.circular_track_slots,
+              nt: drawing.adv.nt,
+              trackType: drawing.form.track_type,
+              axisIndex: drawing.adv.circular_track_slots_axis_index,
+              form: drawing.form
+            })
           : null;
-        const circularTrackSlots = placedCircularTrackStack
-          ? applyCircularSuppressControlsToSlots(placedCircularTrackStack.slots, drawing.form, drawing.adv.nt)
-          : [];
+        const circularTrackSlots = placedCircularTrackStack ? placedCircularTrackStack.slots : [];
         if (placedCircularTrackStack) {
           drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...circularTrackSlots);
           drawing.adv.circular_track_slots_axis_index = placedCircularTrackStack.axisIndex;
@@ -3173,18 +3149,6 @@ export const createRunAnalysis = ({
         );
         const circularDepthEntries = depthTrackEntriesFromRows(circularDepthRows);
         if (useCircularTrackSlots) {
-          let circularDepthSlotOrdinal = 0;
-          circularTrackSlots.forEach((slot) => {
-            if (slot?.enabled === false || String(slot?.renderer || '') !== 'depth') return;
-            const parsedTrackIndex = Number(slot?.params?.track_index);
-            const trackIndex = Number.isInteger(parsedTrackIndex) && parsedTrackIndex >= 0
-              ? parsedTrackIndex
-              : circularDepthSlotOrdinal;
-            if (!slot.params || !Number.isInteger(parsedTrackIndex) || parsedTrackIndex < 0) {
-              slot.params = { ...(slot.params || {}), track_index: trackIndex };
-            }
-            circularDepthSlotOrdinal += 1;
-          });
           const circularDepthSeriesCount = representativeDepthFiles(circularDepthRows).length;
           shapeDepthSeriesForGenerate(circularDepthSeriesCount);
           syncDepthSlotLegendLabelsFromTrackConfigs(circularTrackSlots, circularDepthSeriesCount);
@@ -3426,45 +3390,21 @@ export const createRunAnalysis = ({
         /** @type {number | null} */
         let linearTrackSlotAxisIndex = null;
         if (useLinearTrackSlots) {
-          linearTrackSlots = normalizeLinearTrackSlots(
-            drawing.adv.linear_track_slots,
-            drawing.adv.nt,
-            drawing.form.linear_track_layout
-          );
           const linearDepthSeriesCount = depthTrackMatrixWidth(
             linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth))
           );
           shapeDepthSeriesForGenerate(linearDepthSeriesCount);
-          let nextDepthIndex = 0;
-          linearTrackSlots.forEach((slot) => {
-            if (slot.renderer !== 'depth') return;
-            slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
-            if (slot.enabled === false && slot.depth_binding_error) {
-              delete slot.params.track_index;
-              return;
-            }
-            const rawTrackIndex = Number(slot.params.track_index);
-            if (!Number.isInteger(rawTrackIndex) || rawTrackIndex < 0) {
-              slot.params.track_index = nextDepthIndex;
-            }
-            syncLinearDepthSlotHeightFromTrackConfig(slot);
-            nextDepthIndex = Number(slot.params.track_index) + 1;
+          // One placement owner: the rows, their Depth series, the Axis index.
+          const placedLinearTrackStack = placeLinearStackForGenerate({
+            slots: drawing.adv.linear_track_slots,
+            nt: drawing.adv.nt,
+            trackLayout: drawing.form.linear_track_layout,
+            axisIndex: drawing.adv.linear_track_slots_axis_index,
+            depthTracks: drawing.adv.depth_tracks,
+            depthSeriesCount: linearDepthSeriesCount
           });
-          syncDepthSlotLegendLabelsFromTrackConfigs(linearTrackSlots, linearDepthSeriesCount);
-          linearTrackSlotAxisIndex = clampLinearTrackAxisIndex(
-            drawing.adv.linear_track_slots_axis_index,
-            linearTrackSlots.length
-          );
-          linearTrackSlotAxisIndex = resolveLinearTrackAxisIndex(
-            linearTrackSlots,
-            linearTrackSlotAxisIndex
-          );
-          linearTrackSlots = applyLinearTrackOrderPlacements(
-            linearTrackSlots,
-            linearTrackSlotAxisIndex,
-            drawing.adv.nt,
-            drawing.form.linear_track_layout
-          );
+          linearTrackSlots = placedLinearTrackStack.slots;
+          linearTrackSlotAxisIndex = placedLinearTrackStack.axisIndex;
           drawing.adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
           drawing.adv.linear_track_slots.splice(0, drawing.adv.linear_track_slots.length, ...linearTrackSlots);
         }
@@ -4956,7 +4896,8 @@ export const createRunAnalysis = ({
         resolvedCircularConservation: canonicalCircularConservation,
         omittedAnnotationRecordKeys: requestDrawing.annotationSets.length > 0
           ? (omittedAnnotationRecordKeys?.() || [])
-          : []
+          : [],
+        keepTrackParts: true
       });
       if (useCommittedComparison) {
         if (typeof getCommittedCanonicalSession !== 'function') {
@@ -5988,8 +5929,9 @@ export const createRunAnalysis = ({
    * @param {LabelDiagramOptions | null | undefined} diagramOptions The `diagramOptions` of the request the rerender drew.
    * @param {EditorPaintState} drawnPaint
    * @param {number} historyRequestedAt The History step serial its request was made at.
+   * @param {LiveRedrawLegend} liveRedrawLegend The Legend inventory rule read when it was requested.
    */
-  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint, historyRequestedAt) => {
+  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint, historyRequestedAt, liveRedrawLegend) => {
     const result = commit.results[resultIndex];
     const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
       features: [...(commit.featureState?.renderedFeaturesByResult?.[resultIndex]?.values()
@@ -6010,6 +5952,7 @@ export const createRunAnalysis = ({
         replaceGeneratedLegend: true,
         drawnPaint,
         historyRequestedAt,
+        liveRedrawLegend,
         ...(featureIds.length === 0 ? {} : {
           reportedLabelBinding: Object.freeze({
             featureIds,
@@ -6049,7 +5992,7 @@ export const createRunAnalysis = ({
     /** @type {LiveSettingWrite[]} */
     let liveSettingWrites;
     try {
-      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: { linearSeqs: allLinearSeqs } });
+      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf({ linearSeqs: allLinearSeqs, files }) });
     } catch (e) {
       const error = formatError(e, 'generate', 'render');
       labelReflowLastError.value = liveEditFailure(error);
@@ -6057,6 +6000,9 @@ export const createRunAnalysis = ({
     }
     // Values equal to the committed ones (a Generate applied them) draw nothing.
     if (!editor && liveSettingWrites.length === 0) return { status: 'skipped' };
+    // The Legend rows the redraw keeps, read while the request that drew the
+    // displayed Result is committed.
+    const liveRedrawLegend = readLiveRedrawLegend(drawing);
     // The reflow draws the committed Session's Results again, so they keep their names (OV-136).
     const committedResultNames = results.value.map((/** @type {{ name: string }} */ result) => result.name);
     const generationToken = ++latestGenerationToken;
@@ -6143,7 +6089,15 @@ export const createRunAnalysis = ({
       }, { requestedAt: historyRequestedAt });
       // The committed Session names what the new Results draw (PD-OI-102); the
       // binder reports for these Results while that Session stays committed.
+      // A live Depth show or hide replaces its resources; their records stay,
+      // and so do the record identities Generate read from them.
+      const resourcesBefore = getCommittedCanonicalSession?.()?.resources;
       commitLiveSettingValues(liveSettingWrites);
+      const resourcesAfter = getCommittedCanonicalSession?.()?.resources;
+      const identities = resourcesBefore && committedRecordIdentities.get(resourcesBefore);
+      if (identities && resourcesAfter && resourcesAfter !== resourcesBefore) {
+        committedRecordIdentities.set(resourcesAfter, identities);
+      }
       const drawnRevision = readCommittedCanonicalRevision();
       const isShownReflow = () => isRequested() && readCommittedCanonicalRevision() === drawnRevision;
       if (canonical.renderRequest.mode === 'circular') {
@@ -6153,7 +6107,7 @@ export const createRunAnalysis = ({
       }
       expectReflowBindings(
         execution.commit, nextSelectedResultIndex, isShownReflow, canonical.renderRequest.diagramOptions, drawnPaint,
-        historyRequestedAt
+        historyRequestedAt, liveRedrawLegend
       );
       logPostGbdrawTimings(timingEntries);
       return { status: 'ok' };
@@ -6242,7 +6196,7 @@ export const createRunAnalysis = ({
     if (!pending || !committed) return;
     for (const path of [...pending]) {
       try {
-        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: { linearSeqs: allLinearSeqs } }).length === 0) {
+        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: liveSettingInputsOf({ linearSeqs: allLinearSeqs, files }) }).length === 0) {
           pending.delete(path);
         }
       } catch {

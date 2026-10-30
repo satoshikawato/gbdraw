@@ -101,7 +101,11 @@ import {
   featureEditsOverProjection,
   linearDefinitionVisibilityOf,
   liveSettingNoteApplies,
+  liveTrackHideDrawing,
+  applyLiveResourceWrites,
   applyLiveWebFileWrites,
+  carryKeptTrackParts,
+  liveSettingInputsOf,
   managedConfigOverridePathsForMode,
   projectCanonicalSessionRequest,
   projectSettingsOnlySession,
@@ -307,7 +311,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { StoredDrawing } from './main-session-comparison-frame.js' */
-/** @import { CommittedCanonicalSession, LiveSettingInputs, LiveSettingItem, LiveSettingWrite, RequestCanonicalComparison, SessionRequestProjection,
+/** @import { CommittedCanonicalSession, LiveSettingItem, LiveSettingWrite, RequestCanonicalComparison, SessionRequestProjection,
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
@@ -3663,7 +3667,9 @@ export const heldDepthFiles = (mode, sourceState, drawing) => {
  * @param {string} mode
  * @param {Record<string, any>} sourceState The project inputs (`state`).
  * @param {DrawingState} drawing The drawing whose settings choose the inputs.
- * @param {Record<string, any> | null} [comparisonPlanOrOptions]
+ * @param {Record<string, any> | null} [comparisonPlanOrOptions] A comparison plan, or options:
+ *   `comparisonPlan`, `linearRecordCatalog`, and `hiddenDepth` (Generate: also serialize the Depth files a
+ *   draft that draws no Depth holds, as `hiddenDepth`).
  */
 export const serializeActiveRenderFiles = async (
   mode,
@@ -3704,7 +3710,8 @@ export const serializeActiveRenderFiles = async (
     && typeof comparisonPlanOrOptions === 'object'
     && (
       Object.prototype.hasOwnProperty.call(comparisonPlanOrOptions, 'comparisonPlan') ||
-      Object.prototype.hasOwnProperty.call(comparisonPlanOrOptions, 'linearRecordCatalog')
+      Object.prototype.hasOwnProperty.call(comparisonPlanOrOptions, 'linearRecordCatalog') ||
+      Object.prototype.hasOwnProperty.call(comparisonPlanOrOptions, 'hiddenDepth')
     )
     ? comparisonPlanOrOptions
     : null;
@@ -3771,6 +3778,12 @@ export const serializeActiveRenderFiles = async (
     c_depth: mode === 'circular' && depthRequested
       ? await serializeFileValue(depthSlots[0])
       : null,
+    // Generate keeps the Depth files a draft that draws no Depth holds, so showing Depth again applies live.
+    ...(optionBag?.hiddenDepth === true && !depthRequested
+      ? { hiddenDepth: mode === 'circular'
+          ? { circular: await serializeFileValue(depthSlots[0]) }
+          : { linear: await Promise.all(depthSlots.map((slot) => serializeFileValue(slot))) } }
+      : {}),
     c_conservation_blasts: includeConservationBlasts
       ? await serializeFileValue(sourceFiles.c_conservation_blasts)
       : [],
@@ -3930,23 +3943,36 @@ export const getCommittedCanonicalRenderRequest = () => {
 };
 
 /**
- * The draft values outside a drawing that the live setting projectors read
- * (`LiveSettingInputs`): the Linear cards.
- * @returns {LiveSettingInputs}
+ * For one note render: whether the committed request can show the live value
+ * of each `requestPath` of its mode's drawing, or of its one `item`
+ * (`liveSettingNoteApplies`), read with one set of draft inputs. Without a
+ * committed request every path can while no Result is shown; a Result shown
+ * without one (a Session 27 to 30) applies nothing live, so no path can
+ * (OV-2237). The app setup gives it to `SettingNote` (`SETTING_NOTE_APPLIES`).
+ * @param {LiveSettingItem | null} [item]
+ * @returns {(requestPath: string) => boolean}
  */
-export const liveSettingInputs = () => ({ linearSeqs: state.linearSeqs });
+export const committedSettingNotePredicate = (item = null) => {
+  const request = getCommittedCanonicalRenderRequest();
+  if (!request) {
+    const applies = !(Array.isArray(state.results.value) && state.results.value.length > 0);
+    return () => applies;
+  }
+  const drawing = state.drawingOfMode(request.mode);
+  const inputs = liveSettingInputsOf(state);
+  const resources = committedCanonicalSession?.resources;
+  return (requestPath) => liveSettingNoteApplies(request, requestPath, drawing, inputs, resources, item);
+};
 
 /**
- * Whether the committed request can show the live value of `requestPath` of
- * its mode's drawing, or of its one `item` (`liveSettingNoteApplies`);
- * without a committed Session every path can. The app setup gives it to
- * `SettingNote` (`SETTING_NOTE_APPLIES`).
- * @param {string} requestPath @param {LiveSettingItem | null} [item]
+ * The drawing whose hides the live track apply of `drawing` applies to the
+ * committed request (`liveTrackHideDrawing`); null while nothing applies (a
+ * refused apply) and without a committed request.
+ * @param {DrawingState} drawing
  */
-export const committedLiveSettingApplies = (requestPath, item = null) => {
+export const committedTrackHideDrawing = (drawing) => {
   const request = getCommittedCanonicalRenderRequest();
-  return !request || liveSettingNoteApplies(request, requestPath, state.drawingOfMode(request.mode), liveSettingInputs(),
-    committedCanonicalSession?.resources, item);
+  return request ? liveTrackHideDrawing(request, drawing, liveSettingInputsOf(state), committedCanonicalSession?.resources) : null;
 };
 
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.
@@ -3959,17 +3985,24 @@ export const readCommittedCanonicalRevision = () => committedCanonicalRevision.v
 
 // R1 (c): an automatic rerender that applied live setting values commits them
 // to the committed Session, which then names what the shown Result draws
-// (Save writes them as committed, PD-OI-102). Only those request paths, and
-// the Web file entries a Record names write keeps beside them (F-2), change;
-// the resources and the draft stay. The Session
-// is replaced, not edited, so a History artifact that holds the previous one
-// keeps it.
+// (Save writes them as committed, PD-OI-102). Only those request paths, the
+// Web file entries a Record names write keeps beside them (F-2), and the
+// Depth resources a live Depth show or hide adds or drops change, and the
+// request keeps the track parts its Generate kept; the draft stays. The
+// Session is replaced, not edited, so a History artifact that holds the
+// previous one keeps it.
 /** @param {readonly LiveSettingWrite[]} writes */
 export const commitLiveSettingValues = (writes) => {
   if (!committedCanonicalSession || writes.length === 0) return;
   const renderRequest = cloneJsonData(committedCanonicalSession.renderRequest);
   applyLiveSettingWrites(renderRequest, writes);
-  const next = { ...committedCanonicalSession, renderRequest, webFiles: applyLiveWebFileWrites(committedCanonicalSession.webFiles, writes) };
+  carryKeptTrackParts(committedCanonicalSession.renderRequest, renderRequest, writes);
+  const resources = applyLiveResourceWrites(committedCanonicalSession.resources, writes);
+  if (resources !== committedCanonicalSession.resources && activeSessionResourceTable) {
+    activeSessionResourceTable = adoptCurrentSessionResources(resources);
+  }
+  const next = { ...committedCanonicalSession, renderRequest, resources,
+    webFiles: applyLiveWebFileWrites(committedCanonicalSession.webFiles, writes) };
   setCommittedCanonicalSession(isAdoptedCanonicalSession(committedCanonicalSession) ? adoptRuntimeCanonicalSession(next) : next);
 };
 
