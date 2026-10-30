@@ -520,8 +520,10 @@ def test_gallery_session_arrow_geometry_variants_only_change_feature_paths(
             ],
             # The BGC Session draws shaft 0.6 and head 0.64; the variant draws
             # shaft 0.5 and the Auto head. Features short enough to be drawn as
-            # a head only in the Session have no shaft or head to change.
-            118,
+            # a head only in the Session have no shaft or head to change. The five
+            # CDS with a partial end add an outline path each, and the three of them
+            # short enough for a head only are a shaft instead.
+            126,
         ),
     )
     for source_path, variant_path, expected_changed_paths in pairs:
