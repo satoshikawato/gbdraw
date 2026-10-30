@@ -14,6 +14,7 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
   linearRecordLayoutHasSharedRow,
+  recordTranslationsFor,
   reconcileLinearRecordLayout,
   resolveEffectiveLinearRecordRows,
   linearRecordPositionTokens,
@@ -161,3 +162,33 @@ assert.deepEqual(planLinearSourceRowMove({
   reason: '',
   rows: [{ uid: 'pair-1', row: 1 }, { uid: 'pair-2', row: 2 }, { uid: 'single', row: 3 }]
 }, 'per-record CLI rows move File blocks');
+
+// OV-2291: the translations of a record set, by record key.
+{
+  const stored = [
+    { recordKey: 'record-1', x: 10, y: 0 },
+    { recordKey: 'record-2', x: 0, y: -5 },
+    { recordKey: 'record-3', x: 7, y: 7 }
+  ];
+  // A removed record's translation is left out; the others keep their values, in the drawn order.
+  assert.deepEqual(recordTranslationsFor(stored, ['record-3', 'record-1']), [
+    { recordKey: 'record-3', x: 7, y: 7 },
+    { recordKey: 'record-1', x: 10, y: 0 }
+  ]);
+  // An added record starts at (0, 0).
+  assert.deepEqual(recordTranslationsFor(stored, ['record-1', 'record-2', 'record-3', 'record-4']), [
+    { recordKey: 'record-1', x: 10, y: 0 },
+    { recordKey: 'record-2', x: 0, y: -5 },
+    { recordKey: 'record-3', x: 7, y: 7 },
+    { recordKey: 'record-4', x: 0, y: 0 }
+  ]);
+  // Nothing stored: every record at (0, 0); no records: nothing.
+  assert.deepEqual(recordTranslationsFor([], ['a', 'b']), [{ recordKey: 'a', x: 0, y: 0 }, { recordKey: 'b', x: 0, y: 0 }]);
+  assert.deepEqual(recordTranslationsFor(stored, []), []);
+  // A stored entry of a drawn record passes through as it is, also a duplicate or a
+  // value that is not a number: the request's validation refuses those, not this function.
+  assert.deepEqual(
+    recordTranslationsFor([{ recordKey: 'a', x: '3', y: Infinity }, { recordKey: 'a', x: 1, y: 1 }, null], ['a']),
+    [{ recordKey: 'a', x: '3', y: Infinity }, { recordKey: 'a', x: 1, y: 1 }]
+  );
+}

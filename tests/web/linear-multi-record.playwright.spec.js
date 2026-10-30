@@ -5,7 +5,8 @@ const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, getDiagramWorkerActivity, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, getDiagramWorkerActivity, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated, reveal } = require('./helpers/app-lifecycle.cjs');
+const { generate: generateFromButton } = require('./helpers/mode-transition.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -2212,6 +2213,66 @@ test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ pa
   await expect(firstRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #1 to #2'
   })).toBeEnabled();
+});
+
+// OV-2291: the BGC Gallery Session holds a Similarity alignment plan and one record
+// translation per record. Removing its last File clears the plan but not the
+// translations; Generate then failed with UNKNOWN at the request projection. The
+// request now carries the translations of the records it draws
+// (`recordTranslationsFor` in services/linear-record-layout.js).
+test('Generate draws after the last File of an aligned Gallery Session is removed', async ({ page }) => {
+  test.setTimeout(240000);
+  page.on('dialog', (dialog) => dialog.accept());
+  await openApp(page, { waitForPalette: false });
+  const imported = await evaluateWithRetainedPromise(page, async () => {
+    const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
+    const text = await response.text();
+    const file = new File([text], 'BGC0000708-BGC0000713.gbdraw-session.json', { type: 'application/json' });
+    const result = await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
+    return result?.status;
+  });
+  expect(imported).toBe('ok');
+  await generateFromButton(page);
+  const layoutState = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+    const request = getCommittedCanonicalSession().renderRequest;
+    return {
+      records: request.records.map((record) => record.recordKey),
+      requestTranslations: (request.layout.recordTranslations || []).map((entry) => entry.recordKey),
+      pageTranslations: state.linearRecordTranslations.value.map((entry) => entry.recordKey),
+      plan: state.similarityAlignmentPlan.value ? state.similarityAlignmentPlan.value.records.map((entry) => entry.recordKey) : null,
+      files: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.gb?.name ?? null)
+    };
+  });
+  const five = ['record-1', 'record-2', 'record-3', 'record-4', 'record-5'];
+  expect(await layoutState()).toEqual({
+    records: five, requestTranslations: five, pageTranslations: five, plan: five,
+    files: ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk', 'BGC0000713.gbk']
+  });
+
+  // Remove the last File through its controls.
+  const removeLast = page.getByRole('button', { name: 'Remove last sequence', exact: true });
+  await reveal(removeLast);
+  await removeLast.click();
+  const dialog = page.locator('[data-linear-source-removal-dialog]');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('heading')).toHaveText('Remove BGC0000713.gbk?');
+  await dialog.getByRole('button', { name: 'Remove file', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await settleLive(page);
+  // The plan is cleared; the page keeps its translations.
+  expect(await layoutState()).toMatchObject({ pageTranslations: five, plan: null, files: ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk'] });
+
+  // Generate draws the four remaining records; the request carries their translations only,
+  // and the page keeps its list (a record turned off keeps its place).
+  await generateFromButton(page);
+  const four = five.slice(0, 4);
+  expect(await layoutState()).toEqual({
+    records: four, requestTranslations: four, pageTranslations: five, plan: null,
+    files: ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk']
+  });
+  expect(await page.evaluate(async () => (await import('./js/state.js')).state.results.value.length)).toBe(1);
 });
 
 test('Candidate render post-processing sanitizes and reapplies stable styles before commit', async ({ page }) => {

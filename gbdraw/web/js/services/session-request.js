@@ -93,6 +93,7 @@ import {
 } from './linear-sources.js';
 import {
   linearRecordLayoutHasSharedRow,
+  recordTranslationsFor,
   resolveEffectiveLinearRecordRows
 } from './linear-record-layout.js';
 import { resolveLinearLabelVisibility } from './linear-label-visibility.js';
@@ -3817,8 +3818,11 @@ const buildLayout = (state, drawing, records = []) => {
       recordKeys,
       'renderRequest.layout.similarityAlignment'
     );
+    // The page's translations may name records the draft no longer draws, or
+    // lack one the draft added; the request carries one per drawn record.
+    const stored = state.linearRecordTranslations?.value;
     const translations = canonicalRecordTranslations(
-      state.linearRecordTranslations?.value || [],
+      Array.isArray(stored) && stored.length ? recordTranslationsFor(stored, recordKeys) : stored || [],
       recordKeys,
       'renderRequest.layout.recordTranslations',
       { requireCoverage: plan !== null }

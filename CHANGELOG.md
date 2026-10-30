@@ -12,6 +12,11 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: in the Web app, after the drawn records of a Linear Session whose records had been
+  aligned or moved changed (a File removed, replaced, or added; a record turned off),
+  **Generate Diagram** failed with an unnamed error (`UNKNOWN`) instead of drawing; since 0.14.3
+  at least. The request now carries the places of the records it draws, and an added record
+  starts at its default place (OV-2291).
 - Fixed: Collinear blocks are chained into the longest runs of each record pair and orientation.
   A run no longer splits where one gene has a second anchor, where a single link continues it,
   or where a compatible cluster sits within **Max unit gap** but not next to it

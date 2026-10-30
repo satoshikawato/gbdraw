@@ -2257,6 +2257,44 @@ assertLabelStyleRoundTrip(() => buildCanonicalRenderRequestRaw({
   state, filesData: materializedFilesData, comparisonPlanSnapshot: materializedSnapshot
 }));
 
+// OV-2291: the request carries the translations of the records it draws. After
+// a File was removed, its translation is left out and the others keep theirs;
+// a File added after the translations were written starts at (0, 0).
+{
+  const translatedState = {
+    ...state,
+    linearRecordTranslations: ref([
+      { recordKey: 'first', x: 12, y: 0 }, { recordKey: 'second', x: 0, y: 0 }, { recordKey: 'third', x: 3, y: 4 }
+    ])
+  };
+  const seq = (uid) => ({
+    uid, gb: genbank, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null, region_reverse: false
+  });
+  const layoutOf = (uids) => {
+    const filesData = { linearSeqs: uids.map(seq), linearComparisons: [] };
+    return buildCanonicalRenderRequestRaw({
+      state: translatedState, filesData,
+      comparisonPlanSnapshot: resolveLinearComparisonPlan({
+        plan: { mode: 'none', defaultSource: 'losat', edges: [] }, sequences: filesData.linearSeqs
+      })
+    }).renderRequest.layout;
+  };
+  assert.deepEqual(layoutOf(['first', 'third']).recordTranslations, [
+    { recordKey: 'first', x: 12, y: 0 }, { recordKey: 'third', x: 3, y: 4 }
+  ]);
+  assert.deepEqual(layoutOf(['first', 'second', 'third', 'fourth']).recordTranslations, [
+    { recordKey: 'first', x: 12, y: 0 }, { recordKey: 'second', x: 0, y: 0 },
+    { recordKey: 'third', x: 3, y: 4 }, { recordKey: 'fourth', x: 0, y: 0 }
+  ]);
+  // The page's translations are not rewritten by the projection.
+  assert.equal(translatedState.linearRecordTranslations.value.length, 3);
+  // The request's validation still refuses a duplicate key and a value that is not a finite number.
+  translatedState.linearRecordTranslations.value = [{ recordKey: 'first', x: 1, y: 0 }, { recordKey: 'first', x: 2, y: 0 }];
+  assert.throws(() => layoutOf(['first']), /recordTranslations contains duplicate record keys/);
+  translatedState.linearRecordTranslations.value = [{ recordKey: 'first', x: null, y: 0 }];
+  assert.throws(() => layoutOf(['first']), /x and y must be finite numbers/);
+}
+
 const oneSourceFilesData = {
   linearSeqs: [{
     uid: 'one-source', gb: genbank, cardinality: 'all', losat_gencode: 1,
