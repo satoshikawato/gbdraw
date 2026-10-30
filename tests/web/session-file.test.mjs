@@ -100,26 +100,36 @@ await assert.rejects(
 
 // OV-2240: Save refuses, before anything is written, a Session whose expanded
 // JSON is over the cap that Load enforces (`MAX_EXPANDED_SESSION_BYTES`). The
-// cap is injected small here; at or under it the bytes are those of
-// JSON.stringify, as before.
+// cap is a test hook's small stand-in here; at or under it the bytes are those
+// of JSON.stringify, as before.
 assert.equal(MAX_EXPANDED_SESSION_BYTES, 512 * 1024 * 1024);
 const sizedSession = {
   format: 'gbdraw-session',
   resources: {
-    a: { name: 'small.gb', size: 10, data: 'A'.repeat(10) },
-    b: { name: 'big.tsv', size: 700000, data: 'B'.repeat(700000) },
-    c: { name: 'mid.fa', size: 400000, data: 'C'.repeat(400000) },
-    d: { name: 'tiny.tsv', size: 1, data: 'D' }
-  }
+    'resource-0001': { name: 'resource-0001-small.gb', size: 10, data: 'A'.repeat(10) },
+    'resource-0002': { name: 'resource-0002-big_run_1_.tsv', size: 700000, data: 'B'.repeat(700000) },
+    'resource-0003': { name: 'resource-0003-mid.fa', size: 400000, data: 'C'.repeat(400000) },
+    'resource-0004': { name: 'resource-0004-tiny.tsv', size: 1, data: 'D' }
+  },
+  // The names the files were uploaded under; a resource without one shows its stored name.
+  webFiles: { resourceOriginalNames: { 'resource-0002': 'big run (1).tsv', 'resource-0003': 'mid.fa', 'resource-0004': 'tiny.tsv' } }
 };
 const sizedBytes = Buffer.byteLength(JSON.stringify(sizedSession));
-const atCap = await compressSessionData(sizedSession, { maxExpandedBytes: sizedBytes });
+const withCap = async (cap, run) => {
+  globalThis.__GBDRAW_TEST_HOOKS__ = { maxExpandedSessionBytes: cap };
+  try {
+    return await run();
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__;
+  }
+};
+const atCap = await withCap(sizedBytes, () => compressSessionData(sizedSession));
 assert.equal(
   gunzipSync(Buffer.from(await atCap.arrayBuffer())).toString('utf8'),
   JSON.stringify(sizedSession),
   'a Session exactly at the cap is written unchanged'
 );
-const refusal = await compressSessionData(sizedSession, { maxExpandedBytes: sizedBytes - 1 }).then(
+const refusal = await withCap(sizedBytes - 1, () => compressSessionData(sizedSession)).then(
   () => assert.fail('a Session over the cap must not be written'),
   (error) => error
 );
@@ -130,8 +140,27 @@ assert.deepEqual(
 assert.deepEqual(refusal.context, {
   sessionBytes: sizedBytes,
   sessionByteLimit: sizedBytes - 1,
-  largestInputs: 'big.tsv, mid.fa, small.gb'
+  largestInputs: 'big run (1).tsv, mid.fa, resource-0001-small.gb'
 });
+// A browser's body reader may reject with a new TypeError instead of the
+// stream's error (Chromium does); the refusal reaches the caller as it was.
+const NativeResponse = globalThis.Response;
+globalThis.Response = class {
+  constructor(body) { this.body = body; }
+  async blob() {
+    await new NativeResponse(this.body).blob().catch(() => {});
+    throw new TypeError('Failed to fetch');
+  }
+};
+try {
+  const replaced = await withCap(sizedBytes - 1, () => compressSessionData(sizedSession)).then(
+    () => assert.fail('a Session over the cap must not be written'),
+    (error) => error
+  );
+  assert.deepEqual([replaced.code, replaced.context.sessionBytes], ['SESSION_SIZE_LIMIT', sizedBytes]);
+} finally {
+  globalThis.Response = NativeResponse;
+}
 
 const largeBlob = new Blob(
   [new Uint8Array((50 * 1024 * 1024) + (512 * 1024))],

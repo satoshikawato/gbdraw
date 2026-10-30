@@ -4,6 +4,16 @@ const testHooks = () => globalThis.__GBDRAW_TEST_HOOKS__;
 export const runtimeTestHooksEnabled = () => Boolean(testHooks());
 
 /**
+ * A test's stand-in for the cap on a Session's expanded JSON, so a browser
+ * case needs no Session of 512 MiB.
+ * @returns {number | undefined}
+ */
+export const testExpandedSessionByteCap = () => {
+  const cap = testHooks()?.maxExpandedSessionBytes;
+  return Number.isSafeInteger(cap) && cap > 0 ? cap : undefined;
+};
+
+/**
  * @param {unknown} name
  * @param {unknown} [value]
  * @param {unknown} [detail]
