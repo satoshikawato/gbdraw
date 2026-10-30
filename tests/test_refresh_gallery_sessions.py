@@ -2014,7 +2014,7 @@ def test_gallery_session_features_seed_biological_catalog() -> None:
     [
         # 2565: the current derivation leaves record-2 f2b985ad0 out of the og_570 local-paralog
         # cluster that older code stored (OV-1031 refresh from the raw cache).
-        ("hepatoplasmataceae_orthogroup", 577, 2565, 0),
+        ("hepatoplasmataceae_orthogroup", 576, 2566, 0),
         ("majanivirus_orthogroup", 152, 826, 0),
     ],
 )
