@@ -741,6 +741,36 @@ def test_python_typed_protein_round_trip_with_explicit_adjacent_comparison(
     assert decoded_collinearity == collinearity
 
 
+def test_two_depth_tracks_naming_one_resource_render_as_two_copies(tmp_path: Path) -> None:
+    """The Web Save Session writes one Depth file used twice once (D-220, D-228); Python reads that Session."""
+    depth = pd.DataFrame({"reference_name": ["record"] * 2, "position": [1, 5], "depth": [3, 9]})
+    request = LinearDiagramRequest(
+        records=(_record(),),
+        options=LinearDiagramOptions(depth_tracks=(
+            DepthTrackInput(source=depth, label="A"), DepthTrackInput(source=depth, label="B"),
+        )),
+        output=RenderOutputRequest(output_prefix="depth", overwrite=True),
+    )
+    copies = build_session_document(request).to_dict()
+    tracks = copies["renderRequest"]["diagramOptions"]["depthTracks"]
+    first, second = (track["source"]["resourceId"] for track in tracks)
+    assert first != second
+    assert copies["resources"][first]["data"] == copies["resources"][second]["data"]
+    once = json.loads(json.dumps(copies))
+    once["renderRequest"]["diagramOptions"]["depthTracks"][1]["source"]["resourceId"] = first
+    del once["resources"][second]
+    svgs = []
+    for name, document in (("copies", copies), ("once", once)):
+        session_path = tmp_path / f"{name}.gbdraw-session.json"
+        session_path.write_text(json.dumps(document), encoding="utf-8")
+        output = tmp_path / name
+        output.mkdir()
+        with materialize_session(load_session_document(session_path), output_directory=output) as materialized:
+            result = render_session(materialized)
+        svgs.append(result.output_paths[0].read_text(encoding="utf-8"))
+    assert svgs[0] == svgs[1]
+
+
 @pytest.mark.browser
 def test_python_depth_request_projects_in_web(tmp_path: Path) -> None:
     node = shutil.which("node")
