@@ -94,7 +94,7 @@ const MODES = {
       setOverlayParam: (slot, key, value) => editor.setCircularOverlayAnnotationParam(slot, key, value),
       // The composition root's switch: it asks before turning off a row other rows reach.
       setEnabled: askingTrackRowSwitch({ askChoice, runUndoable: (_label, fn) => fn(), busy: () => null,
-        rows: () => state.adv.circular_track_slots }, editor.setCircularTrackSlotEnabled),
+        rows: () => state.adv.circular_track_slots, mode: 'circular' }, editor.setCircularTrackSlotEnabled),
       offAxis: 'outside',
       referenceOptions: (slot, key) => editor.circularAnnotationAnchorOptions(slot, key).map((option) => option.id),
       referenceKnown: (slot, key) => editor.circularAnnotationAnchorIsKnown(slot, key)
@@ -115,7 +115,7 @@ const MODES = {
       setPlacement: (slot, placement) => editor.updateLinearTrackSlotPlacement(slot, placement),
       setOverlayParam: (slot, key, value) => editor.setLinearOverlayAnnotationParam(slot, key, value),
       setEnabled: askingTrackRowSwitch({ askChoice, runUndoable: (_label, fn) => fn(), busy: () => null,
-        rows: () => state.adv.linear_track_slots }, editor.setLinearTrackSlotEnabled),
+        rows: () => state.adv.linear_track_slots, mode: 'linear' }, editor.setLinearTrackSlotEnabled),
       offAxis: 'above',
       referenceOptions: (slot, key) => editor.linearAnnotationAnchorOptions(slot, key).map((option) => option.id),
       referenceKnown: (slot, key) => editor.linearAnnotationAnchorIsKnown(slot, key)
@@ -579,7 +579,7 @@ for (const mode of ['circular', 'linear']) {
       buildCheckpoint: () => ({}), applyCheckpoint: () => {}
     });
     const editor = mode === 'circular' ? createCircularTrackSlotEditor({ state }) : createLinearTrackSlotEditor({ state });
-    const setEnabled = askingTrackRowSwitch({ askChoice: ask, runUndoable: history.runUndoable, busy: () => null, rows: slots },
+    const setEnabled = askingTrackRowSwitch({ askChoice: ask, runUndoable: history.runUndoable, busy: () => null, rows: slots, mode },
       mode === 'circular' ? editor.setCircularTrackSlotEnabled : editor.setLinearTrackSlotEnabled);
     const read = () => slots().filter((slot) => ['gc_content', 'tint'].includes(slot.id)).map((slot) => slot.enabled);
     await history.initializeIntentBaseline();
@@ -610,4 +610,22 @@ test('circular: Hide GC Content names the rows that reach the GC content track a
   assert.equal(await kept.editor.setCircularGcSuppressed(true), false);
   assert.equal(kept.state.form.suppress_gc, false);
   assert.ok(Object.values(enabledOf(kept)).every(Boolean));
+});
+
+// The hide button is one whole sentence per hide (a translation never joins a
+// control name into a sentence).
+test('circular: the Hide GC Content button with the rows it turns off is one translated sentence', async () => {
+  const { setUiLocale } = await import(pathToFileURL(join(tempRoot, 'utils', 'i18n.js')));
+  await setUiLocale('ja', async () => ({ default: {
+    'Hide GC content and turn off {rows}': '{rows} をオフにして GC content を隠す',
+    'Track row {row}': 'トラック行 {row}'
+  } }));
+  try {
+    const questions = [];
+    const editor = MODES.circular(REACH_ROWS.circular(), { showDepth: true, depthFiles: [depthFile] }, async (request) => { questions.push(request); return 'cancel'; });
+    await editor.editor.setCircularGcSuppressed(true);
+    assert.deepEqual(questions[0].actions.map((action) => action.label), ['トラック行 4 をオフにして GC content を隠す']);
+  } finally {
+    await setUiLocale('en');
+  }
 });

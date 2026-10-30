@@ -1088,7 +1088,7 @@ const reachRow = (id, anchor, to = null) => ({ id, renderer: 'annotations', enab
     ...(to ? { to_slot: to } : {}) } });
 const turnOffWithReach = (drawing, mode, rowId) => {
   const rows = mode === 'circular' ? drawing.adv.circular_track_slots : drawing.adv.linear_track_slots;
-  const reaching = validation.overlayRowsReaching(rows, new Set([rowId]));
+  const reaching = validation.overlayRowsReaching(rows, mode, new Set([rowId]));
   assert.ok(reaching.length > 0, `${rowId}: a row reaches it`);
   for (const index of [rows.findIndex((row) => row.id === rowId), ...reaching]) set(rows[index], 'enabled', false);
   return reaching.map((index) => rows[index].id);
@@ -1103,7 +1103,7 @@ test('rev 6: a GC content or Depth row turned off with the rows that reach it ap
         withTintSet(drawing);
         const generated = generate(mode);
         const committed = loaded ? loadOf(generated) : generated;
-        if (loaded) request.recordLoadedTrackParts(committed, drawing);
+        if (loaded) request.recordLoadedStackSwitch(committed, drawing);
         assert.deepEqual(turnOffWithReach(drawing, mode, rowId), [reach.id], label);
         const hidden = withPending(mode, () => live(committed, mode));
         const slotsKey = mode === 'circular' ? 'circularTrackSlots' : 'linearTrackSlots';
@@ -1117,14 +1117,15 @@ test('rev 6: a GC content or Depth row turned off with the rows that reach it ap
 });
 
 // Review 3 R3-1b, D-214 B: Load records the Use custom stack switch of the
-// loaded draft beside a Circular request with slots, so the switch turned the
-// other way after the Load waits whole (with the Depth hide the simple Show
-// Depth brings), as it waits after a Generate without a plan of the other switch.
+// loaded draft beside a Circular request with slots, whose drawn switch stays
+// unknown (D-212). A switch turned from it after the Load waits whole (with
+// the Depth hide the simple Show Depth brings), as it waits after a Generate
+// without a plan of the other switch.
 test('R3-1b: after a Load of a Circular stack, Use custom stack off with Show Depth off waits whole', () => {
   const drawing = circularStack({ depthSeries: 1 });
   const committed = loadOf(generate('circular'));
-  request.recordLoadedTrackParts(committed, drawing);
-  assert.equal(request.keptTrackPartsOf(committed.renderRequest)?.drawnStack, true, 'the loaded switch is recorded');
+  request.recordLoadedStackSwitch(committed, drawing);
+  assert.equal(request.keptTrackPartsOf(committed.renderRequest), null, 'Load keeps no parts: the drawn switch stays unknown');
   set(drawing.form, 'show_depth', false);
   set(drawing.adv, 'circular_track_slots_enabled', false);
   assert.deepEqual(project(committed, 'circular'), [], 'the switch and the hide it brings write nothing');
@@ -1133,17 +1134,50 @@ test('R3-1b: after a Load of a Circular stack, Use custom stack off with Show De
   set(rowOf(drawing, 'circular', (row) => row.renderer === 'dinucleotide_skew'), 'enabled', false);
   const next = live(committed, 'circular');
   assert.ok(!drawsKind(next.renderRequest, 'dinucleotide_skew') && drawsKind(next.renderRequest, 'depth'), 'the stack stays, without its skew row');
-  undoAll();
-  // A draft that cannot have drawn the slots (stack off, no track widths) records nothing; nor does a Linear request.
-  const plain = circularStack({ depthSeries: 1 });
-  const again = loadOf(generate('circular'));
-  set(plain.adv, 'circular_track_slots_enabled', false);
-  request.recordLoadedTrackParts(again, plain);
-  assert.equal(request.keptTrackPartsOf(again.renderRequest), null);
+  // The switch recorded at Load rides with the request the apply commits.
+  assert.deepEqual(project(next, 'circular'), [], 'the switch still waits after the apply');
   undoAll();
   const linear = linearStack({ depthSeries: 1 });
   const linearLoaded = loadOf(generate('linear'));
-  request.recordLoadedTrackParts(linearLoaded, linear);
+  request.recordLoadedStackSwitch(linearLoaded, linear);
   assert.equal(request.keptTrackPartsOf(linearLoaded.renderRequest), null);
   undoAll();
+});
+
+// Review 4 M1: a Session saved while a Use custom stack change was still
+// waiting, with Circular track widths set. Load records the switch as saved,
+// never the drawn one: the draft unchanged since the Load keeps the hides-only
+// outcome (Use custom stack shows Applies on Generate), and the switch turned
+// back to what the Result draws waits whole.
+test('M1 (review 4): after a Load of a Session saved with the switch pending, Use custom stack applies on Generate', () => {
+  for (const [label, drawnOn] of [['R1 drawn with the stack, saved off', true], ['R2 drawn without it, saved on', false]]) {
+    const drawing = drawnOn ? circularStack({ depthSeries: 1 }) : circularPlain();
+    set(drawing.adv, 'gc_content_width_circular', 40);
+    set(drawing.adv, 'circular_track_slots', (drawnOn ? drawing.adv.circular_track_slots
+      : createDefaultCircularTrackSlots({ showDepth: false })).filter((slot) => slot.renderer !== 'ticks'));
+    const committed = loadOf(generate('circular'));
+    set(drawing.adv, 'circular_track_slots_enabled', !drawnOn);
+    request.recordLoadedStackSwitch(committed, drawing);
+    const noteOf = () => request.liveSettingNoteApplies(committed.renderRequest, K.CSLOTS, drawing, inputs, committed.resources);
+    assert.equal(noteOf(), false, `${label}: Applies on Generate`);
+    set(drawing.adv, 'circular_track_slots_enabled', drawnOn);
+    assert.equal(noteOf(), false, `${label}: turned from the loaded switch, it waits whole`);
+    assert.deepEqual(project(committed, 'circular'), [], `${label}: and writes nothing`);
+    undoAll();
+  }
+});
+
+// Review 4 L3: the rows a hide reaches are those Generate's Overlay check
+// (`overlayReferenceIssues`) refuses for the hidden slot; a row it refuses for
+// its own fault (an Extend to slot equal to its anchor) is not one of them.
+test('L3 (review 4): the rows a hide reaches come from Generate\'s Overlay check', () => {
+  const rows = [
+    { id: 'features', renderer: 'features', enabled: true },
+    { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true },
+    reachRow('tint', 'features', 'gc_content'),
+    reachRow('same', 'gc_content', 'gc_content'),
+    { ...reachRow('off', 'features', 'gc_content'), enabled: false }
+  ];
+  assert.deepEqual(validation.overlayRowsReaching(rows, 'circular', new Set(['gc_content'])), [2]);
+  assert.deepEqual(validation.overlayRowsReaching(rows, 'linear', new Set(['features'])), [2]);
 });

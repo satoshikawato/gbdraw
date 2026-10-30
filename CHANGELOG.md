@@ -13,14 +13,16 @@ write-up of a release.
 ## [Unreleased]
 
 - Fixed: in the Web app, **Save Session** refuses, before downloading anything, a Session that would expand beyond the 512 MiB that **Load Session** opens, and names its size and its largest inputs (OV-2240).
-- Changed: in the Web app, hiding a track that another custom stack row starts at or extends to
-  (an Overlay row's anchor or **Extend to**; **Hide GC Content**, **Hide GC Skew**, or a row's
-  switch, Circular and Linear) asks first: the dialog names those rows and offers to hide the
-  track and turn them off as one Undo step, or Cancel. The track no longer hides alone into a
-  stack that **Generate Diagram** refuses.
-- Changed: after a Session load, **Use custom stack** set the other way on a Circular Result
-  drawn with a custom stack or track widths or radii applies on Generate, with every track it
-  would hide or show, instead of leaving the stack and hiding tracks from it.
+- Changed: in the Web app, turning off a track that another custom stack row starts at or
+  extends to (an Overlay row's anchor or **Extend to**) with the row's switch (Circular and
+  Linear), or with **Hide GC Content** or **Hide GC Skew** while **Use custom stack** is on
+  (Circular), asks first: the dialog names those rows and offers to turn the track and those
+  rows off as one Undo step, or Cancel. The track no longer hides alone into a stack that
+  **Generate Diagram** refuses.
+- Changed: after a Session load, **Use custom stack** set the other way than the Session saved
+  it, on a Circular Result drawn with a custom stack or track widths or radii, applies on
+  Generate, with every track it would hide or show, instead of leaving the stack and hiding
+  tracks from it.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-30
 

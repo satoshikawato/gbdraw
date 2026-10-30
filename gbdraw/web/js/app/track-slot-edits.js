@@ -71,13 +71,15 @@ export const featureSlotEdits = (changeTrackLayout, actions) => /** @type {Actio
  * @typedef {{ id?: unknown, enabled?: unknown }} SwitchedTrackRow
  */
 /**
- * The question a hide asks on its own (Hide GC content?): its texts and its
- * hide and keep buttons.
- * @typedef {{ title: string, description: string, hide: string, keep: string }} TrackHideQuestion
+ * The question a hide asks on its own (Hide GC content?): its texts, its hide
+ * button alone and with the rows it turns off (one whole sentence each), and
+ * its keep button.
+ * @typedef {{ title: string, description: string, hide: string, hideWith: (rows: string) => string, keep: string }} TrackHideQuestion
  */
 /**
  * @typedef {object} TrackHide
  * @property {() => readonly SwitchedTrackRow[]} rows The draft stack's rows, read at the question and at the answer.
+ * @property {'circular' | 'linear'} mode The stack's mode.
  * @property {ReadonlySet<string>} hiding The slot ids of the drawn rows the hide turns off.
  * @property {TrackHideQuestion | null} question The hide's own question, or null for a row's own switch.
  * @property {string} label The History step of the chosen hide.
@@ -96,9 +98,9 @@ export const featureSlotEdits = (changeTrackLayout, actions) => /** @type {Actio
  * @param {TrackHide} hide
  * @returns {Promise<unknown> | null} null when nothing asks: the caller applies the hide itself.
  */
-export const askTrackHide = ({ askChoice, runUndoable }, { rows, hiding, question, label, unchanged, apply }) => {
+export const askTrackHide = ({ askChoice, runUndoable }, { rows, mode, hiding, question, label, unchanged, apply }) => {
   const stack = rows();
-  const reaching = overlayRowsReaching(stack, hiding);
+  const reaching = overlayRowsReaching(stack, mode, hiding);
   if (!question && reaching.length === 0) return null;
   /** @param {number} index */
   const rowName = (index) => t('Track row {row}', { row: index + 1 });
@@ -119,7 +121,7 @@ export const askTrackHide = ({ askChoice, runUndoable }, { rows, hiding, questio
     items: reaching.map((index) => t('{row} ({id})', { row: rowName(index), id: String(stack[index].id) })),
     actions: [{
       id: 'hide',
-      label: question && reaching.length > 0 ? t('{action} and turn off {rows}', { action: own.hide, rows: listText(reaching.map(rowName)) }) : own.hide,
+      label: question && reaching.length > 0 ? question.hideWith(listText(reaching.map(rowName))) : own.hide,
       tone: 'primary'
     }],
     cancelLabel: own.keep
@@ -134,15 +136,16 @@ export const askTrackHide = ({ askChoice, runUndoable }, { rows, hiding, questio
  * The composition root wraps each stack editor's switch with it.
  * @template {SwitchedTrackRow} Row
  * @param {{ askChoice: AskChoice, runUndoable: (label: string, fn: () => unknown) => unknown,
- *   busy: () => unknown, rows: () => readonly Row[] }} ports `rows`: the shown drawing's stack.
+ *   busy: () => unknown, rows: () => readonly Row[], mode: 'circular' | 'linear' }} ports `rows`: the shown drawing's stack.
  * @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled
  *   The editor's switch, run in its stack edit transition.
  * @returns {(slot: Row | null | undefined, enabled: unknown, event?: Event) => unknown}
  */
-export const askingTrackRowSwitch = ({ askChoice, runUndoable, busy, rows }, setEnabled) => (slot, enabled, event) => {
+export const askingTrackRowSwitch = ({ askChoice, runUndoable, busy, rows, mode }, setEnabled) => (slot, enabled, event) => {
   const drawn = () => Boolean(slot) && slot?.enabled !== false && !busy() && rows().includes(/** @type {Row} */ (slot));
   const asked = !enabled && drawn() ? askTrackHide({ askChoice, runUndoable }, {
     rows,
+    mode,
     hiding: new Set([String(slot?.id)]),
     question: null,
     label: msg('Turn off track rows'),

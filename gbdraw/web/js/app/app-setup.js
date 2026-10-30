@@ -2222,7 +2222,8 @@ export const createAppSetup = () => {
   /** @template {SwitchedTrackRow} Row @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
   const askingRowSwitch = (setEnabled, slotsKey) => askingTrackRowSwitch({
     askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability,
-    rows: () => /** @type {readonly Row[]} */ (state.activeDrawing().adv[slotsKey])
+    rows: () => /** @type {readonly Row[]} */ (state.activeDrawing().adv[slotsKey]),
+    mode: slotsKey === 'circular_track_slots' ? 'circular' : 'linear'
   }, setEnabled);
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({

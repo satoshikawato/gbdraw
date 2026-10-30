@@ -1004,19 +1004,25 @@ export const overlayReferenceIssues = (rows, mode, rowIndexOf) => {
 
 /**
  * The rows of a stack that start at (an Overlay anchor) or extend to (an
- * Extend to slot) one of the slots a hide turns off, by slot id: the drawn
- * Overlay annotation rows Generate's Overlay check (`overlayReferenceIssues`)
- * refuses once those slots are off. The hide offers to turn them off with it
- * (PD-OI-104 scenario revision 6).
+ * Extend to slot) one of the slots a hide turns off, by slot id: the rows
+ * Generate's Overlay check (`overlayReferenceIssues`) refuses, over the rows
+ * the stack draws after the hide, because a reference names a slot the hide
+ * turned off. The hide offers to turn them off with it (PD-OI-104 scenario
+ * revision 6).
  * @param {readonly unknown[]} rows The stack's rows, in its order.
+ * @param {string} mode 'circular' or 'linear'.
  * @param {ReadonlySet<string>} hiding The slot ids the hide turns off.
  * @returns {number[]} The indexes of those rows.
  */
-export const overlayRowsReaching = (rows, hiding) => rows.flatMap((row, index) => {
-  const { id, renderer, side, params } = /** @type {OverlayCheckRow} */ (row && typeof row === 'object' ? row : {});
-  return renderer === 'annotations' && side === 'overlay' && trackSlotRowEnabled(row) && !hiding.has(String(id ?? ''))
-    && OVERLAY_SLOT_REFERENCES.some(({ key }) => hiding.has(overlaySlotReference(params, key))) ? [index] : [];
-});
+export const overlayRowsReaching = (rows, mode, hiding) => {
+  const drawn = /** @type {readonly OverlayCheckRow[]} */ (rows.filter((row) => (
+    trackSlotRowEnabled(row) && !hiding.has(String(/** @type {OverlayCheckRow} */ (row).id ?? '')))));
+  const reached = new Set(overlayReferenceIssues(drawn, mode, () => -1)
+    .filter(({ row, issue }) => issue.code.endsWith('_unknown') && OVERLAY_SLOT_REFERENCES.some(({ key }) => (
+      issue.field === `params.${key}` && hiding.has(overlaySlotReference(row.params, key)))))
+    .map(({ row }) => row));
+  return rows.flatMap((row, index) => (reached.has(/** @type {OverlayCheckRow} */ (row)) ? [index] : []));
+};
 
 /** @param {string} mode */
 const customTrackModeLabel = (mode) => (

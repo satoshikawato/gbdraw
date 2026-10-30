@@ -129,6 +129,7 @@ const STACK_ENTRY_SLOT = 'slot';
  * @property {() => string} title the title of the dialog that asks before hiding
  * @property {(count: number) => string} description the dialog text: the custom stack rows the hide turns off
  * @property {() => string} hide the dialog's hide button
+ * @property {(rows: string) => string} hideWith the dialog's hide button when it also turns off `rows`, the stack rows that reach the track
  * @property {() => string} keep the dialog's cancel button
  * @property {() => string} hiddenBy the note on a stack row that the control hides
  */
@@ -140,6 +141,7 @@ const SUPPRESS_TEXT_BY_RENDERER = {
       'Your custom track stack has {count} GC content track. Hiding GC content turns that track off.',
       'Your custom track stack has {count} GC content tracks. Hiding GC content turns those tracks off.'),
     hide: () => t('Hide GC content'),
+    hideWith: (rows) => t('Hide GC content and turn off {rows}', { rows }),
     keep: () => t('Keep GC content'),
     hiddenBy: () => t('Hidden: Hide GC Content is on.')
   },
@@ -149,6 +151,7 @@ const SUPPRESS_TEXT_BY_RENDERER = {
       'Your custom track stack has {count} GC skew track. Hiding GC skew turns that track off.',
       'Your custom track stack has {count} GC skew tracks. Hiding GC skew turns those tracks off.'),
     hide: () => t('Hide GC skew'),
+    hideWith: (rows) => t('Hide GC skew and turn off {rows}', { rows }),
     keep: () => t('Keep GC skew'),
     hiddenBy: () => t('Hidden: Hide GC Skew is on.')
   }
@@ -1320,8 +1323,11 @@ export const createCircularTrackSlotEditor = ({
     if (hidden.length === 0 || !texts) return null;
     return askTrackHide({ askChoice, runUndoable }, {
       rows: () => drawing.adv.circular_track_slots,
+      mode: 'circular',
       hiding: new Set(hidden.map((/** @type {CircularTrackSlot} */ slot) => String(slot.id))),
-      question: { title: texts.title(), description: texts.description(hidden.length), hide: texts.hide(), keep: texts.keep() },
+      question: {
+        title: texts.title(), description: texts.description(hidden.length), hide: texts.hide(), hideWith: texts.hideWith, keep: texts.keep()
+      },
       label: ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || msg('Hide track'),
       unchanged,
       apply
