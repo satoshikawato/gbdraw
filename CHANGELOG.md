@@ -12,6 +12,8 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: in the Web app, **Save Session** stores an input file that the Session uses more than once (for example
+  one Depth file shown as two series) only once, so such a Session file is smaller (D-220).
 - Fixed: in the Web app, **Save Session** refuses, before downloading anything, a Session that would expand beyond the 512 MiB that **Load Session** opens, and names its size and its largest inputs (OV-2240).
 - Changed: in the Web app, turning off a track that another custom stack row starts at or
   extends to (an Overlay row's anchor or **Extend to**) with the row's switch (Circular and
