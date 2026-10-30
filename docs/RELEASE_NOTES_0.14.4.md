@@ -39,8 +39,16 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   keeps that row where it was after **Generate Diagram** as well, unless moving
   the renamed rules would recolor another feature. A feature given a new Legend
   name apart from the rest of its row shows its new row at once where Generate
-  draws it, instead of last, when every named color rule is of one feature
-  type.
+  draws it, instead of last.
+- In the Web app, after a Legend name edit, a feature color change, or a feature
+  color reset that adds, joins, splits off, or moves a color rule's Legend row,
+  the Legend shows the rows at once in the order **Generate Diagram** draws
+  them, including a row of another feature type and an old row the edit moves,
+  instead of first showing them elsewhere and then jumping. Rows placed this way
+  do not count as a hand-edited Legend order.
+- In the Web app, on a Result loaded from a Session saved without a render
+  request (Session versions 27 to 30), settings no longer say **Live edit**
+  while nothing applies until Generate.
 - In the Web app, a color picked without a pointer first (a picker opened from
   the keyboard) is one **Undo** step and applies as its setting does. Before,
   Undo skipped it.
@@ -71,6 +79,15 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   Where a value cannot apply yet (an annotation item with a Legend label, an
   item added since the last Generate, a features or Depth row, a record whose
   File was replaced), its note says **Applies on Generate**.
+  **Show GC Content**, **Show GC Skew**, **Show Depth**, **Hide GC Content**,
+  **Hide GC Skew**, the on/off switch and removal of a GC content, GC skew, or
+  Depth row of the custom stack, and **Use custom stack** redraw the shown
+  Result at once, as Generate would, also for a track the Result does not draw
+  yet; the track comes back as the last Generate built it. These wait for
+  Generate: a track the Result did not draw when its Session was loaded, a
+  Depth file change, a row added since the last Generate, and **Use custom
+  stack** after a Session load or while Region Annotation sets wait for
+  Generate.
 
 ## Added
 
