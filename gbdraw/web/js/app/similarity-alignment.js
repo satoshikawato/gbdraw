@@ -4,6 +4,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { joinSentences, listText, msg, t, tm, tn } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
+import { recordTranslationsFor } from '../services/linear-record-layout.js';
 import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
 import { drawnLinearSequences } from '../services/record-draw-selection.js';
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
@@ -1172,25 +1173,10 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
  * @param {SimilarityAlignmentActionsOptions['state']} state
  * @param {string[]} recordKeys
  */
-const replacementTranslations = (state, recordKeys) => {
-  const current = Array.isArray(state.linearRecordTranslations?.value)
-    ? state.linearRecordTranslations.value
-    : [];
-  const byRecord = new Map(current.map((/** @type {{ recordKey?: unknown, x?: unknown, y?: unknown } | null} */ entry) => [String(entry?.recordKey || ''), entry]));
-  if (
-    byRecord.size === recordKeys.length
-    && recordKeys.every((recordKey) => {
-      const entry = byRecord.get(recordKey);
-      return entry && Number.isFinite(entry.x) && Number.isFinite(entry.y);
-    })
-  ) {
-    return recordKeys.map((recordKey) => {
-      const entry = byRecord.get(recordKey); // present: the `every` above checked each key
-      return { recordKey, x: Number(entry.x), y: Number(entry.y) };
-    });
-  }
-  return recordKeys.map((recordKey) => ({ recordKey, x: 0, y: 0 }));
-};
+const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
+  Array.isArray(state.linearRecordTranslations?.value) ? state.linearRecordTranslations.value : [],
+  recordKeys
+);
 
 /**
  * @param {AnchorIdentity | null | undefined} left
