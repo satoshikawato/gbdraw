@@ -80,9 +80,14 @@ alignment length is an integer. Protein modes can also limit candidates or
 hits per query. Collinear mode adds anchor, unit-gap, diagonal-drift, scope,
 and conflict rules. Its unit mode is `auto`, `cds`, or `locus`; anchor mode is
 `all`, `one_to_one`, or `rbh`; and merge orientation is `strand`, `order`, or
-`either`. `max_conflicts` defaults to `1` and limits how many kept singleton
-anchors may lie inside both order intervals when two compatible clusters
-merge. Those singleton anchors remain in the result.
+`either`. For each record pair and orientation, gbdraw takes the longest chain
+of compatible anchors (most anchors, then the highest summed bit score), removes
+it, and repeats; each anchor left over is a singleton block. Two neighbouring
+anchors of a chain may be at most `max_unit_gap` units apart in both orders.
+`max_conflicts` defaults to `1` and limits how many other anchors may lie
+strictly inside both order intervals between two neighbouring anchors of a
+chain, so it has no effect when `max_unit_gap` is `0`. Those other anchors stay
+in the result in their own blocks.
 
 Filters apply to display or derived results after raw search rows exist. A raw
 TSV can therefore contain more rows than the finished diagram. Record the

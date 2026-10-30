@@ -7,8 +7,7 @@ from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
-import math
-import sys
+from heapq import heappop, heappush
 from typing import Literal, Mapping, Sequence, SupportsInt, cast, get_args
 
 import pandas as pd
@@ -67,7 +66,6 @@ COLLINEARITY_METADATA_COLUMNS = (
     "collinearity_block_kind",
     "collinearity_orientation",
     "collinearity_block_score",
-    "collinearity_block_evalue",
     "collinearity_anchor_index",
     "collinearity_anchor_count",
     "collinearity_color_mode",
@@ -178,6 +176,10 @@ class CollinearityBlock:
     orientation: CollinearityOrientation
     score: float
     anchors: tuple[CollinearityAnchor, ...]
+    # The block caller writes only "cluster" and "singleton" and leaves
+    # block_evalue and label None (OV-2300). The fields and "syntenic" stay
+    # because saved collinearity-result resources carry them and their reader
+    # requires every field.
     kind: CollinearityBlockKind = "syntenic"
     block_evalue: float | None = None
     label: str | None = None
@@ -209,13 +211,6 @@ class LosslessCollinearityParameters:
             raise ValidationError("collinear_max_conflicts must be >= 0")
         if str(self.merge_orientation) not in {"strand", "order", "either"}:
             raise ValidationError("collinear_merge_orientation must be one of: strand, order, either")
-
-
-@dataclass(frozen=True)
-class _Chain:
-    orientation: CollinearityOrientation
-    score: float
-    anchors: tuple[CollinearityAnchor, ...]
 
 
 def normalize_collinearity_color_mode(mode: str | None) -> CollinearityColorMode:
@@ -314,35 +309,24 @@ def _anchor_strand_orientation(anchor: CollinearityAnchor) -> CollinearityOrient
     return "plus" if query_strand == subject_strand else "minus"
 
 
+def _path_sort_key(
+    anchor: CollinearityAnchor,
+    orientation: CollinearityOrientation,
+) -> tuple[int, int, str, str, str]:
+    return (
+        int(anchor.query_order),
+        _orientation_subject_value(anchor, orientation),
+        str(anchor.orthogroup_id),
+        str(anchor.query_protein_id),
+        str(anchor.subject_protein_id),
+    )
+
+
 def _path_sorted_anchors(
     anchors: Sequence[CollinearityAnchor],
     orientation: CollinearityOrientation,
 ) -> tuple[CollinearityAnchor, ...]:
-    if orientation == "minus":
-        return tuple(
-            sorted(
-                anchors,
-                key=lambda anchor: (
-                    int(anchor.query_order),
-                    -int(anchor.subject_order),
-                    str(anchor.orthogroup_id),
-                    str(anchor.query_protein_id),
-                    str(anchor.subject_protein_id),
-                ),
-            )
-        )
-    return tuple(
-        sorted(
-            anchors,
-            key=lambda anchor: (
-                int(anchor.query_order),
-                int(anchor.subject_order),
-                str(anchor.orthogroup_id),
-                str(anchor.query_protein_id),
-                str(anchor.subject_protein_id),
-            ),
-        )
-    )
+    return tuple(sorted(anchors, key=lambda anchor: _path_sort_key(anchor, orientation)))
 
 
 def _orientation_subject_value(
@@ -714,21 +698,6 @@ def _lossless_anchor_supports_orientation(
     return strand_orientation is None or strand_orientation == orientation
 
 
-def _lossless_boundary_orientation(
-    previous: CollinearityAnchor,
-    current: CollinearityAnchor,
-    params: LosslessCollinearityParameters,
-) -> CollinearityOrientation:
-    if params.merge_orientation in {"strand", "either"}:
-        previous_strand = _anchor_strand_orientation(previous)
-        current_strand = _anchor_strand_orientation(current)
-        if previous_strand is not None and current_strand in {None, previous_strand}:
-            return previous_strand
-        if current_strand is not None and previous_strand is None:
-            return current_strand
-    return "minus" if int(current.subject_order) < int(previous.subject_order) else "plus"
-
-
 def _lossless_anchors_are_compatible(
     previous: CollinearityAnchor,
     current: CollinearityAnchor,
@@ -779,172 +748,241 @@ def _lossless_block_from_anchors(
         score=_anchor_bitscore_total(ordered),
         anchors=ordered,
         kind="cluster" if len(ordered) > 1 else "singleton",
-        block_evalue=None,
     )
 
 
-def _lossless_initial_clusters_for_pair(
+def _subject_orders_by_query(anchors: Sequence[CollinearityAnchor]) -> dict[int, list[int]]:
+    """Sorted subject orders of every anchor of one record pair, by query order."""
+
+    by_query: dict[int, list[int]] = {}
+    for anchor in anchors:
+        by_query.setdefault(int(anchor.query_order), []).append(int(anchor.subject_order))
+    for subject_orders in by_query.values():
+        subject_orders.sort()
+    return by_query
+
+
+def _lossless_step_conflicts_exceed(
+    previous: CollinearityAnchor,
+    current: CollinearityAnchor,
+    subject_orders_by_query: Mapping[int, Sequence[int]],
+    max_conflicts: int,
+) -> bool:
+    """Whether more than ``max_conflicts`` anchors of the pair lie strictly
+    inside the box between two chain neighbours, in both order intervals."""
+
+    query_low, query_high = sorted((int(previous.query_order), int(current.query_order)))
+    subject_low, subject_high = sorted((int(previous.subject_order), int(current.subject_order)))
+    if query_high - query_low < 2 or subject_high - subject_low < 2:
+        return False
+    conflicts = 0
+    for query_order in range(query_low + 1, query_high):
+        subject_orders = subject_orders_by_query.get(query_order)
+        if not subject_orders:
+            continue
+        conflicts += bisect_left(subject_orders, subject_high) - bisect_right(subject_orders, subject_low)
+        if conflicts > max_conflicts:
+            return True
+    return False
+
+
+_CHAIN_ORIENTATIONS: tuple[CollinearityOrientation, ...] = ("plus", "minus")
+
+
+@dataclass
+class _OrientationChains:
+    """Longest-chain state of one record pair in one orientation.
+
+    Nodes are the pair's anchors that support the orientation, ranked by the
+    path sort key; ``predecessors[rank]`` lists, in rank order, the nodes that
+    may precede that node in a chain. ``count``/``score``/``previous`` hold the
+    best chain ending at each node: most anchors, then the highest summed
+    bitscore, then the earliest predecessor rank.
+    """
+
+    orientation: CollinearityOrientation
+    anchor_indexes: list[int]
+    predecessors: list[list[int]]
+    count: list[int]
+    score: list[float]
+    previous: list[int]
+    followers: list[set[int]]
+
+
+def _orientation_chains(
+    anchors: Sequence[CollinearityAnchor],
+    orientation: CollinearityOrientation,
+    params: LosslessCollinearityParameters,
+    subject_orders_by_query: Mapping[int, Sequence[int]],
+) -> _OrientationChains:
+    anchor_indexes = sorted(
+        (
+            index
+            for index, anchor in enumerate(anchors)
+            if _lossless_anchor_supports_orientation(anchor, orientation, params)
+        ),
+        key=lambda index: _path_sort_key(anchors[index], orientation),
+    )
+    max_gap = int(params.max_unit_gap)
+    max_conflicts = int(params.max_conflicts)
+    # Query order -> (oriented subject orders, ranks), both in rank order.
+    placed: dict[int, tuple[list[int], list[int]]] = {}
+    predecessors: list[list[int]] = []
+    for rank, anchor_index in enumerate(anchor_indexes):
+        anchor = anchors[anchor_index]
+        query_order = int(anchor.query_order)
+        subject_value = _orientation_subject_value(anchor, orientation)
+        found: list[int] = []
+        # A compatible predecessor lies at most max_gap + 1 units before the
+        # node in both orders; bisect the oriented subject orders per query unit.
+        for previous_query in range(query_order - max_gap - 1, query_order):
+            bucket = placed.get(previous_query)
+            if bucket is None:
+                continue
+            subject_values, ranks = bucket
+            start = bisect_left(subject_values, subject_value - max_gap - 1)
+            end = bisect_left(subject_values, subject_value)
+            for position in range(start, end):
+                previous_rank = ranks[position]
+                previous = anchors[anchor_indexes[previous_rank]]
+                if _lossless_anchors_are_compatible(
+                    previous, anchor, orientation=orientation, params=params
+                ) and not _lossless_step_conflicts_exceed(
+                    previous, anchor, subject_orders_by_query, max_conflicts
+                ):
+                    found.append(previous_rank)
+        predecessors.append(found)
+        bucket = placed.setdefault(query_order, ([], []))
+        bucket[0].append(subject_value)
+        bucket[1].append(rank)
+    size = len(anchor_indexes)
+    return _OrientationChains(
+        orientation=orientation,
+        anchor_indexes=anchor_indexes,
+        predecessors=predecessors,
+        count=[0] * size,
+        score=[0.0] * size,
+        previous=[-1] * size,
+        followers=[set() for _ in range(size)],
+    )
+
+
+def _update_best_chain_end(
+    chains: _OrientationChains,
+    rank: int,
+    anchors: Sequence[CollinearityAnchor],
+    alive: Sequence[bool],
+) -> None:
+    best, best_count, best_score = -1, 0, 0.0
+    for previous_rank in chains.predecessors[rank]:
+        if not alive[chains.anchor_indexes[previous_rank]]:
+            continue
+        count = chains.count[previous_rank]
+        score = chains.score[previous_rank]
+        if count > best_count or (count == best_count and score > best_score):
+            best, best_count, best_score = previous_rank, count, score
+    old = chains.previous[rank]
+    if old >= 0:
+        chains.followers[old].discard(rank)
+    if best >= 0:
+        chains.followers[best].add(rank)
+    chains.previous[rank] = best
+    chains.count[rank] = best_count + 1
+    chains.score[rank] = best_score + float(anchors[chains.anchor_indexes[rank]].bitscore)
+
+
+def _lossless_chains_for_pair(
     pair: tuple[int, int],
     anchors: Sequence[CollinearityAnchor],
     params: LosslessCollinearityParameters,
 ) -> list[CollinearityBlock]:
-    ordered = sorted(
-        anchors,
-        key=lambda anchor: (
-            int(anchor.query_order),
-            int(anchor.subject_order),
-            str(anchor.orthogroup_id),
-            str(anchor.query_protein_id),
-            str(anchor.subject_protein_id),
-        ),
-    )
-    blocks: list[CollinearityBlock] = []
-    current: list[CollinearityAnchor] = []
-    current_orientation: CollinearityOrientation | None = None
+    """Split one record pair's anchors into longest compatible chains.
 
-    def flush() -> None:
-        nonlocal current, current_orientation
-        if not current:
-            return
-        orientation = current_orientation or _lossless_singleton_orientation(current[0])
+    Each orientation's anchors, in query order, form a DAG whose edges join
+    path-compatible neighbours with at most ``max_conflicts`` other anchors in
+    the box between them. The longest chain over both orientations is taken
+    out and the rest are chained again until no chain of two anchors remains;
+    every anchor left is a singleton block.
+    """
+
+    subject_orders_by_query = _subject_orders_by_query(anchors)
+    alive = [True] * len(anchors)
+    graphs = [
+        _orientation_chains(anchors, orientation, params, subject_orders_by_query)
+        for orientation in _CHAIN_ORIENTATIONS
+    ]
+    rank_by_anchor = [
+        {anchor_index: rank for rank, anchor_index in enumerate(graph.anchor_indexes)}
+        for graph in graphs
+    ]
+    # Chain ends by (most anchors, highest score, plus before minus, earliest rank);
+    # an entry is stale once its node is taken or its best chain changed.
+    heap: list[tuple[int, float, int, int]] = []
+    for graph_index, graph in enumerate(graphs):
+        for rank in range(len(graph.anchor_indexes)):
+            _update_best_chain_end(graph, rank, anchors, alive)
+            if graph.count[rank] > 1:
+                heappush(heap, (-graph.count[rank], -graph.score[rank], graph_index, rank))
+
+    blocks: list[CollinearityBlock] = []
+    while heap:
+        negative_count, negative_score, graph_index, rank = heappop(heap)
+        graph = graphs[graph_index]
+        if (
+            not alive[graph.anchor_indexes[rank]]
+            or graph.count[rank] != -negative_count
+            or graph.score[rank] != -negative_score
+        ):
+            continue
+        taken: list[int] = []
+        while rank >= 0:
+            taken.append(graph.anchor_indexes[rank])
+            rank = graph.previous[rank]
+        for anchor_index in taken:
+            alive[anchor_index] = False
         blocks.append(
             _lossless_block_from_anchors(
                 block_id=f"pending_{len(blocks) + 1:04d}",
                 pair=pair,
-                orientation=orientation,
-                anchors=current,
+                orientation=graph.orientation,
+                anchors=[anchors[anchor_index] for anchor_index in taken],
             )
         )
-        current = []
-        current_orientation = None
+        for other_index, other in enumerate(graphs):
+            # Only chains that ran through a taken anchor can change.
+            stale: set[int] = set()
+            pending = [
+                rank_by_anchor[other_index][anchor_index]
+                for anchor_index in taken
+                if anchor_index in rank_by_anchor[other_index]
+            ]
+            while pending:
+                for follower in other.followers[pending.pop()]:
+                    if follower not in stale and alive[other.anchor_indexes[follower]]:
+                        stale.add(follower)
+                        pending.append(follower)
+            for stale_rank in sorted(stale):
+                _update_best_chain_end(other, stale_rank, anchors, alive)
+                if other.count[stale_rank] > 1:
+                    heappush(
+                        heap,
+                        (-other.count[stale_rank], -other.score[stale_rank], other_index, stale_rank),
+                    )
 
-    for anchor in ordered:
-        if not current:
-            current = [anchor]
-            current_orientation = None
-            continue
-        previous = current[-1]
-        orientation = current_orientation or _lossless_boundary_orientation(previous, anchor, params)
-        if _lossless_anchors_are_compatible(
-            previous,
-            anchor,
-            orientation=orientation,
-            params=params,
-        ):
-            current.append(anchor)
-            current_orientation = orientation
-            continue
-        flush()
-        current = [anchor]
-    flush()
-    return blocks
-
-
-def _lossless_conflicts_between_clusters(
-    left: Sequence[CollinearityAnchor],
-    right: Sequence[CollinearityAnchor],
-    anchors: Sequence[CollinearityAnchor],
-    *,
-    max_conflicts: int | None = None,
-) -> int:
-    """Count the strict gap in query-sorted anchors between path-sorted clusters.
-
-    Without a limit this returns the exact count. Only the boolean merge
-    consumer supplies a limit; exceeding it suffices to reject that merge.
-    """
-    if not left or not right:
-        return 0
-    left_end, right_start = left[-1], right[0]
-    query_min = min(int(left_end.query_order), int(right_start.query_order))
-    query_max = max(int(left_end.query_order), int(right_start.query_order))
-    subject_min = min(int(left_end.subject_order), int(right_start.subject_order))
-    subject_max = max(int(left_end.subject_order), int(right_start.subject_order))
-    start = bisect_right(anchors, query_min, key=lambda anchor: int(anchor.query_order))
-    end = bisect_left(anchors, query_max, key=lambda anchor: int(anchor.query_order))
-    cluster_anchors = None
-    conflicts = 0
-    for index in range(start, end):
-        anchor = anchors[index]
-        if not subject_min < int(anchor.subject_order) < subject_max:
-            continue
-        if cluster_anchors is None:
-            cluster_anchors = {*left, *right}
-        if anchor not in cluster_anchors:
-            conflicts += 1
-            if max_conflicts is not None and conflicts > max_conflicts:
-                break
-    return conflicts
-
-
-def _lossless_clusters_can_merge(
-    left: Sequence[CollinearityAnchor],
-    right: CollinearityBlock,
-    *,
-    orientation: CollinearityOrientation,
-    anchors: Sequence[CollinearityAnchor],
-    params: LosslessCollinearityParameters,
-) -> bool:
-    # Initial clusters and the accumulated path are already path-sorted.
-    if orientation != right.orientation or not left or not right.anchors:
-        return False
-    if not _lossless_anchors_are_compatible(
-        left[-1],
-        right.anchors[0],
-        orientation=orientation,
-        params=params,
+    for anchor_index in sorted(
+        (index for index, is_alive in enumerate(alive) if is_alive),
+        key=lambda index: _anchor_sort_key(anchors[index]),
     ):
-        return False
-    return _lossless_conflicts_between_clusters(
-        left, right.anchors, anchors, max_conflicts=int(params.max_conflicts)
-    ) <= int(params.max_conflicts)
-
-
-def _merge_lossless_clusters(
-    blocks: Sequence[CollinearityBlock],
-    *,
-    anchors: Sequence[CollinearityAnchor],
-    params: LosslessCollinearityParameters,
-) -> tuple[CollinearityBlock, ...]:
-    merged: list[CollinearityBlock] = []
-    singleton_blocks = [block for block in blocks if block.kind == "singleton"]
-    cluster_blocks = [block for block in blocks if block.kind == "cluster"]
-    ordered_anchors = (
-        sorted(anchors, key=lambda anchor: int(anchor.query_order))
-        if len(cluster_blocks) > 1 else ()
-    )
-    previous: CollinearityBlock | None = None
-    current: tuple[CollinearityAnchor, ...] | list[CollinearityAnchor] = ()
-
-    def flush() -> None:
-        if previous is None:
-            return
-        merged.append(
+        anchor = anchors[anchor_index]
+        blocks.append(
             _lossless_block_from_anchors(
-                block_id=previous.block_id,
-                pair=(previous.query_record_index, previous.subject_record_index),
-                orientation=previous.orientation,
-                anchors=current,
-            ) if isinstance(current, list) else previous
+                block_id=f"pending_{len(blocks) + 1:04d}",
+                pair=pair,
+                orientation=_lossless_singleton_orientation(anchor),
+                anchors=[anchor],
+            )
         )
-
-    for block in sorted(cluster_blocks, key=_final_block_sort_key):
-        if previous is None or not _lossless_clusters_can_merge(
-            current,
-            block,
-            orientation=previous.orientation,
-            anchors=ordered_anchors,
-            params=params,
-        ):
-            flush()
-            previous, current = block, block.anchors
-            continue
-        if isinstance(current, tuple):
-            current = list(current)
-        # Compatible endpoints strictly increase query order. Appending a
-        # sorted right path therefore preserves the entire path's tie order.
-        current.extend(block.anchors)
-    flush()
-    return tuple(sorted((*merged, *singleton_blocks), key=_final_block_sort_key))
+    return blocks
 
 
 def _filter_blocks_by_min_anchors(
@@ -1011,17 +1049,8 @@ def cluster_lossless_collinearity_anchors(
 
     blocks: list[CollinearityBlock] = []
     for pair in sorted(anchors_by_pair):
-        pair_blocks = _lossless_initial_clusters_for_pair(
-            pair,
-            anchors_by_pair[pair],
-            resolved_params,
-        )
         blocks.extend(
-            _merge_lossless_clusters(
-                pair_blocks,
-                anchors=anchors_by_pair[pair],
-                params=resolved_params,
-            )
+            _lossless_chains_for_pair(pair, anchors_by_pair[pair], resolved_params)
         )
     filtered_blocks, unblocked_anchors = _filter_blocks_by_min_anchors(
         blocks,
@@ -1031,118 +1060,6 @@ def cluster_lossless_collinearity_anchors(
         blocks=_renumber_lossless_blocks(filtered_blocks),
         unblocked_anchors=unblocked_anchors,
     )
-
-
-def _chain_path_anchors(chain: _Chain) -> tuple[CollinearityAnchor, ...]:
-    if chain.orientation == "minus":
-        return tuple(
-            sorted(
-                chain.anchors,
-                key=lambda anchor: (
-                    int(anchor.query_order),
-                    -int(anchor.subject_order),
-                    str(anchor.query_protein_id),
-                    str(anchor.subject_protein_id),
-                ),
-            )
-        )
-    return tuple(
-        sorted(
-            chain.anchors,
-            key=lambda anchor: (
-                int(anchor.query_order),
-                int(anchor.subject_order),
-                str(anchor.query_protein_id),
-                str(anchor.subject_protein_id),
-            ),
-        )
-    )
-
-
-def _log_permutation(n: int, m: int) -> float:
-    if m < 0 or n < m:
-        return math.inf
-    if m == 0:
-        return 0.0
-    return math.lgamma(n + 1) - math.lgamma(n - m + 1)
-
-
-def _anchor_genomic_position(
-    anchor: CollinearityAnchor,
-    start_attr: str,
-    end_attr: str,
-) -> float:
-    start = float(getattr(anchor, start_attr))
-    end = float(getattr(anchor, end_attr))
-    return min(start, end)
-
-
-def calculate_collinearity_block_evalue(
-    chain: _Chain,
-    available_anchors: Sequence[CollinearityAnchor],
-) -> float:
-    """Calculate a MCScanX-style block expectation value in genomic coordinate space."""
-
-    path_anchors = _chain_path_anchors(chain)
-    m = len(path_anchors)
-    if m == 0:
-        return math.inf
-
-    query_positions = [
-        _anchor_genomic_position(anchor, "query_start", "query_end")
-        for anchor in path_anchors
-    ]
-    subject_positions = [
-        _anchor_genomic_position(anchor, "subject_start", "subject_end")
-        for anchor in path_anchors
-    ]
-    query_min = min(query_positions)
-    query_max = max(query_positions)
-    subject_min = min(subject_positions)
-    subject_max = max(subject_positions)
-    region_query_length = max(1.0, query_max - query_min)
-    region_subject_length = max(1.0, subject_max - subject_min)
-    n = sum(
-        1
-        for anchor in available_anchors
-        if query_min
-        <= _anchor_genomic_position(anchor, "query_start", "query_end")
-        <= query_max
-        and subject_min
-        <= _anchor_genomic_position(anchor, "subject_start", "subject_end")
-        <= subject_max
-    )
-    if n < m:
-        return math.inf
-
-    log_evalue = (
-        math.log(2.0)
-        + _log_permutation(n, m)
-        - (m - 1)
-        * (math.log(region_query_length) + math.log(region_subject_length))
-    )
-    for previous, current in zip(path_anchors, path_anchors[1:]):
-        query_distance = max(
-            1.0,
-            abs(
-                _anchor_genomic_position(current, "query_start", "query_end")
-                - _anchor_genomic_position(previous, "query_start", "query_end")
-            ),
-        )
-        subject_distance = max(
-            1.0,
-            abs(
-                _anchor_genomic_position(current, "subject_start", "subject_end")
-                - _anchor_genomic_position(previous, "subject_start", "subject_end")
-            ),
-        )
-        log_evalue += math.log(query_distance) + math.log(subject_distance)
-
-    if log_evalue <= math.log(sys.float_info.min):
-        return 0.0
-    if log_evalue >= math.log(sys.float_info.max):
-        return math.inf
-    return float(math.exp(log_evalue))
 
 
 def call_collinearity_blocks(
@@ -1695,7 +1612,6 @@ def convert_collinearity_blocks_to_pair_comparisons(
                 "collinearity_block_kind": block.kind,
                 "collinearity_orientation": block.orientation,
                 "collinearity_block_score": float(block.score),
-                "collinearity_block_evalue": block.block_evalue,
                 "collinearity_anchor_index": 1,
                 "collinearity_anchor_count": len(block.anchors),
                 "collinearity_color_mode": normalized_color_mode,
@@ -1805,7 +1721,6 @@ __all__ = [
     "build_orthogroup_collinearity_blocks",
     "build_orthogroup_collinearity_blocks_from_hits",
     "call_collinearity_blocks",
-    "calculate_collinearity_block_evalue",
     "cluster_lossless_collinearity_anchors",
     "convert_collinearity_blocks_to_comparisons",
     "convert_collinearity_blocks_to_pair_comparisons",

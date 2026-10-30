@@ -252,7 +252,6 @@ export default Object.freeze({
   "Block ID": "ID khối",
   "Block Stroke Color": "Màu viền khối",
   "Block Stroke Width": "Độ dày viền khối",
-  "Block e-value": "E-value của khối",
   "Block envelopes may include intergenic sequence and genes that are not anchors.": "Phạm vi của khối có thể gồm trình tự giữa các gene và các gene không phải là neo.",
   "Block score": "Điểm khối",
   "Block stroke color": "Màu viền khối",

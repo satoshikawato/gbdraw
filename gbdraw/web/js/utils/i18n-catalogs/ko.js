@@ -252,7 +252,6 @@ export default Object.freeze({
   "Block ID": "블록 ID",
   "Block Stroke Color": "블록 윤곽선 색",
   "Block Stroke Width": "블록 윤곽선 두께",
-  "Block e-value": "블록 E-value",
   "Block envelopes may include intergenic sequence and genes that are not anchors.": "블록 범위에는 유전자 간 서열과 앵커가 아닌 유전자가 포함될 수 있습니다.",
   "Block score": "블록 점수",
   "Block stroke color": "블록 윤곽선 색",

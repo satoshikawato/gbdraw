@@ -252,7 +252,6 @@ export default Object.freeze({
   "Block ID": "ID blok",
   "Block Stroke Color": "Warna garis tepi blok",
   "Block Stroke Width": "Lebar garis tepi blok",
-  "Block e-value": "E-value blok",
   "Block envelopes may include intergenic sequence and genes that are not anchors.": "Rentang blok dapat mencakup sekuens intergenik dan gen yang bukan jangkar.",
   "Block score": "Skor blok",
   "Block stroke color": "Warna garis tepi blok",

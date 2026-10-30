@@ -5484,7 +5484,6 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         addMaterializedMatchRow(blockRows, 'Aligned length', match.alignment_length);
       }
       addMaterializedMatchRow(blockRows, 'Block score', match.block_score);
-      addMaterializedMatchRow(blockRows, 'Block e-value', match.block_evalue);
       addMaterializedMatchRow(blockRows, 'Anchor', [match.anchor_index, match.anchor_count].filter(Boolean).join(' / '));
       if (blockRows.length) sections.push({ title: 'Collinearity', rows: blockRows });
       if (kind !== 'homology') {
