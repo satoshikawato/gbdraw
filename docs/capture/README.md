@@ -17,7 +17,7 @@ their LOSATP Collinear searches from an empty cache. They select **Infer
 orthogroups with self-comparisons** and clear **Max target seqs**, matching the
 Gallery request and the CLI/Python recipes. Fresh Web Collinear settings cap raw
 hits at `5` and leave inference off; without inference the runs execute 8 or 20
-searches instead of 13 or 25 and draw 462 instead of 500 Collinear match
+searches instead of 13 or 25 and draw 462 instead of 492 Collinear match
 elements. H-GUI-14 reloads only the
 current-format session downloaded earlier in the same raw-input journey, and
 it does so in a fresh context. Multi-record Circular examples contain

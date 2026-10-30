@@ -12,6 +12,16 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: Collinear blocks are chained into the longest runs of each record pair and orientation.
+  A run no longer splits where one gene has a second anchor, where a single link continues it,
+  or where a compatible cluster sits within **Max unit gap** but not next to it
+  (OV-2294, OV-2295, OV-2296). Saved derived LOSATP results are rebuilt once on their next use.
+- Removed: the **Block e-value** row of the Collinear match popup, the `collinearity_block_evalue`
+  column of the block table, and the `data-collinearity-block-evalue` SVG attribute; the value has
+  been empty since 0.14.0 (OV-2300).
+- Fixed: Collinear block calling no longer slows down as **Max unit gap** grows; 2000 anchors
+  took seconds at a gap of 1000 and now take tens of milliseconds at any gap.
+
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-30
 
 - Patch release of 0.14.3. Sessions are still saved as Session version 49; Sessions saved by

@@ -747,7 +747,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         "cache_hits=0",
         "cache_misses=13",
         "worker_jobs=13",
-        "svg.collinear_matches=500",
+        "svg.collinear_matches=492",
         "detail_match_inside_preview=true",
         "popup.selected_match_class=true",
         "popup.scrolled_to_details=true",
@@ -758,7 +758,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     assert "Max target seqs | Blank (**Unbounded**)" in gallery_collinear
     assert "Advanced comparison and layout | Execution" not in gallery_collinear
     assert "Open **Selected pairs (4)**" in gallery_collinear
-    assert "500 rendered Collinear match elements" in gallery_collinear
+    assert "492 rendered Collinear match elements" in gallery_collinear
     normalized_gallery_collinear = " ".join(gallery_collinear.split())
     assert "six times to reach **40%**" in normalized_gallery_collinear
     assert "four times to reach **80%**" in normalized_gallery_collinear
@@ -851,7 +851,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         "cache_hits=0",
         "cache_misses=25",
         "worker_jobs=25",
-        "svg.collinear_matches=500",
+        "svg.collinear_matches=492",
         "adjacent_display_pairs=true",
         "orientation_match=true",
         "color_mode=orientation_identity",

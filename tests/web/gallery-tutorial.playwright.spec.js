@@ -348,8 +348,8 @@ test('Gallery renders the two-species Vibrio multi-record tutorial and media', a
   expect(metadata.schema).toBe(5);
   expect(metadata.items).toHaveLength(1);
   expect(metadata.items[0].features).toHaveLength(9_375);
-  // File-level LOSATP databases (PD-OI-018 revision 4) yield 114 blocks.
-  expect(metadata.items[0].comparisonMatches).toHaveLength(114);
+  // File-level LOSATP databases (PD-OI-018 revision 4) yield 113 blocks; chaining (#1498, #1499) joined two.
+  expect(metadata.items[0].comparisonMatches).toHaveLength(113);
   await page.getByRole('tab', { name: 'Preview' }).click();
   await expect(page.locator('#preview-note')).toContainText('JavaScript-enabled');
   await expect(page.locator('#demo-frame')).toHaveAttribute('title', /Interactive gbdraw SVG/);

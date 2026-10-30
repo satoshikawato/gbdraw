@@ -1085,7 +1085,7 @@ def _rechained_from_scratch(
     """The chaining rule restated without incremental updates: every round
     recomputes each orientation's best chains over all remaining anchors."""
 
-    subjects = collinearity_module._subject_orders_by_query(anchors)
+    subjects = collinearity_module._pair_order_index(anchors)
     remaining = list(range(len(anchors)))
     chains = []
     while True:
@@ -1160,6 +1160,27 @@ def test_lossless_chaining_matches_the_rule_recomputed_from_scratch(seed: int) -
         for block in result.blocks
     ) == sorted(_rechained_from_scratch(anchors, params))
 
+
+@pytest.mark.linear
+def test_lossless_chaining_with_a_huge_unit_gap_visits_only_existing_units() -> None:
+    # Review of OV-2294: the step window walked every unit index up to max_unit_gap;
+    # it now visits only the query orders that hold an anchor (a huge gap stays fast).
+    anchors = [_anchor(3 * index, 3 * index) for index in range(200)] + [
+        _anchor(3 * index + 1, 3 * index + 5000) for index in range(200)
+    ]
+
+    def blocks(max_unit_gap: int):
+        return _block_orders(
+            cluster_lossless_collinearity_anchors(
+                anchors,
+                params=LosslessCollinearityParameters(
+                    max_unit_gap=max_unit_gap, max_diagonal_drift=5
+                ),
+            )
+        )
+
+    assert blocks(10**9) == blocks(10)
+    assert [len(block) for block in blocks(10)] == [200, 200]
 
 @pytest.mark.linear
 @pytest.mark.parametrize("seed", range(30))

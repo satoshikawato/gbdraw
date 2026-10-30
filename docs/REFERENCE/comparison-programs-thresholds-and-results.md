@@ -83,7 +83,8 @@ and conflict rules. Its unit mode is `auto`, `cds`, or `locus`; anchor mode is
 `either`. For each record pair and orientation, gbdraw takes the longest chain
 of compatible anchors (most anchors, then the highest summed bit score), removes
 it, and repeats; each anchor left over is a singleton block. Two neighbouring
-anchors of a chain may be at most `max_unit_gap` units apart in both orders.
+anchors of a chain may have at most `max_unit_gap` units between them, on both
+records; at `0` they must be adjacent units.
 `max_conflicts` defaults to `1` and limits how many other anchors may lie
 strictly inside both order intervals between two neighbouring anchors of a
 chain, so it has no effect when `max_unit_gap` is `0`. Those other anchors stay

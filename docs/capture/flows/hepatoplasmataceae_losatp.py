@@ -44,8 +44,9 @@ RECORD_LENGTH_TEXT = {
     for _, _, _, record_id, length, _ in GUI_HEPATOPLASMATACEAE_FIXTURES
 }
 ADJACENT_PAIRS = set(zip(RECORD_IDS[:-1], RECORD_IDS[1:], strict=True))
-EXPECTED_FEATURE_ELEMENTS = 2_994
-EXPECTED_COLLINEAR_MATCH_ELEMENTS = 500
+# 2,994 features plus 9 `__outline` paths: an open partial end draws fill and outline apart.
+EXPECTED_FEATURE_ELEMENTS = 3_003
+EXPECTED_COLLINEAR_MATCH_ELEMENTS = 492
 ALL_RECORD_GENERATION_TIMEOUT_MS = 1_200_000
 POPUP_MARGIN_PX = 12
 PREVIEW_INSET_PX = 12
@@ -316,7 +317,7 @@ def _assert_records(report: dict[str, Any]) -> None:
         )
     if report.get("featureElementCount") != EXPECTED_FEATURE_ELEMENTS:
         raise AssertionError(
-            "Expected 2,994 rendered feature elements, found "
+            f"Expected {EXPECTED_FEATURE_ELEMENTS} rendered feature elements, found "
             f"{report.get('featureElementCount')}"
         )
     texts = set(report.get("texts", []))
@@ -351,8 +352,8 @@ def _assert_collinear(
         raise AssertionError("No LOSATP Collinear blocks were rendered")
     if len(matches) != EXPECTED_COLLINEAR_MATCH_ELEMENTS:
         raise AssertionError(
-            "Expected 500 rendered Collinear match elements, found "
-            f"{len(matches)}"
+            f"Expected {EXPECTED_COLLINEAR_MATCH_ELEMENTS} rendered Collinear match "
+            f"elements, found {len(matches)}"
         )
     endpoints = {(match.get("query"), match.get("subject")) for match in matches}
     if endpoints != ADJACENT_PAIRS:

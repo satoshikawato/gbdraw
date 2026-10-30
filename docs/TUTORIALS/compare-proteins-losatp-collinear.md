@@ -9,7 +9,7 @@ colored blue or red by orientation, with intensity showing average identity.
 
 ![Five Hepatoplasmataceae genomes with adjacent Collinear blocks](../images/t-cli-10/losatp_collinear.svg)
 
-*The figure has 2,994 displayed features and 500 Collinear match elements.*
+*The figure has 2,994 displayed features and 492 Collinear match elements.*
 
 Each block joins protein matches that stay in the same order between two
 adjacent genomes. It shows shared local gene order, not a whole-genome synteny
@@ -33,7 +33,7 @@ downloads and the accession checks.
 Use these five Revision History links, not the live accession downloads. NCBI
 can update a record's annotation without changing its sequence accession
 version. These pinned revisions preserve the exact feature tables used to
-reproduce this Tutorial's 2,994 displayed features and 500 Collinear matches.
+reproduce this Tutorial's 2,994 displayed features and 492 Collinear matches.
 Save each NCBI response under its listed local filename, in the order shown;
 do not substitute a repository copy or a Gallery session.
 
@@ -157,7 +157,7 @@ open until processing finishes. Select **Reset zoom**, select **Zoom out** six
 times to reach **40%**, then drag the preview horizontally until the complete
 diagram is centered.
 
-The result contains 500 rendered Collinear match elements. Their endpoints
+The result contains 492 rendered Collinear match elements. Their endpoints
 cover the four adjacent display pairs. Blue and red families distinguish the
 two orientations, and intensity carries average identity within each family.
 
@@ -278,7 +278,7 @@ and gbdraw writes `losatp_collinear.svg` in the working directory.
 Open `losatp_collinear.svg` and compare its record layout and Collinear blocks
 with the figure at the top of this page. Your SVG should match it: verify five
 complete records in the documented order, centered alignment, rulers, GC
-content and skew, and 500 rendered Collinear match elements colored by
+content and skew, and 492 rendered Collinear match elements colored by
 orientation and identity.
 
 ## In Python
@@ -391,7 +391,7 @@ SVG in the current directory.
 ### Step 3: Inspect the Collinear map
 
 Open `losatp_collinear.svg` and check the five complete records in the
-documented order, 500 rendered Collinear matches, centered alignment, rulers,
+documented order, 492 rendered Collinear matches, centered alignment, rulers,
 GC content, and GC skew. Your SVG should match the figure at the top of this
 page: the same record layout and the same adjacent Collinear blocks colored by
 orientation and identity.

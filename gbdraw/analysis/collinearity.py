@@ -8,7 +8,7 @@ from __future__ import annotations
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from heapq import heappop, heappush
-from typing import Literal, Mapping, Sequence, SupportsInt, cast, get_args
+from typing import Literal, Mapping, NamedTuple, Sequence, SupportsInt, cast, get_args
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
@@ -751,40 +751,69 @@ def _lossless_block_from_anchors(
     )
 
 
-def _subject_orders_by_query(anchors: Sequence[CollinearityAnchor]) -> dict[int, list[int]]:
-    """Sorted subject orders of every anchor of one record pair, by query order."""
+class _PairOrderIndex(NamedTuple):
+    """Every anchor of one record pair: the query orders that hold an anchor,
+    ascending, and the sorted subject orders at each of them."""
 
+    query_orders: list[int]
+    subject_orders: list[list[int]]
+
+
+def _pair_order_index(anchors: Sequence[CollinearityAnchor]) -> _PairOrderIndex:
     by_query: dict[int, list[int]] = {}
     for anchor in anchors:
         by_query.setdefault(int(anchor.query_order), []).append(int(anchor.subject_order))
-    for subject_orders in by_query.values():
-        subject_orders.sort()
-    return by_query
+    query_orders = sorted(by_query)
+    return _PairOrderIndex(query_orders, [sorted(by_query[order]) for order in query_orders])
 
 
 def _lossless_step_conflicts_exceed(
     previous: CollinearityAnchor,
     current: CollinearityAnchor,
-    subject_orders_by_query: Mapping[int, Sequence[int]],
+    index: _PairOrderIndex,
     max_conflicts: int,
 ) -> bool:
     """Whether more than ``max_conflicts`` anchors of the pair lie strictly
-    inside the box between two chain neighbours, in both order intervals."""
+    inside the box between two chain neighbours, in both order intervals.
+
+    Only the query orders that hold an anchor are visited, so a wide box costs
+    the anchors near it, not its width.
+    """
 
     query_low, query_high = sorted((int(previous.query_order), int(current.query_order)))
     subject_low, subject_high = sorted((int(previous.subject_order), int(current.subject_order)))
     if query_high - query_low < 2 or subject_high - subject_low < 2:
         return False
     conflicts = 0
-    for query_order in range(query_low + 1, query_high):
-        subject_orders = subject_orders_by_query.get(query_order)
-        if not subject_orders:
-            continue
+    for position in range(
+        bisect_right(index.query_orders, query_low), bisect_left(index.query_orders, query_high)
+    ):
+        subject_orders = index.subject_orders[position]
         conflicts += bisect_left(subject_orders, subject_high) - bisect_right(subject_orders, subject_low)
         if conflicts > max_conflicts:
             return True
     return False
 
+
+def _oriented_subjects_between(
+    index: _PairOrderIndex,
+    query_order: int,
+    orientation: CollinearityOrientation,
+    low: int,
+    high: int,
+) -> list[int]:
+    """Oriented subject orders strictly between ``low`` and ``high`` of every
+    anchor of the pair at one query order."""
+
+    position = bisect_left(index.query_orders, query_order)
+    if position == len(index.query_orders) or index.query_orders[position] != query_order:
+        return []
+    subject_orders = index.subject_orders[position]
+    if orientation == "minus":
+        start = bisect_right(subject_orders, -high)
+        end = bisect_left(subject_orders, -low)
+        return [-subject for subject in subject_orders[start:end]]
+    return subject_orders[bisect_right(subject_orders, low):bisect_left(subject_orders, high)]
 
 _CHAIN_ORIENTATIONS: tuple[CollinearityOrientation, ...] = ("plus", "minus")
 
@@ -813,7 +842,7 @@ def _orientation_chains(
     anchors: Sequence[CollinearityAnchor],
     orientation: CollinearityOrientation,
     params: LosslessCollinearityParameters,
-    subject_orders_by_query: Mapping[int, Sequence[int]],
+    order_index: _PairOrderIndex,
 ) -> _OrientationChains:
     anchor_indexes = sorted(
         (
@@ -825,8 +854,11 @@ def _orientation_chains(
     )
     max_gap = int(params.max_unit_gap)
     max_conflicts = int(params.max_conflicts)
-    # Query order -> (oriented subject orders, ranks), both in rank order.
-    placed: dict[int, tuple[list[int], list[int]]] = {}
+    max_drift = int(params.max_diagonal_drift)
+    # Query orders placed so far, ascending, and at each one its oriented
+    # subject orders and ranks, both in rank order.
+    placed_queries: list[int] = []
+    placed: list[tuple[list[int], list[int]]] = []
     predecessors: list[list[int]] = []
     for rank, anchor_index in enumerate(anchor_indexes):
         anchor = anchors[anchor_index]
@@ -834,25 +866,52 @@ def _orientation_chains(
         subject_value = _orientation_subject_value(anchor, orientation)
         found: list[int] = []
         # A compatible predecessor lies at most max_gap + 1 units before the
-        # node in both orders; bisect the oriented subject orders per query unit.
-        for previous_query in range(query_order - max_gap - 1, query_order):
-            bucket = placed.get(previous_query)
-            if bucket is None:
-                continue
-            subject_values, ranks = bucket
-            start = bisect_left(subject_values, subject_value - max_gap - 1)
-            end = bisect_left(subject_values, subject_value)
-            for position in range(start, end):
+        # node in both orders. Visit only the placed query orders in that
+        # window, nearest first, and bisect their oriented subject orders, so
+        # the cost is the anchors in the window, not the width of max_gap.
+        # A predecessor dx units back has dy >= dx - max_drift, so the anchors
+        # of nearer units whose oriented subject order lies above
+        # subject_value - dx + max_drift are inside the box of every
+        # predecessor from dx back; once more than max_conflicts are, the
+        # farther units cannot hold one.
+        enclosed = 0
+        inside: list[int] = []  # oriented subject orders, negated (max-heap)
+        for column in range(
+            bisect_left(placed_queries, query_order) - 1,
+            bisect_left(placed_queries, query_order - max_gap - 1) - 1,
+            -1,
+        ):
+            previous_query = placed_queries[column]
+            floor = subject_value - (query_order - previous_query) + max_drift
+            while inside and -inside[0] > floor:
+                heappop(inside)
+                enclosed += 1
+            if enclosed > max_conflicts:
+                break
+            subject_values, ranks = placed[column]
+            for position in range(
+                bisect_left(subject_values, subject_value - max_gap - 1),
+                bisect_left(subject_values, subject_value),
+            ):
                 previous_rank = ranks[position]
                 previous = anchors[anchor_indexes[previous_rank]]
                 if _lossless_anchors_are_compatible(
                     previous, anchor, orientation=orientation, params=params
                 ) and not _lossless_step_conflicts_exceed(
-                    previous, anchor, subject_orders_by_query, max_conflicts
+                    previous, anchor, order_index, max_conflicts
                 ):
                     found.append(previous_rank)
+            for oriented in _oriented_subjects_between(
+                order_index, previous_query, orientation,
+                subject_value - max_gap - 1 + max_drift, subject_value,
+            ):
+                heappush(inside, -oriented)
+        found.sort()
         predecessors.append(found)
-        bucket = placed.setdefault(query_order, ([], []))
+        if not placed_queries or placed_queries[-1] != query_order:
+            placed_queries.append(query_order)
+            placed.append(([], []))
+        bucket = placed[-1]
         bucket[0].append(subject_value)
         bucket[1].append(rank)
     size = len(anchor_indexes)
@@ -905,10 +964,10 @@ def _lossless_chains_for_pair(
     every anchor left is a singleton block.
     """
 
-    subject_orders_by_query = _subject_orders_by_query(anchors)
+    order_index = _pair_order_index(anchors)
     alive = [True] * len(anchors)
     graphs = [
-        _orientation_chains(anchors, orientation, params, subject_orders_by_query)
+        _orientation_chains(anchors, orientation, params, order_index)
         for orientation in _CHAIN_ORIENTATIONS
     ]
     rank_by_anchor = [
