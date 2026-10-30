@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 
 const {
+  MAX_EXPANDED_SESSION_BYTES,
   compressSessionData,
   largeSessionDownloadMegabytes
 } = await import('../../gbdraw/web/js/services/session-file.js');
@@ -96,6 +97,41 @@ await assert.rejects(
   compressSessionData({ value: { toJSON: () => 'unsupported' } }),
   /unsupported object/
 );
+
+// OV-2240: Save refuses, before anything is written, a Session whose expanded
+// JSON is over the cap that Load enforces (`MAX_EXPANDED_SESSION_BYTES`). The
+// cap is injected small here; at or under it the bytes are those of
+// JSON.stringify, as before.
+assert.equal(MAX_EXPANDED_SESSION_BYTES, 512 * 1024 * 1024);
+const sizedSession = {
+  format: 'gbdraw-session',
+  resources: {
+    a: { name: 'small.gb', size: 10, data: 'A'.repeat(10) },
+    b: { name: 'big.tsv', size: 700000, data: 'B'.repeat(700000) },
+    c: { name: 'mid.fa', size: 400000, data: 'C'.repeat(400000) },
+    d: { name: 'tiny.tsv', size: 1, data: 'D' }
+  }
+};
+const sizedBytes = Buffer.byteLength(JSON.stringify(sizedSession));
+const atCap = await compressSessionData(sizedSession, { maxExpandedBytes: sizedBytes });
+assert.equal(
+  gunzipSync(Buffer.from(await atCap.arrayBuffer())).toString('utf8'),
+  JSON.stringify(sizedSession),
+  'a Session exactly at the cap is written unchanged'
+);
+const refusal = await compressSessionData(sizedSession, { maxExpandedBytes: sizedBytes - 1 }).then(
+  () => assert.fail('a Session over the cap must not be written'),
+  (error) => error
+);
+assert.deepEqual(
+  [refusal.code, refusal.stage, refusal.operation],
+  ['SESSION_SIZE_LIMIT', 'write', 'session-save']
+);
+assert.deepEqual(refusal.context, {
+  sessionBytes: sizedBytes,
+  sessionByteLimit: sizedBytes - 1,
+  largestInputs: 'big.tsv, mid.fa, small.gb'
+});
 
 const largeBlob = new Blob(
   [new Uint8Array((50 * 1024 * 1024) + (512 * 1024))],

@@ -9,7 +9,7 @@ const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction'
   'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readFeatureOverrideTable', 'registerFonts', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'synthesizeColorRules', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
-  'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'parse']);
+  'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'write', 'parse']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
 recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick font_size font_family plot_title_font_size height large_tick_interval small_tick_interval tick_font_size
 inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_shaft_width_ratio keep_definition_left_aligned color action feature_type qualifier value record_id label_text
@@ -299,6 +299,10 @@ const PHRASES = Object.freeze({
   exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
   schema: 'Load a supported Session file or recreate it with the current writer.',
   notASession: 'This file is not a gbdraw Session: it is not valid JSON.',
+  // OV-2240: Save refuses a Session that Load could not open (the cap of services/session-file.js).
+  sessionNotSaved: 'The Session was not saved: it is {size} MB expanded, and the browser loads at most {limit} MB.',
+  largestInputs: 'Largest inputs: {inputs}.',
+  sessionSaveRemedy: 'Remove or replace the largest inputs with smaller ones, then save again.',
   liveEditFailed: 'Live edit failed: direct edits already applied are kept; geometry may still need updating.',
   liveEditRetry: 'Retry the live edit or use Generate.',
   liveEditChange: 'Change the edit, or change the settings and use Generate.',
@@ -412,6 +416,9 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [sessionVersion] The version of a Session file this app does not read.
  * @property {number} [latestSessionVersion] The newest Session version this app reads.
  * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
+ * @property {number} [sessionBytes] The expanded size in bytes of a Session that Save refused.
+ * @property {number} [sessionByteLimit] The expanded size in bytes that Load opens at most.
+ * @property {string} [largestInputs] The file names of the largest inputs of a Session that Save refused.
  */
 
 /**
@@ -670,6 +677,14 @@ const contextFor = (value) => {
   if (typeof value.readSessionVersions === 'string' && /^[0-9\u2013, and]{1,200}$/.test(value.readSessionVersions)) {
     context.readSessionVersions = value.readSessionVersions;
   }
+  // A refused Save: both sizes together, or neither; the names are one line of at most 200 characters.
+  if (Number.isSafeInteger(value.sessionBytes) && Number.isSafeInteger(value.sessionByteLimit)
+    && value.sessionBytes > 0 && value.sessionByteLimit > 0) {
+    context.sessionBytes = value.sessionBytes;
+    context.sessionByteLimit = value.sessionByteLimit;
+  }
+  const inputs = typeof value.largestInputs === 'string' ? value.largestInputs.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
+  if (inputs) context.largestInputs = inputs;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
   // Python words the label fit counts (gbdraw/labels/fit.py): one line of printable text, shown as sent.
@@ -766,10 +781,18 @@ export const normalizeUserFacingError = (value, {
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
   const { queryRecordIndex, subjectRecordIndex, labelFitCounts, labelCapacityOuter, labelCapacityInner, exceptionType } = result.context;
+  const { sessionBytes, sessionByteLimit, largestInputs } = result.context;
+  // A Save over the cap: the file would not load again, and saving again fails the same way.
+  const saveOverCap = result.code === 'SESSION_SIZE_LIMIT' && result.operation === 'session-save'
+    && sessionBytes !== undefined && sessionByteLimit !== undefined;
   // One part per sentence, in the order the summary shows them.
   /** @type {(ErrorTextPart | null | false | '' | undefined)[]} */
   const pieces = [
-    { text: message },
+    saveOverCap
+      ? { text: PHRASES.sessionNotSaved, params: { size: (/** @type {number} */ (sessionBytes) / 1048576).toFixed(1), limit: Math.round(/** @type {number} */ (sessionByteLimit) / 1048576) } }
+      : { text: message },
+    saveOverCap && largestInputs !== undefined && { text: PHRASES.largestInputs, params: { inputs: largestInputs } },
+    saveOverCap && { text: PHRASES.sessionSaveRemedy },
     diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
     sessionTable !== undefined && { text: PHRASES.sessionTable, params: { table: { text: SESSION_TABLE_LABELS[sessionTable] } } },
     inputOrdinal !== undefined && { text: ORDINAL_LABELS[result.code] || PHRASES.sequence, params: { n: inputOrdinal } },
@@ -815,7 +838,7 @@ export const normalizeUserFacingError = (value, {
   result.details = [{ label: 'Diagnostics', text: detail.slice(0,
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
   // A table stored in a Session is corrected in the Session file, not in this page.
-  result.actions = sessionTable !== undefined ? ['select-input'] : [...actions];
+  result.actions = sessionTable !== undefined || saveOverCap ? ['select-input'] : [...actions];
   return result;
 };
 
