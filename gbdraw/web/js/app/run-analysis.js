@@ -436,6 +436,7 @@ export const buildLosatCachePayload = ({
 
 /** @import { LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
 /** @import { LiveSettingWrite } from '../services/session-request.js' */
+/** @import { UndoneTrackHide } from '../services/setting-application.js' */
 
 /**
  * A LOSAT search Generate queues: the fields the pool reads (`LosatJob`) and what Generate keeps on it to
@@ -1726,6 +1727,14 @@ export const createRunAnalysis = ({
     const pending = pendingLiveSettings.get(drawing) || new Set();
     pendingLiveSettings.set(drawing, pending);
     return pending;
+  };
+  // The GC and skew hides an Undo took back, per drawing, for the next
+  // iteration's track projection (`undoneTrackHides`).
+  /** @type {Map<DrawingState, Set<UndoneTrackHide>>} */
+  const pendingUndoneHides = new Map();
+  /** @param {DrawingState} drawing @param {Iterable<UndoneTrackHide>} hides */
+  const addUndoneHides = (drawing, hides) => {
+    pendingUndoneHides.set(drawing, new Set([...(pendingUndoneHides.get(drawing) || []), ...hides]));
   };
   // Whether a request since the last iteration began asked for more than the
   // live setting values (an editor edit's rerender).
@@ -5975,11 +5984,12 @@ export const createRunAnalysis = ({
   // named (R1(c), N-16); no other draft setting reaches the Result.
   /**
    * @param {DrawingState} drawing
-   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean }} options
-   *   `settings`: the live setting request paths it applies; `editor`: an editor edit asked for it too.
+   * @param {{ requestId: number, historyRequestedAt: number, decorationContinuity: CanonicalRenderCandidateExecutionOptions['decorationContinuity'], settings: readonly string[], editor: boolean, undoneHides: ReadonlySet<UndoneTrackHide> }} options
+   *   `settings`: the live setting request paths it applies; `editor`: an editor edit asked for it too;
+   *   `undoneHides`: the hides an Undo took back.
    * @returns {Promise<{ status: string, rerun?: boolean, error?: UserFacingError | null }>}
    */
-  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor }) => {
+  const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor, undoneHides }) => {
     const committed = getCommittedCanonicalSession?.();
     if (!committed) {
       labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
@@ -5992,7 +6002,7 @@ export const createRunAnalysis = ({
     /** @type {LiveSettingWrite[]} */
     let liveSettingWrites;
     try {
-      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf({ linearSeqs: allLinearSeqs, files }) });
+      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf({ linearSeqs: allLinearSeqs, files }), undoneHides });
     } catch (e) {
       const error = formatError(e, 'generate', 'render');
       labelReflowLastError.value = liveEditFailure(error);
@@ -6160,18 +6170,23 @@ export const createRunAnalysis = ({
         const pending = pendingLiveSettingsOf(drawing);
         const settings = [...pending];
         activeLiveSettings = settings;
+        const undoneHides = pendingUndoneHides.get(drawing) || new Set();
+        pendingUndoneHides.delete(drawing);
         const outcome = await runLabelReflowCandidate(drawing, {
           decorationContinuity,
           requestId: activeReflowRequestId,
           historyRequestedAt,
           settings,
-          editor
+          editor,
+          undoneHides
         });
         // A stale iteration leaves its values and its editor request to the
         // next one; an applied, failed or empty one is done with them (a
         // failed value waits for its next change or Generate, PD-OI-102).
-        if (outcome.status === 'stale' || outcome.status === 'canceled') editorRerenderRequested ||= editor;
-        else settings.forEach((path) => pending.delete(path));
+        if (outcome.status === 'stale' || outcome.status === 'canceled') {
+          editorRerenderRequested ||= editor;
+          addUndoneHides(drawing, undoneHides);
+        } else settings.forEach((path) => pending.delete(path));
         if (outcome.rerun && !processing.value && !state.sessionOperationAvailability?.()) pendingReflowRequestId += 1;
       }
       if (reflowWaits() && activeReflowRequestId < pendingReflowRequestId) {
@@ -6205,18 +6220,22 @@ export const createRunAnalysis = ({
     }
   };
   // A Load replaces both drawings' committed Sessions and applies nothing (6.7).
-  const discardLiveSettingRequests = () => { pendingLiveSettings.clear(); };
+  const discardLiveSettingRequests = () => { pendingLiveSettings.clear(); pendingUndoneHides.clear(); };
 
   // R1 (c), PD-OI-102: an action committed the values of these live setting
   // request paths in the drawing of `mode` (the shown one). Its Result shows
   // them after the automatic rerender applies them; a mode without a Result
   // applies nothing until its Generate (R15).
-  /** @param {readonly string[]} requestPaths @param {'circular' | 'linear'} mode */
-  const requestLiveSettingApply = (requestPaths, mode) => {
+  /**
+   * @param {readonly string[]} requestPaths @param {'circular' | 'linear'} mode
+   * @param {Iterable<UndoneTrackHide>} [undoneHides] The hides an Undo took back.
+   */
+  const requestLiveSettingApply = (requestPaths, mode, undoneHides = []) => {
     const committed = getCommittedCanonicalSession?.();
     if (requestPaths.length === 0 || !committed || committed.renderRequest?.mode !== mode) return false;
     const pending = pendingLiveSettingsOf(displayedArtifactDrawing());
     requestPaths.forEach((path) => pending.add(path));
+    addUndoneHides(displayedArtifactDrawing(), undoneHides);
     labelReflowLastError.value = null;
     void runLabelReflow({ settings: requestPaths });
     return true;

@@ -31,6 +31,10 @@ write-up of a release.
   such an Overlay row turned back on by hand, while its track is back, returns at once with the
   values of the last Generate; and a row that left when **Use custom stack** changed returns when
   it changes back.
+- Fixed: in the Web app, with a Circular custom stack or Circular track widths or radii, Undo of
+  **Hide GC Content** or **Hide GC Skew** waited for **Generate Diagram**. It now returns the track
+  and the rows it turned off at once, and Redo hides them again. Turning the hide off by hand still
+  applies on Generate.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-30
 
