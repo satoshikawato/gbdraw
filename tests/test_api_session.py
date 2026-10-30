@@ -741,9 +741,8 @@ def test_python_typed_protein_round_trip_with_explicit_adjacent_comparison(
     assert decoded_collinearity == collinearity
 
 
-@pytest.mark.browser
 def test_two_depth_tracks_naming_one_resource_render_as_two_copies(tmp_path: Path) -> None:
-    """The Web Save Session writes equal Depth bytes once (D-220); Python reads that Session."""
+    """The Web Save Session writes one Depth file used twice once (D-220, D-228); Python reads that Session."""
     depth = pd.DataFrame({"reference_name": ["record"] * 2, "position": [1, 5], "depth": [3, 9]})
     request = LinearDiagramRequest(
         records=(_record(),),
@@ -772,6 +771,7 @@ def test_two_depth_tracks_naming_one_resource_render_as_two_copies(tmp_path: Pat
     assert svgs[0] == svgs[1]
 
 
+@pytest.mark.browser
 def test_python_depth_request_projects_in_web(tmp_path: Path) -> None:
     node = shutil.which("node")
     if node is None:

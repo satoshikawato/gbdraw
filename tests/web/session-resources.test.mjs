@@ -552,10 +552,11 @@ for (const adopted of [false, true]) {
   assert.equal(resaved.webFiles.conservationBlastSource, 'losat-cache');
 }
 
-// D-220 (Owner 2026-10-30): a committed request that names two resources with
-// the same bytes (one Depth file added to two series) is saved with one
-// resource; every reference names it, and the Load of the saved bindings
-// gives each series the bytes. Equal names with different bytes stay two.
+// D-220, D-228 (Owner 2026-10-30): a committed request that names two
+// resources with the same bytes, kind and original name (one Depth file added
+// to two series) is saved with one resource; every reference names it, and the
+// Load of the saved bindings gives each series the bytes. Equal names with
+// different bytes stay two.
 {
   const depth = (text, name) => ({
     kind: 'depth-track-file', name, type: 'text/tab-separated-values', size: Buffer.byteLength(text),
@@ -580,7 +581,7 @@ for (const adopted of [false, true]) {
     'depth-tracks-2-source-record-2': depth('chr\t1\t7\n', 'depth-tracks-2-source-record-2-same.tsv')
   };
   const webFiles = { resourceOriginalNames: {
-    'depth-tracks-1-source-record-1': 'file1.tsv', 'depth-tracks-2-source-record-1': 'copy-of-file1.tsv',
+    'depth-tracks-1-source-record-1': 'file1.tsv', 'depth-tracks-2-source-record-1': 'file1.tsv',
     'depth-tracks-1-source-record-2': 'same.tsv', 'depth-tracks-2-source-record-2': 'same.tsv'
   } };
   const table = backing.adoptCurrentSessionResources(resources);
@@ -621,4 +622,33 @@ for (const adopted of [false, true]) {
   }), fixtureDrawing(redraft));
   assert.deepEqual(Object.keys(resaved.resources).sort(), Object.keys(saved.resources).sort());
   assert.strictEqual(resaved.renderRequest, saved.renderRequest);
+}
+
+// D-228: equal bytes merge only with an equal kind and an equal original name
+// (a missing name equals only a missing name), looked up per kind and name, so
+// of X, Y, Y with equal bytes the two Y copies merge.
+{
+  const descriptorOf = (kind, id) => ({ kind, name: `${id}.dat`, type: 'text/plain', size: 5,
+    lastModified: 0, encoding: 'base64', data: base64('SAME\n') });
+  const save = async (entries, names) => {
+    const ids = entries.map(([id]) => id);
+    const renderRequest = { schema: CANONICAL_REQUEST_SCHEMA, mode: 'circular', layout: {}, comparisons: [],
+      records: [], diagramOptions: { depthTracks: ids.map((resourceId, index) => ({ id: `t${index}`, source: { resourceId } })) },
+      output: { prefix: 'x', formats: ['svg'], overwrite: false } };
+    const resources = Object.fromEntries(entries.map(([id, kind]) => [id, descriptorOf(kind, id)]));
+    const draft = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
+    const saved = await buildSessionResources(draft, authority.adoptRuntimeCanonicalSession({
+      renderRequest, resources, webFiles: { resourceOriginalNames: names }
+    }), fixtureDrawing(draft));
+    return saved.renderRequest.diagramOptions.depthTracks.map((track) => track.source.resourceId);
+  };
+  const depthKind = 'depth-track-file';
+  assert.deepEqual(await save([['a', depthKind], ['b', depthKind]], { a: 'a.tsv', b: 'b.tsv' }), ['a', 'b'],
+    'different names stay two');
+  assert.deepEqual(await save([['a', depthKind], ['b', depthKind]], { a: 'a.tsv' }), ['a', 'b'],
+    'a missing name differs from a name');
+  assert.deepEqual(await save([['a', depthKind], ['b', depthKind]], {}), ['a', 'a'],
+    'two missing names are equal');
+  assert.deepEqual(await save([['x', 'fasta'], ['y1', depthKind], ['y2', depthKind]], { x: 's.tsv', y1: 's.tsv', y2: 's.tsv' }),
+    ['x', 'y1', 'y1'], 'X, Y, Y: the two Y copies merge');
 }
