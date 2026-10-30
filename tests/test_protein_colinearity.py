@@ -60,6 +60,7 @@ from gbdraw.analysis.protein_colinearity import (
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.options import (
     LinearDiagramOptions,
+    LinearMultiRecordOptions,
     LosatRuntimeOptions,
     LosatSearchOptions,
 )
@@ -4956,6 +4957,153 @@ def test_orthogroup_display_pairs_do_not_restrict_all_record_membership(reverse:
     assert without_display.orthogroups == result.orthogroups
 
 
+def _all_pairs_losatp(query_fasta: str, subject_fasta: str, **kwargs) -> pd.DataFrame:
+    """Every query protein hits every subject protein, itself included."""
+
+    query_ids = [line[1:].split()[0] for line in query_fasta.splitlines() if line.startswith(">")]
+    subject_ids = [line[1:].split()[0] for line in subject_fasta.splitlines() if line.startswith(">")]
+    text = "".join(
+        f"{query}\t{subject}\t90\t1000\t0\t0\t1\t1000\t1\t1000\t1e-50\t1000\n"
+        for query in query_ids
+        for subject in subject_ids
+    )
+    callback = kwargs.get("raw_output_callback")
+    if callback is not None:
+        callback(text)
+    return parse_losatp_outfmt6(text)
+
+
+_TWO_RECORDS_ON_ROW_ONE = ("#1@1", "#2@1", "#3@2")
+
+
+@pytest.mark.linear
+def test_similarity_groups_with_two_records_on_one_row_link_adjacent_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OV-2297: Similarity groups draws every pair between adjacent rows, as Collinear does."""
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _all_pairs_losatp)
+    records = [_long_record(f"record_{index}", f"p{index}") for index in range(3)]
+
+    result = api_diagram_module.build_linear_diagram_result(
+        records,
+        options=LinearDiagramOptions(
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="similarity_groups")
+        ),
+        layout=LinearMultiRecordOptions(multi_record_positions=_TWO_RECORDS_ON_ROW_ONE),
+    )
+
+    links = {
+        (comparison.query_record_index, comparison.subject_record_index): comparison.matches
+        for comparison in result.metadata.linear_comparisons
+    }
+    # Records 1 and 2 share row 1; record 3 sits in row 2.
+    assert set(links) == {(0, 2), (1, 2)}
+    for (query, subject), frame in links.items():
+        assert list(zip(frame["query_protein_id"], frame["subject_protein_id"])) == [
+            (f"p{query}", f"p{subject}")
+        ]
+    assert result.metadata.protein_comparisons is None
+    orthogroups = result.metadata.orthogroups
+    assert orthogroups is not None
+    assert sorted(
+        sorted(member.protein_id for member in members) for members in orthogroups.orthogroups.values()
+    ) == [["p0", "p1", "p2"]]
+
+
+@pytest.mark.linear
+def test_cli_similarity_groups_with_multi_record_rows_draws_adjacent_row_links(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """OV-2297: the CLI row layout with --losatp_mode similarity_groups renders."""
+
+    import re
+
+    records_by_path = {
+        f"{name}.gb": _long_record(f"record_{index}", f"p{index}") for index, name in enumerate("abc")
+    }
+    monkeypatch.setattr(
+        request_render_module,
+        "load_gbks",
+        lambda paths, **_kwargs: [records_by_path[str(path)] for path in paths],
+    )
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _all_pairs_losatp)
+    output_prefix = tmp_path / "rows"
+
+    linear_cli_module.linear_main(
+        [
+            "--gbk", "a.gb", "b.gb", "c.gb",
+            *(argument for position in _TWO_RECORDS_ON_ROW_ONE for argument in ("--multi_record_position", position)),
+            "--losat", "losatp",
+            "--losatp_mode", "similarity_groups",
+            "-f", "svg",
+            "-o", str(output_prefix),
+        ]
+    )
+
+    svg = output_prefix.with_suffix(".svg").read_text(encoding="utf-8")
+    drawn = {
+        (int(query), int(subject))
+        for query, subject in re.findall(
+            r'data-query-record-index="(\d+)"[^>]*?data-subject-record-index="(\d+)"', svg
+        )
+    }
+    # Records 1 and 2 share row 1; record 3 sits in row 2.
+    assert drawn == {(0, 2), (1, 2)}
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("member_max_hits", [None, 1, 2])
+def test_member_max_hits_does_not_count_the_self_hit(member_max_hits: int | None) -> None:
+    """OV-2298: the limit counts distinct non-self subject proteins per query and table.
+
+    Record r0 holds A1 and its paralog A2; record r1 holds B1, the reciprocal
+    best hit of A1. Each protein's self hit scores highest in its
+    within-record table, so a limit of 1 must still keep the paralog.
+    """
+
+    records = [
+        _record(
+            "r0",
+            sequence="ATG" * 2000,
+            features=[
+                _cds(start, start + 303, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": [protein_id]})
+                for start, protein_id in ((0, "A1"), (1200, "A2"))
+            ],
+        ),
+        _record(
+            "r1",
+            sequence="ATG" * 1000,
+            features=[_cds(0, 303, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": ["B1"]})],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+
+    def table(*rows: tuple[str, str, float]) -> pd.DataFrame:
+        return pd.DataFrame.from_records(
+            [_hit_row(query, subject, bitscore=bitscore) for query, subject, bitscore in rows],
+            columns=COMPARISON_COLUMNS,
+        )
+
+    hits = {
+        (0, 0): table(("A1", "A1", 200), ("A1", "A2", 170), ("A2", "A2", 200), ("A2", "A1", 170)),
+        (1, 1): table(("B1", "B1", 200)),
+        (0, 1): table(("A1", "B1", 180)),
+        (1, 0): table(("B1", "A1", 180)),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        hits, extraction.protein_map, orthogroup_member_max_hits=member_max_hits,
+    )
+
+    assert sorted(
+        sorted(member.protein_id for member in members) for members in result.orthogroups.orthogroups.values()
+    ) == [["A1", "A2", "B1"]]
+
+
 def test_manifest_presentation_identity_check_normalizes_each_distinct_key_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -5060,3 +5208,4 @@ def test_raw_protein_tsv_validation_checks_each_text_and_pair_once(
     assert parse_calls == 2
     assert matches(comment)
     assert parse_calls == 3  # A distinct text parses once, even without rows.
+

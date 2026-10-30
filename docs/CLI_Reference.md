@@ -1213,9 +1213,12 @@ options:
                         --losatp_mode pairwise links (default: 5).
   --losatp_max_target_seqs N
                         LOSATP -max_target_seqs per query; 'none' for no cap
-                        (default: none).
+                        (default: none). In a within-record search the
+                        protein's hit to itself takes one of these slots.
   --losatp_member_max_hits N
-                        Maximum hits per protein used for Similarity group and
+                        Maximum distinct subject proteins, not counting the
+                        protein itself, kept per query protein in each
+                        directed record-pair search for Similarity group and
                         Collinear membership; 'none' for no cap (default:
                         none).
   --losat_output_dir DIR

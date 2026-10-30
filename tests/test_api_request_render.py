@@ -195,6 +195,9 @@ _GRID_2X2_VECTOR = Path(__file__).parent / "fixtures" / "losat_job_plan_cases.js
         # Collinear on a CLI row grid with search scope 'all': the grid
         # displays (0, 1) and (0, 2), each numbered by its own adjacent-row edge.
         ("collinear", (1, 2, 2), {(0, 1): 0, (0, 2): 1}, None),
+        # Similarity groups on the same grid displays the same adjacent-row
+        # pairs (OV-2297).
+        ("similarity_groups", (1, 2, 2), {(0, 1): 0, (0, 2): 1}, None),
         # A 2x2 grid: the search order and the numbers come from the vector
         # that the Web test checks too (tests/web/linear-comparisons.test.mjs).
         ("collinear", None, None, None),
@@ -203,7 +206,10 @@ _GRID_2X2_VECTOR = Path(__file__).parent / "fixtures" / "losat_job_plan_cases.js
         ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}, 1),
         ("collinear", None, {(0, 1): 0, (1, 2): 1}, 1),
     ),
-    ids=("orthogroup", "collinear-grid", "collinear-grid-2x2", "orthogroup-reversed", "collinear-reversed"),
+    ids=(
+        "orthogroup", "collinear-grid", "orthogroup-grid", "collinear-grid-2x2", "orthogroup-reversed",
+        "collinear-reversed",
+    ),
 )
 def test_web_lookup_converter_and_api_build_one_derived_entry(
     monkeypatch: pytest.MonkeyPatch,

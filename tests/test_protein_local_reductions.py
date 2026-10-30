@@ -149,18 +149,31 @@ def numeric_frame(frame):
 def test_member_top_best_and_reciprocity_independent_oracle(ids, limit):
     hits = member_frame(ids)
     before = hits.copy(deep=True)
+    self_rows = [query == subject for query, subject in zip(hits['query'], hits['subject'])]
     if limit is None:
         positions = list(range(len(hits)))
     else:
         chosen = hit_ordinals(hits, limit)
-        pairs = {(hits['query'].iloc[i], hits['subject'].iloc[i]) for i in chosen}
-        positions = [i for i, pair in enumerate(zip(hits['query'], hits['subject'])) if pair in pairs]
         top = pc.select_top_hits_per_query(hits, max_hits=limit)
         assert_frame_equal(top, numeric_frame(hits).iloc[chosen].reset_index(drop=True), check_exact=True)
         assert_frame_equal(top, frozen.select_top_hits_per_query(hits, max_hits=limit), check_exact=True)
+        # OV-2298: the member limit counts subjects other than the query; self
+        # rows (numeric ids 0/0 and 1/1 here) pass through and take no slot.
+        others = [i for i, is_self in enumerate(self_rows) if not is_self]
+        pairs = {
+            (hits['query'].iloc[others[i]], hits['subject'].iloc[others[i]])
+            for i in hit_ordinals(hits.iloc[others], limit)
+        }
+        positions = [
+            i for i, pair in enumerate(zip(hits['query'], hits['subject'])) if self_rows[i] or pair in pairs
+        ]
     members = pc._select_member_candidate_hits_per_query(hits, max_hits=limit)
     assert_frame_equal(members, hits.iloc[positions].reset_index(drop=True), check_exact=True)
-    assert_frame_equal(members, frozen._select_member_candidate_hits_per_query(hits, max_hits=limit), check_exact=True)
+    if limit is None or not any(self_rows):
+        # The frozen copy counts a self hit, so it agrees only without one.
+        assert_frame_equal(
+            members, frozen._select_member_candidate_hits_per_query(hits, max_hits=limit), check_exact=True
+        )
     query_best = hit_ordinals(members)
     actual = pc.select_best_hits_per_query(members)
     assert_frame_equal(actual, numeric_frame(members).iloc[query_best].reset_index(drop=True), check_exact=True)
