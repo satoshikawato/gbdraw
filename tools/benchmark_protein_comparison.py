@@ -793,7 +793,6 @@ def operation_probe(pc, cc, fn):
             (pc, "_build_core_support_candidate", None),
             (pc, "_edge_metadata_for_protein_pair", edge_amount),
             (pc, "_build_ortholog_path_indexes" if hasattr(pc, "_build_ortholog_path_indexes") else "_build_ortholog_paths", None),
-            (cc, "_lossless_conflicts_between_clusters", lambda a, k: len(a[2])),
         ):
             if not hasattr(module, name):
                 continue
