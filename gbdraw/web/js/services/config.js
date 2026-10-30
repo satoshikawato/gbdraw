@@ -105,6 +105,7 @@ import {
   applyLiveResourceWrites,
   applyLiveWebFileWrites,
   carryKeptTrackParts,
+  recordLoadedTrackParts,
   liveSettingInputsOf,
   managedConfigOverridePathsForMode,
   projectCanonicalSessionRequest,
@@ -6604,6 +6605,14 @@ const importSessionDocument = async (e, options = {}) => {
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
+    // A loaded Circular request with slots keeps the Use custom stack switch of the loaded draft (D-214 B).
+    const circularDraft = state.drawingList().find((drawing) => drawing.mode === 'circular');
+    /** @param {unknown[]} loaded The committed Sessions Load installs. */
+    const recordLoadedStacks = (...loaded) => loaded.forEach((canonical) => {
+      if (circularDraft) recordLoadedTrackParts(canonical, circularDraft);
+    });
+    recordLoadedStacks(currentSchemaSession ? adoptedCanonicalSession : null,
+      ...[otherArtifactSlot, topArtifactSlot].map((slot) => slot?.runtimeState?.canonical?.committedCanonicalSession ?? null));
     // The composition root keeps the loaded artifacts: the opening one is shown, the stashed one waits.
     /** @type {((slots: LoadedArtifactSlots) => void) | undefined} */
     const installLoadedArtifactSlots = options.installLoadedArtifactSlots;
@@ -6656,6 +6665,7 @@ const importSessionDocument = async (e, options = {}) => {
       const committed = stored && await convertDetachedProteinResultFrames(
         sourceSessionVersion, stored, canonicalProjectionInput
       );
+      recordLoadedStacks(committed);
       if (!committed && logicalImportedResults.length > 0) {
         const { adv } = shownDrawing;
         loadedTrackSettings = Object.freeze({

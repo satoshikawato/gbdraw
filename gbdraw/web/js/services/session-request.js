@@ -3997,6 +3997,35 @@ export const carryKeptTrackParts = (from, to, writes) => {
   const parts = written ? /** @type {KeptTrackParts} */ (written[1]) : keptTrackPartsOf(from);
   if (parts) keptTrackParts.set(toRaw(to), parts);
 };
+/**
+ * Records, at Load, the kept parts of a loaded Circular request with slots,
+ * which does not show its Use custom stack switch (`requestDrawnStack`), with
+ * the switch of the loaded draft (D-214 B): a switch the other way then waits
+ * whole after the Load. They stay unsaved, like every kept part. A draft with
+ * the switch off and no Circular track widths or radii draws no slots, so it
+ * did not draw the request: nothing is recorded, and only hides apply (D-212).
+ * @param {unknown} loaded A committed Session Load installs (null: none).
+ * @param {RequestDrawing} drawing The loaded Circular draft.
+ */
+export const recordLoadedTrackParts = (loaded, drawing) => {
+  const canonical = /** @type {{ renderRequest?: unknown, resources?: unknown, webFiles?: unknown } | null} */ (
+    loaded && typeof loaded === 'object' ? loaded : null);
+  const request = /** @type {CanonicalRenderRequest | undefined} */ (canonical?.renderRequest);
+  if (!request || request.mode !== 'circular' || keptTrackPartsOf(request) || requestDrawnStack(request) !== null) return;
+  const drawnStack = Boolean(drawing.adv.circular_track_slots_enabled);
+  if (!drawnStack && !hasCircularGeometryShortcuts(circularGeometryShortcutsForState(drawing))) return;
+  /** @type {KeptPlan | null} */
+  let plan;
+  try {
+    plan = committedPlanOf(request);
+  } catch {
+    plan = null;
+  }
+  if (!plan) return;
+  const resources = /** @type {LiveSettingResources} */ (canonical?.resources);
+  const webFiles = /** @type {Readonly<Record<string, unknown>>} */ (canonical?.webFiles || {});
+  keptTrackParts.set(toRaw(request), { ...committedTrackParts(request, plan, resources, webFiles), drawnStack });
+};
 /** @param {unknown} renderer @returns {'content' | 'skew' | 'depth' | null} */
 const trackKindOf = (renderer) => (renderer === 'dinucleotide_content' ? 'content'
   : renderer === 'dinucleotide_skew' ? 'skew' : renderer === 'depth' ? 'depth' : null);

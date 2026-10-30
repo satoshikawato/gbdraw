@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
@@ -180,6 +181,7 @@ import {
 import { createRightDrawerController } from './right-drawer.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
+import { askingTrackRowSwitch } from './track-slot-edits.js';
 import { createAnnotationEditor } from './annotations.js';
 import { buildLegendStyleRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
@@ -2215,6 +2217,13 @@ export const createAppSetup = () => {
   const linearTrackSlotEditor = createLinearTrackSlotEditor({
     state, changeTrackLayout, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions
   });
+  // PD-OI-104 scenario revision 6: a row's own switch asks before it turns off a
+  // drawn row of the shown stack that other rows start at or extend to.
+  /** @template {SwitchedTrackRow} Row @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+  const askingRowSwitch = (setEnabled, slotsKey) => askingTrackRowSwitch({
+    askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability,
+    rows: () => /** @type {readonly Row[]} */ (state.activeDrawing().adv[slotsKey])
+  }, setEnabled);
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, askChoice,
@@ -7233,7 +7242,7 @@ export const createAppSetup = () => {
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
     canDuplicateCircularTrackSlot: circularTrackSlotEditor.canDuplicateCircularTrackSlot,
     removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
-    setCircularTrackSlotEnabled: circularTrackSlotEditor.setCircularTrackSlotEnabled,
+    setCircularTrackSlotEnabled: askingRowSwitch(circularTrackSlotEditor.setCircularTrackSlotEnabled, 'circular_track_slots'),
     circularTrackSlotEffectiveEnabled: circularTrackSlotEditor.circularTrackSlotEffectiveEnabled,
     circularTrackSlotHiddenBySuppress: circularTrackSlotEditor.circularTrackSlotHiddenBySuppress,
     circularTrackSlotSuppressMessage: circularTrackSlotEditor.circularTrackSlotSuppressMessage,
@@ -7290,7 +7299,7 @@ export const createAppSetup = () => {
     duplicateLinearTrackSlot: linearTrackSlotEditor.duplicateLinearTrackSlot,
     canDuplicateLinearTrackSlot: linearTrackSlotEditor.canDuplicateLinearTrackSlot,
     removeLinearTrackSlot: linearTrackSlotEditor.removeLinearTrackSlot,
-    setLinearTrackSlotEnabled: linearTrackSlotEditor.setLinearTrackSlotEnabled,
+    setLinearTrackSlotEnabled: askingRowSwitch(linearTrackSlotEditor.setLinearTrackSlotEnabled, 'linear_track_slots'),
     moveLinearTrackSlot: linearTrackSlotEditor.moveLinearTrackSlot,
     canMoveLinearTrackSlot: linearTrackSlotEditor.canMoveLinearTrackSlot,
     moveLinearTrackSlotAbove: linearTrackSlotEditor.moveLinearTrackSlotAbove,

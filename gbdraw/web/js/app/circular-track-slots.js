@@ -27,7 +27,7 @@ import {
   sizeClassForRecordLengths,
   tickAnchorRadiusFactor
 } from '../services/track-slot-display.js';
-import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
+import { askTrackHide, featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
 import { ownEntry } from '../utils/own-entry.js';
 import {
   GLOBAL_SUPPRESS_PARAM,
@@ -1304,22 +1304,27 @@ export const createCircularTrackSlotEditor = ({
 
   /**
    * Hiding a GC track turns off the enabled custom stack rows that draw it, so
-   * it asks first; null when no row would change.
+   * it asks first, naming the rows that start at or extend to them
+   * (`askTrackHide`); null when no row would change.
    * @param {DrawingState} drawing
    * @param {string} renderer
-   * @returns {Promise<string> | null}
+   * @param {(turnOffReaching: () => void) => unknown} apply
+   * @param {() => boolean} unchanged
+   * @returns {Promise<unknown> | null}
    */
-  const askCircularSuppressOverride = (drawing, renderer) => {
+  const askCircularSuppressOverride = (drawing, renderer, apply, unchanged) => {
     if (!drawing.adv.circular_track_slots_enabled) return null;
-    const count = activeCircularTrackSlotsForRenderer(drawing, renderer).length;
+    const hidden = activeCircularTrackSlotsForRenderer(drawing, renderer);
     // The Hide control of GC content or GC skew.
     const texts = ownEntry(SUPPRESS_TEXT_BY_RENDERER, renderer);
-    if (count === 0 || !texts) return null;
-    return askChoice({
-      title: texts.title(),
-      description: texts.description(count),
-      actions: [{ id: 'hide', label: texts.hide(), tone: 'primary' }],
-      cancelLabel: texts.keep()
+    if (hidden.length === 0 || !texts) return null;
+    return askTrackHide({ askChoice, runUndoable }, {
+      rows: () => drawing.adv.circular_track_slots,
+      hiding: new Set(hidden.map((/** @type {CircularTrackSlot} */ slot) => String(slot.id))),
+      question: { title: texts.title(), description: texts.description(hidden.length), hide: texts.hide(), keep: texts.keep() },
+      label: ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || msg('Hide track'),
+      unchanged,
+      apply
     });
   };
 
@@ -1346,19 +1351,18 @@ export const createCircularTrackSlotEditor = ({
       return;
     }
 
-    const apply = () => changeTrackVisibility(() => {
+    /** @param {() => void} [turnOffReaching] */
+    const apply = (turnOffReaching = () => {}) => changeTrackVisibility(() => {
       drawing.form[formKey] = nextChecked;
+      turnOffReaching();
       normalizeSlotsInPlace();
     });
-    const asked = nextChecked ? askCircularSuppressOverride(drawing, renderer) : null;
+    const asked = nextChecked ? askCircularSuppressOverride(drawing, renderer, apply,
+      () => !state.sessionOperationAvailability?.() && Boolean(drawing.form[formKey]) === previousChecked) : null;
     if (asked) {
       // The checkbox shows the kept value until the choice; the chosen hide is one History step.
       if (event?.target) event.target.checked = previousChecked;
-      return asked.then((choice) => (
-        choice === 'hide' && !state.sessionOperationAvailability?.() && Boolean(drawing.form[formKey]) === previousChecked
-          ? runUndoable(ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || msg('Hide track'), apply)
-          : false
-      ));
+      return asked;
     }
     apply();
     if (event?.target) event.target.checked = nextChecked;
@@ -1407,13 +1411,18 @@ export const createCircularTrackSlotEditor = ({
     return setCircularSuppressControl(drawing, 'gc_skew', checked, event);
   };
 
-  /** @param {CircularTrackSlot | null | undefined} slot @param {unknown} enabled */
-  const setCircularTrackSlotEnabled = (slot, enabled) => {
+  /**
+   * @param {CircularTrackSlot | null | undefined} slot @param {unknown} enabled
+   * @param {(() => void) | Event} [turnOffReaching] Turns off the rows that start at or extend to it
+   *   (`askTrackHide`); a template's trailing event never arrives (`featureSlotEdits` takes it).
+   */
+  const setCircularTrackSlotEnabled = (slot, enabled, turnOffReaching) => {
     const drawing = state.drawingOfMode('circular');
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!slot || circularTrackSlotHiddenBySuppressForm(slot, drawing.form, drawing.adv.nt)) return;
     slot.enabled = Boolean(enabled);
+    if (typeof turnOffReaching === 'function') turnOffReaching();
     if (slot.params && typeof slot.params === 'object' && !Array.isArray(slot.params)) {
       const token = ownEntry(SUPPRESS_KEY_BY_RENDERER, String(slot.renderer || '').trim());
       if (token && slot.params[GLOBAL_SUPPRESS_PARAM] === token) {

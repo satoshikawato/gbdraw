@@ -31,6 +31,7 @@ for (const leaf of ['conservation-series.js', 'current-option-values.js', 'depth
 const { createCircularTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js')));
 const { createLinearTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js')));
 const { paramsKeptOnRendererChange } = await import(pathToFileURL(join(tempRoot, 'services', 'track-slot-validation.js')));
+const { askingTrackRowSwitch } = await import(pathToFileURL(join(tempRoot, 'app', 'track-slot-edits.js')));
 
 const depthFile = { name: 'a.depth.tsv', size: 1, lastModified: 1 };
 
@@ -91,13 +92,15 @@ const MODES = {
       duplicate: (index) => editor.duplicateCircularTrackSlot(index),
       setPlacement: (slot, placement) => editor.updateCircularTrackSlotPlacement(slot, placement),
       setOverlayParam: (slot, key, value) => editor.setCircularOverlayAnnotationParam(slot, key, value),
-      setEnabled: (slot, enabled) => editor.setCircularTrackSlotEnabled(slot, enabled),
+      // The composition root's switch: it asks before turning off a row other rows reach.
+      setEnabled: askingTrackRowSwitch({ askChoice, runUndoable: (_label, fn) => fn(), busy: () => null,
+        rows: () => state.adv.circular_track_slots }, editor.setCircularTrackSlotEnabled),
       offAxis: 'outside',
       referenceOptions: (slot, key) => editor.circularAnnotationAnchorOptions(slot, key).map((option) => option.id),
       referenceKnown: (slot, key) => editor.circularAnnotationAnchorIsKnown(slot, key)
     };
   },
-  linear: (slots, options) => {
+  linear: (slots, options, askChoice = async () => 'hide') => {
     const state = linearState(slots, options);
     const editor = createLinearTrackSlotEditor({ state });
     return {
@@ -111,7 +114,8 @@ const MODES = {
       duplicate: (index) => editor.duplicateLinearTrackSlot(index),
       setPlacement: (slot, placement) => editor.updateLinearTrackSlotPlacement(slot, placement),
       setOverlayParam: (slot, key, value) => editor.setLinearOverlayAnnotationParam(slot, key, value),
-      setEnabled: (slot, enabled) => editor.setLinearTrackSlotEnabled(slot, enabled),
+      setEnabled: askingTrackRowSwitch({ askChoice, runUndoable: (_label, fn) => fn(), busy: () => null,
+        rows: () => state.adv.linear_track_slots }, editor.setLinearTrackSlotEnabled),
       offAxis: 'above',
       referenceOptions: (slot, key) => editor.linearAnnotationAnchorOptions(slot, key).map((option) => option.id),
       referenceKnown: (slot, key) => editor.linearAnnotationAnchorIsKnown(slot, key)
@@ -507,4 +511,103 @@ test('circular: Dinucleotide and row dinucleotide edits re-run the Hide GC Skew 
     assert.equal(enabled(), false, 'the row now uses the Dinucleotide setting');
     assert.deepEqual(JSON.parse(JSON.stringify(editor.slots())), JSON.parse(JSON.stringify(requestSlots())));
   }
+});
+
+// PD-OI-104 scenario revision 6 (D-217, D-219): hiding a drawn track row that
+// another row starts at or extends to (an Overlay row's anchor or Extend to
+// slot) asks; the question names those rows as a refused Generate does
+// ("Track row N", with the slot id) and offers to turn them off with the hide
+// as one History step; Cancel changes nothing.
+const REACH_ROWS = {
+  circular: () => [
+    circularRow('features', 'features', { lane_direction: 'outside' }, 'outside'),
+    circularRow('gc_content', 'dinucleotide_content', { nt: 'GC' }),
+    circularRow('depth', 'depth', { track_index: 0 }),
+    { ...circularRow('tint', 'annotations', { set_id: 'tint_set', anchor_slot: 'features', to_slot: 'gc_content', layer: 'underlay' }, 'overlay'), z: -1 },
+    { ...circularRow('mark', 'annotations', { set_id: 'tint_set', anchor_slot: 'depth', layer: 'foreground' }, 'overlay'), z: 1 }
+  ],
+  linear: () => [
+    linearRow('features', 'features', {}, 'overlay'),
+    linearRow('gc_content', 'dinucleotide_content', { nt: 'GC' }),
+    linearRow('depth', 'depth', { track_index: 0 }),
+    { ...linearRow('tint', 'annotations', { set_id: 'tint_set', anchor_slot: 'features', to_slot: 'gc_content', layer: 'underlay' }, 'overlay'), z: -1 },
+    { ...linearRow('mark', 'annotations', { set_id: 'tint_set', anchor_slot: 'depth', layer: 'foreground' }, 'overlay'), z: 1 }
+  ]
+};
+const enabledOf = (editor) => Object.fromEntries(editor.slots().map((slot) => [slot.id, slot.enabled]));
+
+for (const mode of ['circular', 'linear']) {
+  test(`${mode}: turning off a GC or Depth row that another row reaches asks, names that row, and turns it off too`, async () => {
+    for (const [rowId, reachId, number] of [['gc_content', 'tint', 4], ['depth', 'mark', 5]]) {
+      const questions = [];
+      const editor = MODES[mode](REACH_ROWS[mode](), { showDepth: true, depthFiles: [depthFile] }, async (request) => { questions.push(request); return 'hide'; });
+      const row = editor.slots().find((slot) => slot.id === rowId);
+      const box = { checked: false };
+      const asked = editor.setEnabled(row, false, { target: box });
+      assert.ok(asked instanceof Promise, `${rowId}: it asks`);
+      assert.equal(box.checked, true, `${rowId}: the checkbox shows the row on until the answer`);
+      await asked;
+      const rowNumber = editor.slots().indexOf(row) + 1;
+      assert.equal(questions.length, 1);
+      assert.equal(questions[0].title, `Turn off Track row ${rowNumber}?`);
+      assert.deepEqual(questions[0].items, [`Track row ${number} (${reachId})`]);
+      assert.match(questions[0].description, /This row starts at or extends to a track being turned off\./);
+      assert.deepEqual(questions[0].actions.map((action) => action.label), [`Turn off Track row ${rowNumber} and Track row ${number}`]);
+      const enabled = enabledOf(editor);
+      assert.equal(enabled[rowId], false, `${rowId}: the row is off`);
+      assert.equal(enabled[reachId], false, `${rowId}: the row that reaches it is off`);
+      assert.equal(Object.entries(enabled).filter(([, on]) => !on).length, 2, `${rowId}: no other row changes`);
+    }
+    // Cancel changes nothing; a row no other row reaches turns off without a question.
+    const kept = MODES[mode](REACH_ROWS[mode](), { showDepth: true, depthFiles: [depthFile] }, async () => 'cancel');
+    assert.equal(await kept.setEnabled(kept.slots().find((slot) => slot.id === 'gc_content'), false), false);
+    assert.ok(Object.values(enabledOf(kept)).every(Boolean), 'Cancel keeps every row on');
+    const quiet = MODES[mode](REACH_ROWS[mode](), { showDepth: true, depthFiles: [depthFile] }, async () => assert.fail('no question'));
+    quiet.setEnabled(quiet.slots().find((slot) => slot.id === 'tint'), false);
+    assert.equal(enabledOf(quiet).tint, false);
+  });
+
+  test(`${mode}: the chosen turning off is one History step whose Undo turns both rows on again`, async () => {
+    const { createChoicePrompt } = await import(pathToFileURL(join(tempRoot, 'app', 'app-messages.js')));
+    const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
+    const state = mode === 'circular' ? circularState(REACH_ROWS.circular()) : linearState(REACH_ROWS.linear());
+    const slots = () => (mode === 'circular' ? state.adv.circular_track_slots : state.adv.linear_track_slots);
+    const { ask, resolve } = createChoicePrompt({ reactive: (value) => value });
+    const history = createHistoryManager({
+      buildIntent: () => structuredClone({ slots: slots() }),
+      applyIntent: (intent) => { slots().splice(0, Infinity, ...structuredClone(intent.slots)); },
+      buildCheckpoint: () => ({}), applyCheckpoint: () => {}
+    });
+    const editor = mode === 'circular' ? createCircularTrackSlotEditor({ state }) : createLinearTrackSlotEditor({ state });
+    const setEnabled = askingTrackRowSwitch({ askChoice: ask, runUndoable: history.runUndoable, busy: () => null, rows: slots },
+      mode === 'circular' ? editor.setCircularTrackSlotEnabled : editor.setLinearTrackSlotEnabled);
+    const read = () => slots().filter((slot) => ['gc_content', 'tint'].includes(slot.id)).map((slot) => slot.enabled);
+    await history.initializeIntentBaseline();
+    const asking = setEnabled(slots().find((slot) => slot.id === 'gc_content'), false);
+    await new Promise((settle) => setImmediate(settle));
+    assert.deepEqual(read(), [true, true], 'nothing is written before the answer');
+    resolve('hide');
+    await asking;
+    assert.deepEqual([read(), history.getUndoCount(), history.undoLabel()], [[false, false], 1, 'Turn off track rows']);
+    await history.undo();
+    assert.deepEqual(read(), [true, true]);
+  });
+}
+
+test('circular: Hide GC Content names the rows that reach the GC content track and turns them off with it', async () => {
+  const questions = [];
+  const editor = MODES.circular(REACH_ROWS.circular(), { showDepth: true, depthFiles: [depthFile] }, async (request) => { questions.push(request); return 'hide'; });
+  await editor.editor.setCircularGcSuppressed(true);
+  assert.equal(questions[0].title, 'Hide GC content?');
+  assert.match(questions[0].description, /has 1 GC content track\. Hiding GC content turns that track off\. This row starts at or extends to a track being turned off\./);
+  assert.deepEqual(questions[0].items, ['Track row 4 (tint)']);
+  assert.deepEqual(questions[0].actions.map((action) => action.label), ['Hide GC content and turn off Track row 4']);
+  assert.equal(editor.state.form.suppress_gc, true);
+  const enabled = enabledOf(editor);
+  assert.deepEqual([enabled.gc_content, enabled.tint, enabled.mark, enabled.depth], [false, false, true, true]);
+  // Keep changes nothing.
+  const kept = MODES.circular(REACH_ROWS.circular(), undefined, async () => 'cancel');
+  assert.equal(await kept.editor.setCircularGcSuppressed(true), false);
+  assert.equal(kept.state.form.suppress_gc, false);
+  assert.ok(Object.values(enabledOf(kept)).every(Boolean));
 });

@@ -1077,3 +1077,73 @@ test('(f) (review 3): Use custom stack waits whole while the draft annotation se
   assert.ok(ids.includes('tint') && drawsKind(next.renderRequest, 'depth'), `the stack stays otherwise: ${ids}`);
   undoAll();
 });
+
+// PD-OI-104 scenario revision 6 (D-217, D-219): a hide of a drawn track row
+// that other rows start at or extend to turns those rows off with it (the
+// question's choice, `askTrackHide`, over `overlayRowsReaching`). The draft it
+// leaves applies live and equals Generate, in Circular and Linear, for a GC
+// content row and a Depth row (the stack's Depth off).
+const reachRow = (id, anchor, to = null) => ({ id, renderer: 'annotations', enabled: true, side: 'overlay',
+  z: to ? -1 : 1, params: { set_id: 'tint_set', anchor_slot: anchor, layer: to ? 'underlay' : 'foreground', marks: ['highlight'],
+    ...(to ? { to_slot: to } : {}) } });
+const turnOffWithReach = (drawing, mode, rowId) => {
+  const rows = mode === 'circular' ? drawing.adv.circular_track_slots : drawing.adv.linear_track_slots;
+  const reaching = validation.overlayRowsReaching(rows, new Set([rowId]));
+  assert.ok(reaching.length > 0, `${rowId}: a row reaches it`);
+  for (const index of [rows.findIndex((row) => row.id === rowId), ...reaching]) set(rows[index], 'enabled', false);
+  return reaching.map((index) => rows[index].id);
+};
+test('rev 6: a GC content or Depth row turned off with the rows that reach it applies live, equal to Generate', () => {
+  for (const mode of ['circular', 'linear']) {
+    for (const [rowId, reach] of [['gc_content', reachRow('tint', 'features', 'gc_content')], ['depth', reachRow('mark', 'depth')]]) {
+      for (const loaded of [false, true]) {
+        const label = `${mode} ${rowId}${loaded ? ' after a Load' : ''}`;
+        const drawing = mode === 'circular' ? circularStack({ depthSeries: 1, extra: [reach] }) : linearStack({ depthSeries: 1 });
+        if (mode === 'linear') set(drawing.adv, 'linear_track_slots', [...drawing.adv.linear_track_slots, reach]);
+        withTintSet(drawing);
+        const generated = generate(mode);
+        const committed = loaded ? loadOf(generated) : generated;
+        if (loaded) request.recordLoadedTrackParts(committed, drawing);
+        assert.deepEqual(turnOffWithReach(drawing, mode, rowId), [reach.id], label);
+        const hidden = withPending(mode, () => live(committed, mode));
+        const slotsKey = mode === 'circular' ? 'circularTrackSlots' : 'linearTrackSlots';
+        const ids = hidden.next.renderRequest.diagramOptions.tracks[slotsKey].map((slot) => slot.id);
+        assert.ok(!ids.includes(rowId) && !ids.includes(reach.id), `${label}: ${ids}`);
+        assertLiveEqualsGenerate(hidden.next, mode, hidden.revert, label);
+        undoAll();
+      }
+    }
+  }
+});
+
+// Review 3 R3-1b, D-214 B: Load records the Use custom stack switch of the
+// loaded draft beside a Circular request with slots, so the switch turned the
+// other way after the Load waits whole (with the Depth hide the simple Show
+// Depth brings), as it waits after a Generate without a plan of the other switch.
+test('R3-1b: after a Load of a Circular stack, Use custom stack off with Show Depth off waits whole', () => {
+  const drawing = circularStack({ depthSeries: 1 });
+  const committed = loadOf(generate('circular'));
+  request.recordLoadedTrackParts(committed, drawing);
+  assert.equal(request.keptTrackPartsOf(committed.renderRequest)?.drawnStack, true, 'the loaded switch is recorded');
+  set(drawing.form, 'show_depth', false);
+  set(drawing.adv, 'circular_track_slots_enabled', false);
+  assert.deepEqual(project(committed, 'circular'), [], 'the switch and the hide it brings write nothing');
+  assert.equal(request.liveSettingNoteApplies(committed.renderRequest, K.CSLOTS, drawing, inputs, committed.resources), false);
+  // A row hide of the drawn stack still applies.
+  set(rowOf(drawing, 'circular', (row) => row.renderer === 'dinucleotide_skew'), 'enabled', false);
+  const next = live(committed, 'circular');
+  assert.ok(!drawsKind(next.renderRequest, 'dinucleotide_skew') && drawsKind(next.renderRequest, 'depth'), 'the stack stays, without its skew row');
+  undoAll();
+  // A draft that cannot have drawn the slots (stack off, no track widths) records nothing; nor does a Linear request.
+  const plain = circularStack({ depthSeries: 1 });
+  const again = loadOf(generate('circular'));
+  set(plain.adv, 'circular_track_slots_enabled', false);
+  request.recordLoadedTrackParts(again, plain);
+  assert.equal(request.keptTrackPartsOf(again.renderRequest), null);
+  undoAll();
+  const linear = linearStack({ depthSeries: 1 });
+  const linearLoaded = loadOf(generate('linear'));
+  request.recordLoadedTrackParts(linearLoaded, linear);
+  assert.equal(request.keptTrackPartsOf(linearLoaded.renderRequest), null);
+  undoAll();
+});
