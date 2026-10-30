@@ -150,6 +150,9 @@ and 0.14.4 saves Sessions as version 49, as 0.14.3 does. See
 
 ## Known issues
 
+- After **Reset Settings** on one diagram mode, the other mode's Result keeps its
+  hidden labels and edited label text until the next **Generate Diagram**. Since
+  0.14.3 at least.
 - A Similarity group member popup and the Similarity alignment panel still show
   the coordinates of a CDS across the origin as `1..` the record length. The
   drawing is correct; only this text is wrong.
