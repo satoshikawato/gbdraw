@@ -456,8 +456,9 @@ const assertSemanticSnapshot = (snapshot) => {
     orthogroupCount: 554,
     comparisonMatchCount: 500,
     relationships: EXPECTED_RELATIONSHIPS,
-    featureHookCount: 2_994,
-    stableFeatureHookCount: 2_994,
+    // 2,994 features plus 9 `__outline` paths: an open partial end draws fill and outline apart.
+    featureHookCount: 3_003,
+    stableFeatureHookCount: 3_003,
     matchHookCount: 500,
     recordDefinitionCount: 5,
     comparisonGroups: ['0->1', '1->2', '2->3', '3->4'],
