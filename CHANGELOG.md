@@ -21,6 +21,9 @@ write-up of a release.
   been empty since 0.14.0 (OV-2300).
 - Fixed: Collinear block calling no longer slows down as **Max unit gap** grows; 2000 anchors
   took seconds at a gap of 1000 and now take tens of milliseconds at any gap.
+- Fixed: in the Web app, on a Result loaded from a saved Session, hiding its only Depth track with
+  **Show Depth** or the row's switch failed with **Live edit failed**, and the track stayed until
+  **Generate Diagram**. It now leaves at once, and showing it again, Undo, and Redo apply at once.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-30
 

@@ -560,6 +560,38 @@ test('N7: after a Load a live Depth hide completes the kept parts, and its Undo 
   }
 });
 
+// A Session a Save wrote names its Depth files in `webFiles.bindings`. The
+// binding check runs on every candidate, so a hide that drops the resources
+// and keeps their bindings is refused.
+test('N7b: after a Load of a Session with Web file bindings a live Depth hide clears the Depth bindings, and its Undo restores them', async () => {
+  const { webFileBindingFaults } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
+  for (const [mode, setup] of [['circular', circularStack], ['linear', linearStack]]) {
+    const drawing = setup({ depthSeries: 1 });
+    const generated = generate(mode);
+    const loaded = structuredClone(generated);
+    Object.keys(loaded.resources).forEach((id) => setResourcePayloadOwner(loaded.resources[id], getResourcePayloadOwner(generated.resources[id])));
+    const ids = Object.keys(loaded.resources);
+    const depthId = ids.find((id) => loaded.resources[id].kind === 'depth-track-file');
+    const otherId = ids.find((id) => loaded.resources[id].kind !== 'depth-track-file');
+    const leaf = (id) => ({ resourceId: id, name: `${id}.tsv`, type: 'text/plain', lastModified: 0 });
+    const bindings = { schema: 2, c_gb: leaf(otherId), c_gff: null, c_fasta: null,
+      c_depth: mode === 'circular' ? [[leaf(depthId)]] : null, linearSeqs: mode === 'linear' ? [{ uid: 'r1', gb: leaf(otherId), depth: [leaf(depthId)] }] : [] };
+    loaded.webFiles = { ...loaded.webFiles, bindings };
+    assert.deepEqual(webFileBindingFaults(loaded.webFiles, loaded.resources), [], `${mode}: the fixture is valid`);
+    set(drawing.form, 'show_depth', false);
+    rowOf(drawing, mode, (row) => row.renderer === 'depth').enabled = false;
+    const hidden = live(loaded, mode);
+    assert.deepEqual(webFileBindingFaults(hidden.webFiles, hidden.resources), [], `${mode}: no binding names a resource the hide dropped`);
+    assert.equal(hidden.webFiles.bindings.c_gb.resourceId, otherId, `${mode}: the other bindings stay`);
+    rowOf(drawing, mode, (row) => row.renderer === 'depth').enabled = true;
+    set(drawing.form, 'show_depth', true);
+    const shown = live(hidden, mode);
+    assert.deepEqual(shown.webFiles.bindings, bindings, `${mode}: the show restores the bindings`);
+    assert.deepEqual(webFileBindingFaults(shown.webFiles, shown.resources), []);
+    undoAll();
+  }
+});
+
 test('N17: the shortcut plan with Depth forced, then filtered, equals Generate with Show Depth off', () => {
   for (const trackType of ['tuckin', 'middle', 'spreadout']) {
     for (const series of [1, 2]) {

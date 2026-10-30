@@ -1203,6 +1203,61 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
+// A Session a Save wrote names its Depth files in `webFiles.bindings`: a live
+// hide of the only Depth track clears them with its resources, and the show
+// restores them. Otherwise the rerender fails its binding check, **Live edit
+// failed**, and the track stays in the Result until the next Generate.
+const LOADED_DEPTH_HIDES = {
+  'Show Depth': { stack: false, turn: (page) => toggleDepth(page) },
+  "a Depth row's switch": {
+    stack: true,
+    turn: async (page, mode, shown) => { await slotSwitch(page, mode, 'depth', 0, shown); await settleLive(page); }
+  }
+};
+for (const mode of ['circular', 'linear']) {
+  for (const [name, { stack, turn }] of Object.entries(LOADED_DEPTH_HIDES)) {
+    test(`${name} after a Load of a saved Session hides and shows the only Depth track live, with Undo and Redo (${mode})`, async ({ page, browser }, testInfo) => {
+      test.setTimeout(400_000);
+      await open(page, { mode, results: 'single', reflow: 'off' });
+      await addDepthFile(page, 'depth.tsv', mode);
+      if (stack) {
+        await page.evaluate((linear) => {
+          const app = window.__GBDRAW_APP__;
+          if (linear) app.setLinearTrackSlotsEnabled(true);
+          else app.setCircularTrackSlotsEnabled(true);
+        }, mode === 'linear');
+      }
+      await settleLive(page);
+      await generate(page);
+      const file = testInfo.outputPath('depth.gbdraw-session.json');
+      const titled = await page.evaluate(async () => Boolean((await import('./js/state.js')).state.sessionTitle?.value));
+      await download(page, 'Save Session', file, titled ? {} : { title: 'depth' });
+      const loaded = await load(browser, file);
+      const expectApplied = async (count, step) => {
+        expect(await loaded.evaluate(async () => (await import('./js/state.js')).state.labelReflowLastError.value?.summary ?? null), `${mode}: ${step}: no Live edit failed`).toBeNull();
+        const groups = await shownTrackGroups(loaded, 'DEPTH_GROUPS');
+        if (count === 0) expect(groups, `${mode}: ${step}: the track is gone at once`).toBe(0);
+        else expect(groups, `${mode}: ${step}: the track is drawn`).toBe(count);
+      };
+      try {
+        const drawn = await shownTrackGroups(loaded, 'DEPTH_GROUPS');
+        expect(drawn).toBeGreaterThan(0);
+        await turn(loaded, mode, false);
+        await expectApplied(0, 'off');
+        await turn(loaded, mode, true);
+        await expectApplied(drawn, 'on');
+        await turn(loaded, mode, false);
+        await expectApplied(0, 'off again');
+        await history(loaded, 'undo');
+        await expectApplied(drawn, 'Undo');
+        await history(loaded, 'redo');
+        await expectApplied(0, 'Redo');
+        await expectLiveEqualsGenerate(loaded, { label: `${mode}: ${name} off after a Load` });
+      } finally { await loaded.context().close(); }
+    });
+  }
+}
+
 test('GT B5: Use custom stack turned on after a Generate with it off applies live, with a spacer row (Linear)', async ({ page }) => {
   test.setTimeout(300_000);
   await open(page, { mode: 'linear', results: 'single', reflow: 'off' });

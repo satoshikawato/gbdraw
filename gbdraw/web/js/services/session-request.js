@@ -200,7 +200,8 @@ import {
   adoptCurrentSessionResources,
   createCombinedSessionResourceFileView,
   createSessionResourceFileView,
-  validateWebFileBindings
+  validateWebFileBindings,
+  webFileBindingsWithoutDepth
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
@@ -1945,7 +1946,8 @@ const committedTrackParts = (request, plan, resources, webFiles) => {
     depth: Array.isArray(depthTracks) ? {
       depthTracks,
       resources: Object.fromEntries(ids.map((id) => [id, /** @type {RawSessionResourceDescriptor} */ ((resources || {})[id])])),
-      originalNames: Object.fromEntries(ids.filter((id) => names[id]).map((id) => [id, names[id]]))
+      originalNames: Object.fromEntries(ids.filter((id) => names[id]).map((id) => [id, names[id]])),
+      ...(webFiles?.bindings ? { bindings: /** @type {WebFileBindings} */ (webFiles.bindings) } : {})
     } : null,
     waiting: new Set()
   };
@@ -2162,13 +2164,18 @@ const trackPlanProjection = (request, drawing, context) => {
     Object.entries(kept.depth.resources).forEach(([id, descriptor]) => depthWrites.push([[LIVE_RESOURCES_ROOT, id], descriptor]));
     Object.assign(names, kept.depth.originalNames);
     depthWrites.push([[LIVE_WEB_FILES_ROOT, 'resourceOriginalNames'], names]);
+    if (kept.depth.bindings) depthWrites.push([[LIVE_WEB_FILES_ROOT, 'bindings'], kept.depth.bindings]);
   } else if (!depthPresent && committedDepth) {
     depthWrites.push([['diagramOptions', 'depthTracks'], undefined]);
-    Object.keys(committedResources).filter((id) => committedResources[id]?.kind === 'depth-track-file').forEach((id) => {
+    const dropped = Object.keys(committedResources).filter((id) => committedResources[id]?.kind === 'depth-track-file');
+    dropped.forEach((id) => {
       depthWrites.push([[LIVE_RESOURCES_ROOT, id], undefined]);
       delete names[id];
     });
     depthWrites.push([[LIVE_WEB_FILES_ROOT, 'resourceOriginalNames'], Object.keys(names).length > 0 ? names : undefined]);
+    // A Session's Web input inventory names those files too; the candidate's binding check reads it.
+    const bindings = /** @type {WebFileBindings | undefined} */ (webFiles?.bindings);
+    if (bindings) depthWrites.push([[LIVE_WEB_FILES_ROOT, 'bindings'], webFileBindingsWithoutDepth(bindings, new Set(dropped))]);
   }
   // A request without a flag (a CLI Session without overrides) draws the
   // mode's track default, as Load reads it; a flag equal to it creates nothing.
@@ -3963,10 +3970,13 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
  */
 /**
  * The Depth parts of a Generate: its series, their resources (the descriptors,
- * by reference, so each keeps its File) and original names.
+ * by reference, so each keeps its File) and original names. `bindings` is the
+ * loaded Web input inventory (`webFiles.bindings`): only a Session's committed
+ * Web file record has one, and a Generate's has none.
  * @typedef {{ readonly depthTracks: readonly Record<string, unknown>[],
  *   readonly resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
- *   readonly originalNames: Readonly<Record<string, string>> }} KeptDepth
+ *   readonly originalNames: Readonly<Record<string, string>>,
+ *   readonly bindings?: WebFileBindings }} KeptDepth
  */
 /**
  * @typedef {object} KeptTrackParts
@@ -7863,7 +7873,8 @@ export const projectCommittedEditorIntent = ({
   const candidate = {
     ...committed,
     renderRequest: cloneCanonicalJsonValue(request),
-    resources: { ...applyLiveResourceWrites(committed.resources, liveSettingWrites) }
+    resources: { ...applyLiveResourceWrites(committed.resources, liveSettingWrites) },
+    webFiles: applyLiveWebFileWrites(committed.webFiles, liveSettingWrites)
   };
   applyLiveSettingWrites(candidate.renderRequest, liveSettingWrites);
   carryKeptTrackParts(request, candidate.renderRequest, liveSettingWrites);
