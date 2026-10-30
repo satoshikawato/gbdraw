@@ -97,7 +97,10 @@ class SourceInterval:
         if not isinstance(self.partial_start, bool) or not isinstance(
             self.partial_end, bool
         ):
-            raise ValidationError("Partial end flags must be booleans.")
+            raise ValidationError(
+                "Partial end flags must be booleans.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
 
 
 @dataclass(frozen=True)
