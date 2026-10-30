@@ -105,6 +105,7 @@ import {
   applyLiveResourceWrites,
   applyLiveWebFileWrites,
   carryKeptTrackParts,
+  recordLoadedStackSwitch,
   liveSettingInputsOf,
   managedConfigOverridePathsForMode,
   projectCanonicalSessionRequest,
@@ -5580,6 +5581,16 @@ class UncomposedResultSet extends Error {
 }
 
 /**
+ * Records the Use custom stack switch beside a committed Session Load installs
+ * (`recordLoadedStackSwitch`). Load holds it untyped, as the committed Session
+ * variable does; it is read as `getCommittedCanonicalSession` reads it.
+ * @param {Readonly<Record<string, unknown>> | null} loaded
+ * @param {DrawingState} drawing The drawing whose Session it is.
+ */
+const recordLoadedStack = (loaded, drawing) => {
+  if (loaded) recordLoadedStackSwitch(/** @type {CommittedCanonicalSession} */ (loaded), drawing);
+};
+/**
  * @param {{ target: { files: ArrayLike<File>, value?: string } }} e
  * @param {Record<string, any>} [options] The options of `importSession` with
  * `isCurrent` and `signal`; `transformLegacyResultSvg` is the composition
@@ -6604,6 +6615,14 @@ const importSessionDocument = async (e, options = {}) => {
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
+    // Beside each loaded Circular request with slots, the Use custom stack
+    // switch of its own drawing's loaded draft (D-214 B): the shown Session's
+    // is the shown drawing's, an artifact slot's is its drawing's.
+    if (currentSchemaSession) recordLoadedStack(adoptedCanonicalSession, shownDrawing);
+    for (const slot of [otherArtifactSlot, topArtifactSlot]) {
+      // The committed Session `buildLoadedArtifactSlot` gave the slot.
+      if (slot) recordLoadedStack(slot.runtimeState?.canonical.committedCanonicalSession ?? null, state.drawingOf(slot.drawingId));
+    }
     // The composition root keeps the loaded artifacts: the opening one is shown, the stashed one waits.
     /** @type {((slots: LoadedArtifactSlots) => void) | undefined} */
     const installLoadedArtifactSlots = options.installLoadedArtifactSlots;
@@ -6656,6 +6675,7 @@ const importSessionDocument = async (e, options = {}) => {
       const committed = stored && await convertDetachedProteinResultFrames(
         sourceSessionVersion, stored, canonicalProjectionInput
       );
+      recordLoadedStack(committed, shownDrawing);
       if (!committed && logicalImportedResults.length > 0) {
         const { adv } = shownDrawing;
         loadedTrackSettings = Object.freeze({

@@ -2069,9 +2069,13 @@ const trackPlanProjection = (request, drawing, context) => {
   // committed ones (the plan places the draft's sets, Generate-only values):
   // it waits whole, with every hide or show it brings, and the rest applies
   // as the drawn switch would draw it (D-214 (f)).
-  const switchWaits = drawnStack !== null && drawnStack !== draftStack
-    && (!otherPlan || !sameAnnotationSetIds(drawing.annotationSets, request));
-  const stackOn = switchWaits ? Boolean(drawnStack) : draftStack;
+  // While the drawn switch is unknown, a switch changed from the one Load
+  // recorded (`loadedStackSwitches`) waits whole too, judged as loaded (D-214 B).
+  const loadedStack = drawnStack === null ? loadedStackSwitches.get(toRaw(request)) ?? null : null;
+  const switchWaits = drawnStack !== null
+    ? drawnStack !== draftStack && (!otherPlan || !sameAnnotationSetIds(drawing.annotationSets, request))
+    : loadedStack !== null && loadedStack !== draftStack;
+  const stackOn = switchWaits ? Boolean(drawnStack ?? loadedStack) : draftStack;
   const judged = { form: drawing.form, adv: switchWaits ? { ...drawing.adv, [stackKey]: stackOn } : drawing.adv };
   const other = drawnStack !== null && drawnStack !== stackOn;
   const hidesOnly = drawnStack === null && !kept;
@@ -3995,7 +3999,28 @@ export const keptTrackPartsOf = (request) => (
 export const carryKeptTrackParts = (from, to, writes) => {
   const written = writes.find(([path]) => path[0] === KEPT_TRACK_PARTS_ROOT);
   const parts = written ? /** @type {KeptTrackParts} */ (written[1]) : keptTrackPartsOf(from);
-  if (parts) keptTrackParts.set(toRaw(to), parts);
+  if (parts) keptTrackParts.set(toRaw(to), parts);  const loaded = loadedStackSwitches.get(toRaw(from));
+  if (loaded !== undefined) loadedStackSwitches.set(toRaw(to), loaded);
+};
+/**
+ * The Use custom stack switch as it stood at Load, beside a loaded Circular
+ * request with slots, which does not show the switch it was drawn with
+ * (`requestDrawnStack`). The drawn switch stays unknown (D-212); a draft
+ * switch changed from this value waits whole (D-214 B). Unsaved, carried with
+ * the request by `carryKeptTrackParts`.
+ * @type {WeakMap<object, boolean>}
+ */
+const loadedStackSwitches = new WeakMap();
+/**
+ * Records, at Load, the Use custom stack switch of the loaded draft beside a
+ * loaded Circular request with slots (`loadedStackSwitches`).
+ * @param {CommittedCanonicalSession} loaded A committed Session Load installs.
+ * @param {RequestDrawing} drawing The loaded draft of the drawing whose Session it is.
+ */
+export const recordLoadedStackSwitch = (loaded, drawing) => {
+  const request = loaded.renderRequest;
+  if (request.mode !== 'circular' || drawing.mode !== 'circular' || keptTrackPartsOf(request) || requestDrawnStack(request) !== null) return;
+  loadedStackSwitches.set(toRaw(request), Boolean(drawing.adv.circular_track_slots_enabled));
 };
 /** @param {unknown} renderer @returns {'content' | 'skew' | 'depth' | null} */
 const trackKindOf = (renderer) => (renderer === 'dinucleotide_content' ? 'content'

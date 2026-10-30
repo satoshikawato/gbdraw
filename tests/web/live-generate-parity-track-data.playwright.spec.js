@@ -1273,6 +1273,38 @@ test('GT B1: Hide GC Skew keeps an AT skew row in the Result and the Legend list
   }
 });
 
+// PD-OI-104 scenario revision 6 (D-217, D-219): Hide GC Content in the tobacco
+// Session, whose Track row 2 (plastome_tint) extends to the GC content track,
+// asks; the choice that turns that row off with the hide applies live as one
+// History step, equal to Generate; its Undo turns both back on in the draft.
+test('GT B12 (rev 6): Hide GC Content with a row that extends to it turns that row off too (tobacco)', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
+  try {
+    await settleLive(page);
+    const rows = () => page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.adv.circular_track_slots
+      .filter((slot) => ['plastome_tint', 'gc_content'].includes(slot.id)).map((slot) => [slot.id, slot.enabled !== false])));
+    expect(await rows()).toEqual({ plastome_tint: true, gc_content: true });
+    expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), 'the Session draws GC content').toBeGreaterThan(0);
+    await clickTrackCheckbox(page, 'Hide GC Content');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Track row 2 (plastome_tint)');
+    await dialog.getByRole('button', { name: 'Hide GC content and turn off Track row 2', exact: true }).click();
+    await settleLive(page);
+    expect(await rows(), 'both rows are off').toEqual({ plastome_tint: false, gc_content: false });
+    expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), 'hidden live').toBe(0);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError ?? null), 'no refusal').toBeNull();
+    await history(page, 'undo');
+    expect(await rows(), 'Undo turns both on again').toEqual({ plastome_tint: true, gc_content: true });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.suppress_gc), 'Undo clears Hide GC Content').toBe(false);
+    await history(page, 'redo');
+    expect(await rows(), 'Redo turns both off').toEqual({ plastome_tint: false, gc_content: false });
+    await expectLiveEqualsGenerate(page, { label: 'Hide GC Content with Track row 2 turned off' });
+  } finally {
+    await page.context().close();
+  }
+});
+
 test('GT B10 (OV-2237): on a Result loaded without a request a hide waits for Generate and the note says so', async ({ browser }) => {
   test.setTimeout(300_000);
   const page = await load(browser, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v29.gbdraw-session.json.gz');

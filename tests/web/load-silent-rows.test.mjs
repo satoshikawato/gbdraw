@@ -515,3 +515,20 @@ test('U8: Save writes the Results that currentResults returns', async () => {
     sessionConfig.setPreviewRuntime({ clearActiveRuntime: () => {}, currentResults: () => state.results.value });
   }
 });
+
+// Review 4 L5 (D-214 B): Load records, beside the shown Circular request with
+// slots, the Use custom stack switch of the loaded draft, so the switch turned
+// off after the Load waits whole: the live track apply judges its hides with
+// the stack on, as loaded (`committedTrackHideDrawing`).
+test('Load records the Use custom stack switch of the loaded Circular draft beside its request (tobacco)', async () => {
+  await load(gallery('tobacco-chloroplast.gbdraw-session.json'));
+  const drawing = modeDrawing(state, 'circular');
+  assert.equal(drawing.adv.circular_track_slots_enabled, true);
+  drawing.adv.circular_track_slots_enabled = false;
+  try {
+    assert.equal(sessionConfig.committedTrackHideDrawing(drawing)?.adv.circular_track_slots_enabled, true,
+      'Use custom stack off after the Load waits whole');
+  } finally {
+    drawing.adv.circular_track_slots_enabled = true;
+  }
+});

@@ -561,12 +561,17 @@ export const createLinearTrackSlotEditor = ({
     normalizeCurrentSlots();
   };
 
-  /** @param {OptionalLinearSlot} slot @param {unknown} enabled */
-  const setLinearTrackSlotEnabled = (slot, enabled) => {
+  /**
+   * @param {OptionalLinearSlot} slot @param {unknown} enabled
+   * @param {(() => void) | Event} [turnOffReaching] Turns off the rows that start at or extend to it
+   *   (`askTrackHide`); a template's trailing event never arrives (`featureSlotEdits` takes it).
+   */
+  const setLinearTrackSlotEnabled = (slot, enabled, turnOffReaching) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
     slot.enabled = Boolean(enabled);
+    if (typeof turnOffReaching === 'function') turnOffReaching();
   };
 
   /** @param {unknown} index */
