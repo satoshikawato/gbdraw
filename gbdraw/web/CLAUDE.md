@@ -284,14 +284,9 @@ code writes a mounted root into a Result.
 A setting that none of these applies is **Applies on Generate**: say so beside
 the control, write only the draft, and leave the Result unchanged. Never patch
 the Result from a draft value outside the declared live rows or with a helper's
-SVG fragment. The one exception is the drawn-track hide and show that
-`PD-OI-104` keeps (`web.layout.track-toggle-application`): `applyTrackVisibility`
-in `app/svg-styles.js` hides or shows a track the Result draws at once (rows
-`track-visibility` and `depth-sources`); a track the Result lacks and the
-layout apply on Generate. A Generate reply's
-pieces are not a helper fragment: they are the Generate compiler's input and
-are admitted whole into one new Result. A new Python helper that
-returns SVG text (`DIAGRAM_HELPER_OPERATIONS` in
+SVG fragment. A Generate reply's pieces are not a helper fragment: they are the
+Generate compiler's input and are admitted whole into one new Result. A new
+Python helper that returns SVG text (`DIAGRAM_HELPER_OPERATIONS` in
 `services/diagram-worker-protocol.js`) needs architecture review.
 
 Guards:
