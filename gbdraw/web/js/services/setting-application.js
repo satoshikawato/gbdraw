@@ -242,8 +242,8 @@ export const liveSettingRequestPaths = (changes) => {
  * The kind of track whose Circular hide control an Undo took back.
  * @typedef {'content' | 'skew'} UndoneTrackHide
  */
-/** @type {Readonly<Record<string, UndoneTrackHide>>} */
-const HIDE_CONTROL_TRACKS = Object.freeze({ 'config.form.suppress_gc': 'content', 'config.form.suppress_skew': 'skew' });
+/** @type {readonly { readonly control: 'suppress_gc' | 'suppress_skew', readonly track: UndoneTrackHide }[]} */
+const HIDE_CONTROLS = Object.freeze([{ control: 'suppress_gc', track: 'content' }, { control: 'suppress_skew', track: 'skew' }]);
 /**
  * The hides a History step changed. Its Undo takes them back: their rows stop
  * waiting for Generate and return from the kept parts of the last Generate, as
@@ -252,7 +252,16 @@ const HIDE_CONTROL_TRACKS = Object.freeze({ 'config.form.suppress_gc': 'content'
  * @param {readonly { readonly path: readonly unknown[] }[]} changes The step's changes.
  * @returns {Set<UndoneTrackHide>}
  */
-export const changedTrackHides = (changes) => new Set(changes.flatMap(({ path }) => HIDE_CONTROL_TRACKS[path.join('.')] ?? []));
+export const changedTrackHides = (changes) => {
+  const paths = new Set(changes.map(({ path }) => path.join('.')));
+  return new Set(HIDE_CONTROLS.filter(({ control }) => paths.has(`config.form.${control}`)).map(({ track }) => track));
+};
+/**
+ * The hides that are on: an Undo's name lives only while its hide is off.
+ * @param {Readonly<Record<'suppress_gc' | 'suppress_skew', boolean>>} form
+ * @returns {Set<UndoneTrackHide>}
+ */
+export const trackHidesOn = (form) => new Set(HIDE_CONTROLS.filter(({ control }) => form[control]).map(({ track }) => track));
 
 /** Every request path a live setting row applies, as Reset Settings and an artifact restore request them. */
 export const allLiveSettingRequestPaths = () => [...new Set(SETTING_APPLICATION.flatMap((row) => Object.values(row.requestPaths || {}).flat()))];

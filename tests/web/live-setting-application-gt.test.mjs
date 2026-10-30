@@ -24,7 +24,7 @@ const config = await import('../../gbdraw/web/js/services/config.js');
 const request = await import('../../gbdraw/web/js/services/session-request.js');
 const owner = await import('../../gbdraw/web/js/services/setting-application.js');
 const legendRows = await import('../../gbdraw/web/js/services/track-legend-rows.js');
-const { changedTrackHides } = await import('../../gbdraw/web/js/services/setting-application.js');
+const { changedTrackHides, trackHidesOn } = await import('../../gbdraw/web/js/services/setting-application.js');
 const { getResourcePayloadOwner, resourceIdOwnedBy, setResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
@@ -1375,4 +1375,11 @@ test('A row that left with its anchor returns when the draft draws both again', 
       undoAll();
     }
   }
+});
+
+test('The hide controls that are on name their tracks', () => {
+  assert.deepEqual([...trackHidesOn({ suppress_gc: false, suppress_skew: false })], []);
+  assert.deepEqual([...trackHidesOn({ suppress_gc: true, suppress_skew: false })], ['content']);
+  assert.deepEqual([...trackHidesOn({ suppress_gc: false, suppress_skew: true })], ['skew']);
+  assert.deepEqual([...trackHidesOn({ suppress_gc: true, suppress_skew: true })].sort(), ['content', 'skew']);
 });

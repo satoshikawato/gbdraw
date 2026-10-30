@@ -1692,3 +1692,103 @@ test('An Undo whose rerender fails keeps the Result and shows the wait; the next
   expect(await shownTrackGroups(page, CONTENT_GROUPS), 'off by hand waits').toBe(0);
   await expect.poll(() => noteOf(page)).toContain(WAIT_NOTE);
 });
+
+const resetSettings = async (page) => {
+  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); });
+};
+const hideIsOn = (page) => page.evaluate(() => window.__GBDRAW_APP__.form.suppress_gc);
+
+test('Redo of Reset Settings inside the rerender of an Undo keeps the wait: a restore that turns the hide on drops its name', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  await hideStep(page, 'Hide GC Content', false);
+  await resetSettings(page);
+  await settleLive(page);
+  await hideStep(page, 'Hide GC Content', false);
+  await undoWithHeldRerender(page);
+  await step(page, 'undo');
+  expect(await hideIsOn(page), 'the Undo of Reset Settings turned the hide on').toBe(true);
+  await step(page, 'redo');
+  expect(await noteOf(page), 'the Redo of Reset Settings hands the hide off').toContain(WAIT_NOTE);
+  await releaseRerender(page);
+  expect(await hideIsOn(page)).toBe(false);
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'it waits for Generate').toBe(0);
+  expect(await noteOf(page), 'the note names the wait').toContain(WAIT_NOTE);
+});
+
+test('An Undo that leaves its hide on names nothing', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  await hideStep(page, 'Hide GC Content', false);
+  await hideStep(page, 'Hide GC Content', false);
+  await holdNextRerender(page);
+  await clickTrackCheckbox(page, 'Hide GC Skew');
+  await insideHeldRerender(page);
+  await step(page, 'undo');
+  await step(page, 'undo');
+  expect(await hideIsOn(page), 'the second Undo leaves the hide on').toBe(true);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return [...state.undoneTrackHides.value.get('circular')];
+  })).toEqual(['skew']);
+  await releaseRerender(page);
+});
+
+test('Undo, Undo through Reset Settings inside the rerender returns the track: a restore that leaves the hide off keeps the name', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  const shown = await shownTrackGroups(page, CONTENT_GROUPS);
+  await resetSettings(page);
+  await settleLive(page);
+  await hideStep(page, 'Hide GC Content', false);
+  await undoWithHeldRerender(page);
+  await step(page, 'undo');
+  expect(await hideIsOn(page)).toBe(false);
+  await releaseRerender(page);
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'the track returns').toBe(shown);
+  expect(await noteOf(page), 'no note remains').not.toContain(WAIT_NOTE);
+});
+
+// A Generate waits for the running rerender; its Cancel ends that rerender too.
+const generateAndCancel = async (page) => {
+  await page.evaluate(() => { void window.__GBDRAW_APP__.runAnalysis(); });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.processing)).toBe(true);
+  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.cancelGeneration(); });
+  await releaseRerender(page);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.processing)).toBe(false);
+  await settleLive(page);
+};
+const resultContent = (page) => page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+
+test('Cancel of a Generate inside the rerender of an Undo leaves the Result and shows the wait; the next off by hand waits too', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  await hideStep(page, 'Hide GC Content', false);
+  const tracks = await committedTracks(page);
+  const result = await resultContent(page);
+  expect(result).toContain('<svg');
+  await undoWithHeldRerender(page);
+  await generateAndCancel(page);
+  expect(await hideIsOn(page)).toBe(false);
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'the track stays out').toBe(0);
+  await expect.poll(() => noteOf(page), 'the note is back').toContain(WAIT_NOTE);
+  expect(await committedTracks(page), 'the committed tracks are unchanged').toEqual(tracks);
+  expect((await resultContent(page)) === result, 'the Result is unchanged').toBe(true);
+  await hideStep(page, 'Hide GC Content', false);
+  await hideStep(page, 'Hide GC Content', false);
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'off by hand waits').toBe(0);
+  await expect.poll(() => noteOf(page)).toContain(WAIT_NOTE);
+});
+
+test('Cancel of a Generate inside the rerender of an Undo keeps the names when another Undo queued an iteration', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  const groups = [await shownTrackGroups(page, CONTENT_GROUPS), await shownTrackGroups(page, SKEW_GROUPS)];
+  await hideStep(page, 'Hide GC Content', false);
+  await hideStep(page, 'Hide GC Skew', false);
+  await undoWithHeldRerender(page);
+  await step(page, 'undo');
+  await generateAndCancel(page);
+  expect([await shownTrackGroups(page, CONTENT_GROUPS), await shownTrackGroups(page, SKEW_GROUPS)], 'both tracks return').toEqual(groups);
+  expect(await noteOf(page), 'no note remains').not.toContain(WAIT_NOTE);
+});
