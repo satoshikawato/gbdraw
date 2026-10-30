@@ -128,11 +128,14 @@ const rewriteOriginalNameHints = (webFiles, aliases) => {
   delete rewritten.bindings;
   const hints = webFiles?.resourceOriginalNames;
   if (hints && typeof hints === 'object' && !Array.isArray(hints)) {
-    rewritten.resourceOriginalNames = Object.fromEntries(
-      Object.entries(hints)
-        .filter(([resourceId]) => aliases.has(resourceId))
-        .map(([resourceId, name]) => [aliases.get(resourceId), name])
-    );
+    // Of the ids that became one resource, the kept id's own hint wins.
+    /** @type {Record<string, string>} */
+    const names = {};
+    Object.entries(hints).forEach(([resourceId, name]) => {
+      const target = aliases.get(resourceId);
+      if (target !== undefined && (!Object.hasOwn(names, target) || target === resourceId)) names[target] = name;
+    });
+    rewritten.resourceOriginalNames = names;
   }
   [
     'conservationLosatFastaSources',
@@ -300,12 +303,18 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
     // `id` is in `resources` or `reserved`.
     usedNames.add((resources[id] || /** @type {RawSessionResourceDescriptor} */ (reserved.get(id))).name);
   };
+  // The first registered resource whose payload has this encoded text: equal
+  // text is equal bytes, found with no read or hash.
+  /** @param {ResourceCandidate} candidate */
+  const encodedEqualId = candidate => {
+    const descriptor = candidate.descriptor || candidate.encoded;
+    return (descriptor && candidatesBySize.get(candidate.size)?.encoded.get(descriptor.encoding)?.get(descriptor.data)) || null;
+  };
   /** @param {ResourceCandidate} candidate */
   const equivalentId = async candidate => {
     const bucket = candidatesBySize.get(candidate.size);
     if (!bucket) return null;
-    const descriptor = candidate.descriptor || candidate.encoded;
-    const encodedId = descriptor && bucket.encoded.get(descriptor.encoding)?.get(descriptor.data);
+    const encodedId = encodedEqualId(candidate);
     if (encodedId) return encodedId;
     const identity = await identityFor(candidate);
     if (bucket.identities.has(identity)) return /** @type {string} */ (bucket.identities.get(identity));
@@ -382,7 +391,9 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
   if (reuseEncodedResources) {
     // Only what the committed request and its Web metadata name is kept as
     // is; the bindings and the other mode's request (E1) are allocated below,
-    // so a resource that nothing names any more is not written.
+    // so a resource that nothing names any more is not written. A resource
+    // whose encoded bytes and kind equal an earlier one's is written once
+    // (D-220): its id becomes an alias of the earlier id.
     const webFiles = committedRequest?.webFiles || {};
     const named = collectCanonicalResourceIds(committedRequest?.renderRequest);
     collectCanonicalResourceIds(webFiles, named);
@@ -391,28 +402,33 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
         .forEach((/** @type {unknown} */ id) => { if (typeof id === 'string' && id) named.add(id); });
     });
     Object.entries(committedResources).forEach(([id, descriptor]) => {
-      if (named.has(id)) {
-        resources[id] = descriptor;
-        aliases.set(id, id);
-      } else {
-        reserved.set(id, descriptor);
-      }
       // A view of one resource id is a single backing.
-      register(id, candidateFor(/** @type {ResourceSource} */ (
+      const candidate = candidateFor(/** @type {ResourceSource} */ (
         sessionResourceSource(createSessionResourceFileView(committedTable, id))
-      )));
+      ));
+      const equal = encodedEqualId(candidate);
+      if (equal && committedResources[equal].kind === descriptor.kind) {
+        aliases.set(id, named.has(id) ? use(equal) : equal);
+        return;
+      }
+      if (named.has(id)) resources[id] = descriptor;
+      else reserved.set(id, descriptor);
+      aliases.set(id, id);
+      register(id, candidate);
     });
   }
   for (const id of collectCanonicalResourceIds(committedRequest?.renderRequest)) {
     if (!Object.hasOwn(committedResources, id)) {
       throw new Error(`Committed render resource is missing: ${id}.`);
     }
+    // An adopted request's ids were kept or aliased above.
+    if (reuseEncodedResources) continue;
     // A view of one resource id is a single backing, which always has readBytes.
     const source = /** @type {SessionResourceSource & { descriptor: RawSessionResourceDescriptor, readBytes: () => Promise<Uint8Array> }} */ (
       sessionResourceSource(createSessionResourceFileView(committedTable, id))
     );
-    if (!reuseEncodedResources) await source.readBytes();
-    aliases.set(id, reuseEncodedResources ? id : await allocate(source, source.descriptor));
+    await source.readBytes();
+    aliases.set(id, await allocate(source, source.descriptor));
   }
   /** @type {Map<string, string>} */
   const otherAliases = new Map();
