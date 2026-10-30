@@ -100,12 +100,17 @@ combination in its raw result. The display-stage `max_hits` setting
 (`--losatp_max_hits` on the command line) is a separate limit: it
 defaults to `5` and keeps the strongest distinct subject proteins for each
 query protein after the display thresholds are applied. Similarity-group and
-Collinear construction use **Max hits per protein for groups**, a separate limit on
-threshold-qualified directional subject hits. Changing a derived limit does
-not change raw search jobs or raw cache keys.
+Collinear construction use **Max hits per protein for groups**
+(`--losatp_member_max_hits`), a separate limit on threshold-qualified hits: in
+each directed record-pair search it keeps, for each query protein, the
+strongest distinct subject proteins other than the protein itself. Changing a
+derived limit does not change raw search jobs or raw cache keys.
 
 In Web **Settings**, **Max target seqs** sets the raw LOSATP
-`--max-target-seqs` limit. A blank value leaves the search unbounded. Both
+`--max-target-seqs` limit (`--losatp_max_target_seqs` on the command line).
+A blank value leaves the search unbounded. In a within-record search, the
+protein's hit to itself counts toward this limit, so a limit of N leaves at
+most N - 1 other proteins of the same record for each query protein. Both
 **Max target seqs** and **Max hits per protein for groups** initially use `5` in
 Collinear blocks and are unbounded in Similarity groups. Each LOSATP mode
 remembers its own values when switching modes, including after a Session

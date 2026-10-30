@@ -393,7 +393,10 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         metavar='N',
         type=_parse_optional_positive_int,
         default=None,
-        help="LOSATP -max_target_seqs per query; 'none' for no cap (default: none).",
+        help=(
+            "LOSATP -max_target_seqs per query; 'none' for no cap (default: none). "
+            "In a within-record search the protein's hit to itself takes one of these slots."
+        ),
     )
     parser.add_argument(
         '--losatp_member_max_hits',
@@ -401,8 +404,9 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=_parse_optional_positive_int,
         default=None,
         help=(
-            "Maximum hits per protein used for Similarity group and Collinear membership; "
-            "'none' for no cap (default: none)."
+            "Maximum distinct subject proteins, not counting the protein itself, kept per "
+            "query protein in each directed record-pair search for Similarity group and "
+            "Collinear membership; 'none' for no cap (default: none)."
         ),
     )
     parser.add_argument(

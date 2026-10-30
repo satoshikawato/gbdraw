@@ -848,3 +848,31 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
     vector.searches
   );
 }
+
+{
+  // OV-2297: LOSATP Similarity groups on a CLI row grid with two records in
+  // row 2. The Web numbers its displayed pairs by the comparison plan's edges
+  // (no grid override), and they are the pairs Python draws for the same rows
+  // (`record_pairs_between_adjacent_rows`; the orthogroup-grid case of
+  // tests/test_api_request_render.py): 0->1 as 0 and 0->2 as 1.
+  const cell = (uid, row, column) => ({
+    uid, row, canonicalRow: row, canonicalColumn: column, canonicalCardinality: 'exactly_one'
+  });
+  const drawn = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
+  const rows = [cell('a', 1, 1), cell('b', 2, 1), cell('c', 2, 2)];
+  const resolution = resolveLinearComparisonPlan({
+    plan: { mode: LINEAR_COMPARISON_MODES.ADJACENT, defaultSource: 'losat', edges: [] },
+    sequences: drawn, layout: rows, losatProgram: 'blastp', blastpMode: 'orthogroup'
+  });
+  assert.equal(resolution.error, '');
+  const specs = buildLosatJobSpecs({
+    resolution, recordCount: drawn.length, recordUids: ['a', 'b', 'c'], program: 'blastp', blastpMode: 'orthogroup'
+  });
+  const numbers = numberLosatDisplayPairs(specs, resolution.edges, null);
+  assert.deepEqual(
+    specs.flatMap((spec, index) => (
+      numbers[index].displayPair ? [[spec.queryIndex, spec.subjectIndex, numbers[index].pairIndex]] : []
+    )),
+    [[0, 1, 0], [0, 2, 1]]
+  );
+}
