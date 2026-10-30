@@ -54,6 +54,16 @@ assert.equal(saveTooLarge.stage, 'write');
 assert.match(saveTooLarge.summary, /^The Session was not saved: it is 600\.0 MB expanded, and the browser loads at most 512 MB\. Largest inputs: depth-a\.tsv, depth b\.tsv, x{1,200}\. /);
 assert.doesNotMatch(saveTooLarge.summary, /smaller Session file|\u0007|x{201}/);
 assert.deepEqual(saveTooLarge.actions, ['select-input']);
+// OV-2245: a Save over the file cap says "file", not "expanded".
+const saveFileTooLarge = normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', {
+  sessionBytes: 213 * 1024 * 1024, sessionByteLimit: 200 * 1024 * 1024, sessionSizeKind: 'file', largestInputs: 'depth-a.tsv'
+}, { stage: 'write', operation: 'session-save' }), { operation: 'session-save' });
+assert.match(saveFileTooLarge.summary, /^The Session was not saved: its file would be 213\.0 MB, and the browser loads files of at most 200 MB\. Largest inputs: depth-a\.tsv\. /);
+assert.doesNotMatch(saveFileTooLarge.summary, /expanded/);
+assert.deepEqual(saveFileTooLarge.actions, ['select-input']);
+// The kind is dropped without the sizes it describes.
+assert.equal(normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', { sessionSizeKind: 'file' },
+  { stage: 'write', operation: 'session-save' }), { operation: 'session-save' }).context.sessionSizeKind, undefined);
 assert.match(normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', {}, { stage: 'read' }), { operation: 'session-load' }).summary,
   /^The Session exceeds the browser size limit\. Use a smaller Session file\.$/);
 // The LOSATP-mode reason is true with and without an Upload pair: a Selected

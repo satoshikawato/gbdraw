@@ -258,8 +258,8 @@ and the header names the reason, such as **Generating diagram. Retry after
 generation finishes.**
 
 A plain Session file larger than 200 MiB, or a gzip Session that expands beyond
-512 MiB, is rejected. Save refuses before writing a Session that would expand beyond
-512 MiB, and names its size and its largest inputs. Save needs browser gzip compression. Load needs Web
+512 MiB, is rejected. Save refuses before downloading a Session that would expand beyond
+512 MiB or whose gzip file is larger than 200 MiB, and names its size and its largest inputs. Save needs browser gzip compression. Load needs Web
 Workers and, for `.gz` files, gzip decompression. A rejected or failed Save or
 Load shows its error and keeps the current Result, settings, and Undo history.
 A failed Load shows its reason and correction under **Session not loaded**,

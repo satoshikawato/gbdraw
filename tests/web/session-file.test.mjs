@@ -115,8 +115,8 @@ const sizedSession = {
   webFiles: { resourceOriginalNames: { 'resource-0002': 'big run (1).tsv', 'resource-0003': 'mid.fa', 'resource-0004': 'tiny.tsv' } }
 };
 const sizedBytes = Buffer.byteLength(JSON.stringify(sizedSession));
-const withCap = async (cap, run) => {
-  globalThis.__GBDRAW_TEST_HOOKS__ = { maxExpandedSessionBytes: cap };
+const withCap = async (cap, run, hook = 'maxExpandedSessionBytes') => {
+  globalThis.__GBDRAW_TEST_HOOKS__ = { [hook]: cap };
   try {
     return await run();
   } finally {
@@ -140,6 +140,31 @@ assert.deepEqual(
 assert.deepEqual(refusal.context, {
   sessionBytes: sizedBytes,
   sessionByteLimit: sizedBytes - 1,
+  largestInputs: 'big run (1).tsv, mid.fa, resource-0001-small.gb'
+});
+// OV-2245: Save also refuses a gzip file over the cap that Load reads
+// (`MAX_SESSION_FILE_BYTES`), naming the file's size; a file exactly at the cap
+// is written as before. The test hook stands in for 200 MiB.
+const fileBytes = atCap.size;
+const withFileCap = (cap, run) => withCap(cap, run, 'maxSessionFileBytes');
+const atFileCap = await withFileCap(fileBytes, () => compressSessionData(sizedSession));
+assert.equal(
+  gunzipSync(Buffer.from(await atFileCap.arrayBuffer())).toString('utf8'),
+  JSON.stringify(sizedSession),
+  'a Session file exactly at the cap is written unchanged'
+);
+const fileRefusal = await withFileCap(fileBytes - 1, () => compressSessionData(sizedSession)).then(
+  () => assert.fail('a Session file over the cap must not be written'),
+  (error) => error
+);
+assert.deepEqual(
+  [fileRefusal.code, fileRefusal.stage, fileRefusal.operation],
+  ['SESSION_SIZE_LIMIT', 'write', 'session-save']
+);
+assert.deepEqual(fileRefusal.context, {
+  sessionBytes: fileBytes,
+  sessionByteLimit: fileBytes - 1,
+  sessionSizeKind: 'file',
   largestInputs: 'big run (1).tsv, mid.fa, resource-0001-small.gb'
 });
 // A browser's body reader may reject with a new TypeError instead of the
