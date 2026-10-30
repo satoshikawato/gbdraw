@@ -47,6 +47,15 @@ def _step(value: int) -> None:
         raise ValidationError("Orientation step must be +1 or -1.")
 
 
+def strand_ordered(first: bool, second: bool, strand: int | None) -> tuple[bool, bool]:
+    """Swap a pair of end flags between biological (5', 3') and ascending (low, high) order.
+
+    On the minus strand the 5' end is the high one; any other strand reads low to high.
+    The map is its own inverse, so it converts in both directions.
+    """
+    return (second, first) if strand == -1 else (first, second)
+
+
 @dataclass(frozen=True)
 class SourceInterval:
     """Ascending half-open boundaries, with a direction of biological traversal.
@@ -253,10 +262,8 @@ class RecordDisplayTransform:
             spans.reverse()
         local_anchor = self.source_base - (self.source_step == 1)
         # Biological ends lie at the low source boundary on +1 and the high one on -1.
-        partial_lo, partial_hi = (
-            (interval.partial_start, interval.partial_end)
-            if interval.strand == 1
-            else (interval.partial_end, interval.partial_start)
+        partial_lo, partial_hi = strand_ordered(
+            interval.partial_start, interval.partial_end, interval.strand
         )
         fragments = []
         for index, (start, end) in enumerate(spans):

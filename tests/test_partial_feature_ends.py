@@ -57,13 +57,14 @@ def _record(location) -> SeqRecord:
 
 
 def _svg(mode: str, record: SeqRecord, *, start: int | None = None, reverse: bool = False,
-         region: str | None = None) -> ET.Element:
+         region: str | None = None, shaft: float = 1.0) -> ET.Element:
     options_type = CircularDiagramOptions if mode == "circular" else LinearDiagramOptions
     request_type = CircularDiagramRequest if mode == "circular" else LinearDiagramRequest
     cfg = apply_config_overrides(None, {
         "labels.circular.scope": "none", "labels.linear.scope": "none",
         "canvas.show_gc": False, "canvas.show_skew": False,
         "objects.features.arrow_geometry.head_length_ratio": 1.0,
+        "objects.features.arrow_geometry.shaft_width_ratio": shaft,
     })
     request = request_type(records=(RecordInput(
         InMemoryRecordSource(record),
@@ -109,25 +110,25 @@ def _close(a: float, b: float) -> bool:
     return abs(a - b) < 1e-6
 
 
-def _linear_block(fill: str, stroke: str) -> Block:
-    """Edges are vertical stroked segments; the arrowhead is the vertex on the middle line."""
+def _linear_block(fill: str, stroke: str) -> tuple[Block, float]:
+    """Edges are vertical stroked segments at the block's ends; the arrowhead is the vertex
+    on the middle line. Also returns the block's thickness."""
     points = _points(fill)
-    ys = sorted({round(y, 6) for _, y in points})
+    top, bottom = min(y for _, y in points), max(y for _, y in points)
     low, high = min(x for x, _ in points), max(x for x, _ in points)
-    head = None
-    if len(ys) == 3:
-        head = next(x for x, y in points if _close(y, ys[1]))
+    head = next((x for x, y in points if _close(y, (top + bottom) / 2)), None)
     stroked = {
         round(a[0], 6) for kind, a, b in _segments(stroke)
         if kind == "L" and _close(a[0], b[0]) and not _close(a[1], b[1])
+        and (_close(a[0], low) or _close(a[0], high))
     }
-    expected_closed = {round(x, 6) for x in (low, high) if head is None or not _close(x, head)}
-    assert stroked <= expected_closed, (stroked, expected_closed)
-    return Block(
+    assert head is None or round(head, 6) not in stroked
+    block = Block(
         open_low=round(low, 6) not in stroked and (head is None or not _close(low, head)),
         open_high=round(high, 6) not in stroked and (head is None or not _close(high, head)),
         arrow=head is not None,
     )
+    return block, bottom - top
 
 
 # Path numbers have three decimals; on a ~350 px radius that is well under 0.05 bp.
@@ -147,13 +148,12 @@ def _centre(points: list[tuple[float, float]]) -> float:
     return _position((x, y)) % LENGTH
 
 
-def _circular_block(fill: str, stroke: str) -> Block:
-    """Edges are radial stroked segments; the arrowhead is the vertex on the centre radius."""
+def _circular_block(fill: str, stroke: str) -> tuple[Block, float]:
+    """Edges are radial stroked segments at the block's ends; the arrowhead is the vertex on
+    the centre radius. Also returns the block's thickness."""
     points = _points(fill)
-    radii: list[float] = []
-    for radius in sorted(math.hypot(*p) for p in points):
-        if not radii or radius - radii[-1] > 0.05:
-            radii.append(radius)
+    inner = min(math.hypot(*p) for p in points)
+    outer = max(math.hypot(*p) for p in points)
     centre = _centre(points)
 
     def _at(point: tuple[float, float]) -> float:
@@ -161,13 +161,15 @@ def _circular_block(fill: str, stroke: str) -> Block:
 
     positions = [_at(p) for p in points]
     low, high = min(positions), max(positions)
-    head = None
-    if len(radii) == 3:
-        head = next(_at(p) for p in points if abs(math.hypot(*p) - radii[1]) <= 0.05)
+    head = next((_at(p) for p in points if abs(math.hypot(*p) - (inner + outer) / 2) <= 0.05), None)
+
+    def at_edge(position: float) -> bool:
+        return min(abs(position - low), abs(position - high)) < _BP_TOLERANCE
+
     stroked = [
         _at(a) for kind, a, b in _segments(stroke)
         if kind == "L" and abs(_at(a) - _at(b)) < _BP_TOLERANCE
-        and abs(math.hypot(*a) - math.hypot(*b)) > 0.05
+        and abs(math.hypot(*a) - math.hypot(*b)) > 0.05 and at_edge(_at(a))
     ]
 
     def is_stroked(position: float) -> bool:
@@ -176,34 +178,37 @@ def _circular_block(fill: str, stroke: str) -> Block:
     def is_head(position: float) -> bool:
         return head is not None and abs(position - head) < _BP_TOLERANCE
 
-    # Radial strokes lie only on the block's own edges, never at the arrowhead.
-    assert all(min(abs(p - low), abs(p - high)) < _BP_TOLERANCE for p in stroked)
     assert not any(is_head(p) for p in stroked)
-    return Block(
+    block = Block(
         open_low=not is_stroked(low) and not is_head(low),
         open_high=not is_stroked(high) and not is_head(high),
         arrow=head is not None,
     )
+    return block, outer - inner
 
 
-def _blocks(root: ET.Element, mode: str) -> list[Block]:
+def _read(root: ET.Element, mode: str) -> list[tuple[Block, float]]:
+    """Each drawn block with its thickness, ordered by display position."""
     nodes = [node for node in root.iter() if node.get("data-gbdraw-feature-part") == "block"]
     outlines = {node.get("id", "").removesuffix("__outline"): node.get("d", "")
                 for node in nodes if node.get("id", "").endswith("__outline")}
-    fills = [node for node in nodes if not node.get("id", "").endswith("__outline")]
     read = _linear_block if mode == "linear" else _circular_block
-    blocks = []
-    for node in fills:
+    items = []
+    for node in nodes:
+        if node.get("id", "").endswith("__outline"):
+            continue
         fill = node.get("d", "")
         outline = outlines.get(node.get("id", ""))
         if outline is not None:
             assert node.get("stroke") == "none"
-        blocks.append((min(_points(fill)) if mode == "linear" else 0, read(fill, outline or fill), fill))
-    if mode == "linear":
-        blocks.sort(key=lambda item: item[0])
-    else:
-        blocks.sort(key=lambda item: _centre(_points(item[2])))
-    return [block for _, block, _ in blocks]
+        key = min(_points(fill)) if mode == "linear" else _centre(_points(fill))
+        items.append((key, read(fill, outline or fill)))
+    items.sort(key=lambda item: item[0])
+    return [item for _, item in items]
+
+
+def _blocks(root: ET.Element, mode: str) -> list[Block]:
+    return [block for block, _ in _read(root, mode)]
 
 
 def _reversed(blocks: list[Block]) -> list[Block]:
@@ -260,6 +265,47 @@ def test_a_partial_end_and_a_display_seam_are_both_open(mode):
     # tail fragment at both the partial end and the seam.
     blocks = _blocks(_svg(mode, _record(_loc(BeforePosition(100), 400, 1)), start=251), mode)
     assert sorted(blocks) == sorted([Block(True, False, True), Block(True, True, False)])
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+@pytest.mark.parametrize("start", [None, 700], ids=["no_display_start", "display_start"])
+@pytest.mark.parametrize("case", sorted(CASES))
+def test_partial_ends_with_a_narrow_shaft(case, start, mode):
+    # A block without an arrowhead is drawn as the narrow shaft, open at its partial edges.
+    location, expected = CASES[case]
+    record = _record(location)
+    full = _read(_svg(mode, record, start=start), mode)
+    narrow = _read(_svg(mode, record, start=start, shaft=0.5), mode)
+    assert [block for block, _ in narrow] == expected
+    is_arrow_glyph = location.strand in (1, -1)
+    for (block, width), (_, full_width) in zip(narrow, full, strict=True):
+        ratio = 0.5 if is_arrow_glyph and not block.arrow else 1.0
+        assert width == pytest.approx(ratio * full_width, abs=0.01)
+
+
+ORIGIN_CASES = {
+    # A circular record's origin-crossing join is drawn as one merged block (low edge at 900).
+    "plus_3p_partial": (CompoundLocation([_loc(900, 1000, 1), _loc(0, AfterPosition(100), 1)]),
+                        Block(False, True, False)),
+    "plus_5p_partial": (CompoundLocation([_loc(BeforePosition(900), 1000, 1), _loc(0, 100, 1)]),
+                        Block(True, False, True)),
+    "minus_3p_partial": (CompoundLocation([_loc(0, 100, -1), _loc(BeforePosition(900), 1000, -1)]),
+                         Block(True, False, False)),
+    "minus_5p_partial": (CompoundLocation([_loc(0, AfterPosition(100), -1), _loc(900, 1000, -1)]),
+                         Block(False, True, True)),
+}
+
+
+@pytest.mark.parametrize("shaft", [1.0, 0.5])
+@pytest.mark.parametrize("case", sorted(ORIGIN_CASES))
+def test_origin_crossing_partial_ends_are_drawn_open(case, shaft):
+    location, expected = ORIGIN_CASES[case]
+    record = _record(location)
+    ((full, full_width),) = _read(_svg("circular", record), "circular")
+    ((block, width),) = _read(_svg("circular", record, shaft=shaft), "circular")
+    assert full == block == expected
+    ratio = shaft if not block.arrow else 1.0
+    assert width == pytest.approx(ratio * full_width, abs=0.01)
 
 
 REGION_CASES = {

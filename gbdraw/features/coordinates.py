@@ -7,7 +7,7 @@ from typing import List, NamedTuple, Sequence, Tuple, cast
 from Bio.SeqFeature import AfterPosition, BeforePosition, SimpleLocation
 
 from .objects import FeatureDisplayPart, FeatureLocation, FeatureLocationPart, Strand
-from ..layout.record_coordinates import DisplayFragment, RecordDisplayTransform, SourceInterval
+from ..layout.record_coordinates import DisplayFragment, RecordDisplayTransform, SourceInterval, strand_ordered
 
 
 logger = logging.getLogger(__name__)
@@ -24,19 +24,21 @@ NOT_PARTIAL = PartialEnds(False, False)
 
 
 def location_partial_ends(exons: Sequence[SimpleLocation]) -> tuple[PartialEnds, ...]:
-    """The partial ends of each part, in biological order: the one reader of ``<``/``>``.
+    """The partial ends of each part, in biological order, for feature drawing.
 
     The source writes ``<`` on a low boundary and ``>`` on a high one, whether the
     file or a gbdraw crop wrote it. Only the outer ends of a location can be
     partial: the first part's start and the last part's end. A part without a
-    strand is read low to high.
+    strand is read low to high. CDS translation reads the 5' marker on its own
+    (``gbdraw.core.sequence._cds_five_prime_is_complete``, which also reads the
+    GFF3 ``start_range``/``end_range`` attributes).
     """
     last = len(exons) - 1
     ends = []
     for index, exon in enumerate(exons):
         low = isinstance(exon.start, BeforePosition)
         high = isinstance(exon.end, AfterPosition)
-        start, end = (high, low) if exon.strand == -1 else (low, high)
+        start, end = strand_ordered(low, high, exon.strand)
         ends.append(PartialEnds(start and index == 0, end and index == last))
     return tuple(ends)
 
@@ -125,7 +127,7 @@ def get_exon_coordinate(
     exon_end = int(exon_line.end)
     if exon_end < 1:
         exon_end = 1
-    open_start, open_end = (partial.end, partial.start) if exon_strand == "negative" else partial
+    open_start, open_end = strand_ordered(partial.start, partial.end, exon_line.strand)
     exon_coordinate = FeatureLocationPart(
         "block", exon_id, exon_strand, exon_start, exon_end, last_or_not and not partial.end,
         open_start, open_end,

@@ -383,6 +383,23 @@ class FeaturePathGenerator:
             self.shaft_width_ratio,
         )
 
+    def _generate_block(
+        self,
+        coord_dict: Dict[str, Union[str, int]],
+        is_last: bool,
+        glyph_kind: str,
+        lane,
+    ) -> list[str]:
+        """The glyph of one block: the arrowhead only on the block that ends at a known 3' end;
+        another block of an arrow feature is its shaft; an undirected block is a rectangle."""
+        if str(coord_dict["coord_strand"]) not in {"positive", "negative"}:
+            return self._generate_rectangle(coord_dict, lane)
+        if is_last and glyph_kind == "arrow":
+            return self._generate_terminal_block(coord_dict, glyph_kind, lane)
+        if glyph_kind == "arrow" and self.shaft_width_ratio < 1.0:
+            return self._generate_narrow_arrow_shaft(coord_dict, lane)
+        return self._generate_rectangle(coord_dict, lane)
+
     def _generate_rectangle(
         self,
         coord_dict: Dict[str, Union[str, int]],
@@ -493,17 +510,9 @@ class FeaturePathGenerator:
             lane = self.feature_layout.lane_for_track_id(int(getattr(feature_object, "feature_track_id", 0)))
         merged_coord = (self._coalesce_origin_spanning_block(feature_object)
                         if feature_object.display_parts is None else None)
+        glyph_kind = str(getattr(feature_object, "glyph_kind", "rectangle"))
         if merged_coord is not None:
-            merged_strand = str(merged_coord["coord_strand"])
-            glyph_kind = str(getattr(feature_object, "glyph_kind", "rectangle"))
-            if merged_strand not in {"positive", "negative"} or not merged_coord["is_last"]:
-                glyph_kind = "rectangle"
-            merged_path = self._generate_terminal_block(
-                merged_coord,
-                glyph_kind,
-                lane,
-            )
-            return [merged_path]
+            return [self._generate_block(merged_coord, bool(merged_coord["is_last"]), glyph_kind, lane)]
 
         if feature_object.display_parts is not None and lane is None:
             inner, center, outer = self._feature_radii(feature_object.strand, None)
@@ -545,20 +554,7 @@ class FeaturePathGenerator:
                         lane.center_px,
                     )
             elif coord_type == "block":
-                glyph_kind = str(getattr(feature_object, "glyph_kind", "rectangle"))
-                coord_strand = str(coord_dict["coord_strand"])
-                if coord_strand not in {"positive", "negative"}:
-                    coord_path = self._generate_rectangle(coord_dict, lane)
-                elif coord.is_last and glyph_kind == "arrow":
-                    coord_path = self._generate_terminal_block(
-                        coord_dict,
-                        glyph_kind,
-                        lane,
-                    )
-                elif glyph_kind == "arrow" and self.shaft_width_ratio < 1.0:
-                    coord_path = self._generate_narrow_arrow_shaft(coord_dict, lane)
-                else:
-                    coord_path = self._generate_rectangle(coord_dict, lane)
+                coord_path = self._generate_block(coord_dict, coord.is_last, glyph_kind, lane)
             else:
                 coord_path = []
             coordinates_paths.append(coord_path)
