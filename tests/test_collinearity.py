@@ -185,7 +185,7 @@ def _record_local_mixed_fixture():
 
 
 @pytest.mark.parametrize("search_scope", ["adjacent", "all"])
-@pytest.mark.parametrize("edge_mode", ["rbh", "one_to_one", "all_hits"])
+@pytest.mark.parametrize("edge_mode", ["rbh", "all_hits"])
 def test_collinear_record_local_mixed_fixture(search_scope, edge_mode):
     records, extraction, hits = _record_local_mixed_fixture()
     result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
@@ -232,7 +232,7 @@ def test_collinear_record_local_mixed_fixture(search_scope, edge_mode):
 
 
 @pytest.mark.parametrize("search_scope", ["adjacent", "all"])
-@pytest.mark.parametrize("edge_mode", ["one_to_one", "all_hits"])
+@pytest.mark.parametrize("edge_mode", ["all_hits"])
 def test_collinear_scope_partitions_table_identity(monkeypatch, search_scope, edge_mode):
     records, extraction, hits = _record_local_mixed_fixture()
     records.append(_record("record_c", [_cds(0, 9, {"protein_id": ["c0"]})]))
@@ -468,11 +468,14 @@ def test_collinearity_color_mode_defaults_to_orientation_and_aliases_identity() 
 
 
 @pytest.mark.linear
-def test_collinearity_anchor_mode_defaults_to_rbh_and_aliases_top1() -> None:
+def test_collinearity_anchor_mode_defaults_to_rbh_and_refuses_one_to_one() -> None:
     assert normalize_collinearity_anchor_mode(None) == "rbh"
-    assert normalize_collinearity_anchor_mode("top1") == "one_to_one"
-    assert normalize_collinearity_anchor_mode("mutual-best") == "one_to_one"
     assert normalize_collinearity_anchor_mode("reciprocal-best") == "rbh"
+    # The removed anchor mode one_to_one and its spellings (OV-2303); a stored
+    # value is read as rbh by the request and Session readers instead.
+    for retired in ("one_to_one", "top1", "mutual-best"):
+        with pytest.raises(ValidationError):
+            normalize_collinearity_anchor_mode(retired)
 
 
 @pytest.mark.linear
@@ -511,7 +514,7 @@ def test_iter_collinearity_search_pairs_all_returns_every_unordered_pair() -> No
 
 
 @pytest.mark.linear
-def test_build_blocks_from_hits_one_to_one_removes_query_to_many_noise() -> None:
+def test_build_blocks_from_hits_rbh_removes_query_to_many_noise() -> None:
     records = [
         _record(
             "record_a",
@@ -547,20 +550,20 @@ def test_build_blocks_from_hits_one_to_one_removes_query_to_many_noise() -> None
         anchor_mode="all",
         reverse_hits_by_pair=[reverse_hits],
     )
-    one_to_one = build_collinearity_blocks_from_hits(
+    rbh = build_collinearity_blocks_from_hits(
         [hits],
         extraction,
         records=records,
         params=params,
-        anchor_mode="one_to_one",
+        anchor_mode="rbh",
         reverse_hits_by_pair=[reverse_hits],
     )
 
     assert len(all_hits.blocks) == 2
     assert all_hits.blocks[0].anchors[0].subject_protein_id == "sb0"
     assert all_hits.blocks[0].anchors[0].subject_orthogroup_member_count == 2
-    assert len(one_to_one.blocks) == 1
-    assert one_to_one.blocks[0].anchors[0].subject_protein_id == "sb0"
+    assert len(rbh.blocks) == 1
+    assert rbh.blocks[0].anchors[0].subject_protein_id == "sb0"
 
 
 @pytest.mark.linear
@@ -595,12 +598,12 @@ def test_build_blocks_from_hits_rbh_uses_reverse_best_hits() -> None:
         max_unit_gap=0,
     )
 
-    one_to_one = build_collinearity_blocks_from_hits(
+    all_hits = build_collinearity_blocks_from_hits(
         [forward_hits],
         extraction,
         records=records,
         params=params,
-        anchor_mode="one_to_one",
+        anchor_mode="all",
     )
     rbh = build_collinearity_blocks_from_hits(
         [forward_hits],
@@ -611,7 +614,7 @@ def test_build_blocks_from_hits_rbh_uses_reverse_best_hits() -> None:
         reverse_hits_by_pair=[reverse_hits],
     )
 
-    assert sum(len(block.anchors) for block in one_to_one.blocks) == 2
+    assert sum(len(block.anchors) for block in all_hits.blocks) == 2
     assert len(rbh.blocks) == 1
     assert rbh.blocks[0].anchors[0].query_protein_id == "qa0"
     assert rbh.blocks[0].anchors[0].subject_protein_id == "sb0"
@@ -1200,7 +1203,7 @@ def test_lossless_settings_without_effect_keep_their_contract(seed: int) -> None
     # Diagonal drift and merge conflicts have no effect at max_unit_gap 0 (OV-2302).
     assert blocks(max_diagonal_drift=0) == blocks(max_diagonal_drift=7)
     assert blocks(max_conflicts=0) == blocks(max_conflicts=5)
-    # "strand" and "either" behave the same until D-09 decides the value set (OV-2301).
+    # "either" is the old spelling of "strand" (OV-2301).
     gap = seed % 4
     assert blocks(max_unit_gap=gap, merge_orientation="strand") == blocks(
         max_unit_gap=gap, merge_orientation="either"
@@ -1234,7 +1237,7 @@ def test_build_blocks_from_hits_maps_proteins_to_units() -> None:
         extraction,
         records=records,
         params=LosslessCollinearityParameters(min_anchors=3, max_unit_gap=1),
-        anchor_mode="one_to_one",
+        anchor_mode="rbh",
         reverse_hits_by_pair=[reverse_hits],
     )
     comparisons = convert_collinearity_blocks_to_comparisons(result, records=records, color_mode="orientation")
@@ -1274,7 +1277,7 @@ def test_true_global_singleton_orthogroup_does_not_create_link() -> None:
         extraction,
         records=records,
         params=LosslessCollinearityParameters(min_anchors=1),
-        anchor_mode="one_to_one",
+        anchor_mode="rbh",
         reverse_hits_by_pair=[reverse_hits],
     )
 
@@ -2003,7 +2006,7 @@ def test_build_blocks_from_hits_adjacent_scope_ignores_non_adjacent_tables() -> 
         extraction,
         records=records,
         params=LosslessCollinearityParameters(),
-        edge_mode="one_to_one",
+        edge_mode="all",
         search_scope="adjacent",
     )
 
@@ -2029,7 +2032,7 @@ def test_build_blocks_from_hits_adjacent_scope_uses_explicit_adjacent_row_pairs(
         extraction,
         records=records,
         params=LosslessCollinearityParameters(min_anchors=1),
-        edge_mode="one_to_one",
+        edge_mode="all",
         search_scope="adjacent",
         comparison_pairs=((0, 2),),
     )
@@ -2059,7 +2062,7 @@ def test_build_blocks_from_hits_all_scope_uses_non_adjacent_connectivity_only_as
         extraction,
         records=records,
         params=LosslessCollinearityParameters(),
-        edge_mode="one_to_one",
+        edge_mode="all",
         search_scope="all",
     )
     comparisons = convert_collinearity_blocks_to_comparisons(
@@ -2099,7 +2102,7 @@ def test_build_blocks_from_hits_can_render_selected_non_adjacent_pairs() -> None
         extraction,
         records=records,
         params=LosslessCollinearityParameters(),
-        edge_mode="one_to_one",
+        edge_mode="all",
         search_scope="all",
         comparison_pairs=((0, 2),),
     )
@@ -2391,8 +2394,6 @@ def test_linear_cli_help_omits_removed_collinearity_options(capsys: pytest.Captu
         "orthogroup-membership-mode",
         "orthogroup_member_max_hits",
         "orthogroup-member-max-hits",
-        "collinear_anchor_mode",
-        "collinear-anchor-mode",
         "collinear_orthogroup_edge_mode",
         "collinear-orthogroup-edge-mode",
         "collinear_blocks",
@@ -2645,7 +2646,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
         1,
         "cds",
         "orientation",
-        "one_to_one",
+        "rbh",
         25,
         1,
         2,
@@ -2690,7 +2691,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
         "requested": "cds",
         "effectiveKinds": ["cds"],
     }
-    assert result["provenance"]["collinear"]["anchorMode"] == "one_to_one"
+    assert result["provenance"]["collinear"]["anchorMode"] == "rbh"
 
 
 @pytest.mark.linear
@@ -2698,7 +2699,8 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     ("anchor_mode", "merge_orientation", "expected_anchor_count"),
     (
         ("all", "strand", 2),
-        ("one_to_one", "order", 2),
+        ("all", "order", 2),
+        # "either" is the old spelling of "strand" (OV-2301).
         ("rbh", "either", 1),
     ),
 )
@@ -2815,7 +2817,7 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
     assert result["provenance"]["collinear"]["anchorMode"] == anchor_mode
     assert (
         result["provenance"]["collinear"]["parameters"]["mergeOrientation"]
-        == merge_orientation
+        == {"either": "strand"}.get(merge_orientation, merge_orientation)
     )
 
     if anchor_mode == "rbh":
@@ -2964,14 +2966,14 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
             0,
             "cds",
             "orientation",
-            "one_to_one",
+            "all",
             25,
             1,
             2,
             scope,
             "rbh",
             None,
-            "either",
+            "strand",
             True,
             None,
             explicit_display_pairs,
@@ -3067,7 +3069,8 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
                 orientation="plus",
                 score=150.0,
                 block_evalue=1e-9,
-                anchors=(_anchor(0, 0), _anchor(1, 1), _anchor(2, 2)),
+                # The rows name a group scope only when an anchor has a group (OV-2302).
+                anchors=(replace(_anchor(0, 0), orthogroup_id="og_1"), _anchor(1, 1), _anchor(2, 2)),
             ),
             CollinearityBlock(
                 block_id="block_minus",
@@ -3889,7 +3892,7 @@ def test_collinearity_match_group_draws_inversions_above_plus_blocks() -> None:
 
 
 @pytest.mark.parametrize("scope,pair_count", [("adjacent", 4), ("all", 6)])
-@pytest.mark.parametrize("anchor_mode", ["rbh", "one_to_one", "all"])
+@pytest.mark.parametrize("anchor_mode", ["rbh", "all"])
 def test_collinear_without_orthogroups_skips_self_search_and_inference(
     monkeypatch, scope, pair_count, anchor_mode,
 ):

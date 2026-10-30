@@ -5224,7 +5224,7 @@ const inactiveProteinDefaults = {
   collinearMaxConflicts: 1,
   collinearityUnitMode: 'auto',
   collinearityAnchorMode: 'rbh',
-  collinearityMergeOrientation: 'either',
+  collinearityMergeOrientation: 'strand',
   collinearitySearchScope: 'adjacent',
   collinearityColorMode: 'orientation'
 };
@@ -5582,7 +5582,8 @@ assert.deepEqual(resolvedProteinMarker.pairs, []);
 // other 81 requests are the 83 recorded before, byte for byte.
 assert.equal(characterizedRequests.length, 81);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  '9f0a68dde640b4645bbbef3813fbdce3d59072167910543562c539ca3bbbfea3',
+  // Re-recorded when the default merge orientation became "strand" (OV-2301).
+  '226ee05fe6c482311ca894941631c6f1e22590b494cbc79970024f1ad9e156dd',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 const projectSessionIndex = process.argv.indexOf('--project-session');

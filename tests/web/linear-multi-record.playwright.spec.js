@@ -3133,7 +3133,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
     collinearMaxParalogLinksPerOrthogroup: 2,
     collinearUnitMode: 'auto',
     collinearAnchorMode: 'rbh',
-    collinearMergeOrientation: 'either',
+    collinearMergeOrientation: 'strand',
     collinearColorMode: 'orientation',
     collinearSearchScope: 'adjacent'
   }));

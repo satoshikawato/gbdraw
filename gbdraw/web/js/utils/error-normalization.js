@@ -53,8 +53,8 @@ const REASONS = Object.freeze({
   PROTEIN_BLASTP_MODE: 'Choose pairwise, orthogroup, or collinear.',
   COLLINEAR_SEARCH_SCOPE: 'Choose adjacent or all.',
   COLLINEAR_UNIT_MODE: 'Choose auto, cds, or locus.',
-  COLLINEAR_ANCHOR_MODE: 'Choose all, one_to_one, or rbh.',
-  COLLINEAR_MERGE_ORIENTATION: 'Choose strand, order, or either.',
+  COLLINEAR_ANCHOR_MODE: 'Choose all or rbh.',
+  COLLINEAR_MERGE_ORIENTATION: 'Choose strand or order.',
   COLLINEAR_COLOR_MODE: 'Choose average_identity, orientation, or orientation_identity.',
   ORTHOGROUP_MEMBERSHIP_MODE: 'Choose anchor_core_v1.',
 
@@ -505,8 +505,8 @@ for (const [label, field, options] of [
   ['Protein BLASTP mode', 'protein_blastp_mode', 'pairwise, orthogroup, collinear'],
   ['Collinear search scope', 'collinear_search_scope', 'adjacent, all'],
   ['Collinear unit mode', 'collinear_unit_mode', 'auto, cds, locus'],
-  ['Collinear anchor mode', 'collinear_anchor_mode', 'all, one_to_one, rbh'],
-  ['Collinear merge orientation', 'collinear_merge_orientation', 'strand, order, either'],
+  ['Collinear anchor mode', 'collinear_anchor_mode', 'all, rbh'],
+  ['Collinear merge orientation', 'collinear_merge_orientation', 'strand, order'],
   ['Collinear color mode', 'collinear_color_mode', 'average_identity, orientation, orientation_identity'],
   ['Protein BLASTP orthogroup membership mode', 'orthogroup_membership_mode', 'anchor_core_v1']
 ]) {

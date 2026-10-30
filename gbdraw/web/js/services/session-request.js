@@ -180,6 +180,7 @@ import {
 import {
   readCollinearAnchorMode,
   readCollinearColorMode,
+  readCollinearMergeOrientation,
   readCollinearSearchScope,
   readCollinearUnitMode,
   readOrthogroupMembershipMode
@@ -3363,7 +3364,7 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
           : nonNegativeInteger(blastp.collinearMaxConflictsInMergeGap, 1),
         mergeOrientation: blastpMode === 'collinear'
           ? requireCurrentCollinearMergeOrientation(blastp.collinearMergeOrientation)
-          : (baselineParameters.mergeOrientation || 'either')
+          : (baselineParameters.mergeOrientation || 'strand')
       }
     },
     collinearityUnitMode,
@@ -7985,6 +7986,10 @@ const normalizePublicationRequestAliases = (request, resources) => {
       comparison.settings.collinearInferOrthogroups = resolvePipelineCollinearInference(
         comparison.settings, comparison.mode
       );
+      // A released writer stored "either", which reads as "strand" (OV-2301).
+      const parameters = comparison.settings.collinearityParams?.parameters;
+      const orientation = readCollinearMergeOrientation(parameters?.mergeOrientation);
+      if (parameters && !orientation.lost) parameters.mergeOrientation = orientation.value;
     }
   }
   if (drawsNoComparison(normalized.comparisons || [])) normalized.comparisons = [];

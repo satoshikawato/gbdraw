@@ -1396,7 +1396,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     orthogroup_membership_mode: Literal[
         "anchor_core_v1"
     ] | str = "anchor_core_v1"
-    collinear_infer_orthogroups: bool = True
+    collinear_infer_orthogroups: bool = False
     collinear_max_paralog_links_per_orthogroup: int = 2
     comparison_table_file: str | None = None
 

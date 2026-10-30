@@ -1,7 +1,7 @@
 // @ts-check
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { readSpelling } from '../utils/contract-shape.js';
-/** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
+/** @import { CanonicalLosslessCollinearityParameters, CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
 /** @import { FieldReader } from '../utils/field-reading.js' */
 /** @import { LiteralShape, ObjectShape } from '../utils/contract-shape.js' */
 
@@ -67,6 +67,42 @@ export const readCollinearAnchorMode = comparisonSettingReader('collinearityAnch
 export const readCollinearSearchScope = comparisonSettingReader('collinearitySearchScope');
 export const readCollinearColorMode = comparisonSettingReader('collinearityColorMode');
 export const readOrthogroupMembershipMode = comparisonSettingReader('orthogroupMembershipMode');
+
+/** @typedef {CanonicalLosslessCollinearityParameters['mergeOrientation']} CollinearMergeOrientation */
+// The merge orientation of the Collinear parameters, a literal with spellings
+// ("either" reads as "strand", OV-2301).
+const MERGE_ORIENTATION = /** @type {LiteralShape} */ (
+  /** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types.CanonicalLosslessCollinearityParameters).fields.mergeOrientation
+);
+/**
+ * The merge orientation `value` spells, or null.
+ * @param {unknown} value
+ * @returns {CollinearMergeOrientation | null}
+ */
+const readMergeOrientationSpelling = (value) => (
+  // `readSpelling` returns one of the literal's values, which the typedef lists.
+  /** @type {CollinearMergeOrientation | null} */ (readSpelling(value, MERGE_ORIENTATION))
+);
+// The names a writer writes: the stored values without their old spellings.
+const WRITTEN_MERGE_ORIENTATIONS = MERGE_ORIENTATION.values.filter(
+  (value) => !Object.hasOwn(MERGE_ORIENTATION.spellings?.aliases ?? {}, String(value))
+);
+const DEFAULT_MERGE_ORIENTATION = /** @type {CollinearMergeOrientation} */ (readMergeOrientationSpelling(null));
+/** @type {FieldReader<CollinearMergeOrientation>} */
+export const readCollinearMergeOrientation = (value) => {
+  const read = readMergeOrientationSpelling(value);
+  return read === null ? { value: DEFAULT_MERGE_ORIENTATION, lost: true } : { value: read, lost: false };
+};
+/**
+ * The merge orientation `value` spells; a value Python does not read is refused.
+ * @param {unknown} value
+ * @returns {CollinearMergeOrientation}
+ */
+export const requireCollinearMergeOrientation = (value) => {
+  const read = readMergeOrientationSpelling(value);
+  if (read === null) throw new Error(`Collinear merge orientation must be one of: ${WRITTEN_MERGE_ORIENTATIONS.join(', ')}.`);
+  return read;
+};
 
 /** @param {unknown} value */
 export const collinearGroupScopeForEvidenceScope = (value) =>

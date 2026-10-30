@@ -351,9 +351,8 @@ def _configure_losatp(
         settings.get_by_label("Collinear color mode", exact=True).select_option(
             "orientation_identity"
         )
-        settings.get_by_label(
-            "Collinear search between", exact=True
-        ).select_option("adjacent")
+        # Search between keeps its default, Adjacent pairs; it shows only
+        # with similarity groups (OV-2302).
 
     advanced = open_linear_comparison_disclosure(
         page,

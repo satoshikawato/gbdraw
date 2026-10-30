@@ -917,7 +917,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     memberMaxHits: null,
     unitMode: 'auto',
     anchorMode: 'rbh',
-    mergeOrientation: 'either',
+    mergeOrientation: 'strand',
     searchScope: 'adjacent'
   });
   expect(preFirstGenerateActiveIntent.linearRecordLayout).toMatchObject({
@@ -1022,7 +1022,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
       memberMaxHits: 0,
       unitMode: 'auto',
       anchorMode: 'rbh',
-      mergeOrientation: 'either',
+      mergeOrientation: 'strand',
       searchScope: 'adjacent'
     }]
   });
@@ -1032,7 +1032,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     memberMaxHits: 6,
     unitMode: 'auto',
     anchorMode: 'rbh',
-    mergeOrientation: 'either',
+    mergeOrientation: 'strand',
     searchScope: 'adjacent'
   }]);
   expect(capturedCanonicalRequests[0].layout.multiRecordPositions ?? null).toBeNull();

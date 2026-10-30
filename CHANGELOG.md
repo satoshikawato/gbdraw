@@ -40,6 +40,30 @@ write-up of a release.
   **Hide GC Content** or **Hide GC Skew** waited for **Generate Diagram**. It now returns the track
   and the rows it turned off at once, and Redo hides them again. Turning the hide off by hand still
   applies on Generate.
+- Changed: LOSATP Collinear blocks have one set of defaults on every surface.
+  Similarity-group inference is off by default on the CLI and in the Python
+  API too (`--collinear_infer_orthogroups off`), and the Web Collinear
+  **Max target seqs** and **Max hits per protein for groups** are unbounded by
+  default, as on the CLI. A Session, request, or recorded command that names
+  Collinear without the inference setting still replays with inference on.
+- Added: `--collinear_anchor_mode {all,rbh}` and
+  `--collinear_merge_orientation {strand,order}`, the two Collinear settings
+  that only the Web app had, and the Python field
+  `LinearComparisonOptions.collinearity_infer_orthogroups` (default `False`).
+- Changed: `--collinear_unit_mode`, `--collinear_max_conflicts_in_merge_gap`,
+  and `--collinear_max_paralog_links_per_orthogroup` are listed in
+  `gbdraw linear --help`.
+- Removed: the Collinear anchor mode `one_to_one` and the merge orientation
+  `either`. A saved `either` reads as `strand`, which it drew as; a saved
+  `one_to_one` reads as `rbh`, and the web app lists that change at Load.
+- Changed: in the Web app, **Search between** shows only while **Build
+  similarity groups with within-record searches** is on, and **Max hits per
+  protein for groups** only while it is on or **Anchor mode** is All hits.
+  Collinear block rows built without similarity groups no longer name a group
+  scope in their popup.
+- Fixed: the help text of the Collinear options and the Collinear tutorial
+  describe what each setting changes, and the tutorial commands state
+  `--collinear_infer_orthogroups on` (OV-2302).
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-30
 

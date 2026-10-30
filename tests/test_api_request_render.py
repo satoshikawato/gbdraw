@@ -418,13 +418,13 @@ def _derived_settings_key(options: LinearDiagramOptions, mode: str) -> str:
         LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(max_unit_gap=1)),
         LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(max_diagonal_drift=1)),
         LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(max_conflicts=0)),
-        LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(merge_orientation="strand")),
+        LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(merge_orientation="order")),
         LinearDiagramOptions(collinearity_unit_mode="cds"),
         LinearDiagramOptions(collinearity_anchor_mode="all"),
         LinearDiagramOptions(collinearity_search_scope="all"),
         LinearDiagramOptions(collinearity_color_mode="orientation_identity"),
         LinearDiagramOptions(collinear_max_paralog_links_per_orthogroup=3),
-        LinearDiagramOptions(collinear_infer_orthogroups=False),
+        LinearDiagramOptions(collinear_infer_orthogroups=True),
         LinearDiagramOptions(bitscore=60),
         LinearDiagramOptions(evalue=1e-6),
         LinearDiagramOptions(identity=71),
@@ -2335,14 +2335,16 @@ _RECORDED_DERIVED_ENTRIES = {
     # write-only `orthogroups` member gone, the paralog-link limit in the
     # orthogroup block), and when stored results moved to the search frame
     # (OV-1145: semantics v3), and when Collinear blocks became longest chains
-    # and the block E-value column went (OV-2294..2296, OV-2300: semantics v4).
+    # and the block E-value column went (OV-2294..2296, OV-2300: semantics v4),
+    # and when the default merge orientation became "strand", which "either"
+    # was a spelling of (OV-2301).
     "similarity_groups": (
         "6b1dfc2b33423552ff2f9b6210928bf22c640619a81c5fab117ab6a3d30c2a8f",
         "92675b3ccb5fb991e5b6baaffe892c48aae067b611911fc297d502f55b75b8cc",
     ),
     "collinear": (
-        "1e1560a0f5df85959fd4d492e8a5c9d172079256147e1ade943731532abff47b",
-        "29eadeff0bd574574e12ada2005ada78b9008250aa0c802a40192113104e486c",
+        "1c335911c992797b48ab4f36315726541903c150b9966e1edee418340efc2a38",
+        "154fde7cae802b09b0ff0d807edb5500f193fcb09c9242ba249808f0d678c362",
     ),
 }
 

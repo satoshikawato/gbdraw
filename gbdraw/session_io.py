@@ -34,6 +34,12 @@ from typing import (
     cast,
 )
 
+from .analysis.collinearity import (
+    COLLINEARITY_MERGE_ORIENTATION_SPELLINGS,
+    COLLINEARITY_MERGE_ORIENTATIONS,
+    RETIRED_COLLINEARITY_ANCHOR_MODES,
+)
+from .contract_shapes import read_spelling
 from .analysis.protein_artifacts import (
     CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
     is_current_derived_protein_artifact,
@@ -5996,6 +6002,22 @@ def canonicalize_cli_invocation(
     return canonical_args, remapped
 
 
+def _keep_recorded_collinear_inference(args: list[str]) -> list[str]:
+    """A recorded Collinear command without the inference flag ran with inference on.
+
+    The CLI default became off; the replay keeps what the command drew.
+    """
+
+    if any(arg.split("=", 1)[0] == "--collinear_infer_orthogroups" for arg in args):
+        return args
+    collinear = any(
+        arg == "--losatp_mode=collinear"
+        or (arg == "--losatp_mode" and index + 1 < len(args) and args[index + 1] == "collinear")
+        for index, arg in enumerate(args)
+    )
+    return [*args, "--collinear_infer_orthogroups", "on"] if collinear else args
+
+
 def _session_cli_invocation_to_args(
     session: Mapping[str, Any],
     *,
@@ -6049,6 +6071,7 @@ def _session_cli_invocation_to_args(
             mode=mode,
         )
 
+    run_args = _keep_recorded_collinear_inference(run_args)
     run_args = _apply_option_override(run_args, "-o", "--output", output_override)
     run_args = _apply_option_override(run_args, "-f", "--format", format_override)
     invocation_args = _apply_option_override(invocation_args, "-o", "--output", output_override)
@@ -6874,6 +6897,26 @@ def _append_linear_gui_blastp_args(
             value = blastp_cfg.get("collinearMaxGeneGap")
         if value not in (None, "", False):
             _append_pair(run_args, invocation_args, option, str(value))
+    # Web Load reads a draft without the inference flag as on for a Collinear
+    # search (services/config-field-readers.js), and the CLI default is off.
+    inference = blastp_cfg.get("collinearInferOrthogroups")
+    _append_pair(
+        run_args,
+        invocation_args,
+        "--collinear_infer_orthogroups",
+        "off" if inference is False else "on",
+    )
+    anchor_mode = blastp_cfg.get("collinearAnchorMode")
+    if isinstance(anchor_mode, str) and anchor_mode.strip():
+        anchor_mode = RETIRED_COLLINEARITY_ANCHOR_MODES.get(anchor_mode.strip().lower().replace("-", "_"), anchor_mode)
+        _append_pair(run_args, invocation_args, "--collinear_anchor_mode", str(anchor_mode))
+    merge_orientation = blastp_cfg.get("collinearMergeOrientation")
+    if isinstance(merge_orientation, str) and merge_orientation.strip():
+        # The parameters read the old spelling "either" as "strand".
+        merge_orientation = read_spelling(
+            merge_orientation, COLLINEARITY_MERGE_ORIENTATIONS, COLLINEARITY_MERGE_ORIENTATION_SPELLINGS
+        ) or merge_orientation
+        _append_pair(run_args, invocation_args, "--collinear_merge_orientation", merge_orientation)
 
 
 def _append_depth_gui_options(

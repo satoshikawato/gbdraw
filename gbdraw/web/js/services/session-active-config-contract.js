@@ -111,7 +111,7 @@ export const createDefaultAdv = (mode = 'circular') => ({
 export const createDefaultLosatpHitLimits = () => ({
   pairwise: { candidateLimit: null, orthogroupMemberMaxHits: null },
   orthogroup: { candidateLimit: null, orthogroupMemberMaxHits: null },
-  collinear: { candidateLimit: 5, orthogroupMemberMaxHits: 5 }
+  collinear: { candidateLimit: null, orthogroupMemberMaxHits: null }
 });
 // How LOSAT runs: one app-level setting for both drawings (Session `ui.losatExecution`).
 export const createDefaultLosatExecution = () => ({
@@ -122,7 +122,7 @@ export const createDefaultLosat = () => ({
   blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: null, orthogroupMembershipMode: ORTHOGROUP_INFERENCE_VERSION,
     orthogroupMemberMaxHits: null, collinearInferOrthogroups: false, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
-    collinearUnitMode: 'auto', collinearAnchorMode: 'rbh', collinearMergeOrientation: 'either', collinearSearchScope: 'adjacent' }
+    collinearUnitMode: 'auto', collinearAnchorMode: 'rbh', collinearMergeOrientation: 'strand', collinearSearchScope: 'adjacent' }
 });
 export const createDefaultCircularConservation = () => ({ enabled: false, source: 'losat', losat_program: 'blastn',
   subject_gencode: 1, reference: 'auto', labels: '', series: [], ring_width: null, ring_gap: null });

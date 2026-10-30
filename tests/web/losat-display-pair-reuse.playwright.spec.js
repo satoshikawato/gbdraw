@@ -219,7 +219,9 @@ const openCollinearGrid = async (page, sessionPath) => {
     ({ row, canonicalRow, canonicalColumn }) => [row, canonicalRow, canonicalColumn]
   )), { timeout: 60000 }).toEqual([[1, 1, 1], [1, 1, 2], [2, 2, 1]]);
   await chooseLosatp(page, 'collinear');
-  await page.getByRole('combobox', { name: 'Collinear search between' }).selectOption('all');
+  // Search between shows only with similarity groups (OV-2302); the hidden
+  // draft value still widens the searched pairs.
+  await page.evaluate(() => { window.__GBDRAW_APP__.losat.blastp.collinearSearchScope = 'all'; });
 };
 
 test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fresh ribbons', async ({ page, browser }, testInfo) => {

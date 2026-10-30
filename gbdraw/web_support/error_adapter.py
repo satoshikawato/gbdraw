@@ -125,7 +125,7 @@ _EXACT = {
     "The staged Web render workspace is incomplete.": ("RESOURCE_INVALID", {"reason": "WORKSPACE"}),
     "The temporary staged Web render workspace could not be cleaned up.": ("CLEANUP_FAILED", {}),
     "The temporary Web render workspace could not be cleaned up.": ("CLEANUP_FAILED", {}),
-    "collinear_merge_orientation must be one of: strand, order, either": ("INPUT_INVALID", {"field": "collinear_merge_orientation", "reason": "COLLINEAR_MERGE_ORIENTATION"}),
+    "collinear_merge_orientation must be one of: strand, order": ("INPUT_INVALID", {"field": "collinear_merge_orientation", "reason": "COLLINEAR_MERGE_ORIENTATION"}),
     "Protein FASTA contains duplicate transport IDs.": ("COMPARISON_INPUT", {"reason": "UNIQUE_IDS"}),
     "Protein FASTA and protein map contain different transport IDs.": ("COMPARISON_INPUT", {"reason": "MATCH_IDS"}),
     "Reverse display transform requires a positive length.": ("REGION_INVALID", {"field": "recordLength", "reason": "POSITIVE_INTEGER"}),

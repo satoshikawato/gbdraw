@@ -15,7 +15,7 @@ from gbdraw.exceptions import ValidationError
 if TYPE_CHECKING:
     from pandas import DataFrame
 
-    from .collinearity import CollinearityResult, LosslessCollinearityParameters
+    from .collinearity import CollinearityMergeOrientation, CollinearityResult, LosslessCollinearityParameters
     from .protein_colinearity import ProteinIdentityManifest
 
 CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA = 3
@@ -436,9 +436,7 @@ class DerivedLosatpSettings:
             max_unit_gap=self.max_unit_gap,
             max_diagonal_drift=self.max_diagonal_drift,
             max_conflicts=self.max_conflicts,
-            merge_orientation=cast(
-                Literal["strand", "order", "either"], self.merge_orientation
-            ),
+            merge_orientation=cast("CollinearityMergeOrientation", self.merge_orientation),
         )
 
 
@@ -559,9 +557,9 @@ def normalize_derived_losatp_settings(
             max_unit_gap=_setting_int(max_unit_gap, 0),
             max_diagonal_drift=_setting_int(max_diagonal_drift, 0),
             max_conflicts=_setting_int(max_conflicts, 1),
+            # The parameters read the old spelling "either" as "strand".
             merge_orientation=cast(
-                Literal["strand", "order", "either"],
-                _setting_text(merge_orientation, "either").strip().lower(),
+                "CollinearityMergeOrientation", _setting_text(merge_orientation, "strand")
             ),
         )
         params.validate()

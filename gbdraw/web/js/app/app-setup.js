@@ -804,6 +804,7 @@ export const createAppSetup = () => {
       losatProgram: drawing.losatProgram.value,
       blastpMode: drawing.losat.blastp?.mode,
       inferOrthogroups: drawing.losat.blastp?.collinearInferOrthogroups === true,
+      anchorMode: drawing.losat.blastp?.collinearAnchorMode,
       filters: {
         min_bitscore: drawing.adv.min_bitscore,
         evalue: drawing.adv.evalue,

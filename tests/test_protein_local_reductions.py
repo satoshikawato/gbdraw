@@ -200,7 +200,7 @@ def test_member_top_best_and_reciprocity_independent_oracle(ids, limit):
         assert_frame_equal(hits, before, check_exact=True)
 
 
-@pytest.mark.parametrize('mode', ['rbh', 'one_to_one', 'all'])
+@pytest.mark.parametrize('mode', ['rbh', 'all'])
 @pytest.mark.parametrize('missing', [False, True])
 @pytest.mark.parametrize('limit', [1, 5, None])
 def test_edge_caller_missing_direction_and_member_limit(mode, missing, limit):
@@ -361,7 +361,7 @@ def test_evidence_is_ranked_once_from_precomputed_ranks(scenario):
 @pytest.mark.parametrize('infer', [False, True])
 @pytest.mark.parametrize('limit', [1, 5, None])
 @pytest.mark.parametrize('mode', ['auto', 'cds', 'locus'])
-@pytest.mark.parametrize('anchor', ['rbh', 'one_to_one', 'all'])
+@pytest.mark.parametrize('anchor', ['rbh', 'all'])
 @pytest.mark.parametrize('scenario,reverse', [('sparse-2', False), ('dense-4', True), ('support-edges', False)])
 def test_complete_collinear_result_differential(scope, infer, limit, mode, anchor, scenario, reverse, baseline):
     from tests.prototypes import protein_s078

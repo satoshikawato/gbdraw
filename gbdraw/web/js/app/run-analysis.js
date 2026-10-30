@@ -31,6 +31,7 @@ import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadat
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
+import { readCollinearMergeOrientation } from '../services/losat-normalization.js';
 import {
   losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
 } from '../services/linear-sources.js';
@@ -811,7 +812,7 @@ const canReuseResolvedProteinArtifacts = ({
     && sameNumber(parameters.maxUnitGap ?? 0, active.maxUnitGap)
     && sameNumber(parameters.maxDiagonalDrift ?? 0, active.maxDiagonalDrift)
     && sameNumber(parameters.maxConflicts ?? 1, active.maxConflicts)
-    && String(parameters.mergeOrientation || 'either') === active.mergeOrientation
+    && readCollinearMergeOrientation(parameters.mergeOrientation).value === active.mergeOrientation
     && String(settings.collinearityUnitMode || 'auto') === active.unitMode
     && String(settings.collinearityAnchorMode || 'rbh') === active.anchorMode
     && (settings.collinearInferOrthogroups ?? true) === active.inferOrthogroups
@@ -3496,7 +3497,7 @@ export const createRunAnalysis = ({
           ? requireCurrentCollinearMergeOrientation(
               drawing.losat.blastp?.collinearMergeOrientation
             )
-          : 'either';
+          : 'strand';
         const collinearInferOrthogroups = requireCurrentCollinearInferOrthogroups(drawing.losat.blastp?.collinearInferOrthogroups);
         const collinearSearchScope = useCollinearBlastp
           ? requireCurrentCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope)
