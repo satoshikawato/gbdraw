@@ -252,7 +252,6 @@ export default Object.freeze({
   "Block ID": "區塊ID",
   "Block Stroke Color": "區塊筆畫顏色",
   "Block Stroke Width": "區塊筆畫寬度",
-  "Block e-value": "區塊E-value",
   "Block envelopes may include intergenic sequence and genes that are not anchors.": "區塊的涵蓋範圍可能包含基因間序列以及非錨點的基因。",
   "Block score": "區塊分數",
   "Block stroke color": "區塊筆畫顏色",

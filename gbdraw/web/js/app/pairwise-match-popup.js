@@ -1850,7 +1850,6 @@ const collinearDetailRows = (element, descriptor) => {
     addRow(rows, msg('Aligned length'), alignedLength === null ? '' : `${groupedInteger(alignedLength)} aa`);
   }
   addRow(rows, msg('Block score'), attr(element, 'data-collinearity-block-score'));
-  addRow(rows, msg('Block e-value'), attr(element, 'data-collinearity-block-evalue'));
   addRow(rows, msg('Anchor'), [
     attr(element, 'data-collinearity-anchor-index'),
     attr(element, 'data-collinearity-anchor-count')

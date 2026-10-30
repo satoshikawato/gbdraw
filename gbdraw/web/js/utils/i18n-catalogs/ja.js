@@ -252,7 +252,6 @@ export default Object.freeze({
   "Block ID": "ブロックID",
   "Block Stroke Color": "ブロックの線の色",
   "Block Stroke Width": "ブロックの線の幅",
-  "Block e-value": "ブロックのE-value",
   "Block envelopes may include intergenic sequence and genes that are not anchors.": "ブロックの範囲には、遺伝子間領域の配列や、アンカーではない遺伝子が含まれることがあります。",
   "Block score": "ブロックスコア",
   "Block stroke color": "ブロックの線の色",

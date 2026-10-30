@@ -2328,14 +2328,15 @@ _RECORDED_DERIVED_ENTRIES = {
     # one owner built the identity, key and pairs (OV-1063: semantics v2, the
     # write-only `orthogroups` member gone, the paralog-link limit in the
     # orthogroup block), and when stored results moved to the search frame
-    # (OV-1145: semantics v3).
+    # (OV-1145: semantics v3), and when Collinear blocks became longest chains
+    # and the block E-value column went (OV-2294..2296, OV-2300: semantics v4).
     "similarity_groups": (
-        "ab49e6402431c26299e66aaca22d7f6843b63dbd46c3f9af12f87033ea348768",
-        "36e6fa4e0ce0bb7e070fa2b2799e3818510edac628a6d16c1b99e95cbafebd14",
+        "6b1dfc2b33423552ff2f9b6210928bf22c640619a81c5fab117ab6a3d30c2a8f",
+        "92675b3ccb5fb991e5b6baaffe892c48aae067b611911fc297d502f55b75b8cc",
     ),
     "collinear": (
-        "4fcdd2219f1d0ecad06457bfb21995964b48d48232965edfafa5420093892e49",
-        "8eda1cb2048bfcd0048e4d4fdca44f89c09c636716373e0ff57bee1bd54757c4",
+        "1e1560a0f5df85959fd4d492e8a5c9d172079256147e1ade943731532abff47b",
+        "29eadeff0bd574574e12ada2005ada78b9008250aa0c802a40192113104e486c",
     ),
 }
 

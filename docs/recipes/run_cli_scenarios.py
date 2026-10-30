@@ -1146,7 +1146,8 @@ def _assert_hepatoplasmataceae_collinear(
         )
         for element in matches
     }
-    if len(matches) != 500 or observed_pairs != expected_pairs:
+    # 492 blocks since chaining joins runs split by a second anchor (OV-2294..2296).
+    if len(matches) != 492 or observed_pairs != expected_pairs:
         raise RecipeContractError("T-CLI-10 changed its adjacent Collinear evidence.")
     required_text = {
         "LOSATP Collinear blocks across Hepatoplasmataceae",

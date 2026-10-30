@@ -48,7 +48,6 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'data-collinearity-block-id',
     'data-collinearity-block-kind',
     'data-collinearity-orientation',
-    'data-collinearity-block-evalue',
     'data-collinearity-color-mode',
     'data-edge-kind',
     'data-group-kind',

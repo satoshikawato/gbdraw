@@ -252,7 +252,6 @@ export default Object.freeze({
   "Block ID": "รหัสบล็อก",
   "Block Stroke Color": "สีเส้นขอบของบล็อก",
   "Block Stroke Width": "ความหนาเส้นขอบของบล็อก",
-  "Block e-value": "E-value ของบล็อก",
   "Block envelopes may include intergenic sequence and genes that are not anchors.": "ช่วงครอบคลุมของบล็อกอาจรวมลำดับระหว่างยีน และยีนที่ไม่ใช่จุดยึด",
   "Block score": "คะแนนบล็อก",
   "Block stroke color": "สีเส้นขอบของบล็อก",

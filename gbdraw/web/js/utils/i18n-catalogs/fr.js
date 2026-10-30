@@ -252,7 +252,6 @@ export default Object.freeze({
   "Block ID": "ID du bloc",
   "Block Stroke Color": "Couleur du contour des blocs",
   "Block Stroke Width": "Épaisseur du contour des blocs",
-  "Block e-value": "E-value du bloc",
   "Block envelopes may include intergenic sequence and genes that are not anchors.": "L’enveloppe d’un bloc (la région qu’il couvre) peut inclure des séquences intergéniques et des gènes qui ne sont pas des ancres.",
   "Block score": "Score du bloc",
   "Block stroke color": "Couleur du contour des blocs",
