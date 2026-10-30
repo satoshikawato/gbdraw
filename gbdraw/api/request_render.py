@@ -2309,9 +2309,22 @@ def stored_protein_result_request(
                 stored,
                 orthogroups=metadata.orthogroups,
                 protein_comparisons=tuple(metadata.protein_comparisons or ()),
+                linear_comparisons=_stored_linear_comparisons(options, metadata),
             )
         ),
     )
+
+
+def _stored_linear_comparisons(
+    options: LinearDiagramOptions,
+    metadata: LinearDiagramMetadata,
+) -> tuple[LinearComparison, ...]:
+    """The explicit comparisons a stored request keeps: the given ones as
+    given, then the pairs the analysis drew (a row layout's adjacent-row
+    pairs, OV-2297), from ``metadata`` in the search frame."""
+
+    given = tuple(options.linear_comparisons or ())
+    return (*given, *tuple(metadata.linear_comparisons or ())[len(given):])
 
 
 def _search_frame_metadata(metadata: LinearDiagramMetadata) -> LinearDiagramMetadata:
@@ -2382,7 +2395,6 @@ def _resolve_similarity_alignment_reference(
     # given and stores the analysis rows and typed results, all in the
     # search frame (OV-399, OV-1145).
     planned = analysis_plan.request.options
-    given = tuple(planned.linear_comparisons or ())
     resolved = replace(
         request,
         records=records,
@@ -2394,7 +2406,7 @@ def _resolve_similarity_alignment_reference(
                 if planned.protein_comparisons is not None or metadata.protein_comparisons is None
                 else tuple(metadata.protein_comparisons)
             ),
-            linear_comparisons=(*given, *tuple(metadata.linear_comparisons or ())[len(given):]),
+            linear_comparisons=_stored_linear_comparisons(planned, metadata),
             orthogroups=metadata.orthogroups,
             collinearity_blocks=metadata.collinearity_result,
         ),

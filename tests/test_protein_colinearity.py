@@ -5288,3 +5288,39 @@ def test_self_hits_do_not_set_the_normalization_scale(monkeypatch: pytest.Monkey
     )
     assert set(between["record_pair_normalization_source"]) == {"fit"}
     assert between["normalized_score"].tolist() == pytest.approx([1.0] * 12)
+
+
+@pytest.mark.linear
+def test_a_within_record_fit_equals_the_fit_of_its_non_self_hits() -> None:
+    """OV-2299 (D-07 A): with enough non-self hits to fit, a within-record
+    table's model is the one its non-self hits alone give; the self hits
+    (the top rows of every length bin) do not move it."""
+
+    lengths = {f"W{index}": 60 + 10 * index for index in range(14)}
+    extraction = extract_cds_proteins([_proteins_record("w", lengths)])
+
+    def hit(query: str, subject: str, bitscore: float, evalue: float = 1e-30) -> dict[str, object]:
+        return _hit_row(
+            query, subject, alignment_length=min(lengths[query], lengths[subject]),
+            qend=lengths[query], send=lengths[subject], bitscore=bitscore, evalue=evalue,
+        )
+
+    proteins = list(lengths)
+    others = [
+        hit(query, subject, (1.2 + 0.05 * (index % 3)) * min(lengths[query], lengths[subject]))
+        for index, (query, subject) in enumerate(zip(proteins, proteins[1:]))
+    ]
+    selfs = [hit(protein, protein, 4.0 * length, evalue=0.0) for protein, length in lengths.items()]
+
+    def normalized(rows: list[dict[str, object]]) -> pd.DataFrame:
+        table = protein_colinearity_module._normalize_directional_hit_table(
+            pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS), extraction.protein_map, min_coverage=0.0
+        )
+        return table.loc[table["query"] != table["subject"]].sort_values(["query", "subject"])
+
+    with_self = normalized([*others, *selfs])
+    alone = normalized(others)
+    assert len(alone) == 13
+    assert set(with_self["record_pair_normalization_source"]) == {"fit"}
+    assert set(alone["record_pair_normalization_source"]) == {"fit"}
+    assert with_self["normalized_score"].tolist() == alone["normalized_score"].tolist()
