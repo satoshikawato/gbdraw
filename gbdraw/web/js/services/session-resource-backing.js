@@ -338,6 +338,29 @@ export const webFileBindingFaults = (webFiles, resources = {}) => {
 };
 
 /**
+ * The inventory with no Depth file that names one of `resourceIds`: each keeps
+ * its place in its list as an empty position.
+ * @param {WebFileBindings} bindings
+ * @param {ReadonlySet<string>} resourceIds
+ * @returns {WebFileBindings}
+ */
+export const webFileBindingsWithoutDepth = (bindings, resourceIds) => {
+  /** @param {unknown} value @returns {unknown} */
+  const kept = (value) => {
+    if (Array.isArray(value)) return value.map(kept);
+    return resourceIds.has(String(/** @type {{ resourceId?: unknown } | null} */ (value)?.resourceId)) ? null : value;
+  };
+  return {
+    ...bindings,
+    ...(Object.hasOwn(bindings, 'c_depth') ? { c_depth: kept(bindings.c_depth) } : {}),
+    ...(Array.isArray(bindings.linearSeqs) ? {
+      linearSeqs: bindings.linearSeqs.map((/** @type {WebFileBindingRow} */ row) => (
+        row && Object.hasOwn(row, 'depth') ? { ...row, depth: kept(row.depth) } : row))
+    } : {})
+  };
+};
+
+/**
  * @param {{ bindings?: unknown } | null | undefined} webFiles
  * @param {{ readonly [resourceId: string]: RawSessionResourceDescriptor | null | undefined } | null} [resources]
  * @returns {WebFileBindings | undefined} the `webFiles.bindings` object, checked

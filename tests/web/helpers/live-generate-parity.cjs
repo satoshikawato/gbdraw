@@ -25,7 +25,9 @@ const showResult = async (page, index) => {
 // - labels[renderedId]: the text of each drawn label;
 // - leaders[renderedId]: the drawn leader segments of the label;
 // - legend: the drawn legend rows in reading order (caption, swatch colors);
-// - texts: every other drawn text (ticks, definitions, titles).
+// - texts: every other drawn text (ticks, definitions, titles);
+// - overlays: the slot ids of the drawn annotation tracks, which a Result may
+//   draw with no feature, label, legend row, or text of their own.
 // An element is drawn unless it or an ancestor has display none, or its
 // nearest visibility setting is hidden or collapse; a hidden element and an
 // absent one read the same. Positions, sizes, and paths are left out.
@@ -126,6 +128,9 @@ const semanticSnapshot = (page) => page.evaluate(() => {
     .filter((element) => drawn(element) && !element.closest('[data-label-feature-id], g[data-legend-key]'))
     .map(textOf).filter(Boolean).sort();
 
+  const overlays = sortedUnique([...root.querySelectorAll('[data-gbdraw-slot-renderer="annotations"]')]
+    .filter(drawn).map((element) => element.getAttribute('data-gbdraw-slot-id')));
+
   return {
     context: {
       mode: app.mode,
@@ -137,12 +142,13 @@ const semanticSnapshot = (page) => page.evaluate(() => {
     labels,
     leaders,
     legend,
-    texts
+    texts,
+    overlays
   };
 });
 
 // One difference per ID and attribute: { kind, id, attribute, live, generated }.
-// kind is feature, label, leader, legend, or text; a missing item reads as
+// kind is feature, label, leader, legend, text, or overlay; a missing item reads as
 // attribute 'drawn' (true/false).
 const diffSemanticSnapshots = (live, generated) => {
   const differences = [];
@@ -197,6 +203,11 @@ const diffSemanticSnapshots = (live, generated) => {
     differences.push({
       kind: 'text', id: '*', attribute: 'drawn', live: missing(live.texts, generated.texts), generated: missing(generated.texts, live.texts)
     });
+  }
+  for (const id of [...new Set([...live.overlays, ...generated.overlays])].sort()) {
+    if (live.overlays.includes(id) !== generated.overlays.includes(id)) {
+      differences.push({ kind: 'overlay', id, attribute: 'drawn', live: live.overlays.includes(id), generated: generated.overlays.includes(id) });
+    }
   }
   return differences;
 };

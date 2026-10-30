@@ -560,6 +560,38 @@ test('N7: after a Load a live Depth hide completes the kept parts, and its Undo 
   }
 });
 
+// A Session a Save wrote names its Depth files in `webFiles.bindings`. The
+// binding check runs on every candidate, so a hide that drops the resources
+// and keeps their bindings is refused.
+test('N7b: after a Load of a Session with Web file bindings a live Depth hide clears the Depth bindings, and its Undo restores them', async () => {
+  const { webFileBindingFaults } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
+  for (const [mode, setup] of [['circular', circularStack], ['linear', linearStack]]) {
+    const drawing = setup({ depthSeries: 1 });
+    const generated = generate(mode);
+    const loaded = structuredClone(generated);
+    Object.keys(loaded.resources).forEach((id) => setResourcePayloadOwner(loaded.resources[id], getResourcePayloadOwner(generated.resources[id])));
+    const ids = Object.keys(loaded.resources);
+    const depthId = ids.find((id) => loaded.resources[id].kind === 'depth-track-file');
+    const otherId = ids.find((id) => loaded.resources[id].kind !== 'depth-track-file');
+    const leaf = (id) => ({ resourceId: id, name: `${id}.tsv`, type: 'text/plain', lastModified: 0 });
+    const bindings = { schema: 2, c_gb: leaf(otherId), c_gff: null, c_fasta: null,
+      c_depth: mode === 'circular' ? [[leaf(depthId)]] : null, linearSeqs: mode === 'linear' ? [{ uid: 'r1', gb: leaf(otherId), depth: [leaf(depthId)] }] : [] };
+    loaded.webFiles = { ...loaded.webFiles, bindings };
+    assert.deepEqual(webFileBindingFaults(loaded.webFiles, loaded.resources), [], `${mode}: the fixture is valid`);
+    set(drawing.form, 'show_depth', false);
+    rowOf(drawing, mode, (row) => row.renderer === 'depth').enabled = false;
+    const hidden = live(loaded, mode);
+    assert.deepEqual(webFileBindingFaults(hidden.webFiles, hidden.resources), [], `${mode}: no binding names a resource the hide dropped`);
+    assert.equal(hidden.webFiles.bindings.c_gb.resourceId, otherId, `${mode}: the other bindings stay`);
+    rowOf(drawing, mode, (row) => row.renderer === 'depth').enabled = true;
+    set(drawing.form, 'show_depth', true);
+    const shown = live(hidden, mode);
+    assert.deepEqual(shown.webFiles.bindings, bindings, `${mode}: the show restores the bindings`);
+    assert.deepEqual(webFileBindingFaults(shown.webFiles, shown.resources), []);
+    undoAll();
+  }
+});
+
 test('N17: the shortcut plan with Depth forced, then filtered, equals Generate with Show Depth off', () => {
   for (const trackType of ['tuckin', 'middle', 'spreadout']) {
     for (const series of [1, 2]) {
@@ -1180,4 +1212,53 @@ test('L3 (review 4): the rows a hide reaches come from Generate\'s Overlay check
   ];
   assert.deepEqual(validation.overlayRowsReaching(rows, 'circular', new Set(['gc_content'])), [2]);
   assert.deepEqual(validation.overlayRowsReaching(rows, 'linear', new Set(['features'])), [2]);
+});
+
+// A row that left with the slot it names (`overlayReferenceIssues`) returns
+// with it: Undo of the choice restores the draft, and the live apply gives the
+// committed request back what it held. A row
+// whose own switch stays off stays out, and one the draft draws while the slot
+// it names stays hidden does not refuse the apply that holds it out.
+test('A row that left with its anchor returns when the draft draws both again', () => {
+  for (const [mode, setup, key] of [['circular', circularStack, 'circularTrackSlots'], ['linear', linearStack, 'linearTrackSlots']]) {
+    for (const loaded of [false, true]) {
+      const label = `${mode} ${loaded ? 'after a Load' : 'after a Generate'}`;
+      const drawing = setup({ depthSeries: 1 });
+      withTintSet(drawing);
+      const stack = mode === 'circular' ? 'circular_track_slots' : 'linear_track_slots';
+      const depthRow = rowOf(drawing, mode, (row) => row.renderer === 'depth');
+      set(drawing.adv, stack, [...drawing.adv[stack], reachRow('mark', depthRow.id)]);
+      const generated = generate(mode);
+      const committed = loaded ? loadOf(generated) : generated;
+      const slotsOf = (session) => session.renderRequest.diagramOptions.tracks[key];
+      const ids = (session) => slotsOf(session).map((slot) => slot.id);
+      assert.ok(ids(committed).includes('mark'), `${label}: drawn`);
+      const mark = rowOf(drawing, mode, (row) => row.id === 'mark');
+      // The choice: both rows off, as one step.
+      depthRow.enabled = false;
+      mark.enabled = false;
+      const hidden = live(committed, mode);
+      assert.ok(!ids(hidden).includes('mark') && !ids(hidden).includes(depthRow.id), `${label}: both leave: ${ids(hidden)}`);
+      // Undo: the draft is back.
+      depthRow.enabled = true;
+      mark.enabled = true;
+      const undone = live(hidden, mode);
+      assert.deepEqual(slotsOf(undone), slotsOf(committed), `${label}: Undo gives the rows back`);
+      assert.deepEqual(undone.renderRequest.diagramOptions.tracks, committed.renderRequest.diagramOptions.tracks, `${label}: and the axis`);
+      assert.deepEqual(undone.renderRequest.diagramOptions.depthTracks, committed.renderRequest.diagramOptions.depthTracks, `${label}: Depth`);
+      assert.deepEqual(project(undone, mode), [], `${label}: nothing is left to apply`);
+      // Redo.
+      depthRow.enabled = false;
+      mark.enabled = false;
+      assert.deepEqual(slotsOf(live(undone, mode)), slotsOf(hidden), `${label}: Redo removes them again`);
+      // The anchor back, the row's own switch off: Generate does not draw it.
+      depthRow.enabled = true;
+      assert.deepEqual(ids(live(hidden, mode)), ids(committed).filter((id) => id !== 'mark'), `${label}: its own switch keeps it out`);
+      // The row on, its anchor off: it stays out, and the apply is not refused.
+      depthRow.enabled = false;
+      mark.enabled = true;
+      assert.ok(!ids(live(hidden, mode)).includes('mark'), `${label}: it does not return without its anchor`);
+      undoAll();
+    }
+  }
 });

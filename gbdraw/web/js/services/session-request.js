@@ -200,7 +200,8 @@ import {
   adoptCurrentSessionResources,
   createCombinedSessionResourceFileView,
   createSessionResourceFileView,
-  validateWebFileBindings
+  validateWebFileBindings,
+  webFileBindingsWithoutDepth
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
@@ -1945,7 +1946,8 @@ const committedTrackParts = (request, plan, resources, webFiles) => {
     depth: Array.isArray(depthTracks) ? {
       depthTracks,
       resources: Object.fromEntries(ids.map((id) => [id, /** @type {RawSessionResourceDescriptor} */ ((resources || {})[id])])),
-      originalNames: Object.fromEntries(ids.filter((id) => names[id]).map((id) => [id, names[id]]))
+      originalNames: Object.fromEntries(ids.filter((id) => names[id]).map((id) => [id, names[id]])),
+      ...(webFiles?.bindings ? { bindings: /** @type {WebFileBindings} */ (webFiles.bindings) } : {})
     } : null,
     waiting: new Set()
   };
@@ -2086,6 +2088,11 @@ const trackPlanProjection = (request, drawing, context) => {
   /** @param {'content' | 'skew' | 'depth'} kind @param {string | null} slotId @param {string | null} slotNt */
   const hidden = (kind, slotId, slotNt) => drawnTrackHidden({ slotId, kind, nt: slotNt }, request, judged);
   const waiting = new Set(kept?.waiting || []);
+  const draftRows = /** @type {readonly unknown[]} */ (stackOn && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
+  /** @param {string} id The draft row that draws this slot, by id; -1 when none does. */
+  const drawnDraftRow = (id) => draftRows.findIndex((row) => trackSlotRowEnabled(row) && String(/** @type {{ id?: unknown }} */ (row).id) === id);
+  /** @type {Set<OverlayCheckRow>} */
+  const returning = new Set();
   /** @type {TrackSlotEntry[] | null} */
   let slots = null;
   /** @type {number | null} */
@@ -2098,11 +2105,18 @@ const trackPlanProjection = (request, drawing, context) => {
       const kind = trackKindOf(kept_.renderer);
       const inCommitted = committedIds.has(kept_.id) && !baseIsOther;
       const committedSlot = inCommitted ? (committedSlots || []).find((slot) => slot.id === kept_.id) : undefined;
-      // A features, ticks or spacer row stays as the committed stack has it; a
-      // stack the committed request does not draw (Use custom stack turned on
-      // again, or the other kept plan) returns whole from the kept parts.
+      // A features, ticks, spacer or Overlay row stays as the committed stack
+      // has it; a stack the committed request does not draw (Use custom stack
+      // turned on again, or the other kept plan) returns whole from the kept
+      // parts. A row a live apply took out with the slot it names (the check
+      // below) returns from them when the draft draws it again (an Undo of
+      // that choice), unless the slot it names stays out.
       if (!kind) {
         if (inCommitted || baseIsOther || !committedSlots) present.push(committedSlot ?? kept_);
+        else if (kept && !hidesOnly && (!stackOn || drawnDraftRow(kept_.id) >= 0)) {
+          present.push(kept_);
+          returning.add(kept_.read);
+        }
         continue;
       }
       const slotNt = kind === 'depth' ? null : normalizeNt(kept_.nt, nt);
@@ -2134,10 +2148,8 @@ const trackPlanProjection = (request, drawing, context) => {
     // the draft does not draw that row either (`trackSlotRowEnabled`), and
     // one the draft draws refuses the apply with the issue Generate gives
     // that draft row.
-    const draftRows = /** @type {readonly unknown[]} */ (stackOn && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
-    const issues = overlayReferenceIssues(present.map((slot) => slot.read), request.mode, (read) => draftRows.findIndex((row) => (
-      trackSlotRowEnabled(row) && String(/** @type {{ id?: unknown }} */ (row).id) === String(read.id))));
-    const refused = issues.filter(({ issue }) => issue.rowIndex >= 0).map(({ issue }) => issue);
+    const issues = overlayReferenceIssues(present.map((slot) => slot.read), request.mode, (read) => drawnDraftRow(String(read.id)));
+    const refused = issues.filter(({ issue, row }) => issue.rowIndex >= 0 && !returning.has(row)).map(({ issue }) => issue);
     if (refused.length > 0) return { ...TRACK_PLAN_WAITS, refused: new CustomTrackPlanValidationError(refused) };
     const leaving = new Set(issues.map(({ row }) => row));
     present.splice(0, present.length, ...present.filter((slot) => !leaving.has(slot.read)));
@@ -2162,13 +2174,18 @@ const trackPlanProjection = (request, drawing, context) => {
     Object.entries(kept.depth.resources).forEach(([id, descriptor]) => depthWrites.push([[LIVE_RESOURCES_ROOT, id], descriptor]));
     Object.assign(names, kept.depth.originalNames);
     depthWrites.push([[LIVE_WEB_FILES_ROOT, 'resourceOriginalNames'], names]);
+    if (kept.depth.bindings) depthWrites.push([[LIVE_WEB_FILES_ROOT, 'bindings'], kept.depth.bindings]);
   } else if (!depthPresent && committedDepth) {
     depthWrites.push([['diagramOptions', 'depthTracks'], undefined]);
-    Object.keys(committedResources).filter((id) => committedResources[id]?.kind === 'depth-track-file').forEach((id) => {
+    const dropped = Object.keys(committedResources).filter((id) => committedResources[id]?.kind === 'depth-track-file');
+    dropped.forEach((id) => {
       depthWrites.push([[LIVE_RESOURCES_ROOT, id], undefined]);
       delete names[id];
     });
     depthWrites.push([[LIVE_WEB_FILES_ROOT, 'resourceOriginalNames'], Object.keys(names).length > 0 ? names : undefined]);
+    // A Session's Web input inventory names those files too; the candidate's binding check reads it.
+    const bindings = /** @type {WebFileBindings | undefined} */ (webFiles?.bindings);
+    if (bindings) depthWrites.push([[LIVE_WEB_FILES_ROOT, 'bindings'], webFileBindingsWithoutDepth(bindings, new Set(dropped))]);
   }
   // A request without a flag (a CLI Session without overrides) draws the
   // mode's track default, as Load reads it; a flag equal to it creates nothing.
@@ -3963,10 +3980,13 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
  */
 /**
  * The Depth parts of a Generate: its series, their resources (the descriptors,
- * by reference, so each keeps its File) and original names.
+ * by reference, so each keeps its File) and original names. `bindings` is the
+ * loaded Web input inventory (`webFiles.bindings`): only a Session's committed
+ * Web file record has one, and a Generate's has none.
  * @typedef {{ readonly depthTracks: readonly Record<string, unknown>[],
  *   readonly resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
- *   readonly originalNames: Readonly<Record<string, string>> }} KeptDepth
+ *   readonly originalNames: Readonly<Record<string, string>>,
+ *   readonly bindings?: WebFileBindings }} KeptDepth
  */
 /**
  * @typedef {object} KeptTrackParts
@@ -7863,7 +7883,8 @@ export const projectCommittedEditorIntent = ({
   const candidate = {
     ...committed,
     renderRequest: cloneCanonicalJsonValue(request),
-    resources: { ...applyLiveResourceWrites(committed.resources, liveSettingWrites) }
+    resources: { ...applyLiveResourceWrites(committed.resources, liveSettingWrites) },
+    webFiles: applyLiveWebFileWrites(committed.webFiles, liveSettingWrites)
   };
   applyLiveSettingWrites(candidate.renderRequest, liveSettingWrites);
   carryKeptTrackParts(request, candidate.renderRequest, liveSettingWrites);
