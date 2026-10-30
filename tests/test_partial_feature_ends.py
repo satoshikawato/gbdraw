@@ -176,7 +176,8 @@ def _circular_block(fill: str, stroke: str) -> Block:
     def is_head(position: float) -> bool:
         return head is not None and abs(position - head) < _BP_TOLERANCE
 
-    assert all(is_stroked(p) for p in stroked)
+    # Radial strokes lie only on the block's own edges, never at the arrowhead.
+    assert all(min(abs(p - low), abs(p - high)) < _BP_TOLERANCE for p in stroked)
     assert not any(is_head(p) for p in stroked)
     return Block(
         open_low=not is_stroked(low) and not is_head(low),
