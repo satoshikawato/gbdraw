@@ -7,7 +7,6 @@ const { openApp } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { load, seeds } = require('./helpers/mode-transition.cjs');
 
-const TOGGLE_NOTE = 'Hiding or showing a drawn track applies at once; a new track and the layout apply on Generate';
 
 const openLayout = async (page) => {
   const details = page.locator('[data-setting="layout"] > details');
@@ -15,7 +14,7 @@ const openLayout = async (page) => {
   return page.locator('[data-setting="layout"]');
 };
 
-test('the Layout card says its settings apply on Generate and the track toggles say what applies at once (OV-1036)', async ({ page }) => {
+test('the Layout card says its settings apply on Generate, the track toggles are live, and the stack names its live switches (OV-1036, PD-OI-104 rev 5)', async ({ page }) => {
   await openApp(page);
   for (const [mode, toggles] of [
     ['linear', ['Show GC Content', 'Show GC Skew', 'Show Depth']],
@@ -26,9 +25,11 @@ test('the Layout card says its settings apply on Generate and the track toggles 
     await expect(layout.locator(':scope > details > [data-applies-on-generate="layout"]')).toHaveText('Applies on Generate');
     const visibility = layout.locator('[data-setting="track-visibility"]');
     await expect(visibility).toHaveCount(1);
-    await expect(visibility.locator('[data-applies-on-generate="track-visibility"]')).toHaveText(TOGGLE_NOTE);
+    await expect(visibility.locator('.apply-note').first()).toHaveText('Live edit');
+    await expect(visibility.locator('[data-applies-on-generate="track-visibility"]')).toHaveCount(0);
     await expect(visibility.locator('label')).toHaveText(toggles.map((name) => new RegExp(name)));
-    await expect(layout.locator('[data-setting="track-slots"] [data-applies-on-generate="track-slots"]')).toHaveText('Applies on Generate');
+    await expect(layout.locator('[data-setting="track-slots"] [data-applies-on-generate="track-slots"]').first())
+      .toHaveText(/Applies on Generate, except turning a GC content, GC skew or Depth row on or off/);
   }
 });
 

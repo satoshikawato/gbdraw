@@ -553,6 +553,46 @@ test('a rule row in the color a palette row shows after a palette switch is no L
     (error) => error.code === 'LEGEND_ROW_CONFLICT');
 });
 
+// OV-2265: a rule row with a Legend color of its own (a type row's Legend
+// color that a Legend name kept on the row it re-keyed) shows that color, as
+// Generate draws it. A commit that leaves the row's rules alone keeps the row
+// and its color; a commit that recolors the row's rule recolors the row and
+// retires that color (OV-61). Neither is a Legend row conflict (OV-644).
+const ownColorRow = () => {
+  const s = setup();
+  const { legend } = paletteSwitched(s);
+  const trna = { feat: 'CDS', qual: 'gene', val: '^a$', color: '#c83366', cap: 'tRNA' };
+  const group = { feat: 'CDS', qual: 'gene', val: '^b$', color: '#d3d3d3', cap: 'Walk group' };
+  s.state.manualSpecificRules.push(trna, group);
+  s.state.svgContainer = mounted([['tRNA', '#c83366'], ['Walk group', '#123456']]);
+  s.state.legendColorOverrides['Walk group'] = '#123456';
+  s.state.legendEntries.value = [
+    { caption: 'tRNA', originalCaption: 'tRNA', color: '#c83366', featureIds: [] },
+    { caption: 'Walk group', originalCaption: 'Walk group', color: '#123456', featureIds: [] }
+  ];
+  /** @type {{ diff: Record<string, { caption: string, color: string }[]> } | null} */
+  let prepared = null;
+  // The Legend owner's preparation, on the table and rows before the transition.
+  s.setLegendPreparation(async (intents) => { prepared = await legend.prepareFileLegendEntries(intents, { previousFileIntents: s.previousIntents() }); });
+  /** @param {string} cap @param {string} color */
+  const recolor = (cap, color) => s.actions.commitSpecificRules((current, revise) => current.map((rule) => (rule.cap === cap ? revise(rule, { color }) : rule)));
+  const rows = (kind) => prepared.diff[kind].map(({ caption, color }) => [caption, color]);
+  return { s, recolor, rows };
+};
+test('a commit that leaves a rule row with a Legend color of its own keeps the row in that color (OV-2265)', async () => {
+  const { s, recolor, rows } = ownColorRow();
+  assert.equal(await recolor('tRNA', '#2a9d8f'), true);
+  assert.deepEqual(rows('update'), [['tRNA', '#2a9d8f']]);
+  assert.deepEqual(rows('unchanged'), [['Walk group', '#123456']]);
+  assert.equal(s.state.legendColorOverrides['Walk group'], '#123456', 'the row keeps its Legend color');
+});
+test('a commit that recolors the rule of a row with a Legend color of its own recolors the row (OV-2265, OV-61)', async () => {
+  const { s, recolor, rows } = ownColorRow();
+  assert.equal(await recolor('Walk group', '#ff0000'), true);
+  assert.deepEqual(rows('update'), [['Walk group', '#ff0000']]);
+  assert.equal(Object.hasOwn(s.state.legendColorOverrides, 'Walk group'), false, 'the recolored rule retires the Legend color');
+});
+
 // PD-OI-063: Restore gives a returning row the color Generate gives it; for a
 // palette row, the palette's after a switch, not the swatch it recorded.
 test('Restore gives a deleted palette row the palette color it shows after a palette switch', () => {

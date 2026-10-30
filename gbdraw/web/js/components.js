@@ -323,14 +323,15 @@ export const SettingsSectionTitle = {
 // `data-applies-on-generate="<key>"`, "Live edit" for a live block inside a
 // Generate scope, or the row's own qualified note as a hint line. A live
 // setting row the shown Result cannot draw says "Applies on Generate"
-// (the injected `SETTING_NOTE_APPLIES` predicate of the committed request).
-// An `item` (an annotation item, a Linear row) states that one item's value.
+// (the injected `SETTING_NOTE_APPLIES` predicate of the committed request,
+// made once per render). An `item` (an annotation item, a Linear row) states
+// that one item's value.
 export const SettingNote = {
   props: { setting: { type: String, required: true }, item: { type: Object, default: null } },
   /** @param {{ setting: SettingApplicationId, item: LiveSettingItem | null }} props */
   setup: (props) => {
-    const applies = /** @type {(requestPath: string, item: LiveSettingItem | null) => boolean} */ (inject(SETTING_NOTE_APPLIES, () => true));
-    return { note: computed(() => settingApplicationNote(props.setting, (requestPath) => applies(requestPath, props.item))) };
+    const appliesFor = /** @type {(item: LiveSettingItem | null) => (requestPath: string) => boolean} */ (inject(SETTING_NOTE_APPLIES, () => () => true));
+    return { note: computed(() => settingApplicationNote(props.setting, appliesFor(props.item))) };
   },
   template: `<span v-if="note.text" :class="note.qualified ? 'ui-hint block' : 'apply-note'"
     :data-applies-on-generate="note.application === 'generate' ? setting : null"><i v-if="note.application === 'generate'"

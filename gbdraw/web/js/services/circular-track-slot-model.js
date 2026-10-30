@@ -10,6 +10,7 @@ import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptional
 import { isUnsetValue, noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
+import { ownEntry } from '../utils/own-entry.js';
 
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
@@ -1133,3 +1134,100 @@ export const buildCircularTrackSlotPayload = (
 };
 
 export { SUPPORTED_RENDERERS as CIRCULAR_TRACK_RENDERERS };
+
+// Hide GC Content / Hide GC Skew (R10: the suppress controls go through
+// `applyCircularSuppressControlsToSlots`). The slot editor, Generate's
+// placement and the live track projection read them here.
+export const GLOBAL_SUPPRESS_PARAM = '_suppressed_by_global';
+/** @type {Record<string, string>} */
+export const SUPPRESS_RENDERER_BY_KEY = {
+  gc_content: 'dinucleotide_content',
+  gc_skew: 'dinucleotide_skew'
+};
+/** @type {Record<string, string>} */
+export const SUPPRESS_KEY_BY_RENDERER = {
+  dinucleotide_content: 'gc_content',
+  dinucleotide_skew: 'gc_skew'
+};
+/** @type {Record<string, string>} */
+export const SUPPRESS_FORM_KEY_BY_RENDERER = {
+  dinucleotide_content: 'suppress_gc',
+  dinucleotide_skew: 'suppress_skew'
+};
+/** @param {unknown} renderer @param {Record<string, unknown> | null | undefined} [form] */
+export const isCircularTrackRendererSuppressedByForm = (renderer, form = {}) => {
+  const normalizedRenderer = String(renderer || '').trim();
+  const formKey = ownEntry(SUPPRESS_FORM_KEY_BY_RENDERER, normalizedRenderer);
+  return Boolean(formKey && form?.[formKey]);
+};
+
+// Hide GC Content / Hide GC Skew reach the rows the simple control draws: the
+// rows of the drawing's dinucleotide `nt` (TK-09). An AT skew row is not hidden.
+/**
+ * @param {{ params?: { nt?: unknown, dinucleotide?: unknown } | null } | null | undefined} slot
+ * @param {unknown} nt
+ */
+export const slotUsesDrawingDinucleotide = (slot, nt) => {
+  const drawingNt = normalizeNt(nt);
+  return normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, drawingNt) === drawingNt;
+};
+
+/**
+ * @param {{ renderer?: unknown, params?: { nt?: unknown, dinucleotide?: unknown } | null } | null | undefined} slot
+ * @param {Record<string, unknown> | null | undefined} [form]
+ * @param {unknown} [nt]
+ */
+export const circularTrackSlotHiddenBySuppressForm = (slot, form = {}, nt = 'GC') =>
+  isCircularTrackRendererSuppressedByForm(slot?.renderer, form) && slotUsesDrawingDinucleotide(slot, nt);
+
+// Hide GC Content / Hide GC Skew own the visibility of their rows. A hidden
+// renderer disables its enabled rows and marks them; once the form no longer
+// hides it, the marked rows are enabled again. Rows the user disabled carry no
+// mark and stay disabled. The projection depends only on the rows, the form,
+// and the drawing's dinucleotide.
+/**
+ * @param {unknown} slots
+ * @param {Record<string, unknown> | null | undefined} [form]
+ * @param {unknown} [nt]
+ */
+export const applyCircularSuppressControlsToSlots = (slots, form = {}, nt = 'GC') => (
+  (Array.isArray(slots) ? slots : []).map((slot) => {
+    if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return slot;
+    const token = ownEntry(SUPPRESS_KEY_BY_RENDERER, String(slot.renderer || '').trim());
+    if (!token) return slot;
+    const params = cloneParams(slot.params);
+    if (circularTrackSlotHiddenBySuppressForm(slot, form, nt)) {
+      if (slot.enabled === false) return slot;
+      params[GLOBAL_SUPPRESS_PARAM] = token;
+      return { ...slot, enabled: false, params };
+    }
+    if (params[GLOBAL_SUPPRESS_PARAM] !== token) return slot;
+    delete params[GLOBAL_SUPPRESS_PARAM];
+    return { ...slot, enabled: true, params };
+  })
+);
+
+/**
+ * Generate's placement of a Circular custom track stack, as a new list: the
+ * rows placed around one Axis index (`placeCircularTrackStack`, OV-1263), the
+ * Hide GC Content and Hide GC Skew marks (`applyCircularSuppressControlsToSlots`),
+ * and each enabled Depth row without a series its ordinal among the enabled
+ * Depth rows. Generate writes the result into the draft (run-analysis.js);
+ * the kept track parts place a stack the last Generate did not draw with it.
+ * @param {{ slots: unknown, nt: unknown, trackType: unknown, axisIndex: unknown, form: Record<string, unknown> }} input
+ * @returns {{ slots: CircularTrackSlot[], axisIndex: number }}
+ */
+export const placeCircularStackForGenerate = ({ slots, nt, trackType, axisIndex, form }) => {
+  const list = Array.isArray(slots) ? slots : [];
+  const placed = placeCircularTrackStack(list, /** @type {string} */ (nt), /** @type {string} */ (trackType),
+    clampCircularTrackAxisIndex(axisIndex, list.length));
+  const placedSlots = /** @type {CircularTrackSlot[]} */ (applyCircularSuppressControlsToSlots(placed.slots, form, nt));
+  let ordinal = 0;
+  placedSlots.forEach((slot) => {
+    if (!slot || typeof slot !== 'object' || slot.enabled === false || String(slot.renderer || '') !== 'depth') return;
+    const parsed = Number(slot.params?.track_index);
+    if (!slot.params || !Number.isInteger(parsed) || parsed < 0) slot.params = { ...(slot.params || {}), track_index: ordinal };
+    ordinal += 1;
+  });
+  return { slots: placedSlots, axisIndex: placed.axisIndex };
+};

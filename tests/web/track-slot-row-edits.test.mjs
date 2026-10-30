@@ -481,8 +481,9 @@ test('circular: an invalid Depth track index stays visible with a field error an
 // the Hide GC projection, so their edits run it; the editor state equals what
 // Generate projects (run-analysis applies the same projection to the request).
 test('circular: Dinucleotide and row dinucleotide edits re-run the Hide GC Skew projection', async () => {
-  const { applyCircularSuppressControlsToSlots } = await import(pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js')));
-  const { applyCircularTrackOrderPlacements } = await import(pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js')));
+  const { applyCircularSuppressControlsToSlots, applyCircularTrackOrderPlacements } = await import(
+    pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js'))
+  );
   {
     const editor = MODES.circular(ROWS.circular());
     const { state } = editor;

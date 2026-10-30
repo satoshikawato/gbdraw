@@ -10,6 +10,11 @@
  */
 /** @typedef {EntryRecord & { caption: string, originalCaption: string }} ListedEntry A row a Result lists, under its caption and its key. */
 /**
+ * A live redraw's Legend inventory rule: the rows of the inventory it keeps though it stops drawing them
+ * (`liveRedrawLegend`, read when the redraw is requested).
+ * @typedef {{ readonly keep: readonly string[] }} LiveRedrawLegend
+ */
+/**
  * Where a rule commit puts a row it splits off: right after the row of key
  * `after` (D-29), or right before the row of key `before` (OV-2194).
  * @typedef {{ caption: PythonLegendKey, after: PythonLegendKey }} LegendRowPlacement
@@ -198,6 +203,11 @@ export const createLegendEntryActions = ({
   const inventoryByResult = new Map();
   /** @type {Set<string>} */
   const replayedInventoryResults = new Set();
+  // The rows a live redraw stopped drawing (a track it hides), kept for each
+  // Result it drew while another was displayed and that has no inventory yet:
+  // that Result keeps them when it is first displayed, as the displayed one did.
+  /** @type {Map<string, string[]>} */
+  const undrawnByResult = new Map();
 
   // The names the displayed Result shows for its Legend rows, by each row's
   // key: read when the rows are listed and after the executor named them. A
@@ -701,11 +711,17 @@ export const createLegendEntryActions = ({
   // order. Deleted entries keep their place.
   /**
    * @param {DrawingState} drawing
-   * @param {{ inventory: string[], orderEdited: boolean, generatedCaptions: Set<string>, rendered: string[] }} drawn
+   * @param {{ inventory: string[], orderEdited: boolean, generatedCaptions: Set<string>, rendered: string[],
+   *   keep: readonly string[] }} drawn
    */
-  const drawnInventory = (drawing, { inventory, orderEdited, generatedCaptions, rendered }) => {
+  const drawnInventory = (drawing, { inventory: previous, orderEdited, generatedCaptions, rendered, keep }) => {
+    const inventory = [...previous, ...keep.filter((caption) => !previous.includes(caption))];
     const retainedCaptions = new Set([
       ...generatedCaptions,
+      // A live redraw keeps the rows it stops drawing (a track it hides): an Undo
+      // lists them again, and the redraw that shows them again draws them as Python's
+      // rows, never as rows the editor adds.
+      ...keep,
       ...drawing.deletedLegendEntries.value.map(entry => entry.originalCaption || entry.caption)
     ]);
     const surviving = inventory.filter(caption => retainedCaptions.has(caption));
@@ -752,18 +768,26 @@ export const createLegendEntryActions = ({
    * @param {DrawingState} drawing
    * @param {SVGSVGElement} svg
    * @param {LegendRowListing} listing The rows the Result lists.
-   * @param {{ inventory: string[], orderEdited: boolean }} previous The inventory before
-   *   the draw, and whether the draw replayed an edited order (read when nothing is recorded).
+   * @param {{ inventory: string[], orderEdited: boolean, keep?: readonly string[] }} previous The inventory before
+   *   the draw, whether the draw replayed an edited order (read when nothing is recorded), and the rows it
+   *   keeps though the draw does not draw them.
    * @returns {string[]}
    */
-  const resultInventory = (drawing, svg, listing, { inventory, orderEdited }) => {
+  const resultInventory = (drawing, svg, listing, { inventory, orderEdited, keep = [] }) => {
     const recorded = recordedLegendOrder(svg);
     return drawnInventory(drawing, {
       inventory,
+      keep,
       orderEdited: !recorded && orderEdited,
       generatedCaptions: recorded ? new Set(recorded) : listing.generatedCaptions,
       rendered: recorded || renderedCaptions(listing)
     });
+  };
+  // The rows of an inventory a Result does not draw.
+  /** @param {readonly string[]} inventory @param {SVGSVGElement} svg @param {LegendRowListing} listing */
+  const undrawnRows = (inventory, svg, listing) => {
+    const drawn = new Set(recordedLegendOrder(svg) || listing.generatedCaptions);
+    return inventory.filter((caption) => !drawn.has(caption));
   };
 
   /** @param {string[]} liveResultIdentities */
@@ -774,6 +798,9 @@ export const createLegendEntryActions = ({
     });
     [...replayedInventoryResults].forEach((key) => {
       if (!live.has(key)) replayedInventoryResults.delete(key);
+    });
+    [...undrawnByResult.keys()].forEach((key) => {
+      if (!live.has(key)) undrawnByResult.delete(key);
     });
   };
 
@@ -795,11 +822,13 @@ export const createLegendEntryActions = ({
     const mounted = listLegendRows(svg, legendIntentOf(drawing));
     const inventory = mounted
       ? resultInventory(drawing, svg, mounted, {
-        inventory: originalLegendOrder.value, orderEdited: replayedInventoryResults.has(identity)
+        inventory: originalLegendOrder.value, orderEdited: replayedInventoryResults.has(identity),
+        keep: undrawnByResult.get(identity) || []
       })
       : [];
     inventoryByResult.set(identity, inventory);
     replayedInventoryResults.delete(identity);
+    undrawnByResult.delete(identity);
     return inventory;
   };
 
@@ -828,10 +857,29 @@ export const createLegendEntryActions = ({
     else inventoryByResult.set(identity, [...originalLegendOrder.value]);
   };
 
+  // The rows of the displayed Result's inventory that a live redraw requested
+  // now keeps though it stops drawing them: the rows of a drawn track the
+  // draft hides (`readHiddenTrackRows`, read while the request that drew them
+  // is committed), and those an earlier live redraw kept, which the Result
+  // does not draw. Any other row it stops drawing leaves the inventory, so a
+  // row the editor adds under that caption is the editor's (review M1).
+  /** @param {DrawingState} drawing @returns {LiveRedrawLegend} */
+  const liveRedrawLegend = (drawing) => {
+    const inventory = /** @type {string[]} */ (originalLegendOrder.value || []);
+    const hidden = new Set(readHiddenTrackRows(drawing));
+    const svg = svgContainer.value?.querySelector('svg');
+    const listing = svg ? listLegendRows(svg, legendIntentOf(drawing)) : null;
+    const undrawn = new Set(svg && listing ? undrawnRows(inventory, svg, listing) : []);
+    return { keep: inventory.filter((caption) => hidden.has(caption) || undrawn.has(caption)) };
+  };
+
   // The drawing's Legend list on the displayed Result (`listLegendRows`), and
   // after a draw the inventory and the dormant renames it leaves.
-  /** @param {{ replaceGeneratedInventory?: boolean, liveResultIdentities?: string[] }} [options] */
-  const extractLegendEntries = ({ replaceGeneratedInventory = false, liveResultIdentities = [] } = {}) => {
+  /**
+   * @param {{ replaceGeneratedInventory?: boolean, liveRedraw?: LiveRedrawLegend | null, liveResultIdentities?: string[] }} [options]
+   *   `liveRedraw`: the draw is a live redraw, which keeps these rows of the inventory though it stops drawing them.
+   */
+  const extractLegendEntries = ({ replaceGeneratedInventory = false, liveRedraw = null, liveResultIdentities = [] } = {}) => {
     const drawing = state.activeDrawing();
     readLegendRowNames();
     if (!svgContainer.value) {
@@ -871,7 +919,17 @@ export const createLegendEntryActions = ({
     if (replaceGeneratedInventory || originalLegendOrder.value.length === 0) {
       // Keep deletion intent; live editor extraction alone must not advance
       // the accepted generated inventory.
-      originalLegendOrder.value = resultInventory(drawing, svg, mounted, { inventory: originalLegendOrder.value, orderEdited });
+      const previous = originalLegendOrder.value;
+      originalLegendOrder.value = resultInventory(drawing, svg, mounted, {
+        inventory: previous, orderEdited, keep: liveRedraw ? liveRedraw.keep.filter((caption) => previous.includes(caption)) : []
+      });
+      if (identity && liveRedraw) {
+        // The other Results the redraw drew stop drawing the same rows.
+        const undrawn = undrawnRows(originalLegendOrder.value, svg, mounted);
+        liveResultIdentities.filter((key) => key !== identity && !inventoryByResult.has(key)).forEach((key) => {
+          undrawnByResult.set(key, [...new Set([...(undrawnByResult.get(key) || []), ...undrawn])]);
+        });
+      }
       if (identity) {
         // A draw that replays an edited order shows it on every Result.
         if (replaceGeneratedInventory && orderEdited) {
@@ -993,6 +1051,7 @@ export const createLegendEntryActions = ({
     legendEntryName,
     legendRowIsNamed,
     legendRowName,
+    liveRedrawLegend,
     moveLegendRecords,
     onLegendGeometryChanged,
     prepareFileLegendEntries,

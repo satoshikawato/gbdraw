@@ -75,8 +75,6 @@ import {
  * @property {ReturnType<typeof import('../services/feature-visibility.js').featureDrawnContext> | null} drawnContext
  *   `featureDrawnContext` of the drawing; read when `domains` has featureVisibility.
  * @property {RuleLegendRows | null} [ruleRows] The Legend rows a rule commit shows at once.
- * @property {readonly string[]} [hiddenTrackRows] The keys of the displayed Result's Legend rows whose drawn
- *   track the draft hides (Show Depth off): each leaves with its track (OV-1198, PD-OI-104).
  * @property {ReadonlyMap<PythonLegendKey, PythonLegendRow>} [pythonRows] Python's Legend rows of the
  *   displayed Result (`pythonLegendRows`), by which the draft allocates a rule's row (N-06).
  * @property {LegendRowContext['features']} [features] The features the displayed Result draws
@@ -794,12 +792,6 @@ const compilePlanBundle = ({
     if (ruleRows?.order) {
       addToResults(operationsByResult, allResultIndexes, 'legendOrder', { captions: Object.freeze([...ruleRows.order]) });
     }
-    // The row of a drawn track the draft hides leaves with the track; the
-    // recorded deletion returns the row once the track shows again. Generate
-    // compiles none: Python draws no row for a hidden track.
-    (livePreview?.hiddenTrackRows || []).forEach((caption) => {
-      if (!deletedCaptions.has(caption)) addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true });
-    });
   });
 
   // Category style preferences outlive the current generated entry projection.

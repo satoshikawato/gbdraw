@@ -8,7 +8,7 @@ const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { writeFile } = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { download } = require('./helpers/mode-transition.cjs');
+const { download, load } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { reveal, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
@@ -391,6 +391,8 @@ for (const [name, { mode, rows, groups, setup, edit }] of Object.entries(SLOT_ED
     };
     await expectRows('generated', true);
     await inHistoryStep(page, 'Edit track slot', edit);
+    // The hide is a live redraw from the kept track parts (PD-OI-104 rev 5): wait for it.
+    await settleLive(page);
     await expectRows('slot edit', false);
     // One Undo returns the track and its row; the parity Generate comes last, as it is a History step of its own.
     await history(page, 'undo');
@@ -1094,3 +1096,204 @@ for (const [shown, current] of [['circular', 'linear'], ['linear', 'circular']])
     });
   }
 }
+
+// PD-OI-104 rev 5 (the GT set): Show GC Content, Show GC Skew, Show Depth, Hide GC Content,
+// Hide GC Skew, a GC, skew or Depth row's switch, and Use custom stack apply live, also for a
+// track the Result does not draw yet, from the parts the last Generate built (D-199). Each case
+// ends with the live Result equal to the next Generate (R3).
+const depthFileOf = (text) => new File([text], 'depth.tsv', { type: 'text/tab-separated-values' });
+const withTwoDepthSeries = (mode) => async (page) => page.evaluate(({ text, linear }) => {
+  const app = window.__GBDRAW_APP__;
+  const file = () => new File([text], 'depth.tsv', { type: 'text/tab-separated-values' });
+  if (linear) {
+    app.setLinearDepthFile(app.linearSeqs[0], 0, file());
+    app.addLinearDepthTrack();
+    app.setLinearDepthFile(app.linearSeqs[0], 1, file());
+    app.setTrackShown('show_gc', true);
+    app.setLinearTrackSlotsEnabled(true);
+  } else {
+    app.setCircularDepthFile(0, file());
+    app.addCircularDepthTrack();
+    app.setCircularDepthFile(1, file());
+    app.setCircularTrackSlotsEnabled(true);
+  }
+}, { text: DEPTH_TSV, linear: mode === 'linear' });
+const slotSwitch = (page, mode, renderer, nth, enabled) => inHistoryStep(page, 'Edit track slot', (app, value) => {
+  const slots = value.linear ? app.adv.linear_track_slots : app.adv.circular_track_slots;
+  const row = slots.filter((slot) => slot.renderer === value.renderer)[value.nth];
+  if (!row) throw new Error(`no ${value.renderer} row ${value.nth}`);
+  if (value.linear) app.setLinearTrackSlotEnabled(row, value.enabled);
+  else app.setCircularTrackSlotEnabled(row, value.enabled);
+}, { linear: mode === 'linear', renderer, nth, enabled });
+// In a Circular custom stack, turning a Hide control on asks first; the test chooses to hide.
+const hideInStack = async (page, box, choice) => {
+  await clickTrackCheckbox(page, box);
+  await page.getByRole('button', { name: choice, exact: true }).click();
+  await settleLive(page);
+};
+// The text of the track toggles' scope (the Layout card may be closed).
+const trackScopeText = (page) => page.evaluate(() => [...document.querySelectorAll('[data-setting="track-visibility"]')]
+  .map((scope) => scope.textContent).join(' | '));
+
+for (const mode of ['circular', 'linear']) {
+  test(`GT B2: one of two Depth rows switched off and on applies live (${mode} stack)`, async ({ page }) => {
+    test.setTimeout(300_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    await withTwoDepthSeries(mode)(page);
+    await settleLive(page);
+    await generate(page);
+    const both = await shownTrackGroups(page, 'DEPTH_GROUPS');
+    await slotSwitch(page, mode, 'depth', 1, false);
+    await settleLive(page);
+    expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), `${mode}: one Depth row off`).toBeLessThan(both);
+    await expectLiveEqualsGenerate(page, { label: `${mode}: second Depth row off` });
+    // The row was off at that Generate: it turns on from the kept parts.
+    await slotSwitch(page, mode, 'depth', 1, true);
+    await settleLive(page);
+    expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), `${mode}: the row returns live`).toBe(both);
+    await expectLiveEqualsGenerate(page, { label: `${mode}: second Depth row on` });
+  });
+
+  test(`GT B3/B4: a GC content row's switch hides and shows live (${mode} stack)`, async ({ page }) => {
+    test.setTimeout(300_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    await page.evaluate((linear) => {
+      const app = window.__GBDRAW_APP__;
+      if (linear) {
+        app.setTrackShown('show_gc', true);
+        app.setLinearTrackSlotsEnabled(true);
+        if (!app.adv.linear_track_slots.some((slot) => slot.renderer === 'dinucleotide_content')) app.addLinearTrackSlot('dinucleotide_content');
+      } else app.setCircularTrackSlotsEnabled(true);
+    }, mode === 'linear');
+    await settleLive(page);
+    await generate(page);
+    await slotSwitch(page, mode, 'dinucleotide_content', 0, false);
+    await settleLive(page);
+    expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), `${mode}: GC row off`).toBe(0);
+    await expectLiveEqualsGenerate(page, { label: `${mode}: GC row off` });
+    await slotSwitch(page, mode, 'dinucleotide_content', 0, true);
+    await settleLive(page);
+    expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), `${mode}: GC row on`).toBeGreaterThan(0);
+    await expectLiveEqualsGenerate(page, { label: `${mode}: GC row on` });
+  });
+
+  test(`GT B6/B7: Show Depth on after a Generate with it off shows live, through History, a mode switch, Save and Load (${mode})`, async ({ page }) => {
+    test.setTimeout(400_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    await addDepthFile(page, 'depth.tsv', mode);
+    await page.evaluate(() => window.__GBDRAW_APP__.setTrackShown('show_depth', false));
+    await settleLive(page);
+    await generate(page);
+    expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), `${mode}: generated without Depth`).toBe(0);
+    await toggleDepth(page);
+    expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), `${mode}: shown live`).toBeGreaterThan(0);
+    expect(await depthRows(page), `${mode}: Legend list`).toEqual(await resultDepthRows(page));
+    await history(page, 'undo');
+    expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), `${mode}: Undo hides`).toBe(0);
+    await history(page, 'redo');
+    expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), `${mode}: Redo shows`).toBeGreaterThan(0);
+    const other = mode === 'circular' ? 'linear' : 'circular';
+    await switchTo(page, other);
+    await switchTo(page, mode);
+    expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), `${mode}: after a mode switch and back`).toBeGreaterThan(0);
+    const saved = await saveSessionJson(page, `gt-depth-shown-${mode}`);
+    const path = test.info().outputPath(`gt-depth-shown-${mode}-${Date.now()}.gbdraw-session.json`);
+    await writeFile(path, JSON.stringify(saved));
+    await page.locator('input[accept^=".json,"]').setInputFiles(path);
+    await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(true);
+    await settleLive(page);
+    expect(await resultDepthRows(page), `${mode}: Result after Load`).toEqual(await depthRows(page));
+    expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), `${mode}: Depth after Load`).toBeGreaterThan(0);
+    await expectLiveEqualsGenerate(page, { label: `${mode}: Depth shown live, saved and loaded` });
+  });
+}
+
+test('GT B5: Use custom stack turned on after a Generate with it off applies live, with a spacer row (Linear)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addDepthFile(page, 'depth.tsv', 'linear');
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setTrackShown('show_gc', true);
+    app.setLinearTrackSlotsEnabled(true);
+    app.addLinearTrackSlot('spacer');
+    app.setLinearTrackSlotsEnabled(false);
+  });
+  await settleLive(page);
+  await generate(page);
+  const before = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
+  await inHistoryStep(page, 'Use custom stack', (app) => app.setLinearTrackSlotsEnabled(true));
+  await settleLive(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content), 'the stack redraws live').not.toBe(before);
+  await expectLiveEqualsGenerate(page, { label: 'Use custom stack on after a Generate with it off' });
+});
+
+test('GT B8: Undo of a Generate restores the parts it kept, so Show Depth shows live', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await addDepthFile(page, 'depth.tsv');
+  await page.evaluate(() => window.__GBDRAW_APP__.setTrackShown('show_depth', false));
+  await settleLive(page);
+  await generate(page);
+  await inHistoryStep(page, 'Legend font size', (app) => { app.adv.legend_font_size = 17; });
+  await settleLive(page);
+  await generate(page);
+  await history(page, 'undo');
+  await toggleDepth(page);
+  expect(await shownTrackGroups(page, 'DEPTH_GROUPS'), 'Depth shown live after the Undo of a Generate').toBeGreaterThan(0);
+  await expectLiveEqualsGenerate(page, { label: 'Show Depth after the Undo of a Generate' });
+});
+
+test('GT B9 (PQ-4 A): in a Circular stack Hide GC Content off after a live hide waits for Generate, with the note', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true));
+  await settleLive(page);
+  await generate(page);
+  await hideInStack(page, 'Hide GC Content', 'Hide GC content');
+  expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), 'hidden live').toBe(0);
+  await clickTrackCheckbox(page, 'Hide GC Content');
+  await settleLive(page);
+  expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), 'Hide GC Content off waits').toBe(0);
+  await expect.poll(() => trackScopeText(page), 'the note names the wait').toContain('Showing a track applies on Generate');
+  await generate(page);
+  expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), 'Generate draws it').toBeGreaterThan(0);
+});
+
+test('GT B1: Hide GC Skew keeps an AT skew row in the Result and the Legend list (HmmtDNA_ATskew)', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
+  try {
+    await settleLive(page);
+    const atRows = async () => (await semanticSnapshot(page)).legend.filter((row) => /^AT skew/i.test(row.caption)).map((row) => row.caption);
+    const drawnAt = await atRows();
+    expect(drawnAt.length, 'the Session draws an AT skew row').toBeGreaterThan(0);
+    await hideInStack(page, 'Hide GC Skew', 'Hide GC skew');
+    expect((await semanticSnapshot(page)).legend.filter((row) => /^GC skew/i.test(row.caption)), 'GC skew rows hidden').toEqual([]);
+    expect(await atRows(), 'AT skew rows stay on the Result').toEqual(drawnAt);
+    expect(await shownListNames(page, /^AT skew/i), 'AT skew rows stay in the Legend list').toEqual(drawnAt);
+    await expectLiveEqualsGenerate(page, { label: 'Hide GC Skew with an AT skew row' });
+  } finally {
+    await page.context().close();
+  }
+});
+
+test('GT B10 (OV-2237): on a Result loaded without a request a hide waits for Generate and the note says so', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const page = await load(browser, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v29.gbdraw-session.json.gz');
+  try {
+    await settleLive(page);
+    const before = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[window.__GBDRAW_APP__.selectedResultIndex].content);
+    const listed = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
+    await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('[data-applies-on-generate="track-visibility"]')]
+      .map((note) => note.textContent.trim())), 'the toggles say Applies on Generate').toContain('Applies on Generate');
+    const box = await page.evaluate(() => (window.__GBDRAW_APP__.mode === 'linear' ? 'Show GC Content' : 'Hide GC Content'));
+    await clickTrackCheckbox(page, box);
+    await settleLive(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[window.__GBDRAW_APP__.selectedResultIndex].content),
+      'the Result waits for Generate').toBe(before);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption)), 'the Legend list follows the Result').toEqual(listed);
+  } finally {
+    await page.context().close();
+  }
+});

@@ -32,6 +32,15 @@ import {
 } from '../services/track-slot-display.js';
 import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
 import { ownEntry } from '../utils/own-entry.js';
+import {
+  GLOBAL_SUPPRESS_PARAM,
+  SUPPRESS_FORM_KEY_BY_RENDERER,
+  SUPPRESS_KEY_BY_RENDERER,
+  SUPPRESS_RENDERER_BY_KEY,
+  applyCircularSuppressControlsToSlots,
+  circularTrackSlotHiddenBySuppressForm,
+  slotUsesDrawingDinucleotide
+} from '../services/circular-track-slot-model.js';
 import { listText, msg, t, tm, tn } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import {
@@ -106,22 +115,6 @@ const RENDERER_LABELS = {
 
 const STACK_ENTRY_AXIS = 'axis';
 const STACK_ENTRY_SLOT = 'slot';
-const GLOBAL_SUPPRESS_PARAM = '_suppressed_by_global';
-/** @type {Record<string, string>} */
-const SUPPRESS_RENDERER_BY_KEY = {
-  gc_content: 'dinucleotide_content',
-  gc_skew: 'dinucleotide_skew'
-};
-/** @type {Record<string, string>} */
-const SUPPRESS_KEY_BY_RENDERER = {
-  dinucleotide_content: 'gc_content',
-  dinucleotide_skew: 'gc_skew'
-};
-/** @type {Record<string, string>} */
-const SUPPRESS_FORM_KEY_BY_RENDERER = {
-  dinucleotide_content: 'suppress_gc',
-  dinucleotide_skew: 'suppress_skew'
-};
 /**
  * The shown texts of a Hide GC Content or Hide GC Skew control. Each is a
  * whole sentence, so no locale fits a track or control name into a sentence
@@ -391,59 +384,6 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
 
   return `${normalized.id}:${normalized.renderer}${options.length ? `@${options.join(',')}` : ''}`;
 };
-
-/** @param {unknown} renderer @param {Record<string, unknown> | null | undefined} [form] */
-export const isCircularTrackRendererSuppressedByForm = (renderer, form = {}) => {
-  const normalizedRenderer = String(renderer || '').trim();
-  const formKey = ownEntry(SUPPRESS_FORM_KEY_BY_RENDERER, normalizedRenderer);
-  return Boolean(formKey && form?.[formKey]);
-};
-
-// Hide GC Content / Hide GC Skew reach the rows the simple control draws: the
-// rows of the drawing's dinucleotide `nt` (TK-09). An AT skew row is not hidden.
-/**
- * @param {{ params?: { nt?: unknown, dinucleotide?: unknown } | null } | null | undefined} slot
- * @param {unknown} nt
- */
-const slotUsesDrawingDinucleotide = (slot, nt) => {
-  const drawingNt = normalizeNt(nt);
-  return normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, drawingNt) === drawingNt;
-};
-
-/**
- * @param {{ renderer?: unknown, params?: { nt?: unknown, dinucleotide?: unknown } | null } | null | undefined} slot
- * @param {Record<string, unknown> | null | undefined} [form]
- * @param {unknown} [nt]
- */
-export const circularTrackSlotHiddenBySuppressForm = (slot, form = {}, nt = 'GC') =>
-  isCircularTrackRendererSuppressedByForm(slot?.renderer, form) && slotUsesDrawingDinucleotide(slot, nt);
-
-// Hide GC Content / Hide GC Skew own the visibility of their rows. A hidden
-// renderer disables its enabled rows and marks them; once the form no longer
-// hides it, the marked rows are enabled again. Rows the user disabled carry no
-// mark and stay disabled. The projection depends only on the rows, the form,
-// and the drawing's dinucleotide.
-/**
- * @param {unknown} slots
- * @param {Record<string, unknown> | null | undefined} [form]
- * @param {unknown} [nt]
- */
-export const applyCircularSuppressControlsToSlots = (slots, form = {}, nt = 'GC') => (
-  (Array.isArray(slots) ? slots : []).map((slot) => {
-    if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return slot;
-    const token = ownEntry(SUPPRESS_KEY_BY_RENDERER, String(slot.renderer || '').trim());
-    if (!token) return slot;
-    const params = cloneParams(slot.params);
-    if (circularTrackSlotHiddenBySuppressForm(slot, form, nt)) {
-      if (slot.enabled === false) return slot;
-      params[GLOBAL_SUPPRESS_PARAM] = token;
-      return { ...slot, enabled: false, params };
-    }
-    if (params[GLOBAL_SUPPRESS_PARAM] !== token) return slot;
-    delete params[GLOBAL_SUPPRESS_PARAM];
-    return { ...slot, enabled: true, params };
-  })
-);
 
 /** @param {DrawingState} drawing */
 const conservationSourceFiles = (drawing) => {

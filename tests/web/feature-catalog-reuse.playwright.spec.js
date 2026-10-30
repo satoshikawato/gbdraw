@@ -420,13 +420,16 @@ test('the similarity-group copy feedback clears when a Generate replaces the sho
     // Undo of a reused Generate step replaces the shown Results: the label
     // clears. Once the GC track is drawn, its Step applies on Generate and
     // keeps the catalog (the Plot Title and the window used before are live
-    // edits).
+    // edits). Show GC content is live (PD-OI-104 rev 5), so its step holds a
+    // redrawn Result, and the History byte limit may drop the oldest step when
+    // the Generate step is added: the top step names the Generate.
     await undoable(page, 'Show GC content', { fields: { 'form.show_gc': true } });
+    await settleLive(page);
     await observeGenerate(page);
     await setStep(page, 200);
     const retitled = await observeGenerate(page);
     expect(retitled.transports).toEqual([KEPT]);
-    expect(retitled.undo).toBe(1);
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Generate diagram');
     expect(await copy()).toBe('Copied!');
     await history(page, 'undo');
     expect(await elapsed(), 'inconclusive: Undo came after the label timer').toBeLessThan(1500);

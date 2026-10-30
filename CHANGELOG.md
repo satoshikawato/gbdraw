@@ -24,6 +24,16 @@ write-up of a release.
   Sessions are saved as Session version 50, which gbdraw 0.14.x cannot open;
   Sessions saved by 0.14.x (46 to 49) open as before.
 - Changed: the drawing bar replaces the Circular and Linear mode buttons.
+- Changed: in the Web app, **Show GC Content**, **Show GC Skew**, **Show Depth**, **Hide GC
+  Content**, **Hide GC Skew**, the on/off switch and removal of a GC content, GC skew, or Depth
+  row of the custom stack, and **Use custom stack** redraw the current Result at once, also for
+  a track the Result does not draw yet, as **Generate Diagram** would draw it. The track comes
+  back as the last Generate built it; other changed values of its row apply on Generate. A
+  note names the cases that wait for Generate (a track the Result did not draw when its Session
+  was loaded, a Depth file change, a row added since the last Generate, **Use custom stack**
+  after a Session load or while Region Annotation sets wait for Generate).
+- Fixed: on a Result loaded from a Session saved without a render request (Session versions 27
+  to 30), settings no longer say **Live edit** while nothing applies until Generate.
 - Fixed: after a Legend name edit, a feature color change, or a feature color reset that
   adds, joins, splits off, or moves a color rule's Legend row, the Web app's Legend shows the
   rows at once in the order Generate draws them, including a row of another feature type and
@@ -83,6 +93,9 @@ write-up of a release.
 - Fixed: in the Web app, a feature color change for a color rule whose Legend row another rule
   of the same name and color also draws now shows that row where Generate draws it at once;
   since 0.14.0 it stayed in its old place until the next Generate (OV-2264).
+- Fixed: in the Web app, a color rule edit is no longer refused as a Legend conflict when another
+  rule's Legend row shows a Legend color of its own, such as a type row's Legend color kept by a
+  Legend name given in the feature popup; 0.14.3 refused every such edit without a message (OV-2265).
 
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
 

@@ -27,6 +27,8 @@ import {
  * @property {{ featureIds: readonly string[], report: (error: unknown) => void }} [reportedLabelBinding]
  * @property {import('./result-paint-record.js').EditorPaintState} [drawnPaint] The editor state a label rerender drew from.
  * @property {number} [historyRequestedAt] The History step serial a label rerender was requested at (D-40).
+ * @property {import('./legend/entry-actions.js').LiveRedrawLegend} [liveRedrawLegend] The Legend inventory rule of a
+ *   live redraw (an automatic rerender), read when it was requested.
  */
 
 /**
