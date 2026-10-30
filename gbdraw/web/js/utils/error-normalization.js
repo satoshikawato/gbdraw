@@ -301,6 +301,7 @@ const PHRASES = Object.freeze({
   notASession: 'This file is not a gbdraw Session: it is not valid JSON.',
   // OV-2240: Save refuses a Session that Load could not open (the cap of services/session-file.js).
   sessionNotSaved: 'The Session was not saved: it is {size} MB expanded, and the browser loads at most {limit} MB.',
+  sessionFileNotSaved: 'The Session was not saved: its file would be {size} MB, and the browser loads files of at most {limit} MB.',
   largestInputs: 'Largest inputs: {inputs}.',
   sessionSaveRemedy: 'Remove or replace the largest inputs with smaller ones, then save again.',
   liveEditFailed: 'Live edit failed: direct edits already applied are kept; geometry may still need updating.',
@@ -417,7 +418,8 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [latestSessionVersion] The newest Session version this app reads.
  * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
  * @property {number} [sessionBytes] The expanded size in bytes of a Session that Save refused.
- * @property {number} [sessionByteLimit] The expanded size in bytes that Load opens at most.
+ * @property {number} [sessionByteLimit] The size in bytes that Load opens at most.
+ * @property {'file'} [sessionSizeKind] Set when the two sizes are those of the gzip file, not of its expanded JSON.
  * @property {string} [largestInputs] The file names of the largest inputs of a Session that Save refused.
  */
 
@@ -683,6 +685,7 @@ const contextFor = (value) => {
     context.sessionBytes = value.sessionBytes;
     context.sessionByteLimit = value.sessionByteLimit;
   }
+  if (context.sessionBytes !== undefined && value.sessionSizeKind === 'file') context.sessionSizeKind = 'file';
   const inputs = typeof value.largestInputs === 'string' ? value.largestInputs.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
   if (inputs) context.largestInputs = inputs;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
@@ -781,7 +784,7 @@ export const normalizeUserFacingError = (value, {
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
   const { queryRecordIndex, subjectRecordIndex, labelFitCounts, labelCapacityOuter, labelCapacityInner, exceptionType } = result.context;
-  const { sessionBytes, sessionByteLimit, largestInputs } = result.context;
+  const { sessionBytes, sessionByteLimit, sessionSizeKind, largestInputs } = result.context;
   // A Save over the cap: the file would not load again, and saving again fails the same way.
   const saveOverCap = result.code === 'SESSION_SIZE_LIMIT' && result.operation === 'session-save'
     && sessionBytes !== undefined && sessionByteLimit !== undefined;
@@ -789,7 +792,7 @@ export const normalizeUserFacingError = (value, {
   /** @type {(ErrorTextPart | null | false | '' | undefined)[]} */
   const pieces = [
     saveOverCap
-      ? { text: PHRASES.sessionNotSaved, params: { size: (/** @type {number} */ (sessionBytes) / 1048576).toFixed(1), limit: Math.round(/** @type {number} */ (sessionByteLimit) / 1048576) } }
+      ? { text: sessionSizeKind === 'file' ? PHRASES.sessionFileNotSaved : PHRASES.sessionNotSaved, params: { size: (/** @type {number} */ (sessionBytes) / 1048576).toFixed(1), limit: Math.round(/** @type {number} */ (sessionByteLimit) / 1048576) } }
       : { text: message },
     saveOverCap && largestInputs !== undefined && { text: PHRASES.largestInputs, params: { inputs: largestInputs } },
     saveOverCap && { text: PHRASES.sessionSaveRemedy },

@@ -3694,6 +3694,46 @@ test('Save Session over the Load size cap downloads nothing and names the size a
   expect(downloads).toEqual([]);
 });
 
+// OV-2245: Save also refuses a Session whose gzip file is over the cap that Load
+// reads; the notice says "file", and nothing is downloaded. The cap is the test
+// hook's small stand-in for 200 MiB.
+test('Save Session over the Load file cap downloads nothing and names the file size and the largest inputs (OV-2245)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
+    .toBeGreaterThan(0);
+  const depthTsv = Array.from({ length: 2000 }, (_, index) => `NC_012920.1\t${index * 8 + 1}\t${10 + (index % 7)}`).join('\n');
+  await page.evaluate(async (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularDepthFile(0, new File([text], 'My depth (run 1).tsv', { type: 'text/tab-separated-values' }));
+    await window.Vue.nextTick();
+  }, depthTsv);
+  const downloads = [];
+  page.on('download', (download) => downloads.push(download.suggestedFilename()));
+  const capBytes = 1024;
+  await page.evaluate((cap) => {
+    window.__GBDRAW_TEST_HOOKS__ = { ...(window.__GBDRAW_TEST_HOOKS__ || {}), maxSessionFileBytes: cap };
+  }, capBytes);
+  const saved = await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'ov-2245-over-file-cap';
+    const result = await window.__GBDRAW_APP__.saveSessionWithTitle();
+    return { status: result.status, error: window.__GBDRAW_APP__.errorLog };
+  });
+  expect(saved.status).toBe('error');
+  expect(saved.error.code).toBe('SESSION_SIZE_LIMIT');
+  expect([saved.error.operation, saved.error.stage]).toEqual(['session-save', 'write']);
+  expect(saved.error.context.sessionSizeKind).toBe('file');
+  expect(saved.error.context.sessionByteLimit).toBe(capBytes);
+  expect(saved.error.context.sessionBytes).toBeGreaterThan(capBytes);
+  expect(saved.error.context.largestInputs).toContain('My depth (run 1).tsv');
+  expect(saved.error.summary).toContain('its file would be');
+  expect(saved.error.summary).toContain('My depth (run 1).tsv');
+  expect(saved.error.actions).toEqual(['select-input']);
+  await page.waitForTimeout(500);
+  expect(downloads).toEqual([]);
+});
+
 test('a Load takes the loaded Session\'s Depth series, not the previous document\'s (OV-1164)', async ({ page }) => {
   test.setTimeout(180_000);
   await openApp(page);

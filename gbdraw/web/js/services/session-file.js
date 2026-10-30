@@ -1,12 +1,13 @@
 // @ts-check
 import { diagnosticError } from '../utils/error-normalization.js';
-import { testExpandedSessionByteCap } from './runtime-test-hooks.js';
+import { testSessionByteCap } from './runtime-test-hooks.js';
 
 const GZIP_MAGIC = Object.freeze([0x1f, 0x8b]);
+// The largest Session file, gzip or plain, that Load reads; Save refuses to
+// write a larger one (OV-2245).
 const MAX_SESSION_FILE_BYTES = 200 * 1024 * 1024;
 // The most JSON a Session may expand to: Load stops reading past it, and Save
-// refuses to write more (OV-2240). Load also refuses a compressed file over
-// MAX_SESSION_FILE_BYTES, which Save does not check (OV-2245).
+// refuses to write more (OV-2240).
 export const MAX_EXPANDED_SESSION_BYTES = 512 * 1024 * 1024;
 const LARGEST_INPUT_COUNT = 3;
 const LARGEST_INPUT_NAME_CHARS = 80;
@@ -314,12 +315,13 @@ const largestInputNames = (data) => {
 
 /**
  * @param {Record<string, unknown>} data The Session document.
- * @param {number} sessionBytes Its expanded JSON size.
+ * @param {number} sessionBytes Its expanded JSON size, or its file size when `file` is set.
  * @param {number} sessionByteLimit The cap it exceeds.
+ * @param {boolean} [file] The size is the gzip file's, not the expanded JSON's.
  */
-const sessionSaveSizeLimit = (data, sessionBytes, sessionByteLimit) => diagnosticError(
+const sessionSaveSizeLimit = (data, sessionBytes, sessionByteLimit, file = false) => diagnosticError(
   'SESSION_SIZE_LIMIT',
-  { sessionBytes, sessionByteLimit, largestInputs: largestInputNames(data) },
+  { sessionBytes, sessionByteLimit, ...(file && { sessionSizeKind: 'file' }), largestInputs: largestInputNames(data) },
   { stage: 'write', operation: 'session-save' }
 );
 
@@ -401,7 +403,7 @@ const jsonByteStream = (data, maxBytes, refused) => {
 /**
  * @param {Record<string, any>} data The Session document.
  * @returns {Promise<Blob>} The gzip Session; it rejects with `SESSION_SIZE_LIMIT` (stage `write`)
- *   when the JSON is over the cap.
+ *   when the JSON is over the expanded cap or the file is over the file cap that Load reads.
  */
 export const compressSessionData = async (data) => {
   if (typeof CompressionStream !== 'function') {
@@ -409,13 +411,16 @@ export const compressSessionData = async (data) => {
   }
   /** @type {{ error: Error | null }} */
   const refused = { error: null };
-  const compressedStream = jsonByteStream(data, testExpandedSessionByteCap() ?? MAX_EXPANDED_SESSION_BYTES, refused)
+  const compressedStream = jsonByteStream(data, testSessionByteCap('maxExpandedSessionBytes') ?? MAX_EXPANDED_SESSION_BYTES, refused)
     .pipeThrough(new CompressionStream('gzip'));
-  return new Response(compressedStream, {
+  const blob = await new Response(compressedStream, {
     headers: { 'Content-Type': 'application/gzip' }
   }).blob().catch((error) => {
     throw refused.error ?? error;
   });
+  const maxFileBytes = testSessionByteCap('maxSessionFileBytes') ?? MAX_SESSION_FILE_BYTES;
+  if (blob.size > maxFileBytes) throw sessionSaveSizeLimit(data, blob.size, maxFileBytes, true);
+  return blob;
 };
 
 /**
