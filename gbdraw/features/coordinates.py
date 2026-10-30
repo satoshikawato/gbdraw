@@ -2,15 +2,43 @@
 # coding: utf-8
 
 import logging
-from typing import List, Tuple, cast
+from typing import List, NamedTuple, Sequence, Tuple, cast
 
-from Bio.SeqFeature import SimpleLocation
+from Bio.SeqFeature import AfterPosition, BeforePosition, SimpleLocation
 
 from .objects import FeatureDisplayPart, FeatureLocation, FeatureLocationPart, Strand
 from ..layout.record_coordinates import DisplayFragment, RecordDisplayTransform, SourceInterval
 
 
 logger = logging.getLogger(__name__)
+
+
+class PartialEnds(NamedTuple):
+    """Whether a location part's biological start (5') and end (3') are partial."""
+
+    start: bool
+    end: bool
+
+
+NOT_PARTIAL = PartialEnds(False, False)
+
+
+def location_partial_ends(exons: Sequence[SimpleLocation]) -> tuple[PartialEnds, ...]:
+    """The partial ends of each part, in biological order: the one reader of ``<``/``>``.
+
+    The source writes ``<`` on a low boundary and ``>`` on a high one, whether the
+    file or a gbdraw crop wrote it. Only the outer ends of a location can be
+    partial: the first part's start and the last part's end. A part without a
+    strand is read low to high.
+    """
+    last = len(exons) - 1
+    ends = []
+    for index, exon in enumerate(exons):
+        low = isinstance(exon.start, BeforePosition)
+        high = isinstance(exon.end, AfterPosition)
+        start, end = (high, low) if exon.strand == -1 else (low, high)
+        ends.append(PartialEnds(start and index == 0, end and index == last))
+    return tuple(ends)
 
 
 def project_feature_parts(
@@ -30,9 +58,11 @@ def project_feature_parts(
         int(exon.start), int(exon.end),
         exon.strand if exon.strand in (-1, 1) else 1,
         index,
-        biological_start=exon.strand in (-1, 1),
-        biological_end=exon.strand in (-1, 1),
-    ) for index, exon in enumerate(exons)]
+        biological_start=exon.strand in (-1, 1) and not partial.start,
+        biological_end=exon.strand in (-1, 1) and not partial.end,
+        partial_start=partial.start,
+        partial_end=partial.end,
+    ) for index, (exon, partial) in enumerate(zip(exons, location_partial_ends(exons), strict=True))]
     # With start_coordinate set (checked above) project_local_parts returns DisplayFragments.
     by_part: dict[int, list[DisplayFragment]] = {}
     for fragment in cast("tuple[DisplayFragment, ...]", transform.project_local_parts(parts)):
@@ -71,10 +101,16 @@ def project_feature_parts(
 
 
 def get_exon_coordinate(
-    exon_line: SimpleLocation, previous_exon_count: int, last_or_not: bool
+    exon_line: SimpleLocation,
+    previous_exon_count: int,
+    last_or_not: bool,
+    partial: PartialEnds = NOT_PARTIAL,
 ) -> Tuple[int, FeatureLocationPart]:
     """
     Calculates the coordinate of an exon.
+
+    A partial 3' end is not a known biological end, so the block is not the
+    arrowhead block; a partial end opens the block's edge on that side.
 
     Returns:
         (exon_count, exon_coordinate)
@@ -89,7 +125,11 @@ def get_exon_coordinate(
     exon_end = int(exon_line.end)
     if exon_end < 1:
         exon_end = 1
-    exon_coordinate = FeatureLocationPart("block", exon_id, exon_strand, exon_start, exon_end, last_or_not)
+    open_start, open_end = (partial.end, partial.start) if exon_strand == "negative" else partial
+    exon_coordinate = FeatureLocationPart(
+        "block", exon_id, exon_strand, exon_start, exon_end, last_or_not and not partial.end,
+        open_start, open_end,
+    )
     return exon_count, exon_coordinate
 
 
@@ -184,15 +224,16 @@ def get_exon_and_intron_coordinates(
 
     if num_exons == 0:
         return []
+    partial_ends = location_partial_ends(exons)
 
     if num_exons == 1:
-        exon_count, exon_coord = get_exon_coordinate(exons[0], exon_count, True)
+        exon_count, exon_coord = get_exon_coordinate(exons[0], exon_count, True, partial_ends[0])
         coordinates_list.append(exon_coord)
 
     elif num_exons > 1 and not is_trans_spliced:
         for i, exon in enumerate(exons):
             is_last_exon = i == num_exons - 1
-            exon_count, exon_coord = get_exon_coordinate(exon, i, is_last_exon)
+            exon_count, exon_coord = get_exon_coordinate(exon, i, is_last_exon, partial_ends[i])
 
             if i > 0:
                 previous_exon_coord = coordinates_list[-1]
@@ -206,7 +247,7 @@ def get_exon_and_intron_coordinates(
     elif num_exons > 1 and is_trans_spliced:
         for i, exon in enumerate(exons):
             is_last = i == num_exons - 1
-            exon_count, exon_coord = get_exon_coordinate(exon, i, is_last)
+            exon_count, exon_coord = get_exon_coordinate(exon, i, is_last, partial_ends[i])
             coordinates_list.append(exon_coord)
 
     return coordinates_list
@@ -237,11 +278,13 @@ def get_strand(strand_value: int) -> Strand:
 
 
 __all__ = [
+    "PartialEnds",
     "get_coordinate",
     "get_exon_and_intron_coordinates",
     "get_exon_coordinate",
     "get_intron_coordinate",
     "get_strand",
+    "location_partial_ends",
 ]
 
 

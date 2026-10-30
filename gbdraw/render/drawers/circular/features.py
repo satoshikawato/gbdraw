@@ -467,11 +467,15 @@ class FeaturePathGenerator:
         if merged_start <= merged_end:
             return None
 
+        # The block that runs to the record end starts the merged block; the one from 1 ends it.
         return {
             "coord_type": "block",
             "coord_strand": block_coords[0].strand,
             "coord_start": merged_start,
             "coord_end": merged_end,
+            "open_start": right_blocks[0].open_start,
+            "open_end": left_blocks[0].open_end,
+            "is_last": any(coord.is_last for coord in block_coords),
         }
 
     def generate_circular_gene_path(self, feature_object: FeatureObject):
@@ -492,7 +496,7 @@ class FeaturePathGenerator:
         if merged_coord is not None:
             merged_strand = str(merged_coord["coord_strand"])
             glyph_kind = str(getattr(feature_object, "glyph_kind", "rectangle"))
-            if merged_strand not in {"positive", "negative"}:
+            if merged_strand not in {"positive", "negative"} or not merged_coord["is_last"]:
                 glyph_kind = "rectangle"
             merged_path = self._generate_terminal_block(
                 merged_coord,
@@ -509,17 +513,17 @@ class FeaturePathGenerator:
         coords = (feature_object.location if feature_object.display_parts is None
                   else [part.location for part in feature_object.display_parts])
         coordinates_paths: List[List[str]] = []
-        for coord_index, coord in enumerate(coords):
+        for coord in coords:
             coord_dict: Dict[str, Union[str, int]] = {
                 "coord_type": str(coord.kind),
                 "coord_strand": coord.strand,
                 "coord_start": coord.start,
                 "coord_end": coord.end,
+                "open_start": coord.open_start,
+                "open_end": coord.open_end,
             }
             if feature_object.display_parts is not None:
-                fragment = feature_object.display_parts[coord_index].fragment
-                coord_dict.update(display_fragment=True, open_start=fragment.artificial_start,
-                                  open_end=fragment.artificial_end)
+                coord_dict["display_fragment"] = True
             coord_type: str = str(coord_dict["coord_type"])
             if coord_type == "line":
                 if lane is None:
