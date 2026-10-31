@@ -38,7 +38,8 @@ test('Italic gene names draws gene-named labels in italics, and a live label edi
     app.newPriorityRule.order = 'gene,product';
     app.addPriorityRule();
   });
-  const italic = page.getByRole('checkbox', { name: 'Italic gene names' });
+  // The checkbox sits in a collapsed labels card; find it by its help id.
+  const italic = page.locator('input[type="checkbox"][aria-describedby="help-label-italic-gene-labels"]');
   await expect(italic).not.toBeChecked();
   await generate(page);
   const upright = await labelStyles(page);
