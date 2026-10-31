@@ -190,7 +190,7 @@ def test_drawn_axis_length_is_the_row_width_only_on_a_wrapped_record() -> None:
         )
     )
     assert drawn_axis_length(cropped.records[0], cropped.transforms[0]) == 30_001
-    assert built.metadata.wrap == LinearWrapSummary(10_000, 5, 10_000, (5,))
+    assert built.metadata.wrap == LinearWrapSummary(10_000, 10_000, (LAMBDA_LENGTH,))
 
 
 def test_stacking_adds_each_rows_own_height() -> None:

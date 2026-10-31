@@ -140,7 +140,6 @@ from gbdraw.diagrams.circular.assemble import (
     circular_legend_table,
     plan_circular_annotation_slots,
 )
-from gbdraw.diagrams.circular.positioning import _parse_svg_number
 from gbdraw.diagrams.circular.radial_layout import track_layout_reason
 from gbdraw.diagrams.linear import assemble_linear_diagram
 from gbdraw.exceptions import LabelLayoutError, LabelsDoNotFitError, ValidationError
@@ -224,6 +223,8 @@ from gbdraw.mode_profiles import (
     LINEAR_MODE_PROFILE,
     ComparisonThresholds,
 )
+from gbdraw.render.document import drawing_size
+from gbdraw.render.export_limits import bind_export_wrap
 from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
@@ -2621,6 +2622,7 @@ def assemble_linear_diagram_from_records(
             wrap=wrap_summary,
         ),
     )
+    bind_export_wrap(canvas, wrap_summary)
     return build_result if _return_build_result else canvas
 
 
@@ -3790,13 +3792,6 @@ def _circular_label_layouts(drawing: Drawing) -> tuple[CircularLabelLayout, ...]
     return tuple(layout for layout in layouts if isinstance(layout, CircularLabelLayout))
 
 
-def _drawing_size(drawing: Drawing) -> tuple[float, float]:
-    return (
-        _parse_svg_number(drawing.attribs.get("width")),
-        _parse_svg_number(drawing.attribs.get("height")),
-    )
-
-
 # The reason of a row whose settings leave the tracks no room (OV-1266, D-07).
 _TRACKS_DO_NOT_FIT_REASON = "The tracks do not fit with this setting"
 
@@ -3846,7 +3841,7 @@ def _checked_circular_drawing(
         layouts = _circular_label_layouts(verified)
         return LabelFitVerification(
             outcome=circular_label_outcome(layouts),
-            canvas_size=_drawing_size(verified),
+            canvas_size=drawing_size(verified),
             fit=sum((layout.fit for layout in layouts), FITS),
         )
 
@@ -4187,7 +4182,7 @@ def _checked_linear_build(
                 raise
             return unfit
         label_fit = _linear_label_fit(verified)
-        return LabelFitVerification(label_fit.outcome, _drawing_size(verified), label_fit.fit)
+        return LabelFitVerification(label_fit.outcome, drawing_size(verified), label_fit.fit)
 
     drawing = _linear_drawing(result)
     report = check_linear_label_fit(_linear_label_fit(drawing), verify, features_separated=features_separated)

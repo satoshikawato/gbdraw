@@ -60,14 +60,46 @@ def _length_words(length: int) -> str:
     return f"{length / 1_000:g} kb" if length >= 1_000 else f"{length} bp"
 
 
+def wrap_length_option(length: int) -> str:
+    """A row length as the option a person types: ``--wrap_length 100kb``."""
+
+    if length >= 1_000_000:
+        return f"--wrap_length {length / 1_000_000:g}Mb"
+    return f"--wrap_length {length / 1_000:g}kb" if length >= 1_000 else f"--wrap_length {length}"
+
+
+def longer_row_lengths(row_length: int, longest_bp: int) -> tuple[int, ...]:
+    """The 1-2-5 row lengths above ``row_length``, up to the first that holds the longest record on one row."""
+
+    lengths: list[int] = []
+    decade = 10 ** (len(str(row_length)) - 1)
+    while True:
+        for length in (decade, 2 * decade, 5 * decade):
+            if length > row_length:
+                lengths.append(length)
+                if length >= longest_bp:
+                    return tuple(lengths)
+        decade *= 10
+
+
 @dataclass(frozen=True)
 class LinearWrapSummary:
-    """What a figure drew: its row length, its rows in all, what was asked for, and each record's rows."""
+    """What a figure drew: its row length, what was asked for, and each record's length; rows follow from them."""
 
     row_length: int
-    row_count: int
     requested: LinearWrapLength
-    record_rows: tuple[int, ...]
+    record_lengths: tuple[int, ...]
+
+    def rows_at(self, row_length: int) -> int:
+        return sum(ceil(length / row_length) for length in self.record_lengths)
+
+    @property
+    def row_count(self) -> int:
+        return self.rows_at(self.row_length)
+
+    @property
+    def record_rows(self) -> tuple[int, ...]:
+        return tuple(ceil(length / self.row_length) for length in self.record_lengths)
 
     @property
     def message(self) -> str:
@@ -110,8 +142,7 @@ def resolve_wrap(
         transform.with_wrap(row_length, length) if length > row_length else transform
         for transform, length in zip(bound, lengths, strict=True)
     )
-    rows = tuple(ceil(length / row_length) for length in lengths)
-    return wrapped, LinearWrapSummary(row_length, sum(rows), requested, rows)
+    return wrapped, LinearWrapSummary(row_length, requested, tuple(lengths))
 
 
 def stack_row_offsets(row_bands: Sequence[VerticalBand], gap: float) -> tuple[float, ...]:
@@ -179,10 +210,12 @@ __all__ = [
     "LinearWrapSummary",
     "auto_wrap_length",
     "drawn_axis_length",
+    "longer_row_lengths",
     "reject_wrap_in_one_grid_row",
     "reject_wrap_with_comparisons",
     "resolve_wrap",
     "resolve_wrap_length",
     "stack_row_offsets",
+    "wrap_length_option",
     "wrap_blocking_inputs",
 ]
