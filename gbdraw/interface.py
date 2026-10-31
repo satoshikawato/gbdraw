@@ -608,7 +608,7 @@ class LinearOptions(_CommonOptions):
     """Options accepted only by :func:`draw_linear`.
 
     ``anchor_feature`` (``key=value``, for example ``"gene=dnaA"``) aligns the
-    records at the left end, as drawn, of the feature it names in each
+    records at the first drawn base of the feature it names in each
     record; the first record that has it keeps its place, and a record
     without it keeps its place (off by default).
     """

@@ -2095,7 +2095,14 @@ def plan_linear_request(
         # anchor_feature beside a similarity alignment.
         anchor_feature = materialized_request.options.anchor_feature
         alignment_anchor_centers = (
-            project_anchor_feature_starts(collection, anchor_feature)
+            project_anchor_feature_starts(
+                collection,
+                anchor_feature,
+                resolve_record_row_positions(
+                    collection.records,
+                    resolved_layout.multi_record_positions if resolved_layout is not None else None,
+                )[1],
+            )
             if isinstance(anchor_feature, FeatureSelector)
             else project_similarity_alignment_centers(
                 collection,

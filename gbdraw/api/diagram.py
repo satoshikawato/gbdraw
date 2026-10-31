@@ -2212,6 +2212,9 @@ def assemble_linear_diagram_from_records(
                 losat_search=losat_search,
                 similarity_alignment=similarity_alignment,
             ),
+            # Anchor positions without a Similarity alignment plan come from anchor_feature.
+            anchor_feature=similarity_alignment is None
+            and any(center is not None for center in (_alignment_anchor_centers or ())),
         )
         _record_transforms, wrap_summary = resolve_wrap(wrap_length, records, _record_transforms)
         # Rows carry their ruler on the axis: there is no other place for it.

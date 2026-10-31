@@ -219,3 +219,126 @@ def test_anchor_feature_is_the_last_positional_option_field() -> None:
     assert [item.name for item in fields(LinearDiagramOptions)][-1] == "anchor_feature"
     assert [item.name for item in fields(LinearOptions)][-1] == "anchor_feature"
     assert LinearDiagramOptions(anchor_feature="gene=COX1").anchor_feature == _COX1
+
+
+def _human_and_zebrafish(*, first_display: object = None, **options: object) -> LinearDiagramRequest:
+    from gbdraw.api.requests import RecordDisplayOptions
+
+    first = RecordInput(GenBankInputSource(_HUMAN))
+    if first_display is not None:
+        assert isinstance(first_display, RecordDisplayOptions)
+        first = replace(first, display=first_display)
+    return LinearDiagramRequest(
+        records=(first, RecordInput(GenBankInputSource(_ZEBRAFISH))),
+        options=LinearDiagramOptions(**options),
+    )
+
+
+@pytest.mark.linear
+def test_only_matches_that_start_in_the_drawn_region_count(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Each record has two dUTPase CDSs (MjeNMV 249324..249569 and
+    # 250088..250528, MelaMJNV 234967..235212 and 235538..235978); each region
+    # draws only the first, so the selector names one feature in each record.
+    with caplog.at_level(logging.WARNING):
+        linear_cli.linear_main([
+            "--gbk", str(_EXAMPLES / "MjeNMV.gb"), str(_EXAMPLES / "MelaMJNV.gb"),
+            "--region", "LC738868.1:249000-249800", "--region", "LC738874.1:234800-235400",
+            "--anchor_feature", "product=dUTPase",
+            "-f", "svg", "-o", str(tmp_path / "region"),
+        ])
+    svg = (tmp_path / "region.svg").read_text(encoding="utf-8")
+    # 249324 is 324 bp into the first region and 234967 is 167 bp into the second.
+    assert _record_shifts(svg)[0] == 0.0
+    assert _record_shifts(svg)[1] > 0.0
+    assert "matches 2 features at different starts" not in caplog.text
+    assert "keeps its place" not in caplog.text
+
+
+@pytest.mark.linear
+def test_a_match_that_starts_outside_the_drawn_region_is_reported_as_such(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from gbdraw.io.regions import parse_region_spec
+
+    request = _human_and_zebrafish(anchor_feature=_COX1)
+    cropped = replace(request, records=(
+        replace(request.records[0], region=parse_region_spec("NC_012920.1:6000-8000")),
+        request.records[1],
+    ))
+    with caplog.at_level(logging.WARNING):
+        plan = plan_linear_request(cropped)
+    assert plan.alignment_anchor_centers == (None, _ZEBRAFISH_COX1_START)
+    assert (
+        "anchor_feature gene=COX1 matched 2 feature(s) in record #1 'NC_012920.1' whose start "
+        "lies outside its drawn region; the record keeps its place."
+    ) in caplog.text
+
+
+@pytest.mark.linear
+def test_a_feature_across_a_rotated_display_start_starts_before_the_seam() -> None:
+    from gbdraw.api.requests import RecordDisplayOptions
+
+    # Rotated to 7000, human COX1 (5904..7445) is drawn as 15473..16569 then 0..446.
+    plan = plan_linear_request(_human_and_zebrafish(
+        first_display=RecordDisplayOptions(is_circular=True, start_coordinate=7000),
+        anchor_feature=_COX1,
+    ))
+    assert plan.alignment_anchor_centers == (15473.0, _ZEBRAFISH_COX1_START)
+
+
+@pytest.mark.linear
+def test_a_feature_across_the_origin_starts_on_its_piece_before_it() -> None:
+    # The human D-loop is complement(join(16024..16569,1..576)) on a circular record.
+    plan = plan_linear_request(_request(anchor_feature=FeatureSelector(value="D-loop", key="type")))
+    assert plan.alignment_anchor_centers == (16023.0, 0.0)
+
+
+@pytest.mark.linear
+def test_records_that_share_a_row_are_refused() -> None:
+    request = _request(anchor_feature=_COX1)
+    shared = replace(
+        request,
+        records=tuple(
+            replace(record, presentation=RecordPresentation(grid_row=1)) for record in request.records
+        ),
+        layout=LinearMultiRecordOptions(),
+    )
+    with pytest.raises(ValidationError, match="cannot align records that share a row") as caught:
+        plan_linear_request(shared)
+    # The published vocabulary has no anchor_feature field or reason yet; the Web cannot send the option.
+    assert caught.value.diagnostic == {"code": "INPUT_INVALID"}
+
+
+@pytest.mark.linear
+def test_a_wrap_that_cuts_a_record_is_refused_by_the_wrap_owner() -> None:
+    with pytest.raises(ValidationError, match="anchor_feature cannot align a record cut by wrap_length") as caught:
+        plan_linear_request(_request(anchor_feature=_COX1, config_overrides={"canvas.linear.wrap_length": 5000}))
+    assert caught.value.diagnostic == {"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_ANCHOR_FEATURE"}
+    # A wrap that cuts nothing changes nothing.
+    uncut = _svg(_request(anchor_feature=_COX1, config_overrides={"canvas.linear.wrap_length": 20000}))
+    assert _record_shifts(uncut) == _record_shifts(_svg(_request(anchor_feature=_COX1)))
+
+
+@pytest.mark.linear
+def test_the_anchor_is_read_after_auto_orient() -> None:
+    import pandas as pd
+
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+    from gbdraw.linear_comparison import LinearComparison
+
+    # One reverse hit: auto_orient reverse-complements the zebrafish record.
+    reverse = pd.DataFrame(
+        [("Q", "S", 99.0, 600, 0, 0, 1, 600, 6000, 5401, 1e-20, 50.0)], columns=list(COMPARISON_COLUMNS)
+    )
+    comparisons = (LinearComparison(0, 1, reverse),)
+    oriented = plan_linear_request(_request(anchor_feature=_COX1, auto_orient=True, linear_comparisons=comparisons))
+    request = _request(anchor_feature=_COX1, linear_comparisons=comparisons)
+    explicit = plan_linear_request(replace(request, records=(
+        request.records[0],
+        replace(request.records[1], presentation=RecordPresentation(reverse_complement=True)),
+    )))
+    assert oriented.alignment_anchor_centers == explicit.alignment_anchor_centers == (
+        _HUMAN_COX1_START, 16596.0 - 7975.0,
+    )

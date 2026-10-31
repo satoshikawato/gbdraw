@@ -1429,7 +1429,7 @@ options:
                         > 0).
   --align_center        Align genomes to the center (default: False).
   --anchor_feature KEY=VALUE
-                        Align the records at the left end, as drawn, of the
+                        Align the records at the first drawn base of the
                         feature this exact selector names in each record, for
                         example gene=dnaA or locus_tag=b0001 (the
                         feature_selector form of the placement and override

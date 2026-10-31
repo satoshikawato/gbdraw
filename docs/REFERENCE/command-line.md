@@ -129,18 +129,25 @@ Multi-record rows cannot be combined with `--normalize_length`.
 feature, for example `--anchor_feature gene=COX1` across mitogenomes. The
 selector has the `feature_selector` form of the placement and override tables
 and matches a qualifier value exactly; `locus_tag=` and `gene=` are the usual
-keys. It is resolved in each record as drawn, after `--region` and
-`--reverse_complement`, and the anchor is the feature's left end there (on a
-reverse-complemented record, its end with the higher source coordinate). The first record
+keys. It is resolved in each record as drawn, after `--region`,
+`--reverse_complement`, and a display start. The anchor is the feature's first
+drawn base: the point from which reading rightward covers the whole feature.
+That is its left end as drawn (on a reverse-complemented record, its end with
+the higher source coordinate); on a complete circular record, a feature that
+crosses the origin or the display start begins on its piece before that seam.
+Only features that start inside the drawn region count. The first record
 that has the feature keeps its place; every other record that has it moves
-along its row so that the feature's left end lies directly below. A record
-without the feature keeps its place, with a warning naming it. A gene and its
-CDS that start at the same base count as one match; matches at different
-starts stop the run with the candidates listed, and so does a selector that
-no record matches. With `--align_center`, the first record keeps its centred
-place and the records the anchor moves leave theirs. A moved record can extend
-the canvas, or overlap a neighbour in a multi-record row. `--anchor_feature`
-cannot be combined with `--similarity_alignment_feature` or with a
+so that the feature's start lies directly below, and that place replaces the
+record's own x, as with Similarity alignment. A record without the feature
+keeps its place, with a warning naming it, or saying that its match starts
+outside the drawn region. A gene and its CDS that start at the same base
+count as one match; matches at different starts stop the run with the
+candidates listed, and so does a selector that no record matches. With
+`--align_center`, the first record keeps its centred place and the records the
+anchor moves leave theirs. A moved record can widen the canvas. With
+`--auto_orient`, the anchor is read after the automatic reverse complement.
+`--anchor_feature` cannot be combined with `--similarity_alignment_feature`,
+with records that share a row (`--multi_record_position`), or with a
 `--wrap_length` that cuts a record, and a Session does not store it yet:
 `--save_session` with it stops before drawing.
 

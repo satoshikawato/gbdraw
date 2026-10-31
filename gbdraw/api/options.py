@@ -1408,11 +1408,14 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     ``auto_orient`` reverse-complements records from their nucleotide hits
     (:func:`gbdraw.linear_comparison.auto_orient_reversed_records`).
 
-    ``anchor_feature`` aligns the records at the left end, as drawn, of the
+    ``anchor_feature`` aligns the records at the first drawn base of the
     feature it selects in each record (``key=value``, exact; a string is
     parsed with :func:`gbdraw.annotations.models.parse_feature_selector`).
     The first record that has the feature keeps its place
-    (:func:`gbdraw.api.record_planning.project_anchor_feature_starts`).
+    (:func:`gbdraw.api.record_planning.project_anchor_feature_starts`). The
+    x of each record it moves replaces that record's own x, explicit
+    ``LinearMultiRecordOptions.record_translations`` included, as Similarity
+    alignment does; the y is kept.
     """
 
     tracks: LinearRequestTrackOptions | None = None
