@@ -8,6 +8,7 @@ from types import ModuleType
 from unittest.mock import patch
 
 from gbdraw.analysis import collinearity as cc, collinearity_units as cu, protein_colinearity as pc
+from tests.prototypes.protein_local_reductions import without_protein_map
 
 
 # S07.7 predates the LOSAT runtime owner (gbdraw.comparisons.losat_runtime).
@@ -52,7 +53,7 @@ def frozen_collinear_callers():
     with ExitStack() as stack:
         for name, value in vars(cc).items():
             if name in vars(frozen) and value is vars(pc).get(name) and callable(value):
-                stack.enter_context(patch.object(cc, name, vars(frozen)[name]))
+                stack.enter_context(patch.object(cc, name, without_protein_map(name, vars(frozen)[name])))
         stack.enter_context(patch.object(cc, 'build_collinearity_unit_index',
                                         frozen_units.build_collinearity_unit_index))
         yield

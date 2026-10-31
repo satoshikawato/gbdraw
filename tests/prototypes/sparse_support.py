@@ -59,21 +59,20 @@ def _normalized_score_from_row(row: object) -> float:
 def _anchor_core_hit_rank(
     row: object,
     protein_map: Mapping[str, CdsProtein],
-) -> tuple[float, float, float, float, int, int, str, int, str]:
-    query_id = str(getattr(row, "query", ""))
-    subject_id = str(getattr(row, "subject", ""))
-    query_record_index = int(protein_map[query_id].record_index) if query_id in protein_map else 0
-    subject_record_index = int(protein_map[subject_id].record_index) if subject_id in protein_map else 0
+) -> tuple[float, float, float, float, int, tuple[int, int, int, str], tuple[int, int, int, str]]:
+    # A complete tie follows the live owner of CDS order (OV-2370); the frozen
+    # scan broke it on the record and then the ID text.
+    def endpoint(protein_id: str) -> tuple[int, int, int, str]:
+        return _protein_sort_key(protein_map[protein_id]) if protein_id in protein_map else (0, 0, 0, protein_id)
+
     return (
         -_normalized_score_from_row(row),
         _row_float(row, "evalue", float("inf")),
         -_row_float(row, "min_coverage", 0.0),
         -_row_float(row, "identity", 0.0),
         -int(_row_float(row, "alignment_length", 0.0)),
-        query_record_index,
-        query_id,
-        subject_record_index,
-        subject_id,
+        endpoint(str(getattr(row, "query", ""))),
+        endpoint(str(getattr(row, "subject", ""))),
     )
 
 

@@ -1610,6 +1610,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 display_hits = select_top_hits_per_query(
                     item["hits"],
                     max_hits=settings.max_hits,
+                    protein_map={**item["query_map"], **item["subject_map"]},
                 )
                 converted = convert_pair_protein_hits_to_genomic_links(
                     display_hits,

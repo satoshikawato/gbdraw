@@ -10,6 +10,7 @@ import pytest
 
 from gbdraw.analysis import collinearity_units as cu, protein_colinearity as pc
 from tests.prototypes.protein_s078 import frozen, frozen_units
+from tests.prototypes.protein_local_reductions import ids_in_cds_order
 from tests.test_protein_colinearity import _hit_row, _protein_map_for_lengths
 from tests.test_collinearity_units import _boundaries, _extraction, _observe
 
@@ -106,7 +107,8 @@ def test_aliases_remain_ordered_for_large_collapsed_locus(mode, caplog):
 def test_related_limits_complete_s077_result(scenario, limit):
     from gbdraw.exceptions import ValidationError
     from tests.test_protein_comparison_benchmark import benchmark
-    pm, tables = benchmark.synthetic(pc, scenario, benchmark.SEED)
+    # The frozen copy breaks score ties on the ID text, the live code on the CDS (OV-2370).
+    pm, tables = ids_in_cds_order(*benchmark.synthetic(pc, scenario, benchmark.SEED))
     def run(module):
         try:
             result = module.select_rbh_orthogroup_edges_from_directional_hits(

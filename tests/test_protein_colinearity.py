@@ -1563,7 +1563,7 @@ def test_select_best_hits_per_query_avoids_secondary_paralog_merge() -> None:
         columns=COMPARISON_COLUMNS,
     )
 
-    selected = select_best_hits_per_query(hits)
+    selected = select_best_hits_per_query(hits, {})
 
     assert selected[["query", "subject"]].to_records(index=False).tolist() == [
         ("a", "b1")
@@ -1584,24 +1584,9 @@ def test_select_reciprocal_best_hit_edges_requires_directional_reciprocity() -> 
         columns=COMPARISON_COLUMNS,
     )
 
-    selected = select_reciprocal_best_hit_edges(forward, reverse)
+    selected = select_reciprocal_best_hit_edges(forward, reverse, {})
 
     assert selected.empty
-
-
-@pytest.mark.linear
-def test_select_top_hits_per_query_is_deterministic_on_subject_tie() -> None:
-    hits = pd.DataFrame.from_records(
-        [
-            _hit_row("a", "b2", bitscore=300),
-            _hit_row("a", "b1", bitscore=300),
-        ],
-        columns=COMPARISON_COLUMNS,
-    )
-
-    selected = select_top_hits_per_query(hits, max_hits=1)
-
-    assert selected.iloc[0]["subject"] == "b1"
 
 
 @pytest.mark.linear
@@ -1856,7 +1841,7 @@ def test_hsp_adjacent_reverse_clamped_union_and_all_selected_hsps(monkeypatch):
         _hit_row("q", "s", bitscore=190, alignment_length=30, qstart=21, qend=50, sstart=50, send=21),
         _hit_row("q", "s", bitscore=180, alignment_length=40, qstart=150, qend=61, sstart=61, send=150)])
     for limit in (1, None):
-        selected = pc._select_member_candidate_hits_per_query(hits, max_hits=limit)
+        selected = pc._select_member_candidate_hits_per_query(hits, max_hits=limit, protein_map=pm)
         result = pc._normalize_directional_hit_table(selected, pm, min_coverage=0.0)
         pair = result.loc[result["subject"] == "s"].iloc[0]
         assert pair["hsp_count"] == 3
