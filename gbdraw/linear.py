@@ -145,6 +145,7 @@ from .cli_utils.losat_output import (
     parse_positive_int as _parse_positive_int,
     write_losat_output_files,
 )
+from .comparisons.identity_scale import LINEAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import losat_entry_filename, losat_pair_filename, unique_losat_filenames
 from .core.numeric import (
     argparse_float,
@@ -666,6 +667,14 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='minimum BLAST alignment length threshold (default=0)',
         type=argparse_integer,
         default=LINEAR_MODE_PROFILE.comparison.alignment_length)
+    parser.add_argument(
+        '--identity_scale',
+        help='Fix the identity colour scale of the pairwise matches and their Legend to MIN..MAX percent '
+        '(0 <= MIN < MAX <= 100), so figures with different --identity thresholds share one scale '
+        '(default: from --identity to 100).',
+        nargs=2,
+        metavar=('MIN', 'MAX'),
+        type=argparse_float)
     parser.add_argument(
         '--pairwise_match_style',
         dest='pairwise_match_style',
@@ -1584,6 +1593,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "labels.linear.protection": args.label_protection,
         # Only the italic style is an override, so a default run's request is unchanged.
         "labels.linear.italic_gene_labels": True if args.italic_gene_labels else None,
+        LINEAR_IDENTITY_SCALE_PATH: list(args.identity_scale) if args.identity_scale else None,
         "labels.linear.placement": label_placement,
         "labels.linear.rotation": label_rotation,
         "objects.features.line_stroke_color": line_stroke_color,

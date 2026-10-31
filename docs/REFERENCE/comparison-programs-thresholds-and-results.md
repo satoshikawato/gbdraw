@@ -76,7 +76,25 @@ only between adjacent display rows.
 
 Display filters are e-value, bit score, identity, and alignment length. Values
 must be finite and non-negative; identity is limited to 0 through 100, and
-alignment length is an integer. Protein modes can also limit candidates or
+alignment length is an integer.
+
+### Identity colour scale
+
+A Linear pairwise match and a Circular similarity-ring hit take their colour
+from where their percent identity falls between the two ends of the identity
+scale, and the comparison Legend labels those two ends. By default the scale
+runs from the identity threshold to 100%, so the same 95% match changes colour
+when the threshold changes. `--identity_scale MIN MAX` fixes the scale
+(0 <= MIN < MAX <= 100), so figures drawn with different thresholds share
+colours and Legend labels: a match below MIN takes the start colour and a match
+above MAX the end colour. The config leaf is `objects.blast_match.identity_scale`
+in Linear and `objects.conservation.identity_scale` in Circular (`"auto"` or
+`[MIN, MAX]`); the Python field is `LinearComparisonOptions.identity_scale` and
+`ComparisonRingOptions.identity_scale`, and the Web app has **Identity scale
+min (%)** and **Identity scale max (%)** beside the identity threshold. The
+scale changes colours only; the threshold still decides which matches are drawn.
+
+Protein modes can also limit candidates or
 hits per query. Collinear mode adds anchor, unit-gap, diagonal-drift, scope,
 and conflict rules. Its unit mode is `auto`, `cds`, or `locus`
 (`--collinear_unit_mode`); anchor mode is `rbh` or `all`

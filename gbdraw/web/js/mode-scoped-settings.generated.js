@@ -201,6 +201,7 @@ export const MODE_SCOPED_SETTINGS = deepFreeze({
     {"domain": "config.adv", "key": null, "migrate": "profile", "modes": "both", "path": "min_bitscore"},
     {"domain": "config.adv", "key": null, "migrate": "profile", "modes": "both", "path": "evalue"},
     {"domain": "config.adv", "key": null, "migrate": "profile", "modes": "both", "path": "identity"},
+    {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "identity_scale"},
     {"domain": "config.adv", "key": null, "migrate": "profile", "modes": "both", "path": "alignment_length"},
     {"domain": "config.losat", "key": null, "migrate": "copy", "modes": "both", "path": "outfmt"},
     {"domain": "config.losat", "key": null, "migrate": "copy", "modes": "both", "path": "blastn"},

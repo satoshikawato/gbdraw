@@ -65,6 +65,7 @@ from .tracks import (
 )
 
 from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
+from .comparisons.identity_scale import CIRCULAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import unique_losat_filenames
 from .core.numeric import argparse_float, argparse_integer, argparse_scale_interval, parse_ascii_finite_float
 from .render.output_paths import preflight_output_paths
@@ -1227,6 +1228,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         # Only a hidden definition is an override, so a default run's request is unchanged.
         "objects.definition.circular.show": False if args.hide_definition else None,
         "objects.conservation.color_scheme": args.conservation_color_scheme,
+        CIRCULAR_IDENTITY_SCALE_PATH: list(args.identity_scale) if args.identity_scale else None,
         "labels.rendering": label_rendering,
         "labels.circular.line": args.label_line,
         "labels.circular.protection": args.label_protection,

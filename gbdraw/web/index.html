@@ -3257,6 +3257,14 @@
                                                 <label class="linear-primary-label mb-1">{{ t('Min length') }}</label>
                                                 <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" :aria-label="t('Linear comparison minimum alignment length')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))" :disabled="!semanticMutationAvailable">
                                             </div>
+                                            <div>
+                                                <label class="linear-primary-label mb-1">{{ t('Identity scale min (%)') }} <help-tip :text="t('Fix the identity colour scale so figures with different thresholds share colours and Legend labels. Leave the minimum blank to colour from the minimum identity to 100%.')"></help-tip></label>
+                                                <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[0] : ''" @change="setIdentityScaleEnd(0, $event.target.value)" :aria-label="t('Linear comparison identity scale minimum')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(adv.identity)" :disabled="!semanticMutationAvailable" data-testid="linear-identity-scale-min">
+                                            </div>
+                                            <div>
+                                                <label class="linear-primary-label mb-1">{{ t('Identity scale max (%)') }}</label>
+                                                <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[1] : ''" @change="setIdentityScaleEnd(1, $event.target.value)" :aria-label="t('Linear comparison identity scale maximum')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(identityPercentMaximum)" :disabled="!semanticMutationAvailable || !adv.identity_scale" data-testid="linear-identity-scale-max">
+                                            </div>
                                         </div>
                                     </div>
 
@@ -3762,6 +3770,14 @@
                                     <div>
                                         <label class="input-label text-[10px]">{{ t('Minimum Length') }}</label>
                                         <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('circular', 'alignment_length') : Number($event.target.value)" :aria-label="t('Circular comparison minimum alignment length')" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'alignment_length'))" :disabled="!semanticMutationAvailable">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">{{ t('Identity scale min (%)') }} <help-tip :text="t('Fix the identity colour scale so figures with different thresholds share colours and Legend labels. Leave the minimum blank to colour from the minimum identity to 100%.')"></help-tip></label>
+                                        <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[0] : ''" @change="setIdentityScaleEnd(0, $event.target.value)" :aria-label="t('Circular comparison identity scale minimum')" class="form-input form-input-compact" :placeholder="String(adv.identity)" :disabled="!semanticMutationAvailable" data-testid="circular-identity-scale-min">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">{{ t('Identity scale max (%)') }}</label>
+                                        <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[1] : ''" @change="setIdentityScaleEnd(1, $event.target.value)" :aria-label="t('Circular comparison identity scale maximum')" class="form-input form-input-compact" :placeholder="String(identityPercentMaximum)" :disabled="!semanticMutationAvailable || !adv.identity_scale" data-testid="circular-identity-scale-max">
                                     </div>
                                 </div>
                             </div>

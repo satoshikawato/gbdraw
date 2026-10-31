@@ -60,6 +60,7 @@ class CircularRingLegendLayout:
     band_y: float
     band_label_x: float
     min_label_text: str
+    max_label_text: str
     min_label_x: float
     max_label_x: float
     scale_label_y: float
@@ -95,12 +96,13 @@ class _MeasuredLegendEntry:
     entry_width: float
 
 
-def min_gradient_label_text(value: object) -> str:
+def gradient_label_text(value: object) -> str:
+    """The Legend text of one end of an identity scale: ``70%``, ``72.5%``."""
     # Non-numeric values were never accepted; legend properties are numeric or numeric strings.
-    min_identity = float(cast("float | str", value or 0))
-    if min_identity == int(min_identity):
-        return f"{int(min_identity)}%"
-    return f"{min_identity}%"
+    identity = float(cast("float | str", value or 0))
+    if identity == int(identity):
+        return f"{int(identity)}%"
+    return f"{identity}%"
 
 
 def _measure_entries(
@@ -181,7 +183,8 @@ def _build_ring_layout(
         bar_width=bar_width,
         band_y=band_y,
         band_label_x=band_label_x,
-        min_label_text=min_gradient_label_text(ring_entries[0].properties.get("min_value", 0)),
+        min_label_text=gradient_label_text(ring_entries[0].properties.get("min_value", 0)),
+        max_label_text=gradient_label_text(ring_entries[0].properties.get("max_value", 100)),
         min_label_x=0.0,
         max_label_x=bar_width,
         scale_label_y=scale_label_y,
@@ -505,5 +508,5 @@ __all__ = [
     "RING_INNER_CAPTION",
     "RING_OUTER_CAPTION",
     "build_circular_legend_layout",
-    "min_gradient_label_text",
+    "gradient_label_text",
 ]

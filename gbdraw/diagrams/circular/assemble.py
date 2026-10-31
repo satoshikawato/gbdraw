@@ -103,6 +103,7 @@ from ...layout.composition import (
     plan_composition,
 )
 from ...layout.spatial import Aabb, bounding_aabb, union_aabbs
+from ...comparisons.identity_scale import IdentityColorDomain, identity_color_domain
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
     DepthLegendSource,
@@ -1828,7 +1829,7 @@ def _sync_legend_table_for_circular_slots(
     depth_tracks: Sequence[DepthLegendSource] | None = None,
     conservation_legend: Sequence[ConservationLegendSource] = (),
     conservation_colors: tuple[str, str] = ("", ""),
-    conservation_min_identity: float | None = None,
+    conservation_domain: IdentityColorDomain | None = None,
 ) -> LegendTable:
     """Replace singleton numeric legend entries with slot-aware entries.
 
@@ -1883,7 +1884,9 @@ def _sync_legend_table_for_circular_slots(
             nt = slot_dinucleotide(slot.params, default_nt)
             out.add_numeric_source(slot_legend_label(slot, f"{nt} skew"), skew.for_skew_slot(slot, nt))
     if conservation_legend:
-        _add_conservation_ring_rows(out, conservation_legend, conservation_colors, conservation_min_identity)
+        _add_conservation_ring_rows(
+            out, conservation_legend, conservation_colors, conservation_domain or identity_color_domain(0.0, None)
+        )
     return out
 
 
@@ -1891,7 +1894,7 @@ def _add_conservation_ring_rows(
     out: LegendTable,
     rings: Sequence[ConservationLegendSource],
     default_colors: tuple[str, str],
-    min_identity: float | None,
+    domain: IdentityColorDomain,
 ) -> None:
     """One row per drawn ring, outermost first, with the identity band they share (PD-OI-110).
 
@@ -1917,7 +1920,8 @@ def _add_conservation_ring_rows(
             "width": 0,
             "min_color": band_min,
             "max_color": band_max,
-            "min_value": float(min_identity or 0.0),
+            "min_value": domain.minimum,
+            "max_value": domain.maximum,
         })
 
 
@@ -3532,7 +3536,7 @@ def build_circular_legend_table(
     annotations: ResolvedAnnotationBundle | None = None,
     conservation_legend: Sequence[ConservationLegendSource] = (),
     conservation_colors: tuple[str, str] = ("", ""),
-    conservation_min_identity: float = 0.0,
+    conservation_domain: IdentityColorDomain | None = None,
 ) -> LegendTable:
     """Build the one Circular legend table for the records drawn on a canvas.
 
@@ -3574,7 +3578,7 @@ def build_circular_legend_table(
         depth_tracks=depth_tracks,
         conservation_legend=conservation_legend,
         conservation_colors=conservation_colors,
-        conservation_min_identity=conservation_min_identity,
+        conservation_domain=conservation_domain,
     )
     if annotations is not None:
         legend_table = sync_annotation_legend_entries(legend_table, annotations, annotation_slots)
@@ -3623,7 +3627,7 @@ def circular_legend_table(
         annotations=annotations,
         conservation_legend=tuple(conservation_legend),
         conservation_colors=(conservation.min_color, conservation.max_color),
-        conservation_min_identity=conservation_min_identity,
+        conservation_domain=identity_color_domain(conservation_min_identity, conservation.identity_scale),
     )
 
 

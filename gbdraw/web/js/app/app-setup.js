@@ -278,7 +278,9 @@ import {
   getDepthTrackFileBaseName,
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
-import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
+import {
+  comparisonProfileDefault, IDENTITY_PERCENT_MAXIMUM, identityScaleWithEnd, linearAxisRulerApplies
+} from '../mode-profiles.js';
 import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, tx, uiLocale } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import {
@@ -7211,6 +7213,12 @@ export const createAppSetup = () => {
     unmanagedConfigOverrideEntries,
     resetUnmanagedConfigOverride,
     comparisonProfileDefault,
+    identityPercentMaximum: IDENTITY_PERCENT_MAXIMUM,
+    /** @param {0 | 1} end @param {string} text */
+    setIdentityScaleEnd: (end, text) => {
+      const { adv } = state.activeDrawing();
+      adv.identity_scale = identityScaleWithEnd(adv.identity_scale, end, text);
+    },
     comparisonHeightValidationError,
     optionalNumberInputValue,
     setOptionalNumberInputValue,

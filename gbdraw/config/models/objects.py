@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import partial
 from numbers import Real
 from typing import Any, Literal, Mapping, Optional, get_args
 
@@ -10,9 +11,16 @@ from gbdraw.definition_line_styles import (
     normalize_definition_line_font_size,
     normalize_definition_line_font_weight,
 )
+from gbdraw.comparisons.identity_scale import (
+    CIRCULAR_IDENTITY_SCALE_PATH,
+    LINEAR_IDENTITY_SCALE_PATH,
+    IdentityScale,
+    identity_scale_from_config,
+)
 from gbdraw.core.numeric import ascii_float, ascii_int
 from gbdraw.exceptions import ValidationError
 
+from .canvas import LEAF_VALIDATOR
 from .common import ShortLongFloatConfig
 
 
@@ -265,6 +273,10 @@ class ObjectsBlastMatchConfig:
     stroke_width: float
     style: PairwiseMatchStyle | str
     curve_tension: float
+    # A fixed identity colour scale; None colours from the identity threshold to 100%.
+    identity_scale: IdentityScale | None = field(
+        default=None, metadata={LEAF_VALIDATOR: partial(identity_scale_from_config, path=LINEAR_IDENTITY_SCALE_PATH)}
+    )
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsBlastMatchConfig":
@@ -274,6 +286,7 @@ class ObjectsBlastMatchConfig:
             stroke_width=ascii_float(d["stroke_width"]),
             style=normalize_pairwise_match_style(d.get("style", "ribbon")),
             curve_tension=_normalize_curve_tension(d.get("curve_tension", 0.5)),
+            identity_scale=identity_scale_from_config(d.get("identity_scale"), path=LINEAR_IDENTITY_SCALE_PATH),
         )
 
 
@@ -331,6 +344,10 @@ class ObjectsConservationConfig:
     ring_gap: float | None
     reference: str
     color_scheme: ConservationColorScheme = "same"
+    # A fixed identity colour scale; None colours from the identity threshold to 100%.
+    identity_scale: IdentityScale | None = field(
+        default=None, metadata={LEAF_VALIDATOR: partial(identity_scale_from_config, path=CIRCULAR_IDENTITY_SCALE_PATH)}
+    )
 
     def __post_init__(self) -> None:
         _normalize_conservation_color_scheme(self.color_scheme)
@@ -350,6 +367,7 @@ class ObjectsConservationConfig:
             ring_gap=_optional_auto_positive_float(d.get("ring_gap", None), field_name="conservation ring_gap"),
             reference=_normalize_conservation_reference(d.get("reference", "auto")),
             color_scheme=_normalize_conservation_color_scheme(d.get("color_scheme", "same")),
+            identity_scale=identity_scale_from_config(d.get("identity_scale"), path=CIRCULAR_IDENTITY_SCALE_PATH),
         )
 
 

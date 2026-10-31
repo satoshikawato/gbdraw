@@ -777,6 +777,20 @@ const italicLabelRequest = buildCanonicalRenderRequestRaw({ state, filesData });
 assert.equal(italicLabelRequest.renderRequest.diagramOptions.configOverrides['labels.circular.italic_gene_labels'], true);
 assert.equal(projectCanonicalSessionRequest(italicLabelRequest).config.adv.italic_gene_labels, true);
 state.adv.italic_gene_labels = false;
+// A fixed identity colour scale: the mode's leaf (named by Python through the generated
+// mode profiles) is in the request only when a scale is set, and projects back to `adv`.
+assert.ok(managedConfigOverridePathsForMode('circular').includes('objects.conservation.identity_scale'));
+assert.ok(!managedConfigOverridePathsForMode('circular').includes('objects.blast_match.identity_scale'));
+assert.equal(
+  Object.hasOwn(uprightLabelRequest.renderRequest.diagramOptions.configOverrides, 'objects.conservation.identity_scale'),
+  false
+);
+assert.equal(projectCanonicalSessionRequest(uprightLabelRequest).config.adv.identity_scale, null);
+state.adv.identity_scale = [40, 90];
+const scaledRequest = buildCanonicalRenderRequestRaw({ state, filesData });
+assert.deepEqual(scaledRequest.renderRequest.diagramOptions.configOverrides['objects.conservation.identity_scale'], [40, 90]);
+assert.deepEqual(projectCanonicalSessionRequest(scaledRequest).config.adv.identity_scale, [40, 90]);
+state.adv.identity_scale = null;
 // PD-OI-109: Show Definition (Circular only). A shown definition is left out of the
 // request, as an earlier writer left it; a hidden one is `false`, and both project back.
 assert.ok(managedConfigOverridePathsForMode('circular').includes('objects.definition.circular.show'));

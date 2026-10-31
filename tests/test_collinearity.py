@@ -9,6 +9,8 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+
+from gbdraw.comparisons.identity_scale import identity_color_domain
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -3358,7 +3360,7 @@ def test_orientation_collinearity_suppresses_pairwise_identity_legend() -> None:
     blast_config = SimpleNamespace(
         min_color="#ffffff",
         max_color="#000000",
-        identity=0,
+        identity_domain=identity_color_domain(0, None),
     )
 
     legend_table = prepare_legend_table(
@@ -3402,7 +3404,7 @@ def test_average_identity_collinearity_legend_uses_average_identity_label() -> N
     blast_config = SimpleNamespace(
         min_color="#ffffff",
         max_color="#000000",
-        identity=0,
+        identity_domain=identity_color_domain(0, None),
     )
 
     legend_table = prepare_legend_table(
@@ -3447,7 +3449,7 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
     blast_config = SimpleNamespace(
         min_color="#ffffff",
         max_color="#000000",
-        identity=0,
+        identity_domain=identity_color_domain(0, None),
     )
 
     legend_table = prepare_legend_table(

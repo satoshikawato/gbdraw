@@ -8,6 +8,7 @@ from typing import Any
 from pandas import DataFrame
 from gbdraw.svg.elements import Group, Path
 
+from ....comparisons.identity_scale import IdentityColorDomain
 from ....core.color import interpolate_color
 from ....layout.circular import RadialBand
 from ....layout.circular_ink import CircularInk, CircularInkRing, stroke_pad_px
@@ -62,14 +63,14 @@ class ConservationDrawer:
     def __init__(
         self,
         *,
-        min_identity: float,
+        identity_domain: IdentityColorDomain,
         min_color: str,
         max_color: str,
         fill_opacity: float,
         stroke_color: str,
         stroke_width: float,
     ) -> None:
-        self.min_identity = float(min_identity)
+        self.identity_domain = identity_domain
         self.min_color = str(min_color)
         self.max_color = str(max_color)
         self.fill_opacity = float(fill_opacity)
@@ -77,11 +78,7 @@ class ConservationDrawer:
         self.stroke_width = float(stroke_width)
 
     def _identity_factor(self, identity: float) -> float:
-        if self.min_identity >= 100:
-            return 1.0 if float(identity) >= 100 else 0.0
-        denominator = 100.0 - float(self.min_identity)
-        factor = (float(identity) - float(self.min_identity)) / denominator
-        return max(0.0, min(1.0, factor))
+        return self.identity_domain.factor(identity)
 
     def _fill_color(self, identity: float) -> str:
         return interpolate_color(

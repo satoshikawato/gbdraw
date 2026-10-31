@@ -80,6 +80,12 @@ from gbdraw.layout.similarity_alignment import (
 )
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.objects import CONSERVATION_COLOR_SCHEME_PATH, ConservationColorScheme
+from gbdraw.comparisons.identity_scale import (
+    CIRCULAR_IDENTITY_SCALE_PATH,
+    LINEAR_IDENTITY_SCALE_PATH,
+    IdentityScale,
+    identity_scale_from_config,
+)
 from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
     ComparisonThresholds,
@@ -352,7 +358,9 @@ class ComparisonRingOptions:
     ``"ten"`` (ten colors, repeating from ring 11) or ``"per_five"`` (one
     color per five rings, repeating from ring 31). ``None`` (the default)
     keeps the config's ``objects.conservation.color_scheme``; a value
-    overrides it.
+    overrides it. ``identity_scale`` ``(MIN, MAX)`` fixes the identity colour
+    scale of the rings and their Legend (0 <= MIN < MAX <= 100); ``None``
+    (the default) colours from the identity threshold to 100%.
     """
 
     tracks: Sequence[ComparisonRingTrackOptions] = ()
@@ -366,6 +374,12 @@ class ComparisonRingOptions:
     ncbi_blast_executable: str | None = None
     threads: int | None = None
     color_scheme: ConservationColorScheme | None = None
+    identity_scale: IdentityScale | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "identity_scale", identity_scale_from_config(self.identity_scale, path="identity_scale")
+        )
 
 
 # Compatibility aliases for the original package-root names.
@@ -393,6 +407,9 @@ class LinearComparisonOptions:
     ``collinearity_infer_orthogroups`` adds within-record searches to
     ``losatp_mode="collinear"`` and groups proteins into similarity groups
     before blocks are built (off by default).
+    ``identity_scale`` ``(MIN, MAX)`` fixes the identity colour scale of the
+    pairwise matches and their Legend (0 <= MIN < MAX <= 100); ``None`` (the
+    default) colours from the identity threshold to 100%.
     """
 
     blast_files: Sequence[str] | None = None
@@ -437,6 +454,12 @@ class LinearComparisonOptions:
     similarity_alignment: (
         SimilarityAlignmentPlan | SimilarityAlignmentReference | None
     ) = None
+    identity_scale: IdentityScale | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "identity_scale", identity_scale_from_config(self.identity_scale, path="identity_scale")
+        )
 
 
 @dataclass(frozen=True)
@@ -942,11 +965,16 @@ def _circular_options(
                 )
             values["conservation_labels"] = labels
         values.update(_ring_color_values(comparison_rings.tracks))
-    if comparison_rings.color_scheme is not None:
-        values["config_overrides"] = {
-            **(options.config_overrides or {}),
-            CONSERVATION_COLOR_SCHEME_PATH: comparison_rings.color_scheme,
-        }
+    ring_overrides = {
+        path: value
+        for path, value in (
+            (CONSERVATION_COLOR_SCHEME_PATH, comparison_rings.color_scheme),
+            (CIRCULAR_IDENTITY_SCALE_PATH, None if comparison_rings.identity_scale is None else list(comparison_rings.identity_scale)),
+        )
+        if value is not None
+    }
+    if ring_overrides:
+        values["config_overrides"] = {**(options.config_overrides or {}), **ring_overrides}
     values.update(
         conservation_reference=comparison_rings.reference,
         conservation_ring_width=comparison_rings.ring_width,
@@ -1087,6 +1115,11 @@ def _linear_options(
         ),
     )
     comparisons = options.comparisons
+    if comparisons.identity_scale is not None:
+        values["config_overrides"] = {
+            **(options.config_overrides or {}),
+            LINEAR_IDENTITY_SCALE_PATH: list(comparisons.identity_scale),
+        }
     values.update(
         blast_files=comparisons.blast_files,
         linear_comparisons=comparisons.comparisons,

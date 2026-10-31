@@ -381,6 +381,14 @@ def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
         help='Minimum BLAST alignment length retained for similarity rings (default: 0).',
         type=argparse_integer,
         default=thresholds.alignment_length)
+    parser.add_argument(
+        '--identity_scale',
+        help='Fix the identity colour scale of the similarity rings and their Legend to MIN..MAX percent '
+        '(0 <= MIN < MAX <= 100), so figures with different --identity thresholds share one scale '
+        '(default: from --identity to 100).',
+        nargs=2,
+        metavar=('MIN', 'MAX'),
+        type=argparse_float)
 
 
 def _add_gc_content_axis_args(parser: argparse.ArgumentParser) -> None:
