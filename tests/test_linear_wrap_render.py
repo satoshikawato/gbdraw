@@ -51,6 +51,7 @@ WRAP = "canvas.linear.wrap_length"
 LAMBDA = Path(__file__).parent / "test_inputs" / "NC_001416.gb"
 LAMBDA_LENGTH = 48_502
 SVG = "{http://www.w3.org/2000/svg}"
+WRAP_ROW = "data-gbdraw-wrap-row"
 GC_ON = {"canvas.show_gc": True, "canvas.show_skew": True, "labels.linear.scope": "all"}
 
 
@@ -119,6 +120,68 @@ def _rows_of(element: ElementTree.Element) -> list[ElementTree.Element]:
 def _translate_y(element: ElementTree.Element) -> float:
     match = re.search(r"translate\(\s*[-0-9.e]+[ ,]+([-0-9.e]+)\s*\)", element.attrib.get("transform", ""))
     return float(match.group(1)) if match else 0.0
+
+
+def _record_groups(root: ElementTree.Element) -> list[ElementTree.Element]:
+    return [element for element in root.iter(f"{SVG}g") if element.attrib.get("id", "").startswith("record_group_")]
+
+
+def _path_points(data: str) -> list[tuple[float, float]]:
+    return [(float(x), float(y)) for x, y in re.findall(r"(-?\d*\.?\d+)[ ,]+(-?\d*\.?\d+)", data)]
+
+
+def _element_ys(element: ElementTree.Element) -> list[float]:
+    """The y coordinates an element draws at, in its own frame."""
+
+    tag = element.tag.removeprefix(SVG)
+    attributes = element.attrib
+    if tag == "path":
+        return [y for _, y in _path_points(attributes["d"])]
+    if tag == "line":
+        return [float(attributes["y1"]), float(attributes["y2"])]
+    if tag == "rect":
+        return [float(attributes["y"]), float(attributes["y"]) + float(attributes["height"])]
+    if tag == "text":
+        half = float(attributes.get("font-size", 0)) / 2.0
+        return [float(attributes["y"]) - half, float(attributes["y"]) + half]
+    return []
+
+
+def _shift(element: ElementTree.Element) -> float:
+    return sum(float(y) for y in re.findall(r"translate\(\s*[-0-9.e]+[ ,]+([-0-9.e]+)\s*\)", element.attrib.get("transform", "")))
+
+
+def _ink_by_row(root: ElementTree.Element) -> tuple[dict[int, tuple[float, float]], list[tuple[float, float]]]:
+    """Each row's drawn vertical extent on the canvas, read from the drawn elements, and each feature label's."""
+
+    rows: dict[int, list[float]] = {}
+    labels: list[tuple[float, float]] = []
+
+    def walk(element: ElementTree.Element, offset: float, row: int | None) -> None:
+        if element.tag == f"{SVG}defs" or element.tag == f"{SVG}clipPath":
+            return
+        offset += _shift(element)
+        row = int(element.attrib[WRAP_ROW]) if WRAP_ROW in element.attrib else row
+        ys = [offset + y for y in _element_ys(element)]
+        if ys and "data-label-feature-id" in element.attrib:
+            labels.append((min(ys), max(ys)))
+        elif ys and row is not None:
+            rows.setdefault(row, []).extend(ys)
+        for child in element:
+            walk(child, offset, row)
+
+    walk(root, 0.0, None)
+    return {row: (min(ys), max(ys)) for row, ys in rows.items()}, labels
+
+
+def _assert_rows_do_not_overlap(root: ElementTree.Element, count: int) -> None:
+    rows, labels = _ink_by_row(root)
+    assert sorted(rows) == list(range(count))
+    extents = [rows[row] for row in sorted(rows)]
+    assert all(above[1] < below[0] for above, below in zip(extents, extents[1:]))
+    # A label stands in its row's band or in the gap above it, so it meets the ink of at most one row.
+    for top, bottom in labels:
+        assert sum(1 for low, high in extents if top < high and low < bottom) <= 1
 
 
 def _labels(root: ElementTree.Element) -> Counter[str]:
@@ -214,8 +277,12 @@ def test_one_record_group_and_one_identity_per_feature(overrides) -> None:
     assert not [identifier for identifier in _ids(wrapped) if "_row_" in identifier]
     assert [identifier for identifier, count in _ids(wrapped).items() if count > 1] == []
     assert not [element for element in _rows_of(wrapped) if element.tag == f"{SVG}g" and "id" in element.attrib]
-    groups = [element for element in wrapped.iter(f"{SVG}g") if "data-gbdraw-record-id" in element.attrib and element.attrib.get("id")]
-    assert len([group for group in groups if group.attrib["id"].startswith("NC_001416")]) >= 1
+    assert len(_record_groups(wrapped)) == 1
+    assert [group.attrib["id"] for group in _record_groups(wrapped)] == [group.attrib["id"] for group in _record_groups(plain)]
+
+
+def test_two_cut_records_draw_two_record_groups() -> None:
+    assert len(_record_groups(_root(_build(also=(LAMBDA,))))) == 2
 
 
 def test_every_row_has_an_axis() -> None:
@@ -283,7 +350,36 @@ def test_gc_percent_plot_data_is_prepared_once_per_record(monkeypatch) -> None:
     assert len(calls) == 1
 
 
-def test_gc_and_skew_have_one_path_per_row_at_the_records_mean() -> None:
+def _half_gc_record(path: Path) -> Path:
+    """20 kb: all GC, then all AT. The record's mean is 0.5, while each half's own mean is its only value."""
+
+    record = SeqRecord(Seq("GC" * 5_000 + "AT" * 5_000), id="HALF1", name="HALF1", description="half")
+    record.annotations["molecule_type"] = "DNA"
+    SeqIO.write(record, path, "genbank")
+    return path
+
+
+def test_each_row_draws_gc_against_the_whole_records_mean(tmp_path: Path) -> None:
+    root = _root(_build(source=_half_gc_record(tmp_path / "half.gb"), overrides={"canvas.show_gc": True}))
+    slot = next(element for element in root.iter(f"{SVG}g") if element.attrib.get("data-gbdraw-slot-renderer") == "dinucleotide_content")
+    deviations = {}
+    for row in slot:
+        if WRAP_ROW not in row.attrib:
+            continue
+        points = _path_points(next(row.iter(f"{SVG}path")).attrib["d"])
+        baseline = points[0][1]
+        # The path opens and closes on the baseline: every sample lies between. A row's own mean would draw it flat.
+        deviations[row.attrib[WRAP_ROW]] = sorted(y - baseline for _, y in points[1:-2])
+    assert deviations["0"] and deviations["1"]
+    medians = {row: values[len(values) // 2] for row, values in deviations.items()}
+    # Most of each row is one composition, a full half track from the record's mean, in opposite directions.
+    # Against its own row's mean, nearly all of a row would lie close to the baseline.
+    assert medians["0"] < 0.0 < medians["1"]
+    assert medians["0"] == pytest.approx(-medians["1"])
+    assert abs(medians["0"]) == pytest.approx(max(abs(value) for value in deviations["0"]))
+
+
+def test_gc_and_skew_have_one_path_per_row() -> None:
     root = _root(_build(overrides=GC_ON))
     slots = {
         element.attrib["data-gbdraw-slot-id"]: element
@@ -350,16 +446,83 @@ def test_a_row_with_more_labels_is_taller_and_a_sparse_one_is_not_padded(tmp_pat
     assert row_heights[2] > row_heights[1]
 
 
-def test_the_records_bottom_extent_is_the_sum_of_its_rows(tmp_path: Path) -> None:
+def test_the_records_extent_is_the_sum_of_its_rows_and_gaps(tmp_path: Path) -> None:
     source = _join_record(tmp_path / "join.gb")
-    record = _geometry(_build(source=source, overrides={"labels.linear.scope": "all"}))
-    assert record["canvasBand"]["bottomPx"] == pytest.approx(record["wrap"]["rowCanvasBands"][-1]["bottomPx"])
-    assert record["canvasBand"]["topPx"] == pytest.approx(record["wrap"]["rowCanvasBands"][0]["topPx"])
+    built = _build(source=source, overrides={"labels.linear.scope": "all"})
+    record = _geometry(built)
+    bands = record["wrap"]["rowCanvasBands"]
+    heights = [band["bottomPx"] - band["topPx"] for band in bands]
+    extent = record["canvasBand"]["bottomPx"] - record["canvasBand"]["topPx"]
+    gaps = [below["topPx"] - above["bottomPx"] for above, below in zip(bands, bands[1:])]
+    assert all(gap > 0.0 for gap in gaps) and gaps[0] == pytest.approx(gaps[-1])
+    assert extent == pytest.approx(sum(heights) + sum(gaps))
+    # Not a uniform pitch: the tallest row times the rows would be more.
+    assert extent < max(heights) * len(heights) + sum(gaps) - 1.0
+    # The canvas holds that extent.
+    assert float(built.drawing.attribs["height"].removesuffix("px")) >= extent
 
 
-def test_rows_do_not_overlap() -> None:
-    bands = _geometry(_build(overrides=GC_ON))["wrap"]["rowCanvasBands"]
-    assert all(below["topPx"] > above["bottomPx"] for above, below in zip(bands, bands[1:]))
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"overrides": GC_ON},
+        {"overrides": {"labels.linear.scope": "all"}},
+        {"overrides": {**GC_ON, "canvas.linear.track_layout": "below"}},
+        {"overrides": {"canvas.strandedness": True, "labels.linear.scope": "all"}},
+        {
+            "overrides": GC_ON,
+            "tracks": LinearRequestTrackOptions(
+                linear_track_slots=(
+                    "gc:dinucleotide_content@side=above",
+                    "features:features@side=below",
+                    "skew:dinucleotide_skew@side=below",
+                )
+            ),
+        },
+    ],
+    ids=["tracks", "labels", "below", "separate_strands", "custom_slots"],
+)
+def test_rows_do_not_overlap_in_the_drawn_output(fields) -> None:
+    _assert_rows_do_not_overlap(_root(_build(**fields)), 5)
+
+
+def test_labels_of_the_first_record_only_on_rows() -> None:
+    root = _root(_build(also=(LAMBDA,), overrides={"labels.linear.scope": "first"}))
+    labels_by_group = [
+        sum(1 for element in group.iter(f"{SVG}text") if "data-label-feature-id" in element.attrib)
+        for group in _record_groups(root)
+    ]
+    assert labels_by_group[0] > 0 and labels_by_group[1] == 0
+    assert len([element for group in _record_groups(root) for element in group.iter() if element.attrib.get("data-gbdraw-wrap-part") == "axis"]) == 10
+
+
+def test_separate_strands_keep_both_strands_on_each_row() -> None:
+    root = _root(_build(overrides={"canvas.strandedness": True}))
+    plain = _root(_build(wrap=None, overrides={"canvas.strandedness": True}))
+    assert _feature_ids(root) == _feature_ids(plain)
+    tops_by_row: dict[str, set[float]] = {}
+    parents = {child: parent for parent in root.iter() for child in parent}
+    for path in root.iter(f"{SVG}path"):
+        if path.attrib.get("data-gbdraw-feature-part") == "block":
+            row = parents[path].attrib[WRAP_ROW]
+            tops_by_row.setdefault(row, set()).add(min(y for _, y in _path_points(path.attrib["d"])))
+    # Each strand has its own lane on a row that holds both.
+    assert any(len(tops) >= 2 for tops in tops_by_row.values())
+
+
+def test_a_custom_slot_order_reaches_every_row() -> None:
+    built = _build(
+        overrides=GC_ON,
+        tracks=LinearRequestTrackOptions(
+            linear_track_slots=("features:features@side=above", "gc:dinucleotide_content@side=below"),
+        ),
+    )
+    root = _root(built)
+    slot = next(element for element in root.iter(f"{SVG}g") if element.attrib.get("data-gbdraw-slot-id") == "gc")
+    assert [row.attrib[WRAP_ROW] for row in slot if WRAP_ROW in row.attrib] == ["0", "1", "2", "3", "4"]
+    assert not [element for element in root.iter(f"{SVG}g") if element.attrib.get("data-gbdraw-slot-id") == "gc_skew"]
 
 
 def test_the_slot_geometry_payload_carries_the_row_offsets(tmp_path: Path) -> None:
@@ -368,6 +531,27 @@ def test_the_slot_geometry_payload_carries_the_row_offsets(tmp_path: Path) -> No
     assert wrap["rowOffsets"][0] == 0.0 and len(wrap["rowOffsets"]) == len(wrap["rowCanvasBands"]) == 3
     assert "rowPitch" not in wrap
     assert "wrap" not in _geometry(_build(wrap=None))
+
+
+def test_a_label_wider_than_its_fragment_keeps_a_neighbour_out_of_its_lane(recwarn) -> None:
+    """The label stands on the longest fragment: its width is measured against that, not the whole span."""
+
+    root = _root(
+        _build(
+            annotations=_annotations(
+                # 900 bp on row 0 and 1,000 bp on row 1, where the label stands, wider than those 1,000 bp.
+                RegionAnnotation(id="across", target=CoordinateSpan(None, 9_100, 11_000), label="Across xxxxxxxxxxxxxxxxxxx", mark="band"),
+                RegionAnnotation(id="neighbour", target=CoordinateSpan(None, 11_040, 11_500), label="Nbr", mark="band"),
+            )
+        )
+    )
+    top = {
+        group.attrib["data-gbdraw-annotation-id"]: next(group.iter(f"{SVG}rect")).attrib["y"]
+        for group in root.iter(f"{SVG}g")
+        if "data-gbdraw-annotation-id" in group.attrib
+    }
+    assert top["across"] != top["neighbour"]
+    assert not [warning for warning in recwarn if "do not fit" in str(warning.message)]
 
 
 def test_a_clipped_annotation_track_clips_per_row_at_the_slots_height() -> None:
@@ -391,13 +575,37 @@ def test_a_clipped_annotation_track_clips_per_row_at_the_slots_height() -> None:
 # The row length sets the size class, and one row length serves every record.
 
 
-def test_the_size_class_follows_the_row_length() -> None:
+def _sparse_record(path: Path, length: int) -> Path:
+    record = SeqRecord(Seq("ATGC" * (length // 4)), id="LONG1", name="LONG1", description="long")
+    record.annotations["molecule_type"] = "DNA"
+    record.features.append(SeqFeature(SimpleLocation(2_000, 8_000, strand=1), type="CDS", qualifiers={"gene": ["a"]}))
+    SeqIO.write(record, path, "genbank")
+    return path
+
+
+def _block_height(built) -> float:
+    root = _root(built)
+    block = next(path for path in root.iter(f"{SVG}path") if path.attrib.get("data-gbdraw-feature-part") == "block")
+    ys = [y for _, y in _path_points(block.attrib["d"])]
+    return max(ys) - min(ys)
+
+
+def test_the_drawn_size_class_follows_the_row_length(tmp_path: Path) -> None:
+    long_record = _sparse_record(tmp_path / "long.gb", 300_000)
+    short_record = _sparse_record(tmp_path / "short.gb", 50_000)
+    above = {"canvas.linear.track_layout": "above"}
+    long_height = _block_height(_build(source=long_record, wrap=None, overrides=above))
+    short_height = _block_height(_build(source=short_record, wrap=None, overrides=above))
+    assert long_height != short_height
+    assert _block_height(_build(source=long_record, wrap=50_000)) == pytest.approx(short_height)
+
+
+def test_the_size_class_of_an_extent_reads_the_row_length_and_the_window_the_record() -> None:
     cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
     whole = DrawnExtent("linear", (300_000,))
     rows = DrawnExtent("linear", (300_000,), wrap_row_length=50_000)
     assert whole.size_class(cfg) == "long"
     assert rows.size_class(cfg) == "short"
-    # The window still reads the whole record.
     assert auto_setting_values(rows, cfg)["window"] == auto_setting_values(whole, cfg)["window"]
 
 

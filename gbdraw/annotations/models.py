@@ -478,6 +478,13 @@ class ResolvedRegionAnnotation:
         return 0 if self.display_parts is None else self._label_part.row
 
     @property
+    def label_room_bp(self) -> int:
+        """What the annotation's label can stand over: its span, or on several rows the fragment it stands on."""
+        if self.display_parts is None or len({part.row for part in self.display_parts}) == 1:
+            return self.span_bp
+        return self._label_part.display_end - self._label_part.display_start
+
+    @property
     def geometry_rows(self) -> tuple[int, ...]:
         """The rows of a wrapped record the annotation draws on, in order."""
         if self.display_parts is None:

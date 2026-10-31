@@ -48,7 +48,7 @@ def _expanded_intervals(
     """What an annotation occupies on one row, with its label on the row that holds it."""
 
     intervals = [(float(start), float(end)) for start, end in annotation.row_segments(row)]
-    if annotation.label and row == annotation.label_row and label_width_bp > annotation.span_bp:
+    if annotation.label and row == annotation.label_row and label_width_bp > annotation.label_room_bp:
         half = label_width_bp / 2.0
         center = float(annotation.geometry_midpoint_bp)
         start, end = center - half, center + half

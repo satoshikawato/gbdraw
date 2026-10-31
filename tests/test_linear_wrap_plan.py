@@ -39,7 +39,6 @@ from gbdraw.mode_profiles import (
     resolve_mode_profile_overrides,
 )
 from gbdraw.session_io import CURRENT_SESSION_VERSION
-from gbdraw.session_request_codec import describe_canonical_request
 from gbdraw.web_support.mode_scoped_settings import SLICE_CONTAINERS
 
 
@@ -562,8 +561,35 @@ def test_a_figure_with_nothing_to_cut_stores_the_plain_leaves_and_replays_byte_i
     assert (tmp_path / "replayed.svg").read_bytes() == (tmp_path / "out.svg").read_bytes()
 
 
-def test_the_option_consumed_by_the_planner_is_refused_in_a_stored_request() -> None:
-    assert "wrap_defaults" not in {name for name in describe_canonical_request()["types"]}
+def _diagram_options(value: object) -> dict | None:
+    if isinstance(value, dict):
+        if isinstance(value.get("diagramOptions"), dict):
+            return value["diagramOptions"]
+        value = list(value.values())
+    for item in value if isinstance(value, list) else ():
+        found = _diagram_options(item)
+        if found is not None:
+            return found
+    return None
+
+
+def test_the_field_the_planner_consumes_is_refused_in_a_stored_request(tmp_path: Path) -> None:
+    saved = _cli("--wrap_length", "10kb", "--save_session", "-o", "out", cwd=tmp_path)
+    assert saved.returncode == 0, saved.stderr
+    session_path = tmp_path / "out.gbdraw-session.json"
+    session = _session(session_path)
+    options = _diagram_options(session)
+    assert options is not None and "wrapDefaults" not in options
+    options["wrapDefaults"] = {"trackLayout": "above"}
+    session_path.write_text(json.dumps(session), encoding="utf-8")
+    replay = subprocess.run(
+        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", session_path.name,
+         "-o", "replayed", "-f", "svg"],
+        cwd=tmp_path, capture_output=True, text=True, env={"PYTHONPATH": str(Path(__file__).parents[1]), "PATH": "/usr/bin:/bin"},
+    )
+    assert replay.returncode != 0
+    assert "wrapDefaults" in replay.stderr + replay.stdout
+    assert not (tmp_path / "replayed.svg").exists()
 
 
 def test_session_form_key_reads_in_the_linear_slice_and_replays() -> None:

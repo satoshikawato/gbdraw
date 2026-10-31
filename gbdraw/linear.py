@@ -69,7 +69,7 @@ from .analysis.protein_colinearity import (
 )
 from .config.modify import modify_config_dict
 from .config.models.objects import normalize_pairwise_match_style
-from .config.models.canvas import linear_axis_ruler_applies
+from .config.models.canvas import LINEAR_WRAP_LENGTH_PATH, linear_axis_ruler_applies
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
 from .mode_profiles import (
@@ -1613,7 +1613,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "canvas.resolve_overlaps": resolve_overlaps,
         "canvas.feature_overlap_tolerance_bp": args.feature_overlap_tolerance_bp,
         "canvas.linear.track_layout": args.track_layout,
-        "canvas.linear.wrap_length": args.wrap_length,
+        LINEAR_WRAP_LENGTH_PATH: args.wrap_length,
         "canvas.linear.track_axis_gap": track_axis_gap,
         "canvas.linear.ruler_on_axis": ruler_on_axis,
         "canvas.linear.align_center": align_center,
