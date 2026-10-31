@@ -1,6 +1,6 @@
 # Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th, de, it, pl, tr, ru, uk
 
-Revision 11, 2026-10-31 (German, Italian, Polish, Turkish, Russian and Ukrainian: §12–§17; plural objects for few/many locales: §1.3). Revision 10 was the 2026-10-22 revision (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
+Revision 11, 2026-10-31 (German, Italian, Polish, Turkish, Russian and Ukrainian: §12–§17; plural objects for few/many locales and the de, it, pl, tr plural and separator lists: §1.3; the cited Auto option in de: §12.2; tr dialog titles and singular `one` forms: §15.2, §15.5). Revision 10 was the 2026-10-22 revision (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
 locale, rail names wrap only between words in every locale, ja/zh comparative-genomics terms with no established use stay English,
 ja Attach, zh Either and axis line, es/fr/pt counts and exact matches, fr stroke and Linear scale, id/vi/th record selector
 and feature wording: §1.5, §2, §3, §4, §5.1, §6, §7, §8, §9, §10, §11. Revision 9: counted sentences are `tn` pairs, and
@@ -94,7 +94,8 @@ nothing states that they are reviewed.
   sentence.
 - A `tn` key has one string in `ja`, `zh-Hans`, `zh-Hant` and `ko`, which have
   no plural forms (`Intl.PluralRules` returns `other`), and a `one` and an
-  `other` string in `es`, `fr` and `pt` (§5.5 to §11.5). `th`, `id` and `vi`
+  `other` string in `es`, `fr`, `pt`, `de`, `it` and `tr` (§5.5 to §11.5,
+  §12.5, §13.5, §15.5). `th`, `id` and `vi`
   have no plural forms either: `Intl.PluralRules` selects `other` for every
   count, so their `one` rows are never shown (they carry the `other` text or a
   natural singular; §9.5, §10.5, §11.5).
@@ -118,7 +119,8 @@ nothing states that they are reviewed.
   `<i18n-text>` component places the element at its `{name}` slot (D-04).
 - Two sentences shown together are two keys. The code joins them with a
   language-dependent separator: a space in English and in `ko`, `es`,
-  `fr`, `pt`, `id`, `vi` and `th`, none after 。 in `ja` and `zh-*` (D-18). Do
+  `fr`, `pt`, `id`, `vi`, `th`, `de`, `it`, `pl` and `tr`, none after 。 in
+  `ja` and `zh-*` (D-18). Do
   not add a trailing space to a value.
 - Quotes follow the English: a `{name}` that the English key quotes is quoted
   in the target language's quotes (`ja` 「」, `zh-Hans` “ ”, `zh-Hant` 「」,
@@ -1840,8 +1842,10 @@ label itself is Sprache. This section is a draft; no text states that it is revi
   Sie es erneut, wenn der Vorgang abgeschlossen ist.
 - Required / optional / recommended: erforderlich (invariable after a field: Region (optional)),
   optional, empfohlen. Not Pflichtfeld, not optionell.
-- An option or button name is never the grammatical subject: Bei „Automatisch“ wird …; Beim
-  Speichern wird …, not Automatisch wählt … .
+- An option or button name is never the grammatical subject: Bei „Auto“ wird …; Beim
+  Speichern wird …, not Auto wählt … . A text cites the label the control shows: the options
+  read Auto, so help and notices cite „Auto“; „Automatisch“ only where the control itself shows
+  automatisch.
 
 ### 12.3 Punctuation and spacing
 
@@ -2323,7 +2327,9 @@ page `lang` is `tr`; the menu label is Dil. This section is a draft and nothing 
   (Ayarları sıfırla, Tüm kayıtları seç). Never the infinitive (Kaydetmek).
 - Labels, headings, tabs, column headers, badges: a noun phrase without a final period, with the possessive
   compound Turkish needs (Yazı tipi boyutu, Etiket görünürlüğü). Options are nouns or adjectives (Otomatik, Etkin).
-  A dialog title that asks ends in mI: Bu dosya kaldırılsın mı?
+  A dialog title that asks ends in mI: Bu dosya kaldırılsın mı? A dialog title that names its command stays the
+  command, as the button it opens from (Varsayılan renkleri sıfırla, Kayıtları seçin): the -mA noun (sıfırlama)
+  would read as the negative imperative ("do not reset").
 - Required, optional, recommended: Gerekli, İsteğe bağlı, Önerilen. A field marker is (isteğe bağlı).
 - Progress (…ing): -iliyor / -ıyor + … (Oturum kaydediliyor…, Diyagram oluşturuluyor…). Completion: -ildi in a
   status line (Oturum kaydedildi.; Alignment applied: Hizalama uygulandı.).
@@ -2377,8 +2383,10 @@ page `lang` is `tr`; the menu label is Dil. This section is a draft and nothing 
   5. A pair is an arrow: #{from} → #{to}. An ordinal is a class noun: Dosya {n} (not {n}. dosya).
   6. A quoted placeholder is followed by a space and a noun, never by a suffix: “{name}” dosyası.
 - {count} precedes a singular noun (a noun after a numeral is singular): {count} kayıt, never {count} kayıtlar. Turkish
-  has `one` and `other` only; Intl.PluralRules('tr') returns one for 1 alone, and 0 or 1.5 take other. Both forms are
-  the same string, so the `one` and `other` catalog values are equal (D-09). A string that counts things without
+  has `one` and `other` only; Intl.PluralRules('tr') returns one for 1 alone, and 0 or 1.5 take other. The two forms
+  are usually the same string (D-09). Because `one` is exactly 1, the `one` value may be a singular where the English
+  `one` form names a single thing (Seçilen özellik zaten sola bakıyor. / Seçilen {count} özelliğin tümü zaten sola
+  bakıyor.). A string that counts things without
   `tn` is a noun phrase and a colon: Gerekli sütun sayısı: {count}.
 - Worked pairs, `one` / `other` (English `other` key in parentheses):
   1. ({count} source records inspected): {count} kaynak kayıt incelendi / {count} kaynak kayıt incelendi
