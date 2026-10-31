@@ -787,13 +787,22 @@ def test_upload_action_chooses_the_file_through_the_named_button() -> None:
         def locator(self, selector: str) -> FakeLocator:
             return FakeLocator(selector)
 
+        def evaluate(self, script: str) -> None:
+            events.append("wait for transitions")
+
     selector = "role=button[name='Choose Priority File (TSV)']"
     capture_tool.apply_capture_action(
         FakePage(), {"type": "upload", "selector": selector, "path": "gallery/files/qualifier_priority.tsv"}
     )
 
     expected = capture_tool.WEB_ROOT.resolve() / "gallery/files/qualifier_priority.tsv"
-    assert events == ["expect_file_chooser", ("click", selector), "file_chooser_opened", ("set_files", str(expected))]
+    assert events == [
+        "expect_file_chooser",
+        ("click", selector),
+        "file_chooser_opened",
+        ("set_files", str(expected)),
+        "wait for transitions",
+    ]
 
 
 def test_replay_resets_then_performs_steps_through_the_named_one(
@@ -851,6 +860,9 @@ def test_reset_settings_waits_for_the_diagram_update_to_finish() -> None:
             events.append(f"timeout {ms}")
 
         def wait_for_function(self, script: str, timeout: int) -> None:
+            events.append(script)
+
+        def evaluate(self, script: str) -> None:
             events.append(script)
 
     capture_tool.apply_capture_action(FakePage(), {"type": "resetSettings"})
@@ -972,3 +984,19 @@ def test_popup_captures_find_popup_parts_by_their_hooks() -> None:
     for path in tutorials:
         scan(json.loads(path.read_text(encoding="utf-8")), path.name)
     assert tutorials and not found, found
+
+
+def test_each_capture_action_lets_its_transitions_end_before_the_next() -> None:
+    """A zoom or pan moves the preview in a 0.2 s transition. The popup script measured the
+    ribbon before it ended, at its old place off the page, and put the popup past the edge (OV-2280)."""
+
+    events: list[str] = []
+
+    class FakePage:
+        def evaluate(self, script: str, *args: object) -> None:
+            events.append(script)
+
+    capture_tool.apply_capture_action(FakePage(), {"type": "evaluate", "script": "app.zoom = 1.15"})
+
+    assert events[0] == "app.zoom = 1.15"
+    assert len(events) == 2 and "CSSTransition" in events[1] and ".finished" in events[1]

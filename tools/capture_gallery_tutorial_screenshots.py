@@ -708,6 +708,9 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
         chooser.value.set_files(str(path))
     else:
         raise RuntimeError(f"Unsupported capture action: {action_type}")
+    # The next action measures what this one moved: a zoom or pan moves the preview in a
+    # 0.2 s transition, and a box read before it ends is the old one (OV-2280).
+    wait_for_css_transitions(page)
 
 
 def generate_and_wait(page, timeout_ms: int) -> None:
