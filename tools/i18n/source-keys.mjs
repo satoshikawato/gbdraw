@@ -46,7 +46,8 @@ const RUNTIME_FILES = new Set(['utils/i18n.js']);
  * @property {string} key the catalog key
  * @property {string} english the English text shown
  * @property {string | null} context the `tx()` context, or null
- * @property {{ one: string, other: string } | null} plural the `tn()` pair the key is one form of, or null
+ * @property {{ one: string, other: string } | null} plural the `tn()` pair the key is one form of, or null when
+ *   another call or a derived list also produces the key (its translation is then one string)
  * @property {KeySite[]} sites
  */
 /**
@@ -419,10 +420,13 @@ export const sourceKeys = async () => {
    * @param {{ one: string, other: string } | null} plural
    */
   const add = (key, english, context, site, plural) => {
-    const entry = keys.get(key) ?? { key, english, context, plural: null, sites: [] };
-    entry.plural ??= plural;
+    const entry = keys.get(key);
+    if (!entry) {
+      keys.set(key, { key, english, context, plural, sites: [site] });
+      return;
+    }
+    if (!plural) entry.plural = null;
     entry.sites.push(site);
-    keys.set(key, entry);
   };
   for (const path of sourceFiles()) {
     const source = sourceText(path);

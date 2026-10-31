@@ -12,8 +12,8 @@ import { CONTEXT_SEPARATOR, UI_LOCALES } from '../../gbdraw/web/js/utils/i18n.js
 import {
   CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, formatCatalog, glossaryMatcher, parseCatalog, parseGlossary, readCatalog
 } from '../../tools/i18n/catalogs.mjs';
-import { reviewKeyId, reviewPageData } from '../../tools/i18n/review-page-data.mjs';
-import { roleAt, sourceKeys } from '../../tools/i18n/source-keys.mjs';
+import { reviewDraftText, reviewKeyId, reviewPageData } from '../../tools/i18n/review-page-data.mjs';
+import { roleAt, sourceCalls, sourceKeys } from '../../tools/i18n/source-keys.mjs';
 import { previousKeyOf, runSync } from '../../tools/i18n/sync.mjs';
 
 const { keys } = await sourceKeys();
@@ -68,6 +68,14 @@ test('a key carries each call site with its role and part of the app', () => {
   assert.match(heading.sites[0].snippet, /t\('Generating Diagram\.\.\.'\)/);
   const plural = [...keys.values()].find(({ plural: pair }) => pair);
   assert.ok(keys.get(plural.plural.one).plural && keys.get(plural.plural.other).plural, 'both forms of a tn() pair name the pair');
+  // A key that a t(), tx() or msg() call or a derived list also produces keeps one string, so it names no pair.
+  const producers = new Map();
+  for (const call of sourceCalls()) if (!('problem' in call)) producers.set(call.key, [...(producers.get(call.key) ?? []), call.name]);
+  for (const entry of keys.values()) {
+    if (!entry.plural) continue;
+    const names = producers.get(entry.key) ?? [];
+    assert.ok(names.length === entry.sites.length && names.every((name) => name === 'tn'), `${entry.key}: only tn() calls produce a plural key`);
+  }
   const context = keys.get(`size scaling${CONTEXT_SEPARATOR}Linear`);
   assert.equal(context.context, 'size scaling');
   assert.equal(context.sites[0].area, 'Settings: Layout');
@@ -81,7 +89,12 @@ test('every catalog prints back to its own bytes; other text is refused', () => 
   }
   assert.throws(() => parseCatalog('export default {};\n'), /canonical/);
   assert.throws(() => parseCatalog('// x\nexport default Object.freeze({\n  "a": 1\n});\n'), /not a string/);
+  assert.throws(() => parseCatalog('// x\nexport default Object.freeze({\n  "a": {"other": 1}\n});\n'), /not a string/);
   assert.equal(formatCatalog({ header: '// h\n', entries: { b: '2', a: '1', B: '3' } }), '// h\nexport default Object.freeze({\n  "B": "3",\n  "a": "1",\n  "b": "2"\n});\n');
+  // Plural forms print on the key's row in CLDR category order, and read back to the same bytes.
+  const plural = formatCatalog({ header: '// h\n', entries: { n: { other: 'o', few: 'f', many: 'm' } } });
+  assert.equal(plural, '// h\nexport default Object.freeze({\n  "n": {"few": "f", "many": "m", "other": "o"}\n});\n');
+  assert.equal(formatCatalog(parseCatalog(plural)), plural);
 });
 
 test('glossary hints: whole-word terms, longest first, names kept in every locale left out', () => {
@@ -111,8 +124,7 @@ test('status counts missing and stale keys; --require-complete fails on either',
   // A stale key alone: the PR-tier catalog check passes it, the release gate fails it.
   const stale = scratch(t);
   stale.edit('fr', (entries) => { entries['Old text'] = 'Ancien texte'; });
-  const english = new Map([...keys.values()].map(({ key, english: text }) => [key, text]));
-  assert.deepEqual(catalogProblems(english, readCatalog('fr', stale.root).entries), []);
+  assert.deepEqual(catalogProblems(keys, readCatalog('fr', stale.root).entries), []);
   const gate = await stale.run('status', '--locale', 'fr', '--require-complete');
   assert.equal(gate.code, 1);
   assert.ok(gate.lines.includes('  stale "Old text"'));
@@ -165,6 +177,33 @@ test('apply writes the canonical catalog, drops stale keys, and changes no byte 
   assert.equal(Object.keys(after).length, keys.size);
 });
 
+test('plural forms go through export and apply as an object; apply refuses them on a key that is no tn() form', async (t) => {
+  const { run, bytes, file } = scratch(t);
+  const counted = [...keys.values()].find(({ key, plural }) => plural && key === plural.other && /\{count\}/.test(key));
+  const forms = { many: `${counted.key} (many)`, few: `${counted.key} (few)`, other: `${counted.key} (other)` };
+  assert.deepEqual((await run('apply', '--locale', 'fr', file('plural.jsonl', [{ key: counted.key, translation: forms }]))).lines,
+    ['fr: 1 lines applied (1 changed), 0 stale keys dropped']);
+  assert.match(bytes()['fr.js'], new RegExp(`\\n  ${JSON.stringify(counted.key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: \\{"few": `));
+  const exported = (await run('export', '--locale', 'fr', '--all')).lines.map((text) => JSON.parse(text));
+  assert.deepEqual(exported.find(({ key }) => key === counted.key).translation, { few: forms.few, many: forms.many, other: forms.other });
+  const before = bytes();
+  assert.deepEqual((await run('apply', '--locale', 'fr', file('again.jsonl', exported))).lines,
+    [`fr: ${keys.size} lines applied (0 changed), 0 stale keys dropped`], 'the export applied again changes nothing');
+  assert.deepEqual(bytes(), before);
+
+  const { code, lines } = await run('apply', '--locale', 'fr', file('refused.jsonl', [
+    { key: 'Generating Diagram...', translation: { one: 'Génération…', other: 'Générations…' } },
+    { key: counted.key, translation: { few: '{n}', other: forms.other } }
+  ]));
+  assert.equal(code, 1);
+  assert.deepEqual(lines.map((line) => line.replace(/^refused .*?:(\d+): /, 'refused $1: ')), [
+    'refused 1: "Generating Diagram...": plural forms are allowed only for a form of a tn() pair',
+    `refused 2: ${JSON.stringify(counted.key)} few: placeholders {n} differ from the English {count}`,
+    'fr: nothing written; fix the 2 refused line(s)'
+  ]);
+  assert.deepEqual(bytes(), before, 'nothing written');
+});
+
 test('apply refuses unknown keys, placeholder changes, repeated keys and bad lines, and then writes nothing', async (t) => {
   const { run, bytes, file } = scratch(t);
   const before = bytes();
@@ -184,13 +223,13 @@ test('apply refuses unknown keys, placeholder changes, repeated keys and bad lin
     'refused bad.jsonl:1: "Not a key of the sources" is not a key of the sources',
     `refused bad.jsonl:2: ${JSON.stringify(counted.key)}: placeholders {n} differ from the English {count}`,
     'refused bad.jsonl:4: "Generating Diagram..." is given twice',
-    'refused bad.jsonl:5: not an object with a string "key" and a string "translation"',
+    'refused bad.jsonl:5: not an object with a string "key" and a string or object "translation"',
     'refused bad.jsonl:6: "Cancel": the translation is empty',
     'refused bad.jsonl:7: not a JSON line',
-    'refused bad.jsonl:8: not an object with a string "key" and a string "translation"',
-    'refused bad.jsonl:9: not an object with a string "key" and a string "translation"',
-    'refused bad.jsonl:10: not an object with a string "key" and a string "translation"',
-    'refused bad.jsonl:11: not an object with a string "key" and a string "translation"',
+    'refused bad.jsonl:8: not an object with a string "key" and a string or object "translation"',
+    'refused bad.jsonl:9: not an object with a string "key" and a string or object "translation"',
+    'refused bad.jsonl:10: not an object with a string "key" and a string or object "translation"',
+    'refused bad.jsonl:11: not an object with a string "key" and a string or object "translation"',
     'es: nothing written; fix the 10 refused line(s)'
   ]);
   assert.deepEqual(bytes(), before);
@@ -219,6 +258,9 @@ test('the review page data: ids are sha1(key)[:12], drafts are the catalogs, the
   assert.ok(rows.every(({ g }) => g.every((index) => glossary[index])));
   const ja = JSON.parse(files.get('draft-ja.json'));
   assert.equal(ja[reviewKeyId('Cancel')], readCatalog('ja').entries.Cancel);
+  // The page shows one string per key: plural forms are joined in CLDR category order.
+  assert.equal(reviewDraftText('{count} rows'), '{count} rows');
+  assert.equal(reviewDraftText({ other: 'o {count}', many: 'm {count}', few: 'f {count}' }), 'few: f {count} | many: m {count} | other: o {count}');
   assert.deepEqual(JSON.parse(files.get('shots.json')).keys, { [kept]: [[0, 1, 2, 3, 4]] });
   assert.equal(files.get('style.md'), readFileSync(join(import.meta.dirname, '..', '..', 'docs', 'internal', 'I18N_STYLE.md'), 'utf8'));
 });

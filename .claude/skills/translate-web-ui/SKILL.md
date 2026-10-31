@@ -46,7 +46,9 @@ steps 2 to 5 (English fixes, terms, drafting, review, decisions).
    glossary rows in the file. A `previous` entry marked `needs-check` is the
    old translation of a key whose English changed slightly: reuse it only
    after checking it against the new English. The drafter returns JSON lines
-   `{"key": ..., "translation": ...}`.
+   `{"key": ..., "translation": ...}`; for a key with a `plural` pair, a
+   drafter of a language with `few` or `many` forms returns the translation as
+   an object of CLDR categories with `other` (I18N_STYLE §1.3).
 5. **Review per locale, in a fresh context.** Give a reviewer the English,
    the draft, the style section and the glossary, and these calibration cases
    from earlier rounds, which drafts got wrong:

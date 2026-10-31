@@ -16,18 +16,23 @@
 //   cell, the current translation, and, for a missing key whose English is a
 //   small edit of a stale key, that key and its translation as `previous`.
 // apply: reads lines of {"key", "translation"}, refuses a line that is not an
-//   object with those two strings, a key the sources do not have, and an empty
-//   translation or one whose placeholders differ, then writes the
-//   catalog in its canonical format without its stale keys. Nothing is written
+//   object with a string key and a string or object translation, a key the
+//   sources do not have, and an empty translation or one whose placeholders
+//   differ; a translation may be an object of plural forms (`PluralForms` in
+//   gbdraw/web/js/utils/i18n.js) only on a form of a tn() pair, and each form
+//   is checked like a string. It then writes the catalog in its canonical
+//   format without its stale keys. Nothing is written
 //   when a line is refused; a catalog that does not change is not rewritten.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import {
-  CATALOG_LOCALES, CATALOG_ROOT, catalogPath, catalogStatus, formatCatalog, glossaryMatcher, readCatalog, readGlossary, translationProblem
+  CATALOG_LOCALES, CATALOG_ROOT, catalogPath, catalogStatus, formatCatalog, formatCatalogValue, glossaryMatcher, isRecord, readCatalog,
+  readGlossary, translationProblems
 } from './catalogs.mjs';
 import { placeholdersOf, sourceKeys } from './source-keys.mjs';
 
+/** @import { PluralForms } from '../../gbdraw/web/js/utils/i18n.js' */
 /** @typedef {import('./source-keys.mjs').SourceKey} SourceKey */
 /** @typedef {import('./source-keys.mjs').KeyRole} KeyRole */
 
@@ -41,12 +46,13 @@ import { placeholdersOf, sourceKeys } from './source-keys.mjs';
  * @property {{ one: string, other: string } | null} plural the tn() pair this key is a form of
  * @property {{ file: string, line: number, role: KeyRole }[]} sites
  * @property {{ en: string, term: string, note: string }[]} glossary
- * @property {string | null} translation the catalog's translation, or null
- * @property {{ key: string, translation: string, status: 'needs-check' } | null} previous
+ * @property {string | PluralForms | null} translation the catalog's translation, or null
+ * @property {{ key: string, translation: string | PluralForms, status: 'needs-check' } | null} previous
  */
 /**
- * One line of an apply file; other fields of an export line are ignored.
- * @typedef {{ key: string, translation: string }} ApplyRecord
+ * One line of an apply file; other fields of an export line are ignored. An
+ * object translation is unchecked until `translationProblems` passes it.
+ * @typedef {{ key: string, translation: string | Readonly<Record<string, unknown>> }} ApplyRecord
  */
 /**
  * @typedef {object} SyncOptions
@@ -87,12 +93,12 @@ export const previousKeyOf = (key, stale) => {
 
 /**
  * @param {unknown} value one parsed line of an apply file
- * @returns {ApplyRecord | null} null unless a plain object with a string key and a string translation
+ * @returns {ApplyRecord | null} null unless a plain object with a string key and a string or object translation
  */
 const applyRecordOf = (value) => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
-  const { key, translation } = /** @type {Record<string, unknown>} */ (value);
-  return typeof key === 'string' && typeof translation === 'string' ? { key, translation } : null;
+  if (!isRecord(value)) return null;
+  const { key, translation } = value;
+  return typeof key === 'string' && (typeof translation === 'string' || isRecord(translation)) ? { key, translation } : null;
 };
 
 /**
@@ -176,7 +182,7 @@ export const runSync = async (argv, { catalogRoot = CATALOG_ROOT, print = (line)
     return 0;
   }
   // apply
-  /** @type {Record<string, string>} */
+  /** @type {Record<string, string | PluralForms>} */
   const applied = {};
   const refused = [];
   const lines = readFileSync(files[0], 'utf8').split('\n');
@@ -193,7 +199,7 @@ export const runSync = async (argv, { catalogRoot = CATALOG_ROOT, print = (line)
     }
     const record = applyRecordOf(parsed);
     if (!record) {
-      refused.push(`${where}: not an object with a string "key" and a string "translation"`);
+      refused.push(`${where}: not an object with a string "key" and a string or object "translation"`);
       continue;
     }
     const entry = keys.get(record.key);
@@ -205,9 +211,10 @@ export const runSync = async (argv, { catalogRoot = CATALOG_ROOT, print = (line)
       refused.push(`${where}: ${JSON.stringify(entry.key)} is given twice`);
       continue;
     }
-    const problem = translationProblem(entry.key, entry.english, record.translation);
-    if (problem) refused.push(`${where}: ${problem}`);
-    else applied[entry.key] = record.translation;
+    const problems = translationProblems(entry, record.translation);
+    if (problems.length) refused.push(`${where}: ${problems.join('; ')}`);
+    // translationProblems passes only a string or plural forms.
+    if (!problems.length) applied[entry.key] = /** @type {string | PluralForms} */ (record.translation);
   }
   if (refused.length) {
     for (const line of refused) print(`refused ${line}`);
@@ -220,7 +227,8 @@ export const runSync = async (argv, { catalogRoot = CATALOG_ROOT, print = (line)
   const path = catalogPath(tag, catalogRoot);
   const before = readFileSync(path, 'utf8');
   const after = formatCatalog({ header: catalog.header, entries });
-  const changed = Object.keys(applied).filter((key) => catalog.entries[key] !== applied[key]).length;
+  const changed = Object.keys(applied)
+    .filter((key) => !Object.hasOwn(catalog.entries, key) || formatCatalogValue(catalog.entries[key]) !== formatCatalogValue(applied[key])).length;
   if (after !== before) writeFileSync(path, after);
   print(`${tag}: ${Object.keys(applied).length} lines applied (${changed} changed), ${stale.length} stale keys dropped`);
   return 0;
