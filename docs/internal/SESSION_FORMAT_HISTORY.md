@@ -18,10 +18,12 @@ The config leaf `canvas.linear.wrap_length` (`"none"`, `"auto"`, or a positive
 length in bp) and the Linear slice's `form.linear_wrap_length`, an `own` row of
 the mode-scoped registry whose replay flag is `--wrap_length`, are new. No Web
 writer writes the form key yet, and Python draws no record over several rows
-yet, so no writer can produce a file that a `main` build refuses and
-`SESSION_VERSION` stays 49. A `main` build refuses both: the slice's `form` is
-closed (`_validate_mode_slice_fields`) and an unknown override path fails
-(`UNKNOWN_CONFIG_PATH`). The change that first writes either one raises the
+yet, so no writer can produce a wrapped file and `SESSION_VERSION` stays 49. An
+unwrapped CLI Session holds the leaf as `"none"` in its full config, which a
+`main` build ignores and draws the same. A `main` build would refuse the form
+key (the slice's `form` is closed, `_validate_mode_slice_fields`) and an override
+path (`UNKNOWN_CONFIG_PATH`), and would draw a stored full config with a length
+on one row. The change that first draws wrapped rows therefore raises the
 version, or keeps a version that has not reached `main`.
 
 ## Unreleased: Session 49 stores whether a Circular slice shows the centre definition

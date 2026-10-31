@@ -18,7 +18,7 @@ def _samples(
 ) -> ProjectedScalarLine:
     """The samples a Linear track path draws, in display order (projected when the record is transformed)."""
 
-    if record_transform is not None and record_transform.start_coordinate is not None:
+    if record_transform is not None and record_transform.projects:
         return project_scalar_line(positions, values, record_transform)
     return ProjectedScalarLine(np.asarray(positions, dtype=float), np.asarray(values, dtype=float), ())
 
@@ -106,7 +106,7 @@ def calculate_linear_scalar_area_path_desc(
     baseline_y = float(start_y) + float(track_height)
     positions, values, segment_starts = _samples(
         # Unprojected positions are whole bases.
-        scalar_df[position_column] if record_transform is not None and record_transform.start_coordinate is not None
+        scalar_df[position_column] if record_transform is not None and record_transform.projects
         else scalar_df[position_column].to_numpy().astype(np.int64),
         scalar_df[value_column],
         record_transform,

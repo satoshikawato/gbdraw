@@ -54,7 +54,7 @@ def project_feature_parts(
     The +1 traversal for an undirected block orders geometry only. It does not
     assert biological strand or terminals, and never changes the source feature.
     """
-    if transform.start_coordinate is None:
+    if not transform.projects:
         raise ValueError("Unset feature geometry must use the existing local path")
     parts = [SourceInterval(
         int(exon.start), int(exon.end),
@@ -65,7 +65,7 @@ def project_feature_parts(
         partial_start=partial.start,
         partial_end=partial.end,
     ) for index, (exon, partial) in enumerate(zip(exons, location_partial_ends(exons), strict=True))]
-    # With start_coordinate set (checked above) project_local_parts returns DisplayFragments.
+    # A projecting transform (checked above) makes project_local_parts return DisplayFragments.
     by_part: dict[int, list[DisplayFragment]] = {}
     for fragment in cast("tuple[DisplayFragment, ...]", transform.project_local_parts(parts)):
         by_part.setdefault(fragment.part_index, []).append(fragment)

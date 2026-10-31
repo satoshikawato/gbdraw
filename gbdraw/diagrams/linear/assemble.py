@@ -1508,8 +1508,8 @@ def _linear_axis_ruler_bounds(
             ticks.append(int(tick))
         tick += tick_interval
     projected_ticks = None
-    if record_transform is not None and record_transform.start_coordinate is not None:
-        projected_ticks = dict(source_ruler_ticks(record_transform, tick_interval))
+    if record_transform is not None and record_transform.projects:
+        projected_ticks = {tick.base: tick.offset for tick in source_ruler_ticks(record_transform, tick_interval)}
         ticks = list(projected_ticks)
     if not ticks:
         return None

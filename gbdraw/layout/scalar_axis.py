@@ -33,8 +33,8 @@ def project_scalar_samples(
     """
     points = tuple(SeriesPoint(float(position), float(value))
                    for position, value in zip(positions, values, strict=True))
-    # Every caller reaches this point only when ``transform.start_coordinate`` is set,
-    # where project_local_series returns DisplaySeries (it returns the input points when unset).
+    # Every caller reaches this point only when ``transform.projects``,
+    # where project_local_series returns DisplaySeries (it returns the input points otherwise).
     return cast(tuple[DisplaySeries, ...], transform.project_local_series(points))
 
 

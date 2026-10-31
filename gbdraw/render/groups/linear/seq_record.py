@@ -254,8 +254,8 @@ class SeqRecordGroup:
 
         tick_coords = self._axis_tick_coordinates(start_coord, end_coord, interval)
         projected_ticks = None
-        if self.record_transform is not None and self.record_transform.start_coordinate is not None:
-            projected_ticks = dict(source_ruler_ticks(self.record_transform, interval))
+        if self.record_transform is not None and self.record_transform.projects:
+            projected_ticks = {tick.base: tick.offset for tick in source_ruler_ticks(self.record_transform, interval)}
             tick_coords = list(projected_ticks)
         if not tick_coords:
             return
