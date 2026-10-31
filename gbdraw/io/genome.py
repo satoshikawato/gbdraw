@@ -17,10 +17,12 @@ from BCBio import GFF
 from .input_text import (
     FLAT_FILE_FORMAT_NAMES,
     FlatFileFormat,
+    LineStream,
     canonicalize_feature_types,
     flat_file_format,
     flat_file_stream,
     gff3_stream,
+    text_lines,
 )
 from .record_select import parse_record_selector, reverse_records, select_record
 from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationError
@@ -65,7 +67,9 @@ def genbank_absence_diagnostic(path: str) -> dict[str, str]:
     """
 
     with open(path, "rb") as handle:
-        first = next((line.strip() for line in handle if line.strip()), b"")
+        # A byte order mark is not text, also on a line of its own.
+        lines = (line.removeprefix(b"\xef\xbb\xbf") if index == 0 else line for index, line in enumerate(handle))
+        first = next((line.strip() for line in lines if line.strip()), b"")
     reason = "EMPTY_FILE" if not first else "FASTA_IN_GENBANK" if first.startswith(b">") else "NOT_GENBANK"
     return {"code": "NO_RECORDS", "reason": reason}
 
@@ -93,7 +97,7 @@ def read_flat_file_records(path: str) -> list[SeqRecord]:
 
     fmt: FlatFileFormat = "genbank"
     with open(path) as handle:
-        lines = iter(handle.readline, "")
+        lines = text_lines(handle)
         head: list[str] = []
         try:  # A file that is not text (gzip) stops at its first line: UnicodeDecodeError is a ValueError.
             for line in lines:
@@ -392,14 +396,25 @@ def filter_features_by_type(
         annotations=record.annotations,
     )
 
-    filtered_features = scan_features_recursive(record.features, feature_types_to_keep, source_indexes)
-    new_record.features = filtered_features
-
-    kept_types = "all" if feature_types_to_keep is None else ", ".join(sorted(feature_types_to_keep))
-    logger.info(
-        f"INFO: For record {record.id}, filtered to {len(filtered_features)} features of types: {kept_types}."
-    )
+    new_record.features = scan_features_recursive(record.features, feature_types_to_keep, source_indexes)
     return new_record
+
+
+def feature_types_left_out(
+    features: List[SeqFeature], feature_types_to_keep: AbstractSet[str] | None,
+) -> tuple[tuple[str, int], ...]:
+    """The features, nested ones included, that ``filter_features_by_type`` leaves out, counted by type."""
+
+    if feature_types_to_keep is None:
+        return ()
+    counts: Counter[str] = Counter()
+    pending = list(features)
+    while pending:
+        feature = pending.pop()
+        if feature.type not in feature_types_to_keep:
+            counts[str(feature.type)] += 1
+        pending.extend(getattr(feature, "sub_features", None) or ())
+    return tuple(sorted(counts.items()))
 
 
 @contextmanager
@@ -434,19 +449,14 @@ def _read_fasta_records(fasta_file: str) -> list[SeqRecord]:
 
     Text before the first ">" line is skipped, as Biopython 1.85 (the Web's) does;
     Biopython 1.88 refuses it. A file without a ">" line has no entry (OV-1257).
-    Only the lines before the first entry are read twice.
     """
 
     with open(fasta_file) as handle:
-        while True:
-            start = handle.tell()
-            line = handle.readline()
-            if not line:
-                raise ValidationError(f"FASTA file {fasta_file} has no sequence entry.", diagnostic=_FASTA_WITHOUT_ENTRIES)
+        lines = text_lines(handle)
+        for line in lines:
             if line.startswith(">"):
-                break
-        handle.seek(start)
-        return list(SeqIO.parse(handle, "fasta"))
+                return list(SeqIO.parse(LineStream(chain([line], lines)), "fasta"))
+    raise ValidationError(f"FASTA file {fasta_file} has no sequence entry.", diagnostic=_FASTA_WITHOUT_ENTRIES)
 
 
 def read_sequence_file_records(path: str, fmt: str) -> list[SeqRecord]:
@@ -490,7 +500,7 @@ def parse_gff_fasta(
     with _gff_fasta_errors(gff_file, fasta_file):
         logger.info("INFO: Loading GFF3 file {}".format(gff_file))
         with open(gff_file) as gff_handle:
-            gff_records = list(GFF.parse(gff3_stream(iter(gff_handle.readline, ""))))
+            gff_records = list(GFF.parse(gff3_stream(text_lines(gff_handle))))
         for record in gff_records:
             canonicalize_feature_types(record.features)
             _normalize_gff3_multipart_features(record)
@@ -593,6 +603,7 @@ __all__ = [
     "load_gff_fasta",
     "merge_gff_fasta_records",
     "scan_features_recursive",
+    "feature_types_left_out",
     "filter_features_by_type",
 ]
 

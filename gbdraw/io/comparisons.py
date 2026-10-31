@@ -11,7 +11,8 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Protocol
+from dataclasses import dataclass
+from typing import Literal, Protocol
 
 import numpy as np
 import pandas as pd
@@ -381,26 +382,81 @@ def read_comparison_resource(source: str | os.PathLike[str]) -> DataFrame:
     )
 
 
+ComparisonThresholdName = Literal["evalue", "bitscore", "identity", "alignment_length"]
+# A row passes a threshold at or below it (``evalue``) or at or above it (the others).
+_THRESHOLD_UPPER_BOUNDS: dict[ComparisonThresholdName, bool] = {
+    "evalue": True, "bitscore": False, "identity": False, "alignment_length": False,
+}
+
+
+def _threshold_passes(df: DataFrame, blast_config: ComparisonFilter) -> dict[ComparisonThresholdName, pd.Series]:
+    """Each threshold's test of every row: the one rule the filter and its tally read."""
+
+    return {
+        name: (df[name] <= getattr(blast_config, name)) if upper else (df[name] >= getattr(blast_config, name))
+        for name, upper in _THRESHOLD_UPPER_BOUNDS.items()
+    }
+
+
 def filter_comparison_dataframe(
     df: DataFrame, blast_config: ComparisonFilter
 ) -> DataFrame:
     """Apply pairwise match thresholds to a comparison DataFrame."""
 
-    evalue_threshold: float = blast_config.evalue
-    bitscore_threshold: float = blast_config.bitscore
-    identity_threshold: float = blast_config.identity
-    alignment_length_threshold: int = blast_config.alignment_length
-    return df[
-        (df["evalue"] <= evalue_threshold)
-        & (df["bitscore"] >= bitscore_threshold)
-        & (df["identity"] >= identity_threshold)
-        & (df["alignment_length"] >= alignment_length_threshold)
-    ]
+    passes = _threshold_passes(df, blast_config)
+    return df[passes["evalue"] & passes["bitscore"] & passes["identity"] & passes["alignment_length"]]
+
+
+@dataclass(frozen=True)
+class ComparisonThresholdTally:
+    """The rows of a comparison table one threshold leaves out.
+
+    ``best_value`` is the value nearest the threshold among those rows: the lowest
+    e-value, else the highest value.
+    """
+
+    name: ComparisonThresholdName
+    threshold: float
+    rows_left_out: int
+    best_value: float
+
+
+@dataclass(frozen=True)
+class ComparisonRowTally:
+    """How many rows of a comparison table were read and kept, and why the others were left out."""
+
+    rows_read: int
+    rows_kept: int
+    # Only the thresholds that leave a row out; a row below two thresholds counts in both.
+    thresholds: tuple[ComparisonThresholdTally, ...]
+
+
+def comparison_row_tally(df: DataFrame, blast_config: ComparisonFilter) -> ComparisonRowTally:
+    """The tally of :func:`filter_comparison_dataframe` on ``df``, by the same threshold tests."""
+
+    passes = _threshold_passes(df, blast_config)
+    kept = passes["evalue"] & passes["bitscore"] & passes["identity"] & passes["alignment_length"]
+    thresholds = []
+    for name, upper in _THRESHOLD_UPPER_BOUNDS.items():
+        values = df.loc[~passes[name], name]
+        if values.empty:
+            continue
+        thresholds.append(ComparisonThresholdTally(
+            name=name,
+            threshold=float(getattr(blast_config, name)),
+            rows_left_out=int(values.size),
+            best_value=float(values.min() if upper else values.max()),
+        ))
+    return ComparisonRowTally(rows_read=int(len(df)), rows_kept=int(kept.sum()), thresholds=tuple(thresholds))
 
 
 __all__ = [
     "COMPARISON_COLUMNS",
     "ComparisonFilter",
+    "ComparisonRowTally",
+    "ComparisonThresholdName",
+    "ComparisonThresholdTally",
+    "comparison_row_tally",
     "filter_comparison_dataframe",
     "normalize_comparison_dataframe",
     "read_comparison_resource",

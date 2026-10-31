@@ -21,6 +21,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, Mapping, NamedTuple, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
+from pathlib import Path
 import pandas as pd
 from pandas import DataFrame
 from svgwrite import Drawing
@@ -76,7 +77,7 @@ from ...render.groups.linear.length_bar import (
     RULER_TICK_LENGTH,
     format_linear_tick_label,
 )
-from ...io.comparisons import filter_comparison_dataframe, read_comparison_resource
+from ...io.comparisons import comparison_row_tally, filter_comparison_dataframe, read_comparison_resource
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
     ComparisonLegendSource,
@@ -136,6 +137,7 @@ from ...layout.similarity_alignment import (
 from ...mode_profiles import ComparisonThresholds
 from ...linear_comparison import (
     ComparisonRecordIdWarning,
+    ComparisonTableTally,
     LinearComparison,
     ProteinComparisonFrames,
     merge_linear_comparisons,
@@ -712,6 +714,8 @@ class LinearComparisonRows:
 
     comparisons: tuple[LinearComparison, ...]
     record_id_warnings: tuple[ComparisonRecordIdWarning, ...]
+    # One per table the thresholds filtered, in the order the tables were given.
+    tallies: tuple[ComparisonTableTally, ...] = ()
 
 
 def linear_comparison_rows(
@@ -722,15 +726,38 @@ def linear_comparison_rows(
     records: tuple[SeqRecord, ...],
     rows_by_record: tuple[int, ...],
     multi_record_enabled: bool,
+    blast_names: tuple[str, ...] = (),
 ) -> LinearComparisonRows:
     """Filter, merge, validate and project the comparisons (render stage ``comparison_rows``).
 
     The ordered tables (comparison files, then protein comparisons) pair
     record ``i`` with ``i + 1``; explicit comparisons (given, then protein
-    pairs) name their records.
+    pairs) name their records. ``blast_names`` names the comparison files.
     """
 
     proteins = protein_comparisons or ProteinComparisonFrames()
+    explicit = (*linear_comparisons, *proteins.pairs)
+    tallies = (
+        *(
+            ComparisonTableTally(
+                blast_names[index] if index < len(blast_names) else None,
+                index, index + 1, comparison_row_tally(table, thresholds),
+            )
+            for index, table in enumerate(blast_tables)
+        ),
+        *(
+            ComparisonTableTally(None, index, index + 1, comparison_row_tally(table, thresholds), protein_matches=True)
+            for index, table in enumerate(proteins.ordered or ())
+        ),
+        *(
+            ComparisonTableTally(
+                item.source_name, item.query_record_index, item.subject_record_index,
+                comparison_row_tally(item.matches, thresholds), protein_matches=protein,
+            )
+            for items, protein in ((linear_comparisons, False), (proteins.pairs, True))
+            for item in items
+        ),
+    )
     sources = [
         [filter_comparison_dataframe(table, thresholds) for table in source]
         for source in (blast_tables, proteins.ordered)
@@ -746,7 +773,7 @@ def linear_comparison_rows(
             item.subject_record_index,
             filter_comparison_dataframe(item.matches, thresholds),
         )
-        for item in (*linear_comparisons, *proteins.pairs)
+        for item in explicit
     ]
     if ordered_frames:
         if multi_record_enabled:
@@ -767,6 +794,7 @@ def linear_comparison_rows(
     return LinearComparisonRows(
         comparisons=tuple(project_search_frame_comparisons(normalized, records)),
         record_id_warnings=tuple(warnings),
+        tallies=tallies,
     )
 
 
@@ -2296,6 +2324,7 @@ def assemble_linear_diagram(
         tuple(records),
         tuple(rows_by_record),
         bool(multi_record_enabled),
+        tuple(Path(path).name for path in blast_files or ()),
     )
     normalized_comparisons = list(comparison_rows.comparisons)
     comparison_record_id_warnings = comparison_rows.record_id_warnings
@@ -3488,6 +3517,7 @@ def assemble_linear_diagram(
     setattr(canvas, "_gbdraw_linear_source_content_bounds", source_primary_bounds)
     setattr(canvas, "_gbdraw_linear_composition_plan", composition_plan)
     setattr(canvas, "_gbdraw_comparison_record_id_warnings", comparison_record_id_warnings)
+    setattr(canvas, "_gbdraw_comparison_tallies", comparison_rows.tallies)
     setattr(canvas, LINEAR_LABEL_FIT_ATTR, label_fit)
 
     return canvas

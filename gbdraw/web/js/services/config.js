@@ -4808,6 +4808,7 @@ const resetSessionBaseline = () => {
   state.featureEditRemovalCount.value = 0;
   state.comparisonWarnings.value = [];
   state.labelFitReports.value = [];
+  state.inputSummaries.value = [];
   applyFiles(null, { targetDrawing: state.drawingOfMode('linear') });
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
@@ -6611,8 +6612,9 @@ const importSessionDocument = async (e, options = {}) => {
     state.comparisonWarnings.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.comparisonWarnings || []
     );
-    // A Session does not save the label fit report: a loaded Result has no notice.
+    // A Session saves neither the label fit report nor the input summary: a loaded Result has no notice.
     state.labelFitReports.value = [];
+    state.inputSummaries.value = [];
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
