@@ -421,7 +421,7 @@ def _render_canonical_web_request(
     # The CLI logs the same summary and warnings (gbdraw.api.input_summary); not saved in a Session.
     metadata["inputSummaries"] = [
         input_summary_payload(
-            with_source_names(item.input_summary, source_names or {}),
+            with_source_names(item.input_summary, source_names) if source_names else item.input_summary,
             result_index=result_index,
             result_name=results[result_index]["name"],
         )
@@ -722,21 +722,26 @@ def prepared_input_lookup(
 
 def _staged_source_names(
     names: Mapping[str, object] | None, resource_paths: Mapping[str, Path]
-) -> dict[str, str]:
+) -> dict[str, str] | None:
     """The file name of each staged resource, by the name of the file the request reads.
 
     The Worker stages a resource under its content token; the input summary
-    names the file the page read (``resourceManifest[].name``).
+    names the file the page read (``resourceManifest[].name``). The page keeps
+    one resource for files with the same bytes, so they share the first name.
     """
 
     if names is None:
-        return {}
+        return None
     if not isinstance(names, Mapping) or not set(names) <= set(resource_paths):
-        raise ValidationError("The staged Web render resource names do not match its manifest.")
+        raise ValidationError(
+            "The staged Web render resource names do not match its manifest.", diagnostic={"code": "HELPER_PROTOCOL"}
+        )
     staged: dict[str, str] = {}
     for resource_id, name in names.items():
         if not isinstance(name, str) or not name:
-            raise ValidationError(f"Invalid staged Web render resource name for {resource_id!r}.")
+            raise ValidationError(
+                f"Invalid staged Web render resource name for {resource_id!r}.", diagnostic={"code": "HELPER_PROTOCOL"}
+            )
         staged.setdefault(resource_paths[resource_id].name, name)
     return staged
 

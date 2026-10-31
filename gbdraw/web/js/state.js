@@ -95,11 +95,12 @@ const comparisonWarnings = ref([]);
 // (LP-D46): the notice bar of the shown Result reads it. Artifact-owned like
 // comparisonWarnings; not saved in a Session.
 const labelFitReports = ref(/** @type {readonly ResultLabelFit[]} */ ([]));
-/** @import { InputSummary } from './services/input-summary.js' */
+/** @import { DrawnInputSummary } from './services/input-summary.js' */
 // Python's input summary of each drawn Result: the records and comparison rows
-// it read and drew, and its warnings. Artifact-owned like labelFitReports; not
-// saved in a Session.
-const inputSummaries = ref(/** @type {readonly InputSummary[]} */ ([]));
+// it read and drew, and its warnings, with the Feature visibility it drew.
+// Artifact-owned like labelFitReports, so History keeps it with the Result;
+// not saved in a Session.
+const inputSummaries = ref(/** @type {readonly DrawnInputSummary[]} */ ([]));
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
 // Analysis-scoped materialized nucleotide sources used by match span popups.

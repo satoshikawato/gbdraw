@@ -4,6 +4,12 @@
 // for a record or a comparison table it draws nothing of. The CLI logs the same
 // lines and warnings; Python owns every count and word, so the Web shows them
 // as sent. Not saved in a Session.
+//
+// A live Feature visibility edit that no rerender draws (a hide) changes what
+// the Result draws without Python, so the counts no longer describe it. Each
+// entry keeps the Feature visibility of the render that sent it
+// (`drawnVisibility`, `visibilityPaintState`); while the drawing's differs, the
+// page says the summary describes the last render and keeps its warnings back.
 import { diagnosticError } from '../utils/error-normalization.js';
 
 /**
@@ -17,6 +23,10 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {string} resultName
  * @property {readonly string[]} lines
  * @property {readonly InputWarning[]} warnings
+ */
+/**
+ * @typedef {InputSummary & { readonly drawnVisibility: string }} DrawnInputSummary
+ *   A Result's summary with the Feature visibility of the render that sent it (Web-owned).
  */
 
 const SUMMARY_FIELDS = ['resultIndex', 'resultName', 'lines', 'warnings'];
@@ -56,11 +66,21 @@ export const validateInputSummaries = (value, results) => {
 };
 
 /**
- * The summary of the shown Result, or null when the render sent none for it.
+ * The summaries of a render, each with the Feature visibility the render drew.
  * @param {readonly InputSummary[]} summaries
+ * @param {string} drawnVisibility `visibilityPaintState` of the drawing the render read.
+ * @returns {readonly DrawnInputSummary[]}
+ */
+export const drawnInputSummaries = (summaries, drawnVisibility) => Object.freeze(
+  summaries.map((entry) => Object.freeze({ ...entry, drawnVisibility }))
+);
+
+/**
+ * The summary of the shown Result, or null when the render sent none for it.
+ * @param {readonly DrawnInputSummary[]} summaries
  * @param {number} resultIndex
  * @param {string | undefined} resultName
- * @returns {InputSummary | null}
+ * @returns {DrawnInputSummary | null}
  */
 export const inputSummaryOf = (summaries, resultIndex, resultName) => (
   summaries.find((entry) => entry.resultIndex === resultIndex && entry.resultName === resultName) ?? null

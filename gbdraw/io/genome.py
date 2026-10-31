@@ -67,7 +67,9 @@ def genbank_absence_diagnostic(path: str) -> dict[str, str]:
     """
 
     with open(path, "rb") as handle:
-        first = next((line.strip() for line in handle if line.strip()), b"").removeprefix(b"\xef\xbb\xbf")
+        # A byte order mark is not text, also on a line of its own.
+        lines = (line.removeprefix(b"\xef\xbb\xbf") if index == 0 else line for index, line in enumerate(handle))
+        first = next((line.strip() for line in lines if line.strip()), b"")
     reason = "EMPTY_FILE" if not first else "FASTA_IN_GENBANK" if first.startswith(b">") else "NOT_GENBANK"
     return {"code": "NO_RECORDS", "reason": reason}
 
