@@ -723,6 +723,24 @@ svg.dispatch('mouseout', eventAtFeature);
 assert.equal(featureOne.style.opacity, '');
 completeCase('ordinary Feature hover resumes after the final source settles');
 
+// OV-2281: `elementsFromPoint` here finds Feature One at any point, as it
+// finds the drawing under a popup or toolbar the pointer moved onto.
+const eventOffSvg = { ...eventAtFeature, relatedTarget: null, clientX: 2000 };
+featurePanZoom.startPan({ ...eventAtFeature, button: 0, shiftKey: false, target: backgroundTarget });
+featurePanZoom.endPan(eventAtFeature);
+assert.equal(frames.size, 1);
+svg.dispatch('mouseout', eventOffSvg);
+flushFrames();
+runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
+assert.equal(featureOne.style.opacity, '');
+featurePanZoom.startPan({ ...eventAtFeature, button: 0, shiftKey: false, target: backgroundTarget });
+svg.dispatch('mouseout', eventOffSvg);
+featurePanZoom.endPan(eventOffSvg);
+flushFrames();
+runTimersAtDelay(HOVER_HIGHLIGHT_DWELL_MS);
+assert.equal(featureOne.style.opacity, '');
+completeCase('a pointer that leaves the svg during a pan or before its hover replay leaves no hover');
+
 svg.dispatch('click', eventAtFeature);
 assert.equal(state.clickedFeature.value?.id, 'f1');
 svg.dispatch('click', { ...eventAtFeature, ctrlKey: true });
