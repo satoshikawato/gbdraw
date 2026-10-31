@@ -593,6 +593,11 @@ def add_label_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         default="")
     parser.add_argument(
+        '--italic_gene_labels',
+        help='Draw each feature label that the qualifier priority names from the gene qualifier in italics, '
+        'also when --label_table replaces its text; other labels stay upright (default: off).',
+        action='store_true')
+    parser.add_argument(
         '--feature_visibility_table',
         dest='feature_table',
         help='Path to a TSV file defining per-feature visibility overrides (optional)',

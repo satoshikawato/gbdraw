@@ -12,13 +12,13 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Session 50 stores a project and its list of drawings, and the Linear wrap length
+## Unreleased: Session 50 stores a project and its list of drawings, the Linear wrap length, and italic gene names
 
 Session version 50 replaces the two diagram-mode slices of Sessions 46 to 49
 with a list of drawings, so a project can hold several drawings of one mode
-(PD-OI-090), and it stores the Linear wrap length in each Linear drawing. Session
-49 reached `main` with 0.14.3 as the mode-scoped Session below, so both changes
-take 50 (CLAUDE.md, "Persisted-format compatibility").
+(PD-OI-090), it stores the Linear wrap length in each Linear drawing, and it
+stores italic gene names in each drawing. Session 49 reached `main` with 0.14.3
+as the mode-scoped Session below, so all three changes take 50 (CLAUDE.md, "Persisted-format compatibility").
 
 The project keeps `format`, `version`, `createdAt`, `title`, `resources`, `ui`
 (the project's view keys and `ui.activeDrawingId`), and `legacyArtifacts`. Each
@@ -65,6 +65,17 @@ converts it. A Web **Save Session** keeps a length loaded from a Session in the
 request's `configOverrides`; the Web has no control for it yet. The Gallery and
 test-input Sessions were refreshed to 50 (`tools/refresh_gallery_sessions.py`).
 Positive fixtures of Session 49: `tests/fixtures/sessions/*.v49.*`.
+
+Session 50 also adds the config leaf `labels.<mode>.italic_gene_labels` (true or
+false, default false) in both modes and each drawing's key
+`config.adv.italic_gene_labels` (either mode), a `copy` row of the mode-scoped registry next to
+`label_protection`, whose replay flag is `--italic_gene_labels`. A Web writer
+puts `labels.<mode>.italic_gene_labels: true` in the request's
+`configOverrides` only when the setting is on, so a Session with it off has the
+same request as before. The key reached no `main` Session before 50 and shares
+its version with the drawings and the wrap length; a Session up to 49 has no key,
+and reading it gives every drawing the packaged default (off); no reader converts
+it.
 
 ## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
 

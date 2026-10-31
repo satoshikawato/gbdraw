@@ -282,6 +282,7 @@ def mode_profiles_payload() -> dict[str, object]:
     from gbdraw.config.models import GbdrawConfig
     from gbdraw.diagrams.circular.presets import circular_auto_slot_sizes, circular_track_preset_table
     from gbdraw.labels.label_style import (
+        DEFAULT_ITALIC_GENE_LABELS,
         DEFAULT_LABEL_LINE,
         DEFAULT_LABEL_PROTECTION,
         LABEL_LINES,
@@ -335,8 +336,13 @@ def mode_profiles_payload() -> dict[str, object]:
                 },
                 "linearAxisColor": profile.linear_axis_color,
                 "linearRulerAxisColor": profile.linear_ruler_axis_color,
-                # The packaged feature label style of the mode (labels.<mode>.line, .protection).
-                "labelStyle": {"line": DEFAULT_LABEL_LINE[mode], "protection": DEFAULT_LABEL_PROTECTION[mode]},
+                # The packaged feature label style of the mode (labels.<mode>.line, .protection,
+                # .italic_gene_labels).
+                "labelStyle": {
+                    "line": DEFAULT_LABEL_LINE[mode],
+                    "protection": DEFAULT_LABEL_PROTECTION[mode],
+                    "italicGeneLabels": DEFAULT_ITALIC_GENE_LABELS[mode],
+                },
             }
             for mode, profile in MODE_PROFILES.items()
         },

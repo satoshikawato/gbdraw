@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TypedDict
 
+from .label_style import LabelFontStyle
+
 
 class _LinearLabelRequired(TypedDict):
     """Keys every Linear feature label has from ``linear_record_labels`` on."""
@@ -30,6 +32,8 @@ class _LinearLabelRequired(TypedDict):
     feature_anchor_x: float
     font_size: float
     font_family: str
+    # The text's style (``FeatureLabelStyle.font_style``).
+    font_style: LabelFontStyle
     rotation_deg: float
     text_anchor: str
     is_embedded: bool

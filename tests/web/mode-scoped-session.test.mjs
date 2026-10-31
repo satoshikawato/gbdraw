@@ -1033,6 +1033,24 @@ test('a Session 50 keeps each Linear drawing\'s own wrap length override through
   assert.deepEqual(overridesOf('linear'), {});
 });
 
+// Italic gene names are one setting per drawing (`config.adv.italic_gene_labels`):
+// of two Linear drawings, the one that holds it on keeps it through Load and Save.
+test('a Session 50 keeps each Linear drawing\'s own Italic gene names through Load and Save', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  session.drawings.find((entry) => entry.id === 'linear-2').config.adv.italic_gene_labels = true;
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  assert.equal(state.drawingOf('linear-2').adv.italic_gene_labels, true);
+  assert.equal(state.drawingOf('linear').adv.italic_gene_labels, false);
+  const result = await exportSession('italic-gene-labels', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const italicOf = (id) => saved.drawings.find((entry) => entry.id === id).config.adv.italic_gene_labels;
+  assert.equal(italicOf('linear-2'), true);
+  assert.equal(italicOf('linear'), false);
+});
+
 test('Save checks each Session 50 drawing it writes with Save\'s checks, not Load\'s: an input type of no type is refused', async () => {
   const session = v49Session('drawings-linear-pair-losat');
   resetDrawings();

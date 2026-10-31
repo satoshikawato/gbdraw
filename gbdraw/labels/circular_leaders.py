@@ -64,8 +64,9 @@ def label_ink_box(label: CircularLabel, total_length: int) -> Aabb | None:
     """The box of a horizontal label's painted letters, in record coordinates; None when it cannot be measured."""
 
     family = str(label.get("font_family", ""))
-    ink = text_ink(str(label.get("label_text", "")), family)
-    metrics = get_font_vertical_metrics(family)
+    style = label["font_style"]
+    ink = text_ink(str(label.get("label_text", "")), family, "normal", style)
+    metrics = get_font_vertical_metrics(family, "normal", style)
     if ink is None or metrics is None or "font_size" not in label:
         return None
     start_x = float(label["start_x"])

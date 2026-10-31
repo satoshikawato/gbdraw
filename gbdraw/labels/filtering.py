@@ -4,7 +4,7 @@
 import logging
 import re
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
 import pandas as pd
 from pandas import DataFrame
@@ -17,6 +17,7 @@ from ..io.table_text import (
     table_text_stream,
 )
 from ..render_stages import render_stage
+from ..features.overrides import ResolvedFeatureOverride
 from ..features.selector_values import (
     _matches_constraint,
     get_feature_hash as _get_feature_hash,
@@ -438,15 +439,44 @@ def has_forced_label_overrides(label_filtering: dict) -> bool:
     )
 
 
+class FeatureLabel(NamedTuple):
+    """One feature's label: the ``text`` drawn (empty: no label) and ``source_qualifier``.
+
+    ``source_qualifier`` is the qualifier key, lower case, that the qualifier
+    priority names the feature's label from (the first key of the priority with
+    a value), also when an override table row or a per-feature edit replaced the
+    text; None when no key of the priority has a value. How the label is drawn
+    (``FeatureLabelStyle.font_style``) reads it.
+    """
+
+    text: str
+    source_qualifier: Optional[str]
+
+
 def get_label_text(
-    feature: Any,
-    label_filtering: Mapping,
+    feature: object,
+    label_filtering: Mapping[str, Any],
     record_id: Optional[str] = None,
     *,
     overrides_only: bool = False,
-    feature_override: Any = None,
+    feature_override: ResolvedFeatureOverride | None = None,
 ) -> str:
-    """Return the label text for one feature, or an empty string for no label.
+    """Return the label text for one feature, or an empty string for no label (``feature_label``'s text)."""
+
+    return feature_label(
+        feature, label_filtering, record_id, overrides_only=overrides_only, feature_override=feature_override
+    ).text
+
+
+def feature_label(
+    feature: object,
+    label_filtering: Mapping[str, Any],
+    record_id: Optional[str] = None,
+    *,
+    overrides_only: bool = False,
+    feature_override: ResolvedFeatureOverride | None = None,
+) -> FeatureLabel:
+    """Return the label of one feature: its text, empty for no label, and the qualifier it is named from.
 
     ``overrides_only`` selects a feature outside the label display scope: only
     its per-feature override can give it a label. An identity-addressed
@@ -458,7 +488,7 @@ def get_label_text(
     """
     visibility = getattr(feature_override, "label_visibility", None)
     if visibility == "off":
-        return ""
+        return FeatureLabel("", None)
     text = getattr(feature_override, "label_text", None)
     if visibility == "on":
         unfiltered = {
@@ -470,11 +500,10 @@ def get_label_text(
                 if rule.get("qualifier_normalized") != "hash"
             ],
         }
-        return text or _label_text(feature, unfiltered, record_id) or str(
-            getattr(feature_override, "default_label", "")
-        )
-    label = _label_text(feature, label_filtering, record_id, overrides_only=overrides_only)
-    return text if label and text else label
+        label, source = _label_text(feature, unfiltered, record_id)
+        return FeatureLabel(text or label or str(getattr(feature_override, "default_label", "")), source)
+    label, source = _label_text(feature, label_filtering, record_id, overrides_only=overrides_only)
+    return FeatureLabel(text if label and text else label, source)
 
 
 def _label_text(
@@ -483,7 +512,9 @@ def _label_text(
     record_id: Optional[str] = None,
     *,
     overrides_only: bool = False,
-) -> str:
+) -> tuple[str, Optional[str]]:
+    """The label text and the qualifier key (lower case) the priority names it from."""
+
     feature_type = _get_feature_type(feature)
     qualifiers = _get_feature_qualifiers(feature)
     whitelist_map = label_filtering.get("whitelist_map")
@@ -498,10 +529,12 @@ def _label_text(
 
     priority_list = priority_map.get(feature_type, DEFAULT_LABEL_PRIORITY)
     final_label = ""
+    source: Optional[str] = None
     for key in priority_list:
         values = _get_qualifier_values(qualifiers, key)
         if values:
             final_label = values[0]
+            source = str(key).lower()
             break
 
     # Hash-based per-feature overrides are highest priority and can bypass whitelist/blacklist filters.
@@ -515,10 +548,10 @@ def _label_text(
             record_id=record_id,
         )
         if hash_override_text is not None:
-            return hash_override_text
+            return hash_override_text, source
 
     if overrides_only:
-        return ""
+        return "", source
 
     if whitelist_map:
         is_eligible = False
@@ -555,10 +588,10 @@ def _label_text(
                     is_eligible = True
                     break
         if not is_eligible:
-            return ""
+            return "", source
 
     if not whitelist_map and any(str(bl).lower() in final_label.lower() for bl in blacklist):
-        return ""
+        return "", source
 
     if non_hash_rules:
         override_text = _resolve_label_override(
@@ -570,13 +603,15 @@ def _label_text(
             record_id=record_id,
         )
         if override_text is not None:
-            return override_text
+            return override_text, source
 
-    return final_label
+    return final_label, source
 
 
 __all__ = [
     "DERIVED_LABEL_FILTERING_KEYS",
+    "FeatureLabel",
+    "feature_label",
     "get_label_text",
     "has_forced_label_overrides",
     "label_filter_maps",

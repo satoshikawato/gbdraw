@@ -213,14 +213,15 @@ def test_a_request_reference_must_resolve() -> None:
 # changes nothing here) and a change of the packaged
 # config a stored full config is completed with (the label style keys, LP-D98;
 # the Linear box default, LP-D106; the Circular track narrowing leaves, PD-OI-078;
-# the Circular definition show leaf, PD-OI-109; the ring colour scheme leaf, PD-OI-110).
+# the Circular definition show leaf, PD-OI-109; the ring colour scheme leaf, PD-OI-110;
+# the italic gene label leaves).
 _SINGLE_REQUEST_DIGESTS = {
     "synthetic_conservation.gbdraw-session.json.gz":
         "fa32977cf53f3ddd83b4956239006aa08beac4a394f09f2fccc9e34002ddc0ad",
     "q-frame-main-web-upload.v42.gbdraw-session.json.gz":
         "d5a2391e1956fe332c174adf6a884b6dcff25e7ec691198c6406c0e4d08538d5",
     "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz":
-        "02e6b3a50b406d26b53921a7bd5e8ef6bb7024fd689915107c8b536df784daae",
+        "44961976f13ab03b20cf4a7601d085f39dfd0c548e795771be46a05330776938",
     "feature-edits-crop-rc.v44.gbdraw-session.json.gz":
         "47b0d8f091cfc6b882c224e7d87d6a08ea71f928abaab7f7d13ea8f4f79b06e4",
     "selected-feature-annotations.v44.gbdraw-session.json.gz":

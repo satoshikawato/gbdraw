@@ -29,7 +29,7 @@ from .circular_types import (
     CircularLabelCandidateCache,
 )
 from .fit import FITS, LabelFit, LabelKind, LabelShape, Polygon, label_fits_by_kind
-from .label_style import CIRCULAR_LABEL_GAP_EM
+from .label_style import CIRCULAR_LABEL_GAP_EM, LabelFontStyle
 from ..config.models import (
     CircularRenderProfile,
     GbdrawConfig,
@@ -417,10 +417,12 @@ def circular_label_shape(label: CircularLabel, total_length: int) -> LabelShape:
     return LabelShape(kind, parts, leader_polyline(label))
 
 
-def _circular_label_box(text: str, font_family: str, font_size: float) -> tuple[float, float]:
+def _circular_label_box(
+    text: str, font_family: str, font_size: float, font_style: LabelFontStyle
+) -> tuple[float, float]:
     """The box a Circular feature label is laid out in: its drawn box, ``CIRCULAR_LABEL_GAP_EM`` wider."""
 
-    width, height = drawn_text_box(text, font_family, font_size)
+    width, height = drawn_text_box(text, font_family, font_size, "normal", font_style)
     return width + CIRCULAR_LABEL_GAP_EM * float(font_size), height
 
 
@@ -5341,6 +5343,7 @@ def prepare_label_list(
             font_family=font_family,
             font_size=font_size,
             measure_text=_circular_label_box,
+            label_style=profile.label_style,
             record_transform=record_transform,
             overrides_only=profile.labels_overrides_only,
         )
@@ -5494,6 +5497,7 @@ def prepare_label_list(
                 "is_embedded": is_embedded,
                 "font_size": font_size,
                 "font_family": font_family,
+                "font_style": candidate.font_style,
             }
             # Feature clearance of a displaced lane, for the external label stages.
             if lane_clearance and is_outer_label:

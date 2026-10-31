@@ -178,6 +178,7 @@ def _embedded_path_radius(text: str) -> float:
         "is_embedded": True,
         "font_size": 14.0,
         "font_family": family,
+        "font_style": "normal",
     }
     group = CircularLabelDrawer(profile=CircularRenderProfile(cfg)).draw(
         label, Group(id="test"), 1000, float(cfg.canvas.circular.radius), float(cfg.canvas.circular.track_ratio)

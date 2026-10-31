@@ -7,6 +7,7 @@ from typing import Literal, TypeAlias, TypedDict, cast
 
 from ..exceptions import ValidationError
 from ..layout.text_geometry import AabbTuple, Point
+from .label_style import LabelFontStyle
 
 CircularLabelPlacement: TypeAlias = Literal["horizontal", "radial"]
 # The margins of a horizontal label's box in the fit count, in px: the box is this much wider and taller than the
@@ -39,6 +40,7 @@ class CircularLabelCandidate:
     text: str
     font_family: str
     font_size: float
+    font_style: LabelFontStyle
     width_px: float
     height_px: float
     feature_type: str
@@ -89,6 +91,8 @@ class _CircularLabelRequired(TypedDict):
     is_embedded: bool
     font_size: float
     font_family: str
+    # The text's style (``FeatureLabelStyle.font_style``).
+    font_style: LabelFontStyle
 
 
 class CircularLabel(_CircularLabelRequired, total=False):

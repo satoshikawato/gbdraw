@@ -251,6 +251,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
         "identity": 70.0
       },
       "labelStyle": {
+        "italicGeneLabels": false,
         "line": "none",
         "protection": "none"
       },
@@ -269,6 +270,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
         "identity": 0.0
       },
       "labelStyle": {
+        "italicGeneLabels": false,
         "line": "under",
         "protection": "box"
       },

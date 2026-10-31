@@ -89,7 +89,7 @@ class CircularRenderProfile(_RenderProfile):
         object.__setattr__(self, "labels_enabled", scope != "none" or self.forced_labels)
         object.__setattr__(self, "labels_overrides_only", scope == "none")
         object.__setattr__(self, "inner_labels_enabled", scope == "both")
-        object.__setattr__(self, "label_style", FeatureLabelStyle(labels.line, labels.protection))
+        object.__setattr__(self, "label_style", FeatureLabelStyle(labels.line, labels.protection, labels.italic_gene_labels))
 
 
 @dataclass(frozen=True)
@@ -110,7 +110,7 @@ class LinearRenderProfile(_RenderProfile):
         object.__setattr__(self, "label_scope", labels.scope)
         object.__setattr__(self, "label_placement", labels.placement)
         object.__setattr__(self, "label_rotation", labels.rotation)
-        object.__setattr__(self, "label_style", FeatureLabelStyle(labels.line, labels.protection))
+        object.__setattr__(self, "label_style", FeatureLabelStyle(labels.line, labels.protection, labels.italic_gene_labels))
         object.__setattr__(self, "track_layout", canvas.track_layout)
         object.__setattr__(self, "ruler_on_axis", bool(canvas.ruler_on_axis))
 

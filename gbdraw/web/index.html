@@ -5610,6 +5610,13 @@
                                                 <option value="box">{{ t('Box') }}</option>
                                             </select>
                                         </div>
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.italic_gene_labels" aria-describedby="help-label-italic-gene-labels" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>{{ t('Italic gene names') }}</span>
+                                            </label>
+                                            <help-tip id="help-label-italic-gene-labels" :text="t('Draws each label that the label priority names from the gene qualifier in italics, also after its text is edited. Other labels stay upright.')"></help-tip>
+                                        </div>
                                         <template v-if="mode === 'circular'">
                                             <div>
                                                 <span class="input-label text-[10px] mb-0">
@@ -6247,6 +6254,10 @@
                             <select v-model="downloadDpi" aria-label="PNG DPI" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
                                 <option v-for="choice in pngDpiChoices" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
                             </select>
+                            <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer select-none" :title="t('The PNG keeps the transparent background of the drawing instead of a white one. SVG and PDF downloads have no background either way.')">
+                                <input type="checkbox" v-model="downloadTransparentBackground" class="form-checkbox">
+                                <span>{{ t('Transparent background') }}</span>
+                            </label>
                         </div>
                         <button type="button" aria-label="SVG" @click="downloadSVG" aria-describedby="session-export-help" class="btn btn-secondary px-3 py-1 text-sm" :title="t('Download a static SVG for publication and conversion workflows')"><i class="ph ph-download-simple" aria-hidden="true"></i> SVG</button>
                         <button @click="downloadInteractiveSVG" aria-describedby="session-export-help" class="btn btn-secondary px-3 py-1 text-sm" :title="t('Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded.')"><i class="ph ph-cursor-click" aria-hidden="true"></i> {{ t('Interactive SVG') }}</button>
