@@ -395,9 +395,10 @@ class ComparisonTableTally:
     query_record_index: int
     subject_record_index: int
     tally: ComparisonRowTally
-    # A LOSATP protein comparison: its hits are filtered by the thresholds before
-    # they reach the drawing (OV-2389), so the tally counts only the kept hits.
-    protein_hits: bool = False
+    # A LOSATP protein comparison. Its rows are what the protein analysis draws
+    # (hits, collinearity blocks, or reciprocal best-hit pairs, by mode), after
+    # it applied the thresholds itself (OV-2389), so the tally counts no threshold.
+    protein_matches: bool = False
 
 
 @dataclass(frozen=True)

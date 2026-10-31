@@ -364,12 +364,13 @@ INFO: Comparison table pair.tsv (record #1 PROKKA01.1 and record #2 RAST0001.1):
 A record line counts the features drawn per type, the features left out because
 their type is not drawn (`-k/--features`, and for GFF3 the types read), and the
 features a visibility rule or feature edit hides; a cropped record also names its
-region. A comparison line counts the rows each threshold (`--evalue`,
+region, and gives the GFF3 types left out at load for the whole record, since the
+load filters before the crop. A comparison line counts the rows each threshold (`--evalue`,
 `--bitscore`, `--identity`, `--alignment_length`) leaves out, with the best value
 among those rows. A row can fail more than one threshold. A LOSATP protein
-comparison counts only the hits that pass the thresholds, because the protein
-search applies them before the count; its line and its warning say so and give
-no per-threshold counts.
+comparison line counts the protein matches drawn (hits, collinearity blocks, or
+reciprocal best-hit pairs, by mode) and no threshold, because the protein
+analysis applies the thresholds itself.
 
 A `WARNING:` line follows when a record has no feature to draw, naming its
 feature types when it has some, and when the thresholds leave out every row of a

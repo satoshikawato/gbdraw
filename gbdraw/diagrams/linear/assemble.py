@@ -746,13 +746,13 @@ def linear_comparison_rows(
             for index, table in enumerate(blast_tables)
         ),
         *(
-            ComparisonTableTally(None, index, index + 1, comparison_row_tally(table, thresholds), protein_hits=True)
+            ComparisonTableTally(None, index, index + 1, comparison_row_tally(table, thresholds), protein_matches=True)
             for index, table in enumerate(proteins.ordered or ())
         ),
         *(
             ComparisonTableTally(
                 item.source_name, item.query_record_index, item.subject_record_index,
-                comparison_row_tally(item.matches, thresholds), protein_hits=protein,
+                comparison_row_tally(item.matches, thresholds), protein_matches=protein,
             )
             for items, protein in ((linear_comparisons, False), (proteins.pairs, True))
             for item in items
