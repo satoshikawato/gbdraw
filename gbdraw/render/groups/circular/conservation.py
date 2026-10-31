@@ -5,6 +5,7 @@ from __future__ import annotations
 from gbdraw.svg.elements import Group, Path
 
 from ....analysis.conservation import ConservationTrack, conservation_track_gradient_colors
+from ....comparisons.identity_scale import identity_color_domain
 from ....config.models import GbdrawConfig
 from ....layout.circular import RadialBand
 from ....layout.circular_ink import CircularInk, CircularInkRing, paint_shows
@@ -25,7 +26,7 @@ def _conservation_drawer(cfg: GbdrawConfig, track_color: str | None, min_identit
         default_max_color=conservation_cfg.max_color,
     )
     return ConservationDrawer(
-        min_identity=min_identity,
+        identity_domain=identity_color_domain(min_identity, conservation_cfg.identity_scale),
         min_color=min_color,
         max_color=max_color,
         fill_opacity=conservation_cfg.fill_opacity,

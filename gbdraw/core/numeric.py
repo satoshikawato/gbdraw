@@ -205,6 +205,10 @@ def argparse_scale_interval(text: str) -> int:
     return value if value is not None else argparse_length_bp(text)
 
 
+# The text a config file or an override reads as an unset optional number (None).
+UNSET_NUMBER_SPELLINGS = frozenset({"", "auto", "none", "null"})
+
+
 def argparse_float(text: str) -> float:
     """argparse ``type=`` of every float option: a finite ``float()`` in ASCII only.
 
@@ -224,6 +228,7 @@ __all__ = [
     "ASCII_NONNEGATIVE_INTEGER_PATTERN",
     "JS_MAX_SAFE_INTEGER",
     "JS_WHITESPACE",
+    "UNSET_NUMBER_SPELLINGS",
     "argparse_float",
     "argparse_integer",
     "argparse_length_bp",

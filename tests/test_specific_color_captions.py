@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+
+from gbdraw.comparisons.identity_scale import identity_color_domain
 from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
@@ -575,7 +577,7 @@ def test_rule_captioned_like_a_comparison_legend_row_keeps_its_own_row(caption: 
     }[pairwise]
     table = prepare_legend_table(
         numeric, numeric, features, ["CDS"],
-        comparison=ComparisonLegendSource.of(SimpleNamespace(min_color="#ffffff", max_color="#000000", identity=0)),
+        comparison=ComparisonLegendSource.of(SimpleNamespace(min_color="#ffffff", max_color="#000000", identity_domain=identity_color_domain(0, None))),
         used_color_rules={(caption, "#ff0000")},
         show_gc=False, show_skew=False, show_depth=False,
         pairwise_identity_legend=legend,

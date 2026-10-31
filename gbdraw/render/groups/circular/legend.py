@@ -123,7 +123,7 @@ class LegendGroup:
         band.add(self._text(RING_BAND_LABEL, layout.band_label_x, layout.band_y, fill=RING_LEGEND_MUTED_TEXT_COLOR))
         scale = {"baseline": "hanging", "fill": RING_LEGEND_MUTED_TEXT_COLOR}
         band.add(self._text(layout.min_label_text, layout.min_label_x, layout.scale_label_y, **scale))
-        band.add(self._text("100%", layout.max_label_x, layout.scale_label_y, anchor="end", **scale))
+        band.add(self._text(layout.max_label_text, layout.max_label_x, layout.scale_label_y, anchor="end", **scale))
         group.add(band)
         return group
 

@@ -287,6 +287,11 @@ stable percent-encoded protein IDs, and refuses an existing `losatp.raw.tsv`
 unless `--overwrite` is present. Display filters
 and hit caps can make the number of drawn links smaller than the raw row count.
 
+`--identity_scale MIN MAX` (both subcommands) fixes the identity colour scale
+of the pairwise matches or similarity rings and their Legend, which otherwise
+runs from `--identity` to 100%. See [Identity colour
+scale](comparison-programs-thresholds-and-results.md#identity-colour-scale).
+
 See [Comparison programs, thresholds, and result
 semantics](comparison-programs-thresholds-and-results.md) for direction,
 filtering, cache identity, and the limits of each result type.

@@ -13,6 +13,7 @@ import sys
 from dataclasses import replace
 from typing import Sequence
 
+from gbdraw.comparisons.identity_scale import IDENTITY_SCALE_RULE, identity_scale_from_config
 from gbdraw.core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
@@ -381,6 +382,38 @@ def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
         help='Minimum BLAST alignment length retained for similarity rings (default: 0).',
         type=argparse_integer,
         default=thresholds.alignment_length)
+    add_identity_scale_arg(parser, "similarity rings")
+
+
+class _IdentityScaleAction(argparse.Action):
+    """Read ``--identity_scale MIN MAX`` with the scale's one validator; a refusal names the option."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: object,
+        option_string: str | None = None,
+    ) -> None:
+        try:
+            scale = identity_scale_from_config(values, path=self.dest)
+        except ValidationError:
+            parser.error(f"argument {option_string}: must be {IDENTITY_SCALE_RULE}")
+        setattr(namespace, self.dest, scale)
+
+
+def add_identity_scale_arg(parser: argparse.ArgumentParser, drawn: str) -> None:
+    """``--identity_scale MIN MAX`` of either mode; ``drawn`` names what the scale colours."""
+
+    parser.add_argument(
+        '--identity_scale',
+        help=f'Fix the identity colour scale of the {drawn} and their Legend to MIN..MAX percent '
+        '(0 <= MIN < MAX <= 100), so figures with different --identity thresholds share one scale '
+        '(default: from --identity to 100).',
+        nargs=2,
+        metavar=('MIN', 'MAX'),
+        type=argparse_float,
+        action=_IdentityScaleAction)
 
 
 def _add_gc_content_axis_args(parser: argparse.ArgumentParser) -> None:

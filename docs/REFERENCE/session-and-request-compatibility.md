@@ -19,6 +19,11 @@ Session 50 also stores **Italic gene names** in each slice
 (`modes.<mode>.config.adv.italic_gene_labels`); on is saved in the render
 request as `labels.<mode>.italic_gene_labels: true`, and off is left out of the
 request. A Session up to 49 loads with upright gene names.
+Session 50 also stores the **identity colour scale** in each slice
+(`modes.<mode>.config.adv.identity_scale`, `null` or `[MIN, MAX]`); a set scale
+is saved in the render request as `objects.blast_match.identity_scale`
+(Linear) or `objects.conservation.identity_scale` (Circular), and no scale is
+left out of the request. A Session up to 49 loads without a fixed scale.
 gbdraw 0.14.4 and earlier refuse a Session 50 file.
 
 Session 49 stores the Circular **Show Definition** setting in each Circular

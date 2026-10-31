@@ -777,6 +777,33 @@ const italicLabelRequest = buildCanonicalRenderRequestRaw({ state, filesData });
 assert.equal(italicLabelRequest.renderRequest.diagramOptions.configOverrides['labels.circular.italic_gene_labels'], true);
 assert.equal(projectCanonicalSessionRequest(italicLabelRequest).config.adv.italic_gene_labels, true);
 state.adv.italic_gene_labels = false;
+// A fixed identity colour scale: the mode's leaf (named by Python through the generated
+// mode profiles) is in the request only when a scale is set, and projects back to `adv`.
+assert.ok(managedConfigOverridePathsForMode('circular').includes('objects.conservation.identity_scale'));
+assert.ok(!managedConfigOverridePathsForMode('circular').includes('objects.blast_match.identity_scale'));
+assert.equal(
+  Object.hasOwn(uprightLabelRequest.renderRequest.diagramOptions.configOverrides, 'objects.conservation.identity_scale'),
+  false
+);
+assert.equal(projectCanonicalSessionRequest(uprightLabelRequest).config.adv.identity_scale, null);
+state.adv.identity_scale = [40, 90];
+const scaledRequest = buildCanonicalRenderRequestRaw({ state, filesData });
+assert.deepEqual(scaledRequest.renderRequest.diagramOptions.configOverrides['objects.conservation.identity_scale'], [40, 90]);
+assert.deepEqual(projectCanonicalSessionRequest(scaledRequest).config.adv.identity_scale, [40, 90]);
+// R7: the pair is sent as typed (Python judges range and order, tests/fixtures/option_domain_vectors.json),
+// and anything that is not two finite numbers is refused with the leaf path.
+state.adv.identity_scale = [90, 40];
+assert.deepEqual(
+  buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.diagramOptions.configOverrides['objects.conservation.identity_scale'],
+  [90, 40]
+);
+for (const value of [Number.NaN, 7, '1e-50x', [5], [Number.NaN, 100], ['x', 100], [null, 100], [40, 90, 100]]) {
+  state.adv.identity_scale = value;
+  assert.throws(() => buildCanonicalRenderRequestRaw({ state, filesData }),
+    { code: 'INPUT_INVALID', context: { configPath: 'objects.conservation.identity_scale', reason: 'FINITE' } },
+    `identity_scale=${JSON.stringify(value)}`);
+}
+state.adv.identity_scale = null;
 // PD-OI-109: Show Definition (Circular only). A shown definition is left out of the
 // request, as an earlier writer left it; a hidden one is `false`, and both project back.
 assert.ok(managedConfigOverridePathsForMode('circular').includes('objects.definition.circular.show'));
