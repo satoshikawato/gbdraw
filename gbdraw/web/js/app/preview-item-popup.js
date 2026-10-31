@@ -17,7 +17,7 @@ import {
   resolveLinearRecordEffectiveSubtitle
 } from '../services/linear-sources.js';
 import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js';
-import { msg, t, tn, tm } from '../utils/i18n.js';
+import { msg, t, tn, tm, tx } from '../utils/i18n.js';
 
 /**
  * The item a preview popup is about: a Legend row by its key, or the
@@ -226,7 +226,7 @@ const alignmentText = (decision) => {
   if (!decision) return t('Not aligned');
   if (decision.status === 'reference') return t('Reference ({anchor})', { anchor: text(decision.anchorLabel) });
   if (decision.status === 'aligned') return t('Aligned on {anchor}', { anchor: text(decision.anchorLabel) });
-  return t('Not moved ({reason})', { reason: text(decision.rationaleLabel).toLowerCase() || t('skipped') });
+  return t('Not moved ({reason})', { reason: text(decision.rationaleLabel) || t('skipped') });
 };
 
 /**
@@ -261,7 +261,9 @@ const buildRecordDefinitionView = ({
     { label: t('Display start'), value: start == null ? t('Record start') : NUMBER.format(start) },
     { label: t('Region'), value: regionText(record?.region) }
   ];
-  if (alignmentShown) facts.push({ label: t('Alignment'), value: alignmentText(alignment) });
+  // The record's place in a similarity alignment, not a sequence alignment
+  // (the match popup's Alignment section): a locale may name the two apart.
+  if (alignmentShown) facts.push({ label: tx('similarity alignment', 'Alignment'), value: alignmentText(alignment) });
   return {
     kind: /** @type {const} */ ('record-definition'),
     identity: `record:${scope}:${recordIndex}:${recordId}`,

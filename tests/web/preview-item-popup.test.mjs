@@ -440,6 +440,41 @@ test('the record-definition view lists the facts of the displayed Result', () =>
   assert.equal(circular.facts.some((fact) => fact.label === 'Alignment'), false);
 });
 
+// OV-2328: the reason a record was not moved is its label as the UI shows it
+// elsewhere, inserted unchanged; lower-casing a translated label damages
+// German nouns and Turkish I.
+test('a record the alignment did not move shows its reason label unchanged', () => {
+  const alignmentOf = (alignment) => openView(createPopup({
+    requestRecords: [{ recordKey: 'uid-1' }],
+    recordRows: [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'BGC0000708', canonicalRecordKey: 'uid-1' }],
+    alignment: { recordKey: 'uid-1', ...alignment }
+  }), { kind: 'record-definition', recordIndex: 0, recordId: 'BGC0000708' })
+    .facts.find((fact) => fact.label === 'Alignment').value;
+  assert.equal(alignmentOf({ status: 'skipped', rationaleLabel: 'Skipped by user' }), 'Not moved (Skipped by user)');
+  assert.equal(alignmentOf({ status: 'skipped', rationaleLabel: '' }), 'Not moved (skipped)');
+});
+
+// The record's place in a similarity alignment and a sequence alignment (the
+// match popup's Alignment section) are two senses of one English word: the
+// record fact is its own key, so a locale can name each sense (pl Wyrównanie
+// vs Dopasowanie).
+test('the record popup labels its similarity alignment fact with its own key', async () => {
+  const label = () => openView(createPopup({
+    requestRecords: [{ recordKey: 'uid-1' }],
+    recordRows: [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'BGC0000708', canonicalRecordKey: 'uid-1' }],
+    alignment: { recordKey: 'uid-1', status: 'aligned', anchorLabel: 'neoU' }
+  }), { kind: 'record-definition', recordIndex: 0, recordId: 'BGC0000708' }).facts.at(-1).label;
+  assert.equal(label(), 'Alignment');
+  try {
+    await setUiLocale('pl', async () => ({ default: Object.freeze({
+      Alignment: 'Dopasowanie', 'similarity alignment\u0004Alignment': 'Wyrównanie'
+    }) }));
+    assert.equal(label(), 'Wyrównanie');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
 // OV-502: only a Linear definition marks which line is the record's name. A
 // Circular definition's name lines may be an organism, a strain, a replicon or
 // a Record label, wrapped or not: the popup shows them as its heading, as the

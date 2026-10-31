@@ -1,6 +1,6 @@
-# Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th
+# Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th, de, it, pl, tr, ru, uk
 
-Revision 10, 2026-10-22 (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
+Revision 11, 2026-10-31 (German, Italian, Polish, Turkish, Russian and Ukrainian: §12–§17; plural objects for few/many locales and the de, it, pl, tr plural and separator lists: §1.3; the cited Auto option in de: §12.2; tr dialog titles and singular `one` forms: §15.2, §15.5; ru and uk time abbreviations: §1.2, §16.3, §17.3; ru tab names: §16.2; uk Load / Download / Upload sources and plural worked pair 5: §17.1, §17.5; ru and uk in the separator and plural lists: §1.3). Revision 10 was the 2026-10-22 revision (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
 locale, rail names wrap only between words in every locale, ja/zh comparative-genomics terms with no established use stay English,
 ja Attach, zh Either and axis line, es/fr/pt counts and exact matches, fr stroke and Linear scale, id/vi/th record selector
 and feature wording: §1.5, §2, §3, §4, §5.1, §6, §7, §8, §9, §10, §11. Revision 9: counted sentences are `tn` pairs, and
@@ -56,11 +56,13 @@ nothing states that they are reviewed.
   BLAST outfmt 6/7, DPI, CLI, Python, JavaScript, WebAssembly, Pyodide,
   SharedArrayBuffer, Web Workers, IGV, Bakta, Pharokka, Liberation Sans /
   Serif / Mono, and the Circular presets Tuckin, Middle, Spreadout.
-- **The Language menu entries** (English, Bahasa Indonesia, Español, Français,
-  Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어; the menu
-  order) are endonyms and are not translated; the menu's own label is
-  (言語 / 语言 / 語言 / 언어 / Idioma / Langue / Idioma / Bahasa / Ngôn ngữ /
-  ภาษา for ja / zh-Hans / zh-Hant / ko / es / fr / pt / id / vi / th). Gallery
+- **The Language menu entries** (English, Bahasa Indonesia, Deutsch, Español,
+  Français, Italiano, Polski, Português, Tiếng Việt, Türkçe, Русский,
+  Українська, ไทย, 日本語, 简体中文, 繁體中文, 한국어; the menu order) are
+  endonyms and are not translated; the menu's own label is (言語 / 语言 / 語言 /
+  언어 / Idioma / Langue / Idioma / Bahasa / Ngôn ngữ / ภาษา / Sprache /
+  Lingua / Język / Dil / Язык / Мова for ja / zh-Hans / zh-Hant / ko / es /
+  fr / pt / id / vi / th / de / it / pl / tr / ru / uk). Gallery
   example titles from `tutorial-data/manifest.json` stay English too.
 - **Names fixed in English by PD-OI-093 and PD-OI-105** stay English in the
   English UI only. Other locales translate them with the glossary (D-11).
@@ -73,7 +75,8 @@ nothing states that they are reviewed.
 - Units stay Latin and keep the source's spacing between number and unit:
   `100 bp`, `1kb`, `20px`, `0.65 ×R`, `8 pt`, `10x`. Never convert a unit (bp, kb and Mb
   stay in every locale; `fr` writes byte units in French, §7.3).
-  Time words are words, not units: 30 seconds is 30秒 in `ja`, `zh-Hans` and `zh-Hant`.
+  Time words are words, not units: 30 seconds is 30秒 in `ja`, `zh-Hans` and `zh-Hant`,
+  and `ru` and `uk` write мс, с and мин / хв (§16.3, §17.3).
 - Keep `→ ← · × + − %` and the en dash of ranges (`Rows 3–4`) as written.
 - Ellipsis is one `…` (U+2026) whether the source writes `...` or `…`, both
   for "more input follows" (Choose records…) and for progress (Saving
@@ -92,13 +95,15 @@ nothing states that they are reviewed.
   sentence.
 - A `tn` key has one string in `ja`, `zh-Hans`, `zh-Hant` and `ko`, which have
   no plural forms (`Intl.PluralRules` returns `other`), and a `one` and an
-  `other` string in `es`, `fr` and `pt` (§5.5 to §11.5). `th`, `id` and `vi`
+  `other` string in `es`, `fr`, `pt`, `de`, `it` and `tr` (§5.5 to §11.5,
+  §12.5, §13.5, §15.5). `th`, `id` and `vi`
   have no plural forms either: `Intl.PluralRules` selects `other` for every
   count, so their `one` rows are never shown (they carry the `other` text or a
   natural singular; §9.5, §10.5, §11.5).
 - A `tn` key's translation is one string, except that in a language whose
   plural rule has `few` or `many` categories (Polish, Russian, Ukrainian)
-  the `other` key holds an object of the CLDR categories the language uses,
+  the `other` key holds an object of the CLDR categories the language uses
+  (`pl`: few, many, other; `ru` and `uk`: one, few, many, other),
   with `other` required, for example
   `{"one": "…", "few": "…", "many": "…", "other": "…"}`. The `one` key is
   then the text for exactly 1 and stays a string; the object's `one` is the
@@ -116,7 +121,8 @@ nothing states that they are reviewed.
   `<i18n-text>` component places the element at its `{name}` slot (D-04).
 - Two sentences shown together are two keys. The code joins them with a
   language-dependent separator: a space in English and in `ko`, `es`,
-  `fr`, `pt`, `id`, `vi` and `th`, none after 。 in `ja` and `zh-*` (D-18). Do
+  `fr`, `pt`, `id`, `vi`, `th`, `de`, `it`, `pl`, `tr`, `ru` and `uk`, none after 。 in
+  `ja` and `zh-*` (D-18). Do
   not add a trailing space to a value.
 - Quotes follow the English: a `{name}` that the English key quotes is quoted
   in the target language's quotes (`ja` 「」, `zh-Hans` “ ”, `zh-Hant` 「」,
@@ -1766,3 +1772,1011 @@ fails the test and `warn` is printed. Each rule flags:
 - `th-retired-term` (error): a term the r1 term audit retired (แอนโนเทชัน, ความคล้าย without คลึง, …เป็นคู่, ออร์โธล็อก / พาราล็อก, การอนุรักษ์, ต้นน้ำ / ปลายน้ำ).
 - `th-identity-thai` (warn): the English word identity outside a “(identity)” gloss or a code value.
 - `th-line-stroke` (warn): เส้นขอบของแกน / เส้นขอบของเส้น, or ไม่ยอมรับ.
+
+## 12. German (`de`)
+
+Standard German of Germany, formal Sie, spelling of the 1996 reform with ß (Duden). No Swiss or
+Austrian variants. The Language menu entry is the endonym **Deutsch** (page `lang` de); the menu
+label itself is Sprache. This section is a draft; no text states that it is reviewed.
+
+### 12.1 Vocabulary
+
+- **Field terms**: Genom, Sequenz, Datensatz (Record; Microsoft Datensatz), Feature (see below),
+  Feature-Typ, Qualifier (the keys /gene, /product stay), Annotation, Zugangsnummer (Accession),
+  Locus (plural Loci), Locus-Tag, Strang (Strand: Vorwärtsstrang; de.wikipedia GC-Gehalt writes
+  DNA-Strang), reverses Komplement, GC-Gehalt, GC-Skew, AT-Skew, Skew, Dinukleotid, Tiefe (Depth),
+  Lesetiefe (read depth in sentences), Abdeckung (Coverage), Identität, Homologie, Ortholog (plural
+  Orthologe), Paralog (Paraloge), Treffer (BLAST hit; de.wikipedia BLAST-Algorithmus), E-Wert,
+  Alignment (plural Alignments), Lücke (alignment gap), Fehlpaarung (mismatch), genetischer Code,
+  Organell, Organismus, Stamm, Art (species), Produkt, Gen, Protein.
+- **Kept in English** (no established German term, or the field keeps the English noun; D-12):
+  Feature (GenBank's own table is FEATURES; Merkmal means a phenotypic trait), Track (UCSC and IGV
+  usage), Slot, Qualifier, Query, Subject, Skew, Locus-Tag, Orthogroup, Reciprocal Best Hit,
+  Near-reciprocal Hit, Coortholog, Inparalog, Ribbon, Flatfile, Popup, Seed, Pipeline, Workflow,
+  Cache, Preprint, Runtime, Task, Job, Markup, Lookbehind, Issues (GitHub page name), and the rail
+  name Labels. Nouns are capitalized and take German compounds with a hyphen (Feature-Typ).
+- **Diagram terms**: Diagramm (the generated figure; never Karte), Track (a ring or band),
+  Spur (Lane; a gel lane is a Spur, so it never means Track), Track-Slot, Platz (File card
+  slot), Teilstrich (Tick; Hauptteilstrich, Nebenteilstrich), Markierung (annotation mark),
+  Lineal (Ruler), Skala (Scale), Maßstabsbalken (Length bar), Innenabstand (Padding),
+  Zwischenraum (Gap), Abstand (Spacing), Versatz (Offset), Kontur (Stroke of shapes), Linie
+  (lines, the axis line), Füllung, Farbfeld (Swatch), Vordergrund / Hintergrund, Voreinstellung
+  (Preset), Standard (Default), Beschriftung (Label), Legende, Legendeneintrag, Legendentext.
+- **Two-sense words**: Alignment is the sequence alignment, Ausrichtung the layout action of
+  Similarity groups (Ausrichtung prüfen), Orientierung the record orientation; Treffer is the BLAST
+  hit and the search match, Übereinstimmung the drawn pairwise match; Lücke is the alignment gap,
+  Zwischenraum the layout gap; Lage is the INSDC location, Position the legend position; Kontur
+  is the outline, Linie the line itself (Achsenlinie, Linienfarbe); Wählen is Choose, Auswählen is
+  Select; Zuklappen / Aufklappen are Collapse / Expand (Erweitern would echo Erweitert).
+- **Command words** (Microsoft German): Speichern, Laden, Öffnen, Schließen, Kopieren, Einfügen,
+  Duplizieren, Löschen (Delete), Entfernen (Remove), Leeren (Clear), Zurücksetzen (Reset),
+  Wiederherstellen (Restore), Rückgängig (Undo), Wiederholen (Redo), Erneut versuchen (Retry),
+  Anwenden, Abbrechen, Hinzufügen, Umbenennen, Durchsuchen, Hochladen, Herunterladen, Importieren,
+  Exportieren, Überspringen, Beibehalten, Zusammenführen, Andocken, Drehen, Ausblenden, Anzeigen,
+  Aktivieren / Deaktivieren; Ein / Aus (On / Off), Ohne (None).
+- **Generate is Erzeugen** (Diagramm erzeugen, beim Erzeugen, Neu erzeugen); never generieren. It
+  is 8 letters beside the rail where Generieren has 10.
+- **Never use**: Merkmal or Funktion for Feature, Spur for Track, generieren, sichern for Save,
+  Satz for Record, Karte for the figure, kollinear with two l
+  (write kolinear, as de.wikipedia Syntenie writes Kolinearität), Deppenleerzeichen (Locus Tag),
+  du forms, Bitte in instructions, English leftovers (Record, Legend, Session, Settings).
+
+### 12.2 Buttons and sentences
+
+- Register: Sie, written with a capital (Sie, Ihr, Ihnen). Never du, dein, euch. Microsoft and
+  Apple German use Sie for software text; no source was fetched this session (from memory).
+- Buttons, menu commands, links, checkboxes: the infinitive, no article where the English has
+  none: Sitzung speichern, Beispiel laden, Datei hochladen, Tiefe anzeigen. A reflexive object
+  stays short: Zurücksetzen, Neu erzeugen.
+- Labels, headings, tabs, column headers, badges, options: noun phrases, no final period
+  (Benutzerdefinierte Track-Slots, Paarweise Vergleiche). Options are nouns or adjectives that
+  agree with the setting (Automatisch, Seriell, Multithread). A dialog title that asks is a
+  question with the infinitive: Datei vollständig entfernen?
+- Instructions (help, notices, dialogs, errors): the Sie imperative (Wählen Sie einen
+  Datensatz. Klicken Sie auf Erzeugen.). Leave blank for auto: Zur automatischen Bestimmung leer
+  lassen. Separable verbs put the particle last: Wählen Sie die Datei aus.
+- Progress ("…ing"): passive with werden and … (Sitzung wird gespeichert…, Diagramm wird
+  erzeugt…). Completion: the noun and its participle (Sitzung gespeichert.), or a passive sentence
+  (Die Ausrichtung wurde angewendet.). Errors: what failed, then what to do (Die Datei konnte nicht
+  gelesen werden. Prüfen Sie, ob es sich um eine FASTA-Datei handelt.).
+- "Cannot": a state is nicht möglich / kann nicht (Rückgängig ist derzeit nicht möglich.); a
+  failure is konnte nicht (… konnte nicht gespeichert werden.). Retry after it finishes: Versuchen
+  Sie es erneut, wenn der Vorgang abgeschlossen ist.
+- Required / optional / recommended: erforderlich (invariable after a field: Region (optional)),
+  optional, empfohlen. Not Pflichtfeld, not optionell.
+- An option or button name is never the grammatical subject: Bei „Auto“ wird …; Beim
+  Speichern wird …, not Auto wählt … . A text cites the label the control shows: the options
+  read Auto, so help and notices cite „Auto“; „Automatisch“ only where the control itself shows
+  automatisch.
+
+### 12.3 Punctuation and spacing
+
+- Quotes „…“ (U+201E, U+201C), nested ‚…‘ (U+201A, U+2018). A {name} the English quotes is
+  „{name}“; a UI word the English quotes ('Bar') is „Balken“. Never straight " or ', never “…”,
+  ”, « » in German prose. A period or comma follows the closing quote.
+- Colon: no space before, one after (Feld: {path}). A label that ends with a colon keeps it.
+  No space before ? ! ; either.
+- Ellipsis: one … (U+2026) directly after the word (Laden…, Sitzung wird geladen…).
+- Dashes: the en dash with spaces for a break (Wert – Maximum), the en dash without spaces for
+  ranges and between numbers (Zeilen 3–4), the hyphen only inside compounds. Slash as in the source.
+- Digits are ASCII with the English decimal point and grouping (0.65, 1,000.5), never 0,65 or
+  1.000 or 1 000 (D-05); units and % keep the source spacing (100 bp, 50%).
+- Abbreviations: z. B., d. h., u. a. with a no-break space (U+00A0); min., max.,
+  Abb. take a period; ID is invariable (die IDs). Sentences are joined with one space (D-09).
+- Parentheses as in English, no inner space: Region (optional).
+
+### 12.4 Words and capitals
+
+- Every noun is capitalized; labels are sentence case, never English Title Case: Benutzerdefinierte
+  Track-Slots, Paarweise Vergleiche, Achse und Skala.
+  Adjectives, verbs and the words of an option written in lower case in the source stay lower case
+  (hoch, mittel, niedrig; the Python-owned member values).
+- A key the English writes in capitals stays in capitals; Latin script keeps the CSS `uppercase`
+  rule, which writes ß as SS and keeps Ä, Ö, Ü (STANDARDFARBEN, SPEZIFISCHE REGELN,
+  BESCHRIFTUNGSFILTER, QUALIFIER-PRIORITÄT, SCHLÜSSEL HINZUFÜGEN, AUS).
+- The action Generate in running text is the verb or noun in German case rules (beim Erzeugen,
+  vor dem Erzeugen, nach dem Erzeugen). Only the button itself is cited with its label Erzeugen
+  and without quotes (Klicken Sie auf Erzeugen); where the English quotes it, use „Erzeugen“.
+- Concepts the English capitalizes (Session, Result, Legend) follow normal German noun capitals
+  (die Sitzung, das Ergebnis, die Legende); gbdraw stays lower case.
+- Compounds put the head last: Datensatzbeschriftung, Legendeneintrag, Tiefen-Track; the
+  Fugen-s follows Duden (Sitzungseinstellungen, Regionsannotationen, Zugangsnummer). Hyphenate
+  a compound with an acronym, a number or a kept English noun (Feature-Typ, GFF3-Datei, Track-Slot);
+  never write the parts as two words.
+- Genders: der Datensatz, das Feature, der Track, der Slot, die Spur, die Legende, der Strang,
+  die Sitzung, die CDS, die Region, das Set, der Anker, die Beschriftung, das Alignment, der
+  Treffer, die Zugangsnummer, die Einstellung, das Ergebnis, der Qualifier, der Locus, die Query.
+- A count of members is "Anzahl der …" (Anzahl der Gene in der Gruppe); exact match is parenthesized
+  after the field: Produkt (genaue Übereinstimmung): {product}.
+
+### 12.5 Placeholders and counts
+
+- A placeholder's gender, number and case are unknown and it is never inflected, never carries
+  a suffix, and never takes an article that depends on its value. Put a German noun before it
+  and decline the noun: die Datei {file}, der Datensatz {record}, des Datensatzes {record}, dem
+  Track {track}, die Option {setting}, die Palette „{palette}“. Not des {record}, der {track}.
+- A placeholder that holds a translated phrase ({action}, {reason}) follows a colon:
+  Rückgängig: {action}. Lists ({pairs}, {names}) follow a number-bearing noun that agrees:
+  Paar {pairs} ist … / Die Paare {pairs} sind ….
+- {count} stands before the noun and is not declined; the noun and the words agreeing with it
+  follow. `Intl.PluralRules('de')` returns `one` for the integer 1 alone; 0, 1.5, 21, 22, 25 and
+  every other count take `other`: 0 Datensätze, 1.5 Datensätze, 21 Datensätze. A `one` string
+  drops {count} only where the English `one` does.
+- Worked pairs, `one` / `other`:
+  1. ({count} records): ({count} Datensatz) / ({count} Datensätze)
+  2. {count} features ready: {count} Feature bereit / {count} Features bereit
+  3. From this color rule: / From these {count} color rules: Aus dieser Farbregel: / Aus diesen
+     {count} Farbregeln:
+  4. Reset {count} placements to Auto: {count} Platzierung auf Automatisch zurücksetzen /
+     {count} Platzierungen auf Automatisch zurücksetzen
+  5. {count} chosen feature keeps its current direction.: {count} gewähltes Feature behält seine
+     aktuelle Richtung. / {count} gewählte Features behalten ihre aktuelle Richtung.
+
+### 12.6 Length
+
+- German runs 20–30% longer than English (compounds, longer verbs); a button with an object about
+  1.5 times. Take the short form of the glossary first; abbreviate only with an accepted form.
+- Rail short names (52 px entries, 10 px semibold, about nine Latin letters; a word is never
+  split, there are no soft hyphens): Eingabe (Input), Vergleich (Compare), Erweitert (Advanced,
+  Linear only), Regionen, Layout, Schrift, Titel, Legende, Farben, Features, Labels (own rail key;
+  Beschriftungen has 14 letters), Achse, GC / Skew (two words, wraps between them), Info. The
+  Generate button beside the rail reads Erzeugen. The section titles keep the plain words
+  (Beschriftungen, Eingabe-Genome).
+- Header buttons: prefer the short forms Zurücksetzen (Reset Settings), Sitzung speichern,
+  Sitzung laden, Beispiel laden. Einstellungen zurücksetzen is the long form and is used only if
+  the 1,024 px fit check passes (D-11). Options in 10 px rows use Auto, Seriell, Multithread,
+  Oben / Unten, Innen / Außen, Auf der Achse, Hintergrund, Ribbon / Kurve.
+- To shorten a label drop the article first (Track-Breite, not Breite des Tracks); never switch terms.
+
+### 12.7 Machine checks
+
+The rules are in `tests/web/i18n-lint/de.tsv` (draft: `lint-de.tsv`); each runs on one catalog value.
+
+- `de-sie-lowercase` (error): lower-case sie after a sentence-initial imperative infinitive.
+- `de-du-pronoun`, `de-du-imperative` (error): du / dein / euch forms and du-imperatives.
+- `de-bitte` (warn): Bitte at the start of an instruction.
+- `de-spelling` (error): Swiss or transliterated spelling (ss for ß, ae / oe / ue) and old spellings.
+- `de-quote-straight`, `de-quote-closing`, `de-quote-other` (error / error / warn): wrong quotes.
+- `de-space-before-punct` (error): space before : ; ? !. `de-hyphen-dash` (warn): " - " as a dash.
+- `de-three-dots` (error): "..." or a space before the final ellipsis.
+- `de-decimal-comma` (error), `de-thousand-space` (warn), `de-nonascii-digits` (error): numbers.
+- `de-placeholder-glue` (error): a letter glued to a placeholder. `de-apostrophe-genitive` (error).
+- `de-compound-space` (warn): GC Gehalt, Locus Tag written as two words.
+- `de-feature-merkmal` (warn), `de-generieren` (error), `de-kollinear` (warn): glossary terms.
+- `de-english-leftover` (warn): Record, Legend, Settings and similar English words.
+- `de-abbrev-spacing` (warn): z. B. without the no-break space. `de-soft-hyphen` (error).
+
+## 13. Italian (`it`)
+
+Standard Italian, informal second person (tu) as in Microsoft, Apple and Google
+software (a draft). The Language menu entry is the endonym **Italiano**; the
+menu label is Lingua; the page `lang` is `it`. Sources: `glossary-it.notes.md`.
+
+### 13.1 Vocabulary
+
+- **Field terms**: genoma, sequenza, gene, annotazione, numero di accesso
+  (Accession; it.wikipedia GenBank), locus (plural loci), filamento (Strand:
+  filamento +, filamento −, filamento diretto / inverso), complementare inverso,
+  contenuto in GC, profondità (Depth), profondità di lettura (read depth in
+  sentences), copertura, identità, similarità, omologia, ortologo, paralogo,
+  allineamento, blocco colineare, codice genetico, organello, organismo, ceppo,
+  specie, prodotto, localizzazione (Location), amminoacido, nucleotide,
+  a monte / a valle (upstream / downstream), gruppo di similarità.
+- **Diagram terms**: traccia (Track), corsia (Lane), slot (track slot), posizione
+  (File card slot), tacca (Tick; principale / secondaria), righello (Ruler),
+  barra di scala, legenda, voce della legenda, anello, banda, nastro, margine
+  (Padding), spazio (Gap), spaziatura (Spacing), contorno (Stroke), riempimento,
+  campione di colore, sfondo / primo piano, area di disegno (Canvas), livello
+  (Layer), preimpostazione (Preset), predefinito (Default).
+- **Command words** (Microsoft Italian): Annulla (Cancel and Undo), Ripeti (Redo),
+  Elimina (Delete), Rimuovi (Remove), Cancella (Clear), Reimposta (Reset),
+  Ripristina (Restore), Sfoglia (Browse), Carica (Load and Upload), Scarica,
+  Importa, Esporta, Seleziona, Scegli, Mostra / Nascondi, Abilita / Disabilita
+  (verbs), Attivato / Disattivato (On / Off), Riduci / Espandi (Collapse /
+  Expand), Comprimi (Compress), Salta (Skip), Unisci (Merge), Mantieni (Keep),
+  Genera, Rigenera, Fai clic.
+- **Loanwords kept in English** because Italian bioinformatics and software keep
+  them (lower case, invariable plural, an article of the stated gender): feature
+  (f.), record (m.), hit (m.), query (f.), subject (m.), qualifier (m.), mismatch,
+  skew, locus tag, slot (m.), card (f.), layout, popup, file, input / output,
+  browser, runtime, thread, cache, hash, pipeline, tutorial, zoom, reciprocal
+  best hit, near-reciprocal hit, coortholog, inparalog, orthogroup (§13.5). Never
+  mix one with a translation of it (no caratteristica beside feature).
+- **Never use**: cliccare / clicca (write Fai clic), settare / setta,
+  resettare, uploadare, downloadare, editare, linkare, loggare, customizzare,
+  accessione, etichetta di locus, caratteristica or funzionalità for Feature,
+  registro or registrazione for Record, elica or trefolo for strand, mappa for
+  Diagram, inclinazione or asimmetria for skew, opzionale, pb or kpb for bp,
+  Si prega di, Per favore.
+
+### 13.2 Buttons and sentences
+
+- Register: tu, implicit. Never Lei (Faccia clic, Scelga), never the impersonal
+  infinitive of technical manuals (Fare clic su, Selezionare un file), never
+  Si prega di. Source: Microsoft Italian Style Guide examples (Vuoi continuare?,
+  fai clic su Annulla, Per confermare … guarda la riproduzione).
+- Buttons, menu commands, links, tooltips of actions: imperative of tu, no final
+  period, no article where the English has none: Salva sessione, Carica esempio,
+  Reimposta impostazioni, Genera diagramma. Checkboxes follow the English
+  (Mostra la profondità, Scala logaritmica).
+- Labels, headings, tabs, column headers, badges: noun phrases without a final
+  period (Colore del riempimento). Options are nouns or adjectives (Automatico,
+  Attivato, Seriale). Descriptions: a noun phrase or the third person present
+  (Prefisso per i file di output. Mostra la profondità di lettura come traccia.).
+- Instructions (help, notices, dialogs, errors): imperative of tu. Seleziona un
+  record. Fai clic su Genera. Lascia vuoto per usare il valore automatico.
+  A dialog title that asks takes the infinitive (Rimuovere l’intero file?); a
+  question in the body: Vuoi …?
+- Progress: noun and … (Generazione del diagramma…, Salvataggio della
+  sessione…, Caricamento della sessione…); in a sentence …in corso.
+  Completion: noun and participle (Sessione salvata. Allineamento applicato.).
+- Errors: what failed, then what to do. Cannot: Impossibile + infinitive
+  (Impossibile leggere il file. Controlla che sia un file FASTA.); X failed is
+  Errore di X. Busy: Generazione del diagramma in corso. Riprova al termine.
+- Required is Obbligatorio, optional (facoltativo) (invariable, after the field
+  name), recommended Consigliato; non valido, non supportato, non disponibile.
+- An option or button name is not the subject: Con Automatico, …; Al salvataggio, ….
+
+### 13.3 Punctuation and spacing
+
+- Quotes “ ” (U+201C, U+201D), nested ‘ ’. A {name} the English quotes is
+  “{name}”; a UI word the English quotes ('Bar') is “Barra”. Never « », „ or
+  straight quotes in prose. Punctuation follows the closing quote.
+- Apostrophe: the typographic ’ (U+2019) in every elision (l’asse, dell’asse,
+  un’annotazione); the straight ' only in code. An accent is a real letter: è,
+  perché, più, così, già, può, attività, visibilità, È at a sentence start;
+  never e', perche', piu', E'.
+- Colon: no space before, one after (Campo: {path}); after a colon a lower-case
+  word unless a name, control label or placeholder follows. No space before
+  ; ? ! (unlike fr): Vuoi continuare?
+- Parentheses, slashes and ranges as the source writes them: Regione
+  (facoltativo), Organismo / ceppo, Righe 3–4. A spaced hyphen is not a dash.
+  Sentences are joined by an ordinary space (D-09); no non-breaking space.
+- Digits and separators stay en-US (D-05): 0.65, 1,000.5, never 0,65 or
+  1.000,5; units and % keep the source spacing (100 bp, 20px, 65%). One …
+  (U+2026), no space before it. ad es. for e.g., cioè for i.e. No comma before
+  e / o; ed / ad only before the same vowel.
+
+### 13.4 Words and capitals
+
+- Sentence case for every label, button, heading, tab and option, as in Microsoft
+  Italian: the first word and names only (Slot di traccia personalizzati).
+- A key the English writes in capitals stays in capitals with accents:
+  SCHEMI PREIMPOSTATI, COLORI PREDEFINITI, REGOLE SPECIFICHE, FILTRO DELLE
+  ETICHETTE, PRIORITÀ DEI QUALIFIER, AGGIUNGI CHIAVE; the badge OFF is
+  DISATTIVATO.
+- The action Generate in running text is lower case (genera, alla generazione,
+  prima di generare); only the button is cited as Genera, without quotes
+  (fai clic su Genera), or “Genera” where the English quotes it. A cited control
+  keeps its translated label and capital: in Slot di traccia personalizzati.
+- Compounds put the head noun first, joined with di: tipo di feature, TSV di
+  profondità. Genders: la feature, la CDS, la query, la card; il record, il file,
+  l’hit, il locus, lo slot, il subject, il popup.
+- An exact-match condition is parenthesized after the field: Prodotto
+  (corrispondenza esatta): {product}. A count of members is Numero di …
+  (Numero di geni del gruppo), not a bare plural.
+
+### 13.5 Placeholders and counts
+
+- A placeholder value has no known gender. Put a noun before it and make the
+  article agree with the noun: il file {file}, il record {record}, la traccia
+  {track}, lo slot {id}, l’impostazione {setting}. Never glue an elision,
+  suffix or prefix to a placeholder (d’{name}, {name}i); never put an article or
+  an articulated preposition (del, nella) straight before one. A placeholder that
+  holds a translated phrase ({action}, {reason}) follows a colon.
+- `Intl.PluralRules('it')` gives `one` for 1 only. 0, 1.5, 21, 22, 25 and 1000
+  take `other`; 1000000 gives `many`, which falls back to `other`. The `one`
+  string drops {count} only where the English `one` does. Kept English nouns do
+  not change in the plural (1 record, 0 record, 2 record).
+- Worked pairs, `one` / `other`:
+  1. ({count} record) / ({count} records): ({count} record) / ({count} record)
+  2. {count} feature ready / {count} features ready: {count} feature pronta /
+     {count} feature pronte
+  3. From this color rule: / From these {count} color rules: → Da questa regola
+     di colore: / Da queste {count} regole di colore:
+  4. Remove {count} unmatched feature edit / edits → Rimuovi {count} modifica
+     di feature senza corrispondenza / Rimuovi {count} modifiche di feature …
+  5. {count} LOSAT result is cached and reused … → {count} risultato LOSAT è in
+     cache e viene riutilizzato quando input e impostazioni corrispondono. /
+     {count} risultati LOSAT sono in cache e vengono riutilizzati quando input e
+     impostazioni corrispondono.
+
+### 13.6 Length
+
+- Italian runs 15–25% longer than English; help texts and notices wrap. Rail
+  short names fit about nine letters in the 52 px entry and break only between
+  words: Input, Confronto, Avanzate, Regioni, Layout, Carattere, Titoli,
+  Legenda, Colori, Feature, Etichette, Asse, GC / skew, Info (About), with Genera
+  beside the rail. Carattere and Etichette (9 letters) are the widest. The rail
+  keys of Features, Layout and Labels are Feature, Layout and Etichette.
+- Header buttons stay within about 1.4× the English label: Salva sessione,
+  Carica sessione, Carica esempio, Reimposta impostazioni (1.6×: check at 1,024
+  px). Options in 10 px rows use the short forms: Automatico, Seriale,
+  Multithread, Sopra / Sotto, Dentro / Fuori, Sull’asse. Drop an article before
+  switching terms.
+
+### 13.7 Machine checks
+
+`tests/web/i18n-lint/it.tsv` (draft `lint-it.tsv`, 25 rules). Errors: `it-register`
+(Lei forms, Fare clic, Si prega di), `it-never-words` (clicca, settare,
+resettare, uploadare, editare, accessione, etichetta di locus), `it-skew-translated`
+(inclinazione / asimmetria with GC or AT), `it-optional` ((facoltativa),
+opzionale), `it-quotes` (« » „ ‚), `it-apostrophe` (straight apostrophe, e' or e’
+as an accent), `it-missing-accent` (più, così, perché, già, può, -ità nouns,
+future forms), `it-decomposed` (not NFC), `it-digits` (non-ASCII digits),
+`it-number-format` (decimal comma, dot or space grouping), `it-space-before-punct`
+(a space before : ; ? !), `it-ellipsis` (three dots, or a space before …),
+`it-placeholder-suffix` (suffix, prefix or elision glued to {name}),
+`it-loanword-plural` (English -s on feature, record, hit, query, file),
+`it-auto-label` (the label Auto), `it-bp-unit` (pb, kpb, Mpb). Warnings:
+`it-english-ui-words` (upload, download, reset, settings, click, track, lane,
+legend, preset, default, tick, ribbon, strand), `it-feature-words`
+(caratteristica, funzionalità), `it-record-words` (registro, registrazione),
+`it-strand-words` (elica, trefolo, strand), `it-straight-quotes`,
+`it-placeholder-article` (an article straight before a placeholder),
+`it-hyphen-dash` (a spaced hyphen as a dash), `it-title-case` (three or more
+capitalized words in a label), `it-diagram-map` (mappa for diagram).
+
+## 14. Polish (`pl`)
+
+Standard Polish in the register of Polish software (Microsoft, Google, Apple): the bare imperative
+without a pronoun, no Pan/Pani. The Language menu entry is the endonym **Polski**; the menu label is
+Język; the page `lang` is `pl`. Numbers keep the English format (D-05). Translations are drafts; nothing
+states that they are reviewed.
+
+### 14.1 Vocabulary
+
+- **Field terms**: genom, sekwencja, rekord (Record; numer akcesyjny for Accession), cecha (Feature; typ
+  cechy; INSDC "tabela cech"), adnotacja, kwalifikator (the keys /gene, /product stay), locus (plural
+  loci), nić (Strand: nić +, nić −, nić dodatnia), odwrotna komplementarna, zawartość GC, głębokość
+  (Depth), głębokość odczytów (read depth), pokrycie (coverage), identyczność, podobieństwo, homologia,
+  ortolog, paralog, blok kolinearny, kod genetyczny, organellum (plural organella), organizm, szczep,
+  gatunek, produkt, gen.
+- **Alignment has two words**: dopasowanie for sequences (BLAST, LOSAT, długość dopasowania; a drawn
+  match is also dopasowanie), wyrównanie for the layout action of Similarity groups (Wyrównaj, Przejrzyj
+  wyrównanie, wyrównanie według podobieństwa). **Hit** is trafienie.
+- **Diagram terms**: ścieżka (Track; plural ścieżki, ścieżek), tor (Lane), slot (track slot), miejsce
+  (File card slot), karta (File card), zakładka (Tab), znacznik podziałki (Tick; główny / pomocniczy
+  znacznik), oznaczenie (annotation mark), linijka (Ruler; reguła is a color rule), pasek skali (Length
+  bar), margines (Padding), odstęp (Gap), rozstaw (Spacing), interwał, kontur (Stroke), wypełnienie
+  (Fill), próbka koloru, podkład / pierwszy plan (Underlay / Foreground), ustawienie wstępne (Preset),
+  domyślny (Default).
+- **Command words** (imperative): Zapisz, Wczytaj (Load), Importuj, Eksportuj, Prześlij (Upload),
+  Pobierz (Download), Wygeneruj ponownie, Zastosuj, Resetuj, Cofnij, Ponów, Anuluj, Usuń (Delete and
+  Remove), Wyczyść (Clear), Dodaj, Zmień nazwę, Przeglądaj (Browse), Zaznacz (Select), Wybierz (Choose),
+  Zwiń, Rozwiń, Pomiń (Skip), Wyklucz (Omit), Scal (Merge), Zadokuj, Przypnij, Zachowaj (Keep), Obróć,
+  Spróbuj ponownie; states Włączone / Wyłączone (Wł. / Wył. on badges), Automatycznie.
+- **Kept in English** (D-12, evidence in the glossary notes): GC skew, AT skew, skew, query, subject,
+  locus tag, orthogroup, coortholog, inparalog, reciprocal best hit, near-reciprocal hit, upstream,
+  downstream, open source, cross-origin isolated and the names of §1.1. They are lower case in prose,
+  take no Polish case ending and no plural (sekwencja query; rephrase a count). Loanwords in use: slot,
+  diagram, interfejs, piksel, intron, replikon, preprint, hosting.
+- **Never use**: numer dostępu (numer akcesyjny), pasmo, łańcuch, włókno (nić), mapa (diagram), trasa,
+  utwór (ścieżka), kwerenda (query), wgraj, ściągnij, załaduj, ładowanie (Prześlij, Pobierz, Wczytaj),
+  wartość E, wynik bitowy, skos GC, nachylenie GC, asymetria GC, znacznik locus, Pan, Pani, proszę,
+  kołowy (kolisty), and the English feature, track, preset, lane, popup, default, reset, record, legend,
+  label.
+
+### 14.2 Buttons and sentences
+
+- Register (Microsoft, Google, Apple Polish): the second person singular imperative with no pronoun; no
+  Pan/Pani/Państwo, no proszę, no infinitive on a button. Where a possessive is unavoidable write twój
+  in lower case; usually drop it (Zastąp zmienione kolory, not Zastąp twoje zmienione kolory).
+- Buttons, menu commands, links: perfective imperative: Zapisz sesję, Wczytaj przykład, Zmień nazwę,
+  Zastosuj i generuj. Generate is the imperfective Generuj (Generuj diagram); Regenerate is Wygeneruj
+  ponownie.
+- Labels, headings, tabs, column headers, badges: a noun phrase without a final period (Zawartość GC,
+  Typ cechy). Options are nouns, adverbs or adjectives that agree with the setting (Automatycznie,
+  Włączone, Szeregowo). A dialog title that asks is the perfective infinitive + ?: Usunąć cały plik?,
+  Zresetować wszystkie ustawienia?
+- Standalone state chips use the neuter singular (Dostępne, Włączone, Gotowe, Zalecane, Wymagane);
+  inside a phrase the adjective agrees with its noun (slot włączony, ścieżka włączona). Glossary
+  adjectives are listed in the masculine.
+- Required / optional / recommended: Wymagane, (opcjonalnie) after a field name (invariable), Zalecane.
+- Instructions (help, notices, dialogs, errors): the same imperative. Wybierz rekord. Kliknij Generuj.
+  Wygeneruj diagram ponownie. Leave blank for auto: Pozostaw puste, aby użyć wartości automatycznej.
+  Name a button as an action: kliknij Resetuj.
+- Descriptions: third person or the impersonal reflexive (Pokazuje głębokość odczytów. Stosuje się przy
+  generowaniu.).
+- Progress (…ing): the verbal noun + … (Zapisywanie sesji…, Generowanie diagramu…). Completion: the
+  impersonal -no / -to form in a sentence (Zapisano sesję. Zastosowano wyrównanie.), the participle as a
+  status label (Zapisane).
+- Errors: what failed, then what to do. Nie można odczytać pliku. Sprawdź, czy to plik FASTA. Nie można
+  … says the action is impossible; Nie udało się … says an attempt failed (Nie udało się zapisać
+  sesji.). Headings: Błąd generowania, Błąd eksportu SVG. Busy reason: Trwa generowanie diagramu.
+  Spróbuj ponownie po zakończeniu. Retry is Spróbuj ponownie.
+
+### 14.3 Punctuation and spacing
+
+- Quotes „…” (U+201E opens, U+201D closes), nested «…». A `{name}` the English quotes is „{name}”; a UI
+  word the English quotes ('Bar') is „Pasek”. No straight " and no “ ‘ ’ in prose. A period or comma
+  follows the closing ”.
+- Colon: no space before, one after (Pole: {path}). A label that ends with a colon keeps it. No space
+  before ? ! , . ;
+- Dashes: the en dash with spaces for a pause (Plik – brak), without spaces for a range (Wiersze 3–4);
+  never a spaced hyphen. The minus − and → × stay.
+- ASCII digits with the source's decimal point and grouping (0.65, 1,000), never 0,65 or 1 000. Units
+  and % keep the source spacing (100 bp, 50%). One plain space everywhere: the catalog uses no
+  non-breaking space, although print Polish puts one after single-letter words (a, i, o, u, w, z) and
+  between a number and its unit; the tests compare plain text.
+- One … (U+2026) directly after the word. e.g. is np.; i.e. is tzn.; etc. is itd. Sentences are
+  separated by one space (§1.3). Diacritics are NFC: ą ć ę ł ń ó ś ź ż are precomposed.
+
+### 14.4 Words and capitals
+
+- Sentence case for every label, button, heading, tab, option and column header: the first word and
+  proper names only (Niestandardowe sloty ścieżek, Porównania parami). Never copy English Title Case.
+- A key written in capitals stays in capitals, with diacritics: KOLORY DOMYŚLNE, REGUŁY SZCZEGÓŁOWE,
+  FILTROWANIE ETYKIET, PRIORYTET KWALIFIKATORÓW, DODAJ KLUCZ; the badge OFF is WYŁ.
+- The action Generate in running text is the verb in lower case (przy generowaniu, wygeneruj ponownie);
+  only the button itself is cited with its label Generuj (capital, no quotes, „Generuj” where the
+  English quotes it).
+- Nouns the English capitalizes as product terms are lower case in a sentence: sesja, wynik, rekord. A
+  control, section or option cited in a sentence keeps its translated label and capital without quotes
+  (kliknij Generuj; w sekcji Etykiety; wybierz Automatycznie).
+- Compounds put the head noun first and use the genitive: typ cechy, TSV głębokości, plik BLAST TSV,
+  pamięć podręczna LOSAT. Genders: ta CDS (ta sekwencja), ten TSV, ten ID, ten locus; query and subject
+  have no ending.
+
+### 14.5 Placeholders and counts
+
+- A placeholder is never inflected and carries no suffix. Put a class noun before it, in the case the
+  sentence needs, and let adjectives agree with that noun (rekord {record}, ścieżka {track}, plik
+  „{file}”); never write {name}u or {n}-ego. {name} is hidden becomes Element {name} jest ukryty.
+- Categories (Intl.PluralRules('pl')): one is 1 only; few is 2–4, 22–24, 32–34 … (not 12–14); many is 0,
+  5–21, 25–31 … and 112; other is a fraction (1.5). The `one` key holds the text for exactly one (count 1); the `other` key holds an object with one entry per plural category of the other counts: `few`, `many` and `other` (fractions); the runtime shows the object's category text for every count but 1. 21 takes many (21 rekordów), 22 few (22 rekordy), 25
+  many, 0 many (0 rekordów), 1.5 other (1.5 rekordu: the genitive singular). A `one` string drops
+  {count} only where the English one does.
+- After a numeral the noun is nominative plural for few and genitive plural for many. In a frame that
+  already asks for the genitive (z, od, do, dla, po liczbie) the noun is genitive after one as well,
+  singular, and genitive plural after few and many. A verb after few is plural; after many it is the
+  third person singular neuter (5 edycji wskazuje); in the other case it is singular. Prefer an
+  impersonal verb (Pominięto 5 wierszy) to avoid the agreement.
+- Worked sets, `one` / few / many / other (English key in parentheses):
+  1. ({count} records): ({count} rekord) / ({count} rekordy) / ({count} rekordów) / ({count} rekordu)
+  2. ({count} features ready): {count} cecha gotowa / {count} cechy gotowe / {count} cech gotowych /
+     {count} cechy gotowej
+  3. ({current} of {count} matches): {current} z {count} dopasowania / {current} z {count} dopasowań /
+     {current} z {count} dopasowań / {current} z {count} dopasowania (z takes the genitive, so few and
+     many are equal)
+  4. (From these {count} color rules:): Z tej reguły koloru: / Z tych {count} reguł koloru: / Z tych
+     {count} reguł koloru: / Z tych {count} reguł koloru: (tych needs the plural, so other equals many)
+  5. ({count} feature edits name features the source does not have): {count} edycja cechy wskazuje
+     cechę, której nie ma w źródle. / {count} edycje cech wskazują cechy, których nie ma w źródle. /
+     {count} edycji cech wskazuje cechy, których nie ma w źródle. / {count} edycji cech wskazuje cechy,
+     których nie ma w źródle.
+- A string without plural forms that counts things is a noun phrase and a colon: Etykiety: {count}.
+  Never build a plural with (y) or (s).
+
+### 14.6 Length
+
+- Polish runs 10–30% longer than English; help texts and notices wrap. Rail short names, at most 9
+  letters in the 52 px entry (10 px semibold): Wejście, Porównaj (Compare), Zaawans. (Advanced;
+  Zaawansowane has 12 letters and does not fit; the period is the accepted abbreviation), Regiony,
+  Układ, Czcionka, Tytuły, Legenda, Kolory, Cechy, Etykiety, Oś, GC / skew, O programie (two lines,
+  between words); Generuj beside the rail. A word is never hyphenated.
+- Header buttons stay within about 1.35× the English label: Wczytaj przykład (16 for 12), Wczytaj sesję,
+  Zapisz sesję, Cofnij, Ponów, Resetuj ustawienia (18 for 14); check the first and the last at 1,024 px.
+  Generate bar: Generuj diagram, Anuluj, Generowanie….
+- Options in 10 px rows use the short forms: Automatycznie / Auto, Wł. / Wył., Szeregowo, Wielowątkowo,
+  Nad / Pod, Na osi, Na zewnątrz / Wewnątrz, Wstążka / Krzywa. To shorten a label drop a genitive
+  attribute first (Szerokość ścieżki, not Szerokość tej ścieżki); never switch terms.
+
+### 14.7 Machine checks
+
+The lint list is `tests/web/i18n-lint/pl.tsv`; each rule reads one catalog value
+with the `{name}` placeholders masked as `{X}`. `error` fails, `warn` is printed.
+
+- Typography: `pl-nfc` (error) a combining mark, so not NFC; `pl-ellipsis-dots` (error) three periods;
+  `pl-ellipsis-space` (error) a space before …; `pl-straight-quotes` (error) a straight double quote;
+  `pl-wrong-quotes` (error) “ ‘ ’ ‚ or a ” before any „; `pl-space-before-punct` (warn) a space before ,
+  . ; : ! ?; `pl-hyphen-dash` (warn) a spaced hyphen; `pl-nbsp` (warn) a non-breaking or thin space.
+- Numbers and script: `pl-decimal-comma` (warn) 0,65; `pl-thousands-space` (warn) 1 000;
+  `pl-foreign-script` (error) Cyrillic, CJK, Thai, Arabic or full-width characters.
+- Register: `pl-formal-address` (error) Pan, Pani, Państwo, proszę; `pl-pronoun` (warn) ty, ciebie,
+  twój; `pl-infinitive-button` (warn) a value that opens with an infinitive and is not a question;
+  `pl-title-case` (warn) two capitalized words.
+- Terms: `pl-english-words` (warn) feature, track, preset, lane, popup, default, reset, record, legend,
+  label, strand, session, settings, canvas; `pl-strand-words` (warn) pasmo, łańcuch, włókno;
+  `pl-accession` (warn) numer dostępu; `pl-kept-latin` (error) the Polish renderings of GC skew, locus
+  tag, E-value, Bitscore, query, subject and reciprocal best hit; `pl-map-track-words` (warn) mapa,
+  trasa, utwór; `pl-vendor-verbs` (warn) wgraj, ściągnij, załaduj, ładowanie.
+- Words and placeholders: `pl-placeholder-suffix` (error) a letter glued to a placeholder;
+  `pl-plural-hack` (error) rekord(y) or file(s); `pl-ascii-diacritics` (error) błąd written as blad,
+  ścieżka as sciezka, and similar.
+
+## 15. Turkish (`tr`)
+
+Standard Turkish of Turkey, as Microsoft tr-TR and the TDK spelling guide write it. Turkish is agglutinative: suffixes
+carry case and possession, vowel harmony picks their form, and a suffix can never be attached to a `{placeholder}`,
+because the value is unknown. §15.5 shows how to rephrase around that. The Language menu entry is **Türkçe**; the
+page `lang` is `tr`; the menu label is Dil. This section is a draft and nothing in it states that it is reviewed.
+
+### 15.1 Vocabulary
+
+- **Field terms**: genom, dizi (sequence), kayıt (Record), özellik (Feature; özellik tipi, never tür, which is the
+  Species), anotasyon, erişim numarası (Accession), gen, ürün, protein, nükleotit, amino asit, organizma, tür (Species),
+  suş, izolat, organel, replikon, iplik (Strand: ileri iplik; tr.wikipedia DNA and Genetik kod write çift iplikli DNA),
+  ters tamamlayıcı (Reverse complement), GC içeriği, okuma derinliği (Read depth), kapsama, özdeşlik (Identity),
+  homoloji, ortolog, paralog, hizalama (Alignment), benzerlik grubu (Similarity group), kolinear blok, genetik kod,
+  topoloji, sorgu (Query), yuva (track slot), iz (Track), şerit (Lane), halka (Ring), gösterge (Legend, Microsoft
+  Excel Turkish), işaret (Tick; ana işaret, ara işaret), cetvel (Ruler), kontur (Stroke), dolgu (Fill), kenar
+  boşluğu (Padding), boşluk (Gap), aralık (Spacing and Interval), ofset (Offset), kaydırma (Pan), hazır ayar (Preset).
+- **Command words** (Microsoft tr-TR): Kaydet, Yükle (Load), Karşıya yükle (Upload), İndir, İçeri aktar, Dışarı aktar,
+  Sil (Delete), Kaldır (Remove), Temizle (Clear), Sıfırla (Reset), Geri yükle (Restore), Seç (Select and Choose),
+  Gözat, Ekle, Uygula, İptal, Kapat, Kopyala, Çoğalt (Duplicate), Yeniden adlandır, Birleştir, Atla (Skip), Hariç tut
+  (Omit), Göster, Gizle, Etkinleştir, Devre dışı bırak, Genişlet, Daralt, Geri al, Yinele, Yeniden dene, Oluştur,
+  Yeniden oluştur; Açık / Kapalı (On / Off); Etkin / Devre dışı (Enabled / Disabled).
+- **Kept in English** (no settled Turkish form; lower case in running text): anchor, qualifier, locus tag, hit,
+  subject, skew (GC skew, AT skew), seed, reciprocal best hit, near-reciprocal hit, coortholog, inparalog,
+  orthogroup, upstream / downstream, flat file, hash, lookbehind, Halo, and the names of §1.1. The Latin word
+  never takes a suffix: write a compound with the head noun (§15.4).
+- **Two words for one English word**: Hizalama is both the sequence alignment and the layout action; the layout
+  method is "benzerliğe göre hizalama". Kaynak is both Source and Resource. Konum is both Position and Location.
+  Çöz is the button Resolve; belirle is "determine automatically".
+- **Never use**: zincir for a DNA strand, öznitelik / nitelik for feature, çapa for anchor, lokus etiketi, opsiyonel,
+  tavsiye edilen, giriş for input (it is login; write girdi), font (write yazı tipi), lütfen, the informal
+  imperative tıkla in a sentence, the -mak / -mek infinitive as a label, English plural -s (hits, anchors).
+
+### 15.2 Buttons and sentences
+
+- Register: the polite plural imperative in instructions, help and errors (Dosyayı seçin. Oluştur düğmesine
+  tıklayın. Tanılama bilgilerini kopyalayın.), as Microsoft tr-TR writes it. Never the singular sen form
+  (seçebilirsin), and no "lütfen". Descriptions are third person present or impersonal (Etiketleri gösterir.
+  Oluşturulurken uygulanır.).
+- Buttons, menu commands, links: the bare imperative, which is also Microsoft's form (Kaydet, Uygula, İptal,
+  Oturum kaydet, Örnek yükle). A single generic object takes no accusative (Oturum yükle); a specific whole takes it
+  (Ayarları sıfırla, Tüm kayıtları seç). Never the infinitive (Kaydetmek).
+- Labels, headings, tabs, column headers, badges: a noun phrase without a final period, with the possessive
+  compound Turkish needs (Yazı tipi boyutu, Etiket görünürlüğü). Options are nouns or adjectives (Otomatik, Etkin).
+  A dialog title that asks ends in mI: Bu dosya kaldırılsın mı? A dialog title that names its command stays the
+  command, as the button it opens from (Varsayılan renkleri sıfırla, Kayıtları seçin): the -mA noun (sıfırlama)
+  would read as the negative imperative ("do not reset").
+- Required, optional, recommended: Gerekli, İsteğe bağlı, Önerilen. A field marker is (isteğe bağlı).
+- Progress (…ing): -iliyor / -ıyor + … (Oturum kaydediliyor…, Diyagram oluşturuluyor…). Completion: -ildi in a
+  status line (Oturum kaydedildi.; Alignment applied: Hizalama uygulandı.).
+- "Cannot": a failure that happened is -amadı / -ilemedi (Dosya okunamadı.); a rule is -ilemez / -amaz (Etiket boş
+  olamaz.); a feature that is off is Kullanılamıyor.
+- Errors: what failed, then what to do: Dosya okunamadı. Dosyanın FASTA olduğunu denetleyin. Headings: Oluşturma
+  hatası, SVG dışa aktarma hatası. Retry is Yeniden dene on a button and yeniden deneyin in a sentence.
+- A control is cited by its label plus the noun düğme, sekme or bölüm, never by a suffix on the label: Oluştur
+  düğmesine tıklayın; Gösterge sekmesi. A setting is not the subject: write "Otomatik seçeneğinde, …", not
+  "Otomatik …seçer". Where the English quotes a label, use “ ”.
+
+### 15.3 Punctuation and spacing
+
+- Sentences end with a period; labels and buttons do not. Colon: no space before, one after (Etiket: {path}). A
+  question mark or exclamation mark has no space before it.
+- Quotes “ ” (U+201C, U+201D), nested ‘ ’. A {name} the English quotes is “{name}”. No straight " in prose, and no
+  « » or „ “.
+- The apostrophe is ’ (U+2019) and is used only where a suffix must follow a literal Latin name in static text
+  (GenBank’ten); prefer a compound (GenBank dosyası). Never an apostrophe after a placeholder or a number.
+- ASCII digits with the English point and grouping (0.65, 1,000); never 0,65. Units and % keep the source spacing
+  (100 bp, 50%, 8 pt) although Turkish writes %50 in prose.
+- One … (U+2026) with no space before it. Ranges keep the en dash (Satır 3–4); a spaced hyphen is not a dash.
+  Slashes as the source writes them (Üstte / önde). No non-breaking spaces. Sentences are joined by one space (§1.3).
+
+### 15.4 Words and capitals
+
+- Sentence case for every label, button, heading and tab: the first word and proper names only (Özel iz yuvaları,
+  İkili karşılaştırmalar). Never copy English Title Case.
+- İ and I: Turkish has dotted i / İ and dotless ı / I. The capital of i is İ (İptal, İşlem, İndir, İz) and the
+  lower case of I is ı (Kayıt, Sıfırla). Only a few words start with a plain I (Isı, Işık, Irmak). A capital
+  inside a lower-case word is an error (kayIt, kayİt).
+- Keys the English writes in capitals stay in capitals, with İ where the word has i: HAZIR ŞEMALAR, VARSAYILAN
+  RENKLER, BELİRLİ KURALLAR, ETİKET FİLTRELEME, QUALIFIER ÖNCELİĞİ, ETİKET GEOMETRİSİ, ANAHTAR EKLE, RENK; the
+  badge OFF is KAPALI. CSS uppercase on lang tr maps i to İ, but a typed value must do it itself.
+- The action Generate in running text is the lower-case noun or verb form (oluşturma, oluşturulurken, oluşturmadan
+  önce); only the button itself is cited by its label Oluştur, followed by düğmesi.
+- Nouns the English capitalizes as product terms are lower case in a sentence: oturum, sonuç, kayıt.
+- Compounds put the modifier first and mark the head with the possessive: özellik tipi, kayıt etiketi, yazı tipi
+  boyutu, qualifier önceliği, locus tag değeri. A kept English word is always the modifier, so it needs no suffix.
+- Diacritics are never dropped: ı İ ç Ç ğ Ğ ö Ö ş Ş ü Ü. A word typed without them (sifirla) is an error.
+
+### 15.5 Placeholders and counts
+
+- A `{placeholder}` is never inflected: no case, possessive, plural, apostrophe or ordinal dot after it (`}'yi`,
+  `}'nı`, `}ı`, `}’ı`, `{n}.`). Vowel harmony depends on a value the translator cannot see. Rephrase:
+  1. Put a class noun after the placeholder: {file} dosyası, {record} kaydı, {track} izi, {id} kimliği, {section} bölümü.
+     The suffix sits on the class noun, which is known.
+  2. Use a colon: Şuraya git: {section}. Yeniden sırala: {name}. Seçili kayıtlar: {records}.
+  3. Name the thing with adlı: “{name}” adlı yardımcı dosya oluşturulamadı.
+  4. Use a postposition that takes no suffix (için, ile, kadar, önce, sonra): {count} kayıt için; {name} ile.
+  5. A pair is an arrow: #{from} → #{to}. An ordinal is a class noun: Dosya {n} (not {n}. dosya).
+  6. A quoted placeholder is followed by a space and a noun, never by a suffix: “{name}” dosyası.
+- {count} precedes a singular noun (a noun after a numeral is singular): {count} kayıt, never {count} kayıtlar. Turkish
+  has `one` and `other` only; Intl.PluralRules('tr') returns one for 1 alone, and 0 or 1.5 take other. The two forms
+  are usually the same string (D-09). Because `one` is exactly 1, the `one` value may be a singular where the English
+  `one` form names a single thing (Seçilen özellik zaten sola bakıyor. / Seçilen {count} özelliğin tümü zaten sola
+  bakıyor.). A string that counts things without
+  `tn` is a noun phrase and a colon: Gerekli sütun sayısı: {count}.
+- Worked pairs, `one` / `other` (English `other` key in parentheses):
+  1. ({count} source records inspected): {count} kaynak kayıt incelendi / {count} kaynak kayıt incelendi
+  2. ({drawn} of {count} records drawn): Çizilen kayıt: {drawn} / {count} (both forms)
+  3. ({count} issues to fix before Generate): Oluşturmadan önce düzeltilecek {count} sorun (both forms)
+  4. (Auto ({count} parallel runs)): Otomatik ({count} paralel çalıştırma) (both forms)
+  5. ({current} of {count} matches): Eşleşme {current} / {count} (both forms)
+
+### 15.6 Length
+
+- Turkish runs 10 to 25% longer than English; help texts and notices wrap. Compounds are long words and are never
+  hyphenated. Prefer the short native word (Düzen, Eksen, Girdi) and drop the possessive on a button where the
+  noun stays clear.
+- Rail names (52 px entries; one word may run into the padding, a name wraps only between words): Girdi, Karşılaştır
+  (11 letters; if it overflows at 1,024 px use the rail key Kıyasla), Gelişmiş, Bölgeler, Düzen, Yazı tipi, Başlıklar,
+  Gösterge, Renkler, Özellikler (10 letters; fallback Özellik), Etiketler, Eksen, GC / skew, Hakkında; Oluştur
+  beside the rail. Rail keys that need their own value: `rail\u0004Features`, `rail\u0004Layout`, `rail\u0004Labels`.
+- Header buttons stay within about 1.3 times the English label: Oturum kaydet, Oturum yükle, Örnek yükle,
+  Ayarları sıfırla, Geri al, Yinele, Dil. Options in 10 px rows use the short forms: Otomatik, Seri, Yukarı / Aşağı,
+  Dışta / İçte, Eksen üzerinde, Arka plan, Kurdele / Eğri.
+
+### 15.7 Machine checks
+
+The rule list is `tests/web/i18n-lint/tr.tsv`; each rule runs on one catalog value and `error` fails the test.
+
+- Suffixes on placeholders: `tr-placeholder-apostrophe-suffix` (error) `}'yi`, `}'nı`; `tr-placeholder-glued-suffix` (error)
+  `}ı`, `}yi`; `tr-placeholder-quote-suffix` (error) `”ı` after a quoted placeholder; `tr-count-ordinal-dot` (warn) `{n}.`;
+  `tr-count-plural-after-numeral` (warn) `{count} kayıtlar`; `tr-apostrophe-on-kept-word` (warn) anchor’ı.
+- Case and diacritics: `tr-capital-i-inside-word` (error) kayIt; `tr-capital-i-initial` (warn) Iptal;
+  `tr-caps-heading-dotless` (error) ETIKET; `tr-ascii-folded-words` (error) sifirla, yukle.
+- Register: `tr-informal-sen` (error) sen and -sin forms; `tr-please-word` (warn) lütfen; `tr-infinitive-label` (warn)
+  a value ending in -mak / -mek.
+- Vocabulary: `tr-english-word-left` (warn) track, feature, layout …; `tr-retired-terms` (warn) zincir, öznitelik, çapa,
+  opsiyonel, giriş, font; `tr-english-plural-s` (warn) hits, anchors.
+- Punctuation: `tr-straight-double-quote` (error); `tr-foreign-quotes` (error) « » „; `tr-straight-apostrophe` (warn);
+  `tr-space-before-punct` (error) before : ; ? !; `tr-ellipsis` (error) ... or a space before …; `tr-spaced-hyphen-dash`
+  (warn); `tr-edge-space` (error) leading, trailing or doubled whitespace.
+- Numbers: `tr-nonascii-digits` (error); `tr-decimal-comma` (warn) 0,65.
+
+## 16. Russian (`ru`)
+
+Standard Russian as Microsoft, Apple and Google Russian UIs write command words
+and as Russian molecular-biology writing has the science. The Language menu
+entry is **Русский**; the menu label is Язык; the page `lang` is `ru`.
+
+### 16.1 Vocabulary
+
+- **Field terms**: геном, последовательность, запись (Record; ru.wikipedia
+  GenBank), элемент (Feature; тип элемента), квалификатор (keys /gene,
+  /product stay), аннотация, номер доступа (accession), локус (plural локусы),
+  цепь (Strand; ru.wikipedia GFF), обратный комплемент, GC-состав, глубина
+  (Depth), глубина покрытия (read depth in sentences), покрытие, идентичность,
+  сходство, гомология, ортолог, паралог, ортогруппа, коллинеарный блок,
+  генетический код, органелла, организм, штамм, вид, продукт, ген.
+- **Feature is элемент**, an ordinary lower-case noun. A list item is пункт
+  (пункт легенды), never элемент; элементы управления is Microsoft's Control.
+- **Diagram terms**: трек (Track), дорожка (Lane), слот (track slot), позиция
+  (File card slot), деление (Tick; основное / промежуточное), метка (annotation
+  mark), линейка (Ruler; правило is a color rule), масштабный отрезок (Length
+  bar), отступ (Padding), промежуток (Gap), расстояние (Spacing), заливка,
+  обводка (outline of a shape; the axis line is линия оси), образец цвета,
+  подложка, предустановка (Preset), по умолчанию, макет (Layout), подпись
+  (Label), легенда.
+- **Command words** (Microsoft Russian): Применить, Добавить, Удалить (Delete),
+  Убрать (Remove), Очистить (Clear), Сбросить (Reset), Восстановить, Обзор,
+  Загрузить (Load and Upload), Скачать (Download), Выбрать (Select, Choose;
+  Выделить for text), Развернуть / Свернуть, Оставить (Keep), Отменить (Undo),
+  Вернуть (Redo), Повторить (Retry), Откатить (Revert), Включить / Отключить,
+  Вкл. / Выкл. (On / Off). Generate is Построить (построение, построить
+  заново), never Сгенерировать. Session is сеанс, Settings is Настройки, one
+  setting is параметр.
+- **Kept in English**, lower case in running text and never declined: query,
+  subject, coortholog, inparalog, near-reciprocal hit, reciprocal best hit,
+  seed, locus tag, GC skew, AT skew, skew, upstream / downstream, flat file,
+  lookbehind, and every name of STYLE 1.1. Declined loanwords: хит (hit),
+  рендерер, хеш, кэш, репликон, конвейер.
+- **Never use**: кликнуть, клик, фича, признак or особенность (Feature), юзер,
+  конфиг, ресет, сессия, нить, аксессия, учетный / регистрационный /
+  инвентарный номер, метка локуса, локус-тег, GC-асимметрия, ГЦ, рекорд,
+  линейная / круговая запись (write запись линейной диаграммы; кольцевая
+  запись is only the topology), capital Вы / Ваш, пожалуйста, any ты form.
+
+### 16.2 Buttons and sentences
+
+- Register: вы, lower case, implicit (Microsoft, Apple); never ты or capital Вы.
+- Buttons, menu commands, links, button tooltips: the infinitive, no final
+  period (Сохранить сеанс, Загрузить пример, Применить и построить).
+- Labels, headings, tabs, column headers, badges: a nominative noun phrase
+  without a final period (Пользовательские слоты треков). Options are nouns or
+  adjectives (Авто, Последовательно). A dialog title that asks is the
+  infinitive and a question mark (Убрать весь файл?).
+- Instructions (help, notices, dialogs, errors): the plural imperative: Выберите
+  запись. Нажмите кнопку Построить. Leave blank for auto: Оставьте пустым для
+  автоматического значения.
+- Descriptions: third person present or impersonal (Показывает глубину покрытия
+  как трек. Применяется при построении.). An option or button name is not a
+  subject: Если выбрано Авто, …, not Авто выбирает ….
+- Progress (…ing): verbal noun + … (Сохранение сеанса…, Построение диаграммы…).
+  Completion: a neuter short participle as a status (Применено. Сохранено.) or
+  noun and participle (Сеанс сохранен.). A lone state label is neuter: Включено,
+  Отключено, Недоступно, Не применено.
+- Errors: what failed, then what to do: Не удалось прочитать файл. Убедитесь,
+  что это файл FASTA. Cannot is не удалось (failed) or невозможно (not
+  allowed). Retry is Повторить on a button, Повторите попытку in a sentence.
+- Required / optional / recommended: Обязательно, необязательно (invariable:
+  Область (необязательно)), Рекомендуется. Above 0 is положительное (больше 0);
+  possibly 0 is неотрицательное.
+- A control named in a sentence takes a class noun and its label: нажмите кнопку
+  Построить. A name the English quotes is quoted in «…»; one it leaves bare
+  stays bare, except a tab name, which is always quoted after вкладка: на
+  вкладке «Легенда», вкладки «Подробности» и «Квалификаторы».
+
+### 16.3 Punctuation and spacing
+
+- Sentences end with a period; labels and button texts have none. A label
+  ending with a colon keeps it. No space before a colon, semicolon, comma,
+  question mark or exclamation mark (Метка: {name}).
+- Quotes are guillemets «…» with no space inside. Never straight " or English
+  “ ”. Do not nest quotes: rephrase.
+- Hyphen only inside words (GC-состав). The em dash — has a space on each side;
+  the en dash – marks a range (Строки 3–4). One … (U+2026), no space before it.
+  e.g. is например, i.e. is то есть; abbreviations: мин., макс. (minimum,
+  maximum).
+- Digits are ASCII with the source's point and grouping (0.65, 1,000), never
+  0,65 or 1 000, because the app formats numbers with en-US. Units and % keep
+  the source spacing (100 bp, 50%, 20px). Sentences are joined by one space.
+- Time abbreviations are Russian words, as in the ja, zh, ko, th, id and vi
+  catalogs: {value} мс, {value} с, {minutes} мин {seconds} с (no period). The
+  measurement units bp, kb, Mb, px, pt, ×R and DPI stay Latin (STYLE 1.2).
+- No non-breaking or soft hyphen characters: a word is never split. The letter
+  ё is never written, only е (все, учет, отсчет), as Microsoft Russian does.
+  Separate Latin and Cyrillic words by a space or a hyphen (файл LOSAT).
+
+### 16.4 Words and capitals
+
+- Sentence case for every label, button, heading, tab, option and column
+  header: the first word, proper names and acronyms only (Заголовки и подписи
+  записей); a concept the English capitalizes (Session) is lower case in prose.
+- A key the English writes in capitals stays in capitals: ЦВЕТА ПО УМОЛЧАНИЮ,
+  ИНДИВИДУАЛЬНЫЕ ПРАВИЛА, ФИЛЬТРАЦИЯ ПОДПИСЕЙ, ПРИОРИТЕТ КВАЛИФИКАТОРОВ,
+  ГЕОМЕТРИЯ ПОДПИСЕЙ, ДОБАВИТЬ КЛЮЧ; the badge OFF is ВЫКЛ. Cyrillic keeps the
+  CSS `uppercase` and `tracking-*` rules.
+- Compounds put the head noun first, genitive after it: тип элемента, TSV
+  глубины. Gender: запись, цепь, подпись, глубина feminine; элемент, трек, слот,
+  ген, хит, сеанс masculine; покрытие, сходство, выравнивание neuter; CDS
+  feminine, TSV masculine. Exact match: Продукт (точное совпадение): {product}.
+
+### 16.5 Placeholders and counts
+
+- A placeholder's gender, number and case are unknown and never inflected. Put a
+  class noun before it and let agreeing words follow that noun: запись {record},
+  файл {file}, трек {track}. No ending or hyphenated suffix ({count}-й). A
+  placeholder as subject takes a neuter or impersonal verb.
+- `Intl.PluralRules('ru')`: one for 1, 21, 31, 101; few for 2–4, 22–24, 32–34;
+  many for 0, 5–20 (11–14 included), 25–30, 100; other only for fractions (1.5).
+  After the number: one nominative singular, few genitive singular, many
+  genitive plural, other genitive singular: 0 записей, 1 запись, 1.5 записи,
+  21 запись, 22 записи, 25 записей.
+- The `one` key holds the text for exactly one (count 1); the `other` key holds an object with one entry per plural category of the other counts: `few`, `many` and `other` (fractions), and also `one` (the form of 21, 31, 101 …, which Intl classes as one); the runtime shows the object's category text for every count but 1.
+  Prefer a construction with the noun in the genitive plural after a colon
+  (Пропущено строк аннотации: {count}): all four forms are then the same text.
+  Where agreement is needed: a verb is singular in one, plural in few, neuter
+  singular in many; an adjective before a feminine noun is nominative plural in
+  few, before a masculine or neuter noun genitive plural.
+- When the English `one` drops {count} (From this color rule:), Russian `one`
+  still covers 21, 31 and 101: use a count-neutral wording if one exists,
+  else the text is right for 1 only (listed for PR-B in the notes).
+- Worked pairs (ru one / few / many / other):
+  1. ({count} record) / ({count} records): ({count} запись) / ({count} записи)
+     / ({count} записей) / ({count} записи)
+  2. {count} gene / {count} genes: {count} ген / {count} гена / {count} генов
+     / {count} гена
+  3. Skipped {count} annotation row. / rows.: Пропущена {count} строка
+     аннотации. / Пропущены {count} строки аннотации. / Пропущено {count} строк
+     аннотации. / Пропущено {count} строки аннотации.
+  4. {current} of {count} match / matches: {current} из {count} совпадения /
+     {current} из {count} совпадений / {current} из {count} совпадений /
+     {current} из {count} совпадения
+  5. Remove {count} unmatched feature edit / edits: Убрать {count}
+     несопоставленную правку / … несопоставленные правки / … несопоставленных
+     правок / … несопоставленной правки
+
+### 16.6 Length
+
+- Russian runs 20–30% longer than English. Help texts and notices wrap; a label
+  may be about 1.3× the English label, a header button about 1.4×.
+- Rail short names (52 px entries, 10 px semibold, about nine Cyrillic letters
+  on one line): Ввод, Сравнение, Доп., Области, Макет, Шрифт, Заголовки, Легенда,
+  Цвета, Элементы, Подписи, Ось, GC / skew, О программе (two words, wraps
+  between them); Построить beside the rail. Fallbacks if a screenshot shows an
+  overflow: Сравн. for Сравнение, Названия for Заголовки.
+- Header buttons: Сбросить настройки, Сохранить сеанс, Загрузить сеанс, Загрузить
+  пример, Построить диаграмму; Undo and Redo are icons with the tooltips
+  Отменить: {action} and Вернуть: {action}. Check them at 1,024 px and fix an
+  overflow in CSS, not with a shorter key, since the keys name them in prose.
+- Option labels in 10 px rows use the glossary short forms: Авто, Вкл. / Выкл.,
+  Снаружи / Внутри, Сверху / Снизу, Попарно, Последовательно, Многопоточно,
+  Лента / Кривая. Never switch terms to shorten.
+
+### 16.7 Machine checks
+
+`tests/web/i18n-lint/ru.tsv` holds these rules; each matches one catalog value.
+
+- Letters: `ru-ukrainian-letters` (і ї є ґ), `ru-yo` (ё), `ru-combining-marks`
+  (stress accents), `ru-mixed-script` (warn), `ru-non-ascii-digits`.
+- Punctuation: `ru-quotes-not-guillemets`, `ru-space-before-punct`,
+  `ru-hyphen-as-dash`, `ru-three-dots`, `ru-decimal-comma` (warn).
+- Placeholders and plurals: `ru-placeholder-suffix`, `ru-placeholder-prefix`,
+  `ru-plural-parens` (no "(и)" plural; use a tn pair).
+- Register: `ru-informal-ty`, `ru-vy-capital`, `ru-singular-imperative`.
+- Words: `ru-never-slang`, `ru-session-word` (warn), `ru-feature-synonyms`
+  (warn), `ru-accession-alt`, `ru-locus-tag-translated`,
+  `ru-gc-skew-translated`, `ru-strand-nit` (warn), `ru-mode-record`,
+  `ru-english-loanwords` (warn).
+
+## 17. Ukrainian (`uk`)
+
+Standard Ukrainian of Ukraine, written from the English source and the glossary
+only (D-07: no Russian draft is read or reused). The Language menu entry is the
+endonym **Українська**; the menu label itself is Мова. Where Ukrainian software
+and science have a word, it is used even when the Russian cognate is shorter
+(§17.1 lists the calques); where neither has one, the English word stays (D-12).
+
+### 17.1 Vocabulary
+
+- **Biology and bioinformatics**: геном, послідовність, ген, білок, ланцюг (ланцюг +, ланцюг −; прямий ланцюг;
+  "ланцюжок" is not used), зворотний комплемент, анотація, запис (Record), ознака (Feature; тип ознаки, таблиця
+  ознак), реєстраційний номер (Accession), локус, кваліфікатор (the keys /gene, /product stay), розташування
+  (Location), продукт, організм, штам, вид, органела, вміст GC, динуклеотид, глибина (Depth), глибина секвенування
+  (read depth in sentences), покриття (Coverage), ідентичність, поріг, гомологія, ортолог, паралог, колінеарний,
+  блок, вирівнювання, генетичний код.
+- **Figure words**: доріжка (Track), рівень (Lane), слот (track slot), позиція (File card slot), кільце (Ring),
+  легенда, підпис (Label), заголовок, поділка (Tick; основна / проміжна поділка), позначка (annotation mark),
+  лінійка (Ruler; "правило" is a color rule), масштабний відрізок (scale bar, Length bar), шкала (scale of
+  coordinates), заливка, контур (Stroke of shapes), лінія (axis and intron lines), зразок кольору (Swatch),
+  підкладка / передній план (Underlay / Foreground), відступ (Padding), проміжок (Gap), відстань (Spacing), інтервал
+  (Interval), зсув (Offset), пресет (Preset), типовий (Default).
+- **Command words**: Зберегти, Завантажити (Load), Звантажити (Download), Передати (Upload), Відкрити, Закрити, Копіювати, Вставити, Дублювати, Видалити (Delete), Вилучити
+  (Remove), Очистити (Clear), Скинути (Reset), Відновити (Restore), Застосувати, Скасувати (Cancel and Undo),
+  Повторити (Redo), Спробувати ще раз (Retry), Пропустити (Skip), Залишити (Keep), Перейменувати, Додати, Вибрати
+  (Select), Обрати (Choose), Показати / Приховати, Увімкнути / Вимкнути (Enable / Disable), Увімкнено / Вимкнено (On
+  / Off), Розгорнути / Згорнути, Імпортувати / Експортувати, Створити (Generate), Створити знову (Regenerate),
+  Натиснути (click, tap), Перетягнути, Огляд (Browse).
+- **Load, Download and Upload** need three verbs, because Load Session, Download and Upload appear on the same
+  screens. The sources disagree: Microsoft writes Завантажити for Download and Передати for Upload; Google writes
+  Завантажити for Upload; Mozilla writes Завантажити for Download; KDE and Debian write Звантажити for Download.
+  The split Завантажити (Load) / Звантажити (Download) / Передати (Upload) is a decision of this catalog on weak
+  evidence, listed for the Owner; no vendor uses all three this way.
+- **One word, one concept**: ознака is Feature only (a list item is елемент, a thing on the canvas is об’єкт); запис
+  is Record only, never a log line; запит is Request, and Query stays query; збіг is Match; hit stays hit; таблиця
+  is a UI table, таблиця кольорів the color-table file; доріжка is Track, смуга is Band, рівень is Lane, слот is a
+  track slot, позиція is a File card slot or Position; вираз is a regex Pattern, шаблон a Template.
+- **Kept in English** (no established Ukrainian term found, D-12; lower case, indeclinable): GC skew and skew, hit,
+  query, subject, locus tag, orthogroup, coortholog, inparalog, reciprocal best hit, near-reciprocal hit, seed,
+  upstream / downstream, cross-origin isolated, lookbehind, params, hash; plus the names of §1.1. The Ukrainian
+  loanwords пресет, слот, escape-послідовність and хеш (kept as hash in the hash= syntax) are accepted.
+- **Never use** (Russian calques where a Ukrainian term exists; also in the lint list): сесія / сессия (Session is
+  сеанс), відмінити (скасувати), по замовчуванню and дефолт (типовий, типово), включити / відключити / виключити
+  (увімкнути / вимкнути), слідуючий (наступний), приймати участь (брати участь), на протязі (протягом), настройки /
+  настроюваний (налаштування, власний), колонка (стовпець), трек (доріжка), фіча (ознака), закладка (вкладка),
+  кликнути (натиснути), вірний (правильний), любий (будь-який), додаток for an app (застосунок), "при" for "when"
+  (під час, після, у разі), the letters ы э ъ ё.
+
+### 17.2 Buttons and sentences
+
+- Register: ви, written in lower case; never ти. Buttons, menu commands, links and button tooltips: the infinitive
+  (Зберегти сеанс, Завантажити приклад, Скасувати), as Microsoft, Google and Apple Ukrainian do; no article exists.
+  Checkboxes follow the English form (Показати глибину).
+- Labels, headings, tabs, column headers, options, badges: a noun phrase in the nominative without a final period.
+  An option agrees with its setting (Авто, Увімкнено, Послідовно, Вище / Нижче). A dialog title that asks is the
+  infinitive plus ?: Вилучити весь файл? Скинути всі налаштування?
+- Instructions (help, notices, dialogs, errors): the polite plural imperative (Виберіть запис. Натисніть «Створити».
+  Створіть діаграму знову.). A help text that describes its control is in the third person present (Показує вісь
+  глибини.).
+- Work in progress: a verbal noun and … (Збереження сеансу…, Створення діаграми…). Completion: an impersonal -но /
+  -то form (Сеанс збережено. Вирівнювання застосовано: …). Prefer this form for counted sentences: it does not agree
+  with the number (Прочитано {count} вихідний запис).
+- Errors: what failed, then what to do. "Could not X" is Не вдалося X (Не вдалося імпортувати анотації: {reason});
+  "cannot" in a rule is не можна or неможливо. "X failed" is Помилка: X or X не вдалося. Busy reason: Створення
+  діаграми. Повторіть після завершення.
+- Required, optional, recommended: Обов’язково, (необов’язково), Рекомендовано. Auto is Авто on a button and in 10
+  px rows, автоматично in a sentence; Default is типовий (Авто (типово)).
+- An option, button or setting name is quoted when it is cited as a word: «Авто» приховує…, Натисніть «Створити»,
+  not Авто приховує….
+- Circular and Linear name the diagram: for a mode noun use the feminine (Кільцева, Лінійна, to agree with
+  діаграма); as a modifier of a record or scale say кільцевої / лінійної діаграми (запис кільцевої діаграми,
+  масштабний відрізок лінійної діаграми); кільцевий запис is only the topology.
+- An exact-match condition follows the field in parentheses: Продукт (точний збіг): {product}. A count of members is
+  "Кількість …": Кількість генів у групі.
+
+### 17.3 Punctuation and spacing
+
+- Quotes are « » with „ “ nested; a {name} the English quotes becomes «{name}»; one the English leaves bare stays
+  bare. No straight " and no “ ” in prose. A period or comma follows the closing quote.
+- Apostrophe: the typographic ’ (U+2019) in every word (об’єкт, необов’язково, ім’я, пов’язаний, Об’єднати, п’ять),
+  never ASCII ' or ʼ. Letters ґ є і ї are used as spelled; і / й, у / в and з / із / зі follow euphony in running
+  text, but before a placeholder the sentence is rephrased (see 17.5).
+- Colon: no space before, one after (Поле: {path}); a label ending with a colon keeps it. No space before ; ? !
+  either.
+- Dash: the em dash — with U+00A0 before it and an ordinary space after; a hyphen is not a dash. The en dash of
+  ranges stays (Рядки 3–4). The minus sign − and + in ланцюг + / ланцюг − stay.
+- Digits are ASCII with the English decimal point and grouping (0.65, 1,000), never 0,65 or 1 000 (D-05). Units and
+  % keep the source spacing (100 bp, 50%, 8 pt, 0.65 ×R); one … (U+2026), no space before it.
+- Time abbreviations are Ukrainian words, as in the ja, zh, ko, th, id and vi catalogs: {value} мс, {value} с,
+  {minutes} хв {seconds} с, without a period. The measurement units bp, kb, Mb, px, pt, ×R and DPI stay Latin
+  (STYLE 1.2).
+- Parentheses and slashes as in the source: Ділянка (необов’язково), Організм / штам. "from … to" is від … до (від
+  #{from} до #{to}).
+- The code joins sentences with one ordinary space (D-09). e.g. is наприклад, i.e. is тобто; abbreviations take a
+  period (макс., мін., Порівн.), except the time units above. ID is invariable.
+
+### 17.4 Words and capitals
+
+- Sentence case for every label, button, heading, tab, option and column header: the first word and proper names
+  only (Власні слоти доріжок, Попарні порівняння, Вісь і шкала). Never copy English Title Case. Cyrillic keeps the
+  CSS `uppercase` rule, so a sentence-case key that CSS capitalizes stays in sentence case; a key the English writes
+  in capitals stays in capitals: ТИПОВІ КОЛЬОРИ, ОКРЕМІ ПРАВИЛА, ФІЛЬТРАЦІЯ ПІДПИСІВ,
+  ПРІОРИТЕТ КВАЛІФІКАТОРІВ, ДОДАТИ КЛЮЧ; the badge OFF is ВИМКНЕНО.
+- Concepts the English capitalizes (Session, Result, Legend) are lower case in a sentence (сеанс, результат,
+  легенда); gbdraw stays lower case. A control or section cited in a sentence keeps its label with a capital in « »:
+  натисніть «Створити», у розділі «Власні слоти доріжок». The action Generate in running text is створення, створити
+  (під час створення, перед створенням).
+- Compounds put the head noun first: тип ознаки, TSV глибини, кеш LOSAT, підпис запису, ID запису. Genders:
+  діаграма, доріжка, ознака (f.), запис, файл, слот, результат (m.), розміщення (n.), CDS (f., like послідовність),
+  TSV and BLAST (m.). The adjective after a Latin name agrees with the Ukrainian head noun: таблиця BLAST, формат
+  GenBank.
+- An English word kept in the text (hit, query, GC skew) is lower case, never declined, and has no hyphenated
+  suffix: кількість hit, не hit-ів.
+
+### 17.5 Placeholders and counts
+
+- A placeholder's gender, number and first sound are unknown. Put a class noun before it and let prepositions, adjectives
+  and case endings agree with that noun: запис {record}, файл «{file}», доріжка {track}, налаштування
+  {setting}. Never decline or suffix a placeholder ({name}-ом, {n}-й), never put у / в, з / із / зі or і / й
+  directly against one: use від … до, "із" before numerals ({current} із {count}), "та" instead of і / й before a
+  placeholder.
+- {count} precedes the noun; the noun and its adjectives follow the number by `Intl.PluralRules('uk')`: `one` for 1,
+  21, 31, 101 (not 11); `few` for 2–4, 22–24, 32–34 (not 12–14); `many` for 0, 5–20 (so 11–14 too), 25–30; `other`
+  for fractions such as 1.5. The `one` key holds the text for exactly one (count 1); the `other` key holds an object with one entry per plural category of the other counts: `few`, `many` and `other` (fractions), and also `one` (the form of 21, 31, 101 …, which Intl classes as one); the runtime shows the object's category text for every count but 1. After a numeral the noun is nominative singular (one), nominative plural (few),
+  genitive plural (many) and genitive singular (other); a neuter noun such as розміщення has the same form for one
+  and few. Keep {count} in a form wherever the English one form has it; "From this color rule:" has none.
+- Prefer the impersonal -но form or a noun phrase over a verb that must agree with the number. Where a verb is
+  needed use a form that does not change (Прочитано, Вилучено), or put the count after a colon (Обов’язкові стовпці:
+  {count}).
+- Worked pairs, `one` / `few` / `many` / `other` (English `other` key in parentheses):
+  1. ({count} source records inspected): Прочитано {count} вихідний запис / Прочитано {count} вихідні записи /
+     Прочитано {count} вихідних записів / Прочитано {count} вихідного запису
+  2. ({count} LOSAT results are cached and reused …): У кеші {count} результат LOSAT; його використовують повторно,
+     якщо вхідні дані й налаштування збігаються. / … {count} результати LOSAT; їх використовують … / … {count}
+     результатів LOSAT; їх використовують … / … {count} результату LOSAT; його використовують …
+  3. (Reset {count} placements to Auto): Скинути {count} розміщення до значення Авто / Скинути {count} розміщення до
+     значення Авто / Скинути {count} розміщень до значення Авто / Скинути {count} розміщення до значення Авто
+  4. ({current} of {count} matches): {current} із {count} збігу / {current} із {count} збігів / {current} із {count}
+     збігів / {current} із {count} збігу
+  5. (From these {count} color rules:): the `one` key From this color rule: is З цього правила кольору: (count 1
+     only); the object is З {count} правила кольору: / З цих {count} правил кольору: / З цих {count} правил
+     кольору: / З {count} правила кольору: (the catalog's forms)
+- Few / many of the counted nouns (also in the glossary notes): запис записи / записів, ознака ознаки / ознак, ген гени /
+  генів, пара пари / пар, рядок рядки / рядків, збіг збіги / збігів, доріжка доріжки / доріжок, результат результати /
+  результатів, редагування редагування / редагувань.
+- Rule check: 0, 5, 12 and 25 take `many` (0 записів, 12 записів, 25 записів); 21 takes the `one` entry of the `other` object (21 запис); 22 takes
+  `few` (22 записи); 1.5 takes `other` (1.5 запису). A `one` string never says "один", since 21 and 101 use it.
+
+### 17.6 Length
+
+- Ukrainian runs 20–30 % longer than English, and Cyrillic letters at 10 px semibold are about 10 % wider than Latin
+  ones (about eight letters on one line in the 52 px rail entry). Shorter wording first (D-11): drop a noun, then
+  use the short form in the glossary; never hyphenate or split a word.
+- The 14 rail names (rail keys where the section title is longer): Вхід, Порівн., Додатково, Ділянки, Макет, Шрифт,
+  Заголовки, Легенда, Кольори, Ознаки, Підписи, Вісь, GC / skew, Про програму (two lines, between words); Створити
+  beside the rail. Додатково and Заголовки (9 letters) are the widest words; a word wider than 58 px needs a shorter
+  rail key chosen at the fit check.
+- Header buttons (Скинути налаштування, Зберегти сеанс, Завантажити сеанс, Завантажити приклад) are 1.2–1.6 times
+  the English width: check them at 1,024 px. If one overflows, the fit check decides a shorter glossary form
+  (candidates: Скинути, Відкрити сеанс, Приклад), not a syllable break.
+- Options in 10 px rows use the glossary's short forms: Авто, Послідовно, Багатопотоково, Вище / Нижче, Зовні /
+  Всередині, На осі, Підкладка, Стрічка / Крива. Help texts and notices wrap and may be as long as needed.
+
+### 17.7 Machine checks (`tests/web/i18n-lint/uk.tsv`)
+
+- `uk-russian-letters`: a string with ы э ъ ё. `uk-ascii-apostrophe`, `uk-modifier-apostrophe`: an apostrophe that
+  is not ’. `uk-straight-quote`, `uk-wrong-quotes`, `uk-guillemet-space`: quotes other than « » or a space inside
+  them.
+- `uk-space-before-punct`, `uk-three-dots`, `uk-spaced-hyphen`: a space before : ; ? !, three dots, a hyphen used as
+  a dash. `uk-nonascii-digits`: digits other than 0-9. `uk-placeholder-suffix`: Cyrillic letters glued to a
+  placeholder. `uk-mixed-script`: Latin and Cyrillic letters touching.
+- `uk-register-vy-capital`, `uk-register-ty`: capitalised Ви / Ваш mid-sentence, and the ти form or a singular
+  imperative (натисни, вибери).
+- Russian calques (17.1): `uk-calque-session`, `uk-calque-undo`, `uk-calque-default` (warn variant
+  `uk-default-variant`), `uk-calque-enable`, `uk-calque-participle`, `uk-calque-settings`, `uk-calque-pry` (warn),
+  `uk-calque-column`, `uk-track-trek-fich`, `uk-calque-words` (warn).
