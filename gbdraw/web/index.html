@@ -6409,7 +6409,7 @@
                            richFeaturePopup ? '' : 'feature-popup--simple'
                          ]"
                          :style="featurePopupStyle">
-                        <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100">
+                        <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100" data-popup-header>
                             <div class="w-4 h-4 rounded mt-1 shrink-0" :style="{ backgroundColor: clickedFeature.color }"></div>
                             <div class="min-w-0 flex-1">
                                 <div tabindex="-1" data-dialog-initial-focus class="text-base font-bold text-slate-700 truncate" data-feature-popup-title>{{ clickedFeatureHeading.title }}</div>
@@ -6420,7 +6420,7 @@
                                 <i class="ph ph-x" aria-hidden="true"></i>
                             </button>
                         </div>
-                        <div v-if="richFeaturePopup" class="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
+                        <div v-if="richFeaturePopup" class="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true" data-feature-popup-tabs>
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'edit'"
                                     :class="[
@@ -6923,7 +6923,7 @@
                          class="fixed z-50 feature-popup pairwise-match-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
                          :class="{ 'preview-item-popup': clickedPairwiseMatch.previewItem }"
                          :style="pairwiseMatchPopupStyle">
-                        <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move">
+                        <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move" data-popup-header>
                             <color-swatch v-if="!previewItemView || previewItemView.kind === 'legend-entry'"
                                  class="w-4 h-4 shrink-0 rounded mt-1 border border-slate-200"
                                  :color="(previewItemView && previewItemView.color) || clickedPairwiseMatch.fill || '#94a3b8'"></color-swatch>

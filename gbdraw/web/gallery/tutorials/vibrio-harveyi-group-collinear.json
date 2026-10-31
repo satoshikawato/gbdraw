@@ -932,7 +932,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const layout = popup?.querySelector('[data-feature-popup-group=\"layout\"]'); if (!popup || !layout) throw new Error('Feature popup Layout section not found.'); popup.querySelectorAll('[data-feature-popup-group=\"appearance\"]').forEach((section) => section.style.setProperty('display', 'none', 'important')); popup.children[0]?.setAttribute('data-capture', 'vibrio-popup-header'); layout.setAttribute('data-capture', 'vibrio-popup-layout');"
+                "script": "const popup = document.querySelector('.feature-popup'); const layout = popup?.querySelector('[data-feature-popup-group=\"layout\"]'); if (!popup || !layout) throw new Error('Feature popup Layout section not found.'); popup.querySelectorAll('[data-feature-popup-group=\"appearance\"]').forEach((section) => section.style.setProperty('display', 'none', 'important')); popup.querySelector('[data-popup-header]').setAttribute('data-capture', 'vibrio-popup-header'); layout.setAttribute('data-capture', 'vibrio-popup-layout');"
               },
               {
                 "type": "wait",

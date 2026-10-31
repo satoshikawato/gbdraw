@@ -1692,6 +1692,22 @@ export const createFeatureSvgActions = ({
         handlerState.reconcileHoverAfterTransform = true;
       };
 
+      // The hover a pan or wheel defers is replayed one frame after it ends,
+      // where the pointer was last over the drawing. Until that frame, every
+      // mouse event moves that point, and a pointer that leaves the svg
+      // (null) leaves none (OV-2281).
+      /** @param {MouseEvent | null} pointer @returns {boolean} whether the hover is deferred */
+      const followTransformPointer = (pointer) => {
+        const deferred = isPreviewTransformInteractionActive();
+        if (!deferred && handlerState.hoverReconcileFrame === null) return false;
+        if (pointer) {
+          rememberTransformPointer(pointer);
+        } else {
+          handlerState.transformPointer = null;
+        }
+        return deferred;
+      };
+
       /** @param {Element} featureEl @param {HoverPoint | null | undefined} eventLike */
       const activateFeatureHover = (featureEl, eventLike) => {
         forgetMatchHover();
@@ -1775,10 +1791,7 @@ export const createFeatureSvgActions = ({
 
       /** @param {MouseEvent} e */
       const handleMouseOver = (e) => {
-        if (isPreviewTransformInteractionActive()) {
-          rememberTransformPointer(e);
-          return;
-        }
+        if (followTransformPointer(e)) return;
         const featureEl = getFeatureTarget(e.target, svg);
         if (featureEl) {
           activateFeatureHover(featureEl, e);
@@ -1791,10 +1804,7 @@ export const createFeatureSvgActions = ({
 
       /** @param {MouseEvent} e */
       const handleMouseMove = (e) => {
-        if (isPreviewTransformInteractionActive()) {
-          rememberTransformPointer(e);
-          return;
-        }
+        if (followTransformPointer(e)) return;
         if (
           clickedFeature.value ||
           clickedPairwiseMatch?.value ||
@@ -1810,10 +1820,7 @@ export const createFeatureSvgActions = ({
 
       /** @param {MouseEvent} e */
       const handleMouseOut = (e) => {
-        if (isPreviewTransformInteractionActive()) {
-          rememberTransformPointer(e);
-          return;
-        }
+        if (followTransformPointer(svg.contains(/** @type {Node | null} */ (e.relatedTarget)) ? e : null)) return;
         // A move straight onto another target leaves the highlight to that
         // target's hover; a move off every target clears it at once.
         const relatedFeature = getFeatureTarget(e.relatedTarget, svg);
