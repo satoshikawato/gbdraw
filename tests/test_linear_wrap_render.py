@@ -14,6 +14,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import CompoundLocation, SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
+import pandas as pd
 import pytest
 
 import gbdraw.analysis.skew as skew_module
@@ -24,7 +25,7 @@ from gbdraw.api import (
     RegionAnnotation,
     render_request,
 )
-from gbdraw.api.options import LinearDiagramOptions
+from gbdraw.api.options import LinearDiagramOptions, LinearRequestTrackOptions
 from gbdraw.api.request_render import plan_request
 from gbdraw.api.requests import (
     GenBankInputSource,
@@ -38,6 +39,8 @@ from gbdraw.auto_sizes import DrawnExtent, auto_setting_values
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 import gbdraw.diagrams.linear.assemble as assemble
+import gbdraw.render.drawers.linear.depth as depth_drawer
+import gbdraw.render.drawers.linear.gc_content as gc_drawer
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.layout.linear import VerticalBand
 from gbdraw.session import build_session_document
@@ -250,6 +253,36 @@ def test_gc_is_computed_once_per_record(monkeypatch) -> None:
     assert len(calls) == 1
 
 
+def _depth_table() -> pd.DataFrame:
+    positions = range(1, LAMBDA_LENGTH, 50)
+    return pd.DataFrame({"reference_name": "NC_001416.1", "position": positions, "depth": [float(p % 40) for p in positions]})
+
+
+def _counting(monkeypatch, module: object, name: str) -> list[int]:
+    calls: list[int] = []
+    original = getattr(module, name)
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, name, counting)
+    return calls
+
+
+def test_depth_plot_data_is_prepared_once_per_record(monkeypatch) -> None:
+    calls = _counting(monkeypatch, depth_drawer, "_prepare_depth_plot_dataframe")
+    root = _root(_build(depth_table=_depth_table(), overrides={"canvas.show_depth": True}))
+    assert len(_rows_of(root)) >= 5
+    assert len(calls) == 1
+
+
+def test_gc_percent_plot_data_is_prepared_once_per_record(monkeypatch) -> None:
+    calls = _counting(monkeypatch, gc_drawer, "gc_content_percent_df")
+    _build(overrides={"canvas.show_gc": True, "objects.gc_content.mode": "percent"})
+    assert len(calls) == 1
+
+
 def test_gc_and_skew_have_one_path_per_row_at_the_records_mean() -> None:
     root = _root(_build(overrides=GC_ON))
     slots = {
@@ -335,6 +368,24 @@ def test_the_slot_geometry_payload_carries_the_row_offsets(tmp_path: Path) -> No
     assert wrap["rowOffsets"][0] == 0.0 and len(wrap["rowOffsets"]) == len(wrap["rowCanvasBands"]) == 3
     assert "rowPitch" not in wrap
     assert "wrap" not in _geometry(_build(wrap=None))
+
+
+def test_a_clipped_annotation_track_clips_per_row_at_the_slots_height() -> None:
+    built = _build(
+        # Overlapping marks take more lanes than the slot's height holds.
+        annotations=_annotations(*(_region(f"whole{index}", 2_000 + index, 45_000 + index) for index in range(8))),
+        tracks=LinearRequestTrackOptions(
+            linear_track_slots=("regions:annotations@set_id=regions,side=above,h=20px,overflow=clip", "features:features"),
+        ),
+    )
+    root = _root(built)
+    clipped = next(group for group in root.iter(f"{SVG}g") if group.attrib.get("data-gbdraw-annotation-clipped"))
+    clip_id = clipped.attrib["clip-path"].removeprefix("url(#").removesuffix(")")
+    rectangles = list(next(clip for clip in root.iter(f"{SVG}clipPath") if clip.attrib["id"] == clip_id))
+    assert [float(rect.attrib["height"]) for rect in rectangles] == [20.0] * 5
+    offsets = _geometry(built)["wrap"]["rowOffsets"]
+    tops = [float(rect.attrib["y"]) for rect in rectangles]
+    assert [top - tops[0] for top in tops] == pytest.approx(offsets)
 
 
 # The row length sets the size class, and one row length serves every record.

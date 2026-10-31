@@ -545,15 +545,14 @@ def linear_annotation_track_content(
             else f"gbdraw-annotation-clip-{dom_token(track.slot_id)}-{record_index + 1}"
         )
         clip_path = ClipPath(id=clip_id)
-        clip_path.add(
-            Rect(
-                insert=(0, float(y_offset_px)),
-                size=(
-                    float(bar_length_px),
-                    max((frame.shift_y + frame.height_px for frame in row_frames), default=float(height_px)),
-                ),
+        # One rectangle per row: the slot's height holds on each of them.
+        for frame in row_frames or (AnnotationRowFrame(0.0, float(height_px)),):
+            clip_path.add(
+                Rect(
+                    insert=(0, float(y_offset_px) + frame.shift_y),
+                    size=(float(bar_length_px), frame.height_px),
+                )
             )
-        )
         clip_paths.append(clip_path)
         group.attribs["clip-path"] = f"url(#{clip_id})"
     return GroupContent.of(group, (*definitions.values(), *clip_paths))

@@ -5,7 +5,7 @@ from numbers import Integral
 from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping, TypeAlias, cast
 
-from gbdraw.core.numeric import ascii_float, ascii_int, parse_length_bp
+from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, ascii_int, parse_length_bp
 from gbdraw.exceptions import ValidationError
 
 LinearTrackLayoutMode: TypeAlias = Literal["above", "middle", "below"]
@@ -47,7 +47,8 @@ def linear_wrap_length_from_config(value: object) -> LinearWrapLength:
             return cast(LinearWrapLength, normalized)
         parsed = parse_length_bp(normalized)
     else:
-        parsed = value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+        in_range = isinstance(value, int) and not isinstance(value, bool) and 0 < value <= JS_MAX_SAFE_INTEGER
+        parsed = cast(int, value) if in_range else None
     if parsed is None:
         raise ValidationError(
             f'{LINEAR_WRAP_LENGTH_PATH} must be "none", "auto", or a positive length in bp '

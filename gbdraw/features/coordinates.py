@@ -43,6 +43,35 @@ def location_partial_ends(exons: Sequence[SimpleLocation]) -> tuple[PartialEnds,
     return tuple(ends)
 
 
+def _unrotated_connector_gaps(previous: SourceInterval, part: SourceInterval, strand: object) -> list[tuple[int, int]]:
+    """What an unrotated record connects: the parts ``get_intron_coordinate`` connects, by the first part's strand.
+
+    Wrapping is a display format, so it adds and drops no connection. Parts in the other order have none.
+    """
+
+    if strand == 1:
+        return [(previous.end, part.start)] if previous.end < part.start else []
+    if strand == -1:
+        return [(part.end, previous.start)] if part.end < previous.start else []
+    return []
+
+
+def _rotated_connector_gaps(
+    previous: SourceInterval, part: SourceInterval, previous_strand: object, strand: object, length: int
+) -> list[tuple[int, int]]:
+    """What a rotated record connects: also over the origin, for parts of one strand."""
+
+    if previous_strand == strand == 1:
+        if previous.end < part.start:
+            return [(previous.end, part.start)]
+        return [(previous.end, length), (0, part.start)] if previous.start >= part.end else []
+    if previous_strand == strand == -1:
+        if part.end < previous.start:
+            return [(part.end, previous.start)]
+        return [(0, previous.start), (part.end, length)] if part.start >= previous.end else []
+    return []
+
+
 def project_feature_parts(
     exons: List[SimpleLocation],
     transform: RecordDisplayTransform,
@@ -76,17 +105,10 @@ def project_feature_parts(
             continue
         if previous_index is not None and not is_trans_spliced:
             previous = parts[previous_index]
-            gaps = []
-            if exons[previous_index].strand == exons[index].strand == 1:
-                if previous.end < part.start:
-                    gaps = [(previous.end, part.start)]
-                elif previous.start >= part.end:
-                    gaps = [(previous.end, transform.length), (0, part.start)]
-            elif exons[previous_index].strand == exons[index].strand == -1:
-                if part.end < previous.start:
-                    gaps = [(part.end, previous.start)]
-                elif part.start >= previous.end:
-                    gaps = [(0, previous.start), (part.end, transform.length)]
+            if transform.start_coordinate is None:
+                gaps = _unrotated_connector_gaps(previous, part, exons[previous_index].strand)
+            else:
+                gaps = _rotated_connector_gaps(previous, part, exons[previous_index].strand, exons[index].strand, transform.length)
             for start, end in gaps:
                 if start == end:
                     continue

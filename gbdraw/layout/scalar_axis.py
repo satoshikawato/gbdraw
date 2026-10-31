@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from typing import Any, NamedTuple, cast
+from typing import Any, NamedTuple, TypeVar, cast
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -69,6 +69,7 @@ class ScalarRows:
     def __init__(self, transform: RecordDisplayTransform) -> None:
         self._transform = transform
         self._rows: dict[int, ProjectedScalarLine] | None = None
+        self._plot_data: object | None = None
 
     def line(self, positions: ArrayLike, values: ArrayLike, row: int) -> ProjectedScalarLine:
         if self._rows is None:
@@ -89,6 +90,20 @@ class ScalarRow(NamedTuple):
 
     samples: ScalarRows
     row: int
+
+
+_PlotData = TypeVar("_PlotData")
+
+
+def plot_data_once(row: ScalarRow | None, build: Callable[[], _PlotData]) -> _PlotData:
+    """A track's plot data over the whole record: built once however many rows draw it."""
+
+    if row is None:
+        return build()
+    samples = row.samples
+    if samples._plot_data is None:
+        samples._plot_data = build()
+    return cast(_PlotData, samples._plot_data)
 
 
 def has_tick_value(values: list[float], candidate: float) -> bool:
@@ -253,6 +268,7 @@ ScalarTickFormatter = Callable[[float], str]
 
 
 __all__ = [
+    "plot_data_once",
     "LINEAR_SCALAR_AXIS_LABEL_GAP_PX",
     "LINEAR_SCALAR_AXIS_STROKE_PX",
     "LINEAR_SCALAR_AXIS_TICK_PX",

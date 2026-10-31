@@ -104,7 +104,7 @@ def test_config_leaf_canonical_values(value, expected) -> None:
     assert parsed.wrap_length == expected
 
 
-@pytest.mark.parametrize("value", [0, -5, True, False, 1.5, "0", "abc", "1e3", [], {}])
+@pytest.mark.parametrize("value", [0, -5, True, False, 1.5, "0", "abc", "1e3", [], {}, 2**53, str(2**53)])
 def test_config_leaf_refuses_other_values_and_names_its_path(value) -> None:
     raw = load_config_toml("gbdraw.data", "config.toml")["canvas"]["linear"]
     with pytest.raises(ValidationError, match="canvas.linear.wrap_length"):

@@ -16,13 +16,18 @@ from dataclasses import dataclass, field, replace
 from math import ceil, isfinite
 from typing import Literal, Mapping, Sequence, TypeVar, cast
 
+from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER
 from gbdraw.exceptions import ValidationError
 
 
 _Coordinate = TypeVar("_Coordinate", int, float)
 
 
-MAX_WRAP_LENGTH = 2**53 - 1
+def wrapped_row_count(drawn_length: int, row_length: int) -> int:
+    """The rows ``drawn_length`` bases take at ``row_length`` bases per row: the one count of rows."""
+
+    return ceil(drawn_length / row_length)
+
 
 _DISPLAY_START_DIAGNOSTIC = {
     "code": "INPUT_INVALID",
@@ -222,7 +227,7 @@ class RecordDisplayTransform:
             anchor = self.start_coordinate
         object.__setattr__(self, "_anchor_boundary", anchor - (self.source_step == 1))
         if self.wrap_length is not None:
-            _integer(self.wrap_length, "Wrap length", 1, MAX_WRAP_LENGTH)
+            _integer(self.wrap_length, "Wrap length", 1, JS_MAX_SAFE_INTEGER)
         if self.display_length is not None:
             _integer(self.display_length, "Display length", 1, self.length)
 
@@ -248,7 +253,7 @@ class RecordDisplayTransform:
 
     @property
     def row_count(self) -> int:
-        return ceil(self.drawn_length / self.axis_length)
+        return wrapped_row_count(self.drawn_length, self.axis_length)
 
     def row_length(self, row: int) -> int:
         """The bases on one row: the axis length, or the remainder on the last row."""

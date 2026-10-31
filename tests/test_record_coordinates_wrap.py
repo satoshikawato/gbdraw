@@ -25,7 +25,7 @@ from gbdraw.api.requests import (
 )
 from gbdraw.io.regions import RegionSpec, parse_region_spec
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.coordinates import project_feature_parts
+from gbdraw.features.coordinates import get_exon_and_intron_coordinates, project_feature_parts
 from gbdraw.layout.record_coordinates import (
     DisplayFragment,
     RecordDisplayTransform,
@@ -230,6 +230,57 @@ def test_a_join_over_a_row_boundary_has_one_arrow_block_and_a_cut_connector(stra
     ]
     assert sum(block.location.is_last for block in blocks) == 1
     assert all(line.location.is_last is False for line in lines)
+
+
+def _connectors(exons: list[SimpleLocation], transform: RecordDisplayTransform) -> list[tuple[int, int, int]]:
+    return [
+        (part.fragment.row, part.fragment.display_start, part.fragment.display_end)
+        for part in project_feature_parts(exons, transform)
+        if part.kind == "line"
+    ]
+
+
+_WRAPPED = RecordDisplayTransform(30_000, 1, 1, None, True).with_wrap(10_000, 30_000)
+
+
+@pytest.mark.parametrize(
+    "exons",
+    [
+        # Over the origin of a circular record: the unwrapped figure draws two blocks and no connection.
+        [(28_000, 28_500, 1), (1_500, 2_000, 1)],
+        # Out of order without trans_splicing: the same.
+        [(12_000, 13_000, 1), (5_000, 6_000, 1)],
+        [(5_000, 6_000, -1), (12_000, 13_000, -1)],
+    ],
+    ids=["origin", "out_of_order", "out_of_order_minus"],
+)
+def test_a_wrapped_record_adds_no_connection_its_unwrapped_figure_does_not_draw(exons) -> None:
+    locations = [SimpleLocation(start, end, strand=strand) for start, end, strand in exons]
+    assert not [part for part in get_exon_and_intron_coordinates(locations, 30_000) if part.kind == "line"]
+    assert _connectors(locations, _WRAPPED) == []
+
+
+@pytest.mark.parametrize(
+    ("exons", "expected"),
+    [
+        ([(5_000, 6_000, 1), (12_000, 13_000, 1)], [(0, 6_000, 10_000), (1, 0, 2_000)]),
+        ([(12_000, 13_000, -1), (5_000, 6_000, -1)], [(1, 0, 2_000), (0, 6_000, 10_000)]),
+        # Strands that differ: the unwrapped figure connects them by the first part's strand.
+        ([(5_000, 6_000, 1), (7_000, 8_000, -1)], [(0, 6_000, 7_000)]),
+        ([(7_000, 8_000, -1), (5_000, 6_000, 1)], [(0, 6_000, 7_000)]),
+    ],
+    ids=["plus", "minus", "plus_then_minus", "minus_then_plus"],
+)
+def test_a_wrapped_record_drops_no_connection_its_unwrapped_figure_draws(exons, expected) -> None:
+    locations = [SimpleLocation(start, end, strand=strand) for start, end, strand in exons]
+    assert [part for part in get_exon_and_intron_coordinates(locations, 30_000) if part.kind == "line"]
+    assert sorted(_connectors(locations, _WRAPPED)) == sorted(expected)
+
+
+def test_a_rotated_wrapped_record_keeps_its_connection_over_the_origin() -> None:
+    rotated = RecordDisplayTransform(30_000, 1, 1, 20_000, True).with_wrap(10_000, 30_000)
+    locations = [SimpleLocation(28_000, 28_500, strand=1), SimpleLocation(1_500, 2_000, strand=1)]
+    assert _connectors(locations, rotated)
 
 
 def test_a_block_cut_at_a_row_has_one_arrowhead_on_its_true_end() -> None:

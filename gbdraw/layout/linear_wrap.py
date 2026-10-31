@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from math import ceil
 
 from Bio.SeqRecord import SeqRecord
 
@@ -18,7 +17,7 @@ from gbdraw.config.models.root import GbdrawConfig
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import VerticalBand
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_coordinates import RecordDisplayTransform, wrapped_row_count
 
 
 AUTO_WRAP_CAP_BP = 50_000
@@ -38,7 +37,7 @@ def auto_wrap_length(longest_bp: int) -> int | None:
     if longest_bp <= AUTO_WRAP_FLOOR_BP:
         return None
     for length in _AUTO_WRAP_LADDER_BP:
-        if ceil(longest_bp / length) <= AUTO_WRAP_MAX_ROWS:
+        if wrapped_row_count(longest_bp, length) <= AUTO_WRAP_MAX_ROWS:
             return length
     return AUTO_WRAP_CAP_BP
 
@@ -96,7 +95,7 @@ class LinearWrapSummary:
     record_lengths: tuple[int, ...]
 
     def rows_at(self, row_length: int) -> int:
-        return sum(ceil(length / row_length) for length in self.record_lengths)
+        return sum(wrapped_row_count(length, row_length) for length in self.record_lengths)
 
     @property
     def row_count(self) -> int:
@@ -104,7 +103,7 @@ class LinearWrapSummary:
 
     @property
     def record_rows(self) -> tuple[int, ...]:
-        return tuple(ceil(length / self.row_length) for length in self.record_lengths)
+        return tuple(wrapped_row_count(length, self.row_length) for length in self.record_lengths)
 
     @property
     def message(self) -> str:

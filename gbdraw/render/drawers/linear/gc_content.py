@@ -12,6 +12,7 @@ from ....layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_TICK_PX,
     ScalarRow,
     format_percent_tick,
+    plot_data_once,
     linear_scalar_axis_tick_font_size_px,
     scalar_axis_small_tick_values,
     scalar_axis_tick_values,
@@ -209,11 +210,14 @@ class GcContentDrawer:
         row: ScalarRow | None = None,
     ) -> Group:
         if self.mode == "percent":
-            plot_df = gc_content_percent_df(
-                gc_df,
-                dinucleotide=dinucleotide,
-                min_percent=self.min_percent,
-                max_percent=self.max_percent,
+            plot_df = plot_data_once(
+                row,
+                lambda: gc_content_percent_df(
+                    gc_df,
+                    dinucleotide=dinucleotide,
+                    min_percent=self.min_percent,
+                    max_percent=self.max_percent,
+                ),
             )
             gc_path_desc: str = calculate_linear_scalar_area_path_desc(
                 start_x,
