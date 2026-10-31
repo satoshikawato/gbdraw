@@ -2644,13 +2644,17 @@ and science have a word, it is used even when the Russian cognate is shorter
   coordinates), заливка, контур (Stroke of shapes), лінія (axis and intron lines), зразок кольору (Swatch),
   підкладка / передній план (Underlay / Foreground), відступ (Padding), проміжок (Gap), відстань (Spacing), інтервал
   (Interval), зсув (Offset), пресет (Preset), типовий (Default).
-- **Command words** (Microsoft, Google, Apple, Mozilla Ukrainian): Зберегти, Завантажити (Load), Звантажити
-  (Download), Передати (Upload), Відкрити, Закрити, Копіювати, Вставити, Дублювати, Видалити (Delete), Вилучити
+- **Command words**: Зберегти, Завантажити (Load), Звантажити (Download), Передати (Upload), Відкрити, Закрити, Копіювати, Вставити, Дублювати, Видалити (Delete), Вилучити
   (Remove), Очистити (Clear), Скинути (Reset), Відновити (Restore), Застосувати, Скасувати (Cancel and Undo),
   Повторити (Redo), Спробувати ще раз (Retry), Пропустити (Skip), Залишити (Keep), Перейменувати, Додати, Вибрати
   (Select), Обрати (Choose), Показати / Приховати, Увімкнути / Вимкнути (Enable / Disable), Увімкнено / Вимкнено (On
   / Off), Розгорнути / Згорнути, Імпортувати / Експортувати, Створити (Generate), Створити знову (Regenerate),
   Натиснути (click, tap), Перетягнути, Огляд (Browse).
+- **Load, Download and Upload** need three verbs, because Load Session, Download and Upload appear on the same
+  screens. The sources disagree: Microsoft writes Завантажити for Download and Передати for Upload; Google writes
+  Завантажити for Upload; Mozilla writes Завантажити for Download; KDE and Debian write Звантажити for Download.
+  The split Завантажити (Load) / Звантажити (Download) / Передати (Upload) is a decision of this catalog on weak
+  evidence, listed for the Owner; no vendor uses all three this way.
 - **One word, one concept**: ознака is Feature only (a list item is елемент, a thing on the canvas is об’єкт); запис
   is Record only, never a log line; запит is Request, and Query stays query; збіг is Match; hit stays hit; таблиця
   is a UI table, таблиця кольорів the color-table file; доріжка is Track, смуга is Band, рівень is Lane, слот is a
@@ -2706,18 +2710,20 @@ and science have a word, it is used even when the Russian cognate is shorter
   ranges stays (Рядки 3–4). The minus sign − and + in ланцюг + / ланцюг − stay.
 - Digits are ASCII with the English decimal point and grouping (0.65, 1,000), never 0,65 or 1 000 (D-05). Units and
   % keep the source spacing (100 bp, 50%, 8 pt, 0.65 ×R); one … (U+2026), no space before it.
+- Time abbreviations are Ukrainian words, as in the ja, zh, ko, th, id and vi catalogs: {value} мс, {value} с,
+  {minutes} хв {seconds} с, without a period. The measurement units bp, kb, Mb, px, pt, ×R and DPI stay Latin
+  (STYLE 1.2).
 - Parentheses and slashes as in the source: Ділянка (необов’язково), Організм / штам. "from … to" is від … до (від
   #{from} до #{to}).
 - The code joins sentences with one ordinary space (D-09). e.g. is наприклад, i.e. is тобто; abbreviations take a
-  period (макс., мін., Порівн.). ID is invariable.
+  period (макс., мін., Порівн.), except the time units above. ID is invariable.
 
 ### 17.4 Words and capitals
 
 - Sentence case for every label, button, heading, tab, option and column header: the first word and proper names
   only (Власні слоти доріжок, Попарні порівняння, Вісь і шкала). Never copy English Title Case. Cyrillic keeps the
   CSS `uppercase` rule, so a sentence-case key that CSS capitalizes stays in sentence case; a key the English writes
-  in capitals stays in capitals with
- : ТИПОВІ КОЛЬОРИ, ОКРЕМІ ПРАВИЛА, ФІЛЬТРАЦІЯ ПІДПИСІВ,
+  in capitals stays in capitals: ТИПОВІ КОЛЬОРИ, ОКРЕМІ ПРАВИЛА, ФІЛЬТРАЦІЯ ПІДПИСІВ,
   ПРІОРИТЕТ КВАЛІФІКАТОРІВ, ДОДАТИ КЛЮЧ; the badge OFF is ВИМКНЕНО.
 - Concepts the English capitalizes (Session, Result, Legend) are lower case in a sentence (сеанс, результат,
   легенда); gbdraw stays lower case. A control or section cited in a sentence keeps its label with a capital in « »:
@@ -2755,8 +2761,9 @@ and science have a word, it is used even when the Russian cognate is shorter
      значення Авто / Скинути {count} розміщень до значення Авто / Скинути {count} розміщення до значення Авто
   4. ({current} of {count} matches): {current} із {count} збігу / {current} із {count} збігів / {current} із {count}
      збігів / {current} із {count} збігу
-  5. (From these {count} color rules:): З цього правила кольору: / З цих {count} правил кольору: / З цих {count}
-     правил кольору: / З цих {count} правил кольору:
+  5. (From these {count} color rules:): the `one` key From this color rule: is З цього правила кольору: (count 1
+     only); the object is З {count} правила кольору: / З цих {count} правил кольору: / З цих {count} правил
+     кольору: / З {count} правила кольору: (the catalog's forms)
 - Few / many of the counted nouns (also in the glossary notes): запис записи / записів, ознака ознаки / ознак, ген гени /
   генів, пара пари / пар, рядок рядки / рядків, збіг збіги / збігів, доріжка доріжки / доріжок, результат результати /
   результатів, редагування редагування / редагувань.

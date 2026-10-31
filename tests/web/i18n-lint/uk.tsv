@@ -2,10 +2,10 @@ id	regex	flags	message	severity
 uk-russian-letters	[ыэъёЫЭЪЁ]	u	Russian-only letter (ы э ъ ё) in a Ukrainian string (STYLE 17.3): write the Ukrainian spelling with и, е, і, є, ї or an apostrophe.	error
 uk-ascii-apostrophe	(?<=[а-яіїєґ])'(?=[а-яіїєґ])	iu	ASCII apostrophe inside a Ukrainian word: write the typographic apostrophe ’ (U+2019), e.g. об’єкт, необов’язково (STYLE 17.3).	error
 uk-modifier-apostrophe	ʼ	u	Modifier-letter apostrophe ʼ (U+02BC): the catalogs use the typographic apostrophe ’ (U+2019) in every Ukrainian word (STYLE 17.3).	error
-uk-straight-quote	"	u	Straight double quote in prose: Ukrainian quotes are « » (nested „ “), never " (STYLE 17.3).	error
+uk-straight-quote	^(?![^\n]*=")(?![^\n]*\\ : \* \? " < > \|)[^\n]*"	u	Straight double quote in prose: Ukrainian quotes are « » (nested „ “), never " (STYLE 17.3). Exempt: code such as /key="value" (a value with =") and the literal forbidden file-name characters (\ : * ? " < > |) as the English shows them (review-addenda).	error
 uk-wrong-quotes	[“”„‘]	u	Curly or low quote mark: use « » for the English "…" and „ “ only inside « » (STYLE 17.3).	error
 uk-guillemet-space	«[\s ]|[\s ]»	u	Space inside « »: Ukrainian guillemets hug the text, «{name}» (STYLE 17.3).	error
-uk-space-before-punct	[  ][:;?!]	u	Space before a colon, semicolon, question or exclamation mark: Ukrainian has none (Поле: {path}, Видалити?) (STYLE 17.3).	error
+uk-space-before-punct	^(?![^\n]*\\ : \* \? " < > \|)[^\n]*[  ][:;?!]	u	Space before a colon, semicolon, question or exclamation mark: Ukrainian has none (Поле: {path}, Видалити?) (STYLE 17.3). Exempt: the file-name rule lists the literal characters \ : * ? " < > | (spaces before : and ?) as the English shows them.	error
 uk-three-dots	\.\.\.	u	Three dots: write one ellipsis character … (STYLE 17.3).	error
 uk-spaced-hyphen	\s-\s	u	Hyphen used as a dash: write an em dash — (preceded by U+00A0) in prose (STYLE 17.3). The minus sign is − (U+2212).	error
 uk-nonascii-digits	[٠-٩۰-۹０-９]	u	Non-ASCII digit: numbers use ASCII digits 0-9 (STYLE 1.2).	error
