@@ -1102,8 +1102,8 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL]
               [--depth_small_tick_interval DEPTH_SMALL_TICK_INTERVAL]
               [--depth_tick_font_size DEPTH_TICK_FONT_SIZE] [--align_center]
-              [--keep_definition_left_aligned] [--evalue EVALUE]
-              [--bitscore BITSCORE] [--identity IDENTITY]
+              [--anchor_feature KEY=VALUE] [--keep_definition_left_aligned]
+              [--evalue EVALUE] [--bitscore BITSCORE] [--identity IDENTITY]
               [--alignment_length ALIGNMENT_LENGTH] [--identity_scale MIN MAX]
               [--pairwise_match_style {ribbon,curve}] [-k FEATURES]
               [--feature_shape TYPE=SHAPE]
@@ -1428,6 +1428,15 @@ options:
                         Depth coverage tick label font size (optional; must be
                         > 0).
   --align_center        Align genomes to the center (default: False).
+  --anchor_feature KEY=VALUE
+                        Align the records at the left end, as drawn, of the
+                        feature this exact selector names in each record, for
+                        example gene=dnaA or locus_tag=b0001 (the
+                        feature_selector form of the placement and override
+                        tables). The first record that has the feature keeps
+                        its place; a record without it keeps its place and is
+                        reported. Wins over --align_center for the records it
+                        moves (default: off).
   --keep_definition_left_aligned
                         Keep linear record definitions in the left column. In
                         a multi-record row, a label or subtitle that no record

@@ -1769,7 +1769,7 @@ def _decode_linear_layout(
 # The planner consumes it: a Session stores what the figure drew with.
 _PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults"})
 # Options a Session does not store yet: a request that sets one is refused.
-_UNSTORED_FIELDS = frozenset({"auto_orient"})
+_UNSTORED_FIELDS = frozenset({"auto_orient", "anchor_feature"})
 
 
 def require_storable_diagram_options(

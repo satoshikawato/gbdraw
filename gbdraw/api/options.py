@@ -68,6 +68,7 @@ from gbdraw.tracks import (
     parse_linear_track_slots,
 )
 from gbdraw.annotations import AnnotationOptions
+from gbdraw.annotations.models import FeatureSelector, parse_feature_selector
 
 
 # Paths not listed here are shared by both renderers.
@@ -1406,6 +1407,12 @@ class LinearDiagramOptions(_ModeDiagramOptions):
 
     ``auto_orient`` reverse-complements records from their nucleotide hits
     (:func:`gbdraw.linear_comparison.auto_orient_reversed_records`).
+
+    ``anchor_feature`` aligns the records at the left end, as drawn, of the
+    feature it selects in each record (``key=value``, exact; a string is
+    parsed with :func:`gbdraw.annotations.models.parse_feature_selector`).
+    The first record that has the feature keeps its place
+    (:func:`gbdraw.api.record_planning.project_anchor_feature_starts`).
     """
 
     tracks: LinearRequestTrackOptions | None = None
@@ -1433,6 +1440,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     comparison_table_file: str | None = None
     wrap_defaults: LinearWrapDefaults | None = None
     auto_orient: bool = False
+    anchor_feature: FeatureSelector | str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -1440,6 +1448,13 @@ class LinearDiagramOptions(_ModeDiagramOptions):
             raise ValidationError(
                 "auto_orient must be a boolean.", diagnostic={"code": "INPUT_INVALID"}
             )
+        if self.anchor_feature is not None:
+            if not isinstance(self.anchor_feature, (FeatureSelector, str)):
+                raise ValidationError(
+                    "anchor_feature must be a FeatureSelector, a key=value string, or None.",
+                    diagnostic={"code": "INPUT_INVALID"},
+                )
+            object.__setattr__(self, "anchor_feature", parse_feature_selector(self.anchor_feature))
         for placement in self.feature_placements:
             placement.target.validate_mode("linear")
         _validate_mode_config_overrides(

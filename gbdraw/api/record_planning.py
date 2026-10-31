@@ -69,6 +69,7 @@ from .options import (
     LinearMultiRecordOptions,
 )
 from gbdraw.features.source import SourceFeatureCatalog, SourceFeatureIdentity, capture_source_features
+from gbdraw.annotations.models import FeatureSelector
 from gbdraw.features.ids import compute_feature_hash_from_location_parts
 
 from .prepared import (
@@ -792,6 +793,84 @@ def _alignment_source_feature(
             f"for record {provenance.record_key!r}."
         )
     return matches[0]
+
+
+def _selector_text(selector: FeatureSelector) -> str:
+    return selector.value if selector.key is None else f"{selector.key}={selector.value}"
+
+
+def _source_feature_display_start(
+    feature: SourceFeatureIdentity, transform: RecordDisplayTransform,
+) -> float:
+    """The display offset of a source feature's left end as drawn (its first drawn base)."""
+
+    return float(min(
+        transform.source_boundary_to_display_offset(boundary)
+        for start, end, _strand in feature.location_parts
+        for boundary in (start, end)
+    ))
+
+
+def project_anchor_feature_starts(
+    collection: ResolvedRecordCollection,
+    selector: FeatureSelector,
+) -> tuple[float | None, ...]:
+    """Where ``selector``'s feature starts in each record as drawn, in display bp.
+
+    The one owner of the ``anchor_feature`` positions. The selector matches a
+    record's source features exactly (:class:`FeatureSelector`); matches that
+    start at the same drawn base (a gene and its CDS) count as one, and matches
+    that start at different bases are refused with the candidates. The start
+    is the feature's left end in the record's drawn orientation, so it is read
+    after any reverse complement. A record without a match, or whose match
+    starts outside its drawn region, has ``None`` and keeps its place; a
+    selector that no record matches is refused.
+    """
+
+    text = _selector_text(selector)
+    starts: list[float | None] = []
+    for index, (record, provenance, transform) in enumerate(zip(
+        collection.records, collection.provenance, collection.transforms, strict=True,
+    )):
+        by_start: dict[float, list[SourceFeatureIdentity]] = {}
+        for feature in provenance.source_feature_catalog:
+            if feature.matches(key=selector.key, value=selector.value, record_id=provenance.source_record_id):
+                by_start.setdefault(_source_feature_display_start(feature, transform), []).append(feature)
+        name = f"record #{index + 1} {str(record.id)!r}"
+        if len(by_start) > 1:
+            candidates = "; ".join(
+                f"{feature.feature_type} {_feature_location_text(feature)}"
+                for matches in by_start.values()
+                for feature in matches
+            )
+            raise ValidationError(
+                f"anchor_feature {text} matches {sum(map(len, by_start.values()))} features at "
+                f"different starts in {name}: {candidates}. Use a selector that names one "
+                "feature, such as locus_tag=<tag>.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
+        start = next(iter(by_start), None)
+        if start is None or not 0.0 <= start < float(len(record)):
+            logger.warning(
+                "WARNING: anchor_feature %s matched no feature in %s%s; the record keeps its place.",
+                text, name, "" if start is None else " inside its drawn region",
+            )
+            start = None
+        starts.append(start)
+    if all(start is None for start in starts):
+        raise ValidationError(
+            f"anchor_feature {text} matched no feature in any record.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    return tuple(starts)
+
+
+def _feature_location_text(feature: SourceFeatureIdentity) -> str:
+    """The feature's span in 1-based source coordinates, with ``complement`` for the minus strand."""
+
+    parts = ",".join(f"{start + 1}..{end}" for start, end, _strand in feature.location_parts)
+    text = parts if len(feature.location_parts) == 1 else f"join({parts})"
+    return f"complement({text})" if feature.location_parts[0][2] == -1 else text
 
 
 @dataclass(frozen=True)
@@ -1815,6 +1894,12 @@ def decide_linear_wrap(
         tracks = options.tracks if defaults.track_order is None else defaults.track_order.tracks(cut=False)
         return replace(options, tracks=tracks, wrap_defaults=None)
     decided = _with_wrap_defaults(options, defaults)
+    if decided.anchor_feature is not None:
+        # A wrapped record's feature starts lie on different rows.
+        raise ValidationError(
+            "wrap_length cannot cut a record of a figure aligned with anchor_feature.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
     refuse_undrawable_wrap(
         apply_config_overrides(decided.config, decided.config_overrides),
         resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
@@ -2010,6 +2095,7 @@ __all__ = [
     "depth_track_inputs_from_cli",
     "parse_cli_bool",
     "prepared_parsed_source",
+    "project_anchor_feature_starts",
     "record_input_manifest_from_paths",
     "record_input_manifest_from_table",
     "resolve_circular_batch_outputs",
