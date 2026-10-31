@@ -670,7 +670,6 @@ Feature Height (--feature_height)												Altezza delle feature (--feature_he
 Run LOSAT for all adjacent pairs												Esegui LOSAT su tutte le coppie adiacenti					it: All four keys use su (glossary all-adjacent LOSAT).
 Reciprocal best hit (sentence start)												Reciprocal best hit					it: Kept English, capital only at a sentence or label start.
 seed RBH (label)												Seed RBH					it: Table label in sentence case; lower case seed in running text.
-Wrap length												Lunghezza del ritorno a capo					it: Weak evidence (word-wrap term); Owner or native reviewer may prefer English wrap.
 {count} more / and {count} more												ancora {count} / e ancora {count}					it: Plain t() count: reads right for 1 (altri 1 did not).
 Noun count without a plural key												Noun: {count} (Mantenute: {count}, disegnati: {drawn})					it: No agreement depends on the number.
 A label does not fit												non entra / non entrano					it: One verb for fit everywhere (was non ci sta / starci in part 3 and 4).
