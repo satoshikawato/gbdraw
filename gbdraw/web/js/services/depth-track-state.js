@@ -706,6 +706,34 @@ export const reindexDepthSlots = ({
 };
 
 /**
+ * The ids of the Depth rows a Depth source change takes out of what the stack
+ * can draw: a row on before and not on after, and a row of either state that
+ * has gone. The change itself builds `after`, so this restates no rule of it.
+ * @param {readonly DepthSlotRow[]} before
+ * @param {readonly DepthSlotRow[]} after
+ * @returns {Set<string>}
+ */
+export const depthRowsLeaving = (before, after) => {
+  const ids = new Set(after.map((slot) => String(slot.id)));
+  const on = new Set(after.filter((slot) => slot.enabled !== false).map((slot) => String(slot.id)));
+  return new Set(before
+    .filter((slot) => isDepthSlot(slot) && !on.has(String(slot.id)) && (slot.enabled !== false || !ids.has(String(slot.id))))
+    .map((slot) => String(slot.id)));
+};
+
+/**
+ * The rows the removal of Depth series `removedIndex` takes out of a stack,
+ * `activeCount` series staying (`reindexDepthSlots`).
+ * @param {readonly DepthSlotRow[]} slots
+ * @param {number} removedIndex
+ * @param {number} activeCount
+ * @returns {Set<string>}
+ */
+export const depthSeriesRowsLeaving = (slots, removedIndex, activeCount) => depthRowsLeaving(
+  slots, reindexDepthSlots({ slots: [...slots], removedIndex, activeCount })
+);
+
+/**
  * A Depth row that names none of the drawing's `count` series.
  * @param {DepthSlotRow} slot
  * @param {number} count

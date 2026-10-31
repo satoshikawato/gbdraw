@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
-/** @import { SwitchedTrackRow } from './track-slot-edits.js' */
+/** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
@@ -185,7 +185,7 @@ import {
 import { createRightDrawerController } from './right-drawer.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
-import { askingTrackRowSwitch } from './track-slot-edits.js';
+import { askDepthSourceRemoval, askingTrackRowRemoval, askingTrackRowSwitch } from './track-slot-edits.js';
 import { createAnnotationEditor } from './annotations.js';
 import { buildLegendStyleRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
@@ -314,6 +314,7 @@ import {
   defaultDepthSeriesLabel,
   reindexDepthSlots,
   removeDepthTrackColumnAt,
+  depthSeriesRowsLeaving,
   syncDepthSlotLabels,
   uploadedDepthFileCount
 } from '../services/depth-track-state.js';
@@ -2236,14 +2237,19 @@ export const createAppSetup = () => {
   const linearTrackSlotEditor = createLinearTrackSlotEditor({
     state, changeTrackLayout, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions
   });
-  // PD-OI-104 scenario revision 6: a row's own switch asks before it turns off a
-  // drawn row of the shown stack that other rows start at or extend to.
-  /** @template {SwitchedTrackRow} Row @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
-  const askingRowSwitch = (setEnabled, slotsKey) => askingTrackRowSwitch({
+  // PD-OI-104 scenario revisions 6 and 7: a row's own switch, a row's Remove, and
+  // the removal of a Depth file or series ask before they take out of the shown
+  // stack a row that other rows start at or extend to.
+  /** @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+  const askingStackPorts = (slotsKey) => ({
     askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability,
-    rows: () => /** @type {readonly Row[]} */ (state.activeDrawing().adv[slotsKey]),
-    mode: slotsKey === 'circular_track_slots' ? 'circular' : 'linear'
-  }, setEnabled);
+    rows: () => /** @type {readonly SwitchedTrackRow[]} */ (state.activeDrawing().adv[slotsKey]),
+    mode: /** @type {'circular' | 'linear'} */ (slotsKey === 'circular_track_slots' ? 'circular' : 'linear')
+  });
+  /** @template {SwitchedTrackRow} Row @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+  const askingRowSwitch = (setEnabled, slotsKey) => askingTrackRowSwitch(/** @type {AskingStackPorts<Row>} */ (askingStackPorts(slotsKey)), setEnabled);
+  /** @param {(index: unknown, turnOffReaching?: (() => void) | Event) => unknown} removeRow @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+  const askingRowRemoval = (removeRow, slotsKey) => askingTrackRowRemoval(askingStackPorts(slotsKey), removeRow);
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, askChoice,
@@ -2359,6 +2365,9 @@ export const createAppSetup = () => {
     }));
   };
   const linearDepthRows = () => linearSeqs.map((seq) => depthFileSlotsFromValue(seq?.depth));
+  // The Depth file rows a removal reads, by identity: a Depth change writes new ones.
+  const circularDepthSources = () => [files.c_depth];
+  const linearDepthSources = () => linearSeqs.map((seq) => seq?.depth);
   const linearDepthLogicalWidth = () => depthTrackMatrixWidth(linearDepthRows());
   const linearDepthTrackUiCount = () => Math.max(1, linearDepthLogicalWidth());
   /** @param {number} width */
@@ -2761,74 +2770,110 @@ export const createAppSetup = () => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
-    ensureDepthTrackConfigCount(drawing, idx + 1);
-    depthTrackUiCounts.circular = Math.max(depthTrackUiCounts.circular, idx + 1);
-    const rows = circularDepthRows();
     const previousFile = circularDepthRepresentatives()[idx] || null;
-    // A new file can rename an auto-labeled series, so the label follows in the same retirement.
-    retireLegendStylesOfUnnamedCaptions(() => {
-      circularTrackSlotEditor.changeCircularDepthSources(() => {
-        rows.forEach((row) => {
-          row[idx] = file || null;
-        });
-        files.c_depth = rows.map((row) => compactDepthFileSlots(row));
-      });
-      if (file) {
-        updateDepthTrackLabelFromFile(drawing, idx, file, previousFile);
-        drawing.form.show_depth = true;
-      }
+    const nextDepth = circularDepthRows().map((row) => {
+      row[idx] = file || null;
+      return compactDepthFileSlots(row);
     });
+    /** @param {() => void} [turnOffReaching] */
+    const apply = (turnOffReaching) => {
+      ensureDepthTrackConfigCount(drawing, idx + 1);
+      depthTrackUiCounts.circular = Math.max(depthTrackUiCounts.circular, idx + 1);
+      // A new file can rename an auto-labeled series, so the label follows in the same retirement.
+      retireLegendStylesOfUnnamedCaptions(() => {
+        circularTrackSlotEditor.changeCircularDepthSources(() => {
+          files.c_depth = nextDepth;
+          turnOffReaching?.();
+        });
+        if (file) {
+          updateDepthTrackLabelFromFile(drawing, idx, file, previousFile);
+          drawing.form.show_depth = true;
+        }
+      });
+    };
+    const asked = file ? null : askDepthSourceRemoval(askingStackPorts('circular_track_slots'), {
+      kind: 'file',
+      series: idx,
+      leaving: circularTrackSlotEditor.circularDepthRowsLeaving(drawing, nextDepth),
+      sources: circularDepthSources,
+      label: msg('Change uploaded file'),
+      apply
+    });
+    return asked ?? apply();
   };
   /** @param {LinearSeq | null | undefined} seq @param {number} index */
   const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
-  /** @param {DrawingState} drawing @param {LinearSeq[]} sequences @param {number} index @param {FileLike | null} file */
-  const setLinearDepthFiles = (drawing, sequences, index, file) => {
+  /**
+   * @param {DrawingState} drawing @param {LinearSeq[]} sequences @param {number} index @param {FileLike | null} file
+   * @param {string} [label] The History step of the removal, when it asks.
+   * @param {(apply: () => unknown) => unknown} [run] Runs the removal when nothing asks.
+   */
+  const setLinearDepthFiles = (drawing, sequences, index, file, label = msg('Change uploaded file'), run = (apply) => apply()) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const targets = Array.from(sequences || []).filter(Boolean);
     if (!targets.length) return;
     const idx = Math.max(0, Number(index) || 0);
     const logicalWidth = Math.max(linearDepthLogicalWidth(), idx + 1);
-    padLinearDepthRows(logicalWidth);
-    ensureDepthTrackConfigCount(drawing, logicalWidth);
     const previousFile = getLinearDepthFile(targets[0], idx);
-    retireLegendStylesOfUnnamedCaptions(() => {
-      linearTrackSlotEditor.changeLinearDepthSources(() => {
-        targets.forEach((seq) => {
-          const slots = depthFileSlotsFromValue(seq.depth);
-          if (file) {
-            slots[idx] = file;
-            seq.depth = slots;
-          } else {
-            seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
-          }
+    /** @param {() => void} [turnOffReaching] */
+    const apply = (turnOffReaching) => {
+      padLinearDepthRows(logicalWidth);
+      ensureDepthTrackConfigCount(drawing, logicalWidth);
+      retireLegendStylesOfUnnamedCaptions(() => {
+        linearTrackSlotEditor.changeLinearDepthSources(() => {
+          targets.forEach((seq) => {
+            const slots = depthFileSlotsFromValue(seq.depth);
+            if (file) {
+              slots[idx] = file;
+              seq.depth = slots;
+            } else {
+              seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
+            }
+          });
+          turnOffReaching?.();
         });
+        if (file) {
+          updateDepthTrackLabelFromFile(drawing, idx, file, previousFile);
+          drawing.form.show_depth = true;
+        }
       });
-      if (file) {
-        updateDepthTrackLabelFromFile(drawing, idx, file, previousFile);
-        drawing.form.show_depth = true;
-      }
+    };
+    if (file) return apply();
+    const cleared = new Set(targets.map((seq) => seq.uid));
+    const asked = askDepthSourceRemoval(askingStackPorts('linear_track_slots'), {
+      kind: 'file',
+      series: idx,
+      leaving: linearTrackSlotEditor.linearDepthRowsLeaving(drawing, linearSeqs.map((seq) => (
+        cleared.has(seq.uid) ? clearDepthTrackSourceAt(seq.depth, idx, logicalWidth) : depthFileSlotsFromValue(seq.depth)
+      ))),
+      sources: linearDepthSources,
+      label,
+      apply
     });
+    return asked ?? run(apply);
   };
   /** @param {LinearSeq} seq @param {number} index @param {FileLike | null} file */
   const setLinearDepthFile = (seq, index, file) => {
     const drawing = state.drawingOfMode('linear');
     return setLinearDepthFiles(drawing, [seq], index, file);
   };
-  /** @param {LinearSourceGroup} source @param {number} index @param {FileLike | null} file */
-  const setLinearSourceDepthFile = (source, index, file) => {
-    const drawing = state.drawingOfMode('linear');
-    return setLinearDepthFiles(
-      drawing,
-      (source?.records || []).map(({ sequence }) => sequence),
-      index,
-      file
-    );
-  };
+  /** @param {LinearSourceGroup} source @param {number} index @param {FileLike | null} file @param {string} [label] @param {(apply: () => unknown) => unknown} [run] */
+  const setLinearSourceDepthFile = (source, index, file, label, run) => setLinearDepthFiles(
+    state.drawingOfMode('linear'),
+    (source?.records || []).map(({ sequence }) => sequence),
+    index,
+    file,
+    label,
+    run
+  );
   /** @param {LinearSourceGroup} source @param {number} index */
-  const clearLinearSourceDepthFile = (source, index) => history.runUndoable(
+  const clearLinearSourceDepthFile = (source, index) => setLinearSourceDepthFile(
+    source,
+    index,
+    null,
     msg('Clear File Depth TSV'),
-    () => setLinearSourceDepthFile(source, index, null)
+    (apply) => history.runUndoable(msg('Clear File Depth TSV'), apply)
   );
   const addCircularDepthTrack = () => {
     const drawing = state.drawingOfMode('circular');
@@ -2847,8 +2892,16 @@ export const createAppSetup = () => {
     ensureDepthTrackConfigCount(drawing, nextCount);
     retireLegendStylesOfUnnamedCaptions(() => { if (hasAnyLinearDepthFiles.value) drawing.form.show_depth = true; });
   };
-  /** @param {number} index */
-  const removeCircularDepthTrack = (index) => {
+  // The Depth file rows, and the series that stay, after the removal of a
+  // series: the removal writes them and its question reads them.
+  /** @param {number} idx */
+  const circularSeriesRemoval = (idx) => {
+    const rows = removeDepthTrackColumnAt(circularDepthRows(), idx).map((row) => compactDepthFileSlots(row));
+    return { rows, keptSeries: representativeDepthFiles(rows).length };
+  };
+  const keptLinearSeriesCount = () => Math.max(0, linearDepthLogicalWidth() - 1);
+  /** @param {number} index @param {() => void} [turnOffReaching] */
+  const removeCircularDepthTrack = (index, turnOffReaching) => {
     const drawing = state.drawingOfMode('circular');
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -2858,15 +2911,14 @@ export const createAppSetup = () => {
     retireLegendStylesOfUnnamedCaptions(() => {
       const count = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular);
       const previousFiles = circularDepthRepresentatives();
-      files.c_depth = removeDepthTrackColumnAt(circularDepthRows(), idx)
-        .map((row) => compactDepthFileSlots(row));
+      const { rows, keptSeries } = circularSeriesRemoval(idx);
+      files.c_depth = rows;
       if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
       // Show Depth goes off with the drawing's last Depth source (OV-82).
       if (!hasCircularDepthFiles.value) drawing.form.show_depth = false;
       depthTrackUiCounts.circular = count <= 1 ? 1 : Math.max(1, count - 1);
       refreshDepthTrackLabelsAfterRemoval(drawing, previousFiles, circularDepthRepresentatives(), idx);
       ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('circular'));
-      const activeFileCount = circularDepthRepresentatives().length;
       // The removed series' rows before the Axis lower its index, as in Linear,
       // so no other row crosses the Axis (R10).
       const axis = drawing.adv.circular_track_slots_axis_index;
@@ -2880,17 +2932,32 @@ export const createAppSetup = () => {
         ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
           slots: drawing.adv.circular_track_slots,
           removedIndex: idx,
-          activeCount: activeFileCount,
+          activeCount: keptSeries,
           managedPredicate: isDefaultManagedDepthSlot
         }))
       );
       if (removedBeforeAxis) drawing.adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
+      turnOffReaching?.();
       syncDepthTrackSlotLabelsForTrack(drawing, idx);
       circularTrackSlotEditor.normalizeCircularTrackSlots();
     });
   };
   /** @param {number} index */
-  const removeLinearDepthTrack = (index) => {
+  const askingRemoveCircularDepthTrack = (index) => {
+    const idx = Number(index);
+    if (sessionOperationAvailability() || !Number.isInteger(idx) || idx < 0) return removeCircularDepthTrack(index);
+    const ports = askingStackPorts('circular_track_slots');
+    return askDepthSourceRemoval(ports, {
+      kind: 'series',
+      series: idx,
+      leaving: depthSeriesRowsLeaving(ports.rows(), idx, circularSeriesRemoval(idx).keptSeries),
+      sources: circularDepthSources,
+      label: msg('Remove Depth series'),
+      apply: (turnOffReaching) => removeCircularDepthTrack(index, turnOffReaching)
+    }) ?? removeCircularDepthTrack(index);
+  };
+  /** @param {number} index @param {() => void} [turnOffReaching] */
+  const removeLinearDepthTrack = (index, turnOffReaching) => {
     const drawing = state.drawingOfMode('linear');
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -2898,6 +2965,7 @@ export const createAppSetup = () => {
     if (!Number.isInteger(idx) || idx < 0) return;
     const logicalWidth = linearDepthLogicalWidth();
     if (idx >= logicalWidth) return;
+    const keptSeries = keptLinearSeriesCount();
     // Removing a series retires the Legend styles of its rows (OV-65).
     retireLegendStylesOfUnnamedCaptions(() => {
       const nextRows = removeDepthTrackColumnAt(linearDepthRows(), idx);
@@ -2922,7 +2990,7 @@ export const createAppSetup = () => {
         ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
           slots: drawing.adv.linear_track_slots,
           removedIndex: idx,
-          activeCount: Math.max(0, logicalWidth - 1),
+          activeCount: keptSeries,
           managedPredicate: isDefaultManagedDepthSlot
         }))
       );
@@ -2932,10 +3000,26 @@ export const createAppSetup = () => {
           previousAxisIndex - removedManagedSlotCountBeforeAxis
         );
       }
+      turnOffReaching?.();
       syncDepthTrackSlotLabelsForTrack(drawing, 0);
       linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks();
       linearTrackSlotEditor.normalizeLinearTrackSlots();
     });
+  };
+  /** @param {number} index */
+  const askingRemoveLinearDepthTrack = (index) => {
+    const idx = Number(index);
+    const logicalWidth = linearDepthLogicalWidth();
+    if (sessionOperationAvailability() || !Number.isInteger(idx) || idx < 0 || idx >= logicalWidth) return removeLinearDepthTrack(index);
+    const ports = askingStackPorts('linear_track_slots');
+    return askDepthSourceRemoval(ports, {
+      kind: 'series',
+      series: idx,
+      leaving: depthSeriesRowsLeaving(ports.rows(), idx, keptLinearSeriesCount()),
+      sources: linearDepthSources,
+      label: msg('Remove Depth series'),
+      apply: (turnOffReaching) => removeLinearDepthTrack(index, turnOffReaching)
+    }) ?? removeLinearDepthTrack(index);
   };
   // Each drawing holds a series for each of its own mode's Depth sources: a
   // new drawing at setup and after Reset Settings. Each Depth control fits its
@@ -7152,8 +7236,8 @@ export const createAppSetup = () => {
     syncDepthTrackSlotLabel,
     addCircularDepthTrack,
     addLinearDepthTrack,
-    removeCircularDepthTrack,
-    removeLinearDepthTrack,
+    removeCircularDepthTrack: askingRemoveCircularDepthTrack,
+    removeLinearDepthTrack: askingRemoveLinearDepthTrack,
     getCircularDepthFile,
     setCircularDepthFile,
     getLinearDepthFile,
@@ -7292,7 +7376,7 @@ export const createAppSetup = () => {
     circularTrackAddBlockReason: circularTrackSlotEditor.circularTrackAddBlockReason,
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
     canDuplicateCircularTrackSlot: circularTrackSlotEditor.canDuplicateCircularTrackSlot,
-    removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
+    removeCircularTrackSlot: askingRowRemoval(circularTrackSlotEditor.removeCircularTrackSlot, 'circular_track_slots'),
     setCircularTrackSlotEnabled: askingRowSwitch(circularTrackSlotEditor.setCircularTrackSlotEnabled, 'circular_track_slots'),
     circularTrackSlotEffectiveEnabled: circularTrackSlotEditor.circularTrackSlotEffectiveEnabled,
     circularTrackSlotHiddenBySuppress: circularTrackSlotEditor.circularTrackSlotHiddenBySuppress,
@@ -7349,7 +7433,7 @@ export const createAppSetup = () => {
     linearTrackAddBlockReason: linearTrackSlotEditor.linearTrackAddBlockReason,
     duplicateLinearTrackSlot: linearTrackSlotEditor.duplicateLinearTrackSlot,
     canDuplicateLinearTrackSlot: linearTrackSlotEditor.canDuplicateLinearTrackSlot,
-    removeLinearTrackSlot: linearTrackSlotEditor.removeLinearTrackSlot,
+    removeLinearTrackSlot: askingRowRemoval(linearTrackSlotEditor.removeLinearTrackSlot, 'linear_track_slots'),
     setLinearTrackSlotEnabled: askingRowSwitch(linearTrackSlotEditor.setLinearTrackSlotEnabled, 'linear_track_slots'),
     moveLinearTrackSlot: linearTrackSlotEditor.moveLinearTrackSlot,
     canMoveLinearTrackSlot: linearTrackSlotEditor.canMoveLinearTrackSlot,
