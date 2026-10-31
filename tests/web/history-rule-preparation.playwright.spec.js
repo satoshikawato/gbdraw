@@ -13,15 +13,23 @@ const visibleRuleColor = (page, color = '#ff0000') => page.evaluate(color => {
   return { result: svg.split(color).length - 1, mounted: mounted.length };
 }, color);
 
-const edit = (page, label, action) => page.evaluate(async ({ label, action }) => {
+// The rule the color and predicate edits change: the tRNA-by-gene rule. Its
+// features fall to the tRNA-by-product rule, which draws the same Legend row
+// in the same color, so a predicate restore returns no Legend row that
+// Python has to draw again (a rerender would prepare the rules once more).
+const editedRule = (rules) => rules.findIndex((rule) => rule.feat === 'tRNA' && rule.qual === 'gene');
+
+const edit = (page, label, action) => page.evaluate(async ({ label, action, editedRuleSource }) => {
   const { state } = await import('./js/state.js');
+  const editedRule = new Function(`return (${editedRuleSource})`)();
   await window.__GBDRAW_HISTORY__.runUndoable(label, () => {
+    const rules = state.activeDrawing().manualSpecificRules;
     if (action === 'scale') state.activeDrawing().adv.scale_interval = 12345;
     if (action === 'scaleAgain') state.activeDrawing().adv.scale_interval = 23456;
-    if (action === 'color') state.activeDrawing().manualSpecificRules[0].color = '#ff0000';
-    if (action === 'predicate') state.activeDrawing().manualSpecificRules[0].val = 'psaA_NO_MATCH';
+    if (action === 'color') rules[editedRule(rules)].color = '#ff0000';
+    if (action === 'predicate') rules[editedRule(rules)].val = 'trn_NO_MATCH';
   });
-}, { label, action });
+}, { label, action, editedRuleSource: editedRule.toString() });
 
 const restore = (page, direction) => page.evaluate(direction => window.__GBDRAW_HISTORY__[direction](), direction);
 
@@ -43,7 +51,7 @@ test('History prepares cold rules once, skips warm config preparation, and reche
   try {
     const before = await getDiagramWorkerActivity(page);
     expect(await visibleRuleColor(page)).toEqual({ result: 0, mounted: 0 });
-    const baseGreen = await visibleRuleColor(page, '#00662c');
+    const baseGreen = await visibleRuleColor(page, '#2c6d3e');
     expect(baseGreen.result).toBeGreaterThan(0);
     expect(baseGreen.mounted).toBeGreaterThan(0);
     await edit(page, 'Unrelated scale', 'scale');
@@ -51,10 +59,10 @@ test('History prepares cold rules once, skips warm config preparation, and reche
     await restore(page, 'undo');
     expect(await prepareCalls()).toBe(1);
     expect(await visibleRuleColor(page)).toEqual({ result: 0, mounted: 0 });
-    expect(await visibleRuleColor(page, '#00662c')).toEqual(baseGreen);
+    expect(await visibleRuleColor(page, '#2c6d3e')).toEqual(baseGreen);
     await restore(page, 'redo');
     expect(await prepareCalls()).toBe(0);
-    expect(await visibleRuleColor(page, '#00662c')).toEqual(baseGreen);
+    expect(await visibleRuleColor(page, '#2c6d3e')).toEqual(baseGreen);
     const warm = await getDiagramWorkerActivity(page);
     // The Session has only managed `configOverrides`, so `checkUnmanagedConfigOverrides`
     // (`config.js`) returns before starting the Worker: the Load builds none.
@@ -67,7 +75,7 @@ test('History prepares cold rules once, skips warm config preparation, and reche
     await restore(page, 'undo');
     expect(await prepareCalls()).toBe(1);
     expect(await visibleRuleColor(page)).toEqual({ result: 0, mounted: 0 });
-    expect(await visibleRuleColor(page, '#00662c')).toEqual(baseGreen);
+    expect(await visibleRuleColor(page, '#2c6d3e')).toEqual(baseGreen);
     await restore(page, 'redo');
     expect(await prepareCalls()).toBe(1);
     const colored = await visibleRuleColor(page);
@@ -83,7 +91,10 @@ test('History prepares cold rules once, skips warm config preparation, and reche
     expect(await visibleRuleColor(page)).toEqual({ result: 0, mounted: 0 });
     await edit(page, 'Independent scale', 'scaleAgain');
     expect(await prepareCalls()).toBe(0);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[0].val)).toBe('psaA_NO_MATCH');
+    expect(await page.evaluate((editedRuleSource) => {
+      const rules = window.__GBDRAW_APP__.manualSpecificRules;
+      return rules[new Function(`return (${editedRuleSource})`)()(rules)].val;
+    }, editedRule.toString())).toBe('trn_NO_MATCH');
     expect(await visibleRuleColor(page)).toEqual({ result: 0, mounted: 0 });
     await restore(page, 'undo');
     expect(await prepareCalls()).toBe(0);
