@@ -34,6 +34,8 @@ from .api.options import (
     LinearMultiRecordOptions,
     LinearOutputOptions,
     LinearRequestTrackOptions,
+    LinearWrapDefaults,
+    LinearWrapTrackOrder,
     LOSATN_TASKS,
     LosatRuntimeOptions,
     LosatSearchOptions,
@@ -68,15 +70,19 @@ from .analysis.protein_colinearity import (
 )
 from .config.modify import modify_config_dict
 from .config.models.objects import normalize_pairwise_match_style
-from .config.models.canvas import linear_axis_ruler_applies
+from .config.models.canvas import LINEAR_WRAP_LENGTH_PATH, linear_axis_ruler_applies
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
 from .mode_profiles import (
     ComparisonThresholds,
     LINEAR_MODE_PROFILE,
+    LINEAR_WRAP_DEFAULT_TRACK_LAYOUT,
+    effective_linear_track_leaves,
+    linear_wrap_default_overrides,
     resolve_mode_profile_overrides,
 )
 from .tracks import (
+    LinearTrackSlot,
     linear_track_slots_from_order,
     normalize_linear_track_slots_with_axis,
     parse_linear_track_slots,
@@ -139,7 +145,14 @@ from .cli_utils.losat_output import (
     write_losat_output_files,
 )
 from .comparisons.losat_jobs import losat_entry_filename, losat_pair_filename, unique_losat_filenames
-from .core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float, parse_ascii_integer
+from .core.numeric import (
+    argparse_float,
+    argparse_integer,
+    argparse_length_bp,
+    argparse_scale_interval,
+    parse_ascii_finite_float,
+    parse_ascii_integer,
+)
 
 
 # ``--losat`` choices (design 3.2).
@@ -208,6 +221,10 @@ def _parse_linear_track_layout(value: str) -> str:
     raise argparse.ArgumentTypeError(
         "track layout must be 'above', 'middle', or 'below'"
     )
+
+
+def _parse_wrap_length(value: str) -> int | str:
+    return "auto" if value.strip().lower() == "auto" else argparse_length_bp(value)
 
 
 def _parse_linear_track_axis_gap(value: str) -> float | None:
@@ -781,10 +798,19 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     )
     parser.add_argument(
         '--track_layout',
-        help='Linear track layout mode ("above", "middle", or "below"; default: "middle").',
+        help='Linear track layout mode ("above", "middle", or "below"; default: "middle", or "above" when --wrap_length cuts a record).',
         type=_parse_linear_track_layout,
         metavar="{above,middle,below}",
-        default="middle",
+    )
+    parser.add_argument(
+        '--wrap_length',
+        help=(
+            'Draw each record over several rows of this length: a length in bp with an optional unit '
+            '(for example 50000, 50kb, 0.5Mb), or "auto" (at most 50 kb per row, by the longest record). '
+            'With no record longer than one row, the option has no effect. Default: no wrapping.'
+        ),
+        type=_parse_wrap_length,
+        metavar="AUTO|LENGTH",
     )
     parser.add_argument(
         '--track_axis_gap',
@@ -863,10 +889,9 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         action='store_true')
     parser.add_argument(
         '--scale_style',
-        help='Style for the length scale (default: "bar"; "bar", "ruler")',
+        help='Style for the length scale ("bar", "ruler"; default: "bar", or "ruler" when --wrap_length cuts a record)',
         type=str,
-        choices=["bar", "ruler"],
-        default="bar")
+        choices=["bar", "ruler"])
     parser.add_argument(
         '--scale_stroke_color',
         help='Scale bar/ruler stroke color (optional; str; default: "black")',
@@ -889,8 +914,8 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=str)
     parser.add_argument(
         '--scale_interval',
-        help='Manual tick interval for "ruler" scale style (in bp; must be > 0). Overrides automatic calculation; optional',
-        type=argparse_integer)
+        help='Manual tick interval for "ruler" scale style (a length in bp with an optional unit, for example 5000 or 5kb; must be > 0). Overrides automatic calculation; optional',
+        type=argparse_scale_interval)
     _add_legend_size_args(parser)
     _add_font_args(parser)
     parser.add_argument(
@@ -1036,29 +1061,47 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         if not _legacy_session:
             parser.error("--scale_interval must be > 0")
         args.scale_interval = None  # D-04: a released legacy Session drew <= 0 as automatic.
+    args.effective_track_layout, args.effective_scale_style = effective_linear_track_leaves(
+        {
+            path: value
+            for path, value in (
+                ("canvas.linear.track_layout", args.track_layout),
+                ("objects.scale.style", args.scale_style),
+            )
+            if value is not None
+        }
+    )
     if args.linear_track_order and args.linear_track_slot:
         parser.error("--linear_track_order cannot be combined with --linear_track_slot")
     if args.linear_track_axis_index is not None and not (args.linear_track_order or args.linear_track_slot):
         parser.error("--linear_track_axis_index requires --linear_track_order or --linear_track_slot")
     try:
-        linear_track_slot_specs = None
-        if args.linear_track_order:
-            linear_track_slot_specs = linear_track_slots_from_order(
+        def track_slots_from_order(track_layout: str) -> list[LinearTrackSlot]:
+            return linear_track_slots_from_order(
                 args.linear_track_order,
                 show_depth=bool(args.depth_track),
                 depth_track_count=max(1, len(args.depth_track or [])),
                 show_gc=bool(args.show_gc),
                 show_skew=bool(args.show_skew),
                 dinucleotide=str(args.nt or "GC").upper(),
-                track_layout=args.track_layout,
+                track_layout=track_layout,
             )
+
+        linear_track_slot_specs = None
+        args.wrap_track_order = None
+        if args.linear_track_order and args.wrap_length is not None and args.track_layout is None:
+            # The order follows the layout, which the record lengths decide: the planner chooses and checks the slots.
+            args.wrap_track_order = LinearWrapTrackOrder(
+                track_slots_from_order(LINEAR_WRAP_DEFAULT_TRACK_LAYOUT),
+                track_slots_from_order(args.effective_track_layout),
+                args.linear_track_axis_index,
+            )
+        elif args.linear_track_order:
+            linear_track_slot_specs = track_slots_from_order(args.effective_track_layout)
         elif args.linear_track_slot:
             linear_track_slot_specs = parse_linear_track_slots(args.linear_track_slot)
         if linear_track_slot_specs is not None and args.linear_track_axis_index is not None:
-            normalize_linear_track_slots_with_axis(
-                linear_track_slot_specs,
-                args.linear_track_axis_index,
-            )
+            normalize_linear_track_slots_with_axis(linear_track_slot_specs, args.linear_track_axis_index)
         args.linear_track_slot_specs = linear_track_slot_specs
     except Exception as exc:
         parser.error(str(exc))
@@ -1446,7 +1489,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     out_formats = handle_output_formats(out_formats)
     user_defined_default_colors: str = args.default_colors
     show_scale: bool = not bool(args.hide_scale)
-    scale_style: str = args.scale_style
+    scale_style: str = args.effective_scale_style
     scale_stroke_color: Optional[str] = args.scale_stroke_color
     scale_stroke_width: Optional[float] = args.scale_stroke_width
     scale_font_size: Optional[float] = args.scale_font_size
@@ -1489,7 +1532,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     label_rendering: str = args.label_rendering
     label_placement: Optional[str] = args.label_placement
     label_rotation: Optional[float] = args.label_rotation
-    track_layout: str = args.track_layout
+    track_layout: str = args.effective_track_layout
     track_axis_gap: Optional[float] = args.track_axis_gap
     linear_track_slot_specs = args.linear_track_slot_specs
     linear_track_axis_index: int | None = args.linear_track_axis_index
@@ -1502,9 +1545,11 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     elif ruler_on_axis and not linear_axis_ruler_applies(
         show_scale=show_scale, scale_style=scale_style, track_layout=track_layout
     ):
-        logger.warning(
-            "WARNING: --ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
-        )
+        # With a wrap length the record lengths decide whether it draws: rows always have the axis ruler.
+        if args.wrap_length is None:
+            logger.warning(
+                "WARNING: --ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
+            )
         ruler_on_axis = False
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
@@ -1564,7 +1609,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "labels.linear.scope": show_labels,
         "canvas.resolve_overlaps": resolve_overlaps,
         "canvas.feature_overlap_tolerance_bp": args.feature_overlap_tolerance_bp,
-        "canvas.linear.track_layout": track_layout,
+        "canvas.linear.track_layout": args.track_layout,
+        LINEAR_WRAP_LENGTH_PATH: args.wrap_length,
         "canvas.linear.track_axis_gap": track_axis_gap,
         "canvas.linear.ruler_on_axis": ruler_on_axis,
         "canvas.linear.align_center": align_center,
@@ -1574,7 +1620,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "canvas.linear.comparison_height": comparison_height,
         "canvas.linear.default_gc_height": gc_height,
         "objects.scale.show": show_scale,
-        "objects.scale.style": scale_style,
+        "objects.scale.style": args.scale_style,
         "objects.scale.stroke_color": scale_stroke_color,
         "objects.scale.label_color": scale_label_color,
         "objects.scale.stroke_width": scale_stroke_width,
@@ -1638,19 +1684,14 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.legends.font_size.long",
     ):
         override_candidates[size_path] = legend_font_size
+    explicit_overrides = {path: value for path, value in override_candidates.items() if value is not None}
     # The Linear profile supplies the auto axis color, and the override owner
     # derives unset ruler colors from it, as for API and Web requests.
     config_dict = modify_config_dict(
         config_dict,
-        resolve_mode_profile_overrides(
-            "linear",
-            {
-                path: value
-                for path, value in override_candidates.items()
-                if value is not None
-            },
-        ),
+        resolve_mode_profile_overrides("linear", explicit_overrides),
     )
+    wrap_default_overrides = linear_wrap_default_overrides(explicit_overrides)
 
     if args.records_table:
         record_manifest = record_input_manifest_from_table(args.records_table)
@@ -1722,9 +1763,13 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 default_colors_palette=palette,
                 default_colors_file=user_defined_default_colors or None,
             ),
-            tracks=LinearRequestTrackOptions(
-                linear_track_slots=linear_track_slot_specs,
-                linear_track_axis_index=linear_track_axis_index,
+            tracks=(
+                None
+                if args.wrap_track_order is not None
+                else LinearRequestTrackOptions(
+                    linear_track_slots=linear_track_slot_specs,
+                    linear_track_axis_index=linear_track_axis_index,
+                )
             ),
             annotations=annotation_options,
             output=LinearOutputOptions(
@@ -1766,6 +1811,11 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             bitscore=bitscore,
             identity=identity,
             alignment_length=alignment_length,
+            wrap_defaults=(
+                None
+                if wrap_default_overrides is None
+                else LinearWrapDefaults(wrap_default_overrides, args.wrap_track_order)
+            ),
         ),
         layout=linear_layout,
         similarity_alignment=(
@@ -1839,6 +1889,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             warning.set_id, warning.annotation_id, warning.record_index + 1,
             warning.record_id, warning.message)
     log_feature_identity_notices(render_result.feature_identity_notices)
+    if render_result.linear_metadata is not None and render_result.linear_metadata.wrap is not None:
+        logger.info(render_result.linear_metadata.wrap.message)
     canvas = render_result.drawing
     interactive_context = render_result.interactive_context
     rendered_svg = make_rendered_svg(out_file_prefix, request_path.name)

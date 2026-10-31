@@ -4,18 +4,28 @@ Bases are 1-based integers; intervals and samples use 0-based source boundaries.
 ``length`` always describes the complete source. The existing affine map is
 source_base + source_step * local_base_index. Unset local projection returns its
 input directly; source projection supplies provenance when fragments are needed.
+
+A wrapped transform draws one record over rows: row r holds the display offsets
+[r * wrap_length, (r + 1) * wrap_length). The display offset already holds the
+rotation, the strand step, and the source base, so a row is not a source interval.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from math import isfinite
+from math import ceil, isfinite
 from typing import Literal, Mapping, Sequence, TypeVar, cast
 
 from gbdraw.exceptions import ValidationError
 
 
 _Coordinate = TypeVar("_Coordinate", int, float)
+
+
+def wrapped_row_count(drawn_length: int, row_length: int) -> int:
+    """The rows ``drawn_length`` bases take at ``row_length`` bases per row: the one count of rows."""
+
+    return ceil(drawn_length / row_length)
 
 
 _DISPLAY_START_DIAGNOSTIC = {
@@ -113,6 +123,8 @@ class DisplayFragment:
     open_start/open_end also refer to display_start/end: the drawing continues
     past that edge, at an artificial seam or at a partial end of the source
     location, so a glyph draws no arrowhead, cap, or edge stroke there.
+    On a wrapped record display_start/end are local to ``row`` and a row boundary
+    is one more artificial, open seam; only the true outer ends stay biological.
     """
 
     source_start: int
@@ -129,6 +141,7 @@ class DisplayFragment:
     part_index: int
     open_start: bool
     open_end: bool
+    row: int = 0
 
 
 @dataclass(frozen=True)
@@ -156,12 +169,21 @@ class DisplaySeries:
 
     source_indices identify original samples; None denotes interpolation.
     seam_sampled is None on the unset affine path, otherwise it distinguishes
-    a duplicated existing sample from an interpolated seam endpoint.
+    a duplicated existing sample from an interpolated seam endpoint. On a wrapped
+    record positions are local to ``row``; a row boundary opens the segment the same
+    way, and seam_sampled still describes the display cut.
     """
 
     points: tuple[SeriesPoint, ...]
     source_indices: tuple[int | None, ...]
     seam_sampled: bool | None
+    row: int = 0
+
+
+def _line_value(left: tuple[float, float], right: tuple[float, float], position: float) -> float:
+    """The value at ``position`` on the line between two (position, value) samples."""
+    fraction = (position - left[0]) / (right[0] - left[0])
+    return left[1] + fraction * (right[1] - left[1])
 
 
 @dataclass(frozen=True)
@@ -171,6 +193,10 @@ class RecordDisplayTransform:
     source_step: Literal[-1, 1]
     start_coordinate: int | None
     is_circular: bool
+    # Set at the draw boundary (``with_wrap``), never by the planner.
+    wrap_length: int | None = None
+    # The bases on the display axis when a crop shows fewer than ``length``.
+    display_length: int | None = None
     _anchor_boundary: int = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -199,6 +225,43 @@ class RecordDisplayTransform:
                 )
             anchor = self.start_coordinate
         object.__setattr__(self, "_anchor_boundary", anchor - (self.source_step == 1))
+        if self.wrap_length is not None:
+            # Any positive integer draws; the config leaf owns the upper limit of an accepted value.
+            _integer(self.wrap_length, "Wrap length", 1, self.wrap_length)
+        if self.display_length is not None:
+            _integer(self.display_length, "Display length", 1, self.length)
+
+    def with_wrap(self, wrap_length: int, display_length: int) -> RecordDisplayTransform:
+        """This record drawn over rows of ``wrap_length`` bp along its ``display_length`` bases."""
+        return replace(self, wrap_length=wrap_length, display_length=display_length)
+
+    @property
+    def projects(self) -> bool:
+        """Whether geometry goes through display fragments, not the unset local path."""
+        return self.start_coordinate is not None or self.wrap_length is not None
+
+    @property
+    def drawn_length(self) -> int:
+        """The bases on the display axis, over every row."""
+        return self.length if self.display_length is None else self.display_length
+
+    @property
+    def axis_length(self) -> int:
+        """The width of one drawn row in bp: the whole display axis when not wrapped."""
+        drawn = self.drawn_length
+        return drawn if self.wrap_length is None else min(drawn, self.wrap_length)
+
+    @property
+    def row_count(self) -> int:
+        return wrapped_row_count(self.drawn_length, self.axis_length)
+
+    def row_length(self, row: int) -> int:
+        """The bases on one row: the axis length, or the remainder on the last row."""
+        return min(self.axis_length, self.drawn_length - row * self.axis_length)
+
+    def display_index_row(self, index: int) -> tuple[int, int]:
+        """The row of a whole-axis display base index, and its index in that row."""
+        return (0, index) if self.wrap_length is None else divmod(index, self.wrap_length)
 
     def source_base_to_display_index(self, base: int) -> int:
         _integer(base, "Source base", 1, self.length)
@@ -300,7 +363,53 @@ class RecordDisplayTransform:
                     open_high if self.source_step == 1 else open_low,
                 )
             )
-        return tuple(fragments)
+        return self._split_rows(fragments)
+
+    def _split_rows(self, fragments: Sequence[DisplayFragment]) -> tuple[DisplayFragment, ...]:
+        """Cut whole-axis fragments at the row boundaries, keeping their traversal order."""
+        width = self.wrap_length
+        if width is None:
+            return tuple(fragments)
+        result: list[DisplayFragment] = []
+        for fragment in fragments:
+            pieces = [
+                self._row_piece(fragment, row, width)
+                for row in range(fragment.display_start // width, (fragment.display_end - 1) // width + 1)
+            ]
+            # Biological traversal runs down the rows on a fragment reading against the display.
+            result.extend(pieces if fragment.orientation == 1 else reversed(pieces))
+        return tuple(result)
+
+    def _row_piece(self, fragment: DisplayFragment, row: int, width: int) -> DisplayFragment:
+        """The part of a whole-axis fragment on one row: only its own outer edges keep their flags."""
+        origin = row * width
+        start = max(fragment.display_start, origin)
+        end = min(fragment.display_end, origin + width)
+        at_low, at_high = start == fragment.display_start, end == fragment.display_end
+        offset, size = start - fragment.display_start, end - start
+        source_start = (
+            fragment.source_start + offset if self.source_step == 1 else fragment.source_end - offset - size
+        )
+        at_biological_start, at_biological_end = (
+            (at_low, at_high) if fragment.orientation == 1 else (at_high, at_low)
+        )
+        return DisplayFragment(
+            source_start,
+            source_start + size,
+            fragment.local_start + offset,
+            fragment.local_start + offset + size,
+            start - origin,
+            end - origin,
+            fragment.orientation,
+            fragment.biological_start and at_biological_start,
+            fragment.biological_end and at_biological_end,
+            fragment.artificial_start if at_low else True,
+            fragment.artificial_end if at_high else True,
+            fragment.part_index,
+            fragment.open_start if at_low else True,
+            fragment.open_end if at_high else True,
+            row,
+        )
 
     def project_parts(
         self, parts: Sequence[SourceInterval]
@@ -332,8 +441,8 @@ class RecordDisplayTransform:
         self,
         parts: Sequence[SourceInterval],
     ) -> Sequence[SourceInterval] | tuple[DisplayFragment, ...]:
-        """Pass through existing validated local geometry when start is unset."""
-        if self.start_coordinate is None:
+        """Pass through existing validated local geometry when nothing projects it."""
+        if not self.projects:
             return parts
         source_parts = []
         for part in parts:
@@ -382,11 +491,7 @@ class RecordDisplayTransform:
             previous = point.position
         if not points:
             return ()
-        if (
-            self.start_coordinate is None
-            and self.source_base == 1
-            and self.source_step == 1
-        ):
+        if not self.projects and self.source_base == 1 and self.source_step == 1:
             return (DisplaySeries(tuple(points), tuple(range(len(points))), None),)
         mapped: list[tuple[float, float, int | None]] = sorted(
             (self._boundary_offset(point.position), point.value, i)
@@ -399,39 +504,82 @@ class RecordDisplayTransform:
                 seam_value, seam_index = mapped[0][1:]
             else:
                 left, right = mapped[-1], mapped[0]
-                left_position = left[0] - self.length
-                fraction = -left_position / (right[0] - left_position)
-                seam_value = left[1] + fraction * (right[1] - left[1])
+                seam_value = _line_value((left[0] - self.length, left[1]), right[:2], 0)
                 seam_index = None
                 mapped.insert(0, (0, seam_value, seam_index))
             mapped.append((self.length, seam_value, seam_index))
-        return (
+        return self._split_series_rows(
             DisplaySeries(
                 tuple(SeriesPoint(position, value) for position, value, _ in mapped),
                 tuple(index for _, _, index in mapped),
                 seam_sampled,
-            ),
+            )
         )
+
+    def _split_series_rows(self, series: DisplaySeries) -> tuple[DisplaySeries, ...]:
+        """One segment per row that has samples, opened at each row boundary on one shared edge.
+
+        The edge is the sample on the boundary when there is one, otherwise the line between
+        its neighbours, as at the display cut. A last sample on a boundary closes its row.
+        """
+        width = self.wrap_length
+        if width is None or not series.points:
+            return (series,)
+        rows: list[DisplaySeries] = []
+        row = int(series.points[0].position // width)
+        points: list[SeriesPoint] = []
+        indices: list[int | None] = []
+
+        def close(value: float, index: int | None) -> None:
+            nonlocal row, points, indices
+            points.append(SeriesPoint(width, value))
+            indices.append(index)
+            rows.append(DisplaySeries(tuple(points), tuple(indices), series.seam_sampled, row))
+            row += 1
+            points, indices = [SeriesPoint(0, value)], [index]
+
+        last = series.points[-1].position
+        previous: tuple[float, float] | None = None
+        for point, index in zip(series.points, series.source_indices, strict=True):
+            sample = (point.position, point.value)
+            while previous is not None and point.position > (row + 1) * width:
+                boundary = (row + 1) * width
+                close(_line_value(previous, sample, boundary), None)
+            if point.position == (row + 1) * width and point.position < last:
+                close(point.value, index)
+            else:
+                points.append(SeriesPoint(point.position - row * width, point.value))
+                indices.append(index)
+            previous = sample
+        rows.append(DisplaySeries(tuple(points), tuple(indices), series.seam_sampled, row))
+        return tuple(rows)
 
     def project_local_series(
         self,
         points: Sequence[SeriesPoint],
     ) -> Sequence[SeriesPoint] | tuple[DisplaySeries, ...]:
         """Keep unset local samples unchanged; otherwise adapt boundaries once."""
-        if self.start_coordinate is None:
+        if not self.projects:
             return points
-        source_points = []
-        for point in points:
-            if not 0 <= point.position < self.length:
-                raise ValidationError(
-                    "Local series samples must be in [0, source length)."
-                )
-            position = self._local_boundary_to_source(point.position) % self.length
-            source_points.append(SeriesPoint(position, point.value))
-        order = sorted(
-            range(len(source_points)), key=lambda i: source_points[i].position
-        )
-        segments = self.project_series(tuple(source_points[i] for i in order))
+        if self.start_coordinate is None:
+            # A local position already is the display offset of an affine axis.
+            order = sorted(range(len(points)), key=lambda i: points[i].position)
+            segments = self._split_series_rows(
+                DisplaySeries(tuple(points[i] for i in order), tuple(range(len(order))), None)
+            )
+        else:
+            source_points = []
+            for point in points:
+                if not 0 <= point.position < self.length:
+                    raise ValidationError(
+                        "Local series samples must be in [0, source length)."
+                    )
+                position = self._local_boundary_to_source(point.position) % self.length
+                source_points.append(SeriesPoint(position, point.value))
+            order = sorted(
+                range(len(source_points)), key=lambda i: source_points[i].position
+            )
+            segments = self.project_series(tuple(source_points[i] for i in order))
         return tuple(
             replace(
                 segment,

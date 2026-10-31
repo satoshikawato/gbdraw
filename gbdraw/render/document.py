@@ -17,6 +17,27 @@ from gbdraw.render.group_content import (
 )
 
 
+def parse_svg_number(value: object, *, default: float = 0.0) -> float:
+    if value is None:
+        return float(default)
+    raw = str(value).strip()
+    if raw.endswith("px"):
+        raw = raw[:-2]
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def drawing_size(drawing: Drawing) -> tuple[float, float]:
+    """A drawing's width and height in SVG px; 0 for a size that is not a number."""
+
+    return (
+        parse_svg_number(drawing.attribs.get("width")),
+        parse_svg_number(drawing.attribs.get("height")),
+    )
+
+
 @dataclass(frozen=True)
 class SvgDocument:
     """The text of one serialized drawing.

@@ -58,43 +58,43 @@
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
       "bytes": 3017615,
-      "sha256": "326ab82800234b7289083c6c9ebc28a49bec9cfa83ce24cd79e944a508051045"
+      "sha256": "f7632b509a607f3f6e444d9a6d01dd4e09515e96b458f03d23e0547b770e7a26"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
       "bytes": 278062,
-      "sha256": "7ce677dced10a7625b4019b87e27c8ae613b0e69e9b6685f55be0718d44beb44"
+      "sha256": "cd900bc3559151d4da3536a9f1167a169095fd5cb2352bc9b6c7fe1450612f6b"
     },
     "gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": {
       "bytes": 252874,
-      "sha256": "b7ae2cac0a71452391337a94360baf15d62b4422db935a3f620b141f888e9001"
+      "sha256": "7752cb27525c2f420ade639145133ba0e557e05cccd4a33b1a5f89c06d661abf"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
-      "bytes": 11119355,
-      "sha256": "20b1666329e895917ffaa3ca2fc4be12062a5411766972d0f38ae3a6241544bd"
+      "bytes": 11119357,
+      "sha256": "41d5a6b5e6235c6997e25984fc7cda9336e3659d99605ee99919362f3c993d95"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
-      "bytes": 10732033,
-      "sha256": "cf5dafe1543beaca68908e603284da6f0527932691b3ce4ad4870dda7d901727"
+      "bytes": 10732045,
+      "sha256": "56f8838435196fdcb0f9c0784e7c43b1ed75c0308ea825977cc7fbb579a4c645"
     },
     "gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 14013208,
-      "sha256": "b051f1b6cbbc60697fe6fc28e7ce498dc8a0c8c0b281176bcc5d3bf6a5e2e1d3"
+      "bytes": 14013192,
+      "sha256": "5942aef600531e90c1ec2d0dd03b64b0ca7acd5cb2a0200914fd1e8bd0fa539d"
     },
     "gallery/sessions/lambda_basic_linear.gbdraw-session.json": {
       "bytes": 851723,
-      "sha256": "6f54fc1ac442e1878f3c3118bc300209b025b98f8cf6a9902621c2ac9ec9c793"
+      "sha256": "1a3908a57112cac6daea39c7366fda0888f50bee51b319530453630684c74a38"
     },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 6223090,
-      "sha256": "0980d1ea4be640e638bb91096df3aa7c9d574edf13c44cbee93a0f0febdbb6a8"
+      "bytes": 6223089,
+      "sha256": "37aee68aff7395ea46118fa7c7cba4633b73c110120b869d5501bd1acb95f06d"
     },
     "gallery/sessions/tobacco-chloroplast.gbdraw-session.json": {
       "bytes": 1595155,
-      "sha256": "00f84a228f74f29ab9482b86302954efdb1b213ec5abbf3813e786dbcc28e6bb"
+      "sha256": "b4dccff33ba7100651b373286d195eadd8f0b81f7a2fa17b65f805debc284ef2"
     },
     "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": {
-      "bytes": 28185937,
-      "sha256": "2f2680104adbf7c7927c7adc307d4db94cb06fb52785fde8c4a097b3b4041b48"
+      "bytes": 28185936,
+      "sha256": "82ce5dcf2016f30da353e90e6480d4a9cc56bbdaf74cb05a88641e6a618a28d8"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
       "bytes": 234947,

@@ -14,6 +14,7 @@ from svgwrite import Drawing
 from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render import export as _export
 from gbdraw.render.document import write_svg_document, write_text
+from gbdraw.render.export_limits import check_drawing_export_limits
 from gbdraw.render.formats import (
     INTERACTIVE_SVG_FORMAT,
     SVG_FORMAT,
@@ -114,6 +115,7 @@ def save_figure_to(
     svg_filename = resolve_format_output_path(base_prefix, SVG_FORMAT)
     output_paths = resolve_output_paths(base_prefix, fmt_list, include_base_svg=True)
     preflight_output_paths(output_paths, overwrite=overwrite)
+    check_drawing_export_limits(canvas, fmt_list)
     classification = classify_formats(fmt_list)
     cairosvg_module = _cairosvg_module(classification.cairosvg)
     try:
@@ -199,6 +201,7 @@ def render_to_bytes(
     """
 
     fmt_norm = parse_output_formats((fmt,))[0]
+    check_drawing_export_limits(canvas, (fmt_norm,))
     if fmt_norm in {SVG_FORMAT, INTERACTIVE_SVG_FORMAT}:
         svg_source = write_svg_document(canvas).body
         embedding = _font_embedding(svg_source, embed_fonts)

@@ -85,7 +85,7 @@ def test_registry_rows_match_the_phase_e_registry_table() -> None:
     assert MODE_SCOPED_SETTINGS_REVISION == 5
     with (FIXTURES / "mode-scoped-settings-registry-v46.tsv").open(encoding="utf-8", newline="") as handle:
         table = list(csv.DictReader(handle, delimiter="\t"))
-    assert len(table) == 281
+    assert len(table) == 282
     rows = set()
     for row in table:
         if row["migrate"] == "-":
@@ -357,7 +357,7 @@ def session_46(written_session_46: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_session_46_reads_two_mode_slices_and_rejects_session_45(session_46: dict[str, Any]) -> None:
-    assert CURRENT_SESSION_VERSION == 49 and 45 not in SUPPORTED_SESSION_VERSIONS
+    assert CURRENT_SESSION_VERSION == 50 and 45 not in SUPPORTED_SESSION_VERSIONS
     assert set(session_46["modes"]) == {"circular", "linear"}
     validate_session(session_46)
     with pytest.raises(ValidationError, match="Unsupported session version: 45"):

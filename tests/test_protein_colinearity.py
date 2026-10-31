@@ -4809,6 +4809,7 @@ def test_linear_cli_forwards_protein_blastp_options(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -4878,6 +4879,7 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)

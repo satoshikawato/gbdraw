@@ -163,11 +163,13 @@ def _cli_get_args(mode: str):
 def test_cli_integer_options_refuse_non_ascii_digits_and_underscores(
     mode: str, text: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    for option, _dest in CLI_INTEGER_OPTIONS[mode]:
+    for option, dest in CLI_INTEGER_OPTIONS[mode]:
         with pytest.raises(SystemExit) as raised:
             _cli_get_args(mode)(["--gbk", "dummy.gb", option, text])
         assert raised.value.code == 2
-        assert f"invalid int value: {text!r}" in capsys.readouterr().err
+        # --scale_interval reads a length (a whole number of bases with an optional bp, kb, or Mb unit).
+        kind = "length" if dest == "scale_interval" else "int value"
+        assert f"invalid {kind}: {text!r}" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("mode", sorted(CLI_INTEGER_OPTIONS))

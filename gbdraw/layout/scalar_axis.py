@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from typing import Any, NamedTuple, cast
+from typing import Any, NamedTuple, TypeVar, cast
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -33,8 +33,8 @@ def project_scalar_samples(
     """
     points = tuple(SeriesPoint(float(position), float(value))
                    for position, value in zip(positions, values, strict=True))
-    # Every caller reaches this point only when ``transform.start_coordinate`` is set,
-    # where project_local_series returns DisplaySeries (it returns the input points when unset).
+    # Every caller reaches this point only when ``transform.projects``,
+    # where project_local_series returns DisplaySeries (it returns the input points otherwise).
     return cast(tuple[DisplaySeries, ...], transform.project_local_series(points))
 
 
@@ -61,6 +61,49 @@ def project_scalar_line(
         np.array([point.value for segment in segments for point in segment.points], dtype=float),
         tuple(int(start) for start in np.cumsum(lengths)[:-1]),
     )
+
+
+class ScalarRows:
+    """One track's samples on the rows of a wrapped record: projected once, read row by row."""
+
+    def __init__(self, transform: RecordDisplayTransform) -> None:
+        self._transform = transform
+        self._rows: dict[int, ProjectedScalarLine] | None = None
+        self._plot_data: object | None = None
+
+    def line(self, positions: ArrayLike, values: ArrayLike, row: int) -> ProjectedScalarLine:
+        if self._rows is None:
+            self._rows = {
+                segment.row: ProjectedScalarLine(
+                    np.array([point.position for point in segment.points], dtype=float),
+                    np.array([point.value for point in segment.points], dtype=float),
+                    (),
+                )
+                for segment in project_scalar_samples(positions, values, self._transform)
+            }
+        empty = np.array([], dtype=float)
+        return self._rows.get(row, ProjectedScalarLine(empty, empty, ()))
+
+
+class ScalarRow(NamedTuple):
+    """The row of a wrapped record a track path draws."""
+
+    samples: ScalarRows
+    row: int
+
+
+_PlotData = TypeVar("_PlotData")
+
+
+def plot_data_once(row: ScalarRow | None, build: Callable[[], _PlotData]) -> _PlotData:
+    """A track's plot data over the whole record: built once however many rows draw it."""
+
+    if row is None:
+        return build()
+    samples = row.samples
+    if samples._plot_data is None:
+        samples._plot_data = build()
+    return cast(_PlotData, samples._plot_data)
 
 
 def has_tick_value(values: list[float], candidate: float) -> bool:
@@ -225,6 +268,7 @@ ScalarTickFormatter = Callable[[float], str]
 
 
 __all__ = [
+    "plot_data_once",
     "LINEAR_SCALAR_AXIS_LABEL_GAP_PX",
     "LINEAR_SCALAR_AXIS_STROKE_PX",
     "LINEAR_SCALAR_AXIS_TICK_PX",

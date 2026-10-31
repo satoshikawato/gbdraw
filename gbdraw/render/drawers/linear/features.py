@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Optional
 
 from gbdraw.svg.elements import Group, Path
@@ -127,7 +128,10 @@ class FeatureDrawer:
         record_index: int = 0,
         record_count: int = 1,
         feature_instance_id: int | None = None,
+        row_groups: Sequence[Group] | None = None,
     ) -> Group:
+        """Draw one feature's paths into ``group``, or each into the group of its row on a wrapped record."""
+
         path_generator = FeaturePathGenerator(
             genome_length=genome_length,
             alignment_width=alignment_width,
@@ -159,8 +163,14 @@ class FeatureDrawer:
         block_count = sum(1 for path_type, *_rest in gene_paths if path_type == "block")
         block_index = 0
         line_index = 0
+        # The path generator keeps every display part of a projected feature, in order.
+        targets = (
+            [group] * len(gene_paths)
+            if row_groups is None
+            else [row_groups[part.fragment.row] for part in feature_object.display_parts]
+        )
 
-        for gene_path in gene_paths:
+        for gene_path, target in zip(gene_paths, targets, strict=True):
             path_type, path_data = gene_path[0], gene_path[1]
             if path_type == "block":
                 block_index += 1
@@ -173,7 +183,7 @@ class FeatureDrawer:
                     )
                 self.draw_path(
                     path_data,
-                    group,
+                    target,
                     fill_color=feature_object.color,
                     feature_data_id=feature_data_id,
                     dom_element_id=dom_element_id,
@@ -194,7 +204,7 @@ class FeatureDrawer:
                 dom_element_id = f"{feature_dom_id}__line{line_index}" if feature_dom_id else None
                 self.draw_path(
                     path_data,
-                    group,
+                    target,
                     fill_color="none",
                     stroke_color_specified=self.intron_stroke_color,
                     stroke_width_specified=self.intron_stroke_width,

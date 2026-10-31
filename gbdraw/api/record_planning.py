@@ -23,6 +23,9 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupMember,
     OrthogroupResult,
 )
+from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.canvas import LINEAR_WRAP_LENGTH_PATH, LinearWrapLength, linear_wrap_length_from_config
+from gbdraw.config.modify import modify_config_dict, raw_config_value, with_config_overrides
 from gbdraw.exceptions import ValidationError
 from gbdraw.core.numeric import ascii_float, parse_ascii_integer
 from gbdraw.core.record_metadata import (
@@ -43,6 +46,7 @@ from gbdraw.io.record_select import (
     parse_record_selector,
 )
 from gbdraw.io.regions import RegionSpec, crop_record_to_region, crop_then_reverse_records, parse_region_spec
+from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import resolve_record_row_positions
@@ -55,7 +59,9 @@ from gbdraw.layout.similarity_alignment import (
 )
 from gbdraw.linear_comparison import LinearComparison, reverse_unbound_endpoint_span
 
+from .config import apply_config_overrides
 from .options import (
+    LinearWrapDefaults,
     CircularDiagramOptions,
     DepthTrackInput,
     LinearDiagramOptions,
@@ -1729,6 +1735,82 @@ def _resolve_linear_comparison_selector(
         f"{table_path}: row {row_number}, column {column!r}: unresolved "
         f"record selector {selector!r}."
     )
+
+
+def _requested_wrap_length(options: LinearDiagramOptions) -> LinearWrapLength:
+    """A request's wrap length, read without building its config: a figure that does not wrap pays nothing."""
+
+    overrides = options.config_overrides or {}
+    if LINEAR_WRAP_LENGTH_PATH in overrides:
+        return linear_wrap_length_from_config(overrides[LINEAR_WRAP_LENGTH_PATH])
+    if isinstance(options.config, GbdrawConfig):
+        return options.config.canvas.linear.wrap_length
+    if options.config is None:
+        return "none"
+    return linear_wrap_length_from_config(raw_config_value(options.config, LINEAR_WRAP_LENGTH_PATH))
+
+
+def _with_wrap_defaults(options: LinearDiagramOptions, defaults: LinearWrapDefaults | None) -> LinearDiagramOptions:
+    """``options`` with the leaves and slots a request left to the wrap defaults."""
+
+    if defaults is None:
+        return replace(options, wrap_defaults=None)
+    config = options.config
+    tracks = options.tracks if defaults.track_order is None else defaults.track_order.tracks(cut=True)
+    if config is None:
+        return replace(
+            options,
+            config_overrides={**defaults.config_overrides, **(options.config_overrides or {})},
+            tracks=tracks,
+            wrap_defaults=None,
+        )
+    return replace(
+        options,
+        config=(
+            with_config_overrides(config, defaults.config_overrides)
+            if isinstance(config, GbdrawConfig)
+            else modify_config_dict(config, defaults.config_overrides)
+        ),
+        tracks=tracks,
+        wrap_defaults=None,
+    )
+
+
+def decide_linear_wrap(
+    options: LinearDiagramOptions,
+    *,
+    records: Sequence[SeqRecord],
+    layout: LinearMultiRecordOptions | None,
+    similarity_alignment: object = None,
+) -> LinearDiagramOptions:
+    """The one place a wrap length meets the record lengths: what the figure draws with, or its refusal.
+
+    With nothing to cut the request is the same request without the option. When a record is cut, the wrap defaults
+    apply and what rows cannot draw is refused, before any comparison search.
+    """
+
+    defaults = options.wrap_defaults
+    if resolve_wrap_length(_requested_wrap_length(options), [len(record.seq) for record in records]) is None:
+        if defaults is None:
+            return options
+        tracks = options.tracks if defaults.track_order is None else defaults.track_order.tracks(cut=False)
+        return replace(options, tracks=tracks, wrap_defaults=None)
+    decided = _with_wrap_defaults(options, defaults)
+    refuse_undrawable_wrap(
+        apply_config_overrides(decided.config, decided.config_overrides),
+        resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
+        wrap_blocking_inputs(
+            blast_files=decided.blast_files,
+            comparison_table_file=decided.comparison_table_file,
+            linear_comparisons=decided.linear_comparisons,
+            protein_comparisons=decided.protein_comparisons,
+            orthogroups=decided.orthogroups,
+            collinearity_blocks=decided.collinearity_blocks,
+            losat_search=decided.losat_search,
+            similarity_alignment=similarity_alignment,
+        ),
+    )
+    return decided
 
 
 def resolve_linear_options(

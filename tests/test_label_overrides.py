@@ -723,6 +723,7 @@ def test_linear_cli_label_table_injects_override_df(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)

@@ -207,21 +207,21 @@ def test_a_request_reference_must_resolve() -> None:
 # table existed (3522c0bc): a table without seed resources must reproduce the
 # single-request writer byte for byte. A codec change that changes a fixture's
 # single-request output updates its digest here; so does a Session version
-# bump (46, 47, 48, 49: only the version field changed) and a change of the packaged
+# bump (46, 47, 48, 49, 50: only the version field changed) and a change of the packaged
 # config a stored full config is completed with (the label style keys, LP-D98;
 # the Linear box default, LP-D106; the Circular track narrowing leaves, PD-OI-078;
 # the Circular definition show leaf, PD-OI-109; the ring colour scheme leaf, PD-OI-110).
 _SINGLE_REQUEST_DIGESTS = {
     "synthetic_conservation.gbdraw-session.json.gz":
-        "fa32977cf53f3ddd83b4956239006aa08beac4a394f09f2fccc9e34002ddc0ad",
+        "c3482b619d379fc1d8e7d736e5d4878109d7e09a075fd465b59969b6e7982773",
     "q-frame-main-web-upload.v42.gbdraw-session.json.gz":
-        "d5a2391e1956fe332c174adf6a884b6dcff25e7ec691198c6406c0e4d08538d5",
+        "b091af3e0c7540534aa08083cffa711c827c0d806baff3ecc1e11d2a273099e3",
     "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz":
-        "59b752177113bc26d59f6fb7a4ea0004b5e6c5438c27190ad8d335f79c835781",
+        "3f9c5e3732e81f5623d9afdc62aa0f94a2ef6b04f62a4dd209ff36f3805661e9",
     "feature-edits-crop-rc.v44.gbdraw-session.json.gz":
-        "47b0d8f091cfc6b882c224e7d87d6a08ea71f928abaab7f7d13ea8f4f79b06e4",
+        "45ae4ba56c6048e72b6df8981bd0d27e3d4c653ea6de758170639c0d79fd5609",
     "selected-feature-annotations.v44.gbdraw-session.json.gz":
-        "1602a47e3e285b6e4dc1abcd64f69e3ebc32cf890dc9fff6ed2458e9be3311f8",
+        "ab7d207bf8208a74bc7547031110b70fe897a5b772ba57082bf40f2640189d67",
 }
 
 

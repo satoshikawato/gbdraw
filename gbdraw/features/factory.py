@@ -314,7 +314,7 @@ def _build_feature_layers(
         feature_object.feature_hash = compute_source_feature_hash(feature, gb_record)
         if feature_object.feature_hash in shared_hashes:
             feature_object.rendered_instance_index = feature_object.source_feature_index
-        if record_transform is not None and record_transform.start_coordinate is not None:
+        if record_transform is not None and record_transform.projects:
             feature_object.display_parts = project_feature_parts(
                 feature.location.parts, record_transform,
                 is_trans_spliced="trans_splicing" in feature.qualifiers,

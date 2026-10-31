@@ -19,7 +19,7 @@ losatp_max_hits losatp_max_target_seqs losatp_member_max_hits losatp_mode losatn
 losat losat_search program pairs source losat_gencode comparison_sequence comparison_sequence_source comparison_fasta
 conservation_blast_files conservation_dataframes conservation_reference conservation_sequence_files
 conservation_labels conservation_colors conservation_losat_gencodes conservation_search_results
-alignment_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
+alignment_length wrap_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
 collinear_singleton_merge_gap collinear_max_diagonal_drift collinear_gap_penalty
 collinear_nearby_duplicate_window collinear_constant_anchor_score collinear_infer_orthogroups
 collinear_min_score collinear_min_block_span record_gap_px record_axis_height depth_window depth_step
@@ -60,6 +60,7 @@ const REASONS = Object.freeze({
 
   UNKNOWN_CONFIG_PATH: 'Remove unknown configuration overrides or use a supported setting.',
   CIRCULAR_SETTING: 'It applies only to Circular diagrams. Reset it under Preserved session settings, or switch to Circular.',
+  WRAP: 'A wrapped figure draws no comparisons. Remove the comparison inputs or set the wrap length to none.',
   LINEAR_SETTING: 'It applies only to Linear diagrams. Reset it under Preserved session settings, or switch to Linear.',
   TRACK_SCHEMA: 'Recreate Custom Track Slots with the current schema.',
   SESSION_FIELDS: 'Remove unsupported top-level Session fields.',
@@ -244,7 +245,7 @@ const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pa
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',
-  evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length',
+  evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length', wrap_length: 'Wrap length',
   plot_title_font_size: 'Plot Title Font Size', font_family: 'Font', feature_width_circular: 'Feature Width',
   depth_width_circular: 'Depth Width', gc_content_width_circular: 'GC Content Width',
   gc_content_radius_circular: 'GC Content Radius', gc_skew_width_circular: 'GC Skew Width',

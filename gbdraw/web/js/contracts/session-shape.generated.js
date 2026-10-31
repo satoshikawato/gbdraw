@@ -11,7 +11,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
     Object.freeze({minVersion: 31, versions: Object.freeze([31, 32, 33]), root: "SessionChecked31"}),
     Object.freeze({minVersion: 39, versions: Object.freeze([39]), root: "SessionChecked39"}),
     Object.freeze({minVersion: 40, versions: Object.freeze([40, 41, 42, 44]), root: "SessionChecked40"}),
-    Object.freeze({minVersion: 46, versions: Object.freeze([46, 47, 48, 49]), root: "SessionChecked46"})
+    Object.freeze({minVersion: 46, versions: Object.freeze([46, 47, 48, 49, 50]), root: "SessionChecked46"})
   ]),
   types: Object.freeze({
     CheckedSessionResult: Object.freeze({
@@ -533,6 +533,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         labels_mode: Object.freeze({kind: "unknown"}),
         linear_ruler_on_axis: Object.freeze({kind: "unknown"}),
         linear_track_layout: Object.freeze({kind: "unknown"}),
+        linear_wrap_length: Object.freeze({kind: "unknown"}),
         multi_record_canvas: Object.freeze({kind: "unknown"}),
         normalize_length: Object.freeze({kind: "unknown"}),
         plot_title: Object.freeze({kind: "unknown"}),
@@ -562,6 +563,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         "labels_mode",
         "linear_ruler_on_axis",
         "linear_track_layout",
+        "linear_wrap_length",
         "multi_record_canvas",
         "normalize_length",
         "plot_title",
@@ -735,7 +737,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         runMetadata: Object.freeze({kind: "unknown"}),
         cliInvocation: Object.freeze({kind: "unknown"}),
         format: Object.freeze({kind: "literal", values: Object.freeze(["gbdraw-session"])}),
-        version: Object.freeze({kind: "literal", values: Object.freeze([46, 47, 48, 49])}),
+        version: Object.freeze({kind: "literal", values: Object.freeze([46, 47, 48, 49, 50])}),
         createdAt: Object.freeze({kind: "unknown"}),
         renderRequest: Object.freeze({kind: "unknown"}),
         resources: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),

@@ -58,7 +58,7 @@ const sliceKeys = (value, container = '') => Object.entries(value).flatMap(([key
 });
 
 test('Session 46 saves each drawing as its mode slice and loads it back into that drawing (S1, S6)', async () => {
-  assert.equal(SESSION_VERSION, 49);
+  assert.equal(SESSION_VERSION, 50);
   resetDrawings();
   installShownDrawing('circular');
   modeDrawing(state, 'circular').adv.label_font_size = 13;

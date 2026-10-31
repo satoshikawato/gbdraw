@@ -102,7 +102,7 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 49
+CURRENT_SESSION_VERSION = 50
 # Version 44 is the first with the current active-config and record-display
 # draft shapes; version 46 keeps the Web draft of each diagram mode in
 # ``modes`` (PD-OI-086) and keys per-feature edits by source identity;
@@ -112,7 +112,9 @@ CURRENT_SESSION_VERSION = 49
 # the protein results of a reverse-complemented Linear record in its search
 # frame (OV-1145) and what each file card's file put into a slice, for Remove
 # on the card (OV-1280); version 49 adds each Circular slice's
-# ``adv.show_definition`` (PD-OI-109).
+# ``adv.show_definition`` (PD-OI-109); version 50 adds each Linear slice's
+# ``form.linear_wrap_length`` and the config leaf ``canvas.linear.wrap_length``
+# (a record drawn over several rows).
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
 MODE_SCOPED_SESSION_MIN_VERSION = 46
 ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
@@ -124,7 +126,7 @@ DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, *range(MODE_SCOPED_SESSION_MIN_VERSION, CURRENT_SESSION_VERSION + 1)}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
@@ -135,9 +137,8 @@ FEATURE_CATALOG_ENCODING = "biological-authority-v1"
 CURRENT_FEATURE_CATALOG_SCHEMA = 5
 # The catalog schema each current-authority Session version writes.
 FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
-    44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, 47: CURRENT_FEATURE_CATALOG_SCHEMA,
-    FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
-    CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
+    44: 4,
+    **{v: CURRENT_FEATURE_CATALOG_SCHEMA for v in range(MODE_SCOPED_SESSION_MIN_VERSION, CURRENT_SESSION_VERSION + 1)},
 }
 # The fields of a record display draft row (Session 41+), the two that Session
 # 44 added, and the fields of its anchor intent.
@@ -6614,6 +6615,9 @@ def _append_linear_gui_args(
         _append_pair(run_args, invocation_args, "--track_layout", layout)
     if form.get("linear_ruler_on_axis") is True:
         _append_flag(run_args, invocation_args, "--ruler_on_axis")
+    wrap_length = _string_or_none(form.get("linear_wrap_length"))
+    if wrap_length and wrap_length != "none":
+        _append_pair(run_args, invocation_args, "--wrap_length", wrap_length)
     _append_linear_definition_line_style_args(run_args, invocation_args, adv)
 
     linear_seqs = files.get("linearSeqs")

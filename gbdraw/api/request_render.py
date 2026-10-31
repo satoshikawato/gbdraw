@@ -165,6 +165,7 @@ from .prepared import (
     register_prepared_value_identity,
 )
 from .record_planning import (
+    decide_linear_wrap,
     GenBankLoader,
     GffFastaLoader,
     ResolvedRecordCollection,
@@ -2050,7 +2051,12 @@ def plan_linear_request(
         )
         resolved_layout = _linear_layout_with_record_placements(projected_request)
         resolved_options = resolve_linear_options(
-            projected_request.options,
+            decide_linear_wrap(
+                projected_request.options,
+                records=collection.records,
+                layout=resolved_layout,
+                similarity_alignment=projected_request.similarity_alignment,
+            ),
             records=collection.records,
             layout=resolved_layout,
         )

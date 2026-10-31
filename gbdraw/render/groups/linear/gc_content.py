@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from collections.abc import Sequence
+
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
 
 from ....analysis.skew import skew_df
 from ...drawers.linear.gc_content import GcContentDrawer
+from ...drawers.linear.wrap_rows import draw_track_rows
 from ....configurators import GcContentConfigurator
 
 
@@ -37,6 +40,7 @@ class GcContentGroup:
         gc_df: DataFrame | None = None,
         group_id: str = "gc_content",
         record_transform: RecordDisplayTransform | None = None,
+        row_shifts: Sequence[float] = (),
     ) -> None:
         """
         Initializes the GcContentGroup with the given parameters and configurations.
@@ -50,6 +54,7 @@ class GcContentGroup:
             start_y (float): Starting y-coordinate for the GC content visualization.
         """
         self.record_transform = record_transform
+        self.row_shifts = row_shifts
         self.group_id = group_id
         self.gc_group: Group = Group(id=self.group_id)
         self.start_x: float = start_x
@@ -84,17 +89,26 @@ class GcContentGroup:
         This method calls the GcContentDrawer to draw the GC content based on the calculated
         DataFrame and adds the resulting SVG elements to the group.
         """
-        self.gc_group = GcContentDrawer(self.gc_config).draw(
+        drawer = GcContentDrawer(self.gc_config)
+        self.gc_group = draw_track_rows(
             self.gc_group,
-            self.gc_df,
+            self.record_transform,
             self.record_len,
             self.sequence_width,
-            self.track_height,
-            self.start_x,
-            self.start_y,
-            self.dinucleotide,
-            self.group_id,
-            record_transform=self.record_transform,
+            self.row_shifts,
+            lambda group, length, width, row: drawer.draw(
+                group,
+                self.gc_df,
+                length,
+                width,
+                self.track_height,
+                self.start_x,
+                self.start_y,
+                self.dinucleotide,
+                self.group_id,
+                record_transform=self.record_transform,
+                row=row,
+            ),
         )
 
     def get_group(self) -> Group:

@@ -233,6 +233,7 @@
  * @property {unknown} [labels_mode]
  * @property {unknown} [linear_ruler_on_axis]
  * @property {unknown} [linear_track_layout]
+ * @property {unknown} [linear_wrap_length]
  * @property {unknown} [multi_record_canvas]
  * @property {unknown} [normalize_length]
  * @property {unknown} [plot_title]
@@ -673,6 +674,7 @@
  * @property {unknown} [labels_mode]
  * @property {unknown} [linear_ruler_on_axis]
  * @property {unknown} [linear_track_layout]
+ * @property {unknown} [linear_wrap_length]
  * @property {unknown} [multi_record_canvas]
  * @property {unknown} [normalize_length]
  * @property {unknown} [plot_title]
@@ -773,7 +775,7 @@
  * @property {unknown} [runMetadata]
  * @property {unknown} [cliInvocation]
  * @property {'gbdraw-session'} format
- * @property {46 | 47 | 48 | 49} version
+ * @property {46 | 47 | 48 | 49 | 50} version
  * @property {unknown} [createdAt]
  * @property {unknown} renderRequest
  * @property {Record<string, unknown>} resources

@@ -17,6 +17,7 @@ class DisplayLabelSegment:
     source_span: tuple[int, int]
     part_index: int
     source_middle: float | None
+    row: int = 0
 
 
 def display_label_segment(
@@ -26,7 +27,7 @@ def display_label_segment(
     """Choose one anchor, retaining biological parts for circular placement.
 
     Linear placement uses the longest continuous fragment, breaking ties by
-    display start and original part order. Circular placement retains the
+    the earlier row, display start and original part order. Circular placement retains the
     source part across its artificial cut and the existing origin-part join.
     No source or local feature coordinates are rewritten here.
     """
@@ -47,7 +48,7 @@ def display_label_segment(
 
     group = min(groups, key=lambda items: (
         -sum(p.fragment.display_end - p.fragment.display_start for p in items),
-        (0 if circular else min(p.fragment.display_start for p in items)),
+        (0, 0) if circular else min((p.fragment.row, p.fragment.display_start) for p in items),
         items[0].fragment.part_index,
     ))
     span = sum(p.fragment.display_end - p.fragment.display_start for p in group)
@@ -73,5 +74,5 @@ def display_label_segment(
     return DisplayLabelSegment(
         ordered[0].fragment.display_start, ordered[-1].fragment.display_end,
         middle, span, group[0].strand,
-        (anchor.source_start, anchor.source_end), anchor.part_index, source_middle,
+        (anchor.source_start, anchor.source_end), anchor.part_index, source_middle, anchor.row,
     )
