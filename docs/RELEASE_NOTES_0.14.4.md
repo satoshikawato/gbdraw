@@ -2,9 +2,11 @@
 
 # gbdraw 0.14.4 release notes
 
-gbdraw `0.14.4` is a patch release of [0.14.3](./RELEASE_NOTES_0.14.3.md). It
-fixes LOSATP comparisons of circular records that have a CDS across the
-origin, which were drawn over the whole record. It also draws partial feature
+gbdraw `0.14.4` is a patch release of [0.14.3](./RELEASE_NOTES_0.14.3.md). On
+the command line and in the Python API it fixes LOSATP comparisons of circular
+records that have a CDS across the origin, which were drawn over the whole
+record; the Web app still draws them so (see [Known issues](#known-issues)). It
+also draws partial feature
 ends open (no arrowhead, no edge stroke), adds similarity-ring color schemes to
 the command line and the Python API, and applies more Web app settings to the
 shown Result as soon as you commit a value. LOSATP Collinear blocks are now
@@ -29,7 +31,9 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   span. The blocks that are called do not change; only their drawn coordinates
   do. **Redraw** figures that show LOSATP comparisons of circular records with a
   CDS across the origin, which is typical of complete bacterial genomes from
-  RefSeq. Records without such a CDS draw the same bytes as before.
+  RefSeq. Records without such a CDS draw the same bytes as before. This fix
+  reaches the command line and the Python API only (see
+  [Known issues](#known-issues)).
 - **Collinear blocks as longest chains.** A run of collinear genes stays one
   block where it used to split into several blocks or single links: where a
   query gene has a second anchor, where a single link continues the run, and
@@ -226,6 +230,13 @@ and 0.14.4 saves Sessions as version 49, as 0.14.3 does. See
 
 ## Known issues
 
+- The 0.14.4 Web app still reads a CDS across a circular record's origin as an
+  interval over the whole record. Every LOSATP Pairwise link, Similarity group
+  link, and Collinear block that uses such a CDS is drawn over the whole record,
+  with or without a display start or a reverse complement, and a Session saved
+  by the Web app holds those rows. The Similarity alignment center is correct.
+  The command line and the Python API draw these correctly. A later release
+  fixes the Web app.
 - After **Reset Settings** on one diagram mode, the other mode's Result keeps its
   hidden labels and edited label text, and after a Session load the Legend rows of
   its removed color rules, until the next **Generate Diagram**. Since 0.14.3 at

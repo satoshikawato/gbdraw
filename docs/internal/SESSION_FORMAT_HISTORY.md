@@ -125,6 +125,21 @@ draft) (provenance in `BGC0000708-BGC0000713.v49-one-to-one.provenance.json`). I
 `tests/retired_sessions/`, outside the folders the scans of stored Sessions read, because
 they refuse a value outside the description.
 
+## Unreleased: derived LOSATP token v5 for a CDS across the origin in the Web
+
+No Session, request, or derived envelope version changes. The Web converter
+now receives each CDS's `origin_arc` and `record_length` and the record lengths
+(OV-2368), so a Web result with a CDS across a circular record's origin has new
+rows for the same inputs. The derived identity names the bindings, settings, and
+raw keys, not the protein map, so a derived entry that 0.14.4 wrote would be a
+hit with the old rows. The token becomes `derived-option-conformance-v5`:
+earlier derived entries are cache misses and are recomputed once from the raw
+cache at the next Generate; no search runs again and no reader reads them. The
+protein map itself is never saved: it lives in the page's per-file memory
+(`readOncePerFile`), and no Session field holds it, so `proteinMapSchema` and the
+Session stay as they are. The comparison tables of a saved request keep their
+rows until that Generate.
+
 ## Unreleased: derived LOSATP token v4 for chained Collinear blocks
 
 No Session, request, or derived envelope version changes. Collinear blocks are

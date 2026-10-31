@@ -2338,14 +2338,15 @@ _RECORDED_DERIVED_ENTRIES = {
     # (OV-1145: semantics v3), and when Collinear blocks became longest chains
     # and the block E-value column went (OV-2294..2296, OV-2300: semantics v4),
     # and when the default merge orientation became "strand", which "either"
-    # was a spelling of (OV-2301).
+    # was a spelling of (OV-2301), and when the Web began to carry a CDS's arc
+    # across the origin (OV-2368: semantics v5; these bytes change only by the token).
     "similarity_groups": (
-        "6b1dfc2b33423552ff2f9b6210928bf22c640619a81c5fab117ab6a3d30c2a8f",
-        "92675b3ccb5fb991e5b6baaffe892c48aae067b611911fc297d502f55b75b8cc",
+        "d129661f4cf4fb01c805ae3f4b2a412cad7a7c9df7b7ec01630c036aacb0cad0",
+        "b99221feabf1318c6287b5960c700e842de54d858ef6d45b6e3391d4bf293917",
     ),
     "collinear": (
-        "1c335911c992797b48ab4f36315726541903c150b9966e1edee418340efc2a38",
-        "154fde7cae802b09b0ff0d807edb5500f193fcb09c9242ba249808f0d678c362",
+        "edf2c145bbd0d6d8709f91ffe197121b95452ac92b37912439e81ea1d7d407e9",
+        "d506f535f5ea7c416a4072b1cf29e505859e9f23842131e88bf198bac2e8066f",
     ),
 }
 
