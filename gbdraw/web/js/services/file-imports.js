@@ -3,7 +3,6 @@ import { normalizeDefaultColor, normalizeSpecificRuleColor } from '../utils/colo
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeTsvCell } from '../utils/tsv-cell.js';
 import { CARD_ROW_MARKS } from './card-row-marks.js';
-import { BUILTIN_COLOR_TABLES } from '../builtin-color-tables.generated.js';
 /** @import { CardRowMarks } from './card-row-marks.js' */
 
 /**
@@ -117,21 +116,6 @@ export const parseColorTable = (text, { legacyRows = false } = {}) => {
 
   return { colors, count, repairs: repairs || [] };
 };
-
-/**
- * A built-in color table offered as a preset of the specific rules.
- * @typedef {{ id: string, label: string, rules: readonly Readonly<ParsedSpecificRule>[] }} SpecificRulePreset
- */
-/**
- * The built-in color tables (`gbdraw/data/color_tables/`, read by Python), by
- * name in Python's order. The CLI names the same table `-t builtin:<id>`.
- * @type {readonly SpecificRulePreset[]}
- */
-export const SPECIFIC_RULE_PRESETS = Object.freeze(Object.entries(BUILTIN_COLOR_TABLES).map(([id, table]) => Object.freeze({
-  id,
-  label: table.title,
-  rules: Object.freeze(table.rows.map(([feat, qual, val, color, cap]) => Object.freeze({ feat, qual, val, color, cap })))
-})));
 
 /** @param {string | null | undefined} text */
 export const parseSpecificRules = (text) => {

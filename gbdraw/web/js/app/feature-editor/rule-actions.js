@@ -47,7 +47,7 @@ import {
   setLegendColor
 } from '../../services/drawing/paint.js';
 /** @import { PatternDraft } from './pattern-drafts.js' */
-/** @import { SpecificRulePreset } from '../../services/file-imports.js' */
+/** @import { SpecificRulePreset } from '../../state.js' */
 /** @import { ColorFeature } from './color-actions.js' */
 
 // R13: `projectPaletteAndRules` is the composition root's projection of the

@@ -1,21 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseSpecificRules, SPECIFIC_RULE_PRESETS } from '../../gbdraw/web/js/services/file-imports.js';
+import { BUILTIN_COLOR_TABLES } from '../../gbdraw/web/js/builtin-color-tables.generated.js';
+import { parseSpecificRules } from '../../gbdraw/web/js/services/file-imports.js';
 
-// The presets are the built-in color tables of gbdraw/data/color_tables/, which
-// the CLI names `-t builtin:<id>`; the Web lists and applies them as Python reads them.
-test('the rule presets are the built-in color tables, in Python order', () => {
-  assert.deepEqual(SPECIFIC_RULE_PRESETS.map((preset) => preset.id), ['cog', 'phrog', 'plastid', 'mitochondrion']);
-  for (const preset of SPECIFIC_RULE_PRESETS) {
-    assert.ok(preset.label);
-    assert.ok(preset.rules.length > 0);
+// The Web's rule presets (state.js `specificRulePresets`) are the built-in color
+// tables of gbdraw/data/color_tables/, which the CLI names `-t builtin:<name>`.
+test('the generated tables are the built-in color tables, in Python order', () => {
+  assert.deepEqual(Object.keys(BUILTIN_COLOR_TABLES), ['cog', 'phrog', 'plastid', 'mitochondrion']);
+  for (const table of Object.values(BUILTIN_COLOR_TABLES)) {
+    assert.ok(table.title);
+    assert.ok(table.rows.length > 0);
   }
 });
 
-test('each preset holds the rows the Web reads from the same table file', () => {
-  for (const preset of SPECIFIC_RULE_PRESETS) {
-    const text = readFileSync(new URL(`../../gbdraw/data/color_tables/${preset.id}.tsv`, import.meta.url), 'utf8');
-    assert.deepEqual(preset.rules.map((rule) => ({ ...rule })), parseSpecificRules(text).rules, preset.id);
+test('each generated table holds the rows the Web reads from the same table file', () => {
+  for (const [name, table] of Object.entries(BUILTIN_COLOR_TABLES)) {
+    const text = readFileSync(new URL(`../../gbdraw/data/color_tables/${name}.tsv`, import.meta.url), 'utf8');
+    const rows = table.rows.map(([feat, qual, val, color, cap]) => ({ feat, qual, val, color, cap }));
+    assert.deepEqual(rows, parseSpecificRules(text).rules, name);
   }
 });
