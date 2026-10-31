@@ -1075,7 +1075,7 @@ one drawing never reaches another (PD-OI-090).
   rebuilds each drawing from the projection of its committed request,
   then its stored values, then its mode's defaults.
   Python alone converts a Session 27–44, once at Load (`split_draft_into_modes` in
-  `gbdraw/session_io.py`). Once the Session format holds a list of drawings, a Session 46 to 50
+  `gbdraw/session_io.py`). Once the Session format holds a list of drawings, a Session 46 to 49
   moves to the list without Python, and Load makes the drawing of a mode that has no
   Result only when the Session shows that mode was used
   (its input files, a Save while it was shown, or a setting that differs from the default
