@@ -548,7 +548,9 @@ def _fit_circular_preview(
             steps=10,
         )
         page.mouse.up()
-        # Leave the drawing, or a match or feature under the pointer shows its hover popup.
+        # The frame after a pan replays the hover at the release point; leave the drawing
+        # after it, or a match under the pointer keeps its hover popup in the screenshot.
+        page.wait_for_timeout(250)
         page.mouse.move(VIEWPORT_WIDTH - 40, VIEWPORT_HEIGHT - 30)
     page.evaluate("() => window.getSelection()?.removeAllRanges()")
 
