@@ -224,7 +224,7 @@ options:
   --display_start_coordinate DISPLAY_START_COORDINATE
                         1-based source coordinate at the display start;
                         requires one complete circular record.
-  --gbk [GBK_FILE ...]  GenBank/DDBJ flat file
+  --gbk [GBK_FILE ...]  GenBank, DDBJ, or EMBL flat file
   --gff [GFF3_FILE ...]
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
@@ -1169,7 +1169,7 @@ options:
   --display_start_coordinate DISPLAY_START_COORDINATE
                         1-based source coordinate at the display start;
                         requires one complete circular record.
-  --gbk [GBK_FILE ...]  GenBank/DDBJ flat file
+  --gbk [GBK_FILE ...]  GenBank, DDBJ, or EMBL flat file
   --gff [GFF3_FILE ...]
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]

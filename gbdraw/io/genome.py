@@ -4,6 +4,7 @@
 import os
 import logging
 from contextlib import contextmanager
+from itertools import chain
 from collections import Counter
 from collections.abc import Set as AbstractSet
 from typing import List, Dict
@@ -13,6 +14,14 @@ from Bio.SeqFeature import CompoundLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from BCBio import GFF
 
+from .input_text import (
+    FLAT_FILE_FORMAT_NAMES,
+    FlatFileFormat,
+    canonicalize_feature_types,
+    flat_file_format,
+    flat_file_stream,
+    gff3_stream,
+)
 from .record_select import parse_record_selector, reverse_records, select_record
 from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationError
 
@@ -27,6 +36,20 @@ _DUPLICATE_FASTA_IDS = {"code": "INPUT_INVALID", "field": "fasta", "reason": "UN
 # OV-1257: a GFF3/FASTA pair whose slot file holds no entry says which slot.
 _GFF_WITHOUT_FEATURES = {"code": "NO_RECORDS", "reason": "GFF_NO_FEATURES"}
 _FASTA_WITHOUT_ENTRIES = {"code": "NO_RECORDS", "reason": "FASTA_NO_ENTRIES"}
+_SEQUENCE_UNDEFINED = {"code": "INPUT_UNREADABLE", "reason": "SEQUENCE_UNDEFINED"}
+_FLAT_FILE_KINDS = "GenBank, DDBJ or EMBL flat file"
+# What a file without a record is, by the reason of its NO_RECORDS diagnostic.
+_ABSENCE_MESSAGES = {
+    "EMPTY_FILE": "{path} is empty: it has no " + _FLAT_FILE_KINDS + " record.",
+    "FASTA_IN_GENBANK": (
+        "{path} is a FASTA file, not a " + _FLAT_FILE_KINDS + ". "
+        "Give a FASTA file together with its GFF3 file (--gff with --fasta)."
+    ),
+    "NOT_GENBANK": (
+        "{path} is not a " + _FLAT_FILE_KINDS + ": no line starts a record with "
+        "'LOCUS' (GenBank, DDBJ) or 'ID   ' (EMBL)."
+    ),
+}
 
 
 def _parser_reason(error: BaseException) -> str:
@@ -36,7 +59,7 @@ def _parser_reason(error: BaseException) -> str:
 
 
 def genbank_absence_diagnostic(path: str) -> dict[str, str]:
-    """The NO_RECORDS diagnostic of a GenBank/DDBJ file that has no record (UJ-07).
+    """The NO_RECORDS diagnostic of a GenBank/DDBJ/EMBL file that has no record (UJ-07).
 
     Its first non-blank line tells an empty file, a FASTA file, and other text apart.
     """
@@ -56,6 +79,55 @@ def genbank_read_diagnostic(path: str) -> dict[str, str]:
     with open(path, "rb") as handle:
         compressed = handle.read(2) == b"\x1f\x8b"
     return {"code": "INPUT_UNREADABLE", "reason": "GZIP_INPUT" if compressed else "GENBANK_PARSE"}
+
+
+def read_flat_file_records(path: str) -> list[SeqRecord]:
+    """Every record of one GenBank, DDBJ or EMBL flat file, in file order: the one flat-file parse.
+
+    The first non-blank line names the format (an ``ID`` line is EMBL). The text
+    reaches Biopython through :func:`gbdraw.io.input_text.flat_file_stream`, and each
+    feature type gets its INSDC spelling. A file the parser refuses raises
+    ``ParseError`` (``INPUT_UNREADABLE``); a file without a record raises
+    ``ValidationError`` (``NO_RECORDS``) that says what the file is instead.
+    """
+
+    fmt: FlatFileFormat = "genbank"
+    with open(path) as handle:
+        lines = iter(handle.readline, "")
+        head: list[str] = []
+        try:  # A file that is not text (gzip) stops at its first line: UnicodeDecodeError is a ValueError.
+            for line in lines:
+                head.append(line)
+                if line.strip():
+                    break
+            fmt = flat_file_format(head[-1] if head else "")
+            records = list(SeqIO.parse(flat_file_stream(chain(head, lines), fmt), fmt))
+        except ValueError as e:
+            name = FLAT_FILE_FORMAT_NAMES[fmt]
+            raise ParseError(
+                f"The {name} parser stopped: {_parser_reason(e)}. "
+                f"Error parsing {name} file {path}. It may be corrupt or in the wrong format.",
+                diagnostic=genbank_read_diagnostic(path),
+            ) from e
+    if not records:
+        diagnostic = genbank_absence_diagnostic(path)
+        raise ValidationError(_ABSENCE_MESSAGES[diagnostic["reason"]].format(path=path), diagnostic=diagnostic)
+    for record in records:
+        canonicalize_feature_types(record.features)
+    return records
+
+
+def require_record_sequence(record: SeqRecord, source: str) -> None:
+    """Stop at a record that has no sequence to draw (a CONTIG line, or no ORIGIN sequence)."""
+
+    if getattr(record.seq, "defined", True):
+        return
+    raise ValidationError(
+        f"Record {record.id} in {os.path.basename(source)} has no sequence: the file gives a CONTIG line "
+        "or no ORIGIN sequence in its place. Download the record with its sequence (NCBI: 'GenBank (full)', "
+        "rettype=gbwithparts), or give the sequence as GFF3 + FASTA (--gff with --fasta).",
+        diagnostic=_SEQUENCE_UNDEFINED,
+    )
 
 
 def _attach_source_annotations(record: SeqRecord, source_file: str) -> None:
@@ -87,7 +159,7 @@ def load_gbks(
             raise InputFileError(f"File does not exist or is not accessible: {gbk_file}")
         try:
             logger.info("INFO: Loading GenBank file {}".format(gbk_file))
-            records_list = list(SeqIO.parse(gbk_file, "genbank"))
+            records_list = read_flat_file_records(gbk_file)
             selector_raw = (
                 record_selectors[file_idx]
                 if record_selectors and file_idx < len(record_selectors)
@@ -111,14 +183,12 @@ def load_gbks(
                 _attach_source_annotations(record, gbk_file)
                 record_list.append(record)
                 id_list.append(record.id)
-        except ValueError as e:  # Catching common exception when parsing GenBank files
+        except GbdrawError:
+            raise
+        except ValueError as e:
             if str(e).startswith("Record selector"):
                 raise ValidationError(str(e)) from e
-            raise ParseError(
-                f"The GenBank parser stopped: {_parser_reason(e)}. "
-                f"Error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format.",
-                diagnostic=genbank_read_diagnostic(gbk_file),
-            ) from e
+            raise
         except Exception as e:  # A more generic catch-all for other unexpected issues
             raise ParseError(
                 f"Unexpected error while processing {gbk_file}: {e}"
@@ -346,6 +416,13 @@ def _gff_fasta_errors(gff_file: str, fasta_file: str):
         ) from e
     except GbdrawError:
         raise
+    except AssertionError as e:
+        # BCBio-GFF asserts when it cannot split an attribute column into key=value pairs.
+        raise ParseError(
+            f"The GFF3 parser (BCBio-GFF) could not split an attribute column of {gff_file} "
+            f"into key=value pairs: {e}. Separate the attributes with ';' and write each as key=value.",
+            diagnostic=_UNREADABLE_INPUT,
+        ) from e
     except Exception as e:
         raise ParseError(
             f"Unexpected error while processing {gff_file} or {fasta_file}: {e}"
@@ -412,7 +489,11 @@ def parse_gff_fasta(
             raise InputFileError(f"File does not exist or is not accessible: {path}")
     with _gff_fasta_errors(gff_file, fasta_file):
         logger.info("INFO: Loading GFF3 file {}".format(gff_file))
-        gff_records = [_normalize_gff3_multipart_features(record) for record in GFF.parse(gff_file)]
+        with open(gff_file) as gff_handle:
+            gff_records = list(GFF.parse(gff3_stream(iter(gff_handle.readline, ""))))
+        for record in gff_records:
+            canonicalize_feature_types(record.features)
+            _normalize_gff3_multipart_features(record)
         if not gff_records:
             raise ValidationError(f"GFF3 file {gff_file} has no feature lines.", diagnostic=_GFF_WITHOUT_FEATURES)
         catalogs = {
@@ -504,6 +585,8 @@ def load_gff_fasta(
 
 __all__ = [
     "load_gbks",
+    "read_flat_file_records",
+    "require_record_sequence",
     "parse_gff_fasta",
     "read_sequence_file_records",
     "record_sequence_text",

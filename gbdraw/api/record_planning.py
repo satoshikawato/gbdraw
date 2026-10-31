@@ -40,7 +40,7 @@ from gbdraw.io.cli_tables import (
     read_records_table,
 )
 from gbdraw.io.comparisons import read_comparison_resource
-from gbdraw.io.genome import filter_features_by_type, load_gbks, parse_gff_fasta
+from gbdraw.io.genome import filter_features_by_type, load_gbks, parse_gff_fasta, require_record_sequence
 from gbdraw.io.record_select import (
     RecordSelector,
     parse_record_selector,
@@ -1439,6 +1439,7 @@ def resolve_record_inputs(
         expands = len(source_indexes) > 1
         for source_record_index in source_indexes:
             source_record = raw_records[source_record_index]
+            require_record_sequence(source_record, source_paths[0] if source_paths else "the record input")
             if source_kind == "gff_fasta":
                 source_record = filter_features_by_type(
                     source_record, gff_types, source_indexes=_feature_source_index_map(source_record.features),

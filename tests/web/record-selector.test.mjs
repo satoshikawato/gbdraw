@@ -26,7 +26,8 @@ const {
   discoverGffFastaRecords,
   discoverSequenceRecords,
   normalizeSequenceRecords,
-  parseSequenceRecordText
+  parseSequenceRecordText,
+  readAllSequenceRecords
 } = await import(pathToFileURL(join(sourceRoot, '..', 'services', 'record-discovery.js')));
 
 assert.equal(formatRecordLength(4641652), '4,641,652 bp');
@@ -154,6 +155,25 @@ await assert.rejects(
   }),
   /parse failed/
 );
+
+// A LOCUS line the browser reader cannot read exactly (a Geneious name with spaces) and an EMBL file
+// decline to the Worker, whose reader (read_flat_file_records) reads both (R4).
+for (const [name, text] of [
+  ['geneious.gb', 'LOCUS       Contig 1 edited by me       4 bp    DNA     linear   UNK 01-JAN-2020\nORIGIN\n        1 acgt\n//\n'],
+  ['records.embl', 'ID   EMBL1; SV 1; linear; DNA; STD; PRO; 4 BP.\nXX\nSQ   Sequence 4 BP;\n     acgt 4\n//\n']
+]) {
+  const helperCalls = [];
+  const all = await readAllSequenceRecords(
+    { name, arrayBuffer: async () => new TextEncoder().encode(text).buffer },
+    'genbank',
+    async (operation) => {
+      helperCalls.push(operation);
+      return { result: { records: [{ id: 'FROM_WORKER', aliases: ['FROM_WORKER'], sequence: 'ACGT' }] } };
+    }
+  );
+  assert.deepEqual(all.map(({ id }) => id), ['FROM_WORKER'], name);
+  assert.deepEqual(helperCalls, ['readAllSequenceRecords'], name);
+}
 
 const ref = (value) => ({ value });
 const fileA = { name: 'a.gb' };

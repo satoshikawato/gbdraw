@@ -855,7 +855,8 @@ const allSequenceRecordsFromReply = (payload) => {
  */
 export const readAllSequenceRecords = (file, fmt, runHelperOperation = runDiagramHelperOperation) => (
   readOncePerFile([file], `all-sequence-records:${fmt}`, async () => {
-    const { records } = await readParsedSequenceRecords(file, fmt);
+    // A browser read that throws (a LOCUS line it cannot read exactly) declines to the Worker too (R4).
+    const { records } = await readParsedSequenceRecords(file, fmt).catch(() => ({ records: null }));
     if (records && await fastPathRecords([file], (text) => parseSequenceRecordText(text, fmt))) return records;
     const { result } = await runHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_ALL_SEQUENCE_RECORDS, {
       format: fmt, files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }]
