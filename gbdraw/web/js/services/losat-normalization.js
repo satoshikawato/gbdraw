@@ -13,7 +13,16 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @typedef {'collinearityUnitMode' | 'collinearityAnchorMode' | 'collinearitySearchScope'
  *   | 'collinearityColorMode' | 'orthogroupMembershipMode'} ComparisonSettingName
  */
-const COMPARISON_SETTINGS = /** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types.CanonicalProteinComparisonSettings).fields;
+const COMPARISON_SETTINGS_SHAPE = /** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types.CanonicalProteinComparisonSettings);
+const COMPARISON_SETTINGS = COMPARISON_SETTINGS_SHAPE.fields;
+/**
+ * What a stored comparison without the inference flag held (its description
+ * default): it inferred its Collinear groups. A fresh draft reads
+ * `FRESH_PROTEIN_COMPARISON_DEFAULTS` instead.
+ */
+export const ABSENT_COLLINEAR_INFER_ORTHOGROUPS = /** @type {boolean} */ (
+  /** @type {NonNullable<ObjectShape['defaults']>} */ (COMPARISON_SETTINGS_SHAPE.defaults).collinearInferOrthogroups
+);
 /**
  * Each of the five is a literal with spellings (tests/web/current-option-values.test.mjs).
  * @param {ComparisonSettingName} name
@@ -34,16 +43,16 @@ export const readComparisonSetting = (name, value) => (
 
 /**
  * The name of setting `name` that `value` spells; a value Python does not read
- * is refused, naming the setting by `label`.
+ * is refused with the diagnostic of its input `field`.
  * @template {ComparisonSettingName} K
  * @param {K} name
  * @param {unknown} value
- * @param {string} label
+ * @param {string} field
  * @returns {CanonicalProteinComparisonSettings[K]}
  */
-export const requireComparisonSetting = (name, value, label) => {
+export const requireComparisonSetting = (name, value, field) => {
   const read = readComparisonSetting(name, value);
-  if (read === null) throw new Error(`${label} must be one of: ${settingShape(name).values.join(', ')}.`);
+  if (read === null) throw diagnosticError('INPUT_INVALID', { field, reason: field.toUpperCase() });
   return read;
 };
 

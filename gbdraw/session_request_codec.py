@@ -26,6 +26,7 @@ from typing import (
     NamedTuple,
     NoReturn,
     Sequence,
+    TypedDict,
     Union,
     cast,
     get_args,
@@ -5411,6 +5412,33 @@ def _as_decoded_settings(payload: object) -> object:
     return {**payload, "comparisons": read}
 
 
+class FreshProteinHitLimits(TypedDict):
+    candidateLimit: int | None
+    orthogroupMemberMaxHits: int | None
+
+
+class FreshProteinComparisonDefaults(TypedDict):
+    collinearInferOrthogroups: bool
+    hitLimits: FreshProteinHitLimits
+
+
+def describe_fresh_protein_comparison() -> FreshProteinComparisonDefaults:
+    """What a new protein comparison holds, from the Python options.
+
+    The Web's fresh draft reads these. A stored request without the inference
+    flag reads ``_ABSENT_PROTEIN_SETTINGS`` instead, which stays on when this
+    default changes.
+    """
+
+    return {
+        "collinearInferOrthogroups": _DEFAULT_LINEAR_OPTIONS.collinear_infer_orthogroups,
+        "hitLimits": {
+            "candidateLimit": _UNSET_LOSAT_SEARCH.losatp_max_target_seqs,
+            "orthogroupMemberMaxHits": _UNSET_LOSAT_SEARCH.losatp_member_max_hits,
+        },
+    }
+
+
 def describe_legacy_request_tables() -> dict[str, Any]:
     """The tables of the request schemas 1-2 reading, with wire names.
 
@@ -5923,6 +5951,7 @@ __all__ = [
     "decode_canonical_request",
     "describe_canonical_request",
     "describe_canonical_typed_resources",
+    "describe_fresh_protein_comparison",
     "describe_legacy_request_tables",
     "encode_canonical_table",
     "encode_canonical_typed_resource",

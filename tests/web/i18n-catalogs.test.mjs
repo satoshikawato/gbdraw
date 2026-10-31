@@ -5,7 +5,8 @@
 // literal (that is a `t()` call), on a `tmx()` given a literal text (that is
 // a `tx()` call), on a catalog key that no call produces, on a translation
 // whose placeholders differ from the English, and on a value that is not a
-// string. It prints the coverage of each locale without failing: a new key
+// string, or, for a form of a `tn()` pair only, an object of plural forms
+// (`PluralForms` in utils/i18n.js). It prints the coverage of each locale without failing: a new key
 // ships in English until the batch translation before a release, and the
 // release tier requires every key (`node tools/i18n/sync.mjs status
 // --require-complete`, .claude/skills/translate-web-ui/SKILL.md).
@@ -16,7 +17,8 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 import {
-  CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale, uiLocaleOf
+  CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, pluralTranslation, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
+  uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
 import { memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
 import { CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, catalogStatus } from '../../tools/i18n/catalogs.mjs';
@@ -258,8 +260,18 @@ test('every t(), tn() and tx() call in the Web UI has a literal key', () => {
   assert.deepEqual(problems, []);
 });
 
+/**
+ * Source keys for the catalog check, each its own English: `[key]` for a
+ * plain key, `[one, other]` for the two forms of a tn() pair.
+ * @param {...string[]} groups
+ */
+const keysOf = (...groups) => new Map(groups.flatMap((group) => {
+  const plural = group.length === 2 ? { one: group[0], other: group[1] } : null;
+  return group.map((key) => [key, { key, english: key, plural }]);
+}));
+
 test('catalog check: placeholder sets and non-string or empty values; a stale key is no problem', () => {
-  const english = new Map([['Save Session', 'Save Session'], ['{count} rows', '{count} rows']]);
+  const english = keysOf(['Save Session'], ['{count} rows']);
   assert.deepEqual(catalogProblems(english, {
     'Save Session': 'セッションを保存',
     '{count} rows': '{n} 行',
@@ -269,12 +281,39 @@ test('catalog check: placeholder sets and non-string or empty values; a stale ke
   }), [
     '"{count} rows": placeholders {n} differ from the English {count}'
   ]);
-  const withUndo = new Map([...english, ['Undo', 'Undo'], ['Blank', 'Blank']]);
+  const withUndo = new Map([...english, ...keysOf(['Undo'], ['Blank'])]);
   assert.deepEqual(catalogProblems(withUndo, { Undo: 1, Blank: ' \n' }), [
     '"Undo": the value is not a string',
     '"Blank": the translation is empty'
   ]);
   assert.deepEqual(catalogStatus(english.keys(), { 'Save Session': 'x', 'Load Session': 'y' }).stale, ['Load Session']);
+});
+
+test('catalog check: plural forms only on the `other` form of a tn() pair, with `other`, each form checked like a string', () => {
+  const english = keysOf(['{count} row', '{count} rows'], ['Save Session'], ['{count} file', '{count} files'], ['{count} item', '{count} items']);
+  assert.deepEqual(catalogProblems(english, {
+    '{count} row': '{count} запись',
+    '{count} rows': { one: '{count} запись', few: '{count} записи', many: '{count} записей', other: '{count} записи' }
+  }), [], 'an object of plural forms on the `other` form');
+  assert.deepEqual(catalogProblems(english, {
+    'Save Session': { one: 'Sitzung speichern', other: 'Sitzungen speichern' },
+    '{count} row': { one: '{count} запись', other: '{count} записи' },
+    '{count} rows': { few: '{count} записи', many: '{count} записей' },
+    '{count} items': { other: '{count} штуки', dual: '{count}', 0: 'x' },
+    '{count} files': { one: 7, few: '{n} файла', many: '  ', other: '{count} файла' }
+  }), [
+    '"Save Session": plural forms are allowed only for the other form of a tn() pair',
+    '"{count} row": plural forms are allowed only for the other form of a tn() pair',
+    '"{count} rows": the plural forms lack "other"',
+    '"{count} items": 0, dual are not plural categories',
+    '"{count} files" one: the value is not a string',
+    '"{count} files" few: placeholders {n} differ from the English {count}',
+    '"{count} files" many: the translation is empty'
+  ]);
+  assert.deepEqual(catalogProblems(english, { '{count} rows': ['{count} записи'], '{count} row': null }), [
+    '"{count} rows": the value is not a string',
+    '"{count} row": the value is not a string'
+  ], 'an array or null is no object of plural forms');
 });
 
 // A module that marks keys with msg() imports it from utils/i18n.js, or, when
@@ -302,8 +341,7 @@ test('msg() is the marker of utils/i18n.js or its identity where a test loads th
 });
 
 test('every catalog matches the keys and placeholders of the sources', async () => {
-  const { keys } = await sourceKeys();
-  const english = new Map([...keys.values()].map(({ key, english: text }) => [key, text]));
+  const { keys: english } = await sourceKeys();
   assert.deepEqual(readdirSync(CATALOG_ROOT).sort(), catalogFiles(), 'one catalog per UI language except English');
   for (const file of catalogFiles()) {
     const { default: catalog } = await import(pathToFileURL(join(CATALOG_ROOT, file)).href);
@@ -358,21 +396,26 @@ const parseLintRules = (text) => {
 };
 
 /**
- * Every value that a rule matches, with each `{name}` placeholder masked as
- * `{X}` first: a rule reads the translation, never the placeholder names.
+ * Every text of a catalog that a rule matches, each plural form on its own,
+ * with each `{name}` placeholder masked as `{X}` first: a rule reads the
+ * translation, never the placeholder names.
  * @param {readonly LintRule[]} rules
- * @param {Readonly<Record<string, string>>} catalog
+ * @param {import('../../gbdraw/web/js/utils/i18n.js').TranslationCatalog} catalog
  * @returns {LintMatch[]}
  */
-const lintMatches = (rules, catalog) => Object.entries(catalog).flatMap(([key, value]) => {
-  const masked = value.replace(PLACEHOLDER, '{X}');
-  return rules.filter((rule) => rule.pattern.test(masked)).map((rule) => ({ rule, key, value }));
-});
+const lintMatches = (rules, catalog) => Object.entries(catalog).flatMap(([key, entry]) => (
+  (typeof entry === 'string' ? [entry] : Object.values(entry)).flatMap((value) => {
+    const masked = value.replace(PLACEHOLDER, '{X}');
+    return rules.filter((rule) => rule.pattern.test(masked)).map((rule) => ({ rule, key, value }));
+  })
+));
 
 test('lint check: placeholder names are masked; a match reports its rule and key', () => {
   const rules = parseLintRules(`${LINT_COLUMNS}\nx-upload\t\\bupload\\b\tui\tWrite Unggah.\terror\nx-dots\t\\.\\.\\.\tu\tWrite one ….\twarn\n`);
   assert.deepEqual(lintMatches(rules, { 'Upload {upload}': 'Unggah {upload}', 'Upload': 'Upload', 'Wait...': 'Tunggu...' })
     .map(({ rule, key }) => [rule.id, rule.severity, key]), [['x-upload', 'error', 'Upload'], ['x-dots', 'warn', 'Wait...']]);
+  assert.deepEqual(lintMatches(rules, { '{count} uploads': { few: '{count} upload', many: 'Tunggu...', other: 'x' } })
+    .map(({ rule, value }) => [rule.id, value]), [['x-upload', '{count} upload'], ['x-dots', 'Tunggu...']], 'every plural form is read');
   assert.throws(() => parseLintRules('id\tregex\n'));
   assert.throws(() => parseLintRules(`${LINT_COLUMNS}\nx\ta\tu\tm\tinfo\n`));
 });
@@ -729,11 +772,38 @@ test('the shown locale\'s plural rules pick the form, and the English text of th
     // A missing translation shows the form English picks.
     await setUiLocale('fr', async () => ({ default: { '{count} rows': 'other:{count}' } }));
     assert.deepEqual(forms([0, 1, 2]), ['0 rows', '1 row', 'other:2']);
+    // With an object on the `other` form, the `one` form is the text for exactly 1 and every other count takes the
+    // object's text of its category, else its `other`: fr selects `one` for 0 and `many` for 1000000.
+    await setUiLocale('fr', async () => ({ default: { '{count} row': 'one:{count}', '{count} rows': { many: 'many:{count}', other: 'other:{count}' } } }));
+    assert.deepEqual(forms([0, 1, 2, 1000000]), ['other:0', 'one:1', 'other:2', 'many:1000000']);
     await setUiLocale(SOURCE_LOCALE);
     assert.deepEqual(forms([0, 1]), ['0 rows', '1 row'], 'English again after a switch back');
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }
+});
+
+test('a language with few and many forms: the `one` form is the text for exactly 1, the object on the `other` form gives every other count', () => {
+  // Russian (Intl.PluralRules('ru')): one for 1, 21 and 31, few for 2-4 and 22, many for 0, 5, 11 and 25. A `one`
+  // text without {count} ("From this color rule:") must not show for 21, so 21 takes the object's `one`.
+  const russian = new Intl.PluralRules('ru');
+  const catalog = Object.freeze({
+    '{count} row': 'exactly-one:{count}',
+    '{count} rows': Object.freeze({ one: 'one:{count}', few: 'few:{count}', many: 'many:{count}', other: 'other:{count}' })
+  });
+  const shown = (entries, counts) => counts.map((count) => pluralTranslation(russian, entries, count, '{count} row', '{count} rows'));
+  assert.deepEqual(shown(catalog, [1, 21, 31, 2, 3, 4, 22, 0, 5, 11, 25]), [
+    'exactly-one:{count}', 'one:{count}', 'one:{count}', 'few:{count}', 'few:{count}', 'few:{count}', 'few:{count}',
+    'many:{count}', 'many:{count}', 'many:{count}', 'many:{count}'
+  ]);
+  assert.equal(pluralTranslation(russian, catalog, 1.5, '{count} row', '{count} rows'), 'other:{count}', 'a fraction takes `other`');
+  assert.deepEqual(shown({ '{count} row': 'exactly-one', '{count} rows': { few: 'few', many: 'many', other: 'other' } }, [1, 21, 2]),
+    ['exactly-one', 'other', 'few'], 'a category the object leaves out takes `other`; the `one` form shows only for 1');
+  assert.deepEqual(shown({ '{count} rows': { one: 'one', other: 'other' } }, [1, 21]), [null, 'one'], 'a missing `one` form leaves 1 to the English');
+  // String values keep the category rule: the `one` form for every count the rules call `one`.
+  assert.deepEqual(shown({ '{count} row': 'one:{count}', '{count} rows': 'rows:{count}' }, [1, 21, 2, 5]), ['one:{count}', 'one:{count}', 'rows:{count}', 'rows:{count}']);
+  assert.deepEqual(shown({ '{count} rows': 'rows:{count}' }, [1, 2, 5]), [null, 'rows:{count}', 'rows:{count}'],
+    'a string value shows for few and many; a missing key is null, and tn() shows the English');
 });
 
 test('every `one` text of a tn() call is a catalog key', () => {

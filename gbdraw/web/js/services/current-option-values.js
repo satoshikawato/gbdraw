@@ -1,7 +1,7 @@
 // @ts-check
 import { DEFAULT_FEATURE_RENDERINGS, normalizeFeatureRendering, normalizedPersistedArrowGeometryState } from '../utils/feature-rendering.js';
 import { renameLegacyLinearLabelVisibility, requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
-import { requireCollinearMergeOrientation, requireComparisonSetting } from './losat-normalization.js';
+import { ABSENT_COLLINEAR_INFER_ORTHOGROUPS, requireCollinearMergeOrientation, requireComparisonSetting } from './losat-normalization.js';
 import { integerSettingOr } from '../utils/optional-positive-number.js';
 
 /**
@@ -116,12 +116,12 @@ export const requireCurrentProteinBlastpMode = (value) => (
 
 /** @param {unknown} value */
 export const requireCurrentCollinearSearchScope = (value) => (
-  requireComparisonSetting('collinearitySearchScope', value, 'Collinear search scope')
+  requireComparisonSetting('collinearitySearchScope', value, 'collinear_search_scope')
 );
 
-// Older saved pipelines omit this field; fresh Web state explicitly supplies false.
+// Older saved pipelines omit this field; fresh Web state supplies its default explicitly.
 /** @param {unknown} [value] */
-export const requireCurrentCollinearInferOrthogroups = (value = true) => {
+export const requireCurrentCollinearInferOrthogroups = (value = ABSENT_COLLINEAR_INFER_ORTHOGROUPS) => {
   if (typeof value !== 'boolean') {
     throw new Error('Collinear orthogroup inference must be a boolean.');
   }
@@ -213,12 +213,12 @@ export const paralogLinksFor = (blastpMode, value) => (
 
 /** @param {unknown} value */
 export const requireCurrentCollinearUnitMode = (value) => (
-  requireComparisonSetting('collinearityUnitMode', value, 'Collinear unit mode')
+  requireComparisonSetting('collinearityUnitMode', value, 'collinear_unit_mode')
 );
 
 /** @param {unknown} value */
 export const requireCurrentCollinearAnchorMode = (value) => (
-  requireComparisonSetting('collinearityAnchorMode', value, 'Collinear anchor mode')
+  requireComparisonSetting('collinearityAnchorMode', value, 'collinear_anchor_mode')
 );
 
 /** @param {unknown} value */
@@ -226,12 +226,12 @@ export const requireCurrentCollinearMergeOrientation = requireCollinearMergeOrie
 
 /** @param {unknown} value */
 export const requireCurrentCollinearColorMode = (value) => (
-  requireComparisonSetting('collinearityColorMode', value, 'Collinear color mode')
+  requireComparisonSetting('collinearityColorMode', value, 'collinear_color_mode')
 );
 
 /** @param {unknown} value */
 export const requireCurrentOrthogroupMembershipMode = (value) => (
-  requireComparisonSetting('orthogroupMembershipMode', value, 'Protein BLASTP orthogroup membership mode')
+  requireComparisonSetting('orthogroupMembershipMode', value, 'orthogroup_membership_mode')
 );
 
 /** @param {unknown} value */

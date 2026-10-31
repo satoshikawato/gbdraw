@@ -302,6 +302,15 @@ export const SESSION_DRAWINGS_LAYOUT = Object.freeze({
   drawingResourceFields: Object.freeze(['renderRequest', 'webFiles', 'results'])
 });
 
+// gbdraw/session_request_codec.py: describe_fresh_protein_comparison()
+export const FRESH_PROTEIN_COMPARISON_DEFAULTS = Object.freeze({
+  collinearInferOrthogroups: false,
+  hitLimits: Object.freeze({
+    candidateLimit: null,
+    orthogroupMemberMaxHits: null
+  })
+});
+
 // gbdraw/core/record_metadata.py: organism_name_rule_data()
 export const ORGANISM_NAME_RULE = Object.freeze({
   nonOrganismNames: Object.freeze(['artificial sequence', 'cloning vector', 'expression vector', 'synthetic construct', 'unidentified', 'unidentified cloning vector', 'unidentified organism', 'unknown', 'unknown organism', 'vector']),

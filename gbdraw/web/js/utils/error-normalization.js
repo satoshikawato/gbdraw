@@ -507,12 +507,7 @@ for (const [label, field, options] of [
   ['Circular multi-record size mode', 'circular_multi_record_size_mode', 'auto, linear, equal'],
   ['Linear track layout', 'linear_track_layout', 'above, middle, below'],
   ['Linear label placement', 'linear_label_placement', 'auto, above_feature'],
-  ['Protein BLASTP mode', 'protein_blastp_mode', 'pairwise, orthogroup, collinear'],
-  ['Collinear search scope', 'collinear_search_scope', 'adjacent, all'],
-  ['Collinear unit mode', 'collinear_unit_mode', 'auto, cds, locus'],
-  ['Collinear anchor mode', 'collinear_anchor_mode', 'all, rbh'],
-  ['Collinear color mode', 'collinear_color_mode', 'average_identity, orientation, orientation_identity'],
-  ['Protein BLASTP orthogroup membership mode', 'orthogroup_membership_mode', 'anchor_core_v1']
+  ['Protein BLASTP mode', 'protein_blastp_mode', 'pairwise, orthogroup, collinear']
 ]) {
   NATIVE_VALIDATIONS.set(`${label} must be one of: ${options}.`,
     { code: 'INPUT_INVALID', stage: 'request-validation', context: { field, reason: field.toUpperCase() } });

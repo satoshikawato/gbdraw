@@ -8,6 +8,7 @@ import {
   requireCurrentCircularMultiRecordSizeMode,
   requireCurrentCollinearAnchorMode,
   requireCurrentCollinearColorMode,
+  requireCurrentCollinearInferOrthogroups,
   requireCurrentCollinearMaxConflicts,
   requireCurrentCollinearMaxDiagonalDrift,
   requireCurrentCollinearMaxParalogLinks,
@@ -26,6 +27,7 @@ import {
   requireCurrentWebStateFieldNames
 } from '../../gbdraw/web/js/services/current-option-values.js';
 import {
+  ABSENT_COLLINEAR_INFER_ORTHOGROUPS,
   readCollinearAnchorMode,
   readCollinearColorMode,
   readCollinearSearchScope,
@@ -69,7 +71,7 @@ assert.throws(() => requireCurrentProteinBlastpMode('similarity'), /Protein BLAS
 assert.equal(requireCurrentCollinearSearchScope(), 'adjacent');
 assert.equal(requireCurrentCollinearSearchScope('adjacent'), 'adjacent');
 assert.equal(requireCurrentCollinearSearchScope('all'), 'all');
-assert.throws(() => requireCurrentCollinearSearchScope('all-records'), /search scope/i);
+assert.throws(() => requireCurrentCollinearSearchScope('all-records'), /COLLINEAR_SEARCH_SCOPE/);
 
 for (const [validator, validValues, invalidValue] of [
   [requireCurrentCollinearUnitMode, ['auto', 'cds', 'locus'], 'gene'],
@@ -164,6 +166,28 @@ assert.throws(
   }),
   /collinearMaxGeneGap is obsolete/
 );
+
+// A stored draft without the inference flag inferred its Collinear groups: the
+// absent reading of the generated description, not the fresh default (off).
+assert.equal(ABSENT_COLLINEAR_INFER_ORTHOGROUPS, true);
+assert.equal(requireCurrentCollinearInferOrthogroups(undefined), ABSENT_COLLINEAR_INFER_ORTHOGROUPS);
+assert.equal(requireCurrentCollinearInferOrthogroups(false), false);
+
+// A comparison setting refuses with a diagnostic, not a message that repeats
+// the setting's value list for the error table to match.
+for (const [require, field] of /** @type {const} */ ([
+  [requireCurrentCollinearSearchScope, 'collinear_search_scope'],
+  [requireCurrentCollinearUnitMode, 'collinear_unit_mode'],
+  [requireCurrentCollinearAnchorMode, 'collinear_anchor_mode'],
+  [requireCurrentCollinearColorMode, 'collinear_color_mode'],
+  [requireCurrentOrthogroupMembershipMode, 'orthogroup_membership_mode']
+])) {
+  assert.throws(() => require('banana'), (error) => {
+    assert.equal(error.code, 'INPUT_INVALID', field);
+    assert.deepEqual(error.context, { field, reason: field.toUpperCase() });
+    return true;
+  });
+}
 
 // A draft that holds the removed anchor mode one_to_one, or a spelling of it,
 // loads it as rbh with a Load row (OV-2303).

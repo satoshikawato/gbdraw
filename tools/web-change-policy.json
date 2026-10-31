@@ -202,6 +202,86 @@
       "package": "@fontsource/inter",
       "version": "5.2.8",
       "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-latin-ext-300-normal.woff2",
+      "change": "add",
+      "sha256": "b11def546ac052fad7993e39c53801b55af99b0fd51a9ac0e72884b5c3fcaa3f",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-latin-ext-400-normal.woff2",
+      "change": "add",
+      "sha256": "6744a7f509ebc6ab220a6cd4ea77e898adf014f03d88dcda5d45d8a9feefb4e9",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-latin-ext-500-normal.woff2",
+      "change": "add",
+      "sha256": "2c6fbc42d315528beb06c1096df45487bf4186c4b78b8111d12c9c951f8acca2",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-latin-ext-600-normal.woff2",
+      "change": "add",
+      "sha256": "e4bdf67b0cd15ca9e184509275be95db942195d3cc2b17f6a0452f2adf75d0bf",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-latin-ext-700-normal.woff2",
+      "change": "add",
+      "sha256": "143f9504f1377012aa3e39c90c4354ef429cb0494b9ac0e1437f1a81e5412236",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-cyrillic-300-normal.woff2",
+      "change": "add",
+      "sha256": "2f4d3f2e59e0dd665765f7e6d52f0cd8173a1ec1732b544622e3a4780ad3877c",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-cyrillic-400-normal.woff2",
+      "change": "add",
+      "sha256": "f0bb586459ce8f09b238285040f17e3e9e9538b2c5a7aae0775194e33c36c3c3",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-cyrillic-500-normal.woff2",
+      "change": "add",
+      "sha256": "b77a86ec16aadc157f4a99e8898d71cd75ea264753d9bdf13f962f8c3988cbb0",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-cyrillic-600-normal.woff2",
+      "change": "add",
+      "sha256": "6c2a37f82a676bcd441b735e4e2cda4edb8873a059ab9c362a84f0711f257041",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
+    },
+    {
+      "path": "gbdraw/web/vendor/fonts/inter/inter-cyrillic-700-normal.woff2",
+      "change": "add",
+      "sha256": "5917871d3cc970d8ce195101cbf65c1f68ec948022eb6070030342bb7edfb3bb",
+      "package": "@fontsource/inter",
+      "version": "5.2.8",
+      "source": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.2.8.tgz"
     }
   ],
   "persistedContractCoChange": {

@@ -455,7 +455,8 @@ def test_the_web_adapter_reads_js_null_and_blank_settings_as_unset() -> None:
         "mode": "collinear", "collinearMinAnchors": "", "collinearMaxUnitGap": "null",
         "collinearMaxConflictsInMergeGap": None, "collinearUnitMode": "undefined",
         "orthogroupMemberMaxHits": JsUndefined(), "collinearMaxParalogLinksPerOrthogroup": " ",
-    }) == normalize_derived_losatp_settings(mode="collinear")
+        "collinearInferOrthogroups": False,
+    }) == normalize_derived_losatp_settings(mode="collinear", infer_orthogroups=False)
 
 
 def test_the_paralog_link_limit_reaches_a_similarity_groups_identity() -> None:
