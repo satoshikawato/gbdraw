@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Mapping, NamedTuple, Sequence, cast
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.session_drawings import DraftConfig, session_with_stored_settings_replaced
 from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     FLAT_DRAFT_TOP_LEVEL_FIELDS,
@@ -553,6 +554,39 @@ def _split_session_adjunct(
     ))[0]
 
 
+def _draft_config_with_current_anchor_mode(config: DraftConfig, path: str) -> DraftConfig:
+    """``config`` with the anchor mode the Linear settings bind
+    (``losat.blastp.collinearAnchorMode``) read as its replacement."""
+
+    from gbdraw.session_request_codec import read_retired_anchor_mode
+
+    losat = config.get("losat")
+    if not isinstance(losat, Mapping):
+        return config
+    blastp = losat.get("blastp")
+    if not isinstance(blastp, Mapping) or "collinearAnchorMode" not in blastp:
+        return config
+    mode = read_retired_anchor_mode(blastp["collinearAnchorMode"], path=f"{path}.losat.blastp.collinearAnchorMode")
+    return {**config, "losat": {**losat, "blastp": {**blastp, "collinearAnchorMode": mode}}}
+
+
+def session_with_current_anchor_modes(session: Mapping[str, object]) -> dict[str, object]:
+    """``session`` with each retired spelling of the Collinear anchor mode
+    replaced, in the requests and drafts, each replacement logged as a warning.
+
+    Kept as stored: ``cliInvocation.args``, the identities of derived entries,
+    and draft values that are not a retired spelling.
+    """
+
+    from gbdraw.session_request_codec import request_with_current_anchor_modes
+
+    return session_with_stored_settings_replaced(
+        session,
+        request=request_with_current_anchor_modes,
+        draft_config=_draft_config_with_current_anchor_mode,
+    )
+
+
 def with_current_artifacts(
     fields: Mapping[str, Any],
     *,
@@ -611,6 +645,7 @@ __all__ = [
     "legacy_source_reads",
     "log_session_draft_migration",
     "project_session_adjunct_for_current_write",
+    "session_with_current_anchor_modes",
     "read_legacy_source_features",
     "replace_current_derived_feature_state",
     "with_current_artifacts",
