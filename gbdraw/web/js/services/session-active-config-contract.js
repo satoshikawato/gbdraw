@@ -18,7 +18,7 @@ import { validateRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
-import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+import { FRESH_PROTEIN_COMPARISON_DEFAULTS, ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION } from './losat-normalization.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 // The Feature overlap tolerance of a new drawing, in bp.
@@ -110,9 +110,9 @@ export const createDefaultAdv = (mode = 'circular') => ({
   outer_label_x_offset: null, outer_label_y_offset: null, inner_label_x_offset: null, inner_label_y_offset: null
 });
 export const createDefaultLosatpHitLimits = () => ({
-  pairwise: { candidateLimit: null, orthogroupMemberMaxHits: null },
-  orthogroup: { candidateLimit: null, orthogroupMemberMaxHits: null },
-  collinear: { candidateLimit: null, orthogroupMemberMaxHits: null }
+  pairwise: { ...FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits },
+  orthogroup: { ...FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits },
+  collinear: { ...FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits }
 });
 // How LOSAT runs: one app-level setting for both drawings (Session `ui.losatExecution`).
 export const createDefaultLosatExecution = () => ({
@@ -120,8 +120,9 @@ export const createDefaultLosatExecution = () => ({
 });
 export const createDefaultLosat = () => ({
   outfmt: '6',
-  blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: null, orthogroupMembershipMode: ORTHOGROUP_INFERENCE_VERSION,
-    orthogroupMemberMaxHits: null, collinearInferOrthogroups: false, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
+  blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits.candidateLimit, orthogroupMembershipMode: ORTHOGROUP_INFERENCE_VERSION,
+    orthogroupMemberMaxHits: FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits.orthogroupMemberMaxHits,
+    collinearInferOrthogroups: /** @type {boolean} */ (FRESH_PROTEIN_COMPARISON_DEFAULTS.collinearInferOrthogroups), collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
     collinearUnitMode: 'auto', collinearAnchorMode: DEFAULT_COLLINEAR_ANCHOR_MODE, collinearMergeOrientation: DEFAULT_MERGE_ORIENTATION, collinearSearchScope: 'adjacent' }
 });

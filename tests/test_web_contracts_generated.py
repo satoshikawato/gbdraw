@@ -366,6 +366,40 @@ def test_a_changed_option_default_makes_the_request_shape_module_stale(
     assert 'pairwiseMatchStyle: "curve"' in generator.render_request_shape_module()
 
 
+def test_the_fresh_protein_comparison_defaults_come_from_the_python_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.session_request_codec as codec
+    from gbdraw.api.options import LinearDiagramOptions, LosatSearchOptions
+
+    generator = _generator()
+    assert codec.describe_fresh_protein_comparison() == {
+        "collinearInferOrthogroups": LinearDiagramOptions.collinear_infer_orthogroups,
+        "hitLimits": {
+            "candidateLimit": LosatSearchOptions.losatp_max_target_seqs,
+            "orthogroupMemberMaxHits": LosatSearchOptions.losatp_member_max_hits,
+        },
+    }
+    assert "FRESH_PROTEIN_COMPARISON_DEFAULTS = Object.freeze({\n  collinearInferOrthogroups: false," in (
+        generator.render_web_contracts_module()
+    )
+
+    monkeypatch.setattr(
+        codec, "_DEFAULT_LINEAR_OPTIONS", LinearDiagramOptions(collinear_infer_orthogroups=True)
+    )
+    monkeypatch.setattr(
+        codec,
+        "_UNSET_LOSAT_SEARCH",
+        LosatSearchOptions(
+            program="losatp", losatp_mode="none", losatp_max_target_seqs=9, losatp_member_max_hits=3
+        ),
+    )
+
+    module = generator.render_web_contracts_module()
+    assert "FRESH_PROTEIN_COMPARISON_DEFAULTS = Object.freeze({\n  collinearInferOrthogroups: true," in module
+    assert "candidateLimit: 9,\n    orthogroupMemberMaxHits: 3" in module
+
+
 def test_description_data_renders_any_json_key_but_the_prototype() -> None:
     generator = _generator()
 

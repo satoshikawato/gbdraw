@@ -15,6 +15,7 @@ const {
   validateImportedCircularTrackSlots
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+const { FRESH_PROTEIN_COMPARISON_DEFAULTS } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { normalizeCurrentPairwiseMatchStyle } = await import(
   '../../gbdraw/web/js/services/current-option-values.js'
 );
@@ -64,6 +65,22 @@ assert.equal(Object.hasOwn(createDefaultLosat(), 'executionMode'), false);
 assert.equal(createDefaultLosatExecution().executionMode, 'threaded');
 assert.equal(createDefaultLosat().blastp.collinearSearchScope, 'adjacent');
 assert.equal(createDefaultLosat().blastp.collinearMergeOrientation, 'strand');
+// The inference default and the hit limits come from the Python options through
+// the generated contract; each mode's limits are a copy of their own.
+assert.equal(FRESH_PROTEIN_COMPARISON_DEFAULTS.collinearInferOrthogroups, false);
+assert.equal(createDefaultLosat().blastp.collinearInferOrthogroups, FRESH_PROTEIN_COMPARISON_DEFAULTS.collinearInferOrthogroups);
+assert.deepEqual(FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits, { candidateLimit: null, orthogroupMemberMaxHits: null });
+{
+  const { hitLimitsByMode, candidateLimit, orthogroupMemberMaxHits } = createDefaultLosat().blastp;
+  assert.deepEqual(hitLimitsByMode, {
+    pairwise: FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits,
+    orthogroup: FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits,
+    collinear: FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits
+  });
+  assert.deepEqual({ candidateLimit, orthogroupMemberMaxHits }, FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits);
+  hitLimitsByMode.collinear.candidateLimit = 7;
+  assert.equal(hitLimitsByMode.pairwise.candidateLimit, null);
+}
 assert.equal(createDefaultAdv('circular').pairwise_match_style, 'ribbon');
 assert.equal(createDefaultAdv('linear').pairwise_match_style, 'curve');
 assert.equal(normalizeCurrentPairwiseMatchStyle('curve', 'ribbon'), 'curve');
