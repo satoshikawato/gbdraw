@@ -219,14 +219,15 @@ const openLinearDepthStack = async (page) => {
 };
 
 // TR-03 Linear / PD-OI-083: a File clear keeps the logical series (PD-OI-025);
-// an enabled manual row on it shows the row issue and stops Generate.
+// an enabled manual row on it shows the row issue and stops Generate. Spacing
+// makes the row manual; a typed height alone stays on the series and the row
+// leaves (PD-OI-104 scenario revision 9).
 test('a Linear File clear leaves a manual Depth row whose row issue stops Generate', async ({ page }) => {
   test.setTimeout(300_000);
   const source = await openLinearDepthStack(page);
   expect(await depthRows(page, 'linear_track_slots')).toEqual([{ id: 'depth', enabled: true, trackIndex: 0 }]);
   await page.evaluate(() => {
-    const app = window.__GBDRAW_APP__;
-    app.setLinearTrackSlotHeight(app.adv.linear_track_slots.find((slot) => slot.renderer === 'depth'), '30');
+    window.__GBDRAW_APP__.adv.linear_track_slots.find((slot) => slot.renderer === 'depth').spacing = '6px';
   });
   await uploaderRemove(source).click();
   await settle(page);
