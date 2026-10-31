@@ -809,7 +809,6 @@ def test_runnable_gallery_support_downloads_exist() -> None:
     expected_local_downloads = {
         "HmmtDNA_ATskew": {"./files/HmmtDNA_qualifier_priority.tsv"},
         "tobacco-chloroplast": {
-            "./files/chloroplast_specific_table.tsv",
             "./files/qualifier_priority.tsv",
             "./files/nicotiana-tabacum-regions-span.tsv",
         },

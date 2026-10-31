@@ -34,7 +34,7 @@ The human mitochondrial genome with GC content, GC skew, and AT skew rings insid
 
 <a href="https://gbdraw.app/gallery/#tobacco-chloroplast"><img src="../gbdraw/web/gallery/thumbnails/tobacco-chloroplast.webp" alt="Circular tobacco chloroplast map with tinted LSC, SSC, IRa, and IRb regions named on curved labels, and function-colored genes" width="640"></a>
 
-The 155,943-bp tobacco chloroplast genome with its large single-copy region (LSC), small single-copy region (SSC), and two inverted repeats (IRa and IRb) tinted from the gene track through the GC content track and named on curved labels along an inner ring. An annotation table supplies the four region boundaries, and a color table groups genes by function, such as photosystem I, RNA polymerase, and NADH dehydrogenase. Genes in the inverted repeats, such as <i>ycf2</i>, <i>ndhB</i>, and the rRNA genes, appear twice: once in IRa and once in IRb.
+The 155,943-bp tobacco chloroplast genome with its large single-copy region (LSC), small single-copy region (SSC), and two inverted repeats (IRa and IRb) tinted from the gene track through the GC content track and named on curved labels along an inner ring. An annotation table supplies the four region boundaries, and the built-in plastid color table groups genes by function, such as photosystem I, RNA polymerase, and NADH dehydrogenase. Genes in the inverted repeats, such as <i>ycf2</i>, <i>ndhB</i>, and the rRNA genes, appear twice: once in IRa and once in IRb.
 
 [Open in the interactive Gallery](https://gbdraw.app/gallery/#tobacco-chloroplast) | [Tutorial: Make an annotated map of the tobacco chloroplast genome](./TUTORIALS/build-an-annotated-chloroplast-map.md)
 

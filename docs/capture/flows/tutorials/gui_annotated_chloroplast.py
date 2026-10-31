@@ -46,13 +46,10 @@ SCREENSHOT_NAMES = (
     "05-finished-diagram.png",
 )
 OUTPUT_FILENAME = "annotated_chloroplast_map.svg"
-SPECIFIC_COLORS_PATH = GUI_ANNOTATION_GENBANK_PATH.with_name(
-    "chloroplast_specific_table.tsv"
-)
-SPECIFIC_COLORS_SIZE = 3_033
-SPECIFIC_COLORS_SHA256 = (
-    "406f1a042ec072c0026c014fc173950793582ffe4c8c568ec2539e2db98df0ec"
-)
+# The built-in plastid color table (gbdraw/data/color_tables/plastid.tsv) is the
+# only color source; the Web names it through the Preset scheme select.
+PLASTID_PRESET_ID = "plastid"
+PLASTID_RULE_COUNT = 19
 QUALIFIER_PRIORITY_PATH = GUI_ANNOTATION_GENBANK_PATH.with_name(
     "qualifier_priority.tsv"
 )
@@ -204,7 +201,7 @@ def _assert_gallery_chloroplast(report: Mapping[str, Any]) -> None:
         "photosystem I",
         "photosystem II",
         "RNA polymerase",
-        "rep_origin",
+        "origin of replication",
     }
     missing = required - texts
     if missing:
@@ -268,8 +265,12 @@ def _configure_gallery_presentation(page: Page) -> None:
 
     colors = page.get_by_label("Colors", exact=True)
     toggle_disclosure(colors)
-    page.get_by_label("Specific rules file", exact=True).set_input_files(
-        SPECIFIC_COLORS_PATH
+    preset = page.get_by_label("Preset scheme", exact=True)
+    preset.select_option(PLASTID_PRESET_ID)
+    preset.locator("xpath=..").get_by_role("button", name="Apply", exact=True).click()
+    page.wait_for_function(
+        "(count) => window.__GBDRAW_APP__?.manualSpecificRules?.length === count",
+        arg=PLASTID_RULE_COUNT,
     )
     toggle_disclosure(colors)
 
@@ -462,11 +463,6 @@ def capture_gui_annotated_chloroplast(
         expected_length=155_943,
     )
     annotation_report = _validate_span_table()
-    assert_fixture_identity(
-        SPECIFIC_COLORS_PATH,
-        expected_size=SPECIFIC_COLORS_SIZE,
-        expected_sha256=SPECIFIC_COLORS_SHA256,
-    )
     assert_output_paths(output_paths, SCREENSHOT_NAMES, SCENARIO_ID)
     download_dir.mkdir(parents=True, exist_ok=True)
 

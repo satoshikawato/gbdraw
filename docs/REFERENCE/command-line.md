@@ -373,8 +373,8 @@ This example keeps the colors, radial labels and GC track of the
 and marks the structural regions with brackets.
 Start in an empty directory. Download the complete GenBank record from
 [NCBI NC_001879.2](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2), saving it as
-`NC_001879.gbk` (155,943 bp, circular). Obtain three support tables:
-`chloroplast_specific_table.tsv` and `qualifier_priority.tsv` from that tutorial,
+`NC_001879.gbk` (155,943 bp, circular). Obtain two support tables:
+`qualifier_priority.tsv` from that tutorial,
 and the bracket table
 [`nicotiana-tabacum-regions.tsv`](../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv).
 
@@ -394,7 +394,7 @@ start; the source sequence and feature locations are unchanged.
 ```bash
 gbdraw circular \
   --gbk NC_001879.gbk \
-  -t chloroplast_specific_table.tsv \
+  -t builtin:plastid \
   -k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin \
   --species '<i>Nicotiana tabacum</i>' \
   --track_type tuckin \

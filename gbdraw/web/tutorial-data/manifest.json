@@ -13,8 +13,8 @@
     },
     "extended": {
       "maxUncompressedBytes": 16777216,
-      "actualUncompressedBytes": 7849886,
-      "fileCount": 21
+      "actualUncompressedBytes": 7846853,
+      "fileCount": 20
     }
   },
   "fixtures": {
@@ -358,7 +358,6 @@
         "tobacco-plastome-regions-table",
         "tobacco-plastome-regions-span-table",
         "tobacco-plastome-default-colors",
-        "tobacco-plastome-specific-colors",
         "tobacco-plastome-qualifier-priority"
       ],
       "fileReferences": [],
@@ -1007,36 +1006,6 @@
       "derivation": null,
       "scenarioIds": ["T-GUI-05", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
       "replaces": ["gbdraw/web/gallery/files/modified_default_colors.tsv"]
-    },
-    "tobacco-plastome-specific-colors": {
-      "fixtureId": "tobacco-plastome-regions",
-      "relativePath": "tobacco-plastome-regions/chloroplast_specific_table.tsv",
-      "role": "rule",
-      "mediaType": "text/tab-separated-values",
-      "inputType": "feature-specific-color-table",
-      "sizeBytes": 3033,
-      "sha256": "406f1a042ec072c0026c014fc173950793582ffe4c8c568ec2539e2db98df0ec",
-      "packageTier": "extended",
-      "records": [],
-      "expectedSemantics": {
-        "ruleCount": 70,
-        "featureType": "CDS",
-        "qualifier": "gene",
-        "legendGroups": 11
-      },
-      "provenance": {
-        "sourceName": "gbdraw Gallery chloroplast feature color table",
-        "sourceUrl": "https://github.com/satoshikawato/gbdraw",
-        "retrievedOn": null,
-        "retrievalDateStatus": "unknown-legacy",
-        "repositoryAddedOn": "2026-07-17",
-        "repositoryAddedCommit": "386ff9cf",
-        "licenseNote": "Repository-maintained tutorial rule distributed under the gbdraw repository license.",
-        "filenameNormalization": "Copied from gbdraw/web/gallery/files/chloroplast_specific_table.tsv with one trailing newline added."
-      },
-      "derivation": null,
-      "scenarioIds": ["T-GUI-05", "T-CLI-06", "T-PY-02"],
-      "replaces": ["gbdraw/web/gallery/files/chloroplast_specific_table.tsv"]
     },
     "tobacco-plastome-qualifier-priority": {
       "fixtureId": "tobacco-plastome-regions",
