@@ -7216,8 +7216,8 @@ export const createAppSetup = () => {
     identityPercentMaximum: IDENTITY_PERCENT_MAXIMUM,
     /** @param {0 | 1} end @param {string} text */
     setIdentityScaleEnd: (end, text) => {
-      const { adv } = state.activeDrawing();
-      adv.identity_scale = identityScaleWithEnd(adv.identity_scale, end, text);
+      const drawing = state.activeDrawing();
+      drawing.adv.identity_scale = identityScaleWithEnd(drawing.adv.identity_scale, end, text);
     },
     comparisonHeightValidationError,
     optionalNumberInputValue,

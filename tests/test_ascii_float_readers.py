@@ -80,8 +80,8 @@ def test_no_argparse_option_reads_its_float_with_bare_float() -> None:
     assert offenders == []
 
 
-def _float_options(mode: str) -> list[str]:
-    """The options whose argparse type reads a float, from the parser itself."""
+def _float_options(mode: str) -> list[tuple[str, int]]:
+    """The options whose argparse type reads a float, with how many values each takes, from the parser itself."""
 
     import os
     import sys
@@ -107,10 +107,16 @@ def _float_options(mode: str) -> list[str]:
     ):
         module._get_args([])
     return [
-        action.option_strings[-1]
+        (action.option_strings[-1], action.nargs if isinstance(action.nargs, int) else 1)
         for action in captured[0]._actions
         if getattr(action.type, "__name__", "") in {"float", "argparse_float"}
     ]
+
+
+def _with_value(option: str, count: int, text: str) -> list[str]:
+    """The words that give ``option`` the value ``text``; an option taking more values gets ``text`` last."""
+
+    return [f"{option}={text}"] if count == 1 else [option, *["50"] * (count - 1), text]
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
@@ -122,10 +128,10 @@ def test_every_cli_float_option_refuses_non_ascii_text_and_underscores(
     get_args = circular._get_args if mode == "circular" else linear._get_args
     options = _float_options(mode)
     assert len(options) > 15
-    for option in options:
+    for option, count in options:
         for text in ("١.٥", "1_0"):
             with pytest.raises(SystemExit) as raised:
-                get_args(["--gbk", "dummy.gb", f"{option}={text}"])
+                get_args(["--gbk", "dummy.gb", *_with_value(option, count, text)])
             assert raised.value.code == 2, (option, text)
             assert f"invalid float value: {text!r}" in capsys.readouterr().err, (option, text)
 
@@ -342,10 +348,11 @@ def test_every_cli_float_option_refuses_non_finite_values(mode: str, capsys: pyt
     get_args = circular._get_args if mode == "circular" else linear._get_args
     options = _float_options(mode)
     assert len(options) > 15
-    for option in options:
-        for text in ("nan", "inf", "-inf"):
+    for option, count in options:
+        # argparse reads a separate "-inf" word as an option, so an option taking more values refuses it as missing.
+        for text in ("nan", "inf") if count > 1 else ("nan", "inf", "-inf"):
             with pytest.raises(SystemExit) as raised:
-                get_args(["--gbk", "dummy.gb", f"{option}={text}"])
+                get_args(["--gbk", "dummy.gb", *_with_value(option, count, text)])
             assert raised.value.code == 2, (option, text)
             err = capsys.readouterr().err
             assert f"argument {option}: invalid float value: {text!r}" in err, (option, text, err)
