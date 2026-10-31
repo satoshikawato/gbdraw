@@ -11,7 +11,7 @@ import {
 } from '../services/conservation-series.js';
 import {
   isDefaultManagedDepthSlot,
-  depthRowsLeaving,
+  depthSourceLoss,
   reconcileManagedDepthSlots,
   representativeDepthFiles
 } from '../services/depth-track-state.js';
@@ -429,6 +429,26 @@ const conservationEntriesForState = (state, drawing) => {
 
 /** @param {{ params?: { series_key?: unknown } | null } | null | undefined} slot */
 const managedConservationSlotKey = (slot) => String(slot?.params?.series_key || '').trim();
+
+/**
+ * The managed ring rows no source draws: a row whose source has gone, and a
+ * second row of one source.
+ * @param {readonly CircularTrackSlot[]} slots
+ * @param {readonly ConservationSlotEntry[]} entries
+ * @returns {Set<CircularTrackSlot>}
+ */
+const managedRowsWithoutSource = (slots, entries) => {
+  const desiredKeys = new Set(entries.map((entry) => String(entry.sourceKey || '')));
+  /** @type {Set<string>} */
+  const presentKeys = new Set();
+  return new Set(slots.filter((slot) => {
+    if (!isManagedConservationSlot(slot)) return false;
+    const key = managedConservationSlotKey(slot);
+    if (!key || !desiredKeys.has(key) || presentKeys.has(key)) return true;
+    presentKeys.add(key);
+    return false;
+  }));
+};
 
 /**
  * @template {CircularTrackSlot | null | undefined} T
@@ -873,30 +893,24 @@ export const createCircularTrackSlotEditor = ({
   // Managed Depth rows follow Depth sources (PD-OI-058). The saved stack is
   // reconciled too, so a later Use custom stack shows the row; an empty saved
   // stack is built by Reset when the stack is enabled.
-  /** @param {CircularTrackSlot[]} slots @param {number[]} previousSourced @param {number[]} sourced */
-  const reconciledCircularDepthSlots = (slots, previousSourced, sourced) => (
-    // The reconciled rows are the drawing's own rows (R13: the service types them as DepthSlotRow).
-    /** @type {{ slots: CircularTrackSlot[], additions: number[] }} */ (
-      reconcileManagedDepthSlots(/** @type {any} */ ({ slots, previousSourced, sourced, managedPredicate: isDefaultManagedDepthSlot }))
-    )
-  );
   /**
-   * The rows a Depth file removal takes out of the stack, from the Depth file
-   * rows it would leave. It writes nothing.
+   * What a Depth file removal does to the stack, from the Depth file rows it
+   * would leave. It writes nothing.
    * @param {DrawingState} drawing @param {DepthFileSlots[]} nextDepth
-   * @returns {Set<string>}
    */
-  const circularDepthRowsLeaving = (drawing, nextDepth) => {
-    const slots = Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [];
-    return depthRowsLeaving(slots, reconciledCircularDepthSlots(
-      slots, circularSourcedDepthTrackIndexesForState(state), circularSourcedDepthTrackIndexesForState({ files: { c_depth: nextDepth } })
-    ).slots);
-  };
+  const circularDepthSourceLoss = (drawing, nextDepth) => depthSourceLoss(
+    Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [],
+    circularSourcedDepthTrackIndexesForState(state),
+    circularSourcedDepthTrackIndexesForState({ files: { c_depth: nextDepth } })
+  );
   /** @param {DrawingState} drawing @param {number[]} previousSourced */
   const reconcileCircularDepthSlots = (drawing, previousSourced) => {
     const slots = Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [];
     if (slots.length === 0 && !drawing.adv.circular_track_slots_enabled) return;
-    const { slots: nextSlots, additions } = reconciledCircularDepthSlots(slots, previousSourced, circularSourcedDepthTrackIndexesForState(state));
+    // The reconciled rows are the drawing's own rows (R13: the service types them as DepthSlotRow).
+    const { slots: nextSlots, additions } = /** @type {{ slots: CircularTrackSlot[], additions: number[] }} */ (
+      reconcileManagedDepthSlots({ slots, previousSourced, sourced: circularSourcedDepthTrackIndexesForState(state) })
+    );
     if (additions.length === 0 && nextSlots.length === slots.length) return;
     const seriesCount = circularAvailableDepthTrackCountForState(state);
     /** @type {{ id?: unknown }[]} */
@@ -936,6 +950,20 @@ export const createCircularTrackSlotEditor = ({
     if (previousSourced.length > 0 && circularSourcedDepthTrackIndexesForState(state).length === 0) drawing.form.show_depth = false;
   };
 
+  /**
+   * The slot ids of the managed ring rows a change of the comparison sources
+   * takes out of the stack, from the sources it would leave. It writes nothing.
+   * The rows follow their sources only while the stack is in use
+   * (`refreshCircularConservationSlots`).
+   * @param {DrawingState} drawing @param {readonly ConservationSlotEntry[]} entries
+   * @returns {Set<string>}
+   */
+  const circularConservationRowsLeaving = (drawing, entries) => (
+    drawing.adv.circular_track_slots_enabled === true
+      ? new Set([...managedRowsWithoutSource(drawing.adv.circular_track_slots, entries)].map((slot) => String(slot.id)))
+      : new Set()
+  );
+
   const syncCircularConservationSlots = () => {
     const drawing = state.drawingOfMode('circular');
     const entries = conservationEntriesForState(state, drawing);
@@ -943,7 +971,7 @@ export const createCircularTrackSlotEditor = ({
     const slots = Array.isArray(drawing.adv.circular_track_slots)
       ? drawing.adv.circular_track_slots
       : [];
-    const desiredKeys = new Set(entries.map((entry) => String(entry.sourceKey || '')));
+    const leaving = managedRowsWithoutSource(slots, entries);
     const existingIds = new Set(slots.map((slot) => String(slot?.id || '').trim()).filter(Boolean));
     const entryByKey = new Map(entries.map((entry) => [String(entry.sourceKey || ''), entry]));
     const entryOrderByKey = new Map(entries.map((entry, index) => [String(entry.sourceKey || ''), index]));
@@ -952,12 +980,12 @@ export const createCircularTrackSlotEditor = ({
     const nextSlots = [];
     const presentKeys = new Set();
     slots.forEach((slot) => {
+      if (leaving.has(slot)) return;
       if (!isManagedConservationSlot(slot)) {
         nextSlots.push(slot);
         return;
       }
       const key = managedConservationSlotKey(slot);
-      if (!key || !desiredKeys.has(key) || presentKeys.has(key)) return;
       refreshManagedConservationSlot(slot, entryByKey.get(key), entryOrderByKey.get(key) ?? presentKeys.size);
       presentKeys.add(key);
       nextSlots.push(slot);
@@ -1780,7 +1808,8 @@ export const createCircularTrackSlotEditor = ({
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,
     changeCircularDepthSources,
-    circularDepthRowsLeaving,
+    circularDepthSourceLoss,
+    circularConservationRowsLeaving,
     ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetCircularTrackSlotsFromSimpleControls,
       resetCircularTrackSlotsToPreset,
