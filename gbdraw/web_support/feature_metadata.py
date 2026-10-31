@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence, cast
 
-from Bio import SeqIO
+from gbdraw.io.genome import read_flat_file_records
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import (
@@ -515,7 +515,7 @@ def extract_features_from_genbank_payload(
     """Extract the Rich Feature Popup payload shape from a GenBank file."""
     from gbdraw.io.record_select import parse_record_selector, select_record
 
-    records = list(SeqIO.parse(str(gb_path), "genbank"))
+    records = read_flat_file_records(str(gb_path))
     selector = parse_record_selector(_normalize_record_selector(record_selector))
     records = _crop_then_reverse(select_record(records, selector), region_spec, reverse_flag)
     return extract_features_from_records_payload(

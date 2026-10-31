@@ -215,7 +215,7 @@ def test_the_sensitivity_table_flags_a_builder_that_drops_an_input() -> None:
 
 def test_derived_identity_shape_and_semantics() -> None:
     identity = _identity(_COLLINEAR)
-    assert identity["semantics"] == DERIVED_LOSATP_SEMANTICS == "derived-option-conformance-v4"
+    assert identity["semantics"] == DERIVED_LOSATP_SEMANTICS == "derived-option-conformance-v5"
     assert identity["cacheSchema"] == 3
     assert identity["pathRepresentation"] == "lossless-graph-v1"
     assert identity["rawCacheKeys"] == ["raw-a-a", "raw-a-b", "raw-b-a"]

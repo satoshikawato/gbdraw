@@ -2516,7 +2516,7 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="inputType === 'gb'">
-                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="uploadCircularSourceFile('c_gb', $event)" file-kind="genbank" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="uploadCircularSourceFile('c_gb', $event)" file-kind="genbank" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
                             <file-uploader :label="t('GFF3 File')" :model-value="files.c_gff" @update:model-value="uploadCircularSourceFile('c_gff', $event)" file-kind="gff" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
@@ -2864,7 +2864,7 @@
                                 <file-uploader
                                     :label="t('GenBank / DDBJ File')"
                                     :test-id="`linear-genbank-${sourceIndex + 1}`"
-                                    accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
+                                    accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*"
                                     :model-value="source.sequence.gb"
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
@@ -9376,7 +9376,7 @@
             @keydown.enter.prevent="uploadAvailable && $refs.input.click()"
             @keydown.space.prevent="uploadAvailable && $refs.input.click()"
         >
-            <input type="file" ref="input" :multiple="multiple" :disabled="!uploadAvailable" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" :aria-label="$attrs['data-input-aria-label'] || label" @change="handleFile" :data-testid="testId || undefined" class="hidden">
+            <input type="file" ref="input" :multiple="multiple" :disabled="!uploadAvailable" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" :aria-label="$attrs['data-input-aria-label'] || label" @change="handleFile" :data-testid="testId || undefined" class="hidden">
             <div v-if="!hasSelection" class="flex items-center justify-center gap-1.5 text-slate-500">
                 <i class="ph ph-upload-simple" aria-hidden="true"></i>
                 <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">{{ t('Click to Browse') }}</span>

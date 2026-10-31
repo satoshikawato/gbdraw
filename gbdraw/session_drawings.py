@@ -36,7 +36,7 @@ from functools import cache
 from importlib import resources
 from types import MappingProxyType
 import json
-from typing import Any, Literal, Mapping, Sequence, TypedDict, cast
+from typing import Any, Callable, Literal, Mapping, Sequence, TypeAlias, TypedDict, cast, get_args
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_contract import (
@@ -72,6 +72,10 @@ from gbdraw.web_support.mode_scoped_settings import (
 )
 
 DrawingMode = Literal["circular", "linear"]
+# A committed request as a document stores it, of any supported schema.
+StoredRequest: TypeAlias = Mapping[str, object]
+# A Web draft config as a document stores it: an open object.
+DraftConfig: TypeAlias = Mapping[str, object]
 DRAWING_NAMES: Mapping[str, str] = MappingProxyType(
     {"circular": "Circular", "linear": "Linear"}
 )
@@ -199,6 +203,48 @@ def drawing_draft_config(fields: Mapping[str, Any], mode: DrawingMode) -> Mappin
     if isinstance(modes, Mapping):
         return _mapping(_mapping(modes.get(mode)).get("config"))
     return _mapping(fields.get("config"))
+
+
+def session_with_stored_settings_replaced(
+    data: Mapping[str, object],
+    *,
+    request: Callable[[StoredRequest, str], StoredRequest],
+    draft_config: Callable[[DraftConfig, str], DraftConfig],
+) -> dict[str, object]:
+    """``data`` with each committed request and draft config as the callbacks
+    return them. Each callback also takes the value's path in the document.
+
+    The drawings' requests (``renderRequest``, ``otherModeResult``) and the
+    drafts (each slice in ``modes``, also a slice without a drawing, or the flat
+    ``config`` of a Session 44 or older). Every other field keeps its value, so
+    this serves a document of any canonical version, where
+    :func:`replace_session_drawings` writes the current layout.
+    """
+
+    changed = dict(data)
+    stored = data.get("renderRequest")
+    if isinstance(stored, Mapping):
+        changed["renderRequest"] = request(stored, "renderRequest")
+    other = data.get("otherModeResult")
+    if isinstance(other, Mapping) and isinstance(other.get("renderRequest"), Mapping):
+        changed["otherModeResult"] = {
+            **other,
+            "renderRequest": request(other["renderRequest"], "otherModeResult.renderRequest"),
+        }
+    modes = data.get("modes")
+    if isinstance(modes, Mapping):
+        slices = dict(modes)
+        for mode in get_args(DrawingMode):
+            config = drawing_draft_config(data, mode)
+            if config:
+                slices[mode] = {**modes[mode], "config": draft_config(config, f"modes.{mode}.config")}
+        changed["modes"] = slices
+    else:
+        # Without slices both modes read the one flat draft.
+        config = drawing_draft_config(data, "linear")
+        if config:
+            changed["config"] = draft_config(config, "config")
+    return changed
 
 
 def _request_mode(view: Mapping[str, Any]) -> str | None:
@@ -1054,9 +1100,11 @@ __all__ = [
     "PROJECT_FIELDS",
     "PROJECT_UI_FIELDS",
     "PROJECT_WEB_FILES_FIELDS",
+    "DraftConfig",
     "DrawingMode",
     "SessionDrawingArtifacts",
     "SessionDrawingParts",
+    "StoredRequest",
     "active_session_drawing",
     "allocate_drawing_id",
     "allocate_session_drawing",
@@ -1069,5 +1117,6 @@ __all__ = [
     "other_mode_fields",
     "read_session_drawings",
     "replace_session_drawings",
+    "session_with_stored_settings_replaced",
     "write_session_drawings",
 ]

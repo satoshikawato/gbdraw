@@ -295,6 +295,14 @@ def run_canonical_request_wrapper(
             )
         return failure
 
+def _parse_sequence_file(path, fmt):
+    """The records of a GenBank/DDBJ/EMBL file as the CLI parses them (read_flat_file_records), or of a FASTA file."""
+    if fmt == "genbank":
+        from gbdraw.io.genome import read_flat_file_records
+        return read_flat_file_records(path)
+    from Bio import SeqIO
+    return list(SeqIO.parse(path, fmt))
+
 def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
     """Extract the first record as FASTA for LOSAT input."""
     from Bio import SeqIO
@@ -305,7 +313,7 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
         fmt_map = {"genbank": "genbank", "fasta": "fasta"}
         if fmt not in fmt_map:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {fmt}'), operation='extractFirstFasta', stage="helper")})
-        records = list(SeqIO.parse(path, fmt_map[fmt]))
+        records = _parse_sequence_file(path, fmt_map[fmt])
         if not records:
             return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='extractFirstFasta', stage="helper")})
         selector_raw = None
@@ -532,7 +540,6 @@ def _web_feature_view_hash_parts(record, source_feature_position):
     )
 
 def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, source_feature_catalogs=None):
-    from Bio import SeqIO
     from gbdraw.features.source import capture_source_features
     from gbdraw.io.record_select import parse_record_selector, select_record
     from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
@@ -543,7 +550,7 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         # The records a Generate parses from this staged file (OV-1555, OV-1595),
         # shared and read only; for a file sent as is, this reader's own parse.
         prepared = prepared_parsed_source(GenBankInputSource(path), load_render_source_records)
-        source_records = list(SeqIO.parse(path, "genbank")) if prepared is None else list(prepared.records)
+        source_records = _parse_sequence_file(path, "genbank") if prepared is None else list(prepared.records)
         if not source_records:
             raise ValueError("No records found")
         records = select_record(source_records, selector) if selector is not None else [source_records[0]]
@@ -633,7 +640,8 @@ def _serialize_cds_protein(protein, record=None, view_hash_parts_index=None):
         "display_binding_hash": getattr(protein, "display_binding_hash", None),
         "coord_base": coord_base,
         "coord_step": coord_step,
-        "coord_length": len(record.seq) if record is not None else 0,
+        "origin_arc": None if protein.origin_arc is None else list(protein.origin_arc),
+        "record_length": protein.record_length,
     }
 
 def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None, feature_overrides_json=None):
@@ -751,6 +759,8 @@ def _build_web_cds_protein_map(raw_map):
             "sequence": str(data.get("sequence") or ""),
             "source_protein_id": data.get("source_protein_id"),
             "feature_svg_id": data.get("feature_svg_id"),
+            "origin_arc": None if data.get("origin_arc") is None else tuple(int(bound) for bound in data["origin_arc"]),
+            "record_length": None if data.get("record_length") is None else int(data["record_length"]),
         }
         supported_fields = getattr(CdsProtein, "__dataclass_fields__", {})
         for optional_field in (
@@ -1107,6 +1117,8 @@ def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
         return json.dumps({'status': 'error', 'error': serialize_web_error(error, operation='hydrateProteinLosatTsv', stage="helper")})
 
 def _build_display_web_cds_protein_map(raw_map, view_transform):
+    from gbdraw.analysis.origin_arcs import reversed_arc
+
     normalized = _normalize_web_view_transform(view_transform)
     if not normalized["reverse"]:
         return _build_web_cds_protein_map(raw_map)
@@ -1134,6 +1146,8 @@ def _build_display_web_cds_protein_map(raw_map, view_transform):
         display_data["end"] = end
         display_data["strand"] = strand
         display_data["view_feature_svg_id"] = view_feature_svg_id
+        if data.get("origin_arc") is not None:
+            display_data["origin_arc"] = reversed_arc(data["origin_arc"], normalized["length"])
         display_map[str(protein_id)] = display_data
     return _build_web_cds_protein_map(display_map)
 
@@ -1153,7 +1167,7 @@ def _web_protein_map_bindings(record_payloads):
         transform = record["view_transform"]
         reverse = bool(transform["reverse"])
         length = int(transform["length"]) or next(
-            (int(data.get("coord_length") or 0) for data in raw_map.values() if isinstance(data, dict)), 0
+            (int(data.get("record_length") or 0) for data in raw_map.values() if isinstance(data, dict)), 0
         )
         flipped = {"length": length, "reverse": True}
         source, current, opposite, current_spans, opposite_spans = {}, {}, {}, {}, {}
@@ -1243,9 +1257,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
     try:
         from gbdraw.analysis.collinearity import (
+            RecordExtent,
             build_orthogroup_collinearity_blocks_from_hits,
-            convert_collinearity_blocks_to_comparisons,
-            convert_collinearity_blocks_to_pair_comparisons,
         )
         from gbdraw.analysis.protein_artifacts import (
             DerivedLosatpPair,
@@ -1256,6 +1269,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             derived_pair_payload,
             effective_collinearity_unit_kinds,
         )
+        from gbdraw.api.diagram import project_collinearity_frames
         from gbdraw.analysis.protein_colinearity import (
             convert_pair_protein_hits_to_genomic_links,
             filter_protein_hits_by_thresholds,
@@ -1494,12 +1508,13 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             return _web_losatp_payload_json(*cached_payload, canonical_resource_path)
 
         if normalized_mode == "collinear":
-            record_ids = []
-            for record_proteins in extraction.proteins_by_record:
-                if record_proteins:
-                    record_ids.append(str(record_proteins[0].record_id))
-                else:
-                    record_ids.append("")
+            record_lengths = {
+                int(record["record_index"]): int(record["view_transform"]["length"]) for record in record_payloads
+            }
+            records = [
+                RecordExtent(str(record_proteins[0].record_id) if record_proteins else "", record_lengths.get(index, 0))
+                for index, record_proteins in enumerate(extraction.proteins_by_record)
+            ]
             anchor_mode = settings.anchor_mode
             search_scope = settings.search_scope
             max_paralog_links = settings.max_paralog_links
@@ -1537,7 +1552,13 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     else None
                 ),
             )
-            color_mode = settings.color_mode
+            frames = project_collinearity_frames(
+                collinearity_result,
+                records,
+                color_mode=settings.color_mode,
+                search_scope=search_scope,
+                comparison_pairs=display_pairs if use_display_pairs else None,
+            )
             if use_display_pairs:
                 display_pair_indices = {
                     tuple(sorted((
@@ -1547,26 +1568,22 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     for item in pair_payloads
                     if item["display_pair"]
                 }
-                converted_by_pair = convert_collinearity_blocks_to_pair_comparisons(
-                    collinearity_result,
-                    record_ids=record_ids,
-                    color_mode=color_mode,
-                    search_scope=search_scope,
+                drawn_pairs = sorted(
+                    (
+                        (
+                            display_pair_indices[(pair.query_record_index, pair.subject_record_index)],
+                            pair.query_record_index,
+                            pair.subject_record_index,
+                            pair.matches,
+                        )
+                        for pair in frames.pairs
+                    ),
+                    key=lambda drawn: drawn[1:3],
                 )
-                drawn_pairs = [
-                    (display_pair_indices[pair], pair[0], pair[1], converted_by_pair[pair])
-                    for pair in display_pairs
-                    if pair in converted_by_pair
-                ]
             else:
                 drawn_pairs = [
                     (pair_index, pair_index, pair_index + 1, converted)
-                    for pair_index, converted in enumerate(convert_collinearity_blocks_to_comparisons(
-                        collinearity_result,
-                        record_ids=record_ids,
-                        color_mode=color_mode,
-                        search_scope=search_scope,
-                    ))
+                    for pair_index, converted in enumerate(frames.ordered)
                 ]
             stored_pairs, collinearity_result = _web_search_frame_results(
                 _web_protein_map_bindings(record_payloads), drawn_pairs, collinearity_result,
@@ -1642,12 +1659,11 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
 
 def get_record_length(path, fmt, record_id=None, record_index=None):
     """Return record length for a GenBank/FASTA file."""
-    from Bio import SeqIO
     try:
         fmt_map = {"genbank": "genbank", "fasta": "fasta"}
         if fmt not in fmt_map:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {fmt}'), operation='unknown', stage="helper")})
-        records = list(SeqIO.parse(path, fmt_map[fmt]))
+        records = _parse_sequence_file(path, fmt_map[fmt])
         if not records:
             return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='unknown', stage="helper")})
         if record_id:
@@ -1668,7 +1684,6 @@ def get_record_length(path, fmt, record_id=None, record_index=None):
 
 def list_sequence_records(path, format):
     """List record selectors, IDs, and lengths from a sequence file."""
-    from Bio import SeqIO
     from gbdraw.api.record_planning import _detected_topology
     from gbdraw.core.record_metadata import (
         format_inferred_definition,
@@ -1678,25 +1693,15 @@ def list_sequence_records(path, format):
         format_map = {"genbank": "genbank", "fasta": "fasta"}
         if format not in format_map:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {format}'), operation='listSequenceRecords', stage="helper")})
-        try:
-            records = list(SeqIO.parse(path, format_map[format]))
-        except ValueError as parse_error:
-            if format != "genbank":
-                raise
-            from gbdraw.exceptions import ParseError
-            from gbdraw.io.genome import genbank_read_diagnostic
-            raise ParseError('GenBank file could not be read', diagnostic=genbank_read_diagnostic(path)) from parse_error
+        # A GenBank/DDBJ/EMBL file the parser refuses, or one without a record, raises its diagnostic here.
+        records = _parse_sequence_file(path, format_map[format])
         # OV-1258: a record without sequence cannot be drawn; the inspection says so.
-        if format == "genbank" and not all(getattr(record.seq, "defined", True) for record in records):
-            from gbdraw.exceptions import ValidationError
-            raise ValidationError('Sequence content is undefined', diagnostic={"code": "INPUT_UNREADABLE", "reason": "SEQUENCE_UNDEFINED"})
+        if format == "genbank":
+            from gbdraw.io.genome import require_record_sequence
+            for record in records:
+                require_record_sequence(record, path)
         if not records:
-            missing = ValueError('No records found')
-            if format == "genbank":
-                from gbdraw.exceptions import ValidationError
-                from gbdraw.io.genome import genbank_absence_diagnostic
-                missing = ValidationError('No records found', diagnostic=genbank_absence_diagnostic(path))
-            return json.dumps({'error': serialize_web_error(missing, operation='listSequenceRecords', stage="helper")})
+            return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='listSequenceRecords', stage="helper")})
         payload = []
         for idx, record in enumerate(records):
             organism = ""

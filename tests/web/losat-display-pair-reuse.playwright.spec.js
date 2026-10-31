@@ -253,6 +253,55 @@ test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fr
   expect(rows.paths).toEqual(fresh.paths);
 });
 
+// OV-2368: a CDS across a circular record's origin reaches the converter with its
+// arc, so a link or block that uses it covers the arc, as one row on each side of
+// the origin, and never the whole record.
+const ORIGIN_SOURCES = [
+  { name: 'origin-a.gbk', content: makeGenbank('OriginA', [1, 121, 241]) },
+  {
+    name: 'origin-b.gbk',
+    content: makeGenbank('OriginB', [91, 121, 151])
+      .replace('linear  ', 'circular')
+      .replace('91..180', 'join(331..360,1..60)')
+      .replace('121..210', '71..160')
+      .replace('151..240', '171..260')
+  }
+];
+
+const openOriginCds = async (page, mode) => {
+  await installProteinExecutor(page);
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  for (const [index, source] of ORIGIN_SOURCES.entries()) {
+    if (index > 0) await page.getByRole('button', { name: 'Add sequence' }).first().click();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Choose GenBank / DDBJ File' }).nth(index).click();
+    await (await chooser).setFiles({
+      name: source.name, mimeType: 'text/plain', buffer: Buffer.from(source.content)
+    });
+  }
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.gb?.name || '')
+  ))).toEqual(ORIGIN_SOURCES.map((source) => source.name));
+  await chooseLosatp(page, mode);
+};
+
+test('A CDS across a circular origin covers only its arc in LOSATP results', async ({ page }) => {
+  test.setTimeout(420000);
+  await openOriginCds(page, 'collinear');
+  expect((await generate(page)).links).toEqual(['0->1 1-34 331-360', '0->1 35-330 1-260']);
+  const links = ['0->1 1-30 331-360', '0->1 121-210 71-160', '0->1 241-330 171-260', '0->1 31-90 1-60'];
+  for (const mode of ['pairwise', 'orthogroup']) {
+    await page.getByRole('combobox', { name: 'LOSATP mode', exact: true }).selectOption(mode);
+    expect((await generate(page)).links).toEqual(links);
+  }
+  // The reversed record's arc is flipped with it: the links read in its drawn frame.
+  await page.evaluate(() => { window.__GBDRAW_APP__.linearSeqs[1].region_reverse = true; });
+  expect((await generate(page)).links).toEqual(
+    ['0->1 1-30 30-1', '0->1 121-210 290-201', '0->1 241-330 190-101', '0->1 31-90 360-301']
+  );
+});
+
 // PR5-B1: a CLI Session stores the records of one file in one resource named
 // after it with record-ID selectors, so the Web plans the same source-file
 // searches and every raw CLI search (same protein FASTA, same searchContext

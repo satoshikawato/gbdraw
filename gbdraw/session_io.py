@@ -38,7 +38,7 @@ from typing import (
 from .analysis.collinearity import (
     COLLINEARITY_MERGE_ORIENTATION_SPELLINGS,
     COLLINEARITY_MERGE_ORIENTATIONS,
-    RETIRED_COLLINEARITY_ANCHOR_MODES,
+    retired_collinearity_anchor_mode_replacement,
 )
 from .contract_shapes import read_spelling
 from .analysis.protein_artifacts import (
@@ -7109,7 +7109,7 @@ def _append_linear_gui_blastp_args(
     )
     anchor_mode = blastp_cfg.get("collinearAnchorMode")
     if isinstance(anchor_mode, str) and anchor_mode.strip():
-        anchor_mode = RETIRED_COLLINEARITY_ANCHOR_MODES.get(anchor_mode.strip().lower().replace("-", "_"), anchor_mode)
+        anchor_mode = retired_collinearity_anchor_mode_replacement(anchor_mode) or anchor_mode
         _append_pair(run_args, invocation_args, "--collinear_anchor_mode", str(anchor_mode))
     merge_orientation = blastp_cfg.get("collinearMergeOrientation")
     if isinstance(merge_orientation, str) and merge_orientation.strip():

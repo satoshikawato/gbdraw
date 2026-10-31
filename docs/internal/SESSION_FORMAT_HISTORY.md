@@ -107,13 +107,16 @@ No Session or request version changes; the generated request description and
 - Anchor mode: `one_to_one` and its spellings (`top1`, `mutual_best`, ...) are
   removed from `collinearityAnchorMode`. A stored one reads as `rbh`
   (`RETIRED_COLLINEARITY_ANCHOR_MODES`): Python logs a warning
-  (`_read_retired_anchor_mode`, applied before the schema 9 description check
+  (`read_retired_anchor_mode`, applied before the schema 9 description check
   by `_as_decoded_settings`); the Web request repair takes the description
   default `rbh` with a `setting-replaced` row, and the Web draft reader
   (`readCollinearAnchorMode`) does the same. That description default is the
   repair target, not a writer's empty form: the Web repair replaces every
   unreadable stored anchor mode (an unknown word as well) by `rbh` with the
-  row, where Python refuses an unknown word.
+  row, where Python refuses an unknown word. For a retired spelling,
+  `upgrade_session_document` writes the replacement in the requests and drafts of an
+  older Session, so a Python upgrade and a CLI re-save hold `rbh` there. `cliInvocation.args`,
+  derived entry identities, and other draft values stay as stored.
 - Inference: the CLI and Python default of `collinear_infer_orthogroups`
   becomes off, as on the Web. A request without `collinearInferOrthogroups`
   still reads it as on (`_ABSENT_PROTEIN_SETTINGS`). A Session below 31
@@ -154,6 +157,21 @@ them: `renderRequest.comparisons[0].settings.collinearityAnchorMode` and the dra
 draft) (provenance in `BGC0000708-BGC0000713.v49-one-to-one.provenance.json`). It sits in
 `tests/retired_sessions/`, outside the folders the scans of stored Sessions read, because
 they refuse a value outside the description.
+
+## Unreleased: derived LOSATP token v5 for a CDS across the origin in the Web
+
+No Session, request, or derived envelope version changes. The Web converter
+now receives each CDS's `origin_arc` and `record_length` and the record lengths
+(OV-2368), so a Web result with a CDS across a circular record's origin has new
+rows for the same inputs. The derived identity names the bindings, settings, and
+raw keys, not the protein map, so a derived entry that 0.14.4 wrote would be a
+hit with the old rows. The token becomes `derived-option-conformance-v5`:
+earlier derived entries are cache misses and are recomputed once from the raw
+cache at the next Generate; no search runs again and no reader reads them. The
+protein map itself is never saved: it lives in the page's per-file memory
+(`readOncePerFile`), and no Session field holds it, so `proteinMapSchema` and the
+Session stay as they are. The comparison tables of a saved request keep their
+rows until that Generate.
 
 ## Unreleased: derived LOSATP token v4 for chained Collinear blocks
 

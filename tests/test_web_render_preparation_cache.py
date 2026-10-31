@@ -1213,7 +1213,7 @@ def test_a_source_that_fails_to_parse_keeps_nothing_and_parses_again(
         entry["data"] = base64.b64encode(b"LOCUS broken\nORIGIN\n  this is not a record\n").decode()
     cache = PreparedBiologicalInputCache()
     for request_id in (1, 2):
-        with pytest.raises(ValidationError, match="No valid GenBank records"):
+        with pytest.raises(ValidationError, match="is not a GenBank, DDBJ or EMBL flat file"):
             _render(tmp_path, cache, document, request_id=request_id)
         assert not cache._layers["parsed"]
         assert not cache._layers["resolved"]

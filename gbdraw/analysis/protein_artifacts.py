@@ -414,7 +414,7 @@ def validate_current_derived_protein_artifacts(
 # the `buildProteinLosatCacheKeys` reply) and the Python API call it, so equal
 # inputs give one key on every surface.
 
-DERIVED_LOSATP_SEMANTICS = "derived-option-conformance-v4"
+DERIVED_LOSATP_SEMANTICS = "derived-option-conformance-v5"
 DERIVED_LOSATP_CONVERTER = "convert_losatp_blastp_pairs_to_genomic_payload"
 
 DerivedLosatpMode = Literal["pairwise", "orthogroup", "collinear"]

@@ -48,6 +48,7 @@ from gbdraw.analysis.collinearity import (
     COLLINEARITY_SEARCH_SCOPE_SPELLINGS,
     COLLINEARITY_SEARCH_SCOPES,
     RETIRED_COLLINEARITY_ANCHOR_MODES,
+    retired_collinearity_anchor_mode_replacement,
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityResult,
@@ -4286,7 +4287,7 @@ def _decode_pipeline(
             )
             continue
         if name == "collinearity_anchor_mode":
-            raw = _read_retired_anchor_mode(raw, path=f"{path}.settings.{key}")
+            raw = read_retired_anchor_mode(raw, path=f"{path}.settings.{key}")
         names = _setting_names(name)
         if names and schema >= _SETTING_NAMES_SCHEMA and raw not in names:
             raise CanonicalRequestDecodingError(
@@ -4328,12 +4329,12 @@ def _absent_protein_setting(key: str) -> object:
     return _ABSENT_PROTEIN_SETTINGS[key]
 
 
-def _read_retired_anchor_mode(raw: object, *, path: str) -> object:
+def read_retired_anchor_mode(raw: object, *, path: str) -> object:
     """A retired anchor mode, read as its replacement with a warning."""
 
     if not isinstance(raw, str):
         return raw
-    replacement = RETIRED_COLLINEARITY_ANCHOR_MODES.get(raw.strip().lower().replace("-", "_"))
+    replacement = retired_collinearity_anchor_mode_replacement(raw)
     if replacement is None:
         return raw
     logger.warning(
@@ -5392,29 +5393,50 @@ def _undescribed_parts(payload: object) -> list[str]:
     )
 
 
-def _as_decoded_settings(payload: object) -> object:
-    """``payload`` with the retired anchor mode "one_to_one", which a released
-    schema 9 writer stored, read as "rbh" (``_read_retired_anchor_mode``); the
-    Web repair of the request reads it as the description's default, with a
-    row."""
+def _with_anchor_modes_read(
+    payload: Mapping[str, object], read: Callable[[str, int], object]
+) -> Mapping[str, object]:
+    """``payload`` with each comparison's stored anchor mode replaced by
+    ``read(stored, comparison_index)``."""
 
-    if not isinstance(payload, MappingABC):
-        return payload
     comparisons = payload.get("comparisons")
     if not isinstance(comparisons, list):
         return payload
-    read: list[object] = []
-    for item in comparisons:
+    replaced: list[object] = []
+    for index, item in enumerate(comparisons):
         settings = item.get("settings") if isinstance(item, MappingABC) else None
-        if not isinstance(settings, MappingABC):
-            read.append(item)
+        if not isinstance(settings, MappingABC) or not isinstance(settings.get("collinearityAnchorMode"), str):
+            replaced.append(item)
             continue
-        settings = dict(settings)
-        mode = settings.get("collinearityAnchorMode")
-        if isinstance(mode, str) and mode in RETIRED_COLLINEARITY_ANCHOR_MODES:
-            settings["collinearityAnchorMode"] = RETIRED_COLLINEARITY_ANCHOR_MODES[mode]
-        read.append({**item, "settings": settings})
-    return {**payload, "comparisons": read}
+        mode = read(settings["collinearityAnchorMode"], index)
+        replaced.append({**item, "settings": {**settings, "collinearityAnchorMode": mode}})
+    return {**payload, "comparisons": replaced}
+
+
+def _as_decoded_settings(payload: object) -> object:
+    """``payload`` with a retired anchor mode, which a released schema 9 writer
+    could store as "one_to_one", read as "rbh" (``read_retired_anchor_mode``);
+    the Web repair of the request reads it as the description's default, with
+    a row."""
+
+    if not isinstance(payload, MappingABC):
+        return payload
+    return _with_anchor_modes_read(
+        payload, lambda mode, _index: retired_collinearity_anchor_mode_replacement(mode) or mode
+    )
+
+
+def request_with_current_anchor_modes(request: Mapping[str, object], path: str) -> Mapping[str, object]:
+    """A stored request holding the replacement of each retired anchor mode,
+    each replacement warned about (``read_retired_anchor_mode``). ``path`` names
+    the request in the warning."""
+
+    return _with_anchor_modes_read(
+        request,
+        lambda mode, index: read_retired_anchor_mode(
+            mode, path=f"{path}.comparisons[{index}].settings.collinearityAnchorMode"
+        ),
+    )
 
 
 class FreshProteinHitLimits(TypedDict):

@@ -60,7 +60,7 @@ const REASONS = Object.freeze({
 
   UNKNOWN_CONFIG_PATH: 'Remove unknown configuration overrides or use a supported setting.',
   CIRCULAR_SETTING: 'It applies only to Circular diagrams. Reset it under Preserved session settings, or switch to Circular.',
-  WRAP: 'A wrapped figure draws no comparisons. Remove the comparison inputs or set the wrap length to none.',
+  WRAP: 'A figure that splits records over several rows draws no comparisons. Remove the comparison inputs, or reset canvas.linear.wrap_length under Preserved session settings.',
   LINEAR_SETTING: 'It applies only to Linear diagrams. Reset it under Preserved session settings, or switch to Linear.',
   TRACK_SCHEMA: 'Recreate Custom Track Slots with the current schema.',
   SESSION_FIELDS: 'Remove unsupported top-level Session fields.',
@@ -248,7 +248,7 @@ const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pa
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',
-  evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length', wrap_length: 'Wrap length',
+  evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length', wrap_length: 'Bases per row',
   plot_title_font_size: 'Plot Title Font Size', font_family: 'Font', feature_width_circular: 'Feature Width',
   depth_width_circular: 'Depth Width', gc_content_width_circular: 'GC Content Width',
   gc_content_radius_circular: 'GC Content Radius', gc_skew_width_circular: 'GC Skew Width',

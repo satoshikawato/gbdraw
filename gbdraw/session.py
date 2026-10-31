@@ -1568,8 +1568,11 @@ def upgrade_session_document(
     Session 46-49 then moves to drawings
     (:func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`).
 
-    A current document is returned unchanged. A Session 46 or 47 keeps its
-    drawings; a Session 46 gets its Legend color and stroke edits keyed by
+    A current document is returned unchanged. Every older one holds the
+    replacement of each retired Collinear anchor mode, in its requests and its
+    drafts, with a logged warning
+    (:func:`gbdraw.session_migration.session_with_current_anchor_modes`). A
+    Session 46 or 47 keeps its drawings; a Session 46 gets its Legend color and stroke edits keyed by
     row key (:func:`gbdraw.session_io.legend_edits_by_row_key`), and the
     stored protein results of a reverse-complemented Linear record are
     written in its search frame under their resource IDs (OV-1145); a result
@@ -1880,16 +1883,15 @@ def _upgrade_to_current(
     report: DraftMigrationReport | None = None,
     stored_request_schema: int | None = None,
 ) -> SessionUpgrade:
-    """``loaded`` in the newest mode-scoped version (49), or a Session 49 or
-    50 unchanged. With ``stored_results`` (Web Load's reading), Results
-    without a feature catalog go there instead of being dropped (OV-1659).
-    ``stored_request_schema`` is the schema of the request the file stored
-    (None: the request's own)."""
+    """``loaded`` in the newest mode-scoped version (49), or a Session 50
+    unchanged. A Session 49 changes only by the anchor-mode replacement that
+    every older version gets. With ``stored_results`` (Web Load's reading),
+    Results without a feature catalog go there instead of being dropped
+    (OV-1659). ``stored_request_schema`` is the schema of the request the
+    file stored (None: the request's own)."""
 
-    if loaded.version >= MODE_SCOPED_SESSION_MAX_VERSION:
+    if loaded.version >= DRAWINGS_SESSION_MIN_VERSION:
         return SessionUpgrade(loaded)
-    if loaded.version >= MODE_SCOPED_SESSION_MIN_VERSION:
-        return SessionUpgrade(_upgrade_mode_scoped_session(loaded, temporary_directory))
     if loaded.version < CANONICAL_SESSION_MIN_VERSION:
         raise SessionVersionError(
             "Sessions version 27 through 30 have no canonical request; replay one with "
@@ -1899,8 +1901,17 @@ def _upgrade_to_current(
     from gbdraw.session_migration import (
         read_legacy_source_features,
         replace_current_derived_feature_state,
+        session_with_current_anchor_modes,
         with_current_artifacts,
     )
+
+    repaired = session_with_current_anchor_modes(loaded._data)
+    if repaired != loaded._data:
+        loaded = SessionDocument(repaired, source_path=loaded.source_path)
+    if loaded.version == MODE_SCOPED_SESSION_MAX_VERSION:
+        return SessionUpgrade(loaded)
+    if loaded.version >= MODE_SCOPED_SESSION_MIN_VERSION:
+        return SessionUpgrade(_upgrade_mode_scoped_session(loaded, temporary_directory))
 
     source = loaded._data
     # A Session before the current version holds one drawing.

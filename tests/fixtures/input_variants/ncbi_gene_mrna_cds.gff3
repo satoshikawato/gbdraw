@@ -1,0 +1,13 @@
+##gff-version 3
+##sequence-region ctg1 1 3000
+ctg1	RefSeq	region	1	3000	.	+	.	ID=aa:1;Dbxref=taxon:12345;genome=chromosome
+ctg1	RefSeq	gene	101	1400	.	+	.	ID=gene-A;Name=geneA;gbkey=Gene;gene_biotype=protein_coding
+ctg1	RefSeq	mRNA	101	1400	.	+	.	ID=rna-A;Parent=gene-A;gbkey=mRNA;product=protein A
+ctg1	RefSeq	exon	101	400	.	+	.	ID=exon-A-1;Parent=rna-A
+ctg1	RefSeq	exon	601	900	.	+	.	ID=exon-A-2;Parent=rna-A
+ctg1	RefSeq	exon	1101	1400	.	+	.	ID=exon-A-3;Parent=rna-A
+ctg1	RefSeq	CDS	101	400	.	+	0	ID=cds-A;Parent=rna-A;gbkey=CDS;product=protein A
+ctg1	RefSeq	CDS	601	900	.	+	1	ID=cds-A;Parent=rna-A;gbkey=CDS;product=protein A
+ctg1	RefSeq	CDS	1101	1400	.	+	2	ID=cds-A;Parent=rna-A;gbkey=CDS;product=protein A
+ctg1	RefSeq	gene	1601	2200	.	-	.	ID=gene-B;Name=geneB
+ctg1	RefSeq	CDS	1601	2200	.	-	0	ID=cds-B;Parent=gene-B;gbkey=CDS;product=protein B
