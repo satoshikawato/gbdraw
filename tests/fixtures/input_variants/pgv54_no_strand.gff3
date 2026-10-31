@@ -1,0 +1,5 @@
+##gff-version 3
+##sequence-region ctg1 1 3000
+ctg1	test	CDS	101	700	.	.	0	ID=cds1;product=no strand
+ctg1	test	CDS	801	1400	.	?	0	ID=cds2;product=unknown strand
+ctg1	test	CDS	1501	2000	.	+	0	ID=cds3;product=plus

@@ -1,0 +1,4 @@
+# CRLF is the quirk under test; keep these bytes as written.
+/crlf_line_endings.gb -text
+/ggn117_crlf.gff3 -text
+/ggn117_crlf.fasta -text

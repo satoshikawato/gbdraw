@@ -1,0 +1,11 @@
+##gff-version 3
+##sequence-region ctg1 1 3000
+ctg1	exonerate:protein2genome:local	gene	101	1400	1500	+	.	ID=gene1; Name=query_1; sequence=query_1 ; gene_orientation=+
+ctg1	exonerate:protein2genome:local	cds	101	400	.	+	.	Parent=gene1
+ctg1	exonerate:protein2genome:local	exon	101	400	.	+	.	Parent=gene1 ; insertions=0 ; deletions=0
+ctg1	exonerate:protein2genome:local	splice5	401	402	.	+	.	Parent=gene1 ; intron_id=1 ; splice_site="GT"
+ctg1	exonerate:protein2genome:local	intron	401	600	.	+	.	Parent=gene1 ; derived_from=1
+ctg1	exonerate:protein2genome:local	splice3	599	600	.	+	.	Parent=gene1 ; intron_id=1 ; splice_site="AG"
+ctg1	exonerate:protein2genome:local	cds	601	1400	.	+	.	Parent=gene1
+ctg1	exonerate:protein2genome:local	exon	601	1400	.	+	.	Parent=gene1 ; insertions=0 ; deletions=0
+ctg1	exonerate:protein2genome:local	similarity	101	1400	1500	+	.	alignment_id=1 ; Target=query_1 1 330 ; Query=query_1
