@@ -28,6 +28,10 @@ write-up of a release.
   CDS's own arc, as the command line and Python have since 0.14.4; it drew them
   over the whole record. **Generate Diagram** again on a Session saved by 0.14.4
   to redraw it: the derived LOSATP entries are rebuilt once from the raw searches.
+- Fixed: upgrading an older Session in Python, or re-saving it with
+  `--session_output`, writes `rbh` for a retired Collinear anchor mode such as
+  `one_to_one`, in its requests and drafts. A hand-edited spelling of a retired
+  mode, such as `ONE-TO-ONE`, now reads and upgrades instead of being refused.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

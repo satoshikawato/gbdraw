@@ -130,6 +130,12 @@ RETIRED_COLLINEARITY_ANCHOR_MODES: Mapping[str, CollinearityAnchorMode] = {
 }
 
 
+def retired_collinearity_anchor_mode_replacement(mode: str) -> CollinearityAnchorMode | None:
+    """What a stored anchor mode is read as when ``mode`` is a retired spelling."""
+
+    return RETIRED_COLLINEARITY_ANCHOR_MODES.get(mode.strip().lower().replace("-", "_"))
+
+
 @dataclass(frozen=True)
 class CollinearityAnchor:
     query_protein_id: str
