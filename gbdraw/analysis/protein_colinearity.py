@@ -26,6 +26,7 @@ from typing import (
     Mapping,
     NamedTuple,
     NoReturn,
+    Protocol,
     Sequence,
     SupportsFloat,
     TypedDict,
@@ -3598,18 +3599,48 @@ def filter_protein_hits_by_thresholds(
     ].reset_index(drop=True)
 
 
-def _sort_hits_for_query_best(hits: DataFrame) -> DataFrame:
-    return hits.sort_values(
-        ["query", "bitscore", "evalue", "identity", "alignment_length", "subject"],
-        ascending=[True, False, True, False, False, True],
-        kind="mergesort",
+def _protein_order_codes(protein_ids: pd.Series, protein_map: Mapping[str, _LocatedProtein]) -> np.ndarray:
+    """Each row's place in :func:`_protein_sort_key` order of its protein.
+
+    An ID outside ``protein_map`` sorts after every protein, by its own value,
+    and a missing ID last. A runtime handle hashes the record instance key,
+    which the CLI and the Web set differently, so the handle text never decides
+    a tie between CDSs (OV-2370).
+    """
+
+    row_codes, uniques = pd.factorize(protein_ids)
+    names = [str(value) for value in uniques]
+    known = sorted(
+        (index for index, name in enumerate(names) if name in protein_map),
+        key=lambda index: _protein_sort_key(protein_map[names[index]]),
     )
+    unknown = [index for index, name in enumerate(names) if name not in protein_map]
+    unknown_order = pd.Series(uniques).iloc[unknown].sort_values(kind="mergesort").index
+    rank = np.empty(len(names) + 1, dtype=np.int64)
+    rank[np.asarray(known + unknown_order.tolist(), dtype=np.int64)] = np.arange(len(names))
+    rank[-1] = len(names)  # factorize marks a missing ID -1
+    return rank[row_codes]
+
+
+def _sort_hits_for_query_best(hits: DataFrame, protein_map: Mapping[str, _LocatedProtein]) -> DataFrame:
+    """Each query's hits from best to worst; a complete score tie keeps the subject CDS first in order."""
+
+    order = np.lexsort((
+        _protein_order_codes(hits["subject"], protein_map),
+        -hits["alignment_length"].to_numpy(dtype=float),
+        -hits["identity"].to_numpy(dtype=float),
+        hits["evalue"].to_numpy(dtype=float),
+        -hits["bitscore"].to_numpy(dtype=float),
+        _protein_order_codes(hits["query"], protein_map),
+    ))
+    return hits.iloc[order]
 
 
 def select_top_hits_per_query(
     hits: DataFrame,
     *,
     max_hits: int,
+    protein_map: Mapping[str, CdsProtein],
 ) -> DataFrame:
     """Keep the strongest distinct subject protein hits per query protein."""
 
@@ -3618,7 +3649,7 @@ def select_top_hits_per_query(
         return hits.copy()
     _validate_comparison_columns(hits)
 
-    sorted_hits = _sort_hits_for_query_best(_coerce_outfmt6_numeric_columns(hits))
+    sorted_hits = _sort_hits_for_query_best(_coerce_outfmt6_numeric_columns(hits), protein_map)
     sorted_hits = sorted_hits.drop_duplicates(["query", "subject"], keep="first")
     return (
         sorted_hits.groupby("query", group_keys=False, sort=False)
@@ -3640,6 +3671,7 @@ def _select_member_candidate_hits_per_query(
     hits: DataFrame,
     *,
     max_hits: int | None,
+    protein_map: Mapping[str, CdsProtein],
 ) -> DataFrame:
     """Keep every HSP for the strongest distinct member candidates.
 
@@ -3659,7 +3691,7 @@ def _select_member_candidate_hits_per_query(
         return hits.iloc[0:0].copy()
     _validate_comparison_columns(hits)
     self_hit = _self_hit_mask(hits)
-    selected_pairs = select_top_hits_per_query(hits.loc[~self_hit], max_hits=max_hits)
+    selected_pairs = select_top_hits_per_query(hits.loc[~self_hit], max_hits=max_hits, protein_map=protein_map)
     pair_index = pd.MultiIndex.from_arrays([selected_pairs["query"], selected_pairs["subject"]])
     hit_index = pd.MultiIndex.from_arrays([hits["query"], hits["subject"]])
     return hits.loc[self_hit | hit_index.isin(pair_index)].reset_index(drop=True)
@@ -3667,6 +3699,7 @@ def _select_member_candidate_hits_per_query(
 
 def select_best_hits_per_query(
     hits: DataFrame,
+    protein_map: Mapping[str, CdsProtein],
 ) -> DataFrame:
     """Choose the deterministic best subject for each query protein."""
 
@@ -3675,7 +3708,7 @@ def select_best_hits_per_query(
     _validate_comparison_columns(hits)
 
     return (
-        _sort_hits_for_query_best(_coerce_outfmt6_numeric_columns(hits))
+        _sort_hits_for_query_best(_coerce_outfmt6_numeric_columns(hits), protein_map)
         .drop_duplicates("query", keep="first")
         .reset_index(drop=True)
     )
@@ -3684,6 +3717,7 @@ def select_best_hits_per_query(
 def select_reciprocal_best_hit_edges(
     forward_hits: DataFrame,
     reverse_hits: DataFrame,
+    protein_map: Mapping[str, CdsProtein],
 ) -> DataFrame:
     """Keep RBH edges from directional best-hit tables.
 
@@ -3693,8 +3727,8 @@ def select_reciprocal_best_hit_edges(
     if forward_hits.empty or reverse_hits.empty:
         return forward_hits.iloc[0:0].copy()
 
-    forward_best = select_best_hits_per_query(forward_hits)
-    reverse_best = select_best_hits_per_query(reverse_hits)
+    forward_best = select_best_hits_per_query(forward_hits, protein_map)
+    reverse_best = select_best_hits_per_query(reverse_hits, protein_map)
     reverse_best_by_query = {
         str(query): str(subject)
         for query, subject in zip(reverse_best["query"], reverse_best["subject"])
@@ -3708,6 +3742,7 @@ def select_reciprocal_best_hit_edges(
 
 def _normalized_fit_row_positions(
     normalized_hits: DataFrame,
+    protein_map: Mapping[str, CdsProtein],
     *,
     top_fraction: float,
 ) -> list[int]:
@@ -3715,10 +3750,14 @@ def _normalized_fit_row_positions(
 
     The length-sorted table is cut into at most eight bins; each bin keeps the
     top fraction of its rows by bitscore. One stable sort with the bin as its
-    first key orders every bin as a separate sort of that bin would.
+    first key orders every bin as a separate sort of that bin would. Equal
+    values keep the query, then the subject, in CDS order (:func:`_protein_sort_key`).
     """
 
-    projection = normalized_hits[["length_product", "query", "subject", "bitscore"]].reset_index(drop=True)
+    projection = normalized_hits[["length_product", "bitscore"]].reset_index(drop=True).assign(
+        query=_protein_order_codes(normalized_hits["query"], protein_map),
+        subject=_protein_order_codes(normalized_hits["subject"], protein_map),
+    )
     sorted_hits = projection.sort_values(
         ["length_product", "query", "subject"],
         ascending=[True, True, True],
@@ -3745,12 +3784,13 @@ def _normalized_fit_row_positions(
 
 def _select_normalized_fit_rows(
     normalized_hits: DataFrame,
+    protein_map: Mapping[str, CdsProtein],
     *,
     top_fraction: float,
 ) -> list[tuple[float, float]]:
     if normalized_hits.empty:
         return []
-    positions = _normalized_fit_row_positions(normalized_hits, top_fraction=top_fraction)
+    positions = _normalized_fit_row_positions(normalized_hits, protein_map, top_fraction=top_fraction)
     fit_points: list[tuple[float, float]] = []
     for length_product, bitscore in zip(
         normalized_hits["length_product"].to_numpy(dtype=float)[positions].tolist(),
@@ -3764,6 +3804,7 @@ def _select_normalized_fit_rows(
 
 def _fit_expected_bitscore_model(
     normalized_hits: DataFrame,
+    protein_map: Mapping[str, CdsProtein],
     *,
     top_fraction: float,
 ) -> tuple[float, float] | None:
@@ -3771,6 +3812,7 @@ def _fit_expected_bitscore_model(
         return None
     fit_points = _select_normalized_fit_rows(
         normalized_hits,
+        protein_map,
         top_fraction=top_fraction,
     )
     if len(fit_points) < 3:
@@ -4032,6 +4074,7 @@ def _normalize_directional_hit_table(
     # (OV-2299). Self rows stay in the table until the directed hits drop them.
     model = _fit_expected_bitscore_model(
         normalized_hits.loc[~_self_hit_mask(normalized_hits)],
+        protein_map,
         top_fraction=top_fraction,
     )
     fallback = model is None
@@ -4132,7 +4175,26 @@ def _is_better_member_rank(
     )
 
 
-def _protein_sort_key(protein: CdsProtein) -> tuple[int, int, int, str]:
+class _LocatedProtein(Protocol):
+    """A CDS protein or group member: what :func:`_protein_sort_key` reads."""
+
+    @property
+    def protein_id(self) -> str: ...
+    @property
+    def record_index(self) -> int: ...
+    @property
+    def start(self) -> int: ...
+    @property
+    def end(self) -> int: ...
+
+
+def _protein_sort_key(protein: _LocatedProtein) -> tuple[int, int, int, str]:
+    """The order of CDS proteins: record, then CDS location.
+
+    The ID decides only between CDSs at one location of one record. Every tie
+    between CDSs follows this order on the CLI and on the Web alike.
+    """
+
     return (
         int(protein.record_index),
         int(protein.start),
@@ -4598,7 +4660,7 @@ def _directed_hits_from_tables(
     """
 
     record_index_by_id = {protein_id: int(protein.record_index) for protein_id, protein in protein_map.items()}
-    protein_ids = sorted(record_index_by_id, key=lambda protein_id: (record_index_by_id[protein_id], protein_id))
+    protein_ids = sorted(protein_map, key=lambda protein_id: _protein_sort_key(protein_map[protein_id]))
     protein_index = pd.Index(protein_ids, dtype=object)
     tables = [table for table in normalized_tables.values() if table is not None and not table.empty]
     query_codes = protein_index.get_indexer([str(value) for table in tables for value in table["query"].tolist()])
@@ -4638,7 +4700,7 @@ def _directed_hits_from_tables(
         (-score, evalue, -min_coverage, -identity, -truncated_length),
         int(directions.max(initial=-1)) + 1,
     )
-    # Record index then ID orders the endpoints; the codes keep that order.
+    # The codes follow _protein_sort_key, so a complete tie keeps the endpoints first in CDS order.
     ranked = best[np.lexsort((
         query[best] * count + subject[best],
         -truncated_length[best],
@@ -5405,9 +5467,11 @@ def _build_anchor_core_orthogroups(
     }
     scope_by_group.update({group_id: "cross_record" for group_id in group_member_ids})
 
-    def representative_member_key(member_id: str) -> tuple[float, float, float, float, str]:
+    def representative_member_key(
+        member_id: str,
+    ) -> tuple[float, float, float, float, tuple[int, int, int, str]]:
         rank = member_ranks[member_id]
-        return (-rank[0], rank[1], -rank[2], -rank[3], str(member_id))
+        return (-rank[0], rank[1], -rank[2], -rank[3], _protein_sort_key(protein_map[member_id]))
 
     representative_ids_by_group: dict[str, set[str]] = {}
     for group_id, member_ids in group_member_ids.items():
@@ -5585,10 +5649,8 @@ def _build_anchor_core_orthogroups(
             group_id: sorted(
                 edges,
                 key=lambda edge: (
-                    edge.query_record_index,
-                    edge.subject_record_index,
-                    edge.query_protein_id,
-                    edge.subject_protein_id,
+                    _protein_sort_key(protein_map[edge.query_protein_id]),
+                    _protein_sort_key(protein_map[edge.subject_protein_id]),
                     edge.edge_kind,
                 ),
             )
@@ -5623,10 +5685,8 @@ def _build_anchor_core_orthogroups(
                     edges,
                     key=lambda edge: (
                         ORTHOLOG_DISPLAY_EDGE_KIND_RANK.get(str(edge.edge_kind), 99),
-                        edge.query_record_index,
-                        edge.subject_record_index,
-                        edge.query_protein_id,
-                        edge.subject_protein_id,
+                        _protein_sort_key(protein_map[edge.query_protein_id]),
+                        _protein_sort_key(protein_map[edge.subject_protein_id]),
                     ),
                 )
             )
@@ -6195,6 +6255,12 @@ def _orthogroup_scope(
     return orthogroups.scope_by_orthogroup_id.get(str(orthogroup_id), "cross_record")
 
 
+def _member_order_key(protein_id: str, member: OrthogroupMember | None) -> tuple[int, int, int, str]:
+    """A display endpoint's :func:`_protein_sort_key`; a protein outside every group sorts last."""
+
+    return _protein_sort_key(member) if member is not None else (1 << 62, 0, 0, str(protein_id))
+
+
 def _ortholog_edge_display_rank(
     edge: OrthologEdge,
     orthogroups: OrthogroupResult | OrthogroupGraphResult,
@@ -6216,8 +6282,8 @@ def _ortholog_edge_display_rank(
         -int(edge.alignment_length),
         int(edge.query_record_index),
         int(edge.subject_record_index),
-        str(edge.query_protein_id),
-        str(edge.subject_protein_id),
+        _member_order_key(edge.query_protein_id, query_member),
+        _member_order_key(edge.subject_protein_id, subject_member),
         str(edge.edge_kind),
     )
 
@@ -6301,8 +6367,8 @@ def _comparison_row_display_rank(
         -int(float(cast(SupportsFloat, row.get("alignment_length", 0.0)))),
         int(query_member.record_index) if query_member is not None else 0,
         int(subject_member.record_index) if subject_member is not None else 0,
-        query_id,
-        subject_id,
+        _member_order_key(query_id, query_member),
+        _member_order_key(subject_id, subject_member),
         "direct_orthogroup",
     )
 
@@ -6461,7 +6527,8 @@ def _build_adjacent_display_edges_by_pair(
             direct_rows = _sort_hits_for_query_best(
                 _coerce_outfmt6_numeric_columns(
                     direct_candidate_table.loc[:, list(COMPARISON_COLUMNS)]
-                )
+                ),
+                orthogroups.member_by_protein_id,
             ).drop_duplicates(["query", "subject"], keep="first")
             for row in direct_rows.itertuples(index=False):
                 query_id = str(row.query)
@@ -6605,6 +6672,7 @@ def select_rbh_orthogroup_edges_from_directional_hits(
         pair: _select_member_candidate_hits_per_query(
             hits,
             max_hits=orthogroup_member_max_hits,
+            protein_map=protein_map,
         )
         for pair, hits in directional_hits_by_pair.items()
     }
@@ -6694,7 +6762,9 @@ def build_pairwise_protein_blastp_comparisons(
             identity=identity,
             alignment_length=alignment_length,
         )
-        display_hits = select_top_hits_per_query(filtered_hits, max_hits=max_hits)
+        display_hits = select_top_hits_per_query(
+            filtered_hits, max_hits=max_hits, protein_map=extraction.protein_map
+        )
         comparisons.append(
             convert_protein_hits_to_genomic_links(
                 display_hits,

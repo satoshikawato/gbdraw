@@ -254,9 +254,9 @@ def test_collinear_scope_partitions_table_identity(monkeypatch, search_scope, ed
         captured["semantic"] = tables
         return infer(tables, *args, **kwargs)
 
-    def capture_geometry(tables, **kwargs):
+    def capture_geometry(tables, *args, **kwargs):
         captured["geometry"] = tables
-        return select_geometry(tables, **kwargs)
+        return select_geometry(tables, *args, **kwargs)
 
     monkeypatch.setattr(collinearity_module, "select_rbh_orthogroup_edges_from_directional_hits", capture_semantic)
     monkeypatch.setattr(collinearity_module, "_select_orthogroup_edges", capture_geometry)
@@ -4006,7 +4006,7 @@ def _protein_float_reductions():
         block.score,
         collinearity_module._weighted_identity(anchors),
         tuple(row),
-        protein_colinearity_module._fit_expected_bitscore_model(hits, top_fraction=1.0),
+        protein_colinearity_module._fit_expected_bitscore_model(hits, {}, top_fraction=1.0),
     )
 
 

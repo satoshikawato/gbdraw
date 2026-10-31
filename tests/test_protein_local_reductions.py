@@ -17,6 +17,26 @@ from tests.prototypes.protein_local_reductions import frozen, fit_oracle, hit_or
 from tests.test_protein_comparison_benchmark import benchmark
 from gbdraw.session_request_codec import encode_canonical_typed_resource
 
+# The synthetic IDs name no CDS, so ties keep the ID order the frozen copy used.
+NO_PROTEINS: dict = {}
+
+
+def live_map(module):
+    return {} if module is frozen else {'protein_map': NO_PROTEINS}
+
+
+def ids_in_cds_order(pm, tables):
+    """Rename the proteins so that ID order is CDS order.
+
+    The frozen copies break a score tie on the protein ID, the live code on the
+    CDS (OV-2370); with both orders equal, a differential compares the rest.
+    """
+    order = sorted(pm, key=lambda pid: pc._protein_sort_key(pm[pid]))
+    names = {pid: f'c{rank:04d}_{pid}' for rank, pid in enumerate(order)}
+    renamed = {names[pid]: replace(pm[pid], protein_id=names[pid]) for pid in order}
+    return renamed, {pair: table.assign(query=table['query'].map(names), subject=table['subject'].map(names))
+                     for pair, table in tables.items()}
+
 
 def fit_frame(size, ids='string', duplicate_index=False):
     frame = pd.DataFrame({
@@ -41,16 +61,16 @@ def test_fit_points_model_ordinals_and_input(size, fraction, ids):
     frame = fit_frame(size, ids)
     before = frame.copy(deep=True)
     ordinals, points, model = fit_oracle(frame, fraction)
-    assert pc._normalized_fit_row_positions(frame, top_fraction=fraction) == ordinals
-    actual = pc._select_normalized_fit_rows(frame, top_fraction=fraction)
+    assert pc._normalized_fit_row_positions(frame, NO_PROTEINS, top_fraction=fraction) == ordinals
+    actual = pc._select_normalized_fit_rows(frame, NO_PROTEINS, top_fraction=fraction)
     assert actual == points == frozen._select_normalized_fit_rows(frame, top_fraction=fraction)
-    assert pc._fit_expected_bitscore_model(frame, top_fraction=fraction) == model
+    assert pc._fit_expected_bitscore_model(frame, NO_PROTEINS, top_fraction=fraction) == model
     assert model == frozen._fit_expected_bitscore_model(frame, top_fraction=fraction)
     assert_frame_equal(frame, before, check_exact=True)
     frame.index = [i // 2 for i in range(size)]
     for col in frame.columns[4:]:
         frame[col] = None
-    assert pc._select_normalized_fit_rows(frame, top_fraction=fraction) == points
+    assert pc._select_normalized_fit_rows(frame, NO_PROTEINS, top_fraction=fraction) == points
 
 
 @pytest.mark.parametrize('kind', ['full_tie', 'zero', 'round_tie', 'epsilon', 'few_points', 'nonfinite'])
@@ -72,11 +92,11 @@ def test_fit_degenerate_models(kind):
         frame['bitscore'] = float('inf')
     ordinals, expected, model = fit_oracle(frame, .25)
     assert model is None
-    assert pc._normalized_fit_row_positions(frame, top_fraction=.25) == ordinals
-    assert pc._select_normalized_fit_rows(frame, top_fraction=.25) == expected
+    assert pc._normalized_fit_row_positions(frame, NO_PROTEINS, top_fraction=.25) == ordinals
+    assert pc._select_normalized_fit_rows(frame, NO_PROTEINS, top_fraction=.25) == expected
     if kind == 'full_tie':
         assert ordinals == [0, 4, 8, 12]
-    assert pc._fit_expected_bitscore_model(frame, top_fraction=.25) is None
+    assert pc._fit_expected_bitscore_model(frame, NO_PROTEINS, top_fraction=.25) is None
 
 
 def test_fit_sorts_the_four_fit_columns_in_two_passes():
@@ -87,8 +107,8 @@ def test_fit_sorts_the_four_fit_columns_in_two_passes():
         widths.append(tuple(df.columns))
         return original(df, *args, **kwargs)
     with patch.object(pd.DataFrame, 'sort_values', sort):
-        pc._select_normalized_fit_rows(frame, top_fraction=.05)
-    fit_columns = ('length_product', 'query', 'subject', 'bitscore')
+        pc._select_normalized_fit_rows(frame, NO_PROTEINS, top_fraction=.05)
+    fit_columns = ('length_product', 'bitscore', 'query', 'subject')
     assert widths == [fit_columns, (*fit_columns, '_bin')]
 
 
@@ -154,7 +174,7 @@ def test_member_top_best_and_reciprocity_independent_oracle(ids, limit):
         positions = list(range(len(hits)))
     else:
         chosen = hit_ordinals(hits, limit)
-        top = pc.select_top_hits_per_query(hits, max_hits=limit)
+        top = pc.select_top_hits_per_query(hits, max_hits=limit, protein_map=NO_PROTEINS)
         assert_frame_equal(top, numeric_frame(hits).iloc[chosen].reset_index(drop=True), check_exact=True)
         assert_frame_equal(top, frozen.select_top_hits_per_query(hits, max_hits=limit), check_exact=True)
         # OV-2298: the member limit counts subjects other than the query; self
@@ -167,7 +187,7 @@ def test_member_top_best_and_reciprocity_independent_oracle(ids, limit):
         positions = [
             i for i, pair in enumerate(zip(hits['query'], hits['subject'])) if self_rows[i] or pair in pairs
         ]
-    members = pc._select_member_candidate_hits_per_query(hits, max_hits=limit)
+    members = pc._select_member_candidate_hits_per_query(hits, max_hits=limit, protein_map=NO_PROTEINS)
     assert_frame_equal(members, hits.iloc[positions].reset_index(drop=True), check_exact=True)
     if limit is None or not any(self_rows):
         # The frozen copy counts a self hit, so it agrees only without one.
@@ -175,16 +195,16 @@ def test_member_top_best_and_reciprocity_independent_oracle(ids, limit):
             members, frozen._select_member_candidate_hits_per_query(hits, max_hits=limit), check_exact=True
         )
     query_best = hit_ordinals(members)
-    actual = pc.select_best_hits_per_query(members)
+    actual = pc.select_best_hits_per_query(members, NO_PROTEINS)
     assert_frame_equal(actual, numeric_frame(members).iloc[query_best].reset_index(drop=True), check_exact=True)
     assert_frame_equal(actual, frozen.select_best_hits_per_query(members), check_exact=True)
     reverse = members.rename(columns={'query': 'subject', 'subject': 'query'}).iloc[::-1].copy()
     reverse_best = hit_ordinals(reverse)
     back = {str(reverse['query'].iloc[i]): str(reverse['subject'].iloc[i]) for i in reverse_best}
     mutual = [i for i in query_best if back.get(str(members['subject'].iloc[i])) == str(members['query'].iloc[i])]
-    assert_frame_equal(pc.select_reciprocal_best_hit_edges(members, reverse),
+    assert_frame_equal(pc.select_reciprocal_best_hit_edges(members, reverse, NO_PROTEINS),
                        numeric_frame(members).iloc[mutual].reset_index(drop=True), check_exact=True)
-    assert_frame_equal(pc.select_reciprocal_best_hit_edges(members, reverse),
+    assert_frame_equal(pc.select_reciprocal_best_hit_edges(members, reverse, NO_PROTEINS),
                        frozen.select_reciprocal_best_hit_edges(members, reverse), check_exact=True)
     assert_frame_equal(hits, before, check_exact=True)
     if limit is None:
@@ -204,8 +224,9 @@ def test_edge_caller_missing_direction_and_member_limit(mode, missing, limit):
     if not missing:
         tables[1, 0] = hits.rename(columns={'query': 'subject', 'subject': 'query'}).iloc[::-1]
     def run():
-        selected = {pair: cc._select_member_candidate_hits_per_query(h, max_hits=limit) for pair, h in tables.items()}
-        return cc._select_orthogroup_edges(selected, edge_mode=mode)
+        selected = {pair: cc._select_member_candidate_hits_per_query(h, max_hits=limit, protein_map=NO_PROTEINS)
+                    for pair, h in tables.items()}
+        return cc._select_orthogroup_edges(selected, NO_PROTEINS, edge_mode=mode)
     with frozen_collinear_callers():
         expected = run()
     actual = run()
@@ -230,10 +251,10 @@ def test_public_numeric_rejection_exact_type_message(column, bad):
         with pytest.raises(Exception) as old_error:
             getattr(frozen, name)(*args, **kwargs)
         with pytest.raises(type(old_error.value)) as new_error:
-            getattr(pc, name)(*args, **kwargs)
+            getattr(pc, name)(*args, **kwargs, protein_map=NO_PROTEINS)
         assert str(new_error.value) == str(old_error.value)
     # Unlimited member selection returns original rows, including raw numeric fields.
-    assert_frame_equal(pc._select_member_candidate_hits_per_query(hits, max_hits=None),
+    assert_frame_equal(pc._select_member_candidate_hits_per_query(hits, max_hits=None, protein_map=NO_PROTEINS),
                        frozen._select_member_candidate_hits_per_query(hits, max_hits=None), check_exact=True)
 
 
@@ -254,10 +275,10 @@ def test_selector_empty_and_validation_order(shape):
                 expected = getattr(frozen, name)(*args, **kwargs)
             except Exception as old_error:
                 with pytest.raises(type(old_error)) as new_error:
-                    getattr(pc, name)(*args, **kwargs)
+                    getattr(pc, name)(*args, **kwargs, protein_map=NO_PROTEINS)
                 assert str(new_error.value) == str(old_error)
             else:
-                assert_frame_equal(getattr(pc, name)(*args, **kwargs), expected, check_exact=True)
+                assert_frame_equal(getattr(pc, name)(*args, **kwargs, protein_map=NO_PROTEINS), expected, check_exact=True)
 
 
 def test_removed_member_copies_pair_dedup_and_full_row_conversion():
@@ -273,7 +294,7 @@ def test_removed_member_copies_pair_dedup_and_full_row_conversion():
                 projections.append(tuple(key))
             return original_getitem(df, key)
         with patch.object(pd.DataFrame, 'copy', copy), patch.object(pd.DataFrame, '__getitem__', getitem):
-            module._select_member_candidate_hits_per_query(hits, max_hits=limit)
+            module._select_member_candidate_hits_per_query(hits, max_hits=limit, **live_map(module))
         return copied, projections
     assert len(counts(frozen, None)[0]) - len(counts(pc, None)[0]) == 1
     assert counts(frozen, 1)[1].count(('query', 'subject')) == 2
@@ -288,11 +309,11 @@ def test_removed_member_copies_pair_dedup_and_full_row_conversion():
                 return original_dedupe(df, *args, **kwargs)
             with patch.object(pd.DataFrame, 'drop_duplicates', dedupe):
                 args = (hits, hits) if name == 'select_reciprocal_best_hit_edges' else (hits,)
-                getattr(module, name)(*args)
+                getattr(module, name)(*args, **live_map(module))
             observed.append(len(calls))
         assert observed[0] - observed[1] == expected_removed
     with patch.object(pd.DataFrame, 'itertuples', side_effect=AssertionError('full row conversion')):
-        pc.select_reciprocal_best_hit_edges(hits, hits)
+        pc.select_reciprocal_best_hit_edges(hits, hits, NO_PROTEINS)
 
 
 def independent_evidence_rank(row, proteins):
@@ -333,7 +354,7 @@ def test_stable_evidence_rank_and_first_occurrence_oracle():
 
 @pytest.mark.parametrize('scenario', ['sparse-2', 'dense-4', 'support-edges'])
 def test_evidence_is_ranked_once_from_precomputed_ranks(scenario):
-    pm, tables = benchmark.synthetic(pc, scenario, 20260916)
+    pm, tables = ids_in_cds_order(*benchmark.synthetic(pc, scenario, 20260916))
     expected = benchmark.canonical(frozen.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=3))
     sorts = []
     def sort(values, *args, **kwargs):
@@ -363,6 +384,7 @@ def test_complete_collinear_result_differential(scope, infer, limit, mode, ancho
                       start=4000 - p.end if reverse else p.start,
                       end=4000 - p.start if reverse else p.end,
                       strand=-1 if reverse else 1) for pid, p in pm.items()}
+    pm, tables = ids_in_cds_order(pm, tables)
     ex = pc.ProteinExtractionResult([[p for p in pm.values() if p.record_index == r] for r in range(3)], pm)
     records = [SeqRecord(Seq('A' * 5000), id=f'record_{r}') for r in range(3)]
     before = benchmark.canonical((ex, tables))
@@ -388,6 +410,7 @@ def test_complete_similarity_result_differential(limit, scenario, reverse, basel
     pm, tables = benchmark.synthetic(pc, scenario, 20260916)
     if reverse:
         pm = {pid: replace(p, start=4000 - p.end, end=4000 - p.start, strand=-1) for pid, p in pm.items()}
+    pm, tables = ids_in_cds_order(pm, tables)
     before = benchmark.canonical((pm, tables))
     def run(module):
         result = module.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=3,

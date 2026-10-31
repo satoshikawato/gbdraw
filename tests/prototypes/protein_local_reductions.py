@@ -11,7 +11,7 @@ import gzip
 import math
 from pathlib import Path
 import sys
-from types import ModuleType
+from types import FunctionType, ModuleType
 from unittest.mock import patch
 
 from gbdraw.analysis import collinearity as cc, protein_colinearity as pc
@@ -75,12 +75,28 @@ def frozen_module():
 frozen = frozen_module()
 
 
+# Since OV-2370 the live hit selectors take the protein map that orders a
+# score tie by CDS; the frozen copies order it by ID. Live callers pass the map,
+# which a frozen copy drops; a differential gives IDs in CDS order.
+_POSITIONAL_PROTEIN_MAP = {'select_best_hits_per_query': 1, 'select_reciprocal_best_hit_edges': 2}
+
+
+def without_protein_map(name, function):
+    if not isinstance(function, FunctionType):
+        return function
+    arity = _POSITIONAL_PROTEIN_MAP.get(name)
+
+    def call(*args, protein_map=None, **kwargs):
+        return function(*(args if arity is None else args[:arity]), **kwargs)
+    return call
+
+
 @contextmanager
 def frozen_collinear_callers():
     with ExitStack() as stack:
         for name, value in vars(cc).items():
             if name in vars(frozen) and value is vars(pc).get(name) and callable(value):
-                stack.enter_context(patch.object(cc, name, vars(frozen)[name]))
+                stack.enter_context(patch.object(cc, name, without_protein_map(name, vars(frozen)[name])))
         yield
 
 

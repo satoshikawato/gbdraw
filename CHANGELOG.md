@@ -23,6 +23,13 @@ write-up of a release.
   limit. A wrapped figure's PNG or PDF over its limit
   ([limits](./docs/REFERENCE/output-formats-and-export.md#png-and-pdf-size-limits))
   stops before writing, and the error names a longer row length that should fit.
+- Fixed: LOSATP Pairwise and Similarity groups draw the same links on the
+  command line, in Python, and in the Web app for the same records and hits.
+  When hits tie on score, the first CDS by record and location wins; the
+  protein ID, which differs between the surfaces and between Web pages, decided
+  before, so a few links among identical paralogs could differ. **Generate
+  Diagram** again on a saved Session to redraw it: the derived LOSATP entries
+  are rebuilt once from the raw searches.
 - Fixed: the Web app draws a LOSATP Pairwise link, Similarity group link, or
   Collinear block that uses a CDS across a circular record's origin over the
   CDS's own arc, as the command line and Python have since 0.14.4; it drew them
