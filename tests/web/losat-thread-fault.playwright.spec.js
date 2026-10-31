@@ -81,3 +81,31 @@ test('a trapping WASI thread fails its threaded LOSAT job after bounded retries 
   // Ending each job also ends its WASI thread worker.
   await expect.poll(() => threadWorkers.every((entry) => entry.closed)).toBe(true);
 });
+
+// The shipped threaded file runs a pair in the browser: the job's shared memory meets the
+// memory the file imports (its recorded page limits), and LOSAT reads the search's words.
+test('the shipped threaded LOSAT wasm runs a blastp pair with two threads', async ({ page }) => {
+  test.setTimeout(120000);
+  await routeCrossOriginIsolated(page.context(), {
+    '/gbdraw/web/losat-threaded-run.html': { contentType: 'text/html', body: '<!doctype html><title>LOSAT threaded run</title>' }
+  });
+  await page.goto('/gbdraw/web/losat-threaded-run.html');
+  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
+  const protein = 'MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEKAVQVKVKALPDAQFEVVHSLAKWKRQTLGQHDFSAGEGLYTHMKALRPDEDRLSPLHSVYVDQ';
+  const outcome = await evaluateWithRetainedPromise(page, async (sequence) => {
+    const { runLosatPairsParallel } = await import('/gbdraw/web/js/services/losat.js');
+    return runLosatPairsParallel(
+      [{ pairIndex: 0, cacheKey: 'pair', program: 'blastp', querySequenceKey: 'q', subjectSequenceKey: 's',
+        extraArgs: ['--max-hsps-per-subject', '1', '--max-target-seqs', '5'] }],
+      {
+        executionMode: 'threaded', totalThreadBudget: 2, concurrency: 1, threadsPerJob: 2,
+        sequences: { q: `>q1\n${sequence}\n`, s: `>s1\n${sequence}\n` }
+      }
+    ).then(
+      (results) => ({ status: 'resolved', text: results.map((result) => result.text).join('') }),
+      (error) => ({ status: 'rejected', message: String(error?.message || error) })
+    );
+  }, protein);
+  expect(outcome).toMatchObject({ status: 'resolved' });
+  expect(outcome.text.trim().split('\t').slice(0, 4)).toEqual(['q1', 's1', '100.000', String(protein.length)]);
+});

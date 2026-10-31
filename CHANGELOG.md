@@ -49,6 +49,17 @@ write-up of a release.
   pair again"), or fail after the third stop. In Chromium a copy into memory
   that another LOSAT thread had just grown could trap; the Web app now checks
   each such copy and first brings the thread's view of the memory up to date.
+- Changed: the Web app's LOSAT engine is LOSAT 0.2.0 at commit `dde737f18`
+  (it was a build of LOSAT 0.1.0). Its searches give the rows of the `losat`
+  command of that commit; LOSATN with task `blastn` gives different E-values and
+  hits than before. Task `dc-megablast` now runs dc-megablast with threaded
+  execution; serial execution stops with LOSAT's "unsupported blastn task"
+  error (the old engine ran `blastn` for it). Run Info names the engine's
+  version. A search saved by an earlier Web app, and a LOSATN or TLOSATX search
+  saved in a Session older than version 44, run again once at the next
+  **Generate Diagram**; searches saved by the command line and legacy LOSATP
+  searches are reused as before.
+  `gbdraw/web/wasm/losat/losat-build.json` records the build.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

@@ -3,6 +3,8 @@ const { spawnSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+// The version the Web records with each search: the shipped LOSAT Wasm build.
+const { version: LOSAT_WASM_VERSION } = require('../../../gbdraw/web/wasm/losat/losat-build.json');
 const {
   CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
@@ -798,14 +800,14 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
     expect(searched.result, JSON.stringify(searched.errorLog)).toEqual({ status: 'ok' });
     expect(searched.losatCalls).toBe(1);
     expect(searched.runtimes).toEqual(Array.from({ length: 3 }, () => (
-      { kind: 'losat', source: 'wasm', version: null, program: 'blastn' }
+      { kind: 'losat', source: 'wasm', version: LOSAT_WASM_VERSION, program: 'blastn' }
     )));
     expect(searched.runInfo.losatRuntimes.map(({ text }) => text)).toEqual([
-      'blastn: LOSAT, version not recorded (wasm)'
+      `blastn: LOSAT ${LOSAT_WASM_VERSION} (wasm)`
     ]);
     await page.getByRole('button', { name: /Run info$/ }).click({ timeout: 15_000 });
     await expect(page.locator('[data-run-info-search-runtimes] li')).toHaveText([
-      'blastn: LOSAT, version not recorded (wasm)'
+      `blastn: LOSAT ${LOSAT_WASM_VERSION} (wasm)`
     ]);
     const searchedComparison = compareSvgs('fasta-ring-2.svg', loaded.content, 'searched-ring.svg', searched.content);
     expect(searchedComparison.status, `${searchedComparison.stdout}\n${searchedComparison.stderr}`).toBe(0);

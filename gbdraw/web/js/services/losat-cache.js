@@ -7,6 +7,7 @@ import {
   PROTEIN_IDENTITY_MANIFEST_SCHEMA,
   PROTEIN_LOSAT_CACHE_SCHEMA
 } from '../contracts/schema.generated.js';
+import { LOSAT_WASM_BUILD } from './losat-build.generated.js';
 
 // Membership is tested on unvalidated Session values, hence `ReadonlySet<unknown>`.
 /** @type {ReadonlySet<unknown>} */
@@ -53,15 +54,31 @@ const MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = [
 
 // The runtime identity the Web stores beside each raw entry it searches
 // (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw
-// key. The shipped WASM has no build manifest, so its version is not recorded
-// (null), as for a CLI runtime whose version probe fails.
+// key. Its version is the shipped Wasm's build (gbdraw/web/wasm/losat/losat-build.json).
 /** @param {unknown} program */
 export const webLosatRuntimeRecord = (program) => ({
   kind: 'losat',
   source: 'wasm',
-  version: null,
+  version: LOSAT_WASM_BUILD.version,
   program: String(program || '')
 });
+
+/**
+ * Whether Generate may reuse a raw entry's rows, by the runtime that searched them: a CLI search, or this LOSAT
+ * Wasm build. Rows of another Wasm build (a different `version`, or `null`, which gbdraw 0.14.4 and earlier wrote
+ * before the build was recorded) are searched again once, and so are nucleotide rows with no runtime record
+ * (Sessions before version 44). Protein rows with no runtime record (promoted legacy protein caches) are reused:
+ * the session compatibility reference promises that a later Web Generate uses a pending legacy entry, and the
+ * blastp rows of the earlier build and this one are the same.
+ * @param {unknown} entry
+ * @returns {boolean}
+ */
+export const isReusableLosatEntry = (entry) => {
+  if (!isPlainObject(entry)) return false;
+  const { runtime } = entry;
+  if (!isPlainObject(runtime)) return entry.identityKind === 'protein';
+  return runtime.source !== 'wasm' || runtime.version === LOSAT_WASM_BUILD.version;
+};
 
 // Default raw LOSAT TSV name of a Linear edge; the CLI port is
 // gbdraw.comparisons.linear_losat.losat_edge_filename
@@ -948,6 +965,7 @@ export const getCurrentRawLosatCacheEntry = (
 ) => {
   if (!(cacheMap instanceof Map) || !cacheKey) return null;
   const entry = cacheMap.get(cacheKey);
+  if (!isReusableLosatEntry(entry)) return null;
   if ((entry?.searchContext ?? null) !== (metadata.searchContext ?? null)) return null;
   const classification = classifyRawLosatCacheEntry(entry);
   if (classification === 'protein-current') {
