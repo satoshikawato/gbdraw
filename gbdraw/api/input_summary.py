@@ -239,6 +239,8 @@ def _comparison_label(table: ComparisonTableTally, records: Sequence[RecordInput
         return f"record #{index + 1} {record_id}".rstrip()
 
     pair = f"{endpoint(table.query_record_index)} and {endpoint(table.subject_record_index)}"
+    if table.protein_hits:
+        return f"Protein comparison of {pair}"
     if table.source_name:
         return f"Comparison table {table.source_name} ({pair})"
     return f"Comparison of {pair}"
@@ -254,6 +256,9 @@ def _threshold_text(item: ComparisonThresholdTally) -> str:
 
 def _comparison_line(table: ComparisonTableTally, records: Sequence[RecordInputSummary]) -> str:
     tally = table.tally
+    if table.protein_hits:
+        # The hits the thresholds leave out are not counted (OV-2389).
+        return f"{_comparison_label(table, records)}: drew {_count(tally.rows_kept, 'protein hit')} passing the thresholds."
     line = f"{_comparison_label(table, records)}: kept {tally.rows_kept:,} of {_count(tally.rows_read, 'row')}"
     if tally.thresholds:
         line += "; " + "; ".join(_threshold_text(item) for item in tally.thresholds)
@@ -270,11 +275,14 @@ def input_summary_lines(summary: InputSummary) -> tuple[str, ...]:
 
 
 def _no_feature_reason(record: RecordInputSummary) -> str:
+    hidden = [(item.feature_type, item.hidden) for item in record.features if item.hidden]
+    if record.region is not None and not hidden:
+        # The types left out when a GFF3 file is read are counted over the whole record.
+        return f"its region {record.region[0]:,}..{record.region[1]:,} holds no feature of a type drawn"
     if not record.features:
         return "it has no features"
     reasons = []
     not_drawn = [(item.feature_type, item.type_not_drawn) for item in record.features if item.type_not_drawn]
-    hidden = [(item.feature_type, item.hidden) for item in record.features if item.hidden]
     if not_drawn:
         reasons.append(
             f"its {_type_counts(not_drawn)} features are of types not drawn; add a type to the "
@@ -299,7 +307,11 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
     for table in summary.comparisons:
         tally = table.tally
         label = _comparison_label(table, summary.records)
-        if tally.rows_read == 0:
+        if table.protein_hits and tally.rows_kept == 0:
+            warnings.append(InputWarning(
+                COMPARISON_TABLE_EMPTY, f"{label} has no protein hit that passes the thresholds, so no match is drawn."
+            ))
+        elif tally.rows_read == 0:
             warnings.append(InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no rows, so no match is drawn."))
         elif tally.rows_kept == 0:
             warnings.append(InputWarning(
@@ -326,8 +338,6 @@ def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputS
     knows the name of the file it read.
     """
 
-    if not names:
-        return summary
     return InputSummary(
         records=tuple(
             replace(record, source_name=names.get(record.source_name, record.source_name))

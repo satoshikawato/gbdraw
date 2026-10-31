@@ -714,8 +714,10 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # length): an empty list for a figure with nothing cut, no other change.
     # Updated again when the reply took the `inputSummaries` key (the input
     # summary of each Result): no other key moved.
-    "similarity_groups": "92e56e905e51af81ebba4244725305028eafcffb8207591537b42a334bac9beb",
-    "collinear": "d6869137582f0d55b77980a03ef8c8f0a0f937a82ad806971217d97f691bb755",
+    # Updated again when a protein pair's summary line said it counts the hits
+    # passing the thresholds: only `inputSummaries` moved.
+    "similarity_groups": "4c668082c96d62b13f0f62ce9182a6d90e761570ce740cfd86ce249592d62e78",
+    "collinear": "92b61d6ca556fd1ef8c2a5894262684839a2b1dc0eb534f022928fe791b3077b",
 }
 
 

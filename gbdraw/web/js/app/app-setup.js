@@ -27,7 +27,7 @@
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
-import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors } from './result-paint-record.js';
+import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
@@ -6199,6 +6199,11 @@ export const createAppSetup = () => {
   const shownInputSummary = computed(() => inputSummaryOf(
     inputSummaries.value, selectedResultIndex.value, results.value[selectedResultIndex.value]?.name
   ));
+  // A live Feature visibility edit no render drew since: the summary counts what the render drew.
+  const shownInputSummaryStale = computed(() => {
+    const summary = shownInputSummary.value;
+    return summary !== null && summary.drawnVisibility !== visibilityPaintState(state.activeDrawing());
+  });
   const openLabelFitNotice = () => {
     const entry = labelFitNotice.value;
     if (!entry) return undefined;
@@ -6976,6 +6981,7 @@ export const createAppSetup = () => {
     labelCapacityText,
     labelFitNotice,
     shownInputSummary,
+    shownInputSummaryStale,
     openLabelFitNotice,
     resolveLabelFitChoice,
     editLabelFitRecordText,

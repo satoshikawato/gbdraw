@@ -263,7 +263,9 @@ test('a rerender lands in the artifact of its Result\'s drawing', async () => {
   const redrawn = {
     featureCatalog: { schema: 5, items: [{ id: 'redrawn' }] }, extractedFeatures: [{ id: 'f2' }],
     biologicalFeatures: [{ id: 'b2' }], results: [{ name: 'a.svg', content: '<svg id="a2"/>' }],
-    labelFitReports: []
+    labelFitReports: [],
+    // The input summary the rerender drew replaces the Generate's (it draws the live Feature visibility).
+    inputSummaries: [{ resultIndex: 0, resultName: 'a.svg', lines: ['redrawn'], warnings: [], drawnVisibility: '[[],[]]' }]
   };
   /** @type {unknown[][]} */
   const installed = [];
@@ -277,7 +279,7 @@ test('a rerender lands in the artifact of its Result\'s drawing', async () => {
 
   snapshots.installRedrawnArtifact('circular', redrawn, { installResults });
   assert.deepEqual(installed, [redrawn.results], 'the Results commit through the caller');
-  for (const key of ['featureCatalog', 'extractedFeatures', 'biologicalFeatures', 'labelFitReports']) {
+  for (const key of ['featureCatalog', 'extractedFeatures', 'biologicalFeatures', 'labelFitReports', 'inputSummaries']) {
     assert.strictEqual(state[key].value, redrawn[key], key);
   }
 });

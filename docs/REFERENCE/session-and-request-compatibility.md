@@ -70,6 +70,11 @@ palette as `herbal_garden`. Until the next **Generate**, a Session it saves
 keeps the former name in the palette of the shown Result and in its render
 request; both still draw `herbal_garden`.
 
+After gbdraw 0.14.4, a file that starts with a UTF-8 byte order mark reads its
+first record; before, the mark hid that record. A Session saved with such a
+multi-record file selected records by their index among the records read, so
+the same index now names the record before the one it named.
+
 Two Collinear values were removed after gbdraw 0.14.4. The merge orientation
 `either`, which drew as `strand`, reads as `strand` with no change to the
 drawing. The anchor mode `one_to_one` (or a spelling of it such as `top1`)

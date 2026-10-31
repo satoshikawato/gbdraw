@@ -29,6 +29,16 @@ import { toRaw } from '../utils/vue-raw.js';
  */
 
 /**
+ * The Feature visibility a drawing's editor intent draws: its per-feature rows and its rules.
+ * @param {DrawingState} drawing
+ * @returns {string}
+ */
+export const visibilityPaintState = (drawing) => JSON.stringify([
+  Object.values(drawing.featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
+  drawing.featureVisibilityManualRules
+]);
+
+/**
  * The paint state of a drawing's editor intent.
  * @param {PaintStateSource} state
  * @param {DrawingState} drawing
@@ -39,10 +49,7 @@ export const editorPaintState = (state, drawing) => ({
     toRaw(state.appliedPaletteColors.value),
     JSON.stringify([drawing.manualSpecificRules, drawing.featureColorOverrides, drawing.legendColorOverrides])
   ],
-  visibility: JSON.stringify([
-    Object.values(drawing.featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
-    drawing.featureVisibilityManualRules
-  ]),
+  visibility: visibilityPaintState(drawing),
   // A deleted row strokes no feature (OV-293).
   strokes: JSON.stringify([
     drawing.featureStrokeOverrides, drawing.legendStrokeOverrides,

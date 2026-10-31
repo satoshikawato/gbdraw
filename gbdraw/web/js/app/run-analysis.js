@@ -17,7 +17,7 @@
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
-import { validateInputSummaries } from '../services/input-summary.js';
+import { drawnInputSummaries, validateInputSummaries } from '../services/input-summary.js';
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { trackHidesOn } from '../services/setting-application.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
@@ -189,7 +189,7 @@ import {
   prepareCandidateRenderCommit,
   prepareReflowResultCommit
 } from './candidate-render.js';
-import { editorPaintState } from './result-paint-record.js';
+import { editorPaintState, visibilityPaintState } from './result-paint-record.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -2617,6 +2617,8 @@ export const createRunAnalysis = ({
     let requestDrawing = drawing;
     /** @type {ReturnType<typeof requestLabelProjection> | null} */
     let generatedLabelProjection = null;
+    // The Feature visibility the request draws, kept with the input summaries.
+    let drawnVisibility = '';
     // The record key moves of this run (OV-1949), and the record lists its identities are read from.
     /** @type {ReadonlyMap<string, string>} */
     let recordMoves = new Map();
@@ -2909,6 +2911,7 @@ export const createRunAnalysis = ({
           manualSpecificRules: candidateRules
         };
       }
+      drawnVisibility = visibilityPaintState(requestDrawing);
       if (mode.value === 'linear') {
         requireLinearComparisonPlanSnapshot(activeComparisonPlanSnapshot);
       }
@@ -5183,7 +5186,7 @@ export const createRunAnalysis = ({
         featureIdentityNotices: canonicalExecution.featureIdentityNotices,
         comparisonWarnings: canonicalExecution.comparisonWarnings,
         labelFitReports: canonicalExecution.labelFitReports,
-        inputSummaries: canonicalExecution.inputSummaries,
+        inputSummaries: drawnInputSummaries(canonicalExecution.inputSummaries, drawnVisibility),
         specificRules: candidateRules,
         proteinIdentityManifest: workingProteinIdentityManifest,
         legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
@@ -5732,7 +5735,7 @@ export const createRunAnalysis = ({
         featureIdentityNotices: execution.featureIdentityNotices,
         comparisonWarnings: execution.comparisonWarnings,
         labelFitReports: execution.labelFitReports,
-        inputSummaries: execution.inputSummaries,
+        inputSummaries: drawnInputSummaries(execution.inputSummaries, drawnPaint.visibility),
         matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
           candidateCommit.featureState.sequenceSources
         ) || currentOwnerSet.matchSequenceOwner,
@@ -6102,7 +6105,9 @@ export const createRunAnalysis = ({
           biologicalFeatures: execution.commit.featureState.biologicalFeatures,
           results: execution.commit.results,
           // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
-          labelFitReports: execution.labelFitReports
+          labelFitReports: execution.labelFitReports,
+          // So does the input summary: the rerender draws the live Feature visibility.
+          inputSummaries: drawnInputSummaries(execution.inputSummaries, drawnPaint.visibility)
         }, {
           installResults(nextResults) {
             results.value = nextResults;

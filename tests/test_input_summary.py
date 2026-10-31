@@ -234,3 +234,47 @@ def test_a_byte_order_mark_keeps_the_first_fasta_entry_and_gff3_line(tmp_path: P
     assert [(record.id, len(record), len(record.features)) for record in marked] == [
         (record.id, len(record), len(record.features)) for record in plain
     ]
+
+
+def test_a_protein_comparison_says_its_hits_are_counted_after_the_thresholds(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """LOSATP hits are filtered before they reach the drawing (OV-2389): the summary says so."""
+
+    from dataclasses import replace
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
+    request, _identities = _request("pairwise", tmp_path)
+    request = replace(request, options=replace(request.options, identity=99.0), output=RenderOutputRequest(
+        output_prefix="protein", formats=("svg",), output_directory=tmp_path / "out",
+    ))
+    summary = render_request(request).input_summary
+
+    lines = [line for line in input_summary_lines(summary) if line.startswith("Protein comparison")]
+    assert lines and all(line.endswith(": drew 0 protein hits passing the thresholds.") for line in lines), lines
+    assert {item.code for item in input_warnings(summary)} == {"comparison_table_empty"}
+    assert all("has no protein hit that passes the thresholds" in item.message for item in input_warnings(summary))
+
+
+def test_a_cropped_record_with_nothing_to_draw_names_its_region() -> None:
+    from gbdraw.api.input_summary import FeatureTypeTally, InputSummary, RecordInputSummary
+
+    record = RecordInputSummary(
+        record_index=0, record_id="ctg1", source_name="genes.gff3", source_record_index=0,
+        source_record_count=1, drawn_length=101, source_length=3000, region=(2900, 3000),
+        features=(FeatureTypeTally("exon", 0, 3, 0),),
+    )
+    assert [item.message for item in input_warnings(InputSummary((record,)))] == [
+        "Record ctg1 (genes.gff3) has no feature to draw: its region 2,900..3,000 holds no feature of a type drawn."
+    ]
+
+
+def test_a_byte_order_mark_on_a_line_of_its_own_is_not_text(tmp_path: Path) -> None:
+    from gbdraw.io.genome import genbank_absence_diagnostic
+
+    path = tmp_path / "marked.gb"
+    path.write_bytes(BOM + b"\n>s1\nACGT\n")
+    assert genbank_absence_diagnostic(str(path)) == {"code": "NO_RECORDS", "reason": "FASTA_IN_GENBANK"}
