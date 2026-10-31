@@ -146,6 +146,21 @@ def test_an_other_mode_holding_the_default_depth_series_is_not_used_when_the_sho
     assert _ids(data) == ["circular", "linear"]
 
 
+def test_an_other_mode_holding_the_depth_series_sessions_46_and_47_named_is_not_used() -> None:
+    # main wrote this default before unnamed series kept an empty label
+    # (5f3aa020d); session-drawings-upgrade.test.mjs holds the same mutation.
+    data = _settings_only_v48()
+    series = {
+        "label": "Depth", "color": "#4A90E2", "height": None,
+        "large_tick_interval": None, "small_tick_interval": None, "tick_font_size": None,
+    }
+    _slices(data)["circular"]["config"]["adv"]["depth_tracks"] = [{**series, "color": "#E45756"}]
+    _slices(data)["linear"]["config"]["adv"]["depth_tracks"] = [series]
+    assert _ids(data) == ["circular"]
+    _slices(data)["linear"]["config"]["adv"]["depth_tracks"] = [{**series, "label": "Reads"}]
+    assert _ids(data) == ["circular", "linear"]
+
+
 def test_a_linear_record_layout_counts_only_when_it_arranges_records() -> None:
     data = _settings_only_v48()
     layout = _slices(data)["linear"]["config"]["linearRecordLayout"]

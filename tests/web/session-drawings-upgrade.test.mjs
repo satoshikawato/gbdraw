@@ -61,6 +61,19 @@ test('an other mode that holds the default Depth series is not used when the sho
   assert.deepEqual(idsOf(data), ['circular', 'linear']);
 });
 
+test('an other mode that holds the Depth series Sessions 46 and 47 named is not used', () => {
+  // main wrote this default before unnamed series kept an empty label (5f3aa020d),
+  // in `tests/fixtures/sessions/legend-renamed-rows.v46...`; Python's rule d agrees
+  // (tests/test_session_drawings_vectors.py, the same mutation).
+  const data = settingsOnly();
+  const series = { label: 'Depth', color: '#4A90E2', height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null };
+  data.modes.circular.config.adv.depth_tracks = [{ ...series, color: '#E45756' }];
+  data.modes.linear.config.adv.depth_tracks = [series];
+  assert.deepEqual(idsOf(data), ['circular']);
+  data.modes.linear.config.adv.depth_tracks = [{ ...series, label: 'Reads' }];
+  assert.deepEqual(idsOf(data), ['circular', 'linear']);
+});
+
 test('a Linear record layout counts only when it arranges records', () => {
   const data = settingsOnly();
   data.modes.linear.config.linearRecordLayout.rows = [{ row: 1, uid: 'linear-seq-a' }, { row: 2, uid: 'linear-seq-b' }];

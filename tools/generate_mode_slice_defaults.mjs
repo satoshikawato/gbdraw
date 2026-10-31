@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Writes each diagram mode's default settings, as the Web builds them, to
 // gbdraw/data/mode-slice-defaults.json, which Python reads to decide whether
-// a Session 46-48 used the mode it did not show (rule d of the move to
+// a Session 46-49 used the mode it did not show (rule d of the move to
 // drawings, PD-OI-090; gbdraw.session_drawings), and the same data to
 // gbdraw/web/js/mode-slice-defaults.generated.js, which the Web's move
 // (services/session-drawings-upgrade.js) reads without building a drawing.
@@ -69,6 +69,12 @@ const EARLIER_DEFAULTS = [
     path: 'blastp',
     reason: 'gbdraw 0.14.3 and earlier saved these Collinear defaults (merge either, hit limits 5).',
     value: {"mode": "orthogroup", "hitLimitsByMode": {"pairwise": {"candidateLimit": null, "orthogroupMemberMaxHits": null}, "orthogroup": {"candidateLimit": null, "orthogroupMemberMaxHits": null}, "collinear": {"candidateLimit": 5, "orthogroupMemberMaxHits": 5}}, "maxHits": 5, "candidateLimit": null, "orthogroupMembershipMode": "anchor_core_v1", "orthogroupMemberMaxHits": null, "collinearInferOrthogroups": false, "collinearMinAnchors": 1, "collinearMaxUnitGap": 0, "collinearMaxDiagonalDrift": 0, "collinearMaxConflictsInMergeGap": 1, "collinearMaxParalogLinksPerOrthogroup": 2, "collinearColorMode": "orientation", "collinearUnitMode": "auto", "collinearAnchorMode": "rbh", "collinearMergeOrientation": "either", "collinearSearchScope": "adjacent"}
+  },
+  {
+    domain: 'config.adv',
+    path: 'depth_tracks',
+    reason: 'Sessions 46 and 47 of main saved the default Depth series with the label Depth.',
+    value: [{"label": "Depth", "color": "#4A90E2", "height": null, "large_tick_interval": null, "small_tick_interval": null, "tick_font_size": null}]
   }
 ];
 
