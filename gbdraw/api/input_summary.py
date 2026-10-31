@@ -63,6 +63,9 @@ class FeatureTypeTally:
     type_not_drawn: int
     # Its type is drawn, but a visibility rule or a feature edit hides it.
     hidden: int
+    # Left out when the GFF3 file was read (types not drawn), counted over the
+    # whole source record: the load filters before a region crops the record.
+    not_read: int
 
 
 @dataclass(frozen=True)
@@ -126,7 +129,8 @@ def _record_feature_tallies(
 ) -> tuple[FeatureTypeTally, ...]:
     selected = set(selected_features)
     drawn: Counter[str] = Counter()
-    type_not_drawn: Counter[str] = Counter(dict(types_left_out_at_load))
+    type_not_drawn: Counter[str] = Counter()
+    not_read: Counter[str] = Counter(dict(types_left_out_at_load))
     hidden: Counter[str] = Counter()
     override_of = feature_override_lookup(record, record_features.overrides if record_features else None)
     instance_of = feature_instances(record)
@@ -147,8 +151,8 @@ def _record_feature_tallies(
         else:
             type_not_drawn[feature_type] += 1
     return tuple(
-        FeatureTypeTally(name, drawn[name], type_not_drawn[name], hidden[name])
-        for name in sorted({*drawn, *type_not_drawn, *hidden}, key=lambda name: (name.lower(), name))
+        FeatureTypeTally(name, drawn[name], type_not_drawn[name], hidden[name], not_read[name])
+        for name in sorted({*drawn, *type_not_drawn, *hidden, *not_read}, key=lambda name: (name.lower(), name))
     )
 
 
@@ -201,12 +205,30 @@ def summarize_inputs(
     return InputSummary(records=tuple(summaries), comparisons=tuple(comparisons))
 
 
-def _count(value: int, noun: str) -> str:
-    return f"{value:,} {noun}" if value == 1 else f"{value:,} {noun}s"
+def _count(value: int, noun: str, plural: str | None = None) -> str:
+    return f"{value:,} {noun}" if value == 1 else f"{value:,} {plural or noun + 's'}"
 
 
 def _type_counts(counts: Sequence[tuple[str, int]]) -> str:
     return ", ".join(f"{value:,} {name}" for name, value in counts)
+
+
+def _types_not_drawn(record: RecordInputSummary) -> list[tuple[str, int]]:
+    """The features of types not drawn, within the drawn part of the record.
+
+    The GFF3 types left out at load count over the whole record, so a cropped
+    record names them apart (``_types_not_read_in_record``).
+    """
+
+    whole = 0 if record.region is not None else 1
+    counts = [(item.feature_type, item.type_not_drawn + whole * item.not_read) for item in record.features]
+    return [(name, value) for name, value in counts if value]
+
+
+def _types_not_read_in_record(record: RecordInputSummary) -> list[tuple[str, int]]:
+    if record.region is None:
+        return []
+    return [(item.feature_type, item.not_read) for item in record.features if item.not_read]
 
 
 def _record_label(record: RecordInputSummary) -> str:
@@ -224,10 +246,12 @@ def _record_line(record: RecordInputSummary) -> str:
     line = f"{_record_label(record)}, {place}, {extent}: drew {_count(record.drawn_features, 'feature')}"
     if drawn:
         line += f" ({_type_counts(drawn)})"
-    not_drawn = [(item.feature_type, item.type_not_drawn) for item in record.features if item.type_not_drawn]
+    not_drawn = _types_not_drawn(record)
     hidden = [(item.feature_type, item.hidden) for item in record.features if item.hidden]
     if not_drawn:
         line += f"; left out {_type_counts(not_drawn)} (type{'s' if len(not_drawn) > 1 else ''} not drawn)"
+    if not_read := _types_not_read_in_record(record):
+        line += f"; the whole record has {_type_counts(not_read)} of type{'s' if len(not_read) > 1 else ''} not drawn"
     if hidden:
         line += f"; hid {_type_counts(hidden)} (visibility rule or feature edit)"
     return line + "."
@@ -239,7 +263,7 @@ def _comparison_label(table: ComparisonTableTally, records: Sequence[RecordInput
         return f"record #{index + 1} {record_id}".rstrip()
 
     pair = f"{endpoint(table.query_record_index)} and {endpoint(table.subject_record_index)}"
-    if table.protein_hits:
+    if table.protein_matches:
         return f"Protein comparison of {pair}"
     if table.source_name:
         return f"Comparison table {table.source_name} ({pair})"
@@ -256,9 +280,9 @@ def _threshold_text(item: ComparisonThresholdTally) -> str:
 
 def _comparison_line(table: ComparisonTableTally, records: Sequence[RecordInputSummary]) -> str:
     tally = table.tally
-    if table.protein_hits:
-        # The hits the thresholds leave out are not counted (OV-2389).
-        return f"{_comparison_label(table, records)}: drew {_count(tally.rows_kept, 'protein hit')} passing the thresholds."
+    if table.protein_matches:
+        # The rows the protein analysis left out are not counted (OV-2389).
+        return f"{_comparison_label(table, records)}: drew {_count(tally.rows_kept, 'protein match', 'protein matches')}."
     line = f"{_comparison_label(table, records)}: kept {tally.rows_kept:,} of {_count(tally.rows_read, 'row')}"
     if tally.thresholds:
         line += "; " + "; ".join(_threshold_text(item) for item in tally.thresholds)
@@ -276,13 +300,12 @@ def input_summary_lines(summary: InputSummary) -> tuple[str, ...]:
 
 def _no_feature_reason(record: RecordInputSummary) -> str:
     hidden = [(item.feature_type, item.hidden) for item in record.features if item.hidden]
-    if record.region is not None and not hidden:
-        # The types left out when a GFF3 file is read are counted over the whole record.
+    not_drawn = _types_not_drawn(record)
+    if record.region is not None and not hidden and not not_drawn:
         return f"its region {record.region[0]:,}..{record.region[1]:,} holds no feature of a type drawn"
     if not record.features:
         return "it has no features"
     reasons = []
-    not_drawn = [(item.feature_type, item.type_not_drawn) for item in record.features if item.type_not_drawn]
     if not_drawn:
         reasons.append(
             f"its {_type_counts(not_drawn)} features are of types not drawn; add a type to the "
@@ -307,10 +330,8 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
     for table in summary.comparisons:
         tally = table.tally
         label = _comparison_label(table, summary.records)
-        if table.protein_hits and tally.rows_kept == 0:
-            warnings.append(InputWarning(
-                COMPARISON_TABLE_EMPTY, f"{label} has no protein hit that passes the thresholds, so no match is drawn."
-            ))
+        if table.protein_matches and tally.rows_kept == 0:
+            warnings.append(InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no protein match to draw."))
         elif tally.rows_read == 0:
             warnings.append(InputWarning(COMPARISON_TABLE_EMPTY, f"{label} has no rows, so no match is drawn."))
         elif tally.rows_kept == 0:

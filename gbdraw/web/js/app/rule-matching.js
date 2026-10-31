@@ -4,6 +4,7 @@ import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.j
 import { getFeatureColorRuleHash, getRenderedFeatureHash } from '../services/feature-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { featureVisibilityRows } from '../services/feature-visibility.js';
 import {
   recordRuleMatches, recordVisibilityMatch, ruleKey, ruleKeysPending, ruleMatcher, visibilityRuleKnown
 } from '../services/rule-matchers.js';
@@ -307,8 +308,7 @@ export const createRulePreparation = ({
     legendColors: (drawing) => drawing.legendColorOverrides || {},
     legendStrokes: (drawing) => drawing.legendStrokeOverrides || {},
     featureColors: (drawing) => drawing.featureColorOverrides || {},
-    featureVisibility: (drawing) => Object.values(drawing.featureOverrides || {})
-      .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility])
+    featureVisibility: (drawing) => featureVisibilityRows(Object.values(drawing.featureOverrides || {}))
   };
   const drawingInputs = Object.entries(drawingInputReaders).map(([key, read]) => (
     /** @type {[string, { value: string }]} */ ([key, computed(() => JSON.stringify(read(state.activeDrawing())))])

@@ -5,6 +5,7 @@
 import { isLegendOrderEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { featureVisibilityRows } from '../services/feature-visibility.js';
 
 // Which editor state each Result's bytes show (design §5.4). A Result
 // displayed again receives a domain only when that state changed since it
@@ -34,7 +35,7 @@ import { toRaw } from '../utils/vue-raw.js';
  * @returns {string}
  */
 export const visibilityPaintState = (drawing) => JSON.stringify([
-  Object.values(drawing.featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
+  featureVisibilityRows(Object.values(drawing.featureOverrides)),
   drawing.featureVisibilityManualRules
 ]);
 
