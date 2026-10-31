@@ -31,7 +31,7 @@ import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadat
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
-import { DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION, readCollinearMergeOrientation } from '../services/losat-normalization.js';
+import { ABSENT_COLLINEAR_INFER_ORTHOGROUPS, DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION, readCollinearMergeOrientation } from '../services/losat-normalization.js';
 import {
   losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
 } from '../services/linear-sources.js';
@@ -808,7 +808,7 @@ const canReuseResolvedProteinArtifacts = ({
 
   /** @type {Partial<CanonicalLosslessCollinearityParameters>} */
   const parameters = settings.collinearityParams?.parameters || {};
-  const committedInference = settings.collinearInferOrthogroups ?? true;
+  const committedInference = settings.collinearInferOrthogroups ?? ABSENT_COLLINEAR_INFER_ORTHOGROUPS;
   return (
     sameNumber(parameters.minAnchors ?? 1, active.minAnchors)
     && sameNumber(parameters.maxUnitGap ?? 0, active.maxUnitGap)

@@ -258,7 +258,7 @@ def test_derived_identity_refuses_inputs_no_converter_reads(
         ({"mode": "pairwise", "max_hits": 0}, "max_hits must be > 0"),
         ({"mode": "orthogroup", "member_max_hits": 0}, "member_max_hits must be > 0"),
         ({"mode": "collinear", "infer_orthogroups": "yes"}, "must be a boolean"),
-        ({"mode": "collinear", "min_anchors": 0}, "collinear_min_anchors must be > 0"),
+        ({"mode": "collinear", "infer_orthogroups": False, "min_anchors": 0}, "collinear_min_anchors must be > 0"),
         ({"mode": "orthogroup", "identity": 101}, "identity must be a finite value"),
         ({"mode": "orthogroup", "evalue": "nan"}, "evalue must be a finite value"),
     ],
@@ -271,13 +271,47 @@ def test_derived_settings_are_validated_once(settings: dict[str, object], messag
 def test_unset_settings_take_the_defaults() -> None:
     # The Web adapter turns JS null, undefined, and blank text into None
     # (tests/test_api_request_render.py); the owner reads only None as unset.
-    defaults = normalize_derived_losatp_settings(mode="collinear")
+    defaults = normalize_derived_losatp_settings(mode="collinear", infer_orthogroups=False)
     assert normalize_derived_losatp_settings(
         mode="collinear", min_anchors=None, max_unit_gap=None, max_conflicts=None,
-        unit_mode=None, member_max_hits=None, max_paralog_links=None,
+        unit_mode=None, member_max_hits=None, max_paralog_links=None, infer_orthogroups=False,
     ) == defaults
     with pytest.raises(ValueError):
-        normalize_derived_losatp_settings(mode="collinear", min_anchors="")
+        normalize_derived_losatp_settings(mode="collinear", infer_orthogroups=False, min_anchors="")
+
+
+@pytest.mark.parametrize("settings", [{}, {"infer_orthogroups": None}])
+def test_collinear_settings_refuse_an_unset_inference(settings: dict[str, object]) -> None:
+    # The derived identity names the inference, so an unset value is no default:
+    # every caller passes the value of its request.
+    with pytest.raises(ValueError, match="collinear_infer_orthogroups must be a boolean"):
+        normalize_derived_losatp_settings(mode="collinear", **settings)  # type: ignore[arg-type]
+
+
+def test_unset_collinear_settings_read_the_python_option_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    from gbdraw.api.options import LinearDiagramOptions
+    from gbdraw.analysis.collinearity import LosslessCollinearityParameters
+
+    for field, value in (
+        ("collinearity_unit_mode", "cds"),
+        ("collinearity_color_mode", "average_identity"),
+        ("collinearity_anchor_mode", "all"),
+        ("collinearity_search_scope", "all"),
+        ("collinear_max_paralog_links_per_orthogroup", 7),
+    ):
+        monkeypatch.setattr(LinearDiagramOptions, field, value)
+    monkeypatch.setattr(
+        LosslessCollinearityParameters.__init__, "__defaults__", (4, 3, 2, 5, "order")
+    )
+    settings = normalize_derived_losatp_settings(mode="collinear", infer_orthogroups=True)
+    assert (settings.unit_mode, settings.color_mode, settings.anchor_mode, settings.search_scope) == (
+        "cds", "average_identity", "all", "all",
+    )
+    assert settings.max_paralog_links == 7
+    assert (
+        settings.min_anchors, settings.max_unit_gap, settings.max_diagonal_drift,
+        settings.max_conflicts, settings.merge_orientation,
+    ) == (4, 3, 2, 5, "order")
 
 
 def test_derived_provenance_records_requested_and_effective_units() -> None:
