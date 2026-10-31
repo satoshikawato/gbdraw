@@ -37,6 +37,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
+import { inputSummaryOf } from '../services/input-summary.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
@@ -469,6 +470,7 @@ export const createAppSetup = () => {
     featureEditRemovalCount,
     comparisonWarnings,
     labelFitReports,
+    inputSummaries,
     matchSequenceRegistry,
     svgContent,
     svgResultIdentity,
@@ -6190,6 +6192,10 @@ export const createAppSetup = () => {
       && item.resultName === results.value[selectedResultIndex.value]?.name);
     return entry && entry.report.drawn ? entry : null;
   });
+  // The input summary of the shown Result: its warnings in the status area, its lines in Run info.
+  const shownInputSummary = computed(() => inputSummaryOf(
+    inputSummaries.value, selectedResultIndex.value, results.value[selectedResultIndex.value]?.name
+  ));
   const openLabelFitNotice = () => {
     const entry = labelFitNotice.value;
     if (!entry) return undefined;
@@ -6966,6 +6972,7 @@ export const createAppSetup = () => {
     labelFitDialog,
     labelCapacityText,
     labelFitNotice,
+    shownInputSummary,
     openLabelFitNotice,
     resolveLabelFitChoice,
     editLabelFitRecordText,

@@ -215,6 +215,7 @@ from gbdraw.legend.table import (
 )
 from gbdraw.linear_comparison import (
     ComparisonRecordIdWarning,
+    ComparisonTableTally,
     LinearComparison,
     ProteinComparisonFrames,
 )
@@ -286,6 +287,8 @@ class LinearDiagramMetadata:
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
     collinearity_result: CollinearityResult | None = None
     comparison_warnings: tuple[ComparisonRecordIdWarning, ...] = ()
+    # The rows each comparison table had and kept by the thresholds (input summary).
+    comparison_tallies: tuple[ComparisonTableTally, ...] = ()
     # Each record's search-frame binding, set by the plan's build when the
     # values above hold source-bound results: a Session stores them in F (R5).
     search_frame_bindings: tuple[ComparisonRecordBinding, ...] = ()
@@ -2621,6 +2624,7 @@ def assemble_linear_diagram_from_records(
             orthogroups=resolved_orthogroups,
             collinearity_result=resolved_collinearity_result,
             comparison_warnings=getattr(canvas, "_gbdraw_comparison_record_id_warnings", ()),
+            comparison_tallies=getattr(canvas, "_gbdraw_comparison_tallies", ()),
             wrap=wrap_summary,
         ),
     )

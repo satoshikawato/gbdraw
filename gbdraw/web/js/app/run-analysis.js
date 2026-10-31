@@ -17,6 +17,7 @@
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
+import { validateInputSummaries } from '../services/input-summary.js';
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { trackHidesOn } from '../services/setting-application.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
@@ -1413,6 +1414,8 @@ export const executeCanonicalRenderCandidate = async ({
   const comparisonWarnings = validateComparisonWarnings(metadata.comparisonWarnings, results);
   // Crossing label leaders drawn anyway: each Result's report (LP-D46).
   const labelFitReports = normalizeResultLabelFits(metadata.labelFitReports, results);
+  // What each Result read and drew, and its warnings (Python's input summary).
+  const inputSummaries = validateInputSummaries(metadata.inputSummaries, results);
   // Edits by source identity that a Result does not draw (design Q4 3.4).
   const featureIdentityNotices = Array.isArray(metadata.featureIdentityNotices)
     ? metadata.featureIdentityNotices : [];
@@ -1447,6 +1450,7 @@ export const executeCanonicalRenderCandidate = async ({
     featureIdentityNotices,
     comparisonWarnings,
     labelFitReports,
+    inputSummaries,
     results,
     catalogAdmission: catalogState,
     catalog: catalogState.catalog,
@@ -5177,6 +5181,7 @@ export const createRunAnalysis = ({
         featureIdentityNotices: canonicalExecution.featureIdentityNotices,
         comparisonWarnings: canonicalExecution.comparisonWarnings,
         labelFitReports: canonicalExecution.labelFitReports,
+        inputSummaries: canonicalExecution.inputSummaries,
         specificRules: candidateRules,
         proteinIdentityManifest: workingProteinIdentityManifest,
         legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
@@ -5725,6 +5730,7 @@ export const createRunAnalysis = ({
         featureIdentityNotices: execution.featureIdentityNotices,
         comparisonWarnings: execution.comparisonWarnings,
         labelFitReports: execution.labelFitReports,
+        inputSummaries: execution.inputSummaries,
         matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
           candidateCommit.featureState.sequenceSources
         ) || currentOwnerSet.matchSequenceOwner,

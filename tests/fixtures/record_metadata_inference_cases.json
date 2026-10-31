@@ -1563,8 +1563,16 @@
           ]
         }
       },
+      "fastPath": "declines",
       "expected": {
-        "error": "ValidationError"
+        "records": [
+          {
+            "recordId": "NC_000001.1",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
       }
     },
     {

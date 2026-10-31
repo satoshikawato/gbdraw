@@ -12,6 +12,7 @@ from pandas import DataFrame
 
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ComparisonIdentityError, ValidationError
+from gbdraw.io.comparisons import ComparisonRowTally
 from gbdraw.layout.record_coordinates import (
     DisplayFragment,
     RecordDisplayTransform,
@@ -91,6 +92,8 @@ class LinearComparison:
     decoder read them from a ``nucleotideBlast`` resource; the Session persists
     it as a ``nucleotideBlast`` resource, as the Web does.
 
+    ``source_name`` is the name of the file the decoder read the rows from.
+
     ``drawn_feature_ids`` marks a table of a Session up to 40 without
     ``*_view_feature_svg_id`` columns: main's writers before ``3bca0e8d9``
     stored the drawn-frame feature ID there in ``*_feature_svg_id``, which is
@@ -102,6 +105,8 @@ class LinearComparison:
     matches: DataFrame
     search_frame_text: str | None = field(default=None, repr=False, compare=False)
     drawn_feature_ids: bool = field(default=False, repr=False, compare=False)
+    # The file the rows were read from, when they were (the input summary names it).
+    source_name: str | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         for name in ("query_record_index", "subject_record_index"):
@@ -379,6 +384,20 @@ COMPARISON_RECORD_ID_UNMATCHED = "comparison_record_id_unmatched"
 
 
 @dataclass(frozen=True)
+class ComparisonTableTally:
+    """The rows one Linear comparison table had and kept by the thresholds.
+
+    ``source_name`` is the file of a ``-b`` table; a comparison given as a record
+    pair (a LOSAT search, a comparison table row) has none.
+    """
+
+    source_name: str | None
+    query_record_index: int
+    subject_record_index: int
+    tally: ComparisonRowTally
+
+
+@dataclass(frozen=True)
 class ComparisonRecordIdWarning:
     """Table rows whose sequence IDs name no displayed record (PD-OI-074).
 
@@ -489,6 +508,7 @@ def validate_linear_comparison_record_ids(
 __all__ = [
     "COMPARISON_RECORD_ID_UNMATCHED",
     "ComparisonRecordIdWarning",
+    "ComparisonTableTally",
     "LinearComparison",
     "ProteinComparisonFrames",
     "merge_linear_comparisons",

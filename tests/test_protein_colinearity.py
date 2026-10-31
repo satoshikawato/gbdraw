@@ -18,6 +18,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.api.diagram as api_diagram_module
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.api.request_render as request_render_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.comparisons.losat_runtime as losat_runtime_module
@@ -4809,6 +4810,7 @@ def test_linear_cli_forwards_protein_blastp_options(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
             linear_metadata=None,
         )
 
@@ -4879,6 +4881,7 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
             linear_metadata=None,
         )
 

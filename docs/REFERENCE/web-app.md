@@ -317,6 +317,14 @@ names, paths, SVG, raw exception text, traceback, stdout and stderr are excluded
 from diagnostics and automatic console output. A saved Session can contain
 private inputs, so share one only deliberately.
 
+After a successful Generate, a record of the shown Result with no feature to
+draw, or a comparison table whose rows the thresholds all leave out, shows
+**Part of the input was not drawn.** under the status line, with the same
+warning the command line prints (see [Input
+summary](command-line.md#input-summary)). **Run Info** lists the shown Result's
+**Input summary**: what it read and drew, per record and per comparison table.
+Neither is saved in a Session; the next Generate recomputes them.
+
 While Generate runs, the status line names its stage. The first Generate of a
 page also prepares the diagram runtime and shows each preparation step as it
 starts, for example **Preparing diagram runtime (first use): step 4 of 5,

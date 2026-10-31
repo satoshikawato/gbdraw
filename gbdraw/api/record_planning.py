@@ -40,7 +40,7 @@ from gbdraw.io.cli_tables import (
     read_records_table,
 )
 from gbdraw.io.comparisons import read_comparison_resource
-from gbdraw.io.genome import filter_features_by_type, load_gbks, parse_gff_fasta, require_record_sequence
+from gbdraw.io.genome import feature_types_left_out, filter_features_by_type, load_gbks, parse_gff_fasta, require_record_sequence
 from gbdraw.io.record_select import (
     RecordSelector,
     parse_record_selector,
@@ -177,6 +177,14 @@ class ResolvedRecordProvenance:
     source_record_id_unique: bool = True
     resolved_display: ResolvedRecordDisplay | None = None
     source_features: SourceFeatureCatalog = field(kw_only=True, repr=False)
+    # GFF3 features whose type the request does not draw, left out when the record
+    # was planned, by type (the GFF3 type filter); the input summary counts them.
+    feature_types_left_out_at_load: tuple[tuple[str, int], ...] = field(default=(), kw_only=True)
+
+    @property
+    def source_name(self) -> str:
+        """The file name of the record's source, as the input summary names it."""
+        return Path(self.source_paths[0]).name if self.source_paths else "in-memory record"
 
     @property
     def source_feature_catalog(self) -> tuple[SourceFeatureIdentity, ...]:
@@ -1440,7 +1448,9 @@ def resolve_record_inputs(
         for source_record_index in source_indexes:
             source_record = raw_records[source_record_index]
             require_record_sequence(source_record, source_paths[0] if source_paths else "the record input")
+            types_left_out: tuple[tuple[str, int], ...] = ()
             if source_kind == "gff_fasta":
+                types_left_out = feature_types_left_out(source_record.features, gff_types)
                 source_record = filter_features_by_type(
                     source_record, gff_types, source_indexes=_feature_source_index_map(source_record.features),
                 )
@@ -1486,6 +1496,7 @@ def resolve_record_inputs(
                 detected_topology=_detected_topology(source_record, source_kind),
                 is_cropped=source_cropped,
                 source_features=parsed.source_features[source_record_index],
+                feature_types_left_out_at_load=types_left_out,
             )
             _apply_record_key(record, record_key=record_key)
             _apply_provenance_annotations(record, item)
@@ -1896,7 +1907,7 @@ def resolve_linear_options(
                 f"{table.table_path}: row {row.row_number}, column 'blast': {exc}"
             ) from exc
         comparisons.append(
-            LinearComparison(query_index, subject_index, matches)
+            LinearComparison(query_index, subject_index, matches, source_name=Path(row.blast).name)
         )
     search = options.losat_search
     if losat_pairs and search is None:
