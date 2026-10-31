@@ -250,7 +250,7 @@ export const askTrackSourceRemoval = ({ askChoice, runUndoable, busy, rows, mode
           emptySeries.length === 0 ? '' : tn(emptySeries.length,
             'Depth series {series} stays empty, and Generate will ask for a file or its removal.',
             'Depth series {series} stay empty, and Generate will ask for a file or their removal.',
-            { series: listText(emptySeries.map((index) => String(index + 1))) }),
+            { series: listText(emptySeries.map((index) => `#${index + 1}`)) }),
           staying.length === 0 ? '' : tn(staying.length,
             '{rows} has no Depth file left. It stays in the stack, turned off.',
             '{rows} have no Depth file left. They stay in the stack, turned off.',
