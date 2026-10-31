@@ -4,6 +4,7 @@
 import { msg, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
+import { SPECIFIC_RULE_PRESETS } from './services/file-imports.js';
 import { DEFAULT_LINEAR_RECORD_GAP_PX } from './services/config-field-readers.js';
 import {
   featureDrawnContext,
@@ -348,18 +349,7 @@ const paletteInstantPreviewEnabled = ref(defaultPaletteDraftState.paletteInstant
 const appliedPaletteName = ref(defaultPaletteDraftState.appliedPaletteName);
 const appliedPaletteColors = ref(defaultPaletteDraftState.appliedPaletteColors);
 const newSpecRule = reactive(createDefaultSpecificRule());
-const specificRulePresets = [
-  {
-    id: 'pharokka',
-    label: 'Pharokka (function/phrog/vfdb)',
-    path: 'presets/pharokka_color_table.txt'
-  },
-  {
-    id: 'bakta',
-    label: 'Bakta (COG via note)',
-    path: 'presets/bakta_color_table.txt'
-  }
-];
+const specificRulePresets = SPECIFIC_RULE_PRESETS;
 const selectedSpecificPreset = ref(defaultEditorDraftState.selectedSpecificPreset);
 const specificRulePresetLoading = ref(defaultEditorDraftState.specificRulePresetLoading);
 const downloadDpi = ref(defaultEditorDraftState.downloadDpi);

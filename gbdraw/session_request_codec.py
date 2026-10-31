@@ -84,6 +84,7 @@ from gbdraw.features.placement import (
     FeaturePlacementOverride,
     FeaturePlacementTarget,
 )
+from gbdraw.io.colors import color_table_path
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
@@ -3080,7 +3081,11 @@ def _encode_colors(value: object, *, resources: RequestResources) -> dict[str, A
             else None
         ),
         "colorTableFile": (
-            _file_ref("colors-color-table-file", value.color_table_file, resources=resources)
+            _file_ref(
+                "colors-color-table-file",
+                color_table_path(value.color_table_file),
+                resources=resources,
+            )
             if value.color_table_file is not None
             else None
         ),

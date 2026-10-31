@@ -1681,11 +1681,10 @@ for (const copy of ['#ff0000', '#0000ff']) {
 // D-21 (Q-ORIGIN-1 = A): preset rows are the user's, as hand-made rows are:
 // Remove and a new rules file never take them, in any drawing.
 const withPreset = (s, text) => {
-  s.state.specificRulePresets.splice(0, Infinity, { id: 'preset', path: 'preset.tsv' });
+  const [feat, qual, val, color, cap] = text.trim().split('\t');
+  s.state.specificRulePresets.splice(0, Infinity, { id: 'preset', label: 'Preset', rules: [{ feat, qual, val, color, cap }] });
   s.state.selectedSpecificPreset.value = 'preset';
-  const fetched = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: true, text: async () => text });
-  return s.actions.applySpecificRulePreset().finally(() => { globalThis.fetch = fetched; });
+  return s.actions.applySpecificRulePreset();
 };
 const presetText = 'CDS\tgene\ta\t#0000ff\tPreset\n';
 const fileText = 'CDS\tgene\tb\t#ff0000\tFile\n';

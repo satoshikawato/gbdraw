@@ -49,7 +49,6 @@ BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
     "gbdraw/web/css/",
     "gbdraw/web/gallery/",
     "gbdraw/web/js/",
-    "gbdraw/web/presets/",
     "gbdraw/web/tutorial-data/",
     "gbdraw/web/vendor/",
     "gbdraw/web/wasm/",

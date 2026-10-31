@@ -10,7 +10,7 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { joinedLegendRow, runWhenPrepared, synthesizedRuleTable } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
-import { isCardRow, parseSpecificRules, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
+import { isCardRow, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, drawnRuleMatches, legendColorCopies, legendRowRules, listedRuleRowRemoval,
@@ -47,6 +47,7 @@ import {
   setLegendColor
 } from '../../services/drawing/paint.js';
 /** @import { PatternDraft } from './pattern-drafts.js' */
+/** @import { SpecificRulePreset } from '../../services/file-imports.js' */
 /** @import { ColorFeature } from './color-actions.js' */
 
 // R13: `projectPaletteAndRules` is the composition root's projection of the
@@ -942,7 +943,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     if (specificRulePresetLoading.value) return;
     const presetId = selectedSpecificPreset.value;
     if (!presetId) return;
-    const preset = specificRulePresets.find((/** @type {{ id: string, path: string }} */ entry) => entry.id === presetId);
+    const preset = specificRulePresets.find((/** @type {SpecificRulePreset} */ entry) => entry.id === presetId);
     if (!preset) {
       showNotice({ text: t('That rule preset is not available.'), tone: 'warning' });
       return;
@@ -954,17 +955,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       const presetContext = rulePreparation.snapshot();
       const previousError = state.errorLog?.value;
       try {
-        const response = await fetch(preset.path, { cache: 'no-store' });
-        if (!response.ok) {
-          throw { code: 'INPUT_UNREADABLE', operation: 'evaluateRules', stage: 'resource-staging' };
-        }
-        const text = await response.text();
-        const { rules } = parseSpecificRules(text);
-        if (selectedSpecificPreset.value !== presetId || !rulePreparation.isCurrent(presetContext)) return;
+        const rules = preset.rules.map((/** @type {SpecificRulePreset['rules'][number]} */ rule) => ({ ...rule }));
         return await runSpecificRuleWrite(drawing, () => rules, msg('Apply specific color preset'), {
           isCurrent: () => selectedSpecificPreset.value === presetId,
           afterCommit: () => {
-            if (presetId === 'bakta') {
+            if (presetId === 'cog') {
               editDefaultColors(drawing, { CDS: '#cccccc' });
               drawing.adv.legend_box_size = 12;
               drawing.adv.legend_font_size = 12;

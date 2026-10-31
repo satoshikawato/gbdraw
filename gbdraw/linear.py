@@ -90,6 +90,7 @@ from .tracks import (
 
 
 from .cli_utils.common import (
+    COLOR_TABLE_HELP,
     _add_arrow_geometry_args,
     _add_block_stroke_args,
     _add_depth_axis_args,
@@ -570,7 +571,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '-t',
         '--table',
-        help='color table (optional)',
+        help=COLOR_TABLE_HELP,
         type=str,
         default="")
     parser.add_argument(

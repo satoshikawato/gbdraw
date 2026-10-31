@@ -28,6 +28,7 @@ _WHEEL_CACHE_BUST_DIGITS = 16
 
 _PYTHON_RUNTIME_PACKAGE_DATA = [
     "data/color_palettes.toml",
+    "data/color_tables/*.tsv",
     "data/config.toml",
     "data/losat-release.json",
     "data/*.ttf",
@@ -51,8 +52,6 @@ _WEB_APP_PACKAGE_DATA = [
     "web/js/services/*/*.js",
     "web/js/utils/*.js",
     "web/js/utils/*/*.js",
-    "web/presets/*.txt",
-    "web/presets/*.tsv",
     "web/tutorial-data/*.json",
     "web/tutorial-data/*/*.fna",
     "web/tutorial-data/*/*.gb",
@@ -97,7 +96,6 @@ _BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
     "gbdraw/web/css/",
     "gbdraw/web/gallery/",
     "gbdraw/web/js/",
-    "gbdraw/web/presets/",
     "gbdraw/web/tutorial-data/",
     "gbdraw/web/vendor/",
     "gbdraw/web/wasm/",

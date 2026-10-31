@@ -185,6 +185,25 @@ key, and the CLI orders the rules the same way.
 A partial default-color table changes only the listed feature types. Omitted
 feature types keep their values from the selected palette.
 
+### Built-in color tables
+
+gbdraw ships four specific-color tables in `gbdraw/data/color_tables/`. Name one
+with `-t builtin:<name>` (CLI), `FeatureOptions(color_table="builtin:<name>")`
+(Python), or the **Preset scheme** list in the Web app's **Colors** section,
+which replaces the specific rules with the table's rows.
+
+| Name | Colors | Reads |
+|---|---|---|
+| `cog` | The 26 NCBI COG categories, in hue families by COG group | Bakta's category letters: `db_xref` (`COG:L`), GFF3 `Dbxref`, or `note` with `--compliant`; the first of two letters |
+| `phrog` | The PHROG categories and Pharokka's virulence factor and AMR hits | Pharokka's `function`, `phrog`, `vfdb_short_name`, and `AMR_Gene_Family` |
+| `plastid` | Plastid gene classes after OGDRAW | CDS `gene` names (`psaA`, `rps12`, `ycf2`), unnamed `hypothetical protein` CDS, tRNA, rRNA, and `rep_origin` |
+| `mitochondrion` | Animal and plant mitochondrial gene classes after OGDRAW | CDS `gene` names (`ND4L`, `nad4L`, `mt-Nd5`, `COX1`, `CYTB`, `atp9`, `ccmFn`, `matR`), tRNA, and rRNA |
+
+A Session saves the rows a built-in table added, not its name, so a saved
+figure keeps its colors when a later gbdraw changes a table. The Web app's
+COG preset also sets the CDS default color to `#cccccc` and the Legend box and
+font size to 12.
+
 The generated feature legend reflects which specific color rules actually match
 features in the diagram. Default-colored CDS are captioned `CDS` when no specific
 CDS rule is used. When a specific CDS rule is used and default-colored CDS remain,

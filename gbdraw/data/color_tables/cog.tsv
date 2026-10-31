@@ -1,0 +1,87 @@
+# COG functional categories of Bakta annotations.
+# Bakta writes the category letters of a CDS as /db_xref="COG:<letters>" in GenBank (beside the
+# cluster ID, /db_xref="COG:COG0593"), as Dbxref=COG:<letters> in GFF3, and as /note="COG:<letters>"
+# with --compliant. A CDS with two letters takes its first letter, as Bakta's own plot does.
+# Categories and names: NCBI COG 2020, https://ftp.ncbi.nlm.nih.gov/pub/COG/COG2020/data/fun-20.tab
+# (public domain; read 2026-10-31). Hue families follow NCBI's four groups: information storage and
+# processing (J A K L B), cellular processes and signaling (D Y V T M N Z W U O X), metabolism
+# (C G E F H I P Q), poorly characterized (R S).
+# Columns: feature_type, qualifier_key, value (case-insensitive regular expression), color, caption.
+CDS	db_xref	^COG:J[A-Z]*$	#bf6d9d	Translation, ribosomal structure and biogenesis
+CDS	db_xref	^COG:A[A-Z]*$	#e199b0	RNA processing and modification
+CDS	db_xref	^COG:K[A-Z]*$	#ca6b78	Transcription
+CDS	db_xref	^COG:L[A-Z]*$	#e59b93	Replication, recombination and repair
+CDS	db_xref	^COG:B[A-Z]*$	#c97152	Chromatin structure and dynamics
+CDS	db_xref	^COG:D[A-Z]*$	#e8b45e	Cell cycle control, cell division, chromosome partitioning
+CDS	db_xref	^COG:Y[A-Z]*$	#f6e0a4	Nuclear structure
+CDS	db_xref	^COG:V[A-Z]*$	#b9ae4b	Defense mechanisms
+CDS	db_xref	^COG:T[A-Z]*$	#bcc768	Signal transduction mechanisms
+CDS	db_xref	^COG:M[A-Z]*$	#d3ecb2	Cell wall/membrane/envelope biogenesis
+CDS	db_xref	^COG:N[A-Z]*$	#6aa45a	Cell motility
+CDS	db_xref	^COG:Z[A-Z]*$	#80d496	Cytoskeleton
+CDS	db_xref	^COG:W[A-Z]*$	#b0f3d3	Extracellular structures
+CDS	db_xref	^COG:U[A-Z]*$	#17aa8f	Intracellular trafficking, secretion, and vesicular transport
+CDS	db_xref	^COG:O[A-Z]*$	#49d6cc	Posttranslational modification, protein turnover, chaperones
+CDS	db_xref	^COG:X[A-Z]*$	#a0f2f6	Mobilome: prophages, transposons
+CDS	db_xref	^COG:C[A-Z]*$	#289da9	Energy production and conversion
+CDS	db_xref	^COG:G[A-Z]*$	#77c1d7	Carbohydrate transport and metabolism
+CDS	db_xref	^COG:E[A-Z]*$	#4596bf	Amino acid transport and metabolism
+CDS	db_xref	^COG:F[A-Z]*$	#8bb9e5	Nucleotide transport and metabolism
+CDS	db_xref	^COG:H[A-Z]*$	#6b8cc9	Coenzyme transport and metabolism
+CDS	db_xref	^COG:I[A-Z]*$	#a6b0e8	Lipid transport and metabolism
+CDS	db_xref	^COG:P[A-Z]*$	#8c81c5	Inorganic ion transport and metabolism
+CDS	db_xref	^COG:Q[A-Z]*$	#c0a8de	Secondary metabolites biosynthesis, transport and catabolism
+CDS	db_xref	^COG:R[A-Z]*$	#a99c8e	General function prediction only
+CDS	db_xref	^COG:S[A-Z]*$	#696969	Function unknown
+CDS	Dbxref	^COG:J[A-Z]*$	#bf6d9d	Translation, ribosomal structure and biogenesis
+CDS	Dbxref	^COG:A[A-Z]*$	#e199b0	RNA processing and modification
+CDS	Dbxref	^COG:K[A-Z]*$	#ca6b78	Transcription
+CDS	Dbxref	^COG:L[A-Z]*$	#e59b93	Replication, recombination and repair
+CDS	Dbxref	^COG:B[A-Z]*$	#c97152	Chromatin structure and dynamics
+CDS	Dbxref	^COG:D[A-Z]*$	#e8b45e	Cell cycle control, cell division, chromosome partitioning
+CDS	Dbxref	^COG:Y[A-Z]*$	#f6e0a4	Nuclear structure
+CDS	Dbxref	^COG:V[A-Z]*$	#b9ae4b	Defense mechanisms
+CDS	Dbxref	^COG:T[A-Z]*$	#bcc768	Signal transduction mechanisms
+CDS	Dbxref	^COG:M[A-Z]*$	#d3ecb2	Cell wall/membrane/envelope biogenesis
+CDS	Dbxref	^COG:N[A-Z]*$	#6aa45a	Cell motility
+CDS	Dbxref	^COG:Z[A-Z]*$	#80d496	Cytoskeleton
+CDS	Dbxref	^COG:W[A-Z]*$	#b0f3d3	Extracellular structures
+CDS	Dbxref	^COG:U[A-Z]*$	#17aa8f	Intracellular trafficking, secretion, and vesicular transport
+CDS	Dbxref	^COG:O[A-Z]*$	#49d6cc	Posttranslational modification, protein turnover, chaperones
+CDS	Dbxref	^COG:X[A-Z]*$	#a0f2f6	Mobilome: prophages, transposons
+CDS	Dbxref	^COG:C[A-Z]*$	#289da9	Energy production and conversion
+CDS	Dbxref	^COG:G[A-Z]*$	#77c1d7	Carbohydrate transport and metabolism
+CDS	Dbxref	^COG:E[A-Z]*$	#4596bf	Amino acid transport and metabolism
+CDS	Dbxref	^COG:F[A-Z]*$	#8bb9e5	Nucleotide transport and metabolism
+CDS	Dbxref	^COG:H[A-Z]*$	#6b8cc9	Coenzyme transport and metabolism
+CDS	Dbxref	^COG:I[A-Z]*$	#a6b0e8	Lipid transport and metabolism
+CDS	Dbxref	^COG:P[A-Z]*$	#8c81c5	Inorganic ion transport and metabolism
+CDS	Dbxref	^COG:Q[A-Z]*$	#c0a8de	Secondary metabolites biosynthesis, transport and catabolism
+CDS	Dbxref	^COG:R[A-Z]*$	#a99c8e	General function prediction only
+CDS	Dbxref	^COG:S[A-Z]*$	#696969	Function unknown
+CDS	note	^COG:J[A-Z]*$	#bf6d9d	Translation, ribosomal structure and biogenesis
+CDS	note	^COG:A[A-Z]*$	#e199b0	RNA processing and modification
+CDS	note	^COG:K[A-Z]*$	#ca6b78	Transcription
+CDS	note	^COG:L[A-Z]*$	#e59b93	Replication, recombination and repair
+CDS	note	^COG:B[A-Z]*$	#c97152	Chromatin structure and dynamics
+CDS	note	^COG:D[A-Z]*$	#e8b45e	Cell cycle control, cell division, chromosome partitioning
+CDS	note	^COG:Y[A-Z]*$	#f6e0a4	Nuclear structure
+CDS	note	^COG:V[A-Z]*$	#b9ae4b	Defense mechanisms
+CDS	note	^COG:T[A-Z]*$	#bcc768	Signal transduction mechanisms
+CDS	note	^COG:M[A-Z]*$	#d3ecb2	Cell wall/membrane/envelope biogenesis
+CDS	note	^COG:N[A-Z]*$	#6aa45a	Cell motility
+CDS	note	^COG:Z[A-Z]*$	#80d496	Cytoskeleton
+CDS	note	^COG:W[A-Z]*$	#b0f3d3	Extracellular structures
+CDS	note	^COG:U[A-Z]*$	#17aa8f	Intracellular trafficking, secretion, and vesicular transport
+CDS	note	^COG:O[A-Z]*$	#49d6cc	Posttranslational modification, protein turnover, chaperones
+CDS	note	^COG:X[A-Z]*$	#a0f2f6	Mobilome: prophages, transposons
+CDS	note	^COG:C[A-Z]*$	#289da9	Energy production and conversion
+CDS	note	^COG:G[A-Z]*$	#77c1d7	Carbohydrate transport and metabolism
+CDS	note	^COG:E[A-Z]*$	#4596bf	Amino acid transport and metabolism
+CDS	note	^COG:F[A-Z]*$	#8bb9e5	Nucleotide transport and metabolism
+CDS	note	^COG:H[A-Z]*$	#6b8cc9	Coenzyme transport and metabolism
+CDS	note	^COG:I[A-Z]*$	#a6b0e8	Lipid transport and metabolism
+CDS	note	^COG:P[A-Z]*$	#8c81c5	Inorganic ion transport and metabolism
+CDS	note	^COG:Q[A-Z]*$	#c0a8de	Secondary metabolites biosynthesis, transport and catabolism
+CDS	note	^COG:R[A-Z]*$	#a99c8e	General function prediction only
+CDS	note	^COG:S[A-Z]*$	#696969	Function unknown

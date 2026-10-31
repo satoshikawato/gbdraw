@@ -493,6 +493,53 @@ def rule_captions_as_written() -> Iterator[None]:
         _RULE_CAPTIONS_AS_WRITTEN.reset(token)
 
 
+# The color tables gbdraw ships (``gbdraw/data/color_tables/<name>.tsv``) by
+# name, in the order the Web lists them, with the title it shows. A color table
+# value ``builtin:<name>`` (CLI ``-t/--table``, ``FeatureOptions.color_table``,
+# ``ColorOptions.color_table_file``) names one; ``color_table_path`` reads the
+# name. The Web reads these tables through tools/generate_web_contracts.py.
+BUILTIN_COLOR_TABLE_PREFIX = "builtin:"
+BUILTIN_COLOR_TABLES: Mapping[str, str] = MappingProxyType({
+    "cog": "COG categories (Bakta)",
+    "phrog": "PHROG categories (Pharokka)",
+    "plastid": "Plastid gene classes",
+    "mitochondrion": "Mitochondrial gene classes",
+})
+
+
+def builtin_color_table_names() -> tuple[str, ...]:
+    """The names of the built-in color tables, in their listed order."""
+
+    return tuple(BUILTIN_COLOR_TABLES)
+
+
+def color_table_path(value: str) -> str:
+    """The file a color table value names: a built-in table's packaged file, else ``value``."""
+
+    if not value.startswith(BUILTIN_COLOR_TABLE_PREFIX):
+        return value
+    name = value[len(BUILTIN_COLOR_TABLE_PREFIX):]
+    if name not in BUILTIN_COLOR_TABLES:
+        choices = ", ".join(f"{BUILTIN_COLOR_TABLE_PREFIX}{item}" for item in BUILTIN_COLOR_TABLES)
+        raise ValidationError(
+            f"Unknown built-in color table {value!r}; choose from: {choices}.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    return str(resources.files("gbdraw.data").joinpath("color_tables").joinpath(f"{name}.tsv"))
+
+
+def builtin_color_table_data() -> dict[str, dict[str, object]]:
+    """Each built-in table's title and rows (feature_type, qualifier_key, value, color, caption) as read."""
+
+    data: dict[str, dict[str, object]] = {}
+    for name, title in BUILTIN_COLOR_TABLES.items():
+        table = read_color_table(f"{BUILTIN_COLOR_TABLE_PREFIX}{name}")
+        assert table is not None
+        rows = table[["feature_type", "qualifier_key", "value", "color", "caption"]].values.tolist()
+        data[name] = {"title": title, "rows": [[str(cell) for cell in row] for row in rows]}
+    return data
+
+
 def read_color_table(color_table_file: str) -> Optional[DataFrame]:
     required_cols = ["feature_type", "qualifier_key", "value", "color", "caption"]
     mandatory_cols = ["feature_type", "qualifier_key", "value", "color"]
@@ -500,6 +547,7 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
     # If user did not supply -t, just skip and return None
     if not color_table_file:
         return None
+    color_table_file = color_table_path(color_table_file)
 
     try:
         df = read_literal_table(
@@ -549,7 +597,12 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
 
 
 __all__ = [
+    "BUILTIN_COLOR_TABLES",
+    "BUILTIN_COLOR_TABLE_PREFIX",
     "PALETTE_NAME_ALIASES",
+    "builtin_color_table_data",
+    "builtin_color_table_names",
+    "color_table_path",
     "USER_COLOR_FORMS",
     "check_user_color",
     "current_palette_name",

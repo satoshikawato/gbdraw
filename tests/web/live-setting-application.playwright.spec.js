@@ -450,7 +450,7 @@ test('the Bakta preset applies its Legend sizes; Undo and Redo give the same Res
     for (const details of await preset.locator('xpath=ancestor::details').all()) {
       if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
     }
-    await preset.selectOption('bakta');
+    await preset.selectOption('cog');
     await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.applySpecificRulePreset());
     await appliedLegendFont(page, 12);
     const applied = await facts(page);
