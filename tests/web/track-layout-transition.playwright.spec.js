@@ -1144,7 +1144,7 @@ for (const mode of ['circular', 'linear']) {
       const title = `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`;
       await removeDepthFile(page, mode);
       await expect(page.locator('[data-choice-prompt]').getByRole('heading', { name: title, exact: true })).toBeVisible();
-      expect(await promptText(page)).toContain('Depth series 1 stays empty, and Generate will ask for a file or its removal.');
+      expect(await promptText(page)).toContain('Depth series #1 stays empty, and Generate will ask for a file or its removal.');
       await page.locator('[data-choice-prompt]').getByRole('button', { name: 'Cancel', exact: true }).click();
       await settleLive(page);
       await exerciseAsk(page, mode, {
@@ -1304,6 +1304,7 @@ test('rev 7: Linear File removal: Cancel on the second question keeps the File, 
     const filesBefore = await files();
     const steps = await undoCount(page);
     await fileCardRemove(page);
+    await expect(page.locator('[data-choice-prompt]').getByRole('button', { name: 'Cancel', exact: true }), 'the second question takes the focus').toBeFocused();
     await page.locator('[data-choice-prompt]').getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
     await settleLive(page);
@@ -1348,7 +1349,7 @@ test('rev 7: Linear File removal with another series left says the series stays 
     const title = `Remove the File and turn off Track row ${rowNumber(start, 'mark0')}?`;
     await fileCardRemove(page);
     await expect(page.locator('[data-choice-prompt]').getByRole('heading', { name: title, exact: true })).toBeVisible();
-    expect(await promptText(page)).toContain('Depth series 1 stays empty, and Generate will ask for a file or its removal.');
+    expect(await promptText(page)).toContain('Depth series #1 stays empty, and Generate will ask for a file or its removal.');
     await chooseAsked(page);
     expect(await generateError(page)).toBe('DEPTH_INVALID');
   } finally { await page.context().close(); }

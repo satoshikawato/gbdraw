@@ -910,7 +910,7 @@ for (const mode of ['circular', 'linear']) {
     assert.equal(applied, true);
     assert.equal(questions[0].title, 'Remove the Depth file and turn off Track row 3 and Track row 5?');
     assert.deepEqual(questions[0].items, ['Track row 5 (mark)']);
-    assert.equal(questions[0].description, `Depth series 1 stays empty, and Generate will ask for a file or its removal. Track row 3 (cov) has no Depth file left. It stays in the stack, turned off. ${REACH_SENTENCE}`);
+    assert.equal(questions[0].description, `Depth series #1 stays empty, and Generate will ask for a file or its removal. Track row 3 (cov) has no Depth file left. It stays in the stack, turned off. ${REACH_SENTENCE}`);
     assert.equal(enabledOf(editor).cov, false);
     assert.equal(enabledOf(editor).mark, false);
   });
