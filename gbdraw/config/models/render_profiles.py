@@ -112,7 +112,8 @@ class LinearRenderProfile(_RenderProfile):
         object.__setattr__(self, "label_rotation", labels.rotation)
         object.__setattr__(self, "label_style", FeatureLabelStyle(labels.line, labels.protection))
         object.__setattr__(self, "track_layout", canvas.track_layout)
-        object.__setattr__(self, "ruler_on_axis", bool(canvas.ruler_on_axis))
+        # Wrapped rows carry their ruler on the axis: there is no other place for it.
+        object.__setattr__(self, "ruler_on_axis", bool(canvas.ruler_on_axis) or canvas.wrap_active)
 
     def labels_in_scope(self, record_index: int) -> bool:
         """Return whether the label display scope selects this record's labels."""

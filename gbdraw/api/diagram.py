@@ -116,6 +116,7 @@ from gbdraw.config.models import (
     GbdrawConfig,
     LinearRenderProfile,
 )
+from gbdraw.config.models.canvas import LinearWrapLength
 from gbdraw.config.models.labels import LabelsFilteringConfig
 from gbdraw.config.models.objects import (
     normalize_pairwise_match_style,
@@ -195,6 +196,12 @@ from gbdraw.layout.composition import (
     plan_composition,
 )
 from gbdraw.layout.linear_multi_record import record_key_at, record_pairs_between_adjacent_rows
+from gbdraw.layout.linear_wrap import (
+    reject_wrap_in_one_grid_row,
+    reject_wrap_with_comparisons,
+    resolve_wrap_length,
+    wrap_blocking_inputs,
+)
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
@@ -2078,6 +2085,26 @@ def _shows_identity_labels(record_features: Sequence[ResolvedRecordFeatureInputs
     )
 
 
+def _reject_undrawable_wrap(
+    requested: LinearWrapLength,
+    records: Sequence[SeqRecord],
+    layout: LinearMultiRecordOptions | None,
+    blocking_inputs: Sequence[str],
+) -> None:
+    if requested == "none":
+        return
+    reject_wrap_with_comparisons(requested, blocking_inputs)
+    reject_wrap_in_one_grid_row(
+        requested,
+        resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
+    )
+    if resolve_wrap_length(requested, [len(record.seq) for record in records]) is not None:
+        raise ValidationError(
+            "--wrap_length is not drawn yet for a record longer than one row.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_NOT_DRAWN"},
+        )
+
+
 def assemble_linear_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
@@ -2185,6 +2212,20 @@ def assemble_linear_diagram_from_records(
             "render it with gbdraw.api.render_request().",
             diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
         )
+    _reject_undrawable_wrap(
+        cfg.canvas.linear.wrap_length,
+        records,
+        layout,
+        wrap_blocking_inputs(
+            blast_files=blast_files,
+            linear_comparisons=linear_comparisons,
+            protein_comparisons=protein_comparisons,
+            orthogroups=orthogroups,
+            collinearity_blocks=collinearity_blocks,
+            losat_search=losat_search,
+            similarity_alignment=similarity_alignment,
+        ),
+    )
     normalized_protein_blastp_mode = losatp_analysis_mode(losat_search)
     runtime = losat_search.runtime if losat_search is not None else LosatRuntimeOptions()
     normalized_protein_pairs: tuple[tuple[int, int], ...] | None = None

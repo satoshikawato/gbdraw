@@ -112,6 +112,7 @@ from gbdraw.labels.filtering import (
     read_label_override_file,
     read_qualifier_priority_file,
 )
+from gbdraw.layout.linear_wrap import reject_wrap_with_comparisons, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -142,7 +143,9 @@ from .diagram import (
 )
 from .io import load_gbks
 from .migration_report import SessionMigrationReport
+from .config import apply_config_overrides
 from .options import (
+    resolve_linear_diagram_options,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
     ColorOptions,
@@ -2022,6 +2025,7 @@ def plan_linear_request(
 
     if not isinstance(request, LinearDiagramRequest):
         raise ValidationError("request must be LinearDiagramRequest.")
+    _reject_wrapped_comparisons(request)
     if isinstance(request.similarity_alignment, SimilarityAlignmentReference):
         # Resolving the reference keeps the request mode.
         request, _artifacts = cast(
@@ -2086,6 +2090,27 @@ def plan_linear_request(
             alignment_anchor_centers=alignment_anchor_centers,
             losat_cache_entries=losat_cache_entries,
         )
+
+
+def _reject_wrapped_comparisons(request: LinearDiagramRequest) -> None:
+    """Refuse comparisons while wrapping before a search runs (the builder refuses them as well)."""
+
+    options = request.options
+    blocking = wrap_blocking_inputs(
+        blast_files=options.blast_files,
+        comparison_table_file=options.comparison_table_file,
+        linear_comparisons=options.linear_comparisons,
+        protein_comparisons=options.protein_comparisons,
+        orthogroups=options.orthogroups,
+        collinearity_blocks=options.collinearity_blocks,
+        losat_search=options.losat_search,
+        similarity_alignment=request.similarity_alignment,
+    )
+    # A figure without comparisons need not read its config here.
+    if blocking:
+        resolved = resolve_linear_diagram_options(options)
+        config = apply_config_overrides(resolved.config, resolved.config_overrides)
+        reject_wrap_with_comparisons(config.canvas.linear.wrap_length, blocking)
 
 
 def _resolve_nucleotide_losat(

@@ -528,8 +528,9 @@ options:
                         Inner label y-radius offset factor (float; default
                         from config)
   --scale_interval SCALE_INTERVAL
-                        Manual scale interval for circular mode (in bp; must
-                        be > 0). Overrides automatic calculation.
+                        Manual scale interval for circular mode (a length in
+                        bp with an optional unit, for example 5000 or 5kb;
+                        must be > 0). Overrides automatic calculation.
   --hide_scale          Hide the primary genome-coordinate scale while
                         retaining the circular axis.
   --tick_label_font_size TICK_LABEL_FONT_SIZE
@@ -1116,7 +1117,8 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--label_line {none,under}] [--label_protection {none,halo,box}]
               [--label_rotation LABEL_ROTATION]
               [--linear_label_spacing LINEAR_LABEL_SPACING]
-              [--track_layout {above,middle,below}] [--track_axis_gap AUTO|PX]
+              [--track_layout {above,middle,below}]
+              [--wrap_length AUTO|LENGTH] [--track_axis_gap AUTO|PX]
               [--linear_track_order LINEAR_TRACK_ORDER]
               [--linear_track_slot SLOT]
               [--linear_track_axis_index LINEAR_TRACK_AXIS_INDEX]
@@ -1520,7 +1522,14 @@ options:
                         (optional; float; must be > 0).
   --track_layout {above,middle,below}
                         Linear track layout mode ("above", "middle", or
-                        "below"; default: "middle").
+                        "below"; default: "middle", or "above" with
+                        --wrap_length).
+  --wrap_length AUTO|LENGTH
+                        Draw each record over several rows of this length: a
+                        length in bp with an optional unit (for example 50000,
+                        50kb, 0.5Mb), or "auto" (at most 50 kb per row, by the
+                        longest record). A record no longer than one row draws
+                        one row. Default: no wrapping.
   --track_axis_gap AUTO|PX
                         Gap between axis and nearest feature edge in pixels
                         for above/below layouts. Use 'auto' to derive it from
@@ -1581,8 +1590,8 @@ options:
   --hide_scale          Hide the coordinate scale while retaining each record
                         axis (default: False).
   --scale_style {bar,ruler}
-                        Style for the length scale (default: "bar"; "bar",
-                        "ruler")
+                        Style for the length scale ("bar", "ruler"; default:
+                        "bar", or "ruler" with --wrap_length)
   --scale_stroke_color SCALE_STROKE_COLOR
                         Scale bar/ruler stroke color (optional; str; default:
                         "black")
@@ -1601,7 +1610,8 @@ options:
                         color when --ruler_on_axis is active, otherwise
                         black).
   --scale_interval SCALE_INTERVAL
-                        Manual tick interval for "ruler" scale style (in bp;
+                        Manual tick interval for "ruler" scale style (a length
+                        in bp with an optional unit, for example 5000 or 5kb;
                         must be > 0). Overrides automatic calculation;
                         optional
   --legend_box_size LEGEND_BOX_SIZE

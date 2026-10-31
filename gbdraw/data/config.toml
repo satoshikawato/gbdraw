@@ -50,6 +50,8 @@ ruler_on_axis = false
 align_center = false
 keep_definition_left_aligned = false
 normalize_length = false
+# Base pairs per row of one wrapped record: "none" (one row), "auto", or a length ("50kb").
+wrap_length = "none"
 [canvas.linear.default_cds_height]
   short = 80
   long = 20

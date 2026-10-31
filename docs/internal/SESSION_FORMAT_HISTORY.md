@@ -12,6 +12,18 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
+## Unreleased: Linear wrap length
+
+The config leaf `canvas.linear.wrap_length` (`"none"`, `"auto"`, or a positive
+length in bp) and the Linear slice's `form.linear_wrap_length`, an `own` row of
+the mode-scoped registry whose replay flag is `--wrap_length`, are new. No Web
+writer writes the form key yet, and Python draws no record over several rows
+yet, so no writer can produce a file that a `main` build refuses and
+`SESSION_VERSION` stays 49. A `main` build refuses both: the slice's `form` is
+closed (`_validate_mode_slice_fields`) and an unknown override path fails
+(`UNKNOWN_CONFIG_PATH`). The change that first writes either one raises the
+version, or keeps a version that has not reached `main`.
+
 ## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
 
 Session version 49 adds `adv.show_definition` (boolean, Circular **Show

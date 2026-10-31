@@ -66,7 +66,7 @@ from .tracks import (
 
 from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
 from .comparisons.losat_jobs import unique_losat_filenames
-from .core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
+from .core.numeric import argparse_float, argparse_integer, argparse_scale_interval, parse_ascii_finite_float
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
     _add_arrow_geometry_args,
@@ -572,8 +572,8 @@ def _get_args(
         type=argparse_float)
     parser.add_argument(
         '--scale_interval',
-        help='Manual scale interval for circular mode (in bp; must be > 0). Overrides automatic calculation.',
-        type=argparse_integer)
+        help='Manual scale interval for circular mode (a length in bp with an optional unit, for example 5000 or 5kb; must be > 0). Overrides automatic calculation.',
+        type=argparse_scale_interval)
     parser.add_argument(
         '--hide_scale',
         help='Hide the primary genome-coordinate scale while retaining the circular axis.',

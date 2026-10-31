@@ -169,6 +169,13 @@ MODE_PROFILES: dict[DiagramMode, ModeProfile] = {
 }
 
 
+# What a request that wraps and leaves these unset draws (the other values are refused while wrapping).
+_LINEAR_WRAP_DEFAULTS: Mapping[str, object] = MappingProxyType({
+    "canvas.linear.track_layout": "above",
+    "objects.scale.style": "ruler",
+})
+
+
 def get_mode_profile(mode: DiagramMode | str) -> ModeProfile:
     """Return the immutable defaults for a supported drawing mode."""
 
@@ -190,14 +197,17 @@ def resolve_mode_profile_overrides(
     profile = get_mode_profile(mode)
     resolved = profile.config_overrides
     explicit = dict(explicit_overrides or {})
+    wrapping = profile.mode == "linear" and _asks_linear_wrap(explicit)
+    if wrapping:
+        resolved.update(_LINEAR_WRAP_DEFAULTS)
     if (
         profile.mode == "linear"
-        and explicit.get("canvas.linear.ruler_on_axis") is True
+        and (wrapping or explicit.get("canvas.linear.ruler_on_axis") is True)
         and "objects.axis.linear.stroke_color" not in explicit
     ):
         # A fresh request starts from the packaged config, so its values
         # decide the leaves the request leaves unset.
-        decisive = {**_packaged_axis_ruler_leaves(), **explicit}
+        decisive = {**_packaged_axis_ruler_leaves(), **resolved, **explicit}
         if linear_axis_ruler_applies(
             show_scale=decisive["objects.scale.show"],
             scale_style=decisive["objects.scale.style"],
@@ -205,7 +215,25 @@ def resolve_mode_profile_overrides(
         ):
             resolved["objects.axis.linear.stroke_color"] = profile.linear_ruler_axis_color
     resolved.update(explicit)
+    if wrapping:
+        # Fixed while wrapping: the option's other value has nothing to draw (the CLI always sends one).
+        resolved["canvas.linear.ruler_on_axis"] = True
     return resolved
+
+
+def effective_linear_track_leaves(
+    explicit_overrides: Mapping[str, object] | None = None,
+) -> tuple[str, str]:
+    """The track layout and scale style of a fresh Linear request: explicit, then wrap, then packaged."""
+
+    explicit = dict(explicit_overrides or {})
+    defaults = _LINEAR_WRAP_DEFAULTS if _asks_linear_wrap(explicit) else {}
+    decisive = {**_packaged_axis_ruler_leaves(), **defaults, **explicit}
+    return str(decisive["canvas.linear.track_layout"]), str(decisive["objects.scale.style"])
+
+
+def _asks_linear_wrap(explicit: Mapping[str, object]) -> bool:
+    return explicit.get("canvas.linear.wrap_length", "none") not in ("none", None)
 
 
 @lru_cache(maxsize=1)
@@ -303,6 +331,7 @@ __all__ = [
     "MODE_PROFILE_VERSION",
     "MODE_PROFILES",
     "ModeProfile",
+    "effective_linear_track_leaves",
     "get_mode_profile",
     "mode_profiles_payload",
     "resolve_mode_profile_overrides",

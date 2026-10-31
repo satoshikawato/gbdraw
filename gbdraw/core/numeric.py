@@ -6,6 +6,7 @@ import argparse
 import math
 import re
 from collections.abc import Iterable
+from fractions import Fraction
 from typing import SupportsFloat, SupportsIndex, SupportsInt
 
 # Python's ``\d`` and ``str.isdigit()`` accept other Unicode digits and ``int()`` reads the
@@ -162,6 +163,48 @@ def parse_ascii_finite_float(text: str) -> float | None:
     return value if value is not None and math.isfinite(value) else None
 
 
+# A length in bp: a decimal count and an optional unit, in ASCII. ``float()`` is not used: the
+# value must be an exact whole number of bases, and its spellings (``1e3``) are not lengths.
+_LENGTH_RE = re.compile(r"\s*([0-9]+(?:\.[0-9]*)?|\.[0-9]+)\s*(bp|k|kb|kbp|m|mb|mbp)?\s*", re.IGNORECASE | re.ASCII)
+_LENGTH_UNIT_BP = {"": 1, "bp": 1, "k": 10**3, "kb": 10**3, "kbp": 10**3, "m": 10**6, "mb": 10**6, "mbp": 10**6}
+
+
+def parse_length_bp(text: str) -> int | None:
+    """The positive whole number of bases ``text`` spells, with an optional unit, else ``None``.
+
+    ``50000``, ``50kb``, ``50 kbp``, ``50k``, ``0.5Mb``; the unit's case does not matter. A value
+    that is not a whole base (``0.0004kb``), is zero, or exceeds what a JavaScript reader keeps
+    exactly is ``None``, as are a sign, an exponent, and other digits.
+    """
+
+    match = _LENGTH_RE.fullmatch(text) if isinstance(text, str) else None
+    if match is None or len(match[1]) > 32:
+        return None
+    value = Fraction(match[1]) * _LENGTH_UNIT_BP[(match[2] or "").lower()]
+    return int(value) if value.denominator == 1 and 0 < value <= JS_MAX_SAFE_INTEGER else None
+
+
+def argparse_length_bp(text: str) -> int:
+    """argparse ``type=`` of a length option (:func:`parse_length_bp`)."""
+
+    value = parse_length_bp(text)
+    if value is None:
+        raise argparse.ArgumentTypeError(
+            f"invalid length: {text!r} (a positive whole number of bases, with an optional bp, kb, or Mb unit)"
+        )
+    return value
+
+
+def argparse_scale_interval(text: str) -> int:
+    """argparse ``type=`` of ``--scale_interval``: a length, or any integer as the option always read.
+
+    The caller refuses a value <= 0 or reads it as a released legacy Session drew it.
+    """
+
+    value = parse_ascii_integer(text.strip())
+    return value if value is not None else argparse_length_bp(text)
+
+
 def argparse_float(text: str) -> float:
     """argparse ``type=`` of every float option: a finite ``float()`` in ASCII only.
 
@@ -183,6 +226,8 @@ __all__ = [
     "JS_WHITESPACE",
     "argparse_float",
     "argparse_integer",
+    "argparse_length_bp",
+    "argparse_scale_interval",
     "ascii_float",
     "ascii_int",
     "compensated_sum",
@@ -190,5 +235,6 @@ __all__ = [
     "parse_ascii_float",
     "parse_ascii_integer",
     "parse_ascii_nonnegative_integer",
+    "parse_length_bp",
     "scaled_tick_text",
 ]

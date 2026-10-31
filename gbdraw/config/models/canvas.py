@@ -5,7 +5,7 @@ from numbers import Integral
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping, TypeAlias, cast
 
-from gbdraw.core.numeric import ascii_float, ascii_int
+from gbdraw.core.numeric import ascii_float, ascii_int, parse_length_bp
 from gbdraw.exceptions import ValidationError
 
 LinearTrackLayoutMode: TypeAlias = Literal["above", "middle", "below"]
@@ -20,6 +20,33 @@ def _positive_finite_float(value: Any, *, field_name: str) -> float:
         raise ValidationError(f"{field_name} must be a positive finite number") from exc
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValidationError(f"{field_name} must be a positive finite number")
+    return parsed
+
+
+LinearWrapLength: TypeAlias = int | Literal["auto", "none"]
+
+
+def linear_wrap_length_from_config(value: object) -> LinearWrapLength:
+    """The canonical ``canvas.linear.wrap_length``: a positive int, ``"auto"``, or ``"none"``.
+
+    A config file may spell a length with a unit, and ``None`` means ``"none"``.
+    """
+
+    if value is None:
+        return "none"
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("auto", "none"):
+            return cast(LinearWrapLength, normalized)
+        parsed = parse_length_bp(normalized)
+    else:
+        parsed = value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+    if parsed is None:
+        raise ValidationError(
+            'canvas.linear.wrap_length must be "none", "auto", or a positive length in bp '
+            f"(a number, or a number with a kb or Mb unit); got {value!r}.",
+            diagnostic={"code": "INPUT_INVALID", "configPath": "canvas.linear.wrap_length"},
+        )
     return parsed
 
 
@@ -170,6 +197,12 @@ class LinearCanvasConfig:
     normalize_length: bool
     default_cds_height: LinearCanvasDefaultCdsHeightConfig
     arrow_length_parameter: LinearCanvasArrowLengthParameterConfig
+    wrap_length: LinearWrapLength = "none"
+
+    @property
+    def wrap_active(self) -> bool:
+        """Whether the config asks to wrap; a record no longer than one row still draws one row."""
+        return self.wrap_length != "none"
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LinearCanvasConfig":
@@ -234,6 +267,7 @@ class LinearCanvasConfig:
             normalize_length=bool(d["normalize_length"]),
             default_cds_height=LinearCanvasDefaultCdsHeightConfig.from_dict(d["default_cds_height"]),
             arrow_length_parameter=LinearCanvasArrowLengthParameterConfig.from_dict(d["arrow_length_parameter"]),
+            wrap_length=linear_wrap_length_from_config(d.get("wrap_length")),
         )
 
 
@@ -278,5 +312,7 @@ __all__ = [
     "CircularCanvasConfig",
     "LinearCanvasConfig",
     "LinearTrackLayoutMode",
+    "LinearWrapLength",
     "linear_axis_ruler_applies",
+    "linear_wrap_length_from_config",
 ]

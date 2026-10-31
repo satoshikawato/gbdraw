@@ -6614,6 +6614,9 @@ def _append_linear_gui_args(
         _append_pair(run_args, invocation_args, "--track_layout", layout)
     if form.get("linear_ruler_on_axis") is True:
         _append_flag(run_args, invocation_args, "--ruler_on_axis")
+    wrap_length = _string_or_none(form.get("linear_wrap_length"))
+    if wrap_length and wrap_length != "none":
+        _append_pair(run_args, invocation_args, "--wrap_length", wrap_length)
     _append_linear_definition_line_style_args(run_args, invocation_args, adv)
 
     linear_seqs = files.get("linearSeqs")
