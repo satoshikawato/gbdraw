@@ -10,7 +10,11 @@ from numbers import Integral, Real
 from types import MappingProxyType
 from typing import Literal, Mapping, cast, get_args
 
-from gbdraw.config.models.canvas import linear_axis_ruler_applies
+from gbdraw.config.models.canvas import (
+    LINEAR_WRAP_LENGTH_PATH,
+    linear_axis_ruler_applies,
+    linear_wrap_length_from_config,
+)
 from gbdraw.config.models.labels import LinearLabelScope
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
@@ -169,11 +173,13 @@ MODE_PROFILES: dict[DiagramMode, ModeProfile] = {
 }
 
 
-# What a request that wraps and leaves these unset draws (the other values are refused while wrapping).
+# What a request that cuts a record and leaves these unset draws (the other values are refused then).
+LINEAR_WRAP_DEFAULT_TRACK_LAYOUT = "above"
 _LINEAR_WRAP_DEFAULTS: Mapping[str, object] = MappingProxyType({
-    "canvas.linear.track_layout": "above",
+    "canvas.linear.track_layout": LINEAR_WRAP_DEFAULT_TRACK_LAYOUT,
     "objects.scale.style": "ruler",
 })
+_LINEAR_SCALE_COLORS = ("objects.scale.stroke_color", "objects.scale.label_color")
 
 
 def get_mode_profile(mode: DiagramMode | str) -> ModeProfile:
@@ -197,17 +203,14 @@ def resolve_mode_profile_overrides(
     profile = get_mode_profile(mode)
     resolved = profile.config_overrides
     explicit = dict(explicit_overrides or {})
-    wrapping = profile.mode == "linear" and _asks_linear_wrap(explicit)
-    if wrapping:
-        resolved.update(_LINEAR_WRAP_DEFAULTS)
     if (
         profile.mode == "linear"
-        and (wrapping or explicit.get("canvas.linear.ruler_on_axis") is True)
+        and explicit.get("canvas.linear.ruler_on_axis") is True
         and "objects.axis.linear.stroke_color" not in explicit
     ):
         # A fresh request starts from the packaged config, so its values
         # decide the leaves the request leaves unset.
-        decisive = {**_packaged_axis_ruler_leaves(), **resolved, **explicit}
+        decisive = {**_packaged_axis_ruler_leaves(), **explicit}
         if linear_axis_ruler_applies(
             show_scale=decisive["objects.scale.show"],
             scale_style=decisive["objects.scale.style"],
@@ -215,25 +218,45 @@ def resolve_mode_profile_overrides(
         ):
             resolved["objects.axis.linear.stroke_color"] = profile.linear_ruler_axis_color
     resolved.update(explicit)
-    if wrapping:
-        # Fixed while wrapping: the option's other value has nothing to draw (the CLI always sends one).
-        resolved["canvas.linear.ruler_on_axis"] = True
     return resolved
+
+
+def linear_wrap_default_overrides(explicit_overrides: Mapping[str, object] | None = None) -> dict[str, object] | None:
+    """What a fresh request that asks to wrap draws with if a record is cut; ``None`` when it does not ask.
+
+    They are overrides for the planner to apply when it knows the record lengths. A figure with nothing to cut
+    never reads them, so it draws what the same request without a wrap length draws. The request's own leaves stay
+    out: those it names as something rows cannot draw are refused, not defaulted. The scale's colors it names are
+    restated, because the axis ruler rule sets the ones its overrides leave out.
+    """
+
+    explicit = dict(explicit_overrides or {})
+    if linear_wrap_length_from_config(explicit.get(LINEAR_WRAP_LENGTH_PATH)) == "none":
+        return None
+    defaults: dict[str, object] = {
+        **{path: value for path, value in _LINEAR_WRAP_DEFAULTS.items() if path not in explicit},
+        # Fixed while wrapping: the option's other value has nothing to draw (the CLI always sends one).
+        "canvas.linear.ruler_on_axis": True,
+        **{path: explicit[path] for path in _LINEAR_SCALE_COLORS if explicit.get(path) is not None},
+    }
+    if "objects.axis.linear.stroke_color" not in explicit:
+        decisive = {**_packaged_axis_ruler_leaves(), **explicit, **defaults}
+        if linear_axis_ruler_applies(
+            show_scale=decisive["objects.scale.show"],
+            scale_style=decisive["objects.scale.style"],
+            track_layout=decisive["canvas.linear.track_layout"],
+        ):
+            defaults["objects.axis.linear.stroke_color"] = LINEAR_MODE_PROFILE.linear_ruler_axis_color
+    return defaults
 
 
 def effective_linear_track_leaves(
     explicit_overrides: Mapping[str, object] | None = None,
 ) -> tuple[str, str]:
-    """The track layout and scale style of a fresh Linear request: explicit, then wrap, then packaged."""
+    """The track layout and scale style of a fresh Linear request: explicit, then packaged."""
 
-    explicit = dict(explicit_overrides or {})
-    defaults = _LINEAR_WRAP_DEFAULTS if _asks_linear_wrap(explicit) else {}
-    decisive = {**_packaged_axis_ruler_leaves(), **defaults, **explicit}
+    decisive = {**_packaged_axis_ruler_leaves(), **dict(explicit_overrides or {})}
     return str(decisive["canvas.linear.track_layout"]), str(decisive["objects.scale.style"])
-
-
-def _asks_linear_wrap(explicit: Mapping[str, object]) -> bool:
-    return explicit.get("canvas.linear.wrap_length", "none") not in ("none", None)
 
 
 @lru_cache(maxsize=1)
@@ -321,6 +344,7 @@ def mode_profiles_payload() -> dict[str, object]:
 
 
 __all__ = [
+    "LINEAR_WRAP_DEFAULT_TRACK_LAYOUT",
     "CIRCULAR_MODE_PROFILE",
     "COMPARISON_THRESHOLD_DOMAINS",
     "ComparisonThresholdDomain",
@@ -333,6 +357,7 @@ __all__ = [
     "ModeProfile",
     "effective_linear_track_leaves",
     "get_mode_profile",
+    "linear_wrap_default_overrides",
     "mode_profiles_payload",
     "resolve_mode_profile_overrides",
     "validate_comparison_threshold",

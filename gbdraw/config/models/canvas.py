@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from numbers import Integral
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping, TypeAlias, cast
 
 from gbdraw.core.numeric import ascii_float, ascii_int, parse_length_bp
@@ -23,13 +23,20 @@ def _positive_finite_float(value: Any, *, field_name: str) -> float:
     return parsed
 
 
+# A dataclass field's metadata key: the function that validates the leaf's value in place of its annotation, for a
+# leaf that accepts more spellings than it stores. A config override reads it, so one rule serves both.
+LEAF_VALIDATOR = "gbdraw_leaf_validator"
+
+
 LinearWrapLength: TypeAlias = int | Literal["auto", "none"]
+LINEAR_WRAP_LENGTH_PATH = "canvas.linear.wrap_length"
 
 
 def linear_wrap_length_from_config(value: object) -> LinearWrapLength:
-    """The canonical ``canvas.linear.wrap_length``: a positive int, ``"auto"``, or ``"none"``.
+    """The one validator of ``canvas.linear.wrap_length``, for a config and an override alike.
 
-    A config file may spell a length with a unit, and ``None`` means ``"none"``.
+    It accepts a positive integer, ``"auto"``, ``"none"``, ``None`` (read as ``"none"``), and a length in text
+    with an optional unit (``"50kb"``), and returns a positive int, ``"auto"``, or ``"none"``.
     """
 
     if value is None:
@@ -43,9 +50,9 @@ def linear_wrap_length_from_config(value: object) -> LinearWrapLength:
         parsed = value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
     if parsed is None:
         raise ValidationError(
-            'canvas.linear.wrap_length must be "none", "auto", or a positive length in bp '
-            f"(a number, or a number with a kb or Mb unit); got {value!r}.",
-            diagnostic={"code": "INPUT_INVALID", "configPath": "canvas.linear.wrap_length"},
+            f'{LINEAR_WRAP_LENGTH_PATH} must be "none", "auto", or a positive length in bp '
+            f"(an integer, or text with an optional kb or Mb unit); got {value!r}.",
+            diagnostic={"code": "INPUT_INVALID", "configPath": LINEAR_WRAP_LENGTH_PATH},
         )
     return parsed
 
@@ -197,12 +204,8 @@ class LinearCanvasConfig:
     normalize_length: bool
     default_cds_height: LinearCanvasDefaultCdsHeightConfig
     arrow_length_parameter: LinearCanvasArrowLengthParameterConfig
-    wrap_length: LinearWrapLength = "none"
-
-    @property
-    def wrap_active(self) -> bool:
-        """Whether the config asks to wrap; a record no longer than one row still draws one row."""
-        return self.wrap_length != "none"
+    # Asks to wrap; whether anything is cut is known only with the record lengths (``layout.linear_wrap``).
+    wrap_length: LinearWrapLength = field(default="none", metadata={LEAF_VALIDATOR: linear_wrap_length_from_config})
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LinearCanvasConfig":
@@ -312,6 +315,8 @@ __all__ = [
     "CircularCanvasConfig",
     "LinearCanvasConfig",
     "LinearTrackLayoutMode",
+    "LEAF_VALIDATOR",
+    "LINEAR_WRAP_LENGTH_PATH",
     "LinearWrapLength",
     "linear_axis_ruler_applies",
     "linear_wrap_length_from_config",

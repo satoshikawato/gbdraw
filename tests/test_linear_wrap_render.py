@@ -362,10 +362,12 @@ def test_the_figure_scale_comes_from_the_row_length(tmp_path: Path) -> None:
     assert _geometry(built, 1)["sequenceWidthPx"] == pytest.approx(_geometry(built)["sequenceWidthPx"] * 4_000 / 10_000)
 
 
-def test_a_record_shorter_than_the_row_draws_exactly_as_unwrapped() -> None:
-    wrapped = _build(wrap=100_000, overrides={"canvas.linear.track_layout": "above", "objects.scale.style": "ruler", "canvas.linear.ruler_on_axis": True})
-    plain = _build(wrap=None, overrides={"canvas.linear.track_layout": "above", "objects.scale.style": "ruler", "canvas.linear.ruler_on_axis": True})
-    assert wrapped.drawing.tostring() == plain.drawing.tostring()
+@pytest.mark.parametrize("overrides", [{}, GC_ON], ids=["default", "tracks"])
+def test_nothing_to_cut_draws_exactly_the_same_request_without_a_wrap_length(overrides) -> None:
+    """Same layout and scale style as the plain request (the CLI's byte test is in ``test_linear_wrap_plan``)."""
+
+    wrapped = _build(wrap=100_000, overrides=overrides)
+    assert wrapped.drawing.tostring() == _build(wrap=None, overrides=overrides).drawing.tostring()
     assert wrapped.metadata.wrap is None
 
 

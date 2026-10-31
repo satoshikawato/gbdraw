@@ -1522,14 +1522,14 @@ options:
                         (optional; float; must be > 0).
   --track_layout {above,middle,below}
                         Linear track layout mode ("above", "middle", or
-                        "below"; default: "middle", or "above" with
-                        --wrap_length).
+                        "below"; default: "middle", or "above" when
+                        --wrap_length cuts a record).
   --wrap_length AUTO|LENGTH
                         Draw each record over several rows of this length: a
                         length in bp with an optional unit (for example 50000,
                         50kb, 0.5Mb), or "auto" (at most 50 kb per row, by the
-                        longest record). A record no longer than one row draws
-                        one row. Default: no wrapping.
+                        longest record). With no record longer than one row,
+                        the option has no effect. Default: no wrapping.
   --track_axis_gap AUTO|PX
                         Gap between axis and nearest feature edge in pixels
                         for above/below layouts. Use 'auto' to derive it from
@@ -1591,7 +1591,7 @@ options:
                         axis (default: False).
   --scale_style {bar,ruler}
                         Style for the length scale ("bar", "ruler"; default:
-                        "bar", or "ruler" with --wrap_length)
+                        "bar", or "ruler" when --wrap_length cuts a record)
   --scale_stroke_color SCALE_STROKE_COLOR
                         Scale bar/ruler stroke color (optional; str; default:
                         "black")

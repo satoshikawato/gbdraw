@@ -89,7 +89,7 @@ from gbdraw.annotations import (
     resolve_annotations,
 )
 from gbdraw.api.config import apply_config_overrides
-from gbdraw.api.record_planning import ComparisonRecordBinding
+from gbdraw.api.record_planning import ComparisonRecordBinding, decide_linear_wrap
 from gbdraw.api.options import (
     AnnotationOptions,
     CircularDiagramOptions,
@@ -195,12 +195,12 @@ from gbdraw.layout.composition import (
 )
 from gbdraw.layout.linear_multi_record import record_key_at, record_pairs_between_adjacent_rows
 from gbdraw.layout.linear_wrap import (
-    reject_wrap_in_one_grid_row,
-    reject_wrap_with_comparisons,
-    resolve_wrap,
-    wrap_blocking_inputs,
     LinearWrapSummary,
     drawn_axis_length,
+    refuse_undrawable_wrap,
+    resolve_wrap,
+    resolve_wrap_length,
+    wrap_blocking_inputs,
 )
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
@@ -2198,9 +2198,10 @@ def assemble_linear_diagram_from_records(
         )
     wrap_length = cfg.canvas.linear.wrap_length
     wrap_summary = None
-    if wrap_length != "none":
-        reject_wrap_with_comparisons(
-            wrap_length,
+    if resolve_wrap_length(wrap_length, [len(record.seq) for record in records]) is not None:
+        refuse_undrawable_wrap(
+            cfg,
+            resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
             wrap_blocking_inputs(
                 blast_files=blast_files,
                 linear_comparisons=linear_comparisons,
@@ -2211,11 +2212,9 @@ def assemble_linear_diagram_from_records(
                 similarity_alignment=similarity_alignment,
             ),
         )
-        reject_wrap_in_one_grid_row(
-            wrap_length,
-            resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
-        )
         _record_transforms, wrap_summary = resolve_wrap(wrap_length, records, _record_transforms)
+        # Rows carry their ruler on the axis: there is no other place for it.
+        cfg = replace(cfg, canvas=replace(cfg.canvas, linear=replace(cfg.canvas.linear, ruler_on_axis=True)))
     normalized_protein_blastp_mode = losatp_analysis_mode(losat_search)
     runtime = losat_search.runtime if losat_search is not None else LosatRuntimeOptions()
     normalized_protein_pairs: tuple[tuple[int, int], ...] | None = None
@@ -4039,7 +4038,12 @@ def _build_linear_diagram(
 ) -> Drawing | LinearDiagramBuildResult:
     """Build a linear diagram using mode-specific typed options."""
 
-    options = _linear_builder_options(options)
+    options = decide_linear_wrap(
+        _linear_builder_options(options),
+        records=records,
+        layout=layout,
+        similarity_alignment=similarity_alignment,
+    )
     output = options.output
     tracks = options.tracks
     cfg = _resolve_diagram_options_config(options)

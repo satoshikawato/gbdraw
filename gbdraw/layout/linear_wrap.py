@@ -1,4 +1,4 @@
-"""The owner of a Linear wrap length: its automatic rule and what it refuses.
+"""The owner of a Linear wrap length: its automatic rule, whether a record is cut, and what that refuses.
 
 Wrapping is a display format of one record: rows live in the record display
 transform, never as records. Only a record longer than one row is cut, and every
@@ -14,6 +14,7 @@ from math import ceil
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.config.models.canvas import LinearWrapLength
+from gbdraw.config.models.root import GbdrawConfig
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import VerticalBand
@@ -43,7 +44,11 @@ def auto_wrap_length(longest_bp: int) -> int | None:
 
 
 def resolve_wrap_length(requested: LinearWrapLength, record_lengths: Sequence[int]) -> int | None:
-    """The row length to cut at, or ``None`` when no record is longer than one row."""
+    """The row length to cut at, or ``None`` when no record is longer than one row.
+
+    This is the one test of "a record is cut". Everything the option does beyond the option's own validation (rows,
+    their defaults, its refusals) follows it, so with nothing to cut the option has no effect at all.
+    """
 
     if requested == "none":
         return None
@@ -181,26 +186,55 @@ def wrap_blocking_inputs(
     return tuple(name for name, value in given.items() if value is not None and value != () and value != [])
 
 
-def reject_wrap_with_comparisons(requested: LinearWrapLength, blocking: Sequence[str]) -> None:
-    """Refuse comparison inputs while wrapping, before any search runs."""
+def refuse_undrawable_wrap(
+    config: GbdrawConfig, rows_by_record: Sequence[int], blocking: Sequence[str]
+) -> None:
+    """Refuse what rows cannot draw. Called only when a record is cut: with nothing to cut, the option has no effect."""
 
-    if requested != "none" and blocking:
+    if blocking:
         raise ValidationError(
-            "--wrap_length cannot be combined with comparison inputs "
+            "--wrap_length cannot cut a record of a figure with comparison inputs "
             f"({', '.join(blocking)}): a wrapped figure draws no comparisons.",
             diagnostic={"code": "COMPARISON_INPUT", "field": "wrap_length", "reason": "WRAP"},
         )
-
-
-def reject_wrap_in_one_grid_row(requested: LinearWrapLength, rows_by_record: Sequence[int]) -> None:
-    """Refuse several records in one grid row while wrapping: a row holds one record's rows."""
-
-    if requested != "none" and len(set(rows_by_record)) != len(rows_by_record):
-        raise ValidationError(
-            "--wrap_length cannot draw several records in one grid row; "
-            "give each record its own row, or do not wrap.",
-            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_GRID_ROW"},
+    linear = config.canvas.linear
+    scale = config.objects.scale
+    if linear.track_layout == "middle":
+        raise _wrap_conflict(
+            "WRAP_TRACK_LAYOUT",
+            "--wrap_length cannot be combined with --track_layout middle: rows draw their tracks above or below the axis.",
         )
+    if scale.show and scale.style != "ruler":
+        raise _wrap_conflict(
+            "WRAP_SCALE_STYLE",
+            f"--wrap_length cannot be combined with --scale_style {scale.style}: each row draws a ruler on its axis.",
+        )
+    if linear.normalize_length:
+        raise _wrap_conflict(
+            "WRAP_NORMALIZE_LENGTH",
+            "--wrap_length cannot be combined with --normalize_length: every row draws at one scale.",
+        )
+    if len(set(rows_by_record)) != len(rows_by_record):
+        raise _wrap_conflict(
+            "WRAP_GRID_ROW",
+            "--wrap_length cannot draw several records in one grid row; give each record its own row, or do not wrap.",
+        )
+
+
+def refuse_rows_without_their_ruler(*, show_scale: bool, axis_ruler_enabled: bool) -> None:
+    """Refuse a wrapped figure whose shown scale would not stand on its axis, whatever put its features in the middle:
+    the shared length bar reads one row, and the other rows would have no coordinates."""
+
+    if show_scale and not axis_ruler_enabled:
+        raise _wrap_conflict(
+            "WRAP_TRACK_LAYOUT",
+            "--wrap_length cannot be combined with a feature track on the axis (side=overlay): "
+            "rows draw their tracks above or below the axis.",
+        )
+
+
+def _wrap_conflict(reason: str, message: str) -> ValidationError:
+    return ValidationError(message, diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": reason})
 
 
 __all__ = [
@@ -211,8 +245,8 @@ __all__ = [
     "auto_wrap_length",
     "drawn_axis_length",
     "longer_row_lengths",
-    "reject_wrap_in_one_grid_row",
-    "reject_wrap_with_comparisons",
+    "refuse_rows_without_their_ruler",
+    "refuse_undrawable_wrap",
     "resolve_wrap",
     "resolve_wrap_length",
     "stack_row_offsets",

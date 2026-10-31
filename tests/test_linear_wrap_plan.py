@@ -2,21 +2,28 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+import json
 from pathlib import Path
 import subprocess
 import sys
+from xml.etree import ElementTree
 
+from Bio import SeqIO
 import pytest
 
-from gbdraw.api import render_request
+from gbdraw.api import plan_request, render_request
 from gbdraw.api.config import apply_config_overrides
-from gbdraw.api.options import LinearDiagramOptions, LinearMultiRecordOptions
+from gbdraw.api.diagram import build_linear_diagram_result
+from gbdraw.api.options import LinearDiagramOptions, LinearMultiRecordOptions, LosatSearchOptions
 from gbdraw.api.requests import (
     GenBankInputSource,
     LinearDiagramRequest,
     RecordInput,
     RenderOutputRequest,
+    SimilarityAlignmentReference,
 )
+from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.canvas import LinearCanvasConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
@@ -26,18 +33,19 @@ from gbdraw.layout.linear_wrap import (
     resolve_wrap_length,
     wrap_blocking_inputs,
 )
-from gbdraw.mode_profiles import effective_linear_track_leaves, resolve_mode_profile_overrides
+from gbdraw.mode_profiles import (
+    effective_linear_track_leaves,
+    linear_wrap_default_overrides,
+    resolve_mode_profile_overrides,
+)
 from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.session_request_codec import describe_canonical_request
 from gbdraw.web_support.mode_scoped_settings import SLICE_CONTAINERS
 
 
 WRAP = "canvas.linear.wrap_length"
 LAMBDA = Path(__file__).parent / "test_inputs" / "NC_001416.gb"
 LAMBDA_LENGTH = 48_502
-
-
-def _config(**overrides):
-    return apply_config_overrides(None, resolve_mode_profile_overrides("linear", overrides))
 
 
 @pytest.mark.parametrize(
@@ -94,7 +102,6 @@ def test_config_leaf_canonical_values(value, expected) -> None:
     raw = load_config_toml("gbdraw.data", "config.toml")["canvas"]["linear"]
     parsed = LinearCanvasConfig.from_dict({**raw, "wrap_length": value, "track_layout": "above"})
     assert parsed.wrap_length == expected
-    assert parsed.wrap_active is (expected != "none")
 
 
 @pytest.mark.parametrize("value", [0, -5, True, False, 1.5, "0", "abc", "1e3", [], {}])
@@ -105,54 +112,76 @@ def test_config_leaf_refuses_other_values_and_names_its_path(value) -> None:
 
 
 def test_packaged_config_does_not_wrap() -> None:
-    assert _config().canvas.linear.wrap_active is False
-    assert _config().canvas.linear.wrap_length == "none"
+    assert apply_config_overrides(None, None).canvas.linear.wrap_length == "none"
+    assert apply_config_overrides(None, None).canvas.linear.wrap_length == "none"
 
 
 @pytest.mark.parametrize("value", ["auto", 50_000])
-def test_defaults_follow_wrapping(value) -> None:
+def test_a_config_holds_no_wrap_default_before_the_lengths_are_known(value) -> None:
     resolved = resolve_mode_profile_overrides("linear", {WRAP: value})
-    assert resolved["canvas.linear.track_layout"] == "above"
-    assert resolved["objects.scale.style"] == "ruler"
-    assert resolved["canvas.linear.ruler_on_axis"] is True
-    assert resolved["objects.axis.linear.stroke_color"] == "dimgray"
-
-
-def test_explicit_below_keeps_its_layout_while_wrapping() -> None:
-    resolved = resolve_mode_profile_overrides(
-        "linear", {WRAP: "auto", "canvas.linear.track_layout": "below"}
-    )
-    assert resolved["canvas.linear.track_layout"] == "below"
-
-
-def test_the_axis_ruler_is_fixed_while_wrapping() -> None:
-    resolved = resolve_mode_profile_overrides(
-        "linear", {WRAP: "auto", "canvas.linear.ruler_on_axis": False}
-    )
-    assert resolved["canvas.linear.ruler_on_axis"] is True
-
-
-def test_hidden_scale_keeps_the_plain_axis_color_while_wrapping() -> None:
-    resolved = resolve_mode_profile_overrides("linear", {WRAP: "auto", "objects.scale.show": False})
-    assert resolved["objects.axis.linear.stroke_color"] == "lightgray"
-    assert _config(**{WRAP: "auto", "objects.scale.show": False}).canvas.linear.wrap_active
-
-
-@pytest.mark.parametrize("explicit", [{}, {WRAP: "none"}])
-def test_defaults_do_not_change_without_wrapping(explicit) -> None:
-    resolved = resolve_mode_profile_overrides("linear", explicit)
     assert "canvas.linear.track_layout" not in resolved
     assert "objects.scale.style" not in resolved
     assert "canvas.linear.ruler_on_axis" not in resolved
-    assert effective_linear_track_leaves(explicit) == ("middle", "bar")
+    assert resolved["objects.axis.linear.stroke_color"] == "lightgray"
 
 
-def test_effective_track_leaves_read_one_rule() -> None:
-    assert effective_linear_track_leaves({WRAP: 5}) == ("above", "ruler")
+@pytest.mark.parametrize("value", ["auto", 50_000])
+def test_wrap_defaults_are_what_a_cut_record_draws_with(value) -> None:
+    assert linear_wrap_default_overrides({WRAP: value}) == {
+        "canvas.linear.track_layout": "above",
+        "objects.scale.style": "ruler",
+        "canvas.linear.ruler_on_axis": True,
+        "objects.axis.linear.stroke_color": "dimgray",
+    }
+
+
+def test_wrap_defaults_leave_what_the_request_names() -> None:
+    defaults = linear_wrap_default_overrides(
+        {WRAP: "auto", "canvas.linear.track_layout": "below", "objects.axis.linear.stroke_color": "red"}
+    )
+    assert "canvas.linear.track_layout" not in defaults
+    assert "objects.axis.linear.stroke_color" not in defaults
+
+
+def test_wrap_defaults_restate_the_scale_colors_the_axis_rule_would_overwrite() -> None:
+    defaults = linear_wrap_default_overrides({WRAP: "auto", "objects.scale.stroke_color": "red"})
+    assert defaults["objects.scale.stroke_color"] == "red"
+
+
+def test_the_axis_ruler_is_fixed_in_the_wrap_defaults() -> None:
+    defaults = linear_wrap_default_overrides({WRAP: "auto", "canvas.linear.ruler_on_axis": False})
+    assert defaults["canvas.linear.ruler_on_axis"] is True
+
+
+def test_hidden_scale_keeps_the_plain_axis_color_in_the_wrap_defaults() -> None:
+    defaults = linear_wrap_default_overrides({WRAP: "auto", "objects.scale.show": False})
+    assert "objects.axis.linear.stroke_color" not in defaults
+
+
+@pytest.mark.parametrize("explicit", [{}, {WRAP: "none"}, {WRAP: None}, {WRAP: "NONE"}])
+def test_no_wrap_defaults_without_a_wrap_length(explicit) -> None:
+    assert linear_wrap_default_overrides(explicit) is None
+
+
+def test_effective_track_leaves_read_the_request_then_the_packaged_config() -> None:
+    assert effective_linear_track_leaves({}) == ("middle", "bar")
+    assert effective_linear_track_leaves({WRAP: 5}) == ("middle", "bar")
     assert effective_linear_track_leaves(
-        {WRAP: 5, "canvas.linear.track_layout": "below", "objects.scale.style": "bar"}
-    ) == ("below", "bar")
-    assert effective_linear_track_leaves({"objects.scale.style": "ruler"}) == ("middle", "ruler")
+        {"canvas.linear.track_layout": "below", "objects.scale.style": "ruler"}
+    ) == ("below", "ruler")
+
+
+@pytest.mark.parametrize(
+    "explicit",
+    [
+        {"canvas.linear.track_layout": "middle"},
+        {"objects.scale.style": "bar"},
+        {"canvas.linear.normalize_length": True},
+    ],
+)
+def test_a_config_holding_a_wrap_length_loads_whatever_else_it_holds(explicit) -> None:
+    raw = modify_config_dict(load_config_toml("gbdraw.data", "config.toml"), {WRAP: 10_000, **explicit})
+    assert GbdrawConfig.from_dict(raw).canvas.linear.wrap_length == 10_000
 
 
 @pytest.mark.parametrize(
@@ -163,26 +192,54 @@ def test_effective_track_leaves_read_one_rule() -> None:
         ({"canvas.linear.normalize_length": True}, "WRAP_NORMALIZE_LENGTH", "normalize_length"),
     ],
 )
-def test_option_conflicts_are_refused_on_every_surface(explicit, reason, words) -> None:
+def test_option_conflicts_are_refused_when_a_record_is_cut(tmp_path: Path, explicit, reason, words) -> None:
     with pytest.raises(ValidationError, match=words) as caught:
-        _config(**{WRAP: "auto", **explicit})
+        plan_request(_request(tmp_path, config_overrides={WRAP: 10_000, **explicit}))
     assert caught.value.diagnostic == {"code": "INPUT_INVALID", "field": "wrap_length", "reason": reason}
 
 
-def test_hidden_scale_allows_any_stored_style() -> None:
-    assert _config(**{WRAP: "auto", "objects.scale.show": False, "objects.scale.style": "bar"})
+@pytest.mark.parametrize(
+    "explicit",
+    [
+        {"canvas.linear.track_layout": "middle"},
+        {"objects.scale.style": "bar"},
+        {"canvas.linear.normalize_length": True},
+    ],
+)
+def test_option_conflicts_are_not_refused_when_no_record_is_cut(tmp_path: Path, explicit) -> None:
+    plan_request(_request(tmp_path, config_overrides={WRAP: 100_000, **explicit}))
 
 
-def test_the_override_takes_canonical_values_only() -> None:
+def test_a_stored_config_conflict_is_refused_when_a_record_is_cut(tmp_path: Path) -> None:
+    """A stored config says what its leaves are: middle there was asked for, not defaulted."""
+
+    raw = modify_config_dict(load_config_toml("gbdraw.data", "config.toml"), {WRAP: 10_000})
+    with pytest.raises(ValidationError, match="above or below"):
+        plan_request(_request(tmp_path, config=raw))
+    plain = modify_config_dict(raw, {WRAP: 100_000})
+    assert plan_request(_request(tmp_path, config=plain)).build().metadata.wrap is None
+
+
+def test_hidden_scale_allows_any_stored_style(tmp_path: Path) -> None:
+    plan_request(
+        _request(tmp_path, config_overrides={WRAP: "auto", "objects.scale.show": False, "objects.scale.style": "bar"})
+    )
+
+
+def test_the_override_refuses_what_the_leaf_refuses() -> None:
     raw = load_config_toml("gbdraw.data", "config.toml")
-    for value in ("50kb", True):
+    for value in ("fifty", True, 0, -5):
         with pytest.raises(ValidationError, match=WRAP):
             modify_config_dict(raw, {WRAP: value})
 
 
-def test_conflicts_need_wrapping() -> None:
-    assert _config(**{"canvas.linear.normalize_length": True}).canvas.linear.normalize_length is True
-    assert _config(**{"canvas.linear.track_layout": "middle", "objects.scale.style": "bar"})
+@pytest.mark.parametrize(
+    ("value", "canonical"),
+    [("50kb", 50_000), ("0.5Mb", 500_000), (50_000, 50_000), ("auto", "auto"), ("none", "none"), (None, "none")],
+)
+def test_the_override_accepts_what_the_leaf_accepts(value, canonical) -> None:
+    options = LinearDiagramOptions(config_overrides={WRAP: value})
+    assert apply_config_overrides(options.config, options.config_overrides).canvas.linear.wrap_length == canonical
 
 
 @pytest.mark.parametrize(
@@ -222,7 +279,11 @@ def _rendered_svg(tmp_path: Path) -> str:
     return (tmp_path / "out.svg").read_text(encoding="utf-8")
 
 
-def test_comparisons_are_refused_before_any_search(tmp_path: Path) -> None:
+def test_comparisons_are_refused_before_any_search(tmp_path: Path, monkeypatch) -> None:
+    def no_search(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("a search ran")
+
+    monkeypatch.setattr("gbdraw.api.request_render._resolve_nucleotide_losat", no_search)
     request = _request(
         tmp_path,
         records=2,
@@ -234,7 +295,31 @@ def test_comparisons_are_refused_before_any_search(tmp_path: Path) -> None:
     assert caught.value.diagnostic == {"code": "COMPARISON_INPUT", "field": "wrap_length", "reason": "WRAP"}
 
 
-def test_records_in_one_grid_row_are_refused(tmp_path: Path) -> None:
+def test_a_similarity_analysis_is_refused_before_its_search(tmp_path: Path, monkeypatch) -> None:
+    def no_search(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("a search ran")
+
+    monkeypatch.setattr("gbdraw.api.request_render.build_request_plan_diagram", no_search)
+    request = replace(
+        _request(
+            tmp_path,
+            records=2,
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="similarity_groups"),
+            config_overrides={WRAP: 10_000},
+        ),
+        similarity_alignment=SimilarityAlignmentReference(feature_id="f1"),
+    )
+    with pytest.raises(ValidationError, match="comparison"):
+        render_request(request)
+
+
+def test_comparisons_are_not_refused_when_no_record_is_cut(tmp_path: Path) -> None:
+    empty = tmp_path / "empty.tsv"
+    empty.write_text("", encoding="utf-8")
+    plan_request(_request(tmp_path, records=2, blast_files=(str(empty),), config_overrides={WRAP: 100_000}))
+
+
+def test_records_in_one_grid_row_are_refused_when_a_record_is_cut(tmp_path: Path) -> None:
     request = _request(
         tmp_path,
         records=2,
@@ -246,14 +331,30 @@ def test_records_in_one_grid_row_are_refused(tmp_path: Path) -> None:
     assert caught.value.diagnostic["reason"] == "WRAP_GRID_ROW"
 
 
-def test_a_record_shorter_than_the_row_draws_one_row(tmp_path: Path) -> None:
-    render_request(_request(tmp_path, config_overrides={WRAP: 100_000}))
-    assert "<svg" in _rendered_svg(tmp_path)
+def test_records_in_one_grid_row_are_not_refused_when_no_record_is_cut(tmp_path: Path) -> None:
+    plan_request(
+        _request(
+            tmp_path,
+            records=2,
+            layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1")),
+            config_overrides={WRAP: 100_000},
+        )
+    )
 
 
-def _cli(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+def test_the_builder_decides_as_the_plan_does() -> None:
+    record = SeqIO.read(LAMBDA, "genbank")
+    wrapped = build_linear_diagram_result([record], options=LinearDiagramOptions(config_overrides={WRAP: 10_000}))
+    assert wrapped.metadata.wrap.row_count == 5
+    assert 'data-gbdraw-wrap-row' in wrapped.drawing.tostring()
+    longer = build_linear_diagram_result([record], options=LinearDiagramOptions(config_overrides={WRAP: 100_000}))
+    plain = build_linear_diagram_result([record], options=LinearDiagramOptions())
+    assert longer.drawing.tostring() == plain.drawing.tostring()
+
+
+def _cli(*args: str, cwd: Path, gbk: tuple[Path, ...] = (LAMBDA,)) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--gbk", str(LAMBDA), *args],
+        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--gbk", *map(str, gbk), *args],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -283,12 +384,186 @@ def test_cli_wraps_only_when_asked_and_defaults_stay(tmp_path: Path) -> None:
     assert (tmp_path / "out.svg").exists()
 
 
-def test_cli_longer_row_draws_one_row_with_the_axis_ruler(tmp_path: Path) -> None:
-    result = _cli("--wrap_length", "100kb", "--hide_scale", "-o", "hidden", cwd=tmp_path)
+def _short_record(tmp_path: Path, length: int = 5_000) -> Path:
+    record = SeqIO.read(LAMBDA, "genbank")[:length]
+    record.annotations["molecule_type"] = "DNA"
+    record.annotations["topology"] = "linear"
+    path = tmp_path / "short.gb"
+    SeqIO.write(record, path, "genbank")
+    return path
+
+
+def _assert_draws_as_without_wrap_length(
+    tmp_path: Path, wrap_args: tuple[str, ...], args: tuple[str, ...], gbk: tuple[Path, ...] = (LAMBDA,)
+) -> None:
+    (tmp_path / "plain").mkdir()
+    (tmp_path / "wrap").mkdir()
+    plain = _cli(*args, "-o", "out", cwd=tmp_path / "plain", gbk=gbk)
+    assert plain.returncode == 0, plain.stderr
+    wrapped = _cli(*wrap_args, *args, "-o", "out", cwd=tmp_path / "wrap", gbk=gbk)
+    assert wrapped.returncode == 0, wrapped.stderr
+    plain_svg = (tmp_path / "plain" / "out.svg").read_bytes()
+    assert (tmp_path / "wrap" / "out.svg").read_bytes() == plain_svg
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        (),
+        ("--gc", "--skew", "--show_labels", "all"),
+        ("--track_layout", "middle"),
+        ("--scale_style", "bar"),
+        ("--track_layout", "below", "--scale_style", "ruler", "--ruler_on_axis"),
+        ("--normalize_length",),
+        ("--hide_scale",),
+        ("--linear_track_order", "features,gc_content"),
+        ("--linear_track_slot", "features:features@side=overlay", "--linear_track_slot", "gc_content:dinucleotide_content@side=below"),
+    ],
+    ids=["plain", "tracks", "middle", "bar", "axis_ruler", "normalize", "hidden", "order", "overlay"],
+)
+def test_nothing_to_cut_draws_exactly_the_plain_command(tmp_path: Path, args) -> None:
+    _assert_draws_as_without_wrap_length(tmp_path, ("--wrap_length", "100kb"), args)
+
+
+def test_nothing_to_cut_under_the_automatic_floor_draws_the_plain_command(tmp_path: Path) -> None:
+    _assert_draws_as_without_wrap_length(tmp_path, ("--wrap_length", "auto"), (), gbk=(_short_record(tmp_path),))
+
+
+def test_nothing_to_cut_in_one_grid_row_draws_the_plain_command(tmp_path: Path) -> None:
+    _assert_draws_as_without_wrap_length(
+        tmp_path,
+        ("--wrap_length", "100kb"),
+        ("--multi_record_position", "#1@1", "--multi_record_position", "#2@1"),
+        gbk=(LAMBDA, LAMBDA),
+    )
+
+
+def test_nothing_to_cut_with_a_comparison_draws_the_plain_command(tmp_path: Path) -> None:
+    blast = tmp_path / "blast.tsv"
+    blast.write_text("NC_001416.1\tNC_001416.1\t100\t1000\t0\t0\t1\t1000\t1\t1000\t0.0\t2000\n", encoding="utf-8")
+    _assert_draws_as_without_wrap_length(tmp_path, ("--wrap_length", "100kb"), ("-b", str(blast)), gbk=(LAMBDA, LAMBDA))
+
+
+def test_nothing_to_cut_keeps_the_exit_status_of_the_plain_command(tmp_path: Path) -> None:
+    """The plain command's own refusal stands; the option adds none and removes none."""
+
+    plain = _cli("--track_layout", "middle", "--ruler_on_axis", "-o", "a", cwd=tmp_path)
+    wrapped = _cli("--wrap_length", "100kb", "--track_layout", "middle", "--ruler_on_axis", "-o", "b", cwd=tmp_path)
+    assert (plain.returncode, wrapped.returncode) == (0, 0), (plain.stderr, wrapped.stderr)
+    assert (tmp_path / "a.svg").read_bytes() == (tmp_path / "b.svg").read_bytes()
+
+
+def test_cli_explicit_above_draws_rows_like_the_default(tmp_path: Path) -> None:
+    default = _cli("--wrap_length", "10kb", "-o", "a", cwd=tmp_path)
+    assert default.returncode == 0, default.stderr
+    explicit = _cli("--wrap_length", "10kb", "--track_layout", "above", "--scale_style", "ruler", "-o", "b", cwd=tmp_path)
+    assert explicit.returncode == 0, explicit.stderr
+    assert (tmp_path / "a.svg").read_bytes() == (tmp_path / "b.svg").read_bytes()
+
+
+def test_cli_track_order_follows_the_wrap_default_when_a_record_is_cut(tmp_path: Path) -> None:
+    result = _cli("--wrap_length", "10kb", "--linear_track_order", "features,gc_content", "-o", "out", cwd=tmp_path)
     assert result.returncode == 0, result.stderr
-    result = _cli("--wrap_length", "100kb", "-o", "shown", cwd=tmp_path)
+    assert "data-gbdraw-wrap-row" in (tmp_path / "out.svg").read_text(encoding="utf-8")
+
+
+def test_cli_ruler_on_axis_with_rows_does_not_warn(tmp_path: Path) -> None:
+    result = _cli("--wrap_length", "10kb", "--ruler_on_axis", "-o", "out", cwd=tmp_path)
     assert result.returncode == 0, result.stderr
-    assert "WARNING" not in result.stderr
+    assert "ignored" not in result.stdout + result.stderr
+
+
+OVERLAY = ("--linear_track_slot", "features:features@side=overlay", "--linear_track_slot", "gc:dinucleotide_content@side=below")
+
+
+@pytest.mark.parametrize(
+    ("args", "gbk"),
+    [
+        (OVERLAY, (LAMBDA,)),
+        (OVERLAY, (LAMBDA, LAMBDA)),
+        ((*OVERLAY, "--track_layout", "below"), (LAMBDA,)),
+    ],
+    ids=["one_record", "two_records", "named_layout"],
+)
+def test_a_feature_slot_on_the_axis_is_refused_when_a_record_is_cut(tmp_path: Path, args, gbk) -> None:
+    result = _cli("--wrap_length", "10kb", *args, "-o", "out", cwd=tmp_path, gbk=gbk)
+    assert result.returncode != 0
+    assert "side=overlay" in result.stderr + result.stdout
+    assert "Traceback" not in result.stderr
+    assert not (tmp_path / "out.svg").exists()
+
+
+def test_a_feature_slot_on_the_axis_with_a_hidden_scale_needs_no_ruler(tmp_path: Path) -> None:
+    result = _cli("--wrap_length", "10kb", *OVERLAY, "--hide_scale", "-o", "out", cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert "data-gbdraw-wrap-row" in (tmp_path / "out.svg").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        (),
+        ("--track_layout", "below"),
+        ("--ruler_on_axis",),
+        ("--linear_track_order", "features,gc_content"),
+        ("--linear_track_slot", "features:features@side=above", "--linear_track_slot", "gc:dinucleotide_content@side=below"),
+        ("--linear_track_slot", "features:features@side=below"),
+        ("--linear_track_slot", "gc:dinucleotide_content@side=below"),
+        ("--separate_strands",),
+        ("--show_labels", "first"),
+    ],
+    ids=["default", "below", "ruler_flag", "order", "slots_above", "slots_below", "no_feature_slot", "strands", "labels_first"],
+)
+@pytest.mark.parametrize("gbk", [(LAMBDA,), (LAMBDA, LAMBDA)], ids=["one_record", "two_records"])
+def test_every_row_of_every_cut_figure_with_a_shown_scale_has_ticks_and_no_length_bar(tmp_path: Path, args, gbk) -> None:
+    result = _cli("--wrap_length", "10kb", *args, "-o", "out", cwd=tmp_path, gbk=gbk)
+    assert result.returncode == 0, result.stderr
+    root = ElementTree.parse(tmp_path / "out.svg").getroot()
+    axes = [element for element in root.iter() if element.attrib.get("data-gbdraw-wrap-part") == "axis"]
+    assert len(axes) == 5 * len(gbk)
+    assert all(sum(1 for item in axis.iter() if item.tag.endswith("}text")) > 1 for axis in axes)
+    assert "length_bar" not in (tmp_path / "out.svg").read_text(encoding="utf-8")
+
+
+def _session(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_a_cut_figure_stores_what_it_drew_and_replays_byte_identical(tmp_path: Path) -> None:
+    saved = _cli("--wrap_length", "10kb", "--gc", "--save_session", "-o", "out", cwd=tmp_path)
+    assert saved.returncode == 0, saved.stderr
+    linear = _session(tmp_path / "out.gbdraw-session.json")["renderRequest"]["diagramOptions"]
+    assert "wrapDefaults" not in linear
+    assert linear["config"]["canvas"]["linear"]["track_layout"] == "above"
+    assert linear["config"]["canvas"]["linear"]["wrap_length"] == 10_000
+    assert linear["config"]["objects"]["scale"]["style"] == "ruler"
+    replay = subprocess.run(
+        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", "out.gbdraw-session.json",
+         "-o", "replayed", "-f", "svg"],
+        cwd=tmp_path, capture_output=True, text=True, env={"PYTHONPATH": str(Path(__file__).parents[1]), "PATH": "/usr/bin:/bin"},
+    )
+    assert replay.returncode == 0, replay.stderr
+    assert (tmp_path / "replayed.svg").read_bytes() == (tmp_path / "out.svg").read_bytes()
+
+
+def test_a_figure_with_nothing_to_cut_stores_the_plain_leaves_and_replays_byte_identical(tmp_path: Path) -> None:
+    saved = _cli("--wrap_length", "100kb", "--save_session", "-o", "out", cwd=tmp_path)
+    assert saved.returncode == 0, saved.stderr
+    linear = _session(tmp_path / "out.gbdraw-session.json")["renderRequest"]["diagramOptions"]
+    assert linear["config"]["canvas"]["linear"]["track_layout"] == "middle"
+    assert linear["config"]["canvas"]["linear"]["wrap_length"] == 100_000
+    assert "data-gbdraw-wrap-row" not in (tmp_path / "out.svg").read_text(encoding="utf-8")
+    replay = subprocess.run(
+        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", "out.gbdraw-session.json",
+         "-o", "replayed", "-f", "svg"],
+        cwd=tmp_path, capture_output=True, text=True, env={"PYTHONPATH": str(Path(__file__).parents[1]), "PATH": "/usr/bin:/bin"},
+    )
+    assert replay.returncode == 0, replay.stderr
+    assert (tmp_path / "replayed.svg").read_bytes() == (tmp_path / "out.svg").read_bytes()
+
+
+def test_the_option_consumed_by_the_planner_is_refused_in_a_stored_request() -> None:
+    assert "wrap_defaults" not in {name for name in describe_canonical_request()["types"]}
 
 
 def test_session_form_key_reads_in_the_linear_slice_and_replays() -> None:

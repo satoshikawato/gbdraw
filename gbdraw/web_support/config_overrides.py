@@ -27,9 +27,6 @@ from gbdraw.web_support.error_adapter import serialize_web_error
 _RAW_FILTERING_PATH = "labels.filtering.raw"
 
 
-_WRAP_LENGTH_PATH = "canvas.linear.wrap_length"
-
-
 def _without_derived_filtering(raw: object) -> object:
     if not isinstance(raw, Mapping):
         return raw
@@ -120,11 +117,8 @@ def validate_and_project_web_config_overrides(
     options_type = CircularDiagramOptions if mode == "circular" else LinearDiagramOptions
     options_type(config_overrides=validated)
     base = _validated_base_config(config)
-    # Without a stored config, this checks the leaves the form does not own. The wrap conflicts read the track
-    # layout and scale style, which the form owns: the full request is checked for them at Generate.
-    applied = validated if config is not None else {k: v for k, v in validated.items() if k != _WRAP_LENGTH_PATH}
     try:
-        effective = apply_config_overrides(base, applied)
+        effective = apply_config_overrides(base, validated)
     except ValidationError:
         raise
     except (KeyError, TypeError, ValueError) as exc:

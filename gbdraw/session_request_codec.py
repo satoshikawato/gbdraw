@@ -1763,6 +1763,8 @@ def _decode_linear_layout(
     return result, None
 
 
+# The planner consumes it: a Session stores what the figure drew with.
+_PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults"})
 _PLACEMENT_INPUT_FIELDS = frozenset({
     "feature_placements", "feature_placement_table", "feature_placement_table_file",
     "feature_overrides", "feature_override_table", "feature_override_table_file",
@@ -1810,7 +1812,12 @@ def _encode_diagram_options(
     ], "featureOverrides": [row.to_mapping() for row in options.feature_overrides]}
     for item in fields(options):
         name = item.name
-        if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
+        if (
+            name in _COMPARISON_FIELDS
+            or name in _ALL_DEPTH_INPUT_FIELDS
+            or name in _PLACEMENT_INPUT_FIELDS
+            or name in _PLANNER_ONLY_FIELDS
+        ):
             continue
         if name == "conservation_search_results":
             assert isinstance(options, CircularDiagramOptions)
@@ -1907,6 +1914,7 @@ def _decode_diagram_options(
         and item.name not in _PLACEMENT_INPUT_FIELDS
         and item.name not in _RING_SEARCH_FIELDS
         and item.name not in _TABLE_PATH_FIELDS
+        and item.name not in _PLANNER_ONLY_FIELDS
     }
     unknown = set(payload) - set(known)
     if unknown:
@@ -5565,7 +5573,7 @@ def describe_canonical_request() -> dict[str, Any]:
     # stores every depth input as depthTracks).
     unwritten = (
         _COMPARISON_FIELDS | _PLACEMENT_INPUT_FIELDS | _RING_SEARCH_FIELDS | _DEPTH_COMPATIBILITY_FIELDS
-        | _TABLE_PATH_FIELDS
+        | _TABLE_PATH_FIELDS | _PLANNER_ONLY_FIELDS
     )
 
     def option(name: str, hint: object, mode: Literal["circular", "linear"]) -> Shape:

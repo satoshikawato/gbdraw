@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from gbdraw.features.placement import FeaturePlacementSlot
 from gbdraw.render_stages import render_stage
-from ...layout.linear_wrap import drawn_axis_length
+from ...layout.linear_wrap import drawn_axis_length, refuse_rows_without_their_ruler
 from ...layout.record_labels import source_ruler_ticks
 
 import copy
@@ -2382,6 +2382,8 @@ def assemble_linear_diagram(
         depth_available=depth_available,
     )
     axis_ruler_enabled = render_context.axis_ruler_enabled
+    if any(transform.row_count > 1 for transform in record_transforms or ()):
+        refuse_rows_without_their_ruler(show_scale=bool(cfg.objects.scale.show), axis_ruler_enabled=axis_ruler_enabled)
     resolved_depth_heights_by_index = _resolved_linear_depth_heights(
         linear_track_layout
     )

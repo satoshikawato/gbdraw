@@ -166,41 +166,10 @@ class GbdrawConfig:
 
     @classmethod
     def from_dict(cls, config_dict: Mapping[str, Any]) -> "GbdrawConfig":
-        config = cls(
+        return cls(
             canvas=CanvasConfig.from_dict(config_dict["canvas"]),
             labels=LabelsConfig.from_dict(config_dict["labels"]),
             objects=ObjectsConfig.from_dict(config_dict["objects"]),
-        )
-        _reject_linear_wrap_conflicts(config)
-        return config
-
-
-def _reject_linear_wrap_conflicts(config: GbdrawConfig) -> None:
-    """Refuse the settings a wrapped record cannot draw, for every surface that reads a config."""
-
-    linear = config.canvas.linear
-    if not linear.wrap_active:
-        return
-    scale = config.objects.scale
-    conflict = None
-    if linear.track_layout == "middle":
-        conflict = (
-            "WRAP_TRACK_LAYOUT",
-            "--wrap_length cannot be combined with --track_layout middle: rows draw their tracks above or below the axis.",
-        )
-    elif scale.show and scale.style != "ruler":
-        conflict = (
-            "WRAP_SCALE_STYLE",
-            f"--wrap_length cannot be combined with --scale_style {scale.style}: each row draws a ruler on its axis.",
-        )
-    elif linear.normalize_length:
-        conflict = (
-            "WRAP_NORMALIZE_LENGTH",
-            "--wrap_length cannot be combined with --normalize_length: every row draws at one scale.",
-        )
-    if conflict is not None:
-        raise ValidationError(
-            conflict[1], diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": conflict[0]}
         )
 
 

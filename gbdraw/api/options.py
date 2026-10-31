@@ -52,6 +52,7 @@ from gbdraw.features.shapes import (
 from gbdraw.layout.composition import LegendPlacement
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.mode_profiles import (
+    linear_wrap_default_overrides,
     ComparisonThresholds,
     DiagramMode,
     get_mode_profile,
@@ -1373,6 +1374,18 @@ class CircularDiagramOptions(_ModeDiagramOptions):
 
 
 @dataclass(frozen=True)
+class LinearWrapDefaults:
+    """What a request that asks to wrap draws with if a record is cut, for the planner to apply then.
+
+    It holds the leaves and slots the request left to the wrap defaults, so that "left unset" survives until the
+    record lengths are known. The planner consumes it; a Session stores what was drawn, never this.
+    """
+
+    config_overrides: Mapping[str, object]
+    linear_track_slots: Sequence[LinearTrackSlot] | None = None
+
+
+@dataclass(frozen=True)
 class LinearDiagramOptions(_ModeDiagramOptions):
     """Options accepted by a Linear typed request."""
 
@@ -1399,6 +1412,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     collinear_infer_orthogroups: bool = False
     collinear_max_paralog_links_per_orthogroup: int = 2
     comparison_table_file: str | None = None
+    wrap_defaults: LinearWrapDefaults | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -1577,10 +1591,15 @@ def resolve_linear_diagram_options(
 
     if not isinstance(options, LinearDiagramOptions):
         raise ValidationError("options must be LinearDiagramOptions.")
-    return cast(
+    resolved = cast(
         LinearDiagramOptions,
         _resolve_options_for_mode(options, mode="linear"),
     )
+    if options.config is not None or options.wrap_defaults is not None:
+        return resolved
+    # Only the request's own overrides say what it left unset; a built config cannot.
+    defaults = linear_wrap_default_overrides(options.config_overrides)
+    return resolved if defaults is None else replace(resolved, wrap_defaults=LinearWrapDefaults(defaults))
 
 
 __all__ = [
@@ -1594,6 +1613,7 @@ __all__ = [
     "LinearDiagramOptions",
     "LinearOutputOptions",
     "LinearRequestTrackOptions",
+    "LinearWrapDefaults",
     "LinearTrackOptions",
     "LosatProgram",
     "LosatRuntimeOptions",

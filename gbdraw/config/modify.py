@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 from copy import deepcopy
-from collections.abc import Collection, Iterable, Mapping as MappingABC, Sequence as SequenceABC
+from collections.abc import Callable, Collection, Iterable, Mapping as MappingABC, Sequence as SequenceABC
 from dataclasses import asdict, fields, is_dataclass, replace
 from functools import lru_cache
 from numbers import Integral, Real
@@ -19,6 +19,7 @@ from gbdraw.exceptions import ValidationError
 from .models import GbdrawConfig
 from .models.canvas import (
     FEATURE_OVERLAP_TOLERANCE_PATH,
+    LEAF_VALIDATOR,
     linear_axis_ruler_applies,
     validate_feature_overlap_tolerance,
 )
@@ -80,6 +81,26 @@ def _nested_dataclass_type(annotation: object) -> type | None:
     if len(nested) == 1 and not non_dataclass:
         return next(iter(nested))
     return None
+
+
+@lru_cache(maxsize=1)
+def _leaf_validators() -> dict[str, Callable[[object], object]]:
+    """The leaves that name their own validator (``LEAF_VALIDATOR``), by canonical path."""
+
+    validators: dict[str, Callable[[object], object]] = {}
+
+    def visit(config_type: type, prefix: tuple[str, ...] = ()) -> None:
+        annotations = get_type_hints(config_type)
+        for config_field in fields(config_type):
+            path_parts = (*prefix, config_field.name)
+            nested_type = _nested_dataclass_type(annotations[config_field.name])
+            if nested_type is not None:
+                visit(nested_type, path_parts)
+            elif LEAF_VALIDATOR in config_field.metadata:
+                validators[".".join(path_parts)] = config_field.metadata[LEAF_VALIDATOR]
+
+    visit(GbdrawConfig)
+    return validators
 
 
 @lru_cache(maxsize=1)
@@ -148,7 +169,7 @@ def config_paths_reading_unset_spellings() -> frozenset[str]:
                 raw = deepcopy(default)
                 _set_raw_config_path(raw, path, spelling)
                 parent, _, leaf = path.rpartition(".")
-                read = _raw_config_value(config_to_raw_dict(GbdrawConfig.from_dict(raw)), parent)
+                read = raw_config_value(config_to_raw_dict(GbdrawConfig.from_dict(raw)), parent)
                 unset = unset and isinstance(read, MappingABC) and leaf in read and read[leaf] is None
         except (ValidationError, KeyError, TypeError, ValueError, IndexError, AttributeError):
             # The leaf does not read text at all.
@@ -400,6 +421,11 @@ def validate_config_overrides(
     for raw_path, value in dict(overrides or {}).items():
         path, annotation = _validate_override_path(raw_path)
         _assert_safe_config_value(value, path=path)
+        leaf_validator = _leaf_validators().get(path)
+        if leaf_validator is not None:
+            leaf_validator(value)
+            validated.append((path, value))
+            continue
         if _has_literal_domain(annotation) and not _matches_literal_domain(
             annotation,
             value,
@@ -462,18 +488,18 @@ def _apply_validated_config_overrides(
     # unless the same overrides set them (the documented CLI contract). Like
     # the interval above, this is the one rule for the CLI, API, and Web.
     if dict(validated).get(_LINEAR_RULER_ON_AXIS) is True and linear_axis_ruler_applies(
-        show_scale=_raw_config_value(updated, "objects.scale.show"),
-        scale_style=_raw_config_value(updated, "objects.scale.style"),
-        track_layout=_raw_config_value(updated, "canvas.linear.track_layout"),
+        show_scale=raw_config_value(updated, "objects.scale.show"),
+        scale_style=raw_config_value(updated, "objects.scale.style"),
+        track_layout=raw_config_value(updated, "canvas.linear.track_layout"),
     ):
-        axis_color = _raw_config_value(updated, _LINEAR_AXIS_COLOR)
+        axis_color = raw_config_value(updated, _LINEAR_AXIS_COLOR)
         for path in _AXIS_RULER_COLORS:
             if path not in paths and axis_color is not None:
                 _set_raw_config_path(updated, path, axis_color)
     return updated
 
 
-def _raw_config_value(raw_config: Mapping[str, Any], path: str) -> object:
+def raw_config_value(raw_config: Mapping[str, Any], path: str) -> object:
     value: object = raw_config
     for key in path.split("."):
         if not isinstance(value, MappingABC):
@@ -522,6 +548,7 @@ __all__ = [
     "config_paths_reading_unset_spellings",
     "config_to_raw_dict",
     "modify_config_dict",
+    "raw_config_value",
     "validate_config_overrides",
     "with_config_overrides",
     "with_fit_row_overrides",
