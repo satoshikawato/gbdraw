@@ -35,6 +35,7 @@ from .api.options import (
     LinearOutputOptions,
     LinearRequestTrackOptions,
     LinearWrapDefaults,
+    LinearWrapTrackOrder,
     LOSATN_TASKS,
     LosatRuntimeOptions,
     LosatSearchOptions,
@@ -1076,7 +1077,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         parser.error("--linear_track_axis_index requires --linear_track_order or --linear_track_slot")
     try:
         def track_slots_from_order(track_layout: str) -> list[LinearTrackSlot]:
-            slots = linear_track_slots_from_order(
+            return linear_track_slots_from_order(
                 args.linear_track_order,
                 show_depth=bool(args.depth_track),
                 depth_track_count=max(1, len(args.depth_track or [])),
@@ -1085,27 +1086,23 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
                 dinucleotide=str(args.nt or "GC").upper(),
                 track_layout=track_layout,
             )
-            if args.linear_track_axis_index is not None:
-                normalize_linear_track_slots_with_axis(slots, args.linear_track_axis_index)
-            return slots
 
         linear_track_slot_specs = None
-        if args.linear_track_order:
+        args.wrap_track_order = None
+        if args.linear_track_order and args.wrap_length is not None and args.track_layout is None:
+            # The order follows the layout, which the record lengths decide: the planner chooses and checks the slots.
+            args.wrap_track_order = LinearWrapTrackOrder(
+                track_slots_from_order(LINEAR_WRAP_DEFAULT_TRACK_LAYOUT),
+                track_slots_from_order(args.effective_track_layout),
+                args.linear_track_axis_index,
+            )
+        elif args.linear_track_order:
             linear_track_slot_specs = track_slots_from_order(args.effective_track_layout)
         elif args.linear_track_slot:
             linear_track_slot_specs = parse_linear_track_slots(args.linear_track_slot)
-            if args.linear_track_axis_index is not None:
-                normalize_linear_track_slots_with_axis(
-                    linear_track_slot_specs,
-                    args.linear_track_axis_index,
-                )
+        if linear_track_slot_specs is not None and args.linear_track_axis_index is not None:
+            normalize_linear_track_slots_with_axis(linear_track_slot_specs, args.linear_track_axis_index)
         args.linear_track_slot_specs = linear_track_slot_specs
-        # The order follows the layout: if a record is cut, the slots follow the layout rows default to.
-        args.wrap_track_slot_specs = (
-            track_slots_from_order(LINEAR_WRAP_DEFAULT_TRACK_LAYOUT)
-            if args.linear_track_order and args.wrap_length is not None and args.track_layout is None
-            else None
-        )
     except Exception as exc:
         parser.error(str(exc))
     if args.label_placement == "above_feature" and args.label_rendering != "auto":
@@ -1766,9 +1763,13 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 default_colors_palette=palette,
                 default_colors_file=user_defined_default_colors or None,
             ),
-            tracks=LinearRequestTrackOptions(
-                linear_track_slots=linear_track_slot_specs,
-                linear_track_axis_index=linear_track_axis_index,
+            tracks=(
+                None
+                if args.wrap_track_order is not None
+                else LinearRequestTrackOptions(
+                    linear_track_slots=linear_track_slot_specs,
+                    linear_track_axis_index=linear_track_axis_index,
+                )
             ),
             annotations=annotation_options,
             output=LinearOutputOptions(
@@ -1813,7 +1814,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             wrap_defaults=(
                 None
                 if wrap_default_overrides is None
-                else LinearWrapDefaults(wrap_default_overrides, args.wrap_track_slot_specs)
+                else LinearWrapDefaults(wrap_default_overrides, args.wrap_track_order)
             ),
         ),
         layout=linear_layout,

@@ -219,6 +219,31 @@ def test_a_stored_config_conflict_is_refused_when_a_record_is_cut(tmp_path: Path
     assert plan_request(_request(tmp_path, config=plain)).build().metadata.wrap is None
 
 
+@pytest.mark.parametrize(
+    ("explicit", "setting"),
+    [
+        ({"canvas.linear.track_layout": "middle"}, "track_layout middle"),
+        ({"canvas.linear.track_layout": "above", "objects.scale.style": "bar"}, "scale_style bar"),
+        (
+            {
+                "canvas.linear.track_layout": "above",
+                "objects.scale.style": "ruler",
+                "canvas.linear.normalize_length": True,
+            },
+            "normalize_length",
+        ),
+    ],
+)
+def test_a_refusal_names_the_setting_not_an_option_the_user_may_not_have_typed(tmp_path: Path, explicit, setting) -> None:
+    """A Session saved uncut and replayed on a longer record reaches these without any command line."""
+
+    raw = modify_config_dict(load_config_toml("gbdraw.data", "config.toml"), {WRAP: 10_000, **explicit})
+    with pytest.raises(ValidationError) as caught:
+        plan_request(_request(tmp_path, config=raw))
+    assert setting in str(caught.value)
+    assert "--" not in str(caught.value)
+
+
 def test_hidden_scale_allows_any_stored_style(tmp_path: Path) -> None:
     plan_request(
         _request(tmp_path, config_overrides={WRAP: "auto", "objects.scale.show": False, "objects.scale.style": "bar"})
@@ -424,6 +449,26 @@ def test_nothing_to_cut_draws_exactly_the_plain_command(tmp_path: Path, args) ->
     _assert_draws_as_without_wrap_length(tmp_path, ("--wrap_length", "100kb"), args)
 
 
+ORDER_WITH_AXIS = ("--linear_track_order", "features,gc_content", "--gc", "--linear_track_axis_index")
+
+
+def test_nothing_to_cut_checks_a_track_order_against_the_plain_layout(tmp_path: Path) -> None:
+    """Features at the axis boundary: valid for the plain Middle, a conflict only for rows, which are not drawn."""
+
+    _assert_draws_as_without_wrap_length(tmp_path, ("--wrap_length", "100kb"), (*ORDER_WITH_AXIS, "0"))
+
+
+def test_nothing_to_cut_refuses_what_the_plain_layout_refuses(tmp_path: Path) -> None:
+    args = (*ORDER_WITH_AXIS, "1")
+    plain = _cli(*args, "-o", "a", cwd=tmp_path)
+    wrapped = _cli("--wrap_length", "100kb", *args, "-o", "b", cwd=tmp_path)
+    assert plain.returncode != 0
+    assert wrapped.returncode != 0
+    assert "side='overlay'" in wrapped.stderr + wrapped.stdout
+    assert "Traceback" not in wrapped.stderr
+    assert not (tmp_path / "b.svg").exists()
+
+
 def test_nothing_to_cut_under_the_automatic_floor_draws_the_plain_command(tmp_path: Path) -> None:
     _assert_draws_as_without_wrap_length(tmp_path, ("--wrap_length", "auto"), (), gbk=(_short_record(tmp_path),))
 
@@ -466,6 +511,39 @@ def test_cli_track_order_follows_the_wrap_default_when_a_record_is_cut(tmp_path:
     assert "data-gbdraw-wrap-row" in (tmp_path / "out.svg").read_text(encoding="utf-8")
 
 
+def test_cli_track_order_is_checked_against_the_layout_rows_use(tmp_path: Path) -> None:
+    default = _cli("--wrap_length", "10kb", *ORDER_WITH_AXIS, "1", "-o", "a", cwd=tmp_path)
+    assert default.returncode == 0, default.stderr
+    explicit = _cli("--wrap_length", "10kb", "--track_layout", "above", *ORDER_WITH_AXIS, "1", "-o", "b", cwd=tmp_path)
+    assert explicit.returncode == 0, explicit.stderr
+    drawn = (tmp_path / "a.svg").read_text(encoding="utf-8")
+    assert drawn == (tmp_path / "b.svg").read_text(encoding="utf-8")
+    assert drawn.count('data-gbdraw-wrap-row="') >= 5
+
+
+def test_cli_track_order_refused_for_rows_is_refused_when_a_record_is_cut(tmp_path: Path) -> None:
+    result = _cli("--wrap_length", "10kb", *ORDER_WITH_AXIS, "0", "-o", "out", cwd=tmp_path)
+    assert result.returncode != 0
+    assert "side='above'" in result.stderr + result.stdout
+    assert "Traceback" not in result.stderr
+    assert not (tmp_path / "out.svg").exists()
+
+
+def test_a_track_order_decided_by_the_record_lengths_is_stored_as_drawn(tmp_path: Path) -> None:
+    saved = _cli("--wrap_length", "10kb", *ORDER_WITH_AXIS, "1", "--save_session", "-o", "out", cwd=tmp_path)
+    assert saved.returncode == 0, saved.stderr
+    replayed = subprocess.run(
+        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", "out.gbdraw-session.json",
+         "-o", "again"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={"PYTHONPATH": str(Path(__file__).parents[1]), "PATH": "/usr/bin:/bin"},
+    )
+    assert replayed.returncode == 0, replayed.stderr
+    assert (tmp_path / "again.svg").read_bytes() == (tmp_path / "out.svg").read_bytes()
+
+
 def test_cli_ruler_on_axis_with_rows_does_not_warn(tmp_path: Path) -> None:
     result = _cli("--wrap_length", "10kb", "--ruler_on_axis", "-o", "out", cwd=tmp_path)
     assert result.returncode == 0, result.stderr
@@ -481,8 +559,9 @@ OVERLAY = ("--linear_track_slot", "features:features@side=overlay", "--linear_tr
         (OVERLAY, (LAMBDA,)),
         (OVERLAY, (LAMBDA, LAMBDA)),
         ((*OVERLAY, "--track_layout", "below"), (LAMBDA,)),
+        ((*OVERLAY, "--hide_scale"), (LAMBDA,)),
     ],
-    ids=["one_record", "two_records", "named_layout"],
+    ids=["one_record", "two_records", "named_layout", "hidden_scale"],
 )
 def test_a_feature_slot_on_the_axis_is_refused_when_a_record_is_cut(tmp_path: Path, args, gbk) -> None:
     result = _cli("--wrap_length", "10kb", *args, "-o", "out", cwd=tmp_path, gbk=gbk)
@@ -492,8 +571,8 @@ def test_a_feature_slot_on_the_axis_is_refused_when_a_record_is_cut(tmp_path: Pa
     assert not (tmp_path / "out.svg").exists()
 
 
-def test_a_feature_slot_on_the_axis_with_a_hidden_scale_needs_no_ruler(tmp_path: Path) -> None:
-    result = _cli("--wrap_length", "10kb", *OVERLAY, "--hide_scale", "-o", "out", cwd=tmp_path)
+def test_a_hidden_scale_stays_allowed_with_a_record_cut(tmp_path: Path) -> None:
+    result = _cli("--wrap_length", "10kb", "--hide_scale", "-o", "out", cwd=tmp_path)
     assert result.returncode == 0, result.stderr
     assert "data-gbdraw-wrap-row" in (tmp_path / "out.svg").read_text(encoding="utf-8")
 

@@ -61,7 +61,6 @@ from gbdraw.linear_comparison import LinearComparison, reverse_unbound_endpoint_
 
 from .config import apply_config_overrides
 from .options import (
-    LinearRequestTrackOptions,
     LinearWrapDefaults,
     CircularDiagramOptions,
     DepthTrackInput,
@@ -1757,9 +1756,7 @@ def _with_wrap_defaults(options: LinearDiagramOptions, defaults: LinearWrapDefau
     if defaults is None:
         return replace(options, wrap_defaults=None)
     config = options.config
-    tracks = options.tracks
-    if defaults.linear_track_slots is not None:
-        tracks = replace(tracks or LinearRequestTrackOptions(), linear_track_slots=defaults.linear_track_slots)
+    tracks = options.tracks if defaults.track_order is None else defaults.track_order.tracks(cut=True)
     if config is None:
         return replace(
             options,
@@ -1794,7 +1791,10 @@ def decide_linear_wrap(
 
     defaults = options.wrap_defaults
     if resolve_wrap_length(_requested_wrap_length(options), [len(record.seq) for record in records]) is None:
-        return options if defaults is None else replace(options, wrap_defaults=None)
+        if defaults is None:
+            return options
+        tracks = options.tracks if defaults.track_order is None else defaults.track_order.tracks(cut=False)
+        return replace(options, tracks=tracks, wrap_defaults=None)
     decided = _with_wrap_defaults(options, defaults)
     refuse_undrawable_wrap(
         apply_config_overrides(decided.config, decided.config_overrides),

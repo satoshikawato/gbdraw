@@ -192,7 +192,7 @@ def refuse_undrawable_wrap(
 
     if blocking:
         raise ValidationError(
-            "--wrap_length cannot cut a record of a figure with comparison inputs "
+            "wrap_length cannot cut a record of a figure with comparison inputs "
             f"({', '.join(blocking)}): a wrapped figure draws no comparisons.",
             diagnostic={"code": "COMPARISON_INPUT", "field": "wrap_length", "reason": "WRAP"},
         )
@@ -201,33 +201,34 @@ def refuse_undrawable_wrap(
     if linear.track_layout == "middle":
         raise _wrap_conflict(
             "WRAP_TRACK_LAYOUT",
-            "--wrap_length cannot be combined with --track_layout middle: rows draw their tracks above or below the axis.",
+            "track_layout middle cannot draw a record cut by wrap_length: "
+            "rows draw their tracks above or below the axis.",
         )
     if scale.show and scale.style != "ruler":
         raise _wrap_conflict(
             "WRAP_SCALE_STYLE",
-            f"--wrap_length cannot be combined with --scale_style {scale.style}: each row draws a ruler on its axis.",
+            f"scale_style {scale.style} cannot draw a record cut by wrap_length: each row draws a ruler on its axis.",
         )
     if linear.normalize_length:
         raise _wrap_conflict(
             "WRAP_NORMALIZE_LENGTH",
-            "--wrap_length cannot be combined with --normalize_length: every row draws at one scale.",
+            "normalize_length cannot draw a record cut by wrap_length: every row draws at one scale.",
         )
     if len(set(rows_by_record)) != len(rows_by_record):
         raise _wrap_conflict(
             "WRAP_GRID_ROW",
-            "--wrap_length cannot draw several records in one grid row; give each record its own row, or do not wrap.",
+            "wrap_length cannot cut a record in one grid row with others; give each record its own row, or do not wrap.",
         )
 
 
-def refuse_rows_without_their_ruler(*, show_scale: bool, axis_ruler_enabled: bool) -> None:
-    """Refuse a wrapped figure whose shown scale would not stand on its axis, whatever put its features in the middle:
-    the shared length bar reads one row, and the other rows would have no coordinates."""
+def refuse_feature_track_on_the_axis(feature_track_layout: str) -> None:
+    """Refuse a wrapped figure whose features stand in the middle, whatever put them there: that is the middle layout
+    under another name, and a ruler on the axis of the rows could not stand there."""
 
-    if show_scale and not axis_ruler_enabled:
+    if feature_track_layout == "middle":
         raise _wrap_conflict(
             "WRAP_TRACK_LAYOUT",
-            "--wrap_length cannot be combined with a feature track on the axis (side=overlay): "
+            "A feature track on the axis (side=overlay) cannot draw a record cut by wrap_length: "
             "rows draw their tracks above or below the axis.",
         )
 
@@ -244,7 +245,7 @@ __all__ = [
     "auto_wrap_length",
     "drawn_axis_length",
     "longer_row_lengths",
-    "refuse_rows_without_their_ruler",
+    "refuse_feature_track_on_the_axis",
     "refuse_undrawable_wrap",
     "resolve_wrap",
     "resolve_wrap_length",
