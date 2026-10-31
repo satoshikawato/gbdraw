@@ -47,7 +47,8 @@ const RUNTIME_FILES = new Set(['utils/i18n.js']);
  * @property {string} english the English text shown
  * @property {string | null} context the `tx()` context, or null
  * @property {{ one: string, other: string } | null} plural the `tn()` pair the key is one form of, or null when
- *   another call or a derived list also produces the key (its translation is then one string)
+ *   another call or a derived list also produces the key, or when it is the `one` form of one pair and the `other`
+ *   form of another (its translation is then one string)
  * @property {KeySite[]} sites
  */
 /**
@@ -425,7 +426,7 @@ export const sourceKeys = async () => {
       keys.set(key, { key, english, context, plural, sites: [site] });
       return;
     }
-    if (!plural) entry.plural = null;
+    if (!plural || (entry.plural && (entry.plural.other === key) !== (plural.other === key))) entry.plural = null;
     entry.sites.push(site);
   };
   for (const path of sourceFiles()) {

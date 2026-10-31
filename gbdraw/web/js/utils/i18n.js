@@ -4,8 +4,8 @@
 // has one owner, the place that writes it. There is no English catalog. A
 // catalog (`./i18n-catalogs/<locale>.js`, a frozen `TranslationCatalog`)
 // maps that English text to the shown text of one locale; a missing entry
-// shows the English. A form of a `tn()` pair may instead map to its text per
-// plural category (`PluralForms`). Templates reach `t`, `tn`, `tx` and `tm` through
+// shows the English. The `other` form of a `tn()` pair may instead map to its
+// text per plural category (`PluralForms`). Templates reach `t`, `tn`, `tx` and `tm` through
 // `app.config.globalProperties` (app.js). A text kept until it is shown (a
 // table evaluated at import, a value in state, a value code compares) stays
 // English, marked with `msg('…')`, and is translated where it is shown with
@@ -33,11 +33,15 @@
  * @property {string} sentenceSeparator What separates two sentences shown one after the other.
  */
 /**
- * The translation of a form of a `tn` pair in a language whose plural rule
- * has more categories than English (`few` and `many` in Polish, Russian and
- * Ukrainian): the text per CLDR plural category (Intl.PluralRules); a
- * category without a text takes `other`. Only the value of a key that only
- * `tn` calls produce may be an object; every other value is one string.
+ * The translation of the `other` form of a `tn` pair in a language whose
+ * plural rule has more categories than English (`few` and `many` in Polish,
+ * Russian and Ukrainian): the text per CLDR plural category
+ * (Intl.PluralRules) for every count except exactly 1; a category without a
+ * text takes `other`. The `one` form's value is then the text for exactly 1
+ * only, and `one` here is the text of the other counts the rule calls `one`
+ * (21, 31, … in Russian and Ukrainian). Only the value of a key that is only
+ * ever the `other` form of `tn` calls may be an object; every other value is
+ * one string.
  * @typedef {Readonly<{ other: string, zero?: string, one?: string, two?: string, few?: string, many?: string }>} PluralForms
  */
 /**
@@ -129,6 +133,15 @@ const substitute = (text, params) => (params
   : text);
 
 /**
+ * The text of a catalog value that is read as one string. Plural forms are a
+ * catalog error on any key but the `other` form of a `tn` pair (the catalog
+ * test refuses them); they read as their `other` text.
+ * @param {string | PluralForms} value
+ * @returns {string}
+ */
+const textOf = (value) => (typeof value === 'string' ? value : value.other);
+
+/**
  * The shown text of a catalog key, or `fallback` when the shown locale has none.
  * @param {string} key
  * @param {string} fallback
@@ -136,9 +149,7 @@ const substitute = (text, params) => (params
 const lookup = (key, fallback) => {
   // Read the locale first: a render that calls `t()` depends on it.
   if (locale.value === SOURCE_LOCALE || !Object.hasOwn(catalog, key)) return fallback;
-  const value = catalog[key];
-  // Plural forms are a catalog error on a key that is not only a `tn` form (the catalog test refuses them).
-  return typeof value === 'string' ? value : value.other;
+  return textOf(catalog[key]);
 };
 
 /**
@@ -161,10 +172,13 @@ const pluralForm = (rules, count, one, other) => (rules.select(count) === 'one' 
 
 /**
  * The translation of `count` in `entries` under `rules`, or null when
- * `entries` lack the key. The category the rules select picks the key, the
- * English text of a form (`one` for the category `one`, else `other`), and,
- * when the value is `PluralForms`, the text of that category, else its
- * `other`. A string value is the text of every category.
+ * `entries` lack the key it needs. The keys are the English texts of the two
+ * forms. When the `other` form's value is `PluralForms`, the `one` form's
+ * value is the text for exactly 1 (ICU `=1`), and every other count takes the
+ * object's text of the category the rules select, else its `other`: Russian
+ * selects `one` for 21 too, where a `one` text without `{count}` would be
+ * wrong. When it is a string, the category picks the key (`one` for the
+ * category `one`, else `other`).
  * @param {Intl.PluralRules} rules
  * @param {TranslationCatalog} entries
  * @param {number} count
@@ -173,11 +187,10 @@ const pluralForm = (rules, count, one, other) => (rules.select(count) === 'one' 
  * @returns {string | null}
  */
 export const pluralTranslation = (rules, entries, count, one, other) => {
-  const category = rules.select(count);
-  const key = category === 'one' ? one : other;
-  if (!Object.hasOwn(entries, key)) return null;
-  const value = entries[key];
-  return typeof value === 'string' ? value : value[category] ?? value.other;
+  const forms = Object.hasOwn(entries, other) ? entries[other] : undefined;
+  if (typeof forms === 'object' && count !== 1) return forms[rules.select(count)] ?? forms.other;
+  const key = typeof forms === 'object' ? one : pluralForm(rules, count, one, other);
+  return Object.hasOwn(entries, key) ? textOf(entries[key]) : null;
 };
 
 /**

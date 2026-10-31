@@ -3,8 +3,8 @@
 // and the glossary (docs/internal/I18N_GLOSSARY.tsv). A catalog file is one
 // canonical text: its header comment, then `export default Object.freeze({`
 // with one `"key": value` row per key (keys in code-unit order; a value is a
-// JSON string, or the plural forms of a `tn()` form as one JSON object in
-// CLDR category order), then `});`. Reading parses that text; writing prints it, so a
+// JSON string, or the plural forms of the `other` form of a `tn()` pair as
+// one JSON object in CLDR category order), then `});`. Reading parses that text; writing prints it, so a
 // catalog read and written unchanged keeps every byte.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -117,9 +117,10 @@ const textProblem = (where, english, value) => {
 /**
  * The problems of one translation against its source key: a value that is
  * not a string, empty, or with placeholders that differ from the English.
- * The value of a key that only `tn()` forms produce (`plural`) may instead
- * be plural forms (`PluralForms`): an object of CLDR categories with
- * `other`, each form checked like a string.
+ * The value of the `other` form of a `tn()` pair (`plural.other`) may
+ * instead be plural forms (`PluralForms`): an object of CLDR categories with
+ * `other`, each form checked like a string. The `one` form's value is the
+ * text for exactly 1 and stays a string.
  * @param {CatalogKey} source
  * @param {unknown} value
  * @returns {string[]}
@@ -130,7 +131,7 @@ export const translationProblems = ({ key, english, plural }, value) => {
     const problem = textProblem(where, english, value);
     return problem ? [problem] : [];
   }
-  if (!plural) return [`${where}: plural forms are allowed only for a form of a tn() pair`];
+  if (!plural || plural.other !== key) return [`${where}: plural forms are allowed only for the other form of a tn() pair`];
   /** @type {readonly string[]} */
   const categories = PLURAL_CATEGORIES;
   const unknown = Object.keys(value).filter((category) => !categories.includes(category)).sort();

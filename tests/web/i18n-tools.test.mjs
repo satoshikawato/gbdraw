@@ -177,15 +177,15 @@ test('apply writes the canonical catalog, drops stale keys, and changes no byte 
   assert.equal(Object.keys(after).length, keys.size);
 });
 
-test('plural forms go through export and apply as an object; apply refuses them on a key that is no tn() form', async (t) => {
+test('plural forms go through export and apply as an object; apply refuses them on a key that is not the other form of a tn() pair', async (t) => {
   const { run, bytes, file } = scratch(t);
   const counted = [...keys.values()].find(({ key, plural }) => plural && key === plural.other && /\{count\}/.test(key));
-  const forms = { many: `${counted.key} (many)`, few: `${counted.key} (few)`, other: `${counted.key} (other)` };
+  const forms = { many: `${counted.key} (many)`, few: `${counted.key} (few)`, other: `${counted.key} (other)`, one: `${counted.key} (one)` };
   assert.deepEqual((await run('apply', '--locale', 'fr', file('plural.jsonl', [{ key: counted.key, translation: forms }]))).lines,
     ['fr: 1 lines applied (1 changed), 0 stale keys dropped']);
-  assert.match(bytes()['fr.js'], new RegExp(`\\n  ${JSON.stringify(counted.key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: \\{"few": `));
+  assert.match(bytes()['fr.js'], new RegExp(`\\n  ${JSON.stringify(counted.key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: \\{"one": `));
   const exported = (await run('export', '--locale', 'fr', '--all')).lines.map((text) => JSON.parse(text));
-  assert.deepEqual(exported.find(({ key }) => key === counted.key).translation, { few: forms.few, many: forms.many, other: forms.other });
+  assert.deepEqual(exported.find(({ key }) => key === counted.key).translation, { one: forms.one, few: forms.few, many: forms.many, other: forms.other });
   const before = bytes();
   assert.deepEqual((await run('apply', '--locale', 'fr', file('again.jsonl', exported))).lines,
     [`fr: ${keys.size} lines applied (0 changed), 0 stale keys dropped`], 'the export applied again changes nothing');
@@ -193,13 +193,15 @@ test('plural forms go through export and apply as an object; apply refuses them 
 
   const { code, lines } = await run('apply', '--locale', 'fr', file('refused.jsonl', [
     { key: 'Generating Diagram...', translation: { one: 'Génération…', other: 'Générations…' } },
-    { key: counted.key, translation: { few: '{n}', other: forms.other } }
+    { key: counted.key, translation: { few: '{n}', other: forms.other } },
+    { key: counted.plural.one, translation: { one: counted.plural.one, other: counted.key } }
   ]));
   assert.equal(code, 1);
   assert.deepEqual(lines.map((line) => line.replace(/^refused .*?:(\d+): /, 'refused $1: ')), [
-    'refused 1: "Generating Diagram...": plural forms are allowed only for a form of a tn() pair',
+    'refused 1: "Generating Diagram...": plural forms are allowed only for the other form of a tn() pair',
     `refused 2: ${JSON.stringify(counted.key)} few: placeholders {n} differ from the English {count}`,
-    'fr: nothing written; fix the 2 refused line(s)'
+    `refused 3: ${JSON.stringify(counted.plural.one)}: plural forms are allowed only for the other form of a tn() pair`,
+    'fr: nothing written; fix the 3 refused line(s)'
   ]);
   assert.deepEqual(bytes(), before, 'nothing written');
 });
