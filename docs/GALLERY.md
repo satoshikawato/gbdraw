@@ -2,7 +2,7 @@
 
 # Gallery
 
-Finished figures made with gbdraw. The ten Web Gallery examples come first, in the order of the [interactive Gallery](https://gbdraw.app/gallery/), where you can zoom, open feature popups, download the Session, and follow a step-by-step web app guide. Five of them also have a Tutorial that builds the figure from downloaded inputs in the web app, on the command line, and in Python.
+Finished figures made with gbdraw. The thirteen Web Gallery examples come first, in the order of the [interactive Gallery](https://gbdraw.app/gallery/), where you can zoom, open feature popups, download the Session, and follow a step-by-step web app guide. Five of them also have a Tutorial that builds the figure from downloaded inputs in the web app, on the command line, and in Python. The last three have no step-by-step guide; they show the figures that users of Easyfig, BRIG, and clinker expect, and [Coming from another tool](./FAQ.md#coming-from-another-tool) maps those tools to gbdraw.
 
 ## Web Gallery examples
 
@@ -85,6 +85,30 @@ Five aminoglycoside biosynthetic gene clusters from MIBiG (lividomycin, two neom
 Nine majanivirus genomes from penaeid shrimp, one per row, linked by LOSATP similarity groups at 20% identity or more. A color table marks WSSV-like proteins, BIRP, and tyrosine recombinase by product name. The Litopenaeus vannamei majanivirus genome is shown reverse-complemented, so its synteny with the other genomes reads left to right. The first five genomes share dense, high-identity links, while links further down are paler and sparser; the links show protein similarity, not orthology.
 
 [Open in the interactive Gallery](https://gbdraw.app/gallery/#majanivirus_orthogroup)
+
+### Easyfig look: tblastx comparison of four majanivirus genomes
+
+<a href="https://gbdraw.app/gallery/#look-easyfig"><img src="../gbdraw/web/gallery/thumbnails/look-easyfig.webp" alt="Four majanivirus genomes as rows of gene arrows joined by red tblastx match ribbons, with a ruler" width="640"></a>
+
+For Easyfig users: four majanivirus genomes of about 290 to 530 kbp as stacked rows of gene arrows, joined by precomputed tblastx tables between neighboring rows, with a ruler and no GC tracks. Matches below 150 bits, 50% identity, or 100 aligned residues are hidden. Match ribbons shade from pale to saturated red with identity, and an inverted match is drawn as a crossed ribbon, as in the middle of the second comparison. Unlike Easyfig, gbdraw does not color inverted BLAST matches differently; the orientation colors belong to LOSATP collinear blocks.
+
+[Open in the interactive Gallery](https://gbdraw.app/gallery/#look-easyfig) | [Coming from Easyfig](./FAQ.md#coming-from-another-tool)
+
+### BRIG look: similarity rings around a <i>Staphylococcus aureus</i> genome
+
+<a href="https://gbdraw.app/gallery/#look-brig"><img src="../gbdraw/web/gallery/thumbnails/look-brig.webp" alt="Circular Staphylococcus aureus map with three colored similarity rings, a gene ring outside, and GC content and GC skew inside" width="640"></a>
+
+For BRIG users: three <i>Staphylococcus aureus</i> genomes (N315, COL, MW2) as one ring each around the NCTC 8325 reference, with the gene ring outside and GC content and GC skew inside. Each ring has its own color and shades from pale to full with BLAST identity, from the 50% threshold to 100%; the legend shows that continuous scale, not BRIG's three fixed identity steps. Gaps in a ring are regions without a hit above the threshold.
+
+[Open in the interactive Gallery](https://gbdraw.app/gallery/#look-brig) | [Coming from BRIG](./FAQ.md#coming-from-another-tool)
+
+### clinker look: linked gene clusters aligned on a shared gene
+
+<a href="https://gbdraw.app/gallery/#look-clinker"><img src="../gbdraw/web/gallery/thumbnails/look-clinker.webp" alt="Five aminoglycoside gene clusters aligned on one gene, with colored gene arrows and curved links between similar proteins" width="640"></a>
+
+For clinker users: five aminoglycoside biosynthetic gene clusters from MIBiG aligned on the same ABC transporter group, with curved links between members of one LOSATP similarity group (30% identity or more) shaded by identity. Gene colors come from a gene-kind color table, not from the group: gbdraw colors features by rule, and the group appears as the link. Only the first cluster is labeled.
+
+[Open in the interactive Gallery](https://gbdraw.app/gallery/#look-clinker) | [Coming from clinker](./FAQ.md#coming-from-another-tool)
 
 ## More figures
 

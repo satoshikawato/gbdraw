@@ -261,6 +261,122 @@ Yes. Select the `AT` dinucleotide. [Tracks, axes, and
 annotations](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations)
 describes content and skew for reversed pairs.
 
+## Coming from another tool
+
+Every route needs no Java, Python 2, or local BLAST database: the hosted app
+runs in the browser, and the CLI is `pip install gbdraw`. GenBank files and
+GFF3 with FASTA carry over unchanged (native EMBL syntax does not; convert it to
+GenBank first); see [input formats](./REFERENCE/input-formats-and-tsv-schemas.md). BLAST outfmt 6 or 7
+tables carry over too: upload them in **Pairwise Comparisons** with **Upload
+BLAST TSV**, or pass them with `-b` (Linear) or `--conservation_blast`
+(Circular). To skip BLAST altogether, **Run LOSAT** (`--losat`) searches inside
+the app or the CLI. Each table below maps the other tool's terms to gbdraw's
+controls and flags; flags are listed in the [CLI
+Reference](./CLI_Reference.md).
+
+### Coming from Easyfig
+
+Gallery figure: [Easyfig look](https://gbdraw.app/gallery/#look-easyfig).
+
+| Easyfig | gbdraw |
+| --- | --- |
+| Genomes in rows, BLAST between neighbors | Linear mode; `--gbk` in row order, `-b` with one table per neighboring pair |
+| blastn or tblastx run by Easyfig | `--losat losatn` or `--losat tlosatx`, or upload the table you ran |
+| Minimum length, identity, e-value | `--alignment_length`, `--identity`, `--evalue`, `--bitscore` |
+| Subregion of a genome | `--region record_id:start-end` |
+| Reverse a genome | `--reverse_complement` per input file |
+| Scale | `--scale_style ruler` or `bar` |
+| GC content and skew graphs | `--gc` and `--skew` (off unless given) |
+| Gene names on the figure | `--show_labels`; label sources with `--qualifier_priority` |
+| Feature colors | `-t` color table, `-p` palette |
+| SVG, BMP | `-f svg`, `png`, `pdf`; `-f interactive_svg` adds popups |
+
+Match ribbons shade by identity, and an inverted match is a crossed ribbon.
+gbdraw does not give inverted BLAST matches their own color; orientation colors
+belong to LOSATP collinear blocks (`--collinear_color_mode`). Easyfig-style
+axis breaks are not available. Start from the [LOSATN
+Tutorial](./TUTORIALS/compare-genomes-losatn.md).
+
+### Coming from BRIG
+
+Gallery figure: [BRIG look](https://gbdraw.app/gallery/#look-brig).
+
+| BRIG | gbdraw |
+| --- | --- |
+| Reference sequence | The Circular record (`--gbk`) |
+| One ring per query genome, from a BLAST database | `--conservation_sequence` (one genome file per ring) with `--losat losatn`, or one `--conservation_blast` table per ring |
+| Ring name and color | `--conservation_labels`, `--conservation_colors`, `--conservation_color_scheme` |
+| Identity thresholds with three shades | One continuous shade from `--identity` to 100%; the legend shows that scale |
+| Ring thickness and spacing | `--conservation_ring_width`, `--conservation_ring_gap` |
+| GC content and GC skew rings | `--gc`, `--skew`, or custom `--circular_track_slot` rows |
+| Gene ring from the reference annotation | The feature ring; `-k` selects feature types |
+
+Pairwise rings need no BLAST database. In the web app, use **Run LOSAT** under
+**Pairwise Comparisons** and **Add Seq** for each ring genome. The
+[precomputed rings
+Tutorial](./TUTORIALS/add-precomputed-circular-comparison-rings.md) builds rings
+from uploaded tables.
+
+### Coming from clinker
+
+Gallery figure: [clinker look](https://gbdraw.app/gallery/#look-clinker).
+
+| clinker | gbdraw |
+| --- | --- |
+| Cluster files | Linear mode, one GenBank or GFF3 file per cluster |
+| Gene groups from all-versus-all alignment | `--losat losatp --losatp_mode similarity_groups` |
+| Identity threshold (`-i`) | `--identity` |
+| Align clusters on one gene | `--similarity_alignment_feature` |
+| Flip a cluster | `--reverse_complement` per file |
+| Labels from `gene` or `product` | `--show_labels first` (or `all`) with `--qualifier_priority` |
+| Interactive HTML, saved session | `-f interactive_svg`; Web **Save Session**, CLI `--save_session` |
+
+gbdraw colors genes by color-table rule (`-t`), not by group; the group shows
+as a link between members. See the [similarity group
+Tutorial](./TUTORIALS/compare-proteins-losatp.md). Similarity groups show
+protein similarity, not orthology.
+
+### Coming from DNAPlotter
+
+| DNAPlotter | gbdraw |
+| --- | --- |
+| Circular genome with feature tracks | `gbdraw circular`; `--track_type`, `--separate_strands`, `--circular_track_slot` |
+| Feature types and colors | `-k`, `-t`, `-p` |
+| GC content, GC skew, user plots | `--gc`, `--skew`; a Depth TSV with `--depth_track` |
+| Labels | `--labels`; `--qualifier_priority` |
+| Linear view | `gbdraw linear` |
+
+gbdraw has no annotation-editing or restriction-site tools. Start from the
+[first Circular Tutorial](./TUTORIALS/first-circular-genome-diagram.md).
+
+### Coming from GenoVi
+
+| GenoVi | gbdraw |
+| --- | --- |
+| Circular plot of a genome with several replicons | `--multi_record_canvas` for one canvas; otherwise one figure per record |
+| COG category colors | `-t builtin:cog`, or **Preset scheme** in **Colors** |
+| GC content and skew | `--gc`, `--skew` |
+| Gene labels | `--labels` |
+
+`builtin:cog` colors the COG category letters already in the annotation, such
+as Bakta's `db_xref` values. gbdraw assigns no COG categories and runs no
+protein classifier. See [built-in color
+tables](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#built-in-color-tables).
+
+### Coming from OGDRAW
+
+| OGDRAW | gbdraw |
+| --- | --- |
+| Gene-class colors, plastid | `-t builtin:plastid` or **Preset scheme** |
+| Gene-class colors, mitochondrion | `-t builtin:mitochondrion` |
+| LSC, SSC, IRa, IRb ring | `--annotation_table` with the region rows of the [chloroplast Tutorial](./TUTORIALS/build-an-annotated-chloroplast-map.md) and an `annotations` track slot |
+| Genes inside or outside by strand | `--separate_strands` |
+| GC content | `--gc` |
+
+gbdraw does not detect inverted repeats; today you give the region
+coordinates in the TSV by hand. See the Gallery figure
+[tobacco chloroplast](https://gbdraw.app/gallery/#tobacco-chloroplast).
+
 ## Output and limitations
 
 ### Why does SVG export work but PNG/PDF/EPS/PS export fail?

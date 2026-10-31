@@ -1,0 +1,59 @@
+{
+  "id": "look-brig",
+  "version": 1,
+  "title": "Draw a BRIG-style ring comparison around a reference genome",
+  "summary": "Compare three Staphylococcus aureus genomes with the NCTC 8325 reference as one similarity ring each, with GC content and GC skew inside.",
+  "appMode": "Circular",
+  "primaryWorkflow": "Compare genomes around a reference",
+  "downloads": [
+    {
+      "label": "NC_007795.gb",
+      "source": "gbdraw repository",
+      "targetName": "NC_007795.gb",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/tests/test_inputs/NC_007795.gb",
+      "note": "GenBank record."
+    },
+    {
+      "label": "NC_002745.gb",
+      "source": "gbdraw repository",
+      "targetName": "NC_002745.gb",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/tests/test_inputs/NC_002745.gb",
+      "note": "GenBank record."
+    },
+    {
+      "label": "NC_002951.gb",
+      "source": "gbdraw repository",
+      "targetName": "NC_002951.gb",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/tests/test_inputs/NC_002951.gb",
+      "note": "GenBank record."
+    },
+    {
+      "label": "NC_003923.gb",
+      "source": "gbdraw repository",
+      "targetName": "NC_003923.gb",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/tests/test_inputs/NC_003923.gb",
+      "note": "GenBank record."
+    }
+  ],
+  "requirements": [
+    "Select Circular mode and load the reference. Open gbdraw.app, select Circular and GenBank, and choose the reference record. BRIG asks for a reference sequence in the same way. Control: GenBank / DDBJ File, Value: NC_007795.gb; Control: Track Preset, Value: Tuckin.",
+    "Add one ring per genome. Open Pairwise Comparisons, choose Run LOSAT and LOSATN, and add each comparison genome with Add Seq. No BLAST database is built. Each genome is the query and the reference is the subject. Ring: 1, Comparison file: NC_002745.gb, Label: S. aureus N315, Color: #c0392b; Ring: 2, Comparison file: NC_002951.gb, Label: S. aureus COL, Color: #2471a3; Ring: 3, Comparison file: NC_003923.gb, Label: S. aureus MW2, Color: #1e8449.",
+    "Set the identity threshold. Set Minimum identity to 50 and leave the other filters at their defaults. Each ring shades from pale to its full color between this threshold and 100%. BRIG draws three fixed identity steps; gbdraw draws one continuous scale, which the legend shows. Control: Minimum identity, Value: 50; Control: Legend position, Value: Right.",
+    "Generate and read the rings. Click Generate Diagram. The gene ring is outermost, then the three similarity rings, then GC content and GC skew. A gap in a ring marks a reference region with no hit above the threshold; the largest gaps sit near 1.9 to 2.0 Mbp."
+  ],
+  "manualSteps": [],
+  "related": [
+    {
+      "label": "Coming from BRIG",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#coming-from-another-tool"
+    },
+    {
+      "label": "Tutorial: Show how three animal mitochondrial genomes match the human reference",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/add-precomputed-circular-comparison-rings.md"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "id": "look-clinker",
+  "version": 1,
+  "title": "Draw a clinker-style comparison of gene clusters",
+  "summary": "Align five aminoglycoside gene clusters on one shared gene and link similar proteins with LOSATP similarity groups.",
+  "appMode": "Linear",
+  "primaryWorkflow": "Compare gene clusters by protein similarity",
+  "downloads": [
+    {
+      "label": "BGC0000708",
+      "source": "MIBiG record in the gbdraw repository",
+      "targetName": "BGC0000708.gbk",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708.gbk",
+      "note": "MIBiG cluster as GenBank."
+    },
+    {
+      "label": "BGC0000709",
+      "source": "MIBiG record in the gbdraw repository",
+      "targetName": "BGC0000709.gbk",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000709.gbk",
+      "note": "MIBiG cluster as GenBank."
+    },
+    {
+      "label": "BGC0000711",
+      "source": "MIBiG record in the gbdraw repository",
+      "targetName": "BGC0000711.gbk",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000711.gbk",
+      "note": "MIBiG cluster as GenBank."
+    },
+    {
+      "label": "BGC0000712",
+      "source": "MIBiG record in the gbdraw repository",
+      "targetName": "BGC0000712.gbk",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000712.gbk",
+      "note": "MIBiG cluster as GenBank."
+    },
+    {
+      "label": "BGC0000713",
+      "source": "MIBiG record in the gbdraw repository",
+      "targetName": "BGC0000713.gbk",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000713.gbk",
+      "note": "MIBiG cluster as GenBank."
+    },
+    {
+      "label": "BGC0000708-BGC0000713_default_colors.tsv",
+      "source": "gbdraw repository",
+      "targetName": "BGC0000708-BGC0000713_default_colors.tsv",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708-BGC0000713_default_colors.tsv",
+      "note": "Fallback CDS color."
+    },
+    {
+      "label": "BGC0000708-BGC0000713_specific_colors.tsv",
+      "source": "gbdraw repository",
+      "targetName": "BGC0000708-BGC0000713_specific_colors.tsv",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708-BGC0000713_specific_colors.tsv",
+      "note": "The four gene_kind color rules."
+    }
+  ],
+  "requirements": [
+    "Select Linear mode and add the clusters. Open gbdraw.app, select Linear, and add the five clusters in this order. Reverse-complement the last one so that all five read in the same direction. Row: 1, GenBank / DDBJ File: BGC0000708.gbk, Reverse complement: No; Row: 2, GenBank / DDBJ File: BGC0000709.gbk, Reverse complement: No; Row: 3, GenBank / DDBJ File: BGC0000711.gbk, Reverse complement: No; Row: 4, GenBank / DDBJ File: BGC0000712.gbk, Reverse complement: No; Row: 5, GenBank / DDBJ File: BGC0000713.gbk, Reverse complement: Yes.",
+    "Group similar proteins. Under Pairwise Comparisons choose Run LOSAT and LOSATP, set LOSATP mode to Similarity groups, and set Min identity (%) to 30. clinker aligns all clusters against each other in the same way and links members of a group. Set the alignment gene to CAF33315.1, which aligns the clusters on its group. Control: LOSAT Mode, Value: LOSATP; Control: LOSATP mode, Value: Similarity groups; Control: Min identity (%), Value: 30; Control: Alignment feature, Value: CAF33315.1.",
+    "Color the genes. Load the two color tables. gbdraw colors genes by rule, not by group: the four gene_kind rules give core biosynthetic, additional biosynthetic, transport, and regulatory genes their own colors, and the link between members shows the group. Control: Default colors, Value: BGC0000708-BGC0000713_default_colors.tsv; Control: Specific rules, Value: BGC0000708-BGC0000713_specific_colors.tsv; Control: Show Labels, Value: First Record Only; Control: Scale Style, Value: Bar (Simple); Control: Legend position, Value: Bottom.",
+    "Generate and read the figure. Click Generate Diagram. Links shade from pale to saturated red with identity. A run of core biosynthetic genes links through all five clusters, while regulatory genes occur only in the two neomycin clusters. Links show protein similarity, not orthology."
+  ],
+  "manualSteps": [],
+  "related": [
+    {
+      "label": "Coming from clinker",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md#coming-from-another-tool"
+    },
+    {
+      "label": "Tutorial: Find shared proteins across five aminoglycoside gene clusters",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/compare-proteins-losatp.md"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    }
+  ]
+}

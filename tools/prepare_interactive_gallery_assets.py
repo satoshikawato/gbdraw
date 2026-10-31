@@ -249,6 +249,34 @@ VIBRIO_HARVEYI_GROUP_COMMAND = (
     "-o vibrio-harveyi-group-collinear -f interactive_svg"
 )
 
+EASYFIG_LOOK_COMMAND = (
+    "gbdraw linear --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb "
+    "-b MjeNMV.MelaMJNV.tblastx.out MelaMJNV.PemoMJNVA.tblastx.out "
+    "PemoMJNVA.PeseMJNV.tblastx.out --align_center --scale_style ruler "
+    "--legend right --bitscore 150 --identity 50 --alignment_length 100 "
+    "-f interactive_svg -o look-easyfig"
+)
+
+BRIG_LOOK_COMMAND = (
+    "gbdraw circular --gbk NC_007795.gb --losat losatn "
+    "--conservation_sequence NC_002745.gb NC_002951.gb NC_003923.gb "
+    "--conservation_labels 'S. aureus N315' 'S. aureus COL' 'S. aureus MW2' "
+    "--conservation_colors '#c0392b' '#2471a3' '#1e8449' --identity 50 "
+    "--track_type tuckin -l right -f interactive_svg -o look-brig"
+)
+
+CLINKER_LOOK_COMMAND = (
+    "gbdraw linear --losat losatp --losatp_mode similarity_groups "
+    "--similarity_alignment_feature CAF33315.1 "
+    "--gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk "
+    "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
+    "--reverse_complement 0 --reverse_complement 1 -k CDS "
+    "-d BGC0000708-BGC0000713_default_colors.tsv "
+    "-t BGC0000708-BGC0000713_specific_colors.tsv "
+    "--identity 30 --show_labels first --scale_style bar --pairwise_match_style curve -l bottom "
+    "-f interactive_svg -o look-clinker"
+)
+
 EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="HmmtDNA_basic_circular",
@@ -465,6 +493,75 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command_kind="runnable",
         command_note="Download the nine accession-pinned records and both repository-managed color tables from Files.",
         command=MAJANIVIRUS_COMMAND,
+        compressed_session=True,
+        source_note=GZIP_SESSION_SOURCE_NOTE,
+    ),
+    GallerySessionExample(
+        id="look-easyfig",
+        title="Easyfig look: tblastx comparison of four majanivirus genomes",
+        tags=("Linear", "BLAST table", "Interactive SVG"),
+        description=(
+            "For Easyfig users: four majanivirus genomes of about 290 to 530 kbp as stacked "
+            "rows of gene arrows, joined by precomputed tblastx tables between neighboring "
+            "rows, with a ruler and no GC tracks. Matches below 150 bits, 50% identity, or 100 aligned residues are hidden. Match ribbons shade from pale to saturated "
+            "red with identity, and an inverted match is drawn as a crossed ribbon, as in the "
+            "middle of the second comparison. Unlike Easyfig, gbdraw does not color inverted "
+            "BLAST matches differently; the orientation colors belong to LOSATP collinear blocks."
+        ),
+        workflow="Draw a BLAST comparison",
+        input_summary="4 GenBank + 3 tblastx tables",
+        display_order=100,
+        command_kind="runnable",
+        command_note="Download the four GenBank files and three tblastx tables from Files, then run this command in the same directory.",
+        command=EASYFIG_LOOK_COMMAND,
+        session_from_command=True,
+        command_dir="examples",
+        compressed_session=True,
+        source_note=GZIP_SESSION_SOURCE_NOTE,
+    ),
+    GallerySessionExample(
+        id="look-brig",
+        title="BRIG look: similarity rings around a <i>Staphylococcus aureus</i> genome",
+        tags=("Circular", "Comparison rings", "LOSAT", "Interactive SVG"),
+        description=(
+            "For BRIG users: three <i>Staphylococcus aureus</i> genomes (N315, COL, MW2) as "
+            "one ring each around the NCTC 8325 reference, with the gene ring outside and GC "
+            "content and GC skew inside. Each ring has its own color and shades from pale to "
+            "full with BLAST identity, from the 50% threshold to 100%; the legend shows that "
+            "continuous scale, not BRIG's three fixed identity steps. Gaps in a ring are "
+            "regions without a hit above the threshold."
+        ),
+        workflow="Compare genomes around a reference",
+        input_summary="4 GenBank files",
+        display_order=110,
+        command_kind="runnable",
+        command_note="Download the four GenBank files from Files. The command runs LOSATN locally; no BLAST database is built.",
+        command=BRIG_LOOK_COMMAND,
+        session_from_command=True,
+        command_dir="tests/test_inputs",
+        compressed_session=True,
+        source_note=GZIP_SESSION_SOURCE_NOTE,
+    ),
+    GallerySessionExample(
+        id="look-clinker",
+        title="clinker look: linked gene clusters aligned on a shared gene",
+        tags=("Linear", "Similarity groups", "LOSAT", "Interactive SVG"),
+        description=(
+            "For clinker users: five aminoglycoside biosynthetic gene clusters from MIBiG "
+            "aligned on the same ABC transporter group, with curved links between members "
+            "of one LOSATP similarity group (30% identity or more) shaded by identity. Gene "
+            "colors come from a gene-kind color table, not from the group: gbdraw colors "
+            "features by rule, and the group appears as the link. Only the first cluster is "
+            "labeled."
+        ),
+        workflow="Compare gene clusters by protein similarity",
+        input_summary="5 GenBank + 2 color TSV files",
+        display_order=120,
+        command_kind="runnable",
+        command_note="Download the five MIBiG records and two color tables from Files. The command runs LOSATP locally.",
+        command=CLINKER_LOOK_COMMAND,
+        session_from_command=True,
+        command_dir="gbdraw/web/tutorial-data/aminoglycoside-bgc-five",
         compressed_session=True,
         source_note=GZIP_SESSION_SOURCE_NOTE,
     ),

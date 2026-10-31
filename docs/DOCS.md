@@ -48,7 +48,8 @@ and [Session compatibility](./REFERENCE/session-and-request-compatibility.md#sim
 ## FAQ
 
 The [FAQ](./FAQ.md) answers layout, interface, comparison method, privacy,
-publication, and troubleshooting questions. Each answer links to the full
+publication, and troubleshooting questions, and maps Easyfig, BRIG, clinker,
+DNAPlotter, GenoVi, and OGDRAW to gbdraw. Each answer links to the full
 technical documentation when needed.
 
 ## Gallery

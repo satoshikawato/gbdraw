@@ -9,12 +9,15 @@
     "vibrio-harveyi-group-collinear",
     "hepatoplasmataceae_orthogroup",
     "BGC0000708-BGC0000713",
-    "majanivirus_orthogroup"
+    "majanivirus_orthogroup",
+    "look-easyfig",
+    "look-brig",
+    "look-clinker"
   ],
   "files": {
     "gallery/examples.json": {
-      "bytes": 26165,
-      "sha256": "12f81ea92ccb9a75278090e0233e4e96b16372f7a6d064369de526104e7d6602"
+      "bytes": 32525,
+      "sha256": "964d475cde6a2777ab39976e88cbd16362772a93ef861c5f8dc1890326730ef1"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1319101,
@@ -43,6 +46,18 @@
     "gallery/examples/lambda_basic_linear.svg": {
       "bytes": 869931,
       "sha256": "0751e5b7eea1cf39563577d0768623ded237de5d859b20a5b4c2d0f1206cd016"
+    },
+    "gallery/examples/look-brig.svg": {
+      "bytes": 25611192,
+      "sha256": "d08e93a3596dd49a0447b94292593cd6eb7d734d535bec27f19f500f4943664e"
+    },
+    "gallery/examples/look-clinker.svg": {
+      "bytes": 1328319,
+      "sha256": "4a3204936d40f10be7f02f73582bdfc4cad345752cabc9bc7f772c7faadfbd84"
+    },
+    "gallery/examples/look-easyfig.svg": {
+      "bytes": 13393816,
+      "sha256": "7ebe91458e7325fb3ff8c4a60b0844b31031fc1c17c0e04bb7a838daa0d9e474"
     },
     "gallery/examples/majanivirus_orthogroup.svg": {
       "bytes": 7343919,
@@ -84,6 +99,18 @@
       "bytes": 851723,
       "sha256": "1a3908a57112cac6daea39c7366fda0888f50bee51b319530453630684c74a38"
     },
+    "gallery/sessions/look-brig.gbdraw-session.json.gz": {
+      "bytes": 15043597,
+      "sha256": "c178c321e297e76f1d18a207d9d457ea7df5e7c6177f563b9b45d5bc962256a6"
+    },
+    "gallery/sessions/look-clinker.gbdraw-session.json.gz": {
+      "bytes": 654591,
+      "sha256": "1bf27ae3122df1528b73c0f3f08f18a9e9c4ac471c893a29901790e216d1be55"
+    },
+    "gallery/sessions/look-easyfig.gbdraw-session.json.gz": {
+      "bytes": 3677758,
+      "sha256": "d0ab62c222ca88a9507b6db34ca940bc412de006afd84223eafebaadb5950768"
+    },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
       "bytes": 6223089,
       "sha256": "37aee68aff7395ea46118fa7c7cba4633b73c110120b869d5501bd1acb95f06d"
@@ -124,6 +151,18 @@
       "bytes": 129527,
       "sha256": "98c8a993f3ef82c48508e8bacf5b21562afc5c29b0d8c6c049dd3d481abe39de"
     },
+    "gallery/sources/look-brig.svg": {
+      "bytes": 5933643,
+      "sha256": "616f987c4734e1a65eb2f9f04ccd9d6ab1495563838ec788b776718a37819a36"
+    },
+    "gallery/sources/look-clinker.svg": {
+      "bytes": 244183,
+      "sha256": "e9932ea49a19b3836e02cb25209552ebe5491d4e79844b59a8454497e30d3e7e"
+    },
+    "gallery/sources/look-easyfig.svg": {
+      "bytes": 6595580,
+      "sha256": "9d919051585507019096cb792aa7c761477f699c6d333ff2b074cc041ff29760"
+    },
     "gallery/sources/majanivirus_orthogroup.svg": {
       "bytes": 1689442,
       "sha256": "0d6585c7df0bf20db02bc74bc55453fdefff5e4a977a55b305e4883efa25b3c7"
@@ -163,6 +202,18 @@
     "gallery/thumbnails/lambda_basic_linear.webp": {
       "bytes": 24090,
       "sha256": "51945b2564fbb469509b1c95bfb304491a04143ad12a292369379d78d4112103"
+    },
+    "gallery/thumbnails/look-brig.webp": {
+      "bytes": 25000,
+      "sha256": "fb5b86bf15c02f11a08cb1ed8f41196d297706d2139034b77a011391b5492dc5"
+    },
+    "gallery/thumbnails/look-clinker.webp": {
+      "bytes": 29988,
+      "sha256": "e5adb81759d850c7ee8e50b9226c5379b2e0689d6c0cd51835b65246ef2ba9a9"
+    },
+    "gallery/thumbnails/look-easyfig.webp": {
+      "bytes": 11996,
+      "sha256": "22c449e97e537e2360b88ffda54b90837a875728454d51456ccd10c7a9a7f302"
     },
     "gallery/thumbnails/majanivirus_orthogroup.webp": {
       "bytes": 15904,

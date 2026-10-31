@@ -75,8 +75,8 @@ BUNDLED_SESSION_VERSIONS = frozenset({CURRENT_SESSION_VERSION})
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
     paths = _refresh_session_paths(None)
 
-    assert len(paths) == 11
-    assert len(_public_gallery_session_files()) == 10
+    assert len(paths) == 14
+    assert len(_public_gallery_session_files()) == 13
     assert len(TEST_INPUT_SESSION_FILES) == 1
     assert {path.name for path in paths} >= set(TEST_INPUT_SESSION_FILES)
 
@@ -557,7 +557,7 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
         )
     )
 
-    assert len(paths) == 11
+    assert len(paths) == 14
     for path in paths:
         session = load_cached_gallery_session(path)
         assert session["version"] in BUNDLED_SESSION_VERSIONS, path
@@ -1019,9 +1019,12 @@ def test_multi_record_gallery_sessions_are_built_from_their_declared_commands(
 def _declared_input_files(example: gallery_assets_module.GallerySessionExample) -> list[Path]:
     args = shlex.split(example.command)
     files = []
-    for flag, value in zip(args, args[1:]):
+    for index, (flag, value) in enumerate(zip(args, args[1:])):
         if flag in {"--gbk", "--gff", "--fasta"}:
-            files.append(example.command_cwd / value)
+            for name in args[index + 1 :]:
+                if name.startswith("-"):
+                    break
+                files.append(example.command_cwd / name)
         elif flag == "--records_table":
             table = example.command_cwd / value
             with table.open(encoding="utf-8", newline="") as handle:
