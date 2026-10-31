@@ -38,7 +38,7 @@ nothing states that they are reviewed.
 - **Identifiers.** Setting names and paths (`large_tick_interval`,
   `record_selector`, `losatp_max_hits`, `config.form.keep_definition_left_aligned`),
   CLI options (`--feature_override_table`), option values shown as code
-  (`above_feature`, `one_to_one`, `exclude_matching`, `overflow=error`),
+  (`above_feature`, `exclude_matching`, `overflow=error`),
   renderer ids (`features`, `ticks`, `dinucleotide_content`,
   `dinucleotide_skew`, `depth`, `annotations`), error codes
   (`LOSAT_THREADING_UNAVAILABLE`), Python exception names (`ValueError`), and
@@ -311,8 +311,6 @@ Usually 0.4–0.6× the English character count. Rail short names 2–4 glyphs.
 - A bare 环状 stays for the topology of a record (环状记录 for the key
   `Circular record`), for the mode name itself, and for things that are
   ring-shaped (环状轨道, 环状比较环).
-- Either (Collinear merge orientation) is 不限方向 (accept any orientation),
-  not 任一 (one of the two other conditions).
 
 ### 3.7 Axis and line, not an outline
 
@@ -479,7 +477,6 @@ buttons 儲存工作階段 and 載入工作階段 at 1,024 px in PR-1.
   file or scale reads as molecule topology and is not used for the mode. A
   bare 環狀 stays for the topology of a record, the mode name itself, and
   ring-shaped things.
-- Either (Collinear merge orientation) is 不限方向, not 任一.
 
 ### 4.8 Dimension words of a track
 
