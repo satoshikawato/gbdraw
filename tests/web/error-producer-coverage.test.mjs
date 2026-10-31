@@ -97,7 +97,7 @@ test('JS throw sites normalize to a recognized diagnostic or do not grow in numb
 });
 
 // The message-classification tables in the JS wording owner (R6 ratchet).
-const NATIVE_VALIDATION_BASELINE = { exactMessages: 76, patterns: 16 };
+const NATIVE_VALIDATION_BASELINE = { exactMessages: 75, patterns: 16 };
 
 test('the JS message-classification tables only shrink (R6 ratchet)', async (t) => {
   const source = readFileSync(new URL('utils/error-normalization.js', WEB_ROOT), 'utf8');
