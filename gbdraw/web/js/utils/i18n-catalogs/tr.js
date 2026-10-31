@@ -2715,6 +2715,7 @@ export default Object.freeze({
   "settings": "ayarlar",
   "settings reset.": "ayarlar sıfırlandı.",
   "shifted by": "kaydırma miktarı",
+  "similarity alignment\u0004Alignment": "Hizalama",
   "size scaling\u0004Linear": "Orantılı",
   "size-specific setting \"{setting}\" cannot be expressed by the current CLI.": "boyuta özgü ayar “{setting}” geçerli CLI ile ifade edilemiyor.",
   "skipped": "atlandı",
