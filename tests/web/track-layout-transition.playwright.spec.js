@@ -472,10 +472,10 @@ const removeDepthFile = async (page, mode) => {
     const source = page.locator('[data-linear-source-depth]').first();
     await reveal(source);
     if (!(await source.evaluate((node) => node.open))) await source.locator(':scope > summary').click();
-    return source.getByRole('button', { name: 'Remove Depth TSV', exact: true }).click();
+    return source.getByRole('button', { name: /^Remove Depth TSV/ }).first().click();
   }
   const section = await openDepthSources(page, mode);
-  return section.getByRole('button', { name: 'Remove Depth TSV', exact: true }).first().click();
+  return section.getByRole('button', { name: /^Remove Depth TSV/ }).first().click();
 };
 const expectDepthLeft = (after) => {
   expect(after.rows).toContain('mark:false');
@@ -1005,3 +1005,476 @@ for (const mode of ['circular', 'linear']) {
     }
   }
 }
+
+// PD-OI-104 scenario revision 9: a Depth series' last file.
+const promptText = (page) => page.locator('[data-choice-prompt]').innerText();
+const setRow = (page, mode, id, fields) => evaluateWithRetainedPromise(page, async ({ stackMode, rowId, values }) => {
+  const { state } = await import('./js/state.js');
+  await window.__GBDRAW_HISTORY__.runUndoable('Setup', () => {
+    Object.assign(state.activeDrawing().adv[`${stackMode}_track_slots`].find((row) => row.id === rowId), values);
+  });
+}, { stackMode: mode, rowId: id, values: fields });
+const addDepthFile = (page, mode, index = 0) => evaluateWithRetainedPromise(page, async ({ stackMode, series, tsv }) => {
+  const app = window.__GBDRAW_APP__;
+  const file = new File([tsv], `s${series + 1}.tsv`, { type: 'text/tab-separated-values' });
+  await window.__GBDRAW_HISTORY__.runUndoable('Setup', () => (stackMode === 'circular' ? app.setCircularDepthFile(series, file) : app.setLinearDepthFile(app.linearSeqs[0], series, file)));
+}, { stackMode: mode, series: index, tsv: rev7Depth(mode, 1).tsv });
+const generateError = async (page) => {
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  return page.evaluate(async () => (await import('./js/state.js')).state.errorLog.value?.code ?? null);
+};
+const depthRowsOf = (state) => state.rows.filter((row) => /^depth(_\d+)?:/.test(row));
+
+for (const mode of ['circular', 'linear']) {
+  for (const when of ['before the first Generate', 'after a Generate', 'after a Load']) {
+    test(`rev 7: ${mode} a Depth row turned off stays off without a question when its last file goes and comes back, ${when}, and Generate draws`, async ({ browser }, testInfo) => {
+      test.setTimeout(420000);
+      let page = await openReachFixture(browser, mode);
+      try {
+        await addDepthSeries(page, rev7Depth(mode, 1));
+        await page.evaluate(async (stackMode) => {
+          const { state } = await import('./js/state.js');
+          const app = window.__GBDRAW_APP__;
+          const row = state.activeDrawing().adv[`${stackMode}_track_slots`].find((slot) => slot.id === 'depth');
+          if (stackMode === 'circular') app.setCircularTrackSlotEnabled(row, false); else app.setLinearTrackSlotEnabled(row, false);
+        }, mode);
+        await settleLive(page);
+        if (when !== 'before the first Generate') await expectGenerates(page);
+        if (when === 'after a Load') {
+          const file = testInfo.outputPath('off.gbdraw-session.json');
+          await savedSession(page, file);
+          await page.context().close();
+          page = await load(browser, file);
+          expect(depthRowsOf(await stackState(page, mode))).toEqual(['depth:false']);
+        }
+        const steps = await undoCount(page);
+        const start = await stackState(page, mode);
+        await removeDepthFile(page, mode);
+        await expectNoQuestion(page);
+        const removed = await stackState(page, mode);
+        expect(depthRowsOf(removed), 'the row stays, off').toEqual(['depth:false']);
+        expect(removed.showDepth).toBe(false);
+        expect(await reflowError(page)).toBeNull();
+        expect(await undoCount(page)).toBe(steps + 1);
+        await historyStep(page, 'undo');
+        expect(await stackState(page, mode)).toEqual(start);
+        await historyStep(page, 'redo');
+        await expectGenerates(page);
+        expect(depthRowsOf(await stackState(page, mode))).toEqual(['depth:false']);
+        const savedFile = testInfo.outputPath('off-removed.gbdraw-session.json');
+        await savedSession(page, savedFile);
+        await addDepthFile(page, mode);
+        await settleLive(page);
+        const back = await stackState(page, mode);
+        expect(depthRowsOf(back), 'a re-added file adds no row and does not turn it on').toEqual(['depth:false']);
+        expect(back.showDepth).toBe(true);
+        await expectGenerates(page);
+        expect(await drawsDepth(page), 'the row is off').toBe(false);
+        await page.context().close();
+        page = await load(browser, savedFile);
+        expect(depthRowsOf(await stackState(page, mode)), 'a Session saved in that state keeps it').toEqual(['depth:false']);
+        await addDepthFile(page, mode);
+        await settleLive(page);
+        expect(depthRowsOf(await stackState(page, mode))).toEqual(['depth:false']);
+        await expectGenerates(page);
+      } finally { await page.context().close(); }
+    });
+  }
+
+  test(`rev 7: ${mode} a manual Depth row another row reaches asks, and the choice turns it off too`, async ({ browser }) => {
+    test.setTimeout(420000);
+    const page = await openReachFixture(browser, mode);
+    try {
+      await addDepthSeries(page, rev7Depth(mode, 1));
+      await setRow(page, mode, 'depth', mode === 'circular' ? { id: 'cov' } : { id: 'cov', spacing: '6px' });
+      await addReachRow(page, { id: 'mark', anchor: 'cov', setId: setIdOf(mode), mode });
+      await expectGenerates(page);
+      await settleLive(page);
+      const start = await stackState(page, mode);
+      const [cov, mark] = [rowNumber(start, 'cov'), rowNumber(start, 'mark')];
+      const title = `Remove the Depth file and turn off Track row ${cov} and Track row ${mark}?`;
+      await removeDepthFile(page, mode);
+      await expect(page.locator('[data-choice-prompt]').getByRole('heading', { name: title, exact: true })).toBeVisible();
+      const text = await promptText(page);
+      expect(text).toContain(`Track row ${cov} (cov) has no Depth file left. It stays in the stack, turned off.`);
+      expect(text).toContain(`Track row ${mark} (mark)`);
+      expect(text).not.toContain('stays empty');
+      await page.locator('[data-choice-prompt]').getByRole('button', { name: 'Cancel', exact: true }).click();
+      await settleLive(page);
+      await exerciseAsk(page, mode, {
+        trigger: () => removeDepthFile(page, mode),
+        title,
+        live: true,
+        expectAfter: (after) => {
+          expect(after.rows).toEqual(expect.arrayContaining(['cov:false', 'mark:false']));
+          expect(after.depth).not.toContain('s1.tsv');
+          expect(after.showDepth).toBe(false);
+        }
+      });
+      expect(await reflowError(page)).toBeNull();
+    } finally { await page.context().close(); }
+  });
+
+  test(`rev 7: ${mode} a manual Depth row no row reaches stays on with no question, and Generate refuses it as before`, async ({ browser }) => {
+    test.setTimeout(420000);
+    const page = await openReachFixture(browser, mode);
+    try {
+      await addDepthSeries(page, rev7Depth(mode, 1));
+      await setRow(page, mode, 'depth', { id: 'cov' });
+      await removeDepthFile(page, mode);
+      await expectNoQuestion(page);
+      expect((await stackState(page, mode)).rows).toContain('cov:true');
+      expect(await generateError(page)).toBe('TRACK_INVALID');
+    } finally { await page.context().close(); }
+  });
+
+  test(`rev 7: ${mode} the last file of one of two series says the series stays empty, and Generate asks for a file or its removal`, async ({ browser }) => {
+    test.setTimeout(420000);
+    const page = await openReachFixture(browser, mode);
+    try {
+      await addDepthSeries(page, rev7Depth(mode, 2));
+      const seriesRow = await page.evaluate(async (stackMode) => {
+        const { state } = await import('./js/state.js');
+        return state.activeDrawing().adv[`${stackMode}_track_slots`].find((row) => row.renderer === 'depth' && row.params.track_index === 0).id;
+      }, mode);
+      await addReachRow(page, { id: 'mark', anchor: seriesRow, setId: setIdOf(mode), mode });
+      await expectGenerates(page);
+      await settleLive(page);
+      const start = await stackState(page, mode);
+      const title = `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`;
+      await removeDepthFile(page, mode);
+      await expect(page.locator('[data-choice-prompt]').getByRole('heading', { name: title, exact: true })).toBeVisible();
+      expect(await promptText(page)).toContain('Depth series 1 stays empty, and Generate will ask for a file or its removal.');
+      await page.locator('[data-choice-prompt]').getByRole('button', { name: 'Cancel', exact: true }).click();
+      await settleLive(page);
+      await exerciseAsk(page, mode, {
+        trigger: () => removeDepthFile(page, mode),
+        title,
+        generates: false,
+        expectAfter: (after) => {
+          expect(after.rows).toContain('mark:false');
+          expect(after.series, 'the series stays').toBe(2);
+          expect(after.depth).not.toContain('s1.tsv');
+          expect(after.depth).toContain('s2.tsv');
+          expect(after.showDepth).toBe(true);
+        }
+      });
+      expect(await generateError(page)).toBe('DEPTH_INVALID');
+    } finally { await page.context().close(); }
+  });
+
+  test(`rev 7: ${mode} the sentence is left out when it is not true: a series removal, and the only series' last file`, async ({ browser }) => {
+    test.setTimeout(420000);
+    const page = await openReachFixture(browser, mode);
+    try {
+      await addDepthSeries(page, rev7Depth(mode, 2));
+      const seriesRow = await page.evaluate(async (stackMode) => {
+        const { state } = await import('./js/state.js');
+        return state.activeDrawing().adv[`${stackMode}_track_slots`].find((row) => row.renderer === 'depth' && row.params.track_index === 0).id;
+      }, mode);
+      await addReachRow(page, { id: 'mark', anchor: seriesRow, setId: setIdOf(mode), mode });
+      const section = await openDepthSources(page, mode);
+      await section.getByRole('button', { name: mode === 'circular' ? 'Remove' : 'Remove series', exact: true }).first().click();
+      await expect(page.locator('[data-choice-prompt]')).toBeVisible();
+      expect(await promptText(page)).not.toContain('stays empty');
+      await page.locator('[data-choice-prompt]').getByRole('button', { name: 'Cancel', exact: true }).click();
+      await removeDepthFile(page, mode);
+      await expect(page.locator('[data-choice-prompt]')).toBeVisible();
+      expect(await promptText(page), 'a second series still has a file').toContain('stays empty');
+      await chooseAsked(page);
+      // The second series' last file, no row reaching it: nothing asks.
+      await removeDepthFile(page, mode);
+      await expectNoQuestion(page);
+    } finally { await page.context().close(); }
+  });
+}
+
+test('rev 7: Linear a moved Depth row leaves with its last file, and a re-added file puts it at the default place', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await generatedLinear(browser);
+  try {
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const rows = state.activeDrawing().adv.linear_track_slots;
+      window.__GBDRAW_APP__.moveLinearTrackSlot(rows.findIndex((row) => row.id === 'depth'), rows.findIndex((row) => row.id === 'gc_content'));
+    });
+    await settleLive(page);
+    const order = async () => (await stackState(page, 'linear')).rows.map((row) => row.split(':')[0]);
+    const moved = await order();
+    await removeDepthFile(page, 'linear');
+    await expectNoQuestion(page);
+    expect(await order()).not.toContain('depth');
+    await addDepthFile(page, 'linear');
+    await settleLive(page);
+    const back = await order();
+    expect(back.at(-1), 'the default place').toBe('depth');
+    expect(moved.at(-1)).not.toBe('depth');
+    await expectGenerates(page);
+  } finally { await page.context().close(); }
+});
+
+// A Linear File removal or clear holding the last file of a series (OV-2284).
+const TESTA_GB = readFileSync('tests/fixtures/b_collide.gb', 'utf8');
+const testaDepth = (series) => [0, 1, 2].map((index) => `TESTA\t${index * 900 + 1}\t${10 + index + series}`).join('\n');
+const twoFiles = async (browser, { holding = [0], other = [], gb = TESTA_GB } = {}) => {
+  const page = await openReachFixture(browser, 'linear');
+  await evaluateWithRetainedPromise(page, async ({ text, on, off, tsvOf, lambdaTsv }) => {
+    const app = window.__GBDRAW_APP__;
+    app.addLinearSeq();
+    app.setLinearSeqPrimaryFile(1, 'gb', new File([text], 'testa.gb', { type: 'text/plain', lastModified: 1 }));
+    await app.refreshLinearRecordSelectors();
+    await window.__GBDRAW_HISTORY__.runUndoable('Setup', () => {
+      on.forEach((series) => app.setLinearDepthFile(app.linearSeqs[1], series, new File([tsvOf[series]], `s${series + 1}.tsv`)));
+      off.forEach((series) => app.setLinearDepthFile(app.linearSeqs[0], series, new File([lambdaTsv], `s${series + 1}.tsv`)));
+    });
+  }, { text: gb, on: holding, off: other, tsvOf: [testaDepth(0), testaDepth(1)], lambdaTsv: rev7Depth('linear', 1).tsv });
+  const ids = await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().adv.linear_track_slots
+    .filter((row) => row.renderer === 'depth').map((row) => [row.params.track_index, row.id]));
+  for (const [series, id] of ids) {
+    if (holding.includes(series)) await addReachRow(page, { id: `mark${series}`, anchor: id, setId: 'marks', mode: 'linear' });
+  }
+  return page;
+};
+const secondCard = (page) => page.locator('[data-linear-source-card]').nth(1);
+const fileCardRemove = async (page, card = secondCard(page), action = 'Remove file') => {
+  await reveal(card);
+  await card.evaluate((node) => node.querySelectorAll('details').forEach((fold) => { fold.open = true; }));
+  await card.getByRole('button', { name: /^Remove GenBank/ }).first().click();
+  const dialog = page.locator('[data-linear-source-removal-dialog]');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: action, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+};
+const LINEAR_FILE_ROUTES = {
+  'File card Remove': (page) => fileCardRemove(page),
+  'the record list Remove File': async (page) => {
+    const list = page.locator('[data-record-list-dialog]');
+    if (!(await list.count())) await secondCard(page).locator('[data-record-list-open]').click();
+    await expect(list).toBeVisible();
+    await list.getByRole('button', { name: 'Select none', exact: true }).click();
+    const question = page.locator('[data-record-remove-file-dialog]');
+    await expect(question).toBeVisible();
+    await question.locator('[data-record-remove-file]').click();
+    await expect(question).toHaveCount(0);
+  },
+  'the primary file set to none': (page) => page.evaluate(() => { window.__GBDRAW_APP__.setLinearSeqPrimaryFile(1, 'gb', null); })
+};
+for (const [route, trigger] of Object.entries(LINEAR_FILE_ROUTES)) {
+  test(`rev 7: Linear ${route} holding a series' last file asks after its own question, as one Undo step`, async ({ browser }) => {
+    test.setTimeout(420000);
+    // The record list opens for a File with more than one record.
+    const page = await twoFiles(browser, { gb: `${TESTA_GB}\n${TESTA_GB.replaceAll('TESTA', 'TESTB')}` });
+    try {
+      await expectGenerates(page);
+      await settleLive(page);
+      const start = await stackState(page, 'linear');
+      await exerciseAsk(page, 'linear', {
+        trigger: () => trigger(page),
+        title: `Remove the File and turn off Track row ${rowNumber(start, 'mark0')}?`,
+        beforeGenerate: async () => {
+          const list = page.locator('[data-record-list-dialog]');
+          if (await list.count()) await list.getByRole('button', { name: 'Close', exact: true }).click();
+        },
+        expectAfter: (after) => {
+          expect(after.rows).toContain('mark0:false');
+          expect(depthRowsOf(after), 'the row leaves').toEqual([]);
+          expect(after.depth).not.toContain('s1.tsv');
+          expect(after.showDepth).toBe(false);
+        }
+      });
+    } finally { await page.context().close(); }
+  });
+}
+
+test('rev 7: Linear File removal: Cancel on the second question keeps the File, returns the focus, and other pending values stay', async ({ browser }, testInfo) => {
+  test.setTimeout(420000);
+  const page = await twoFiles(browser);
+  try {
+    const pending = () => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const { form, adv } = state.activeDrawing();
+      const { show_depth: _showDepth, ...otherForm } = form;
+      const { depth_tracks: _series, linear_track_slots: _slots, linear_track_slots_axis_index: _axis, ...otherAdv } = adv;
+      return JSON.stringify({ otherForm, otherAdv, untouched: adv.linear_track_slots.filter((row) => row.id !== 'depth' && row.id !== 'mark0') });
+    });
+    await page.evaluate(async () => { (await import('./js/state.js')).state.activeDrawing().adv.label_font_size = 29; });
+    const before = await pending();
+    const start = await stackState(page, 'linear');
+    const files = () => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.gb?.name ?? null));
+    const filesBefore = await files();
+    const steps = await undoCount(page);
+    await fileCardRemove(page);
+    await page.locator('[data-choice-prompt]').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
+    await settleLive(page);
+    expect(await files()).toEqual(filesBefore);
+    expect(await stackState(page, 'linear')).toEqual(start);
+    expect(await undoCount(page)).toBe(steps);
+    await expect(secondCard(page).getByRole('button', { name: /^Remove GenBank/ }).first()).toBeFocused();
+    await fileCardRemove(page);
+    await chooseAsked(page);
+    expect(await files()).toEqual([filesBefore[0]]);
+    expect(await pending()).toBe(before);
+    await historyStep(page, 'undo');
+    expect(await files()).toEqual(filesBefore);
+    expect(await stackState(page, 'linear')).toEqual(start);
+    const saved = await savedSession(page, testInfo.outputPath('undo.gbdraw-session.json'));
+    expect(saved.modes.linear.config.adv.linear_track_slots.find((row) => row.id === 'mark0').enabled).toBe(true);
+    await expectGenerates(page);
+  } finally { await page.context().close(); }
+});
+
+test('rev 7: Linear File removal losing two series asks once, with the union of the rows', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await twoFiles(browser, { holding: [0, 1] });
+  try {
+    const start = await stackState(page, 'linear');
+    await exerciseAsk(page, 'linear', {
+      trigger: () => fileCardRemove(page),
+      title: `Remove the File and turn off Track row ${rowNumber(start, 'mark0')} and Track row ${rowNumber(start, 'mark1')}?`,
+      expectAfter: (after) => {
+        expect(after.rows).toEqual(expect.arrayContaining(['mark0:false', 'mark1:false']));
+        expect(depthRowsOf(after)).toEqual([]);
+      }
+    });
+  } finally { await page.context().close(); }
+});
+
+test('rev 7: Linear File removal with another series left says the series stays empty', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await twoFiles(browser, { holding: [0], other: [1] });
+  try {
+    const start = await stackState(page, 'linear');
+    const title = `Remove the File and turn off Track row ${rowNumber(start, 'mark0')}?`;
+    await fileCardRemove(page);
+    await expect(page.locator('[data-choice-prompt]').getByRole('heading', { name: title, exact: true })).toBeVisible();
+    expect(await promptText(page)).toContain('Depth series 1 stays empty, and Generate will ask for a file or its removal.');
+    await chooseAsked(page);
+    expect(await generateError(page)).toBe('DEPTH_INVALID');
+  } finally { await page.context().close(); }
+});
+
+test('rev 7: Linear Empty this slot of the only File holding a series last file asks, as one Undo step', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await openReachFixture(browser, 'linear');
+  try {
+    await addDepthSeries(page, rev7Depth('linear', 1));
+    await addReachRow(page, { id: 'mark', anchor: 'depth', setId: 'marks', mode: 'linear' });
+    const start = await stackState(page, 'linear');
+    await exerciseAsk(page, 'linear', {
+      trigger: () => fileCardRemove(page, page.locator('[data-linear-source-card]').first(), 'Empty this slot'),
+      title: `Remove the File and turn off Track row ${rowNumber(start, 'mark')}?`,
+      generates: false,
+      expectAfter: (after) => {
+        expect(after.rows).toContain('mark:false');
+        expect(depthRowsOf(after)).toEqual([]);
+      }
+    });
+  } finally { await page.context().close(); }
+});
+
+test('rev 7: Linear File removal with no row reaching what it takes asks only its own question', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await twoFiles(browser);
+  try {
+    await setRow(page, 'linear', 'mark0', { enabled: false });
+    await fileCardRemove(page);
+    await expectNoQuestion(page);
+    expect(depthRowsOf(await stackState(page, 'linear'))).toEqual([]);
+    await expectGenerates(page);
+  } finally { await page.context().close(); }
+});
+
+// A Circular managed comparison ring row that leaves with its source (OV-2289).
+const RING_SESSION = 'tests/fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz';
+const loadRingSession = async (browser, { stack = true } = {}) => {
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const page = await context.newPage();
+  await page.addInitScript(() => { window.__LIFECYCLE__ = []; window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent: (event) => window.__LIFECYCLE__.push(event) }; });
+  page.on('dialog', (dialog) => dialog.accept());
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(RING_SESSION);
+  await page.waitForFunction(() => window.__LIFECYCLE__.some((event) => event.name === 'interactiveReady') && !window.__GBDRAW_APP__.sessionImportPending);
+  await page.locator('[data-setting="region-annotations"] input[type=file]').first().setInputFiles({
+    name: 'regions.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from('set_id\tid\tmark\trecord\tstart\tend\nmarks\tm1\thighlight\treference-a\t100\t900\n')
+  });
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().annotationSets.length)).toBeGreaterThan(0);
+  await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true));
+  await addReachRow(page, { id: 'mark', anchor: 'conservation_comparison_b', setId: 'marks', mode: 'circular' });
+  if (!stack) await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(false));
+  return page;
+};
+const removeRing = async (page) => {
+  const button = page.locator('button[title="Remove series"]').first();
+  await reveal(button);
+  await button.click();
+};
+
+test('rev 7: Circular removing a comparison source whose managed ring row another row reaches asks, as one Undo step, and Generate draws', async ({ browser }, testInfo) => {
+  test.setTimeout(420000);
+  const page = await loadRingSession(browser);
+  try {
+    const rings = () => page.evaluate(() => window.__GBDRAW_APP__.circularConservation.series.length);
+    const undoSave = async () => {
+      expect(await rings()).toBe(2);
+      await historyStep(page, 'undo');
+      expect(await rings()).toBe(3);
+      const saved = await savedSession(page, testInfo.outputPath('ring-undo.gbdraw-session.json'));
+      expect(saved.modes.circular.config.adv.circular_track_slots.find((row) => row.id === 'mark').enabled).not.toBe(false);
+      await historyStep(page, 'redo');
+    };
+    await expectGenerates(page);
+    await settleLive(page);
+    const start = await stackState(page, 'circular');
+    await exerciseAsk(page, 'circular', {
+      trigger: () => removeRing(page),
+      title: `Remove the comparison source and turn off Track row ${rowNumber(start, 'mark')}?`,
+      beforeGenerate: undoSave,
+      expectAfter: (after) => {
+        expect(after.rows).toContain('mark:false');
+        expect(after.rows.some((row) => row.startsWith('conservation_comparison_b:'))).toBe(false);
+      }
+    });
+  } finally { await page.context().close(); }
+});
+
+test('rev 7: Circular removing a comparison source no row reaches asks nothing', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await loadRingSession(browser);
+  try {
+    const remove = page.locator('button[title="Remove series"]').nth(1);
+    await reveal(remove);
+    await remove.click();
+    await expectNoQuestion(page);
+    expect((await stackState(page, 'circular')).rows.some((row) => row.startsWith('conservation_comparison_c:'))).toBe(false);
+    await expectGenerates(page);
+  } finally { await page.context().close(); }
+});
+
+test('rev 7: Circular clearing the uploaded comparison files asks, and Cancel keeps them', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await load(browser, TOBACCO);
+  try {
+    const ringId = await evaluateWithRetainedPromise(page, async () => {
+      const { state } = await import('./js/state.js');
+      const app = window.__GBDRAW_APP__;
+      const drawing = state.activeDrawing();
+      drawing.circularConservation.source = 'upload';
+      app.setCircularConservationUploadFiles([new File(['NC_001879.2\tq\t90\t100\t0\t0\t1\t100\t1\t100\t1e-5\t100\n'], 'ring.tsv')]);
+      return drawing.adv.circular_track_slots.find((row) => row.renderer === 'sequence_conservation').id;
+    });
+    await addReachRow(page, { id: 'mark', anchor: ringId, setId: 'plastome_tint', mode: 'circular' });
+    const start = await stackState(page, 'circular');
+    const uploader = page.locator('button[aria-label="Remove BLAST outfmt 6/7 files"]');
+    await reveal(uploader);
+    await exerciseAsk(page, 'circular', {
+      trigger: () => uploader.click(),
+      title: `Remove the comparison source and turn off Track row ${rowNumber(start, 'mark')}?`,
+      generates: false,
+      expectAfter: (after) => {
+        expect(after.rows).toContain('mark:false');
+        expect(after.rows.some((row) => row.startsWith(`${ringId}:`))).toBe(false);
+      }
+    });
+  } finally { await page.context().close(); }
+});

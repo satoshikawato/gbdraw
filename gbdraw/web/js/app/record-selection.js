@@ -31,6 +31,10 @@ import { msg } from '../utils/i18n.js';
  * @typedef {(mode: RecordSelectionMode) => void} AfterRecordSetChangePort
  *   Invalidates what the drawn record set derives (Linear comparison results, the alignment plan).
  * @typedef {(mode: RecordSelectionMode, sourceKey: string) => unknown} RemoveSourcePort
+ */
+/**
+ * Asks when the removal needs its own question, and then makes it as the step `label`; null when it does not.
+ * @typedef {(mode: RecordSelectionMode, sourceKey: string, label: string) => Promise<unknown> | null} AskRemoveSourcePort
  *   Removes a whole file inside the open History step (D-06 Remove File).
  * @typedef {(mode: RecordSelectionMode, keys: RecordDrawKey[]) => unknown} DeleteRecordSettingsPort
  *   Deletes the settings and edits of records inside the open History step (D-08).
@@ -47,6 +51,7 @@ import { msg } from '../utils/i18n.js';
  * @property {CloseAfterDialogChoicePort} closeAfterDialogChoice
  * @property {AfterRecordSetChangePort} afterRecordSetChange
  * @property {RemoveSourcePort} removeSource
+ * @property {AskRemoveSourcePort} askRemoveSource
  * @property {DeleteRecordSettingsPort} deleteRecordSettings
  * @property {PrepareRecordsPort} prepareRecords
  * @property {RecordListRequest[]} autoOpenRequests The files whose upload opens their list (D-04), in
@@ -64,7 +69,7 @@ import { msg } from '../utils/i18n.js';
 /** @param {RecordSelectionOptions} options */
 export const createRecordSelection = ({
   reactive, computed, recordsOff, source, runUndoable, withDialogChoice, closeAfterDialogChoice,
-  afterRecordSetChange, removeSource, deleteRecordSettings, prepareRecords, autoOpenRequests
+  afterRecordSetChange, removeSource, askRemoveSource, deleteRecordSettings, prepareRecords, autoOpenRequests
 }) => {
   /** @param {RecordSelectionMode} mode A failed read leaves the records unread; the list shows what is known. */
   const readRecords = (mode) => prepareRecords(mode).catch(() => null);
@@ -207,17 +212,36 @@ export const createRecordSelection = ({
   };
 
   const closeRemoveFileDialog = () => { removeFileDialog.open = false; };
+  /** @param {RecordSelectionMode} mode @param {string} sourceKey */
+  const closeListOfRemovedFile = (mode, sourceKey) => {
+    const shown = shownList.value;
+    if (shown && shown.mode === mode && shown.sourceKey === sourceKey) closeRecordList();
+  };
   /** D-06: Remove File removes the whole file as one step; Cancel changes nothing. */
-  const resolveRemoveFile = withDialogChoice(() => msg('Remove File'), () => {
+  const removeFileInOneStep = withDialogChoice(() => msg('Remove File'), () => {
     const { mode, sourceKey } = removeFileDialog;
     const removed = removeSource(mode, sourceKey);
     closeAfterDialogChoice(() => {
       closeRemoveFileDialog();
-      const shown = shownList.value;
-      if (shown && shown.mode === mode && shown.sourceKey === sourceKey) closeRecordList();
+      closeListOfRemovedFile(mode, sourceKey);
     });
     return removed;
   }, closeRemoveFileDialog);
+  /**
+   * When the file holds what another track row needs, its own question comes
+   * next, and that choice is the step (`askRemoveSource`).
+   * @param {string} choice
+   */
+  const resolveRemoveFile = (choice) => {
+    const { mode, sourceKey } = removeFileDialog;
+    const asked = choice === 'remove' ? askRemoveSource(mode, sourceKey, msg('Remove File')) : null;
+    if (!asked) return removeFileInOneStep(choice);
+    closeRemoveFileDialog();
+    return asked.then((removed) => {
+      if (removed !== false) closeListOfRemovedFile(mode, sourceKey);
+      return removed;
+    });
+  };
 
   return {
     isDrawn, drawnCount, toggleRecord, setRecordsDrawn, selectShown, deleteSettings, deleteShownOffSettings,

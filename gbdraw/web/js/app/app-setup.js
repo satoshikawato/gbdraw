@@ -181,7 +181,7 @@ import {
 import { createRightDrawerController } from './right-drawer.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
-import { askDepthSourceRemoval, askingTrackRowRemoval, askingTrackRowSwitch } from './track-slot-edits.js';
+import { askTrackSourceRemoval, askingTrackRowRemoval, askingTrackRowSwitch } from './track-slot-edits.js';
 import { createAnnotationEditor } from './annotations.js';
 import { buildLegendStyleRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
@@ -308,7 +308,7 @@ import {
   defaultDepthSeriesLabel,
   reindexDepthSlots,
   removeDepthTrackColumnAt,
-  depthSeriesRowsLeaving,
+  depthSeriesRemovalLoss,
   syncDepthSlotLabels,
   uploadedDepthFileCount
 } from '../services/depth-track-state.js';
@@ -2773,10 +2773,9 @@ export const createAppSetup = () => {
         }
       });
     };
-    const asked = file ? null : askDepthSourceRemoval(askingStackPorts('circular_track_slots'), {
-      kind: 'file',
-      series: idx,
-      leaving: circularTrackSlotEditor.circularDepthRowsLeaving(drawing, nextDepth),
+    const asked = file ? null : askTrackSourceRemoval(askingStackPorts('circular_track_slots'), {
+      kind: 'depth-file',
+      loss: circularTrackSlotEditor.circularDepthSourceLoss(drawing, nextDepth),
       sources: circularDepthSources,
       label: msg('Change uploaded file'),
       apply
@@ -2823,10 +2822,9 @@ export const createAppSetup = () => {
     };
     if (file) return apply();
     const cleared = new Set(targets.map((seq) => seq.uid));
-    const asked = askDepthSourceRemoval(askingStackPorts('linear_track_slots'), {
-      kind: 'file',
-      series: idx,
-      leaving: linearTrackSlotEditor.linearDepthRowsLeaving(drawing, linearSeqs.map((seq) => (
+    const asked = askTrackSourceRemoval(askingStackPorts('linear_track_slots'), {
+      kind: 'depth-file',
+      loss: linearTrackSlotEditor.linearDepthSourceLoss(drawing, linearSeqs.map((seq) => (
         cleared.has(seq.uid) ? clearDepthTrackSourceAt(seq.depth, idx, logicalWidth) : depthFileSlotsFromValue(seq.depth)
       ))),
       sources: linearDepthSources,
@@ -2914,8 +2912,7 @@ export const createAppSetup = () => {
         ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
           slots: drawing.adv.circular_track_slots,
           removedIndex: idx,
-          activeCount: keptSeries,
-          managedPredicate: isDefaultManagedDepthSlot
+          activeCount: keptSeries
         }))
       );
       if (removedBeforeAxis) drawing.adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
@@ -2929,10 +2926,10 @@ export const createAppSetup = () => {
     const idx = Number(index);
     if (sessionOperationAvailability() || !Number.isInteger(idx) || idx < 0) return removeCircularDepthTrack(index);
     const ports = askingStackPorts('circular_track_slots');
-    return askDepthSourceRemoval(ports, {
-      kind: 'series',
+    return askTrackSourceRemoval(ports, {
+      kind: 'depth-series',
       series: idx,
-      leaving: depthSeriesRowsLeaving(ports.rows(), idx, circularSeriesRemoval(idx).keptSeries),
+      loss: depthSeriesRemovalLoss(ports.rows(), idx, circularSeriesRemoval(idx).keptSeries),
       sources: circularDepthSources,
       label: msg('Remove Depth series'),
       apply: (turnOffReaching) => removeCircularDepthTrack(index, turnOffReaching)
@@ -2972,8 +2969,7 @@ export const createAppSetup = () => {
         ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
           slots: drawing.adv.linear_track_slots,
           removedIndex: idx,
-          activeCount: keptSeries,
-          managedPredicate: isDefaultManagedDepthSlot
+          activeCount: keptSeries
         }))
       );
       if (Number.isInteger(previousAxisIndex)) {
@@ -2994,10 +2990,10 @@ export const createAppSetup = () => {
     const logicalWidth = linearDepthLogicalWidth();
     if (sessionOperationAvailability() || !Number.isInteger(idx) || idx < 0 || idx >= logicalWidth) return removeLinearDepthTrack(index);
     const ports = askingStackPorts('linear_track_slots');
-    return askDepthSourceRemoval(ports, {
-      kind: 'series',
+    return askTrackSourceRemoval(ports, {
+      kind: 'depth-series',
       series: idx,
-      leaving: depthSeriesRowsLeaving(ports.rows(), idx, keptLinearSeriesCount()),
+      loss: depthSeriesRemovalLoss(ports.rows(), idx, keptLinearSeriesCount()),
       sources: linearDepthSources,
       label: msg('Remove Depth series'),
       apply: (turnOffReaching) => removeLinearDepthTrack(index, turnOffReaching)
@@ -3055,12 +3051,48 @@ export const createAppSetup = () => {
   const setCircularConservationUploadFiles = (nextFiles) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    files.c_conservation_blasts = normalizeFileList(nextFiles);
-    files.c_conservation_blasts_source = null;
-    files.c_conservation_sequence_sources = [];
-    losatCacheInfo.value = [];
-    reconcileCircularConservation(state.drawingOfMode('circular'));
+    const drawing = state.drawingOfMode('circular');
+    const sourceFiles = normalizeFileList(nextFiles);
+    /** @param {() => void} [turnOffReaching] */
+    const apply = (turnOffReaching) => {
+      files.c_conservation_blasts = sourceFiles;
+      files.c_conservation_blasts_source = null;
+      files.c_conservation_sequence_sources = [];
+      losatCacheInfo.value = [];
+      reconcileCircularConservation(drawing);
+      turnOffReaching?.();
+    };
+    return askRingSourceRemoval(drawing, sourceFiles, seriesOfRingFiles(drawing, sourceFiles), msg('Change uploaded file'), apply) ?? apply();
   };
+  /**
+   * The series a change of the ring files leaves (`reconcileCircularConservation`).
+   * @param {DrawingState} drawing @param {FileLike[]} sourceFiles
+   */
+  const seriesOfRingFiles = (drawing, sourceFiles) => reconcileConservationSeries({
+    sourceFiles,
+    previousSeries: drawing.circularConservation.series,
+    legacyLabels: parseConservationLabelText(drawing.circularConservation.labels)
+  });
+  /**
+   * A change of the comparison sources asks when a managed ring row another row
+   * reaches leaves with its source (`askTrackSourceRemoval`).
+   * @param {DrawingState} drawing @param {FileLike[]} sourceFiles The ring files it leaves.
+   * @param {readonly RawConservationSeriesEntry[]} series The series it leaves. @param {string} label
+   * @param {(turnOffReaching: () => void) => unknown} apply
+   */
+  const askRingSourceRemoval = (drawing, sourceFiles, series, label, apply) => askTrackSourceRemoval(askingStackPorts('circular_track_slots'), {
+    kind: 'comparison',
+    loss: {
+      leaving: circularTrackSlotEditor.circularConservationRowsLeaving(
+        drawing, orderedConservationSources(sourceFiles, { ...drawing.circularConservation, series })
+      ),
+      stayingOn: new Set(),
+      emptySeries: []
+    },
+    sources: () => [files.c_conservation_blasts, files.c_conservation_fastas, ...drawing.circularConservation.series],
+    label,
+    apply
+  });
   // The comparison rings of a Circular drawing follow their source files: the
   // series, whether the rings are on, and the managed stack rows. Each
   // transition that changes the source, its files, or the legacy series names
@@ -3246,18 +3278,22 @@ export const createAppSetup = () => {
         sequenceSources: orderedSequenceSources,
         series: drawing.circularConservation.series
       }, idx);
-      drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...kept.series);
-      drawing.circularConservation.labels = kept.labels;
-      files.c_conservation_blasts = kept.blasts;
-      files.c_conservation_fastas = kept.fastas;
-      files.c_conservation_sequence_sources = kept.sequenceSources;
-      files.c_conservation_blasts_source = kept.blasts.length > 0
-        ? 'losat-cache'
-        : null;
-      drawing.circularConservation.enabled = kept.enabled;
-      losatCacheInfo.value = [];
-      refreshCircularConservationSlots(drawing);
-      return;
+      /** @param {() => void} [turnOffReaching] */
+      const applyKept = (turnOffReaching) => {
+        drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...kept.series);
+        drawing.circularConservation.labels = kept.labels;
+        files.c_conservation_blasts = kept.blasts;
+        files.c_conservation_fastas = kept.fastas;
+        files.c_conservation_sequence_sources = kept.sequenceSources;
+        files.c_conservation_blasts_source = kept.blasts.length > 0
+          ? 'losat-cache'
+          : null;
+        drawing.circularConservation.enabled = kept.enabled;
+        losatCacheInfo.value = [];
+        refreshCircularConservationSlots(drawing);
+        turnOffReaching?.();
+      };
+      return askRingSourceRemoval(drawing, /** @type {FileLike[]} */ (normalizeFileList(kept.blasts)), kept.series, msg('Remove series'), applyKept) ?? applyKept();
     }
     const entry = drawing.circularConservation.series[idx];
     const sourceFiles = getCircularConservationSourceFiles(drawing);
@@ -3269,13 +3305,19 @@ export const createAppSetup = () => {
     }
     if (sourceIndex < 0 && idx < sourceFiles.length) sourceIndex = idx;
     if (sourceIndex < 0 || sourceIndex >= sourceFiles.length) return;
-    if (isCircularConservationUploadSource(drawing)) {
-      files.c_conservation_sequence_sources = (Array.isArray(files.c_conservation_sequence_sources)
-        ? files.c_conservation_sequence_sources
-        : [])
-        .filter((/** @type {unknown} */ _, /** @type {number} */ fileIndex) => fileIndex !== sourceIndex);
-    }
-    setCircularConservationSourceFiles(drawing, sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex));
+    const keptFiles = sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex);
+    /** @param {() => void} [turnOffReaching] */
+    const apply = (turnOffReaching) => {
+      if (isCircularConservationUploadSource(drawing)) {
+        files.c_conservation_sequence_sources = (Array.isArray(files.c_conservation_sequence_sources)
+          ? files.c_conservation_sequence_sources
+          : [])
+          .filter((/** @type {unknown} */ _, /** @type {number} */ fileIndex) => fileIndex !== sourceIndex);
+      }
+      setCircularConservationSourceFiles(drawing, keptFiles);
+      turnOffReaching?.();
+    };
+    return askRingSourceRemoval(drawing, keptFiles, seriesOfRingFiles(drawing, keptFiles), msg('Remove series'), apply) ?? apply();
   };
   // E1: the artifacts of the drawings not shown, in the slot store of the
   // History snapshot service; only its named operations change it.
@@ -6498,7 +6540,8 @@ export const createAppSetup = () => {
       preserveLosatCacheInfo = false,
       layoutEntries = drawing.linearRecordRows,
       alignmentMutation = msg('source set changed.'),
-      retiredRecordKeys = /** @type {string[]} */ ([])
+      retiredRecordKeys = /** @type {string[]} */ ([]),
+      turnOffReaching = /** @type {(() => void) | undefined} */ (undefined)
     } = {}
   ) => {
     const sessionBusy = sessionOperationAvailability();
@@ -6513,6 +6556,7 @@ export const createAppSetup = () => {
     // Removing a File can remove the last source of a Depth series.
     retireLegendStylesOfUnnamedCaptions(() => linearTrackSlotEditor.changeLinearDepthSources(() => {
       changeRecordSources(() => linearSeqs.splice(0, linearSeqs.length, ...next));
+      turnOffReaching?.();
     }));
     const activeUids = new Set(next.map((seq) => seq.uid));
     pendingLinearRecordExpansions.forEach((_, uid) => {
@@ -6617,12 +6661,27 @@ export const createAppSetup = () => {
    * the caller's History step: the removal dialog and Remove File (D-06).
    * @param {Extract<LinearSourceRemovalPlan, { allowed: true }>} plan
    * @param {'clear' | 'delete'} intent
+   * @param {() => void} [turnOffReaching]
    */
-  const removeLinearSource = (plan, intent) => {
+  const removeLinearSource = (plan, intent, turnOffReaching) => {
     const next = [...plan.retainedSequences];
     if (intent === 'clear') next.splice(plan.insertionIndex, 0, createLinearSeq());
-    return applyLinearSeqMutation(state.drawingOfMode('linear'), next);
+    return applyLinearSeqMutation(state.drawingOfMode('linear'), next, { turnOffReaching });
   };
+  /**
+   * A Linear File removal asks, after its own question, when it takes the last
+   * Depth source of a series that another row reaches (`askTrackSourceRemoval`).
+   * @param {readonly Partial<LinearSeq>[]} kept The record cards with a Depth file that stay.
+   * @param {string} label
+   * @param {(turnOffReaching: () => void) => unknown} apply
+   */
+  const askLinearFileRemoval = (kept, label, apply) => askTrackSourceRemoval(askingStackPorts('linear_track_slots'), {
+    kind: 'linear-file',
+    loss: linearTrackSlotEditor.linearDepthSourceLoss(state.activeDrawing(), kept.map((seq) => seq.depth)),
+    sources: linearDepthSources,
+    label,
+    apply
+  });
   /** @param {'clear' | 'delete'} intent */
   const applyLinearSourceRemoval = async (intent) => {
     const sessionBusy = sessionOperationAvailability();
@@ -6637,10 +6696,20 @@ export const createAppSetup = () => {
       closeLinearSourceRemovalDialog();
       return false;
     }
-    const operation = await history.runUndoable(
-      intent === 'clear' ? msg('Clear Linear File') : msg('Delete Linear File'),
-      () => removeLinearSource(plan, intent)
-    );
+    const label = intent === 'clear' ? msg('Clear Linear File') : msg('Delete Linear File');
+    const asked = askLinearFileRemoval(plan.retainedSequences, label, (turnOffReaching) => removeLinearSource(plan, intent, turnOffReaching));
+    if (asked) {
+      // The File's dialog gives way to the second question; its Cancel leaves the File and returns the focus.
+      const returnFocus = linearSourceRemovalReturnFocus.value;
+      closeLinearSourceRemovalDialog({ restoreFocus: false });
+      const answer = await asked;
+      if (answer === false) {
+        linearSourceRemovalReturnFocus.value = returnFocus;
+        void restoreLinearSourceRemovalFocus();
+      } else await focusLinearSourceAfterRemoval(plan.sourceIndex);
+      return answer;
+    }
+    const operation = await history.runUndoable(label, () => removeLinearSource(plan, intent));
     closeLinearSourceRemovalDialog({ restoreFocus: false });
     await focusLinearSourceAfterRemoval(plan.sourceIndex);
     return operation;
@@ -6692,10 +6761,17 @@ export const createAppSetup = () => {
       }) ? RETIRED_LINEAR_RECORD_PRESENTATION : RETIRED_LINEAR_RECORD_REFERENCE)
     });
     const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
-    applyLinearSeqMutation(drawing, linearSeqs.flatMap((entry) => (
+    const nextSeqs = linearSeqs.flatMap((entry) => (
       entry.uid === group.uid ? (keepSource ? [replacement] : [])
         : members.has(entry.uid) ? [] : [entry]
-    )), { alignmentMutation: msg('source replaced.'), retiredRecordKeys: [...members] });
+    ));
+    /** @param {() => void} [turnOffReaching] */
+    const apply = (turnOffReaching) => applyLinearSeqMutation(drawing, nextSeqs, {
+      alignmentMutation: msg('source replaced.'), retiredRecordKeys: [...members], turnOffReaching
+    });
+    const asked = keepSource ? null : askLinearFileRemoval(nextSeqs, msg('Delete Linear File'), apply);
+    if (asked) return asked;
+    apply();
     if (keepSource) {
       pendingLinearRecordExpansions.set(replacement.uid, !seq[field]);
       pendingLinearUploads.add(replacement.uid);
@@ -6809,6 +6885,11 @@ export const createAppSetup = () => {
     }
     return true;
   };
+  /** @param {string} sourceKey The Linear File's key in the record list. */
+  const recordFileRemovalPlan = (sourceKey) => {
+    const intent = /** @type {'clear' | 'delete'} */ (linearSourceGroups.value.length > 1 ? 'delete' : 'clear');
+    return { intent, plan: planLinearSourceRemoval({ sequences: linearSeqs, sourceUid: sourceKey, intent }) };
+  };
   /**
    * D-06 Remove File, inside the dialog's History step: a Linear File is
    * deleted, or cleared when it is the only File; the Circular input loses its
@@ -6824,9 +6905,16 @@ export const createAppSetup = () => {
       }
       return setCircularSourceFile('c_gb', null);
     }
-    const intent = linearSourceGroups.value.length > 1 ? 'delete' : 'clear';
-    const plan = planLinearSourceRemoval({ sequences: linearSeqs, sourceUid: sourceKey, intent });
+    const { intent, plan } = recordFileRemovalPlan(sourceKey);
     return plan.allowed ? removeLinearSource(plan, intent) : false;
+  };
+  /** @param {RecordSelectionMode} listMode @param {string} sourceKey @param {string} label */
+  const askRecordFileRemoval = (listMode, sourceKey, label) => {
+    if (listMode !== 'linear' || dialogChoice.pending.value || history.mutationPending()) return null;
+    const { intent, plan } = recordFileRemovalPlan(sourceKey);
+    return plan.allowed
+      ? askLinearFileRemoval(plan.retainedSequences, label, (turnOffReaching) => removeLinearSource(plan, intent, turnOffReaching))
+      : null;
   };
   const recordSelection = createRecordSelection({
     reactive,
@@ -6844,6 +6932,7 @@ export const createAppSetup = () => {
       similarityAlignmentActions?.clearForMutation?.(msg('record drawing changed.'));
     },
     removeSource: removeRecordSource,
+    askRemoveSource: askRecordFileRemoval,
     deleteRecordSettings,
     // After a Session load the records are read on demand, as Generate reads them.
     prepareRecords: async (listMode) => {

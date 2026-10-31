@@ -31,8 +31,8 @@ for (const leaf of ['conservation-series.js', 'current-option-values.js', 'depth
 const { createCircularTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js')));
 const { createLinearTrackSlotEditor } = await import(pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js')));
 const { paramsKeptOnRendererChange } = await import(pathToFileURL(join(tempRoot, 'services', 'track-slot-validation.js')));
-const { askDepthSourceRemoval, askingTrackRowRemoval, askingTrackRowSwitch } = await import(pathToFileURL(join(tempRoot, 'app', 'track-slot-edits.js')));
-const { depthSeriesRowsLeaving, isDefaultManagedDepthSlot, reconcileManagedDepthSlots } = await import(pathToFileURL(join(tempRoot, 'services', 'depth-track-state.js')));
+const { askTrackSourceRemoval, askingTrackRowRemoval, askingTrackRowSwitch } = await import(pathToFileURL(join(tempRoot, 'app', 'track-slot-edits.js')));
+const { depthSeriesRemovalLoss, depthSourceLoss, dropInvalidManagedDepthSlots, isDefaultManagedDepthSlot, reconcileManagedDepthSlots } = await import(pathToFileURL(join(tempRoot, 'services', 'depth-track-state.js')));
 const { normalizeLinearTrackSlots, placeLinearStackForGenerate } = await import(pathToFileURL(join(tempRoot, 'services', 'linear-track-slot-model.js')));
 
 const depthFile = { name: 'a.depth.tsv', size: 1, lastModified: 1 };
@@ -794,28 +794,29 @@ test('the rows a Depth series removal takes out of the stack: its managed row an
   const slots = [managed('depth_1', 0), managed('depth_2', 1),
     { id: 'cov', renderer: 'depth', enabled: true, width: '9', params: { track_index: 0 } },
     { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true, params: {} }];
-  assert.deepEqual([...depthSeriesRowsLeaving(slots, 0, 1)].sort(), ['cov', 'depth_1']);
-  assert.deepEqual([...depthSeriesRowsLeaving(slots, 1, 1)], ['depth_2']);
-  assert.deepEqual([...depthSeriesRowsLeaving(slots.slice(3), 0, 0)], []);
+  assert.deepEqual([...depthSeriesRemovalLoss(slots, 0, 1).leaving].sort(), ['cov', 'depth_1']);
+  assert.deepEqual([...depthSeriesRemovalLoss(slots, 1, 1).leaving], ['depth_2']);
+  assert.deepEqual([...depthSeriesRemovalLoss(slots.slice(3), 0, 0).leaving], []);
   // A row already off, with nothing changing for it, does not leave.
-  assert.deepEqual([...depthSeriesRowsLeaving([{ ...managed('depth_1', 0), width: '9', enabled: false }, managed('depth_2', 1)], 1, 1)], ['depth_2']);
+  assert.deepEqual([...depthSeriesRemovalLoss([{ ...managed('depth_1', 0), width: '9', enabled: false }, managed('depth_2', 1)], 1, 1).leaving], ['depth_2']);
 });
 
 const depthRemovalPorts = (editor, mode, askChoice, steps = []) => ({
   askChoice, runUndoable: (label, fn) => { steps.push(label); return fn(); }, busy: () => null, rows: editor.slots, mode
 });
+const lossOf = (leaving, { stayingOn = [], emptySeries = [] } = {}) => ({ leaving: new Set(leaving), stayingOn: new Set(stayingOn), emptySeries });
 const twoSeries = { showDepth: true, depthFiles: [depthFile, { ...depthFile, name: 'b.depth.tsv' }] };
 
 for (const mode of ['circular', 'linear']) {
   test(`${mode}: the question of a Depth removal says what happens to the source and the rows, and asks before any write`, async () => {
-    for (const [kind, title] of [['file', 'Remove the Depth file and turn off Track row 5?'], ['series', 'Remove Depth series #1 and turn off Track row 5?']]) {
+    for (const [kind, title] of [['depth-file', 'Remove the Depth file and turn off Track row 5?'], ['depth-series', 'Remove Depth series #1 and turn off Track row 5?'], ['linear-file', 'Remove the File and turn off Track row 5?'], ['comparison', 'Remove the comparison source and turn off Track row 5?']]) {
       const questions = [];
       const steps = [];
       const editor = MODES[mode](REACH_ROWS[mode](), twoSeries);
       const sources = ['s'];
       let turned = null;
-      const asked = askDepthSourceRemoval(depthRemovalPorts(editor, mode, async (request) => { questions.push(request); return 'hide'; }, steps), {
-        kind, series: 0, leaving: new Set(['depth']), sources: () => sources, label: 'Label', apply: (turnOffReaching) => { turned = turnOffReaching; return 'applied'; }
+      const asked = askTrackSourceRemoval(depthRemovalPorts(editor, mode, async (request) => { questions.push(request); return 'hide'; }, steps), {
+        kind, series: 0, loss: lossOf(['depth']), sources: () => sources, label: 'Label', apply: (turnOffReaching) => { turned = turnOffReaching; return 'applied'; }
       });
       assert.ok(asked instanceof Promise);
       assert.equal(turned, null, 'nothing is written before the answer');
@@ -834,21 +835,20 @@ for (const mode of ['circular', 'linear']) {
   test(`${mode}: a Depth removal asks nothing when no row reaches what leaves, and does nothing on Cancel or a changed draft`, async () => {
     const editor = MODES[mode](REACH_ROWS[mode](), twoSeries);
     const never = () => assert.fail('no write');
-    const request = { kind: 'series', series: 1, leaving: new Set(['depth_2']), sources: () => ['s'], label: 'Label', apply: never };
-    assert.equal(askDepthSourceRemoval(depthRemovalPorts(editor, mode, neverAsked), request), null, 'the caller removes at once');
-    const leaving = new Set(['depth']);
-    const reaching = { ...request, series: 0, leaving };
-    assert.equal(await askDepthSourceRemoval(depthRemovalPorts(editor, mode, async () => 'cancel'), reaching), false);
+    const request = { kind: 'depth-series', series: 1, loss: lossOf(['depth_2']), sources: () => ['s'], label: 'Label', apply: never };
+    assert.equal(askTrackSourceRemoval(depthRemovalPorts(editor, mode, neverAsked), request), null, 'the caller removes at once');
+    const reaching = { ...request, series: 0, loss: lossOf(['depth']) };
+    assert.equal(await askTrackSourceRemoval(depthRemovalPorts(editor, mode, async () => 'cancel'), reaching), false);
     // A file removed by another route while it asked.
     let current = ['a'];
     let answer;
-    const asking = askDepthSourceRemoval(depthRemovalPorts(editor, mode, () => new Promise((resolve) => { answer = resolve; })), { ...reaching, sources: () => current });
+    const asking = askTrackSourceRemoval(depthRemovalPorts(editor, mode, () => new Promise((resolve) => { answer = resolve; })), { ...reaching, sources: () => current });
     current = ['b'];
     answer('hide');
     assert.equal(await asking, false);
     // Busy at the answer.
     let isBusy = false;
-    const busyAsking = askDepthSourceRemoval({ ...depthRemovalPorts(editor, mode, () => new Promise((resolve) => { answer = resolve; })), busy: () => isBusy }, reaching);
+    const busyAsking = askTrackSourceRemoval({ ...depthRemovalPorts(editor, mode, () => new Promise((resolve) => { answer = resolve; })), busy: () => isBusy }, reaching);
     isBusy = true;
     answer('hide');
     assert.equal(await busyAsking, false);
@@ -858,14 +858,85 @@ for (const mode of ['circular', 'linear']) {
 
 test('the rows a Depth file removal takes out: the series managed row while no file is left, in both editors', () => {
   const circular = MODES.circular(REACH_ROWS.circular(), { showDepth: true, depthFiles: [depthFile] });
-  assert.deepEqual([...circular.editor.circularDepthRowsLeaving(circular.state.drawingOfMode('circular'), [[null]])], ['depth']);
-  assert.deepEqual([...circular.editor.circularDepthRowsLeaving(circular.state.drawingOfMode('circular'), [[depthFile]])], []);
+  assert.deepEqual([...circular.editor.circularDepthSourceLoss(circular.state.drawingOfMode('circular'), [[null]]).leaving], ['depth']);
+  assert.deepEqual([...circular.editor.circularDepthSourceLoss(circular.state.drawingOfMode('circular'), [[depthFile]]).leaving], []);
   const linear = MODES.linear(REACH_ROWS.linear(), { showDepth: true, depthFiles: [depthFile] });
   linear.state.linearSeqs.push({ depth: [depthFile] });
   const drawing = linear.state.drawingOfMode('linear');
   // Another File still holds the series.
-  assert.deepEqual([...linear.editor.linearDepthRowsLeaving(drawing, [[null], [depthFile]])], []);
-  assert.deepEqual([...linear.editor.linearDepthRowsLeaving(drawing, [[null], [null]])], ['depth']);
+  assert.deepEqual([...linear.editor.linearDepthSourceLoss(drawing, [[null], [depthFile]]).leaving], []);
+  assert.deepEqual([...linear.editor.linearDepthSourceLoss(drawing, [[null], [null]]).leaving], ['depth']);
+});
+
+test('what a Depth source change does to a stack: off rows stay off, manual rows stay on, and a series stays empty only beside a sourced one', () => {
+  const managed = (id, track_index, extra = {}) => ({ id, renderer: 'depth', enabled: true, params: { track_index }, ...extra });
+  const off = managed('depth', 0, { enabled: false });
+  const cov = managed('cov', 0);
+  const other = managed('depth_2', 1);
+  const on = managed('depth_1', 0);
+  const lose0 = depthSourceLoss([on, cov, other], [0, 1], [1]);
+  assert.deepEqual([...lose0.leaving], ['depth_1']);
+  assert.deepEqual([...lose0.stayingOn], ['cov']);
+  assert.deepEqual(lose0.emptySeries, [0]);
+  const loseAll = depthSourceLoss([on, other], [0, 1], []);
+  assert.deepEqual([...loseAll.leaving].sort(), ['depth_1', 'depth_2']);
+  assert.deepEqual(loseAll.emptySeries, [], 'with no source left the drawing draws no Depth, so nothing refuses');
+  const offLoss = depthSourceLoss([off, other], [0, 1], [1]);
+  assert.deepEqual([...offLoss.leaving], [], 'a row turned off stays');
+  assert.deepEqual([...offLoss.stayingOn], []);
+  // A manual row of a series that already had no file is not this removal's.
+  assert.deepEqual([...depthSourceLoss([managed('cov', 2), other], [1], []).stayingOn], []);
+  const { slots, additions } = reconcileManagedDepthSlots({ slots: [off], previousSourced: [0], sourced: [] });
+  assert.deepEqual(slots, [off]);
+  assert.deepEqual(additions, []);
+  assert.deepEqual(reconcileManagedDepthSlots({ slots: [off], previousSourced: [], sourced: [0] }), { slots: [off], additions: [] }, 'a file added again adds no row and does not turn it on');
+  assert.equal(off.enabled, false);
+  assert.deepEqual(dropInvalidManagedDepthSlots({ slots: [off, on], activeCount: 1, sourced: [] }).map((slot) => slot.id), ['depth'], 'Load keeps it by the same rule');
+});
+
+for (const mode of ['circular', 'linear']) {
+  test(`${mode}: a manual Depth row another row reaches turns off with the removal, and the question says so and that the series stays empty`, async () => {
+    const rows = REACH_ROWS[mode]();
+    rows.find((row) => row.id === 'depth').id = 'cov';
+    rows.find((row) => row.id === 'mark').params.anchor_slot = 'cov';
+    const editor = MODES[mode](rows, twoSeries);
+    const questions = [];
+    let applied = false;
+    const answer = await askTrackSourceRemoval(depthRemovalPorts(editor, mode, async (request) => { questions.push(request); return 'hide'; }), {
+      kind: 'depth-file', loss: lossOf([], { stayingOn: ['cov'], emptySeries: [0] }), sources: () => [], label: 'Label',
+      apply: (turnOffReaching) => { applied = true; turnOffReaching(); return 'applied'; }
+    });
+    assert.equal(answer, 'applied');
+    assert.equal(applied, true);
+    assert.equal(questions[0].title, 'Remove the Depth file and turn off Track row 3 and Track row 5?');
+    assert.deepEqual(questions[0].items, ['Track row 5 (mark)']);
+    assert.equal(questions[0].description, `Depth series 1 stays empty, and Generate will ask for a file or its removal. Track row 3 (cov) has no Depth file left. It stays in the stack, turned off. ${REACH_SENTENCE}`);
+    assert.equal(enabledOf(editor).cov, false);
+    assert.equal(enabledOf(editor).mark, false);
+  });
+
+  test(`${mode}: a manual Depth row no row reaches asks nothing and stays on`, () => {
+    const rows = REACH_ROWS[mode]().filter((row) => row.id !== 'mark');
+    rows.find((row) => row.id === 'depth').id = 'cov';
+    const editor = MODES[mode](rows, twoSeries);
+    assert.equal(askTrackSourceRemoval(depthRemovalPorts(editor, mode, neverAsked), {
+      kind: 'depth-file', loss: lossOf([], { stayingOn: ['cov'], emptySeries: [0] }), sources: () => [], label: 'Label', apply: () => assert.fail('no write')
+    }), null);
+    assert.equal(enabledOf(editor).cov, true);
+  });
+}
+
+test('circular: the managed ring rows a comparison change takes out, read by the question and the sync, only while the stack is in use', () => {
+  const ring = (id, key) => ({ id, renderer: 'sequence_conservation', enabled: true, side: 'inside', params: { managed: 'circular_conservation', series_key: key } });
+  const rows = [...REACH_ROWS.circular(), ring('ring_a', 'a'), ring('ring_b', 'b'), ring('ring_dup', 'a')];
+  const { editor, state } = MODES.circular(rows, { showDepth: true, depthFiles: [depthFile] });
+  const drawing = state.drawingOfMode('circular');
+  drawing.adv.circular_track_slots_enabled = false;
+  assert.deepEqual([...editor.circularConservationRowsLeaving(drawing, [{ sourceKey: 'b' }])], []);
+  drawing.adv.circular_track_slots_enabled = true;
+  assert.deepEqual([...editor.circularConservationRowsLeaving(drawing, [{ sourceKey: 'b' }])].sort(), ['ring_a', 'ring_dup']);
+  assert.deepEqual([...editor.circularConservationRowsLeaving(drawing, [{ sourceKey: 'a' }, { sourceKey: 'b' }])], ['ring_dup'], 'a second row of one source goes, as the sync takes it');
+  assert.deepEqual([...editor.circularConservationRowsLeaving(drawing, [])].sort(), ['ring_a', 'ring_b', 'ring_dup']);
 });
 
 // Generate's placement as run-analysis.js writes it into the draft.
@@ -882,8 +953,8 @@ test('linear: a Generate writes the series height into a blank Depth row, as a r
   generateLinearDraft(drawing, drawing.adv.depth_tracks);
   assert.equal(row().height, '10px');
   assert.equal(isDefaultManagedDepthSlot(row()), true, 'a row height is also written to its series, so it says nothing about the row');
-  assert.deepEqual([...linear.editor.linearDepthRowsLeaving(drawing, [[null]])], ['depth']);
-  assert.deepEqual([...depthSeriesRowsLeaving(drawing.adv.linear_track_slots, 0, 0)], ['depth']);
+  assert.deepEqual([...linear.editor.linearDepthSourceLoss(drawing, [[null]]).leaving], ['depth']);
+  assert.deepEqual([...depthSeriesRemovalLoss(drawing.adv.linear_track_slots, 0, 0).leaving], ['depth']);
 });
 
 test('linear: a Depth row with a typed height leaves with its last file, and its series keeps the height', () => {
@@ -893,7 +964,7 @@ test('linear: a Depth row with a typed height leaves with its last file, and its
   linear.editor.setLinearTrackSlotHeight(row(), '40');
   assert.equal(drawing.adv.depth_tracks[0].height, 40);
   assert.equal(isDefaultManagedDepthSlot(row()), true);
-  assert.deepEqual([...linear.editor.linearDepthRowsLeaving(drawing, [[null]])], ['depth']);
+  assert.deepEqual([...linear.editor.linearDepthSourceLoss(drawing, [[null]]).leaving], ['depth']);
   linear.editor.changeLinearDepthSources(() => { linear.state.linearSeqs[0].depth = [null]; });
   assert.equal(row(), undefined);
   assert.equal(drawing.adv.depth_tracks[0].height, 40);
@@ -936,7 +1007,7 @@ for (const [name, row, leaves] of LEAVES_WITH_FILE) {
     const linear = MODES.linear([linearRow('features', 'features', {}, 'overlay'), row], { showDepth: true, depthFiles: [depthFile] });
     const drawing = linear.state.drawingOfMode('linear');
     assert.equal(isDefaultManagedDepthSlot(row), leaves);
-    assert.deepEqual([...linear.editor.linearDepthRowsLeaving(drawing, [[null]])], leaves ? [row.id] : []);
+    assert.deepEqual([...linear.editor.linearDepthSourceLoss(drawing, [[null]]).leaving], leaves ? [row.id] : []);
     const { slots } = reconcileManagedDepthSlots({ slots: drawing.adv.linear_track_slots, previousSourced: [0], sourced: [] });
     assert.equal(slots.some((slot) => slot.id === row.id), !leaves);
   });

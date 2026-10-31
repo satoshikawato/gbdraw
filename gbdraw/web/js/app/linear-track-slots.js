@@ -5,7 +5,7 @@ import {
   activeDepthTrackIndices,
   depthTrackConfigForEdit,
   depthTrackEditDefaults,
-  depthRowsLeaving,
+  depthSourceLoss,
   depthTrackMatrixWidth,
   reconcileManagedDepthSlots
 } from '../services/depth-track-state.js';
@@ -802,25 +802,21 @@ export const createLinearTrackSlotEditor = ({
   // Managed Depth rows follow Depth sources (PD-OI-058), as in Circular. A
   // manual row left on a series without a source reports a row issue
   // (PD-OI-083); a logical series itself is kept (PD-OI-025).
-  /** @param {LinearTrackSlot[]} slots @param {number[]} previousSourced @param {number[]} sourced */
-  const reconciledLinearDepthSlots = (slots, previousSourced, sourced) => reconcileManagedDepthSlots({ slots, previousSourced, sourced });
   /**
-   * The rows a Depth file removal takes out of the stack, from the Depth file
+   * What a Depth file or File removal does to the stack, from the Depth file
    * rows it would leave. It writes nothing.
-   * @param {DrawingState} drawing @param {DepthFileSlots[]} nextDepth One per File.
-   * @returns {Set<string>}
+   * @param {DrawingState} drawing @param {(DepthFileSlots | undefined)[]} nextDepth One per record card.
    */
-  const linearDepthRowsLeaving = (drawing, nextDepth) => {
-    const slots = Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : [];
-    return depthRowsLeaving(slots, reconciledLinearDepthSlots(
-      slots, linearSourcedDepthTrackIndexesForState(state), activeDepthTrackIndices(nextDepth)
-    ).slots);
-  };
+  const linearDepthSourceLoss = (drawing, nextDepth) => depthSourceLoss(
+    Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : [],
+    linearSourcedDepthTrackIndexesForState(state),
+    activeDepthTrackIndices(/** @type {DepthFileSlots[]} */ (nextDepth))
+  );
   /** @param {DrawingState} drawing @param {number[]} previousSourced */
   const reconcileLinearDepthSlots = (drawing, previousSourced) => {
     const slots = Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : [];
     if (slots.length === 0 && !drawing.adv.linear_track_slots_enabled) return;
-    const { slots: nextSlots, additions } = reconciledLinearDepthSlots(slots, previousSourced, linearSourcedDepthTrackIndexesForState(state));
+    const { slots: nextSlots, additions } = reconcileManagedDepthSlots({ slots, previousSourced, sourced: linearSourcedDepthTrackIndexesForState(state) });
     if (additions.length === 0 && nextSlots.length === slots.length) return;
     const previousAxisIndex = clampLinearTrackAxisIndex(drawing.adv.linear_track_slots_axis_index, slots.length);
     if (previousAxisIndex !== null) {
@@ -1100,7 +1096,7 @@ export const createLinearTrackSlotEditor = ({
     linearTrackRendererLabel,
     normalizeLinearTrackSlots: normalizeCurrentSlots,
     changeLinearDepthSources,
-    linearDepthRowsLeaving,
+    linearDepthSourceLoss,
     ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetLinearTrackSlotsFromSimpleControls,
       setLinearTrackSlotsEnabled,
