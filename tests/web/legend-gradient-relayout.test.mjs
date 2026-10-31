@@ -165,6 +165,60 @@ test('OV-1741: a Circular compact gradient block laid out again takes Python\'s 
   assert.deepEqual(translateOf(maxLabel), [gradient.maxLabelX, gradient.scaleLabelY]);
 });
 
+// PD-OI-110: the similarity-ring block, as Python writes it (render/groups/circular/legend.py), laid out again
+// from wrong positions, takes the positions Python's layout gives (tests/fixtures/legend_layout_vectors.json).
+const ringBlockSvg = (options, rows, minLabel) => {
+  const svg = circularGradientSvg(options, [], minLabel);
+  const text = (content, anchor = 'start') => `<text font-family="${options.fontFamily}" font-size="${options.fontSize}" `
+    + `text-anchor="${anchor}" transform="translate(3,4)">${content}</text>`;
+  const swatch = '<path d="M 0,0 z" fill="#123456" stroke="none" stroke-width="0" transform="translate(3,4)" />';
+  const solids = rows.filter((row) => row.type === 'solid').map((row) => `<g data-legend-key="${row.key}">`
+    + `<path d="M 0,0 z" fill="#000" stroke="${row.stroke}" stroke-width="${row.strokeWidth}" transform="translate(3,4)" />`
+    + `${text(row.name)}</g>`).join('');
+  const rings = rows.filter((row) => row.type === 'ring').map((row, index) => `<g data-legend-key="${row.key}" `
+    + `data-source-index="${index}" data-track-index="${index + 1}">${row.swatch ? swatch : ''}${text(row.name)}</g>`).join('');
+  const band = '<g data-gbdraw-role="conservation-identity-band"><linearGradient id="band"><stop offset="0%" stop-color="#fff" />'
+    + '</linearGradient><path d="M 0,0 z" fill="url(#band)" stroke="none" stroke-width="0" transform="translate(3,4)" />'
+    + `${text('identity')}${text(minLabel)}${text('100%', 'end')}</g>`;
+  const content = '<svg xmlns="http://www.w3.org/2000/svg"><g id="legend"><path d="M 0,0 z" fill="none" stroke="none" stroke-width="0" />'
+    + `${solids ? `<g id="feature_legend">${solids}</g>` : ''}`
+    + '<g id="conservation_identity_legend" data-gbdraw-role="comparison-legend" data-gbdraw-orientation="circular">'
+    + `${text('outer')}${rings}${text('inner')}${band}</g></g></svg>`;
+  const ringSvg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+  ringSvg.setAttribute(COMPOSITION, svg.getAttribute(COMPOSITION));
+  ringSvg.setAttribute(SCHEMA, svg.getAttribute(SCHEMA) || '');
+  return ringSvg;
+};
+
+for (const edit of ['solid rows and rings of several colors, left', 'solid rows and one-color rings, top']) {
+  test(`PD-OI-110: a similarity-ring block laid out again takes Python's positions (${edit})`, async () => {
+    const source = vector('synthetic circular', edit);
+    const rings = source.expected.rings;
+    const svg = ringBlockSvg(source.options, source.rows.map((row) => ({ ...row, name: row.key })), rings.minLabelText);
+    const actions = layOut();
+    await actions.prepareLegendLayout();
+    assert.ok(actions.layOutLegend(svg));
+    const block = svg.querySelector('#conservation_identity_legend');
+    assert.deepEqual(translateOf(block), [source.expected.gradientX, source.expected.gradientY]);
+    const [outer, inner] = block.children.filter((child) => child.localName === 'text');
+    assert.deepEqual(translateOf(outer), [0, rings.outerCaptionY]);
+    assert.deepEqual(translateOf(inner), [0, rings.innerCaptionY]);
+    const rows = block.children.filter((child) => child.localName === 'g' && child.hasAttribute('data-legend-key'));
+    assert.equal(rows.length, rings.rows.length);
+    rings.rows.forEach((expected, index) => {
+      assert.equal(rows[index].getAttribute('data-legend-key'), expected.key);
+      assert.deepEqual(translateOf(rows[index].querySelector('text')), [expected.textX, expected.y], `${expected.key} name`);
+      if (rings.showSwatches) assert.deepEqual(translateOf(rows[index].querySelector('path')), [expected.swatchX, expected.y]);
+    });
+    const band = block.querySelector('[data-gbdraw-role="conservation-identity-band"]');
+    assert.deepEqual(translateOf(band.querySelector('path')), [0, rings.bandY]);
+    const [label, minLabel, maxLabel] = band.children.filter((child) => child.localName === 'text');
+    assert.deepEqual(translateOf(label), [rings.bandLabelX, rings.bandY]);
+    assert.deepEqual(translateOf(minLabel), [rings.minLabelX, rings.scaleLabelY]);
+    assert.deepEqual(translateOf(maxLabel), [rings.maxLabelX, rings.scaleLabelY]);
+  });
+}
+
 // The fake DOM's textContent, which the cases above read and write, keeps
 // mixed content in document order.
 test('fake SVG DOM: textContent reads mixed content in document order', () => {

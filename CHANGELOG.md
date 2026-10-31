@@ -12,6 +12,154 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
+
+- Patch release of 0.14.3. Sessions are still saved as Session version 49; Sessions saved by
+  0.14.3 open as before. See the [full release notes](./docs/RELEASE_NOTES_0.14.4.md).
+- Added: similarity-ring color schemes. `--conservation_color_scheme`
+  (`same`, the default; `ten`; `per_five`), the config key
+  `objects.conservation.color_scheme`, and `ComparisonRingOptions.color_scheme`
+  (`None` keeps the config's scheme) color the rings without a color of their
+  own by drawn position from the outermost ring. `--conservation_colors`
+  accepts `auto` for such a ring, and a Python ring track with `color=None` no
+  longer requires every ring to leave its color unset.
+- Added: `--collinear_anchor_mode {all,rbh}` and
+  `--collinear_merge_orientation {strand,order}`, the two Collinear settings
+  that only the Web app had, and the Python field
+  `LinearComparisonOptions.collinearity_infer_orthogroups` (default `False`).
+- Changed: the Circular legend lists the drawn similarity rings by name from
+  `outer` to `inner` above one `identity` band, with a swatch per ring when the
+  ring colors differ. It replaces the `Conservation identity` row and the
+  per-ring gradient rows.
+- Changed: in the Web app, Undo and Redo of a track row's switch that also turned off an Overlay row
+  starting at or extending to that row, and of **Hide GC Content** or **Hide GC Skew** with a Circular
+  custom stack or Circular track widths or radii, apply at once, and a Save after the Undo holds the
+  rows. Turning those hides off by hand applies on Generate. An Overlay row turned back on by hand
+  while its track is back returns at once with the values of the last Generate, and a row that left
+  when **Use custom stack** changed returns when it changes back.
+- Fixed: a CDS whose location crosses a circular record's origin, such as
+  `complement(join(3717939..3718359,1..656))`, no longer makes LOSATP
+  Pairwise links and Collinear blocks that use it span the whole record. The
+  link or block covers the CDS's own short arc and is drawn as one piece on
+  each side of the origin, both carrying the same block and protein metadata
+  (OV-2258).
+- Fixed: a Similarity alignment anchored on a CDS that crosses a circular
+  record's origin centers on the middle of that CDS instead of the middle of
+  the record (OV-2259).
+- Fixed: gbdraw imports again on Python 3.14 and later (OV-2196). `Traversable` is read
+  from `importlib.resources.abc`, because Python 3.14 removed `importlib.abc.Traversable`.
+- Fixed: the Circular legend lists only the similarity rings a slot draws; a
+  ring of a disabled `sequence_conservation` slot no longer appears (OV-2167).
+- Fixed: in the Web app, a Legend name that joins another Legend row of the
+  same color now keeps that row where it was after Generate as well, unless
+  moving the renamed rules would recolor another feature. A feature given a new
+  Legend name apart from the rest of its row now shows its new row at once where
+  Generate draws it, instead of last, when every named color rule is of one
+  feature type.
+- Changed: in the Web app, these settings are live edits that rerender the
+  shown Result, which equals a Generate: **Species**, **Default font size** and
+  the Linear definition row **Size**, **Weight**, and **Color**; record names
+  (Linear **Organism / strain**, Circular **Record label** and **Subtitle**,
+  and the record popup's name fields); the **Dinucleotide content/skew**
+  **Window**; Region Annotation **Fill color** and **Line color**; Comparison
+  **Match height**; **Center Reserved Radius**; and a Linear custom-stack row's
+  **Height**. **Strain**, **Keep Full Definition**, and the Linear subtitle
+  still apply on Generate.
+- Changed: in the Web app, **Show GC Content**, **Show GC Skew**, **Show Depth**, **Hide GC
+  Content**, **Hide GC Skew**, the on/off switch and removal of a GC content, GC skew, or Depth
+  row of the custom stack, and **Use custom stack** redraw the current Result at once, also for
+  a track the Result does not draw yet, as **Generate Diagram** would draw it. The track comes
+  back as the last Generate built it; other changed values of its row apply on Generate. A
+  note names the cases that wait for Generate (a track the Result did not draw when its Session
+  was loaded, a Depth file change, a row added since the last Generate, **Use custom stack**
+  after a Session load or while Region Annotation sets wait for Generate).
+- Changed: Region Annotation colors, a Linear custom-stack row's **Height**,
+  and each record popup and File card name field show their own **Live edit**
+  or **Applies on Generate** note: an item with a Legend label, an item added
+  since the last Generate, and a features or Depth row apply on Generate.
+- Changed: in the Web app, **Save Session** stores an input file that the Session uses more than once (for example
+  one Depth file shown as two series) only once, so such a Session file is smaller.
+- Changed: in the Web app, turning off a track that another custom stack row starts at or
+  extends to (an Overlay row's anchor or **Extend to**) with the row's switch (Circular and
+  Linear), or with **Hide GC Content** or **Hide GC Skew** while **Use custom stack** is on
+  (Circular), asks first: the dialog names those rows and offers to turn the track and those
+  rows off as one Undo step, or Cancel. The track no longer hides alone into a stack that
+  **Generate Diagram** refuses.
+- Changed: after a Session load, **Use custom stack** set the other way than the Session saved
+  it, on a Circular Result drawn with a custom stack or track widths or radii, applies on
+  Generate, with every track it would hide or show, instead of leaving the stack and hiding
+  tracks from it.
+- Changed: partial feature ends are drawn open in Linear and Circular diagrams: no arrowhead
+  and no block stroke on that edge. This covers ends written as partial in the file
+  (`<1..1635`, `48045..>48169`, `complement(<1..242)`) and ends cut by `--region` or a
+  records-table `region` (OV-2272).
+- Changed: LOSATP Collinear blocks have one set of defaults on every surface.
+  Similarity-group inference is off by default on the CLI and in the Python
+  API too (`--collinear_infer_orthogroups off`), and the Web Collinear
+  **Max target seqs** and **Max hits per protein for groups** are unbounded by
+  default, as on the CLI. A Session, request, or recorded command that names
+  Collinear without the inference setting still replays with inference on.
+- Changed: `--collinear_unit_mode`, `--collinear_max_conflicts_in_merge_gap`,
+  and `--collinear_max_paralog_links_per_orthogroup` are listed in
+  `gbdraw linear --help`.
+- Changed: in the Web app, **Search between** shows only while **Build
+  similarity groups with within-record searches** is on, and **Max hits per
+  protein for groups** only while it is on or **Anchor mode** is All hits.
+  Without similarity groups, Collinear searches only the displayed pairs on
+  every surface, whatever **Search between** or `--collinear_search_scope`
+  holds; the drawn blocks are the same. Collinear block rows built without
+  similarity groups no longer name a group scope in their popup.
+- Fixed: in the Web app, a color picked without a pointer first (a picker
+  opened from the keyboard) is now one **Undo** step and applies as its
+  setting does; before, Undo skipped it (OV-2243).
+- Fixed: in the Web app, a feature color change for a color rule whose Legend row another rule
+  of the same name and color also draws now shows that row where Generate draws it at once;
+  since 0.14.0 it stayed in its old place until the next Generate (OV-2264).
+- Fixed: after a Legend name edit, a feature color change, or a feature color reset that
+  adds, joins, splits off, or moves a color rule's Legend row, the Web app's Legend shows the
+  rows at once in the order Generate draws them, including a row of another feature type and
+  an old row the edit moves, instead of first showing them elsewhere and then jumping. Rows
+  placed this way do not count as a hand-edited Legend order.
+- Fixed: in the Web app, a color rule edit is no longer refused as a Legend conflict when another
+  rule's Legend row shows a Legend color of its own, such as a type row's Legend color kept by a
+  Legend name given in the feature popup; 0.14.3 refused every such edit without a message (OV-2265).
+- Fixed: on a Result loaded from a Session saved without a render request (Session versions 27
+  to 30), settings no longer say **Live edit** while nothing applies until Generate.
+- Fixed: in the Web app, **Save Session** refuses, before downloading anything, a Session that would expand beyond the 512 MiB that **Load Session** opens, and names its size and its largest inputs (OV-2240).
+- Fixed: in the Web app, **Save Session** also refuses, before downloading anything, a Session whose gzip file is over the 200 MiB that **Load Session** opens, and names its size and its largest inputs (OV-2245).
+- Fixed: a region crop marks every cut end as partial. A minus-strand feature cut by the
+  region kept no `<`/`>` marker (OV-2273), and partial markers written in the file were
+  dropped by any crop (OV-2274).
+- Fixed: a block outline with one open end joins its corners at the closed end (OV-2275).
+- Fixed: in the Web app, after the drawn records of a Linear Session whose records had been
+  aligned or moved changed (a File removed, replaced, or added; a record turned off),
+  **Generate Diagram** failed with an unnamed error (`UNKNOWN`) instead of drawing; since 0.14.3
+  at least. The request now carries the places of the records it draws, and an added record
+  starts at its default place (OV-2291).
+- Fixed: Collinear blocks are chained into the longest runs of each record pair and orientation.
+  A run no longer splits where one gene has a second anchor, where a single link continues it,
+  or where a compatible cluster sits within **Max unit gap** but not next to it
+  (OV-2294, OV-2295, OV-2296). Saved derived LOSATP results are rebuilt once on their next use.
+- Fixed: Collinear block calling no longer slows down as **Max unit gap** grows; 2000 anchors
+  took seconds at a gap of 1000 and now take tens of milliseconds at any gap.
+- Fixed: Similarity groups draws every record pair between adjacent Linear rows instead of failing
+  when a row holds two or more records, and a Session saved on such a layout stores the drawn
+  pairs (OV-2297).
+- Fixed: **Max hits per protein for groups** (`--losatp_member_max_hits`) no longer counts a
+  protein's hit to itself (OV-2298).
+- Fixed: the bitscore normalization of a within-record search no longer takes its scale from self
+  hits; a within-record table with fewer than 12 other hits uses the square-root-of-lengths
+  fallback. Group memberships can change (OV-2299).
+- Fixed: the help text of the Collinear options and the Collinear tutorial
+  describe what each setting changes, and the tutorial commands state
+  `--collinear_infer_orthogroups on` (OV-2302).
+- Removed: the **Block e-value** row of the Collinear match popup, the `collinearity_block_evalue`
+  column of the block table, and the `data-collinearity-block-evalue` SVG attribute; the value has
+  been empty since 0.14.0 (OV-2300).
+- Removed: the Collinear anchor mode `one_to_one` and the merge orientation
+  `either`. A saved `either` reads as `strand`, which it drew as; a saved
+  `one_to_one` reads as `rbh`, and the web app lists that change at Load.
+
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
 
 - Patch release of 0.14.2. Sessions are saved as Session version 49, which gbdraw 0.14.0 to 0.14.2

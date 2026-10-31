@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
 const { load, generate, download } = require('./helpers/mode-transition.cjs');
-const { reveal, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { reveal, getDiagramWorkerActivity, settleLive } = require('./helpers/app-lifecycle.cjs');
 
 const inspect = (page, mode) => page.evaluate(async mode => {
   const { state: s } = await import('./js/state.js');
@@ -151,7 +151,10 @@ for (const width of [1440, 390]) {
       for (const input of inputs) await input.fill('10PX');
       await generate(page);
       expect((await inspect(page, mode)).svg).toBe(control.svg);
-      // Save an inactive row while keeping the last Result and canonical committed request.
+      // Save an inactive row with its pixel drafts. Turning the GC content row
+      // off hides its track live (PD-OI-104 rev 5, D-201), so the saved request
+      // is the live Result's: the last Generate's without the GC content slot
+      // and the rows that name it.
       // Save refuses a stack whose enabled row names a disabled slot, so a row
       // that extends to or anchors on the GC track (the Circular tint,
       // `to_slot=gc_content`) is turned off and on with it.
@@ -160,6 +163,10 @@ for (const width of [1440, 390]) {
       for (const id of [...linked, 'gc_content']) {
         await page.locator(`[data-capture="${mode}-track-slot-${id}"]`).getByTitle('Enabled', { exact: true }).uncheck();
       }
+      await settleLive(page);
+      const hidden = await inspect(page, mode);
+      expect(hidden.request.diagramOptions.tracks[`${mode}TrackSlots`].map(slot => slot.id)).toEqual(
+        control.request.diagramOptions.tracks[`${mode}TrackSlots`].map(slot => slot.id).filter(id => id !== 'gc_content' && !linked.includes(id)));
       const sessionPath = testInfo.outputPath('pixel.gbdraw-session.json.gz');
       const savedBytes = await download(page, 'Save Session', sessionPath);
       const saved = JSON.parse(gunzipSync(savedBytes));
@@ -167,11 +174,11 @@ for (const width of [1440, 390]) {
       expect(savedSlot.enabled).toBe(false);
       if (mode === 'linear') { expect(savedSlot.height).toBe('10px'); expect(savedSlot.spacing).toBe('10px'); }
       else { expect(savedSlot.inner_gap_px).toBe('10'); expect(savedSlot.outer_gap_px).toBe('10'); }
-      expect(saved.renderRequest).toEqual(control.request);
+      expect(saved.renderRequest).toEqual(hidden.request);
       console.log(`pixel ${mode}/${width}: Session Load`);
       const restored = await load(browser, sessionPath, { width, height: 1000 });
       const restoredState = await inspect(restored, mode);
-      expect(restoredState.svg).toBe(control.svg);
+      expect(restoredState.svg).toBe(hidden.svg);
       expect(restoredState.slots.find(slot => slot.id === 'gc_content').enabled).toBe(false);
       expect(restoredState.slots.find(slot => slot.id === 'gc_content')[fields[0]]).toBe(mode === 'linear' ? '10px' : '10');
       expect((await getDiagramWorkerActivity(restored)).runs).toBe(0);

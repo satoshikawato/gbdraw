@@ -280,11 +280,12 @@ export const WORK_ALLOWLIST = [
     // R15-3 (OV-285): a rename onto a deleted row's caption asks; its Merge is
     // the Restore (which shows the row) and then the merge's rule commit, in
     // one History checkpoint. Each shows once: two compiles. The merge's
-    // rule commit prepares its candidate rules (one request); the rows stay
-    // on the displayed Result, so no rerender. It runs after the Load, so it
-    // leaves the rule preparation of the rows above as they were (OV-286).
+    // rule commit prepares its candidate rules (one request) and, as a join,
+    // asks Python where the joined rows go (synthesizeColorRules); the rows
+    // stay on the displayed Result, so no rerender. It runs after the Load, so
+    // it leaves the rule preparation of the rows above as they were (OV-286).
     kind: 'Legend rename onto a deleted row (Restore and merge)', stages: ['fills', 'legend', 'legendFills', 'rules', 'strokes'],
-    compiles: 2, requests: ['evaluateRules'],
+    compiles: 2, requests: ['evaluateRules', 'synthesizeColorRules'],
     before: (page) => deleteLegendRow(page, 'Two'),
     run: async (page) => {
       await renameRow(page, 'Fifth', 'Two');

@@ -38,6 +38,7 @@ await writeFile(
   tempModulePath,
   source.replace("../services/losat-normalization.js", "./losat-normalization.mjs")
     .replace("../services/linear-comparisons.js", new URL("../services/linear-comparisons.js", sourceRoot).href)
+    .replace("../services/current-option-values.js", new URL("../services/current-option-values.js", sourceRoot).href)
     .replace("../services/linear-sources.js", new URL("../services/linear-sources.js", sourceRoot).href)
     .replace("../services/record-draw-selection.js", new URL("../services/record-draw-selection.js", sourceRoot).href)
     .replace("../services/losat-thread-plan.js", new URL("../services/losat-thread-plan.js", sourceRoot).href)
@@ -49,6 +50,7 @@ await writeFile(
   (await readFile(new URL('../services/losat-normalization.js', sourceRoot), 'utf8'))
     .replace("../contracts/request-shape.generated.js", new URL("../contracts/request-shape.generated.js", sourceRoot).href)
     .replace("../utils/contract-shape.js", new URL("../utils/contract-shape.js", sourceRoot).href)
+    .replace("../utils/error-normalization.js", new URL("../utils/error-normalization.js", sourceRoot).href)
 );
 
 const { createLosatSettings } = await import(pathToFileURL(tempModulePath));
@@ -170,7 +172,11 @@ expansionState.losat.blastp.collinearSearchScope = 'all';
 assert.equal(expansionSettings.losatEstimatedJobCount.value, 25);
 
 expansionState.losat.blastp.collinearInferOrthogroups = false;
-assert.equal(expansionSettings.losatEstimatedJobCount.value, 20);
+assert.equal(
+  expansionSettings.losatEstimatedJobCount.value,
+  8,
+  'without inference Collinear searches the edges whatever Search between holds'
+);
 expansionState.losat.blastp.collinearSearchScope = 'adjacent';
 assert.equal(expansionSettings.losatEstimatedJobCount.value, 8);
 expansionState.losat.blastp.collinearInferOrthogroups = true;

@@ -79,6 +79,7 @@ from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentReference,
 )
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.objects import CONSERVATION_COLOR_SCHEME_PATH, ConservationColorScheme
 from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
     ComparisonThresholds,
@@ -327,7 +328,8 @@ class ComparisonRingTrackOptions:
     ``ComparisonRingOptions.losat`` the search builds the ring instead:
     ``source`` stays ``None`` and ``comparison_sequence_source`` names the
     comparison genome file (FASTA, GenBank, or DDBJ). ``losat_gencode`` is the
-    genome's TLOSATX translation table.
+    genome's TLOSATX translation table. A ring with ``color=None`` takes the
+    ``ComparisonRingOptions.color_scheme`` color of its drawn position.
     """
 
     source: TableSource | None = None
@@ -345,6 +347,12 @@ class ComparisonRingOptions:
     genome (query) against the whole reference file (subject). ``losatn_task``
     applies to LOSATN and ``reference_gencode`` to TLOSATX. The runtime fields
     choose the executable; ``None`` resolves one automatically.
+    ``color_scheme`` colors the rings without a color of their own by drawn
+    position from the outermost ring: ``"same"`` (the default color),
+    ``"ten"`` (ten colors, repeating from ring 11) or ``"per_five"`` (one
+    color per five rings, repeating from ring 31). ``None`` (the default)
+    keeps the config's ``objects.conservation.color_scheme``; a value
+    overrides it.
     """
 
     tracks: Sequence[ComparisonRingTrackOptions] = ()
@@ -357,6 +365,7 @@ class ComparisonRingOptions:
     losat_executable: str | None = None
     ncbi_blast_executable: str | None = None
     threads: int | None = None
+    color_scheme: ConservationColorScheme | None = None
 
 
 # Compatibility aliases for the original package-root names.
@@ -381,6 +390,9 @@ class LinearComparisonOptions:
     only); without it, records in adjacent rows are compared.
     ``max_hits``, ``max_target_seqs``, and ``member_max_hits`` apply to
     LOSATP; the runtime fields apply when ``losat`` is set.
+    ``collinearity_infer_orthogroups`` adds within-record searches to
+    ``losatp_mode="collinear"`` and groups proteins into similarity groups
+    before blocks are built (off by default).
     """
 
     blast_files: Sequence[str] | None = None
@@ -406,6 +418,9 @@ class LinearComparisonOptions:
     )
     collinearity_color: CollinearityColorMode | str = (
         _LINEAR_DIAGRAM_DEFAULTS.collinearity_color_mode
+    )
+    collinearity_infer_orthogroups: bool = (
+        _LINEAR_DIAGRAM_DEFAULTS.collinear_infer_orthogroups
     )
     max_hits: int = 5
     max_target_seqs: int | None = None
@@ -920,19 +935,18 @@ def _circular_options(
         else:
             values["conservation_blast_files"] = [str(source) for source in sources]
         labels = [track.label for track in comparison_rings.tracks]
-        colors = [track.color for track in comparison_rings.tracks]
         if any(label is not None for label in labels):
             if any(label is None for label in labels):
                 raise ValidationError(
                     "Set labels for every comparison ring or for none of them."
                 )
             values["conservation_labels"] = labels
-        if any(color is not None for color in colors):
-            if any(color is None for color in colors):
-                raise ValidationError(
-                    "Set colors for every comparison ring or for none of them."
-                )
-            values["conservation_colors"] = colors
+        values.update(_ring_color_values(comparison_rings.tracks))
+    if comparison_rings.color_scheme is not None:
+        values["config_overrides"] = {
+            **(options.config_overrides or {}),
+            CONSERVATION_COLOR_SCHEME_PATH: comparison_rings.color_scheme,
+        }
     values.update(
         conservation_reference=comparison_rings.reference,
         conservation_ring_width=comparison_rings.ring_width,
@@ -942,6 +956,15 @@ def _circular_options(
         keep_full_definition_with_plot_title=options.keep_full_definition_with_title,
     )
     return _CircularDiagramOptions(**values)
+
+
+def _ring_color_values(tracks: Sequence[ComparisonRingTrackOptions]) -> dict[str, object]:
+    """The ring colors when any ring has one; a ring without one (``None``) sends ``''``."""
+
+    colors = [track.color for track in tracks]
+    if all(color is None for color in colors):
+        return {}
+    return {"conservation_colors": ["" if color is None else color for color in colors]}
 
 
 def _ring_losat_values(comparison_rings: ComparisonRingOptions) -> dict[str, object]:
@@ -979,7 +1002,6 @@ def _ring_losat_values(comparison_rings: ComparisonRingOptions) -> dict[str, obj
             diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_OPTION_PROGRAM", "field": "conservation_losat_gencodes"},
         )
     labels = [track.label for track in tracks]
-    colors = [track.color for track in tracks]
     values: dict[str, object] = {
         "losat_search": _LosatSearchOptions(
             program=program,
@@ -1001,14 +1023,14 @@ def _ring_losat_values(comparison_rings: ComparisonRingOptions) -> dict[str, obj
         "conservation_sequence_files": sequences,
         "conservation_losat_gencodes": gencodes if program == "tlosatx" else None,
     }
-    for field_name, entries in (("conservation_labels", labels), ("conservation_colors", colors)):
-        if any(entry is not None for entry in entries):
-            if any(entry is None for entry in entries):
-                raise ValidationError(
-                    f"Set {field_name.split('_')[1]} for every comparison ring or for none of them.",
-                    diagnostic={"code": "COMPARISON_INPUT", "field": field_name},
-                )
-            values[field_name] = entries
+    if any(label is not None for label in labels):
+        if any(label is None for label in labels):
+            raise ValidationError(
+                "Set labels for every comparison ring or for none of them.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "conservation_labels"},
+            )
+        values["conservation_labels"] = labels
+    values.update(_ring_color_values(tracks))
     return values
 
 
@@ -1078,6 +1100,7 @@ def _linear_options(
         collinearity_anchor_mode=comparisons.collinearity_anchor,
         collinearity_search_scope=comparisons.collinearity_scope,
         collinearity_color_mode=comparisons.collinearity_color,
+        collinear_infer_orthogroups=comparisons.collinearity_infer_orthogroups,
         orthogroup_membership_mode=comparisons.orthogroup_membership,
         collinear_max_paralog_links_per_orthogroup=comparisons.max_paralog_links,
     )

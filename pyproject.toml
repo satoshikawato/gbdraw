@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gbdraw"
-version = "0.14.3"
+version = "0.14.4"
 description = "A genome diagram generator for microbes and organelles"
 readme = "README.md"
 license = "MIT"
@@ -21,6 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Topic :: Scientific/Engineering :: Visualization",
 ]
@@ -42,12 +43,12 @@ dev = [
     "cairosvg",
     "gbdraw[typecheck]",
     "Pillow",
-    "playwright==1.61.0",
+    "playwright==1.64.1",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-timeout>=2.0",
     "pytest-xdist>=3.6",
-    "ruff==0.15.12",
+    "ruff==0.17.2",
     "setuptools>=61.0",
     "wheel",
 ]
@@ -93,7 +94,7 @@ filterwarnings = [
 timeout = 300
 
 [tool.ruff]
-required-version = "==0.15.12"
+required-version = "==0.17.2"
 
 [tool.ruff.lint]
 select = ["E", "F", "W"]

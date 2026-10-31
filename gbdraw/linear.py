@@ -56,6 +56,9 @@ from .definition_line_styles import (
 )
 from .analysis.collinearity import (
     LosslessCollinearityParameters,
+    COLLINEARITY_ANCHOR_MODES,
+    COLLINEARITY_MERGE_ORIENTATIONS,
+    normalize_collinearity_anchor_mode,
     normalize_collinearity_color_mode,
     normalize_collinearity_search_scope,
 )
@@ -235,6 +238,13 @@ def _parse_collinear_color_mode(value: str) -> str:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
+def _parse_collinear_anchor_mode(value: str) -> str:
+    try:
+        return normalize_collinearity_anchor_mode(value)
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def _parse_collinear_search_scope(value: str) -> str:
     try:
         return normalize_collinearity_search_scope(value)
@@ -393,7 +403,10 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         metavar='N',
         type=_parse_optional_positive_int,
         default=None,
-        help="LOSATP -max_target_seqs per query; 'none' for no cap (default: none).",
+        help=(
+            "LOSATP -max_target_seqs per query; 'none' for no cap (default: none). "
+            "In a within-record search the protein's hit to itself takes one of these slots."
+        ),
     )
     parser.add_argument(
         '--losatp_member_max_hits',
@@ -401,8 +414,9 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         type=_parse_optional_positive_int,
         default=None,
         help=(
-            "Maximum hits per protein used for Similarity group and Collinear membership; "
-            "'none' for no cap (default: none)."
+            "Maximum distinct subject proteins, not counting the protein itself, kept per "
+            "query protein in each directed record-pair search for Similarity group and "
+            "Collinear membership; 'none' for no cap (default: none)."
         ),
     )
     parser.add_argument(
@@ -430,17 +444,21 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--collinear_unit_mode',
         dest='collinear_unit_mode',
-        help=argparse.SUPPRESS,
+        help=(
+            'Units that order Collinear anchors: auto (the CDSs that share a locus ID form '
+            'one unit; any other CDS is a unit of its own), cds (one unit per CDS), or locus '
+            '(one unit per locus ID; every CDS needs one) (default: auto).'
+        ),
         choices=["auto", "cds", "locus"],
         default=_LINEAR_OPTION_DEFAULTS.collinearity_unit_mode)
     parser.add_argument(
         '--collinear_search_scope',
         dest='collinear_search_scope',
         help=(
-            'Collinear protein blastp scope: adjacent displayed records/rows or all record pairs. '
-            'With multi-record rows, adjacent searches every cross-record pair between '
-            'neighboring rows; all uses every pair as grouping evidence but renders only '
-            'pairs across adjacent rows '
+            'Record pairs whose protein searches supply Collinear similarity-group '
+            'evidence: adjacent (records in neighboring rows) or all (every record pair). '
+            'It changes the group evidence only, never the blocks, which always connect '
+            'adjacent rows, so it has an effect only with --collinear_infer_orthogroups on '
             '(default: adjacent).'
         ),
         type=_parse_collinear_search_scope,
@@ -451,10 +469,32 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         choices=["on", "off"],
         default="on" if _LINEAR_OPTION_DEFAULTS.collinear_infer_orthogroups else "off",
         help=(
-            'Infer Similarity groups from the Collinear evidence and color blocks by group '
-            '(default: on).'
+            'Add within-record protein searches and group proteins, paralogs included, '
+            'into Similarity groups before Collinear blocks are built '
+            f'(default: {"on" if _LINEAR_OPTION_DEFAULTS.collinear_infer_orthogroups else "off"}).'
         ),
     )
+    parser.add_argument(
+        '--collinear_anchor_mode',
+        dest='collinear_anchor_mode',
+        help=(
+            'Between-record hits that become Collinear anchors: rbh (reciprocal best hits; '
+            'with --collinear_infer_orthogroups on, the links of the Similarity groups) or '
+            f'all (every hit that passes the filters) (default: {_LINEAR_OPTION_DEFAULTS.collinearity_anchor_mode}).'
+        ),
+        type=_parse_collinear_anchor_mode,
+        choices=list(COLLINEARITY_ANCHOR_MODES),
+        default=_LINEAR_OPTION_DEFAULTS.collinearity_anchor_mode)
+    parser.add_argument(
+        '--collinear_merge_orientation',
+        dest='collinear_merge_orientation',
+        help=(
+            'How neighboring anchors of a Collinear block must agree: strand (the anchor '
+            'strands follow the block orientation and the gene order) or order (the gene '
+            f'order only) (default: {_COLLINEARITY_PARAMETER_DEFAULTS.merge_orientation}).'
+        ),
+        choices=list(COLLINEARITY_MERGE_ORIENTATIONS),
+        default=_COLLINEARITY_PARAMETER_DEFAULTS.merge_orientation)
     parser.add_argument(
         '--collinear_min_anchors',
         dest='collinear_min_anchors',
@@ -464,25 +504,43 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
     parser.add_argument(
         '--collinear_max_unit_gap',
         dest='collinear_max_unit_gap',
-        help='Maximum unit gap between neighboring collinear anchors (default: 0).',
+        help=(
+            'Maximum number of units (see --collinear_unit_mode) between two neighboring '
+            'anchors of a Collinear block, on both records; 0 joins adjacent units only. '
+            'With --collinear_max_diagonal_drift 0, a gap is bridged only when both records '
+            'skip the same number of units (default: 0).'
+        ),
         type=argparse_integer,
         default=_COLLINEARITY_PARAMETER_DEFAULTS.max_unit_gap)
     parser.add_argument(
         '--collinear_max_diagonal_drift',
         dest='collinear_max_diagonal_drift',
-        help='Maximum order-space diagonal drift allowed within or between collinear runs (default: 0).',
+        help=(
+            'Maximum difference between the unit gaps on the two records for two '
+            'neighboring anchors of a Collinear block. It needs --collinear_max_unit_gap '
+            '1 or more; a value above that gap acts as the gap (default: 0).'
+        ),
         type=argparse_integer,
         default=_COLLINEARITY_PARAMETER_DEFAULTS.max_diagonal_drift)
     parser.add_argument(
         '--collinear_max_conflicts_in_merge_gap',
         dest='collinear_max_conflicts_in_merge_gap',
-        help=argparse.SUPPRESS,
+        help=(
+            'Maximum other anchors that may lie strictly inside the gap between two '
+            'neighboring anchors of a Collinear block, on both records; those anchors '
+            'stay in blocks of their own. It needs --collinear_max_unit_gap 1 or more '
+            '(default: 1).'
+        ),
         type=argparse_integer,
         default=_COLLINEARITY_PARAMETER_DEFAULTS.max_conflicts)
     parser.add_argument(
         '--collinear_max_paralog_links_per_orthogroup',
         dest='collinear_max_paralog_links_per_orthogroup',
-        help=argparse.SUPPRESS,
+        help=(
+            'Maximum paralog links kept for each Similarity group, in --losatp_mode '
+            'similarity_groups and with --collinear_infer_orthogroups on; it does not change '
+            'Collinear blocks (default: 2).'
+        ),
         type=argparse_integer,
         default=_LINEAR_OPTION_DEFAULTS.collinear_max_paralog_links_per_orthogroup)
     parser.add_argument(
@@ -1308,7 +1366,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         args.collinear_unit_mode or _LINEAR_OPTION_DEFAULTS.collinearity_unit_mode
     )
     collinear_anchor_mode: str = str(
-        _LINEAR_OPTION_DEFAULTS.collinearity_anchor_mode
+        args.collinear_anchor_mode or _LINEAR_OPTION_DEFAULTS.collinearity_anchor_mode
     )
     collinear_search_scope: str = str(
         args.collinear_search_scope
@@ -1322,6 +1380,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         max_unit_gap=args.collinear_max_unit_gap,
         max_diagonal_drift=args.collinear_max_diagonal_drift,
         max_conflicts=args.collinear_max_conflicts_in_merge_gap,
+        merge_orientation=args.collinear_merge_orientation,
     )
     color_table_path: str = args.table
     strandedness: bool = args.separate_strands

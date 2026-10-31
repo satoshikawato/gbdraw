@@ -599,8 +599,8 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(
     ("example_id", "record_count", "precomputed_count", "result_kind", "orthogroup_count"),
     [
         # A collinear result stores its blocks, not the pairwise tables (OV-1048).
-        ("hepatoplasmataceae_collinear", 5, 0, "collinearityResult", 587),
-        ("hepatoplasmataceae_orthogroup", 5, 4, "orthogroupResult", 577),
+        ("hepatoplasmataceae_collinear", 5, 0, "collinearityResult", 586),
+        ("hepatoplasmataceae_orthogroup", 5, 4, "orthogroupResult", 576),
         ("majanivirus_orthogroup", 9, 8, "orthogroupResult", 152),
     ],
 )

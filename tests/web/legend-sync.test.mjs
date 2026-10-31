@@ -37,7 +37,7 @@ const { createLegendEntryActions } = await import(
 );
 // The root's reader of the colors Legend rows show (app-setup.js); without a
 // displayed Result, a row shows the color it records.
-const { displayedLegendRowColors } = await import(pathToFileURL(join(tempRoot, 'app', 'candidate-render.js')));
+const { displayedLegendRowColors, draftLegendRows } = await import(pathToFileURL(join(tempRoot, 'app', 'candidate-render.js')));
 const { createLegendStrokeActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'stroke-actions.js'))
 );
@@ -864,6 +864,48 @@ const mockLegendEntry = (caption, color, x) => {
   assert.deepEqual(split.apply(), { add: [{ caption: 'CDS [#00aa00]', name: 'CDS', color: '#00aa00', before: 'New' }], retire: [] });
   assert.deepEqual(listed(), [['CDS', '#112233'], ['CDS [#00aa00]', '#00aa00'], ['New', '#aa0000'], ['tRNA', '#334455']]);
   state.legendEntries.value = state.legendEntries.value.filter(({ caption }) => caption !== 'CDS [#00aa00]');
+  // OV-2194, OV-2247 (Owner 2026-10-29): the rows go where Python's answer
+  // puts them (the keys of its feature rows in Legend order). A row the commit
+  // adds goes before the first listed row the answer puts after it, and the
+  // Result shows it there; in the default order an old row the answer moves
+  // takes its place too, among the places of the answer's rows.
+  const listedRows = state.legendEntries.value;
+  const twoNews = [{ caption: 'New', color: '#aa0000' }, { caption: 'Newer', color: '#aa0000' }];
+  // Rows in Python's order are no edit (D-08): the inventory takes the
+  // answer's order and the placed rows (with a deleted row it still holds), so
+  // the list stays the default order, and Generate replays no order on
+  // another Result.
+  const inventory = state.originalLegendOrder.value;
+  // An old row the answer moves is shown in the answer's order at once
+  // (`order`), and the commit asks for the rerender (`reorders`), which keeps it.
+  for (const [name, order, before, rows, nextInventory, moves] of [
+    ['a split row', ['CDS', 'Newer', 'New', 'tRNA'], 'New', ['CDS', 'Newer', 'New', 'tRNA'], ['CDS', 'Gone', 'Newer', 'New', 'tRNA'], false],
+    ['an old row that moves', ['CDS', 'Newer', 'tRNA', 'New'], 'tRNA', ['CDS', 'Newer', 'tRNA', 'New'], ['CDS', 'Gone', 'Newer', 'tRNA', 'New'], true]
+  ]) {
+    state.legendEntries.value = listedRows;
+    state.originalLegendOrder.value = [...inventory.slice(0, 1), 'Gone', ...inventory.slice(1)];
+    const placed = await actions.prepareFileLegendEntries(twoNews, {
+      previousFileIntents: [{ caption: 'New', color: '#aa0000' }], legendOrder: order
+    });
+    assert.equal(placed.reorders, moves, name);
+    assert.deepEqual(placed.apply(), {
+      add: [{ caption: 'Newer', color: '#aa0000', before }], retire: [], ...(moves ? { order: rows } : {})
+    }, name);
+    assert.deepEqual(listed().map(([caption]) => caption), rows, name);
+    assert.deepEqual(state.originalLegendOrder.value, nextInventory, name);
+    assert.equal(isLegendOrderEdited(state.legendEntries.value, state.originalLegendOrder.value), false, name);
+  }
+  // In an edited order, which Generate replays (PD-OI-063), the old rows stay,
+  // and so does the inventory.
+  state.originalLegendOrder.value = [...inventory];
+  state.legendEntries.value = [listedRows[2], listedRows[0], listedRows[1]];
+  const edited = await actions.prepareFileLegendEntries(twoNews, {
+    previousFileIntents: [{ caption: 'New', color: '#aa0000' }], legendOrder: ['CDS', 'Newer', 'New', 'tRNA']
+  });
+  assert.deepEqual(edited.apply(), { add: [{ caption: 'Newer', color: '#aa0000', before: 'tRNA' }], retire: [] });
+  assert.deepEqual(listed().map(([caption]) => caption), ['Newer', 'tRNA', 'CDS', 'New']);
+  assert.deepEqual(state.originalLegendOrder.value, inventory);
+  state.legendEntries.value = listedRows;
   // A rule color change draws no row; a listed row the rules do not own keeps
   // its color or stops the commit.
   const recolored = await actions.prepareFileLegendEntries([{ caption: 'New', color: '#00aa00' }], {
@@ -1174,4 +1216,67 @@ const mockLegendEntry = (caption, color, x) => {
   deletedSwatch.removeAttribute('stroke');
   deletedSwatch.removeAttribute('stroke-width');
   assert.deepEqual(keepBoth(), { keepBothName: 'Beta', targetNameAfter: null, restores: true }, 'one swatch: one row, restored');
+}
+
+{
+  // GT review 1 M1: a live redraw keeps in the inventory only the rows of a
+  // drawn track the draft hides (and those an earlier live redraw kept); a
+  // row it stops drawing for another reason (a color rule's row retired live)
+  // leaves it, so a row the editor adds under that caption is the editor's.
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const render = (...captions) => {
+    featureLegend.children.forEach(entry => { entry.parentElement = null; });
+    featureLegend.children = [];
+    captions.forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, '#112233', index * 70)));
+  };
+  const state = {
+    results: ref([{ name: 'r1.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    dormantLegendEntries: ref([]),
+    originalLegendOrder: ref([]),
+    originalLegendColors: ref({}),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  // The rows of a drawn track the draft hides (`hiddenTrackLegendKeys` of the committed request).
+  let hidden = [];
+  const actions = createLegendEntryActions({
+    state: withDrawings(state), commitActiveResultEdit: () => true, readActiveResultIdentity: () => 'result-1',
+    readHiddenTrackRows: () => hidden
+  });
+  render('CDS', 'Rule', 'GC content', 'GC skew');
+  actions.extractLegendEntries({ replaceGeneratedInventory: true, liveResultIdentities: ['result-1'] });
+  assert.deepEqual(state.originalLegendOrder.value, ['CDS', 'Rule', 'GC content', 'GC skew']);
+  // The draft hides GC content; the live redraw requested now stops drawing it
+  // and the retired Rule row. Once it commits, its request draws no GC content.
+  hidden = ['GC content'];
+  const keep = ['GC content'];
+  assert.deepEqual(actions.liveRedrawLegend(state.activeDrawing()).keep, keep);
+  hidden = [];
+  render('CDS', 'GC skew');
+  actions.extractLegendEntries({ replaceGeneratedInventory: true, liveRedraw: { keep }, liveResultIdentities: ['result-1'] });
+  assert.ok(state.originalLegendOrder.value.includes('GC content'), 'the hidden track row stays');
+  assert.ok(!state.originalLegendOrder.value.includes('Rule'), 'the retired row leaves the inventory');
+  // A row the editor adds under the retired caption is the editor's, not Python's.
+  state.legendEntries.value = [...state.legendEntries.value, { caption: 'Rule', originalCaption: 'Rule', color: '#445566' }];
+  const draftRows = draftLegendRows({
+    legendEntries: state.legendEntries.value, deletedLegendEntries: state.deletedLegendEntries.value,
+    dormantLegendEntries: state.dormantLegendEntries.value, originalLegendOrder: state.originalLegendOrder.value
+  });
+  assert.equal(draftRows.styledRow('Rule').isOriginal, false, 'the added Rule row is not Python\'s');
+  assert.equal(draftRows.styledRow('GC content').isOriginal, true, 'the kept hidden track row is Python\'s');
+  // The next live redraw (the skew hidden too) keeps the row the last one kept.
+  hidden = ['GC skew'];
+  assert.deepEqual(actions.liveRedrawLegend(state.activeDrawing()).keep, ['GC content', 'GC skew']);
 }

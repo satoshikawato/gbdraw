@@ -75,8 +75,6 @@ import {
  * @property {ReturnType<typeof import('../services/feature-visibility.js').featureDrawnContext> | null} drawnContext
  *   `featureDrawnContext` of the drawing; read when `domains` has featureVisibility.
  * @property {RuleLegendRows | null} [ruleRows] The Legend rows a rule commit shows at once.
- * @property {readonly string[]} [hiddenTrackRows] The keys of the displayed Result's Legend rows whose drawn
- *   track the draft hides (Show Depth off): each leaves with its track (OV-1198, PD-OI-104).
  * @property {ReadonlyMap<PythonLegendKey, PythonLegendRow>} [pythonRows] Python's Legend rows of the
  *   displayed Result (`pythonLegendRows`), by which the draft allocates a rule's row (N-06).
  * @property {LegendRowContext['features']} [features] The features the displayed Result draws
@@ -89,8 +87,10 @@ import {
 
 /**
  * The Legend rows of a rule commit until Python draws them (`prepareFileLegendEntries`):
- * the rows its rules add, each before the row it replaces, and the rows they retire.
- * @typedef {{ add: Array<{ caption: string, name?: string, color: string, before?: string }>, retire: string[] }} RuleLegendRows
+ * the rows its rules add, each before the row it replaces, the rows they retire, and, when
+ * Python's answer moves a listed row in the default order, the keys of the rows in that order.
+ * @typedef {{ add: Array<{ caption: string, name?: string, color: string, before?: string }>, retire: string[],
+ *   order?: string[] }} RuleLegendRows
  */
 
 /**
@@ -789,12 +789,9 @@ const compilePlanBundle = ({
     (ruleRows?.retire || []).forEach((caption) => {
       addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true, retire: true });
     });
-    // The row of a drawn track the draft hides leaves with the track; the
-    // recorded deletion returns the row once the track shows again. Generate
-    // compiles none: Python draws no row for a hidden track.
-    (livePreview?.hiddenTrackRows || []).forEach((caption) => {
-      if (!deletedCaptions.has(caption)) addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true });
-    });
+    if (ruleRows?.order) {
+      addToResults(operationsByResult, allResultIndexes, 'legendOrder', { captions: Object.freeze([...ruleRows.order]) });
+    }
   });
 
   // Category style preferences outlive the current generated entry projection.

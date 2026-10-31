@@ -336,9 +336,14 @@ def test_the_request_shape_module_is_the_description_as_frozen_data() -> None:
         "import { ContractDescription } from '../utils/contract-shape.js' */"
     ]
     assert re.search(r"\bany\b", source) is None
-    assert "defaults: Object.freeze({\n        collinearInferOrthogroups: true,\n        collinearityParams: null," in source
+    assert (
+        "defaults: Object.freeze({\n        collinearInferOrthogroups: true,\n"
+        "        collinearityAnchorMode: \"rbh\",\n        collinearityParams: null,"
+    ) in source
     assert describe_canonical_request()["types"]["CanonicalProteinComparisonSettings"]["defaults"] == {
         "collinearInferOrthogroups": True,
+        # A stored anchor mode that was removed (one_to_one) reads as rbh (OV-2303).
+        "collinearityAnchorMode": "rbh",
         # A required field that holds null takes null (OV-777).
         **{key: None for key in (
             "collinearityParams", "losatpBin", "losatpThreads", "ncbiBlastpBin", "orthogroupMemberMaxHits",

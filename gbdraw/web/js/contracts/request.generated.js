@@ -413,7 +413,7 @@
  * @typedef {object} CanonicalProteinComparisonSettings
  * @property {CanonicalCollinearityParameters | null} collinearityParams
  * @property {'auto' | 'cds' | 'locus'} collinearityUnitMode
- * @property {'all' | 'one_to_one' | 'rbh'} collinearityAnchorMode
+ * @property {'all' | 'rbh'} collinearityAnchorMode
  * @property {'adjacent' | 'all'} collinearitySearchScope
  * @property {'average_identity' | 'orientation' | 'orientation_identity'} collinearityColorMode
  * @property {string | null} losatpBin

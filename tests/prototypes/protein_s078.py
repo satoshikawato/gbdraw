@@ -13,10 +13,12 @@ from gbdraw.analysis import collinearity as cc, collinearity_units as cu, protei
 # S07.7 predates the LOSAT runtime owner (gbdraw.comparisons.losat_runtime).
 # The runtime class moved there and the raw-cache manager now extends its
 # store. The identity manifest became a read-only proof that only the live
-# validator and extraction construct. None of them is part of the frozen
-# collinear algorithm; keep frozen copies.
+# validator and extraction construct. CdsProtein gained the arc of a CDS
+# across the record origin (OV-2258), which the frozen algorithm never reads.
+# None of them is part of the frozen collinear algorithm; keep frozen copies.
 FROZEN_COPY_CLASSES = frozenset({
     'ProteinBlastpRuntime', 'LosatpCacheManager', 'ProteinIdentityManifest',
+    'CdsProtein',
 })
 
 

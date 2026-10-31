@@ -1536,7 +1536,7 @@ def test_enrich_svg_match_metadata_matches_standalone_collinear_sections() -> No
       <path id="fsubject" data-gbdraw-feature-id="fsubject" fill="#54bcf8" d="M 3 1 L 4 2" />
       <path data-gbdraw-match-id="m1" data-match-kind="collinear"
         data-orthogroup-id="og_1" data-collinearity-block-id="block_1"
-        data-collinearity-block-kind="syntenic" data-collinearity-orientation="+"
+        data-collinearity-block-kind="cluster" data-collinearity-orientation="+"
         data-collinearity-color-mode="orthogroup" data-collinearity-block-score="42"
         data-collinearity-block-evalue="1e-10" data-collinearity-anchor-index="1"
         data-collinearity-anchor-count="3" data-query-record-id="rec1"
@@ -1606,7 +1606,9 @@ def test_enrich_svg_match_metadata_matches_standalone_collinear_sections() -> No
     assert match["match_kind"] == "collinear"
     assert match["orthogroup_ids"] == ["og_1"]
     assert match["collinearity_block_id"] == "block_1"
-    assert match["block_kind"] == "syntenic"
+    assert match["block_kind"] == "cluster"
+    # OV-2300: the catalog no longer reads the removed block E-value attribute.
+    assert "block_evalue" not in match
     assert match["identity"] == "95.5"
     assert match["alignment_length"] == "9"
     assert "block_orthogroups" not in match

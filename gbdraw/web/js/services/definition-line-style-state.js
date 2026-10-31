@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { FieldLeaf, FieldReading } from '../utils/field-reading.js' */
 import { keepsMeaning } from '../utils/field-reading.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 export const DEFINITION_LINE_STYLE_KINDS = Object.freeze([
   'name',
   'subtitle',
@@ -100,6 +101,19 @@ export const readDefinitionLineStyles = (source) => {
 export const refusedDefinitionLineFontSizePath = (source) => {
   const leaf = readDefinitionLineStyles(source).leaves?.find((item) => item.at.endsWith('.font_size'));
   return leaf ? `objects.definition.linear.line_styles${leaf.at}` : '';
+};
+
+/**
+ * The styles Generate, the live apply and Save Session send: the stored rows
+ * read, or the refusal PD-OI-081 requires when a font size is refused.
+ * @param {unknown} source
+ * @returns {Record<DefinitionLineStyleKind, DefinitionLineStyle>}
+ * @throws {Error} INPUT_INVALID naming the refused font size setting
+ */
+export const requireDefinitionLineFontSizes = (source) => {
+  const configPath = refusedDefinitionLineFontSizePath(source);
+  if (configPath) throw diagnosticError('INPUT_INVALID', { configPath, reason: 'POSITIVE' });
+  return readDefinitionLineStyles(source).value;
 };
 
 /**

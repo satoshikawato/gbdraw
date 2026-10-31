@@ -2,6 +2,7 @@
 /** @import { DrawingState, LinearSeq } from '../state.js' */
 /** @import { LegendRow } from '../services/drawing/paint.js' */
 /** @import { DrawnTrack } from '../services/track-legend-rows.js' */
+/** @import { SettingApplicationId } from '../services/setting-application.js' */
 // The legend-entry and record-definition popups of the preview. A click (or
 // Enter) on a Legend row or a record definition opens the match popup frame
 // with a `previewItem`; this owner derives what the popup shows from the
@@ -41,8 +42,10 @@ import { msg, t, tn, tm } from '../utils/i18n.js';
  * @typedef {{
  *   name: string, subtitle: string, reverse: boolean, reverseAvailable: boolean,
  *   nameLabel: string, subtitleLabel: string, sequenceUid: string,
- *   fields: Record<RecordField, string>, settingsSelector: string
+ *   fields: Readonly<Record<RecordField, RecordPopupField>>, settingsSelector: string
  * }} RecordDraft
+ * @typedef {{ readonly key: string, readonly setting: SettingApplicationId }} RecordPopupField
+ *   The draft key a popup field writes and the setting row (`SETTING_APPLICATION`) of its timing note.
  * @typedef {ReturnType<typeof buildLegendEntryView>} LegendEntryView
  * @typedef {ReturnType<typeof buildRecordDefinitionView>} RecordDefinitionView
  */
@@ -298,16 +301,32 @@ const readDrawnDefinitionLines = (group, recordId) => {
 };
 
 // The settings a record popup edits: those the sidebar writes for the drawn
-// definition. A Circular record selected on its own draws its Record label and
-// Subtitle, which win over the drawing's Species and Strain.
-const LINEAR_FIELDS = { name: 'definition', subtitle: 'record_subtitle', reverse: 'region_reverse' };
+// definition, each with the setting row that says when it applies (R1): the
+// one owner of field -> setting key -> row for the popup and its notes. A
+// Circular record selected on its own draws its Record label and Subtitle,
+// which win over the drawing's Species and Strain.
+/** @type {Readonly<Record<'linear' | 'circularRecord' | 'circularDrawing', Readonly<Record<RecordField, RecordPopupField>>>>} */
+export const RECORD_POPUP_FIELDS = Object.freeze({
+  linear: Object.freeze({
+    name: { key: 'definition', setting: 'record-names' }, subtitle: { key: 'record_subtitle', setting: 'inputs' },
+    reverse: { key: 'region_reverse', setting: 'inputs' }
+  }),
+  circularRecord: Object.freeze({
+    name: { key: 'circular_record_label', setting: 'record-names' },
+    subtitle: { key: 'circular_record_subtitle', setting: 'record-names' }, reverse: { key: 'circular_reverse', setting: 'inputs' }
+  }),
+  circularDrawing: Object.freeze({
+    name: { key: 'species', setting: 'species' }, subtitle: { key: 'strain', setting: 'species-strain' },
+    reverse: { key: 'circular_reverse', setting: 'inputs' }
+  })
+});
 const CIRCULAR_RECORD = {
-  fields: { name: 'circular_record_label', subtitle: 'circular_record_subtitle', reverse: 'circular_reverse' },
+  fields: RECORD_POPUP_FIELDS.circularRecord,
   nameLabel: msg('Record label'), subtitleLabel: msg('Subtitle'),
   settingsSelector: '[data-circular-record-presentation] input[type="text"]'
 };
 const CIRCULAR_DRAWING = {
-  fields: { name: 'species', subtitle: 'strain', reverse: 'circular_reverse' },
+  fields: RECORD_POPUP_FIELDS.circularDrawing,
   nameLabel: msg('Species'), subtitleLabel: msg('Strain'), settingsSelector: '#circular-species'
 };
 // What a popup without edit fields says instead. A Circular record's sentence
@@ -374,7 +393,7 @@ export const createPreviewItemPopup = ({
     nameLabel: t('Organism / strain'),
     subtitleLabel: t('Subtitle'),
     sequenceUid: sequence.uid,
-    fields: LINEAR_FIELDS,
+    fields: RECORD_POPUP_FIELDS.linear,
     // The record's own name fields, on its File card or in its Record options.
     settingsSelector: `[data-linear-record-names=${JSON.stringify(sequence.uid)}] input[type="text"]`
   };
@@ -391,8 +410,8 @@ export const createPreviewItemPopup = ({
       ...target,
       nameLabel: tm(target.nameLabel),
       subtitleLabel: tm(target.subtitleLabel),
-      name: text(form[target.fields.name]),
-      subtitle: text(form[target.fields.subtitle]),
+      name: text(form[target.fields.name.key]),
+      subtitle: text(form[target.fields.subtitle.key]),
       reverse: Boolean(form.circular_reverse),
       reverseAvailable: ownRecord,
       sequenceUid: ''
@@ -454,13 +473,13 @@ export const createPreviewItemPopup = ({
     : state.linearSeqs.find((entry) => entry.uid === recordView.draft?.sequenceUid) || null);
 
   /**
-   * Writes the setting the sidebar field writes; it applies on Generate.
+   * Writes the setting the sidebar field writes; it applies as its setting does.
    * @param {RecordDefinitionView} recordView @param {RecordField} field @param {unknown} value
    */
   const setRecordField = (recordView, field, value) => {
     const target = recordTarget(recordView);
     if (!target || sessionBusy()) return null;
-    const key = recordView.draft?.fields[field];
+    const key = recordView.draft?.fields[field].key;
     if (!key) return null;
     const next = field === 'reverse' ? Boolean(value) : String(value ?? '');
     if (target[key] === next) return null;

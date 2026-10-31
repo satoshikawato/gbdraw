@@ -17,7 +17,7 @@ their LOSATP Collinear searches from an empty cache. They select **Infer
 orthogroups with self-comparisons** and clear **Max target seqs**, matching the
 Gallery request and the CLI/Python recipes. Fresh Web Collinear settings cap raw
 hits at `5` and leave inference off; without inference the runs execute 8 or 20
-searches instead of 13 or 25 and draw 462 instead of 500 Collinear match
+searches instead of 13 or 25 and draw 462 instead of 492 Collinear match
 elements. H-GUI-14 reloads only the
 current-format session downloaded earlier in the same raw-input journey, and
 it does so in a fresh context. Multi-record Circular examples contain
@@ -38,9 +38,9 @@ python -m playwright install chromium
 
 The authoritative environment is:
 
-- Python Playwright 1.61.0
-- Node Playwright 1.61.1 (the paired JavaScript test environment)
-- Chrome for Testing 149.0.7827.55, Playwright Chromium revision v1228
+- Python Playwright 1.64.1
+- Node Playwright 1.64.1 (the paired JavaScript test environment)
+- Chrome for Testing 156.0.8078.4, Playwright Chromium revision v1248
 - 1440 × 900 viewport at device scale 1
 - `en-US`, UTC, light color scheme, reduced motion, and vendored fonts
 

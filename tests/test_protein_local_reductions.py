@@ -149,27 +149,35 @@ def numeric_frame(frame):
 def test_member_top_best_and_reciprocity_independent_oracle(ids, limit):
     hits = member_frame(ids)
     before = hits.copy(deep=True)
+    self_rows = [query == subject for query, subject in zip(hits['query'], hits['subject'])]
     if limit is None:
         positions = list(range(len(hits)))
     else:
         chosen = hit_ordinals(hits, limit)
-        pairs = {(hits['query'].iloc[i], hits['subject'].iloc[i]) for i in chosen}
-        positions = [i for i, pair in enumerate(zip(hits['query'], hits['subject'])) if pair in pairs]
         top = pc.select_top_hits_per_query(hits, max_hits=limit)
         assert_frame_equal(top, numeric_frame(hits).iloc[chosen].reset_index(drop=True), check_exact=True)
         assert_frame_equal(top, frozen.select_top_hits_per_query(hits, max_hits=limit), check_exact=True)
+        # OV-2298: the member limit counts subjects other than the query; self
+        # rows (numeric ids 0/0 and 1/1 here) pass through and take no slot.
+        others = [i for i, is_self in enumerate(self_rows) if not is_self]
+        pairs = {
+            (hits['query'].iloc[others[i]], hits['subject'].iloc[others[i]])
+            for i in hit_ordinals(hits.iloc[others], limit)
+        }
+        positions = [
+            i for i, pair in enumerate(zip(hits['query'], hits['subject'])) if self_rows[i] or pair in pairs
+        ]
     members = pc._select_member_candidate_hits_per_query(hits, max_hits=limit)
     assert_frame_equal(members, hits.iloc[positions].reset_index(drop=True), check_exact=True)
-    assert_frame_equal(members, frozen._select_member_candidate_hits_per_query(hits, max_hits=limit), check_exact=True)
+    if limit is None or not any(self_rows):
+        # The frozen copy counts a self hit, so it agrees only without one.
+        assert_frame_equal(
+            members, frozen._select_member_candidate_hits_per_query(hits, max_hits=limit), check_exact=True
+        )
     query_best = hit_ordinals(members)
     actual = pc.select_best_hits_per_query(members)
     assert_frame_equal(actual, numeric_frame(members).iloc[query_best].reset_index(drop=True), check_exact=True)
     assert_frame_equal(actual, frozen.select_best_hits_per_query(members), check_exact=True)
-    subject_best = hit_ordinals(members, subject_first=True)
-    reciprocal = {(str(members['query'].iloc[i]), str(members['subject'].iloc[i])) for i in subject_best}
-    mutual = [i for i in query_best if (str(members['query'].iloc[i]), str(members['subject'].iloc[i])) in reciprocal]
-    assert_frame_equal(pc.select_reciprocal_best_hits(members),
-                       numeric_frame(members).iloc[mutual].reset_index(drop=True), check_exact=True)
     reverse = members.rename(columns={'query': 'subject', 'subject': 'query'}).iloc[::-1].copy()
     reverse_best = hit_ordinals(reverse)
     back = {str(reverse['query'].iloc[i]): str(reverse['subject'].iloc[i]) for i in reverse_best}
@@ -187,7 +195,7 @@ def test_member_top_best_and_reciprocity_independent_oracle(ids, limit):
         assert_frame_equal(hits, before, check_exact=True)
 
 
-@pytest.mark.parametrize('mode', ['rbh', 'one_to_one', 'all'])
+@pytest.mark.parametrize('mode', ['rbh', 'all'])
 @pytest.mark.parametrize('missing', [False, True])
 @pytest.mark.parametrize('limit', [1, 5, None])
 def test_edge_caller_missing_direction_and_member_limit(mode, missing, limit):
@@ -216,7 +224,6 @@ def test_public_numeric_rejection_exact_type_message(column, bad):
         ('select_top_hits_per_query', (hits,), {'max_hits': 5}),
         ('_select_member_candidate_hits_per_query', (hits,), {'max_hits': 1}),
         ('select_best_hits_per_query', (hits,), {}),
-        ('select_reciprocal_best_hits', (hits,), {}),
         ('select_reciprocal_best_hit_edges', (hits, member_frame()), {}),
         ('select_reciprocal_best_hit_edges', (member_frame(), hits), {}),
     ]:
@@ -238,7 +245,7 @@ def test_selector_empty_and_validation_order(shape):
     if 'missing_columns' in shape:
         hits = hits.drop(columns='bitscore')
     for name in ['select_top_hits_per_query', '_select_member_candidate_hits_per_query',
-                 'select_best_hits_per_query', 'select_reciprocal_best_hits', 'select_reciprocal_best_hit_edges']:
+                 'select_best_hits_per_query', 'select_reciprocal_best_hit_edges']:
         limits = [1, 5, None, 0, -1, 'bad'] if 'per_query' in name and name != 'select_best_hits_per_query' else [None]
         for limit in limits:
             kwargs = {'max_hits': limit} if name in ['select_top_hits_per_query', '_select_member_candidate_hits_per_query'] else {}
@@ -272,8 +279,7 @@ def test_removed_member_copies_pair_dedup_and_full_row_conversion():
     assert counts(frozen, 1)[1].count(('query', 'subject')) == 2
     assert counts(pc, 1)[1].count(('query', 'subject')) == 0
     original_dedupe = pd.DataFrame.drop_duplicates
-    for name, expected_removed in [('select_best_hits_per_query', 1), ('select_reciprocal_best_hits', 2),
-                                    ('select_reciprocal_best_hit_edges', 2)]:
+    for name, expected_removed in [('select_best_hits_per_query', 1), ('select_reciprocal_best_hit_edges', 2)]:
         observed = []
         for module in [frozen, pc]:
             calls = []
@@ -286,7 +292,6 @@ def test_removed_member_copies_pair_dedup_and_full_row_conversion():
             observed.append(len(calls))
         assert observed[0] - observed[1] == expected_removed
     with patch.object(pd.DataFrame, 'itertuples', side_effect=AssertionError('full row conversion')):
-        pc.select_reciprocal_best_hits(hits)
         pc.select_reciprocal_best_hit_edges(hits, hits)
 
 
@@ -348,7 +353,7 @@ def test_evidence_is_ranked_once_from_precomputed_ranks(scenario):
 @pytest.mark.parametrize('infer', [False, True])
 @pytest.mark.parametrize('limit', [1, 5, None])
 @pytest.mark.parametrize('mode', ['auto', 'cds', 'locus'])
-@pytest.mark.parametrize('anchor', ['rbh', 'one_to_one', 'all'])
+@pytest.mark.parametrize('anchor', ['rbh', 'all'])
 @pytest.mark.parametrize('scenario,reverse', [('sparse-2', False), ('dense-4', True), ('support-edges', False)])
 def test_complete_collinear_result_differential(scope, infer, limit, mode, anchor, scenario, reverse, baseline):
     from tests.prototypes import protein_s078

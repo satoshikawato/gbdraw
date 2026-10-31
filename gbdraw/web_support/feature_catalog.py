@@ -340,7 +340,6 @@ _MATCH_ATTRIBUTES = {
     "group_kind": "data-group-kind",
     "block_color_mode": "data-collinearity-color-mode",
     "block_score": "data-collinearity-block-score",
-    "block_evalue": "data-collinearity-block-evalue",
     "anchor_index": "data-collinearity-anchor-index",
     "anchor_count": "data-collinearity-anchor-count",
     "query_feature_svg_id": "data-query-feature-svg-id",

@@ -30,9 +30,9 @@ module.exports = defineConfig({
     trace: 'on-first-retry'
   },
   webServer: {
-    command: pyodideSnapshotDir
-      ? `python3 tools/serve_pyodide_snapshot.py --port ${serverPort} --snapshot-dir ${JSON.stringify(resolve(pyodideSnapshotDir))} --snapshot-path ${PYODIDE_SNAPSHOT_TEST_PATH}`
-      : `python3 -m http.server ${serverPort} --bind 127.0.0.1`,
+    command: `python3 tools/serve_web_tests.py --port ${serverPort}` + (pyodideSnapshotDir
+      ? ` --snapshot-dir ${JSON.stringify(resolve(pyodideSnapshotDir))} --snapshot-path ${PYODIDE_SNAPSHOT_TEST_PATH}`
+      : ''),
     cwd: __dirname,
     url: serverUrl,
     reuseExistingServer: !process.env.CI,

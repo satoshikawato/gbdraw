@@ -195,6 +195,9 @@ _GRID_2X2_VECTOR = Path(__file__).parent / "fixtures" / "losat_job_plan_cases.js
         # Collinear on a CLI row grid with search scope 'all': the grid
         # displays (0, 1) and (0, 2), each numbered by its own adjacent-row edge.
         ("collinear", (1, 2, 2), {(0, 1): 0, (0, 2): 1}, None),
+        # Similarity groups on the same grid displays the same adjacent-row
+        # pairs (OV-2297).
+        ("similarity_groups", (1, 2, 2), {(0, 1): 0, (0, 2): 1}, None),
         # A 2x2 grid: the search order and the numbers come from the vector
         # that the Web test checks too (tests/web/linear-comparisons.test.mjs).
         ("collinear", None, None, None),
@@ -203,7 +206,10 @@ _GRID_2X2_VECTOR = Path(__file__).parent / "fixtures" / "losat_job_plan_cases.js
         ("similarity_groups", None, {(0, 1): 0, (1, 2): 1}, 1),
         ("collinear", None, {(0, 1): 0, (1, 2): 1}, 1),
     ),
-    ids=("orthogroup", "collinear-grid", "collinear-grid-2x2", "orthogroup-reversed", "collinear-reversed"),
+    ids=(
+        "orthogroup", "collinear-grid", "orthogroup-grid", "collinear-grid-2x2", "orthogroup-reversed",
+        "collinear-reversed",
+    ),
 )
 def test_web_lookup_converter_and_api_build_one_derived_entry(
     monkeypatch: pytest.MonkeyPatch,
@@ -412,13 +418,13 @@ def _derived_settings_key(options: LinearDiagramOptions, mode: str) -> str:
         LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(max_unit_gap=1)),
         LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(max_diagonal_drift=1)),
         LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(max_conflicts=0)),
-        LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(merge_orientation="strand")),
+        LinearDiagramOptions(collinearity_params=LosslessCollinearityParameters(merge_orientation="order")),
         LinearDiagramOptions(collinearity_unit_mode="cds"),
         LinearDiagramOptions(collinearity_anchor_mode="all"),
         LinearDiagramOptions(collinearity_search_scope="all"),
         LinearDiagramOptions(collinearity_color_mode="orientation_identity"),
         LinearDiagramOptions(collinear_max_paralog_links_per_orthogroup=3),
-        LinearDiagramOptions(collinear_infer_orthogroups=False),
+        LinearDiagramOptions(collinear_infer_orthogroups=True),
         LinearDiagramOptions(bitscore=60),
         LinearDiagramOptions(evalue=1e-6),
         LinearDiagramOptions(identity=71),
@@ -2328,14 +2334,17 @@ _RECORDED_DERIVED_ENTRIES = {
     # one owner built the identity, key and pairs (OV-1063: semantics v2, the
     # write-only `orthogroups` member gone, the paralog-link limit in the
     # orthogroup block), and when stored results moved to the search frame
-    # (OV-1145: semantics v3).
+    # (OV-1145: semantics v3), and when Collinear blocks became longest chains
+    # and the block E-value column went (OV-2294..2296, OV-2300: semantics v4),
+    # and when the default merge orientation became "strand", which "either"
+    # was a spelling of (OV-2301).
     "similarity_groups": (
-        "ab49e6402431c26299e66aaca22d7f6843b63dbd46c3f9af12f87033ea348768",
-        "36e6fa4e0ce0bb7e070fa2b2799e3818510edac628a6d16c1b99e95cbafebd14",
+        "6b1dfc2b33423552ff2f9b6210928bf22c640619a81c5fab117ab6a3d30c2a8f",
+        "92675b3ccb5fb991e5b6baaffe892c48aae067b611911fc297d502f55b75b8cc",
     ),
     "collinear": (
-        "4fcdd2219f1d0ecad06457bfb21995964b48d48232965edfafa5420093892e49",
-        "8eda1cb2048bfcd0048e4d4fdca44f89c09c636716373e0ff57bee1bd54757c4",
+        "1c335911c992797b48ab4f36315726541903c150b9966e1edee418340efc2a38",
+        "154fde7cae802b09b0ff0d807edb5500f193fcb09c9242ba249808f0d678c362",
     ),
 }
 

@@ -9,7 +9,7 @@ colored blue or red by orientation, with intensity showing average identity.
 
 ![Five Hepatoplasmataceae genomes with adjacent Collinear blocks](../images/t-cli-10/losatp_collinear.svg)
 
-*The figure has 2,994 displayed features and 500 Collinear match elements.*
+*The figure has 2,994 displayed features and 492 Collinear match elements.*
 
 Each block joins protein matches that stay in the same order between two
 adjacent genomes. It shows shared local gene order, not a whole-genome synteny
@@ -33,7 +33,7 @@ downloads and the accession checks.
 Use these five Revision History links, not the live accession downloads. NCBI
 can update a record's annotation without changing its sequence accession
 version. These pinned revisions preserve the exact feature tables used to
-reproduce this Tutorial's 2,994 displayed features and 500 Collinear matches.
+reproduce this Tutorial's 2,994 displayed features and 492 Collinear matches.
 Save each NCBI response under its listed local filename, in the order shown;
 do not substitute a repository copy or a Gallery session.
 
@@ -105,15 +105,15 @@ Open **Settings** and choose the **LOSATP** button in **LOSAT Mode**. Choose
 **Pairwise matches** from the **LOSATP mode** menu and set **Match style** to
 **Curve** under **Comparison appearance**; Collinear blocks keeps that style but
 hides the control. Then choose **Collinear blocks** from the **LOSATP mode**
-menu, select **Build similarity groups with within-record searches**, clear
-**Max target seqs** so it shows **Unbounded**, and set the remaining block, Performance, and
-result-filter values. Then open **Advanced
+menu, select **Build similarity groups with within-record searches**, leave
+**Max target seqs** at **Unbounded**, set **Max hits per protein for groups** to
+`5`, and set the remaining block, Performance, and result-filter values. Then open **Advanced
 comparison and layout** and set the advanced Collinear values.
 
 Fresh Web Collinear settings leave **Build similarity groups with within-record
-searches** off and set **Max target seqs** to `5`. The Gallery figure and the
-command-line and Python workflows build similarity groups with within-record
-searches from an unbounded search, so change both values to reproduce it. Fresh and Reset
+searches** off. The Gallery figure and the command-line and Python workflows
+build similarity groups with within-record searches, so select it to reproduce
+the figure. Fresh and Reset
 Collinear settings default **Search between** to **Adjacent pairs**, which is
 also the value used by this checked recipe and output.
 
@@ -157,7 +157,7 @@ open until processing finishes. Select **Reset zoom**, select **Zoom out** six
 times to reach **40%**, then drag the preview horizontally until the complete
 diagram is centered.
 
-The result contains 500 rendered Collinear match elements. Their endpoints
+The result contains 492 rendered Collinear match elements. Their endpoints
 cover the four adjacent display pairs. Blue and red families distinguish the
 two orientations, and intensity carries average identity within each family.
 
@@ -188,11 +188,13 @@ select **SVG** to save `losatp_collinear.svg`.
 
 ### Variant: use all-record evidence
 
-Keep **Adjacent pairs** for the checked result above. To build blocks from
-every record pair, change **Search between** to **All records** in Step 3. A
-fresh five-record run executes 25 directional and self search jobs. Block
-construction uses evidence from every record pair, while the finished ribbons
-still connect adjacent display rows.
+Keep **Adjacent pairs** for the checked result above. To build the similarity
+groups from every record pair, change **Search between** to **All records** in
+Step 3; it is shown while **Build similarity groups with within-record
+searches** is selected. A fresh five-record run executes 25 directional and
+self search jobs. The groups use evidence from every record pair, while the
+blocks stay the same and the finished ribbons still connect adjacent display
+rows.
 
 See [selected Linear edges](../REFERENCE/comparison-programs-thresholds-and-results.md#selected-linear-edges)
 for the scope and display rules.
@@ -247,6 +249,7 @@ gbdraw linear \
   --losatp_mode collinear \
   --losat_threads 32 \
   --collinear_search_scope adjacent \
+  --collinear_infer_orthogroups on \
   --collinear_max_unit_gap 0 \
   --collinear_min_anchors 1 \
   --collinear_max_diagonal_drift 0 \
@@ -272,13 +275,14 @@ gbdraw linear \
 ```
 <!-- executable:T-CLI-10:end -->
 
-Expected output: LOSATP performs four adjacent protein searches,
-and gbdraw writes `losatp_collinear.svg` in the working directory.
+Expected output: LOSATP performs 13 directed protein searches, 8 between
+adjacent records and 5 within records for the similarity groups (8 with
+`--collinear_infer_orthogroups off`), and gbdraw writes `losatp_collinear.svg` in the working directory.
 
 Open `losatp_collinear.svg` and compare its record layout and Collinear blocks
 with the figure at the top of this page. Your SVG should match it: verify five
 complete records in the documented order, centered alignment, rulers, GC
-content and skew, and 500 rendered Collinear match elements colored by
+content and skew, and 492 rendered Collinear match elements colored by
 orientation and identity.
 
 ## In Python
@@ -333,6 +337,7 @@ options = LinearOptions(
         match_style="curve",
         collinearity_scope="adjacent",
         collinearity_color="orientation_identity",
+        collinearity_infer_orthogroups=True,
         collinearity_params=LosslessCollinearityParameters(
             min_anchors=1,
             max_unit_gap=0,
@@ -384,14 +389,15 @@ Run the program:
 python losatp_collinear.py
 ```
 
-Expected output: gbdraw's LOSAT runtime performs adjacent protein searches.
+Expected output: gbdraw's LOSAT runtime performs the same 13 directed protein
+searches as the command line.
 The program then prints `Saved losatp_collinear.svg` and writes the
 SVG in the current directory.
 
 ### Step 3: Inspect the Collinear map
 
 Open `losatp_collinear.svg` and check the five complete records in the
-documented order, 500 rendered Collinear matches, centered alignment, rulers,
+documented order, 492 rendered Collinear matches, centered alignment, rulers,
 GC content, and GC skew. Your SVG should match the figure at the top of this
 page: the same record layout and the same adjacent Collinear blocks colored by
 orientation and identity.

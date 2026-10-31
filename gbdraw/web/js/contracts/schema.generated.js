@@ -256,7 +256,7 @@ export const LEGACY_REQUEST_TABLES = Object.freeze({
     maxDiagonalDrift: 'maxDiagonalDrift',
     maxConflictsInMergeGap: 'maxConflicts'
   }),
-  collinearityMergeOrientation: 'either',
+  collinearityMergeOrientation: 'strand',
   collinearityStandardParalogLinks: 'maxParalogLinksPerOrthogroup',
   paralogLinksSetting: 'collinearMaxParalogLinksPerOrthogroup',
   paralogLinksDefault: 2

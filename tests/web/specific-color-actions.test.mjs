@@ -14,6 +14,7 @@ import {
 import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/services/legend-row-names.js';
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
+import { isLegendOrderEdited } from '../../gbdraw/web/js/services/legend-svg.js';
 import { evaluatePythonRules, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
@@ -545,6 +546,46 @@ test('a rule row in the color a palette row shows after a palette switch is no L
     (error) => error.code === 'LEGEND_ROW_CONFLICT');
 });
 
+// OV-2265: a rule row with a Legend color of its own (a type row's Legend
+// color that a Legend name kept on the row it re-keyed) shows that color, as
+// Generate draws it. A commit that leaves the row's rules alone keeps the row
+// and its color; a commit that recolors the row's rule recolors the row and
+// retires that color (OV-61). Neither is a Legend row conflict (OV-644).
+const ownColorRow = () => {
+  const s = setup();
+  const { legend } = paletteSwitched(s);
+  const trna = { feat: 'CDS', qual: 'gene', val: '^a$', color: '#c83366', cap: 'tRNA' };
+  const group = { feat: 'CDS', qual: 'gene', val: '^b$', color: '#d3d3d3', cap: 'Walk group' };
+  s.state.manualSpecificRules.push(trna, group);
+  s.state.svgContainer = mounted([['tRNA', '#c83366'], ['Walk group', '#123456']]);
+  s.state.legendColorOverrides['Walk group'] = '#123456';
+  s.state.legendEntries.value = [
+    { caption: 'tRNA', originalCaption: 'tRNA', color: '#c83366', featureIds: [] },
+    { caption: 'Walk group', originalCaption: 'Walk group', color: '#123456', featureIds: [] }
+  ];
+  /** @type {{ diff: Record<string, { caption: string, color: string }[]> } | null} */
+  let prepared = null;
+  // The Legend owner's preparation, on the table and rows before the transition.
+  s.setLegendPreparation(async (intents) => { prepared = await legend.prepareFileLegendEntries(intents, { previousFileIntents: s.previousIntents() }); });
+  /** @param {string} cap @param {string} color */
+  const recolor = (cap, color) => s.actions.commitSpecificRules((current, revise) => current.map((rule) => (rule.cap === cap ? revise(rule, { color }) : rule)));
+  const rows = (kind) => prepared.diff[kind].map(({ caption, color }) => [caption, color]);
+  return { s, recolor, rows };
+};
+test('a commit that leaves a rule row with a Legend color of its own keeps the row in that color (OV-2265)', async () => {
+  const { s, recolor, rows } = ownColorRow();
+  assert.equal(await recolor('tRNA', '#2a9d8f'), true);
+  assert.deepEqual(rows('update'), [['tRNA', '#2a9d8f']]);
+  assert.deepEqual(rows('unchanged'), [['Walk group', '#123456']]);
+  assert.equal(s.state.legendColorOverrides['Walk group'], '#123456', 'the row keeps its Legend color');
+});
+test('a commit that recolors the rule of a row with a Legend color of its own recolors the row (OV-2265, OV-61)', async () => {
+  const { s, recolor, rows } = ownColorRow();
+  assert.equal(await recolor('Walk group', '#ff0000'), true);
+  assert.deepEqual(rows('update'), [['Walk group', '#ff0000']]);
+  assert.equal(Object.hasOwn(s.state.legendColorOverrides, 'Walk group'), false, 'the recolored rule retires the Legend color');
+});
+
 // PD-OI-063: Restore gives a returning row the color Generate gives it; for a
 // palette row, the palette's after a switch, not the swatch it recorded.
 test('Restore gives a deleted palette row the palette color it shows after a palette switch', () => {
@@ -904,11 +945,14 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   state.extractedFeatures.value = [...resultCatalogFeatures(state).renderedByIdentity.values()];
   const drawingState = withDrawings(state);
   let rerenders = 0;
+  /** @type {unknown[]} The Legend order each commit gives the Legend owner. */
+  const orders = [];
   const actions = createFeatureRuleActions({
     ref: value => ({ value }), computed: get => ({ get value() { return get(); } }), state: drawingState,
     rulePreparation: createRulePreparation({ state: drawingState, evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules }),
     runUndoableCheckpoint: async (_label, commit) => commit(), runUndoable: async (_label, commit) => commit(),
-    prepareFileLegendEntries: async (intents) => {
+    prepareFileLegendEntries: async (intents, options = {}) => {
+      orders.push(options.legendOrder ?? null);
       const diff = diffLegendIntents(state.legendEntries.value, intents);
       return { diff, isCurrent: () => true, apply: () => {
         state.legendEntries.value = intents;
@@ -945,7 +989,127 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   assert.equal(rerenders, first + 1, 'Undo and Redo of the rename ask no rerender');
   assert.equal(await actions.commitSpecificRules(() => [tagRule('A', 'gamma'), tagRule('B', 'beta')]), true);
   assert.equal(rerenders, first + 2, 'a rename of part of the row asks Python');
+  // OV-2194, OV-2247, OV-2248 (Owner 2026-10-29): a build Python answers
+  // carries the Legend order of its next table; the commit gives the Legend
+  // owner that order by the keys it allocates to the rows: a rule row by its
+  // rule (also rules of several feature types, review M2 of #1467), a
+  // renderer row by its key. A row Keep both places takes no order (D-29),
+  // and a build without an answer gives none.
+  const trnaRule = { feat: 'tRNA', qual: 'product', val: '^tRNA-Gly$', color: '#112233', cap: 'delta' };
+  for (const [name, next, legend, order, legendPlacement] of [
+    ['one type', [tagRule('A', 'delta'), tagRule('B', 'beta')], [1, 0, 'other proteins'], ['beta', 'delta', 'other proteins'], null],
+    ['two types', [trnaRule, tagRule('B', 'beta')], [1, 0], ['beta', 'delta'], null],
+    ['Keep both', [tagRule('A', 'delta'), tagRule('B', 'beta')], [0, 1], null, { name: 'delta', color: '#112233', at: 'beta' }],
+    ['no answer', [tagRule('A', 'delta'), tagRule('B', 'beta')], null, null, null]
+  ]) {
+    state.manualSpecificRules.splice(0, state.manualSpecificRules.length, tagRule('A', 'beta'), tagRule('B', 'beta'));
+    state.legendEntries.value = [{ caption: 'beta', color: '#112233' }];
+    assert.equal(await actions.commitSpecificRules(() => (legend ? { rules: next, legend } : next), 'Rename legend item',
+      { legendPlacement }), true, name);
+    assert.deepEqual(orders.at(-1), order, name);
+  }
+  // A rule captioned like a renderer row of another color (Python's row
+  // `CDS [#ff0000]` beside the drawn `CDS` row of B) is named by the key the
+  // commit gives it (review N1 of #1468).
+  const redCds = { feat: 'CDS', qual: 'locus_tag', val: '^(Q)$', color: '#ff0000', cap: 'CDS' };
+  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, tagRule('A|Y', 'beta'), redCds);
+  state.legendEntries.value = [{ caption: 'beta', color: '#112233' }, { caption: 'CDS [#ff0000]', color: '#ff0000' },
+    { caption: 'CDS', originalCaption: 'CDS', color: '#808080' }];
+  const shownSvg = state.svgContainer;
+  state.originalLegendOrder = { value: ['beta', 'CDS [#ff0000]', 'CDS'] };
+  state.svgContainer = mounted([['beta', '#112233'], ['CDS [#ff0000]', '#ff0000'], ['CDS', '#808080']]);
+  assert.equal(await actions.commitSpecificRules(() => ({ rules: [tagRule('Y', 'beta'), redCds, tagRule('A', 'delta')], legend: [0, 1, 2, 'CDS'] }),
+    'Rename legend item'), true, 'renderer row');
+  assert.deepEqual(orders.at(-1), ['beta', 'CDS [#ff0000]', 'delta', 'CDS'], 'a rule row keyed apart from the renderer row');
+  state.svgContainer = shownSvg;
+  delete state.originalLegendOrder;
+  // OV-2193 (review L3 of #1467): the rule owner's `reviseColorRules`, the
+  // Legend editor's rename. Rules renamed onto a listed row move just before
+  // its first rule; a move that would change the rule coloring a feature
+  // leaves them in place, and Python's answer gives the old order (OV-2248,
+  // Owner 2026-10-29).
+  const revise = (row, patch) => ({ ...row, ...patch });
+  for (const [name, delta, table, legend] of [
+    ['moved', '^(B)$', [['^(B)$', 'delta'], ['^(A)$', 'alpha'], ['^(Z)$', 'alpha']], ['delta', 'alpha']],
+    ['kept in place (OV-2248)', '^(A|B)$', [['^(A)$', 'alpha'], ['^(A|B)$', 'delta'], ['^(Z)$', 'alpha']], ['alpha', 'delta']]
+  ]) {
+    const rows = [tagRule('A', 'beta'), { ...tagRule('B', 'delta'), val: delta, color: '#445566' }, tagRule('Z', 'alpha')];
+    state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...rows);
+    const next = await actions.reviseColorRules([rows[0]], { cap: 'alpha', color: '#112233' }, 'alpha')([...rows], revise,
+      () => state.extractedFeatures.value);
+    assert.ok(next && !Array.isArray(next), name);
+    assert.deepEqual(next.rules.map(({ val, cap }) => [val, cap]), table, name);
+    // Python's Legend order of the table, by caption: the kept table keeps alpha first (OV-2248).
+    assert.deepEqual(next.legend?.map((row) => (typeof row === 'number' ? next.rules[row].cap : row)), legend, name);
+  }
+  // A join that moves no rule (the renamed rules stand after the joined row's
+  // first rule) gets Python's answer too, so its rows go where Generate draws them.
+  const after = [tagRule('Z', 'alpha'), { ...tagRule('B', 'delta'), color: '#445566' }, tagRule('A', 'beta')];
+  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...after);
+  const unmoved = await actions.reviseColorRules([after[2]], { cap: 'alpha', color: '#112233' }, 'alpha')([...after], revise,
+    () => state.extractedFeatures.value);
+  assert.ok(unmoved && !Array.isArray(unmoved), 'a join that moves no rule');
+  assert.deepEqual(unmoved.rules.map(({ val, cap }) => [val, cap]), [['^(Z)$', 'alpha'], ['^(B)$', 'delta'], ['^(A)$', 'alpha']]);
+  assert.deepEqual(unmoved.legend?.map((row) => (typeof row === 'number' ? unmoved.rules[row].cap : row)), ['alpha', 'delta']);
+  // OV-2264: a revision that joins no row but takes part of a row (the popup's
+  // "rule" scope recolors one of the row's rules) gets Python's answer as well,
+  // so the row it splits or re-keys goes where Generate draws it. A revision
+  // that takes whole rows moves no row and asks Python nothing.
+  const recolored = [tagRule('A', 'alpha'), { ...tagRule('B', 'delta'), color: '#445566' }, tagRule('Z', 'alpha')];
+  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...recolored);
+  const recolor = await actions.reviseColorRules([recolored[0]], { cap: 'alpha', color: '#abcdef' }, null)([...recolored], revise,
+    () => state.extractedFeatures.value);
+  assert.ok(recolor && !Array.isArray(recolor), 'a revision that splits a row');
+  assert.deepEqual(recolor.rules.map(({ val, color }) => [val, color]), [['^(A)$', '#abcdef'], ['^(B)$', '#445566'], ['^(Z)$', '#112233']]);
+  assert.deepEqual(recolor.legend?.map((row) => (typeof row === 'number' ? `${recolor.rules[row].cap} ${recolor.rules[row].color}` : row)),
+    ['alpha #abcdef', 'delta #445566'], 'Python\'s order of the rows the drawn features take (no feature has tag Z)');
+  const whole = await actions.reviseColorRules([recolored[0], recolored[2]], { cap: 'alpha', color: '#abcdef' }, null)([...recolored],
+    revise, () => state.extractedFeatures.value);
+  assert.ok(Array.isArray(whole), 'a revision of whole rows is a plain table');
 });
+
+// Review round 2 of #1474: a commit whose answer moves a listed row writes the
+// displayed Result's inventory, which only a checkpoint step records, so it is
+// one checkpoint step even when it adds and removes no row; Undo then returns
+// the list and the inventory together, and the list keeps the default order.
+test('a commit whose answer moves a listed row is a checkpoint step, so Undo keeps the default order', () => withDocument(async () => {
+  const inventory = { value: ['beta', 'alpha', 'other proteins'] };
+  const s = setup(undefined, {
+    createHistory: (state) => createHistoryManager({
+      buildIntent: () => structuredClone({ rules: state.manualSpecificRules, entries: state.legendEntries.value }),
+      applyIntent: ({ rules, entries }) => {
+        state.manualSpecificRules.splice(0, Infinity, ...structuredClone(rules));
+        state.legendEntries.value = structuredClone(entries);
+      },
+      // A checkpoint records the editor state with the inventory (history-snapshot.js), an intent step not the inventory.
+      buildCheckpoint: () => structuredClone({ rules: state.manualSpecificRules, entries: state.legendEntries.value, inventory: inventory.value }),
+      applyCheckpoint: ({ rules, entries, inventory: kept }) => {
+        state.manualSpecificRules.splice(0, Infinity, ...structuredClone(rules));
+        state.legendEntries.value = structuredClone(entries);
+        inventory.value = structuredClone(kept);
+      }
+    }),
+    // The Legend owner's answer in the default order (entry-actions.js): the
+    // rows and the inventory take Python's order.
+    prepareFileLegendEntries: async () => ({
+      diff: { add: [], update: [], remove: [], unchanged: [] }, reorders: true, isCurrent: () => true,
+      apply: () => {
+        const order = ['alpha', 'beta', 'other proteins'];
+        s.state.legendEntries.value = order.map((caption) => ({ caption, originalCaption: caption }));
+        inventory.value = [...order];
+        return { add: [], retire: [], order };
+      }
+    })
+  });
+  s.state.legendEntries.value = inventory.value.map((caption) => ({ caption, originalCaption: caption }));
+  s.state.manualSpecificRules.push({ feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'beta' });
+  await s.history.initializeIntentBaseline();
+  assert.equal(await s.actions.commitSpecificRules((current) => current.map((rule) => ({ ...rule, color: '#00aa00' }))), true);
+  assert.equal(s.rerenders(), 1, 'the commit asks for the rerender');
+  await s.history.undo();
+  assert.deepEqual(s.state.legendEntries.value.map(({ caption }) => caption), ['beta', 'alpha', 'other proteins']);
+  assert.equal(isLegendOrderEdited(s.state.legendEntries.value, inventory.value), false);
+}));
 
 // OV-445, OV-443: a rule commit runs once its rules are prepared, and a newer
 // commit supersedes a pending one. An Add is never dropped that way: a second

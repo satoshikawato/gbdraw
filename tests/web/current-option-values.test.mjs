@@ -73,8 +73,8 @@ assert.throws(() => requireCurrentCollinearSearchScope('all-records'), /search s
 
 for (const [validator, validValues, invalidValue] of [
   [requireCurrentCollinearUnitMode, ['auto', 'cds', 'locus'], 'gene'],
-  [requireCurrentCollinearAnchorMode, ['all', 'one_to_one', 'rbh'], 'top3'],
-  [requireCurrentCollinearMergeOrientation, ['strand', 'order', 'either'], 'both'],
+  [requireCurrentCollinearAnchorMode, ['all', 'rbh'], 'one_to_one'],
+  [requireCurrentCollinearMergeOrientation, ['strand', 'order'], 'both'],
   [requireCurrentCollinearColorMode,
     ['average_identity', 'orientation', 'orientation_identity'], 'score'],
   [requireCurrentOrthogroupMembershipMode, ['anchor_core_v1'], 'banana']
@@ -83,6 +83,8 @@ for (const [validator, validValues, invalidValue] of [
   assert.throws(() => validator(invalidValue));
 }
 assert.equal(requireCurrentCollinearColorMode('identity'), 'average_identity');
+// "either" is the old spelling of "strand" (OV-2301).
+assert.equal(requireCurrentCollinearMergeOrientation('either'), 'strand');
 
 for (const [validator, defaultValue, minimum] of [
   [requireCurrentProteinBlastpMaxHits, 5, 1],
@@ -162,6 +164,12 @@ assert.throws(
   }),
   /collinearMaxGeneGap is obsolete/
 );
+
+// A draft that holds the removed anchor mode one_to_one, or a spelling of it,
+// loads it as rbh with a Load row (OV-2303).
+for (const retired of ['one_to_one', 'top1', 'mutual-best']) {
+  assert.deepEqual(readCollinearAnchorMode(retired), { value: 'rbh', lost: true }, retired);
+}
 
 // The five comparison settings: the Web reads each spelling exactly as Python's
 // read_spelling does, from the generated description (OV-776). Load gives the

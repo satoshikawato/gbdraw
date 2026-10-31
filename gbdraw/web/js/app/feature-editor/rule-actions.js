@@ -7,7 +7,7 @@
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { msg, t } from '../../utils/i18n.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
-import { runWhenPrepared, synthesizedRuleTable } from '../rule-matching.js';
+import { joinedLegendRow, runWhenPrepared, synthesizedRuleTable } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
 import { isCardRow, parseSpecificRules, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
@@ -35,7 +35,8 @@ import {
 /** @import { StoredWhitelistRule } from '../../services/config-field-readers.js' */
 import { hasOwnEntry, ownEntry } from '../../utils/own-entry.js';
 import {
-  displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder, resultLegendRowKeys
+  displayedDrawnFeatures, displayedLegendRowContext, featureDrawnContext, legendRowsShowable, legendRuleOrder,
+  resultLegendRowKeys
 } from '../../services/feature-visibility.js';
 import { legendRowTakesPlace, shownLegendKeys, shownPythonLegendRow } from '../../services/legend-svg.js';
 import {
@@ -79,7 +80,8 @@ import {
  * allocates its key), and where it goes: with `replaces`, in the place of the
  * row of key `at`, which it replaces with every record stored under that key
  * (a whole row renamed, OV-158); else right after the row of key `at` (a row
- * split off, D-29).
+ * split off by Keep both, D-29). Without one, a row goes where Python's
+ * answer puts it (`legendRowsInOrder`), else where the commit adds it.
  * @typedef {{ name: string, color: string, at: PythonLegendKey, replaces?: boolean }} LegendPlacement
  */
 
@@ -87,6 +89,7 @@ import {
  * The Legend rows a rule commit draws, prepared and not yet applied.
  * @typedef {object} PreparedFileLegend
  * @property {{ add: any[], update: any[], remove: any[], unchanged: any[] }} diff
+ * @property {boolean} reorders Whether Python's answer moves a listed row the commit keeps (the default order).
  * @property {() => boolean} isCurrent
  * @property {() => import('../candidate-render.js').RuleLegendRows | null} apply Writes the rows into the
  *   intent; returns the rows the displayed Result shows at once.
@@ -105,7 +108,7 @@ import {
 /**
  * @typedef {object} FeatureRuleActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(intents: Record<string, any>[], options?: { drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: { caption: PythonLegendKey, after: PythonLegendKey } | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
+ * @property {(intents: Record<string, any>[], options?: { drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: import('../legend/entry-actions.js').LegendRowPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey>, legendOrder?: readonly PythonLegendKey[] | null }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
  * @property {MoveLegendRecordsPort} moveLegendRecords
  *   The Legend owner's move of a drawing's Legend records; this owner calls it only for a drawing not shown.
@@ -209,7 +212,17 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const rowOf = (rule) => ({ caption: currentCaption(rule), color: rule.color });
     const ruleRows = captioned.map(rowOf);
     const currentMatches = drawnRuleMatches({ rules: drawing.manualSpecificRules, features: displayed.features });
-    const drawnRuleRows = currentMatches.known ? captioned.filter(currentMatches.groupTaken).map(rowOf) : ruleRows;
+    // OV-2265 (OV-61): a rule row with a Legend color of its own shows that
+    // color, as Generate draws it, until a commit recolors the row's rule:
+    // that commit retires the Legend color (`supersededLegendColors`).
+    const overrides = drawing.legendColorOverrides;
+    /** @template {{ caption: PythonLegendKey, color: string }} Row @param {Row} row @returns {Row} */
+    const shownRow = (row) => {
+      const current = ruleRows.find(({ caption }) => caption === row.caption);
+      return Object.hasOwn(overrides, row.caption) && current && resolveColorToHex(current.color) === resolveColorToHex(row.color)
+        ? { ...row, color: overrides[row.caption] } : row;
+    };
+    const drawnRuleRows = (currentMatches.known ? captioned.filter(currentMatches.groupTaken).map(rowOf) : ruleRows).map(shownRow);
     /** @type {readonly LegendRow[]} */
     const listed = drawing.legendEntries.value || [];
     // OV-282: in the color each shows (the palette's for a palette row), as the Legend preparation reads it.
@@ -218,11 +231,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       .map(entry => ({ caption: legendEntryKey(entry), color: shown.listed(entry) }));
     const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows).intents.map(intent => intent.caption));
     return {
-      intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents,
+      intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents.map(shownRow),
       previousIntents: [...drawnRuleRows, ...takenRows, ...retiredLegendIntents],
       ownedCaptions: new Set([...ruleRows, ...takenRows, ...retiredLegendIntents].map(intent => intent.caption)),
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption)),
-      rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows)
+      rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows),
+      rendererRows
     };
   };
   // OV-43 (Owner decision 2026-10-06, option A), narrowed by R14-8 (U3a 1d):
@@ -435,17 +449,19 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       const inputs = rulePreparation.snapshot();
       /** @type {Map<Partial<SpecificColorRule>, SpecificColorRule>} */
       const revised = new Map();
-      const rules = await build(current, (row, patch) => {
+      const built = await build(current, (row, patch) => {
         const next = { ...row, ...patch };
         revised.set(next, row);
         return next;
-      });
+      }, () => displayedDrawnFeatures(state, drawing));
+      const answered = built && !Array.isArray(built) ? built : null;
+      const rules = Array.isArray(built) ? built : answered ? answered.rules : null;
       if (!rules || contentChanged()) return false;
       // The row each rule is written into, so a kept or revised row keeps its identity.
       const sourceRows = rules.map(rule => revised.get(rule) || (current.find(row => row === rule) ?? null));
       const reinstalled = !sameRows();
       const outcome = !reinstalled && rulePreparation.isCurrent(inputs)
-        && await commitOnce(drawing, rules, sourceRows, label, commitOptions);
+        && await commitOnce(drawing, rules, sourceRows, label, commitOptions, answered ? answered.legend : null);
       const stale = reinstalled || state.results.value !== results || !rulePreparation.isCurrent(inputs);
       if (outcome || attempt === 2 || !stale || contentChanged()
         || commitOptions.isCurrent?.() === false
@@ -487,14 +503,16 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * @param {readonly (Readonly<SpecificColorRule> | null)[]} sourceRows The row each rule is written into, or null for a new row.
    * @param {string} label
    * @param {CommitSpecificRulesOptions} [options]
+   * @param {import('../../services/specific-color-rules.js').AnsweredRuleTable['legend']} [legendOrder] Python's
+   *   Legend order of `rules` on the displayed Result.
    */
-  const commitOnce = async (drawing, rules, sourceRows, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], legendPlacement = null, joinsOpenStep = false } = {}) => {
+  const commitOnce = async (drawing, rules, sourceRows, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], legendPlacement = null, joinsOpenStep = false } = {}, legendOrder = null) => {
     const candidate = await prepareRules(rules);
     if (!candidate) return false;
     const current = () => !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
     if (!current()) return false;
-    const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
+    const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed, rendererRows } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
     // The placed row is the intent of its name and color, by the key the
     // commit allocates to it (`X [<fill>]` while another row shows `X`).
     /** @type {PythonLegendKey | undefined} */
@@ -504,23 +522,35 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const replaced = new Map(placedKey && legendPlacement?.replaces && placedKey !== legendPlacement.at ? [[legendPlacement.at, placedKey]] : []);
     // The rows the Legend owner keeps in their place under a new key (OV-645, OV-1235).
     const inPlace = new Map([...rekeyed, ...replaced]);
+    const placement = !placedKey || !legendPlacement || legendPlacement.replaces ? null
+      : { caption: placedKey, after: legendPlacement.at };
+    // OV-2194, OV-2247, OV-2248 (Owner 2026-10-29): Python's answer is where
+    // Generate draws each row from the next table; its rule rows are keyed as
+    // the commit keys them. A row Keep both places stays where it goes (D-29).
+    const commitKey = createRuleLegendCaptions(candidate.rules, rendererRows);
+    const order = !legendOrder || placement ? null : legendOrder.map((row) => (
+      typeof row === 'number' ? commitKey(candidate.rules[row]) : /** @type {PythonLegendKey} */ (row)));
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
       .some((/** @type {KeptLegendRow} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
       drawing,
       previousFileIntents: previousIntents,
       isCurrent: current,
-      placement: placedKey && legendPlacement && !legendPlacement.replaces ? { caption: placedKey, after: legendPlacement.at } : null,
-      rekeyed: inPlace
+      placement,
+      rekeyed: inPlace,
+      legendOrder: order
     });
     if (!legend) return false;
-    const redrawsLegend = redrawsLegendFor(drawing, [...drawing.manualSpecificRules], candidate.rules, {
+    // A commit whose answer moves a listed row asks for the rerender, so Python draws that order.
+    const redrawsLegend = legend.reorders || redrawsLegendFor(drawing, [...drawing.manualSpecificRules], candidate.rules, {
       rows: { add: legend.diff.add, retire: legend.diff.remove.map(({ caption }) => caption) },
       replaced: inPlace
     });
     let applied = false;
     // One History step: the rule transition first, then the legend rows it
-    // draws (R13); a checkpoint when the legend gains or loses a row.
-    const transact = legend.diff.add.length || legend.diff.remove.length
+    // draws (R13); a checkpoint when the legend gains or loses a row, or when
+    // Python's answer moves a listed row: the Legend owner then writes the
+    // displayed Result's inventory, which only a checkpoint records.
+    const transact = legend.diff.add.length || legend.diff.remove.length || legend.reorders
       ? runUndoableCheckpoint : runUndoable;
     // D-24 (OV-731): a checkpoint step records whether the figure of each
     // side is the one its state draws, so Undo and Redo of a drawn side ask
@@ -1038,17 +1068,67 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // rest (Owner R-07); `scope` "features" gives each feature its `hash` rule,
   // and "reset" takes back the `hash` rules that name the features, each
   // feature that another rule still colors taking `color` unless it is empty.
+  // An edit that joins the listed row of key `joins` puts its rules before
+  // that row's first rule, so the row keeps its place (OV-2193).
   /**
    * @param {readonly ColorFeature[]} features
    * @param {string} color
    * @param {string} caption
    * @param {import('../rule-matching.js').GroupColorEdit['scope']} scope
+   * @param {PythonLegendKey | null} [joins]
    * @returns {SpecificRuleBuild}
    */
-  const groupColorRules = (features, color, caption, scope) => async (current) => {
+  const groupColorRules = (features, color, caption, scope, joins = null) => async (current, _revise, drawnFeatures) => {
     const labels = features.map((feature) => [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]);
-    const { table } = await rulePreparation.synthesizeGroup({ scope, features, labels, color, caption }, current);
-    return synthesizedRuleTable(table, current);
+    const joined = joins === null ? null : joinedLegendRow(getLegendRowRules(joins), current, []);
+    const { table, legend } = await rulePreparation.synthesizeGroup({
+      scope, features, labels, color, caption, joins: joined, drawn: drawnFeatures()
+    }, current);
+    return { rules: synthesizedRuleTable(table, current), legend };
+  };
+
+  // Whether revising `rows` of `current` into `next` keeps each Legend row it
+  // touches whole: no other rule draws a row with a revised rule, before or
+  // after. Such a revision moves no row, since its rules keep their places
+  // (OV-158). One that takes part of a row, or meets another row's rules, can
+  // move a row: the row's first drawing rule changes (OV-2264).
+  /**
+   * @param {readonly Partial<SpecificColorRule>[]} current
+   * @param {readonly Partial<SpecificColorRule>[]} next
+   * @param {readonly Partial<SpecificColorRule>[]} rows
+   */
+  const revisesWholeRows = (current, next, rows) => /** @type {const} */ ([
+    [current, (/** @type {Partial<SpecificColorRule>} */ rule) => rows.includes(rule)],
+    [next, (/** @type {Partial<SpecificColorRule>} */ rule) => !current.includes(rule)]
+  ]).every(([table, revised]) => {
+    const rowKey = createRuleLegendCaptions(table);
+    const captioned = table.filter((rule) => String(rule.cap ?? '').trim());
+    const touched = new Set(captioned.filter(revised).map(rowKey));
+    return !captioned.some((rule) => !revised(rule) && touched.has(rowKey(rule)));
+  });
+
+  // The revision of rules in their rows (the Legend editor's rename, "All" in
+  // the popup, the popup's "rule" scope): `rows` take `patch`, each in its row.
+  // When they join the listed row of key `joins`, Python moves the ones before
+  // that row's first rule just before it, so the joined row keeps its place,
+  // unless that changes the rule that colors a feature (OV-2193). Python
+  // answers every join, also one that moves no rule, and every revision that
+  // does not keep its rows whole (`revisesWholeRows`), so a row it splits or
+  // re-keys goes where Generate draws it (OV-2264).
+  /**
+   * @param {readonly Partial<SpecificColorRule>[]} rows
+   * @param {{ cap: string, color: string }} patch
+   * @param {PythonLegendKey | null} joins
+   * @returns {SpecificRuleBuild}
+   */
+  const reviseColorRules = (rows, patch, joins) => async (current, revise, drawnFeatures) => {
+    const next = current.map((rule) => (rows.includes(rule) ? revise(rule, patch) : rule));
+    const joined = joins === null ? null : joinedLegendRow(getLegendRowRules(joins), current, rows);
+    if (!joined && revisesWholeRows(current, next, rows)) return next;
+    const { table, legend } = await rulePreparation.synthesizeGroup({
+      scope: 'group', features: [], labels: [], color: patch.color, caption: patch.cap, joins: joined, drawn: drawnFeatures()
+    }, next);
+    return { rules: synthesizedRuleTable(table, next), legend };
   };
 
   /** @param {DrawingState} drawing @param {ColorFeature[] | null | undefined} features */
@@ -1192,6 +1272,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     getFeatureQualifier,
     getLegendRowRules,
     groupColorRules,
+    reviseColorRules,
     /** @param {number} index */
     moveSpecificRuleDown: (index) => {
       const drawing = state.activeDrawing();

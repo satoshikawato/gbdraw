@@ -2352,6 +2352,8 @@
                             <div class="pt-2 space-y-2">
                                 <p v-if="!circularSingleRecordPresentationEnabled" id="circular-record-presentation-reason" class="ui-hint">{{ form.multi_record_canvas ? t('Available when Multi-Record Canvas is off and one record is selected.') : t('Available when one record is selected.') }}</p>
                                 <div class="grid grid-cols-1 gap-2">
+                                    <div data-setting="record-names" class="grid grid-cols-1 gap-2">
+                                    <setting-note setting="record-names" class="justify-self-start"></setting-note>
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Record label') }} <help-tip id="help-circular-record-label" :text="t('Overrides the inferred organism line for this Circular record. Leave empty to keep inference.')"></help-tip></span>
                                         <input
@@ -2375,6 +2377,7 @@
                                             :placeholder="t('e.g. Neomycin biosynthetic gene cluster')"
                                             class="form-input px-1 py-1 text-xs"
                                         >
+                                    </div>
                                     </div>
                                     <div class="pt-1 border-t border-slate-200 border-dashed">
                                         <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
@@ -3211,14 +3214,14 @@
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                         <div>
-                                            <span class="linear-primary-label mb-1">{{ t('Max unit gap') }} <help-tip id="help-comparison-max-unit-gap" :text="t('Maximum CDS-order gap between neighboring anchors merged into one block.')"></help-tip></span>
+                                            <span class="linear-primary-label mb-1">{{ t('Max unit gap') }} <help-tip id="help-comparison-max-unit-gap" :text="t('Maximum number of units (loci, or CDSs without a locus identifier; see Unit mode) between neighboring anchors of one block, on both records. 0 joins adjacent units only. With Diagonal drift 0, a gap is bridged only when both records skip the same number of units.')"></help-tip></span>
                                             <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxUnitGap" :aria-label="t('Collinear max unit gap')" aria-describedby="help-comparison-max-unit-gap" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
                                             <span class="linear-primary-label mb-1">{{ t('Min block genes') }} <help-tip id="help-comparison-min-block-genes" :text="t('Minimum connected genes required for a Collinear ribbon.')"></help-tip></span>
                                             <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" :aria-label="t('Collinear minimum block genes')" aria-describedby="help-comparison-min-block-genes" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
-                                        <div>
+                                        <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-search-scope')">
                                             <label class="linear-primary-label mb-1">{{ t('Search between') }}</label>
                                             <select v-model="losat.blastp.collinearSearchScope" :aria-label="t('Collinear search between')" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                 <option value="adjacent">{{ t('Adjacent pairs') }}</option>
@@ -3267,8 +3270,9 @@
                                                     <option value="curve">{{ t('Curve') }}</option>
                                                 </select>
                                             </div>
-                                            <div>
+                                            <div data-setting="comparison-height">
                                                 <label class="linear-primary-label mb-1">{{ t('Match height') }}</label>
+                                                <setting-note setting="comparison-height"></setting-note>
                                                 <auto-value-field :visible="autoValueVisible(adv.comparison_height, 'pairwiseMatchHeight')" :text="autoValueText('pairwiseMatchHeight')">
                                                     <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" :aria-label="t('Comparison match height')" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
@@ -3281,11 +3285,11 @@
                                         <div class="linear-primary-label">{{ t('Search limits') }}</div>
                                         <div class="grid min-w-0 grid-cols-1 gap-2">
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('losatp-candidate')">
-                                        <span class="linear-primary-label mb-1">{{ t('Max target seqs') }} <help-tip id="help-comparison-max-target-seqs" :text="t('Raw LOSATP search limit per query protein (--max-target-seqs). Leave blank for an unbounded search. Changing this value requires matching raw search results. Defaults: 5 for Collinear, unbounded for Similarity groups. Each mode remembers its own hit limits.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Max target seqs') }} <help-tip id="help-comparison-max-target-seqs" :text="t('Raw LOSATP search limit per query protein (--max-target-seqs). In a within-record search the query protein itself counts as one target. Leave blank for an unbounded search, the default. Changing this value requires matching raw search results. Each mode remembers its own hit limits.')"></help-tip></span>
                                         <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.candidateLimit" :aria-label="t('LOSATP Max target seqs')" aria-describedby="help-comparison-max-target-seqs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
-                                        <span class="linear-primary-label mb-1">{{ t('Max hits per protein for groups') }} <help-tip id="help-comparison-member-hits-per-protein" :text="t('Maximum directional subject hits used to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Max hits per protein for groups') }} <help-tip id="help-comparison-member-hits-per-protein" :text="t('Maximum distinct subject proteins, not counting the protein itself, kept per query protein in each directed record-pair search to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches.')"></help-tip></span>
                                         <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.orthogroupMemberMaxHits" :aria-label="t('Max hits per protein for groups')" aria-describedby="help-comparison-member-hits-per-protein" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                         </div>
@@ -3476,14 +3480,15 @@
                         </div>
 
                         <div v-if="mode === 'circular'" data-setting="species-strain" class="space-y-2">
-                            <setting-note setting="species-strain"></setting-note>
                             <div class="grid grid-cols-2 gap-1.5">
-                                <div>
+                                <div data-setting="species">
+                                    <setting-note setting="species"></setting-note>
                                     <span class="input-label"><label for="circular-species">{{ t('Species') }}</label> <help-tip id="help-species" :text="t('Species name used in the circular center label when no custom plot title is set.')"></help-tip></span>
                                     <input id="circular-species" type="text" v-model="form.species" aria-describedby="help-species" class="form-input" :placeholder="t('e.g., {example}', { example: 'Escherichia coli' })" :disabled="!semanticMutationAvailable">
                                     <markup-preview :text="form.species"></markup-preview>
                                 </div>
                                 <div>
+                                    <setting-note setting="species-strain"></setting-note>
                                     <span class="input-label">{{ t('Strain') }} <help-tip id="help-strain" :text="t('Strain or isolate name used in the circular center label.')"></help-tip></span>
                                     <input type="text" v-model="form.strain" :aria-label="t('Strain')" aria-describedby="help-strain" class="form-input" placeholder="e.g. K-12" :disabled="!semanticMutationAvailable">
                                 </div>
@@ -3546,19 +3551,17 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <span class="linear-primary-label mb-1">{{ t('Anchor mode') }} <help-tip id="help-comparison-anchor-mode" :text="t('Choose all directional hits, one-to-one hits, or reciprocal best hits as Collinear anchors.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Anchor mode') }} <help-tip id="help-comparison-anchor-mode" :text="t('Reciprocal best hits makes two proteins an anchor when each is the best hit of the other; with similarity groups, the links of the groups are the anchors. All hits makes every hit that passes the result filters an anchor.')"></help-tip></span>
                                         <select v-model="losat.blastp.collinearAnchorMode" :aria-label="t('Collinear anchor mode')" aria-describedby="help-comparison-anchor-mode" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="all">{{ t('All hits') }}</option>
-                                            <option value="one_to_one">{{ t('One-to-one') }}</option>
                                             <option value="rbh">{{ t('Reciprocal best hits') }}</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <span class="linear-primary-label mb-1">{{ t('Merge orientation') }} <help-tip id="help-comparison-merge-orientation" :text="t('Require compatible strand, gene order, or accept either orientation when merging Collinear anchors.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Merge orientation') }} <help-tip id="help-comparison-merge-orientation" :text="t('Strand: neighboring anchors of a block follow its strand orientation and the gene order. Gene order: they follow the gene order only.')"></help-tip></span>
                                         <select v-model="losat.blastp.collinearMergeOrientation" :aria-label="t('Collinear merge orientation')" aria-describedby="help-comparison-merge-orientation" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="strand">{{ t('Strand') }}</option>
                                             <option value="order">{{ t('Gene order') }}</option>
-                                            <option value="either">{{ t('Either') }}</option>
                                         </select>
                                     </div>
                                     <div>
@@ -3613,7 +3616,10 @@
                                             <input :value="item.target.selectors[0].value" @input="setAnnotationField(set, item, 'selectorValue', $event.target.value)" @change="$event.target.value = $event.target.value.trim()" :aria-label="t('Annotation qualifier value')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Value')" :disabled="!semanticMutationAvailable">
                                         </template>
                                         <p v-else class="min-w-0 truncate text-[10px] text-slate-600" data-annotation-feature-identity :title="annotationFeatureCaption(item)">{{ annotationFeatureCaption(item) }}</p>
+                                        <div data-setting="annotation-style" class="contents">
                                         <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-6 w-6 p-0" :title="t('Fill color')" :aria-label="t('Annotation fill color')" :disabled="!semanticMutationAvailable">
+                                        <setting-note setting="annotation-style" :item="{ setId: set.id, itemId: item.id }" class="col-span-full row-start-2 justify-self-start"></setting-note>
+                                        </div>
                                         <button :aria-label="t('Delete annotation')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" :title="t('Delete annotation')" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                     </div>
                                     <div class="flex min-w-0 items-center gap-2">
@@ -3656,7 +3662,7 @@
                                                     <input type="number" min="0" :value="item.lane" @input="setAnnotationField(set, item, 'lane', $event.target.value)" :disabled="!semanticMutationAvailable || (item.mark === 'highlight')" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" :placeholder="t('Auto')" :aria-label="t('Annotation lane')" :aria-describedby="`help-annotation-lane-${item.id}`">
                                                     <help-tip :id="`help-annotation-lane-${item.id}`" :label="t('Help: Annotation lane')" :text="t('Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band.')"></help-tip>
                                                 </div>
-                                                <label class="flex items-center gap-1 text-[10px] text-slate-600">{{ t('Line color') }} <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-6 w-8 p-0" :disabled="!semanticMutationAvailable"></label>
+                                                <div data-setting="annotation-style" class="flex items-center gap-1"><label class="flex items-center gap-1 text-[10px] text-slate-600">{{ t('Line color') }} <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-6 w-8 p-0" :disabled="!semanticMutationAvailable"></label><setting-note setting="annotation-style" :item="{ setId: set.id, itemId: item.id }"></setting-note></div>
                                                 <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" :checked="Boolean((item.style || set.defaultStyle).hatch)" @change="setAnnotationStyle(set, item, 'hatch', $event.target.checked ? { angle: 45, spacing: 5, color: (item.style || set.defaultStyle).stroke, width: 1, cross: false } : null)" :disabled="!semanticMutationAvailable"> {{ t('Hatch') }}</label>
                                             </div>
                                         </div>
@@ -4054,7 +4060,7 @@
                                                         </div>
                                                     </div>
                                                     <div class="track-slot-geometry-grid">
-                                                        <div class="track-slot-field">
+                                                        <div class="track-slot-field" data-setting="track-geometry">
                                                             <span class="track-slot-field-label">h <help-tip :id="`help-linear-slot-height-${entry.index}`" :text="entry.slot.renderer === 'features' ? t('Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.') : t('Linear track height in pixels (px optional; positive). Leave blank for the automatic height.')"></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'height')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'height') }}</span>
@@ -4069,6 +4075,7 @@
                                                                 >
                                                                 <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'height')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'height') }}</span>
                                                             </div>
+                                                            <setting-note setting="track-geometry" :item="{ slotId: entry.slot.id }" class="mt-0.5 max-w-full whitespace-normal"></setting-note>
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">{{ t('spacing') }} <help-tip :id="`help-linear-slot-spacing-${entry.index}`" :text="entry.slot.renderer === 'features' ? t('Clearance between the reserved feature band and its adjacent outer track, in pixels (px optional; nonnegative). Leave blank for the automatic record-specific value.') : t('Linear vertical spacing after the track, in pixels (px optional; nonnegative). Leave blank for the automatic spacing.')"></help-tip></span>
@@ -4360,7 +4367,8 @@
                                             <div>{{ circularTrackPresetSummary().detail }}</div>
                                         </div>
                                         <div class="grid grid-cols-2 gap-1.5 rounded border border-slate-200 bg-white/70 p-1.5">
-                                            <div>
+                                            <div data-setting="track-geometry">
+                                                <setting-note setting="track-geometry"></setting-note>
                                                 <span class="input-label text-[10px]">{{ t('Center Reserved Radius') }} <help-tip id="help-circular-center-reserved-radius" :text="t('Override the center-label reserved radius in px. Lower values let inside tracks move closer to the center and may overlap the label.')"></help-tip></span>
                                                 <input type="number" min="0" step="1" v-model.number="adv.center_reserved_radius" :aria-label="t('Center Reserved Radius')" aria-describedby="help-circular-center-reserved-radius" class="form-input form-input-compact" :placeholder="t('Auto')" :disabled="!semanticMutationAvailable">
                                             </div>
@@ -4806,7 +4814,8 @@
                                     </label>
                                     <help-tip id="help-record-labels-show-definition" :text="t('Circular only. Off draws no center definition for any record (name, strain, replicon, accession, length, GC), and the inside tracks keep no room for it. The plot title is kept.')"></help-tip>
                                 </div>
-                                <div>
+                                <div data-setting="definition-text">
+                                    <setting-note setting="definition-text"></setting-note>
                                     <span class="input-label text-[10px] mb-0">{{ t('Default font size') }} <help-tip id="help-title-default-font-size" :text="t('Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.def_font_size, 'definitionFontSize')" :text="autoValueText('definitionFontSize')">
                                         <input type="number" :value="optionalNumberInputValue(adv.def_font_size)" @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)" class="form-input form-input-compact auto-value-input" :aria-label="t('Default font size')" aria-describedby="help-title-default-font-size" :disabled="!semanticMutationAvailable">
@@ -4828,8 +4837,9 @@
                                                 <option value="hide">{{ t('Hide') }}</option>
                                             </select>
                                         </div>
-                                        <details class="mt-1" :data-definition-line-style="row.key">
+                                        <details class="mt-1" :data-definition-line-style="row.key" data-setting="definition-text">
                                             <summary :aria-label="t('{label} style', { label: row.label })" class="text-[10px]">{{ t('Style') }}<span v-if="isDefinitionLineStyleMuted(row)" class="ui-hint" :title="t('Its style applies when the line is shown.')">{{ ' ' }}{{ t('(line hidden)') }}</span></summary>
+                                            <setting-note setting="definition-text"></setting-note>
                                             <div class="grid grid-cols-[4rem_auto_minmax(0,1fr)] items-end gap-1.5 pt-1.5">
                                                 <label class="input-label !block text-[9px]">{{ t('Size') }}
                                                     <input type="number" min="0.1" step="0.5" :value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" :placeholder="t('Default')" :aria-label="t('{label} font size', { label: row.label })" :disabled="!semanticMutationAvailable">
@@ -5721,7 +5731,8 @@
                         <setting-note setting="dinucleotide" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
-                                <div>
+                                <div data-setting="dinucleotide-window">
+                                    <setting-note setting="dinucleotide-window"></setting-note>
                                     <span class="input-label text-[10px]">{{ t('Window') }} <help-tip id="help-gc-window" :text="t('Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.window_size, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
                                         <input type="number" min="1" step="1" v-model.number="adv.window_size" :aria-label="t('Window')" aria-describedby="help-gc-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
@@ -6979,7 +6990,7 @@
                                         </button>
                                     </div>
                                 </div>
-                                <!-- Record definition: what the Result draws, then the settings the sidebar edits (they apply on Generate). -->
+                                <!-- Record definition: what the Result draws, then the settings the sidebar edits (each applies as its setting does: RECORD_POPUP_FIELDS). -->
                                 <div v-else-if="previewItemView && previewItemView.kind === 'record-definition'" :key="`record-popup-${previewItemView.identity}`" v-dialog-focus class="space-y-3" data-preview-item-popup="record-definition">
                                     <dl class="match-detail-rows" tabindex="-1" data-dialog-initial-focus :aria-label="t('Record facts')">
                                         <template v-for="fact in previewItemView.facts" :key="fact.label">
@@ -6987,28 +6998,30 @@
                                             <dd>{{ fact.value }}</dd>
                                         </template>
                                     </dl>
-                                    <section v-if="previewItemView.draft" data-setting="inputs" class="space-y-2 border-t border-slate-100 pt-3">
-                                        <h3 class="feature-popup-heading">{{ t('Definition text') }} <setting-note setting="inputs" class="normal-case tracking-normal"></setting-note></h3>
-                                        <label class="block text-xs text-slate-600">{{ previewItemView.draft.nameLabel }}
-                                            <input type="text" :value="previewItemView.draft.name"
+                                    <section v-if="previewItemView.draft" class="space-y-2 border-t border-slate-100 pt-3">
+                                        <h3 class="feature-popup-heading">{{ t('Definition text') }}</h3>
+                                        <div :data-setting="previewItemView.draft.fields.name.setting" class="text-xs text-slate-600">
+                                            <label for="preview-record-name">{{ previewItemView.draft.nameLabel }}</label> <setting-note :setting="previewItemView.draft.fields.name.setting"></setting-note>
+                                            <input id="preview-record-name" type="text" :value="previewItemView.draft.name"
                                                    @change="setPreviewRecordField(previewItemView, 'name', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
-                                        </label>
-                                        <label class="block text-xs text-slate-600">{{ previewItemView.draft.subtitleLabel }}
-                                            <input type="text" :value="previewItemView.draft.subtitle"
+                                        </div>
+                                        <div :data-setting="previewItemView.draft.fields.subtitle.setting" class="text-xs text-slate-600">
+                                            <label for="preview-record-subtitle">{{ previewItemView.draft.subtitleLabel }}</label> <setting-note :setting="previewItemView.draft.fields.subtitle.setting"></setting-note>
+                                            <input id="preview-record-subtitle" type="text" :value="previewItemView.draft.subtitle"
                                                    @change="setPreviewRecordField(previewItemView, 'subtitle', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
-                                        </label>
-                                        <label class="flex items-center gap-2 text-xs text-slate-700">
-                                            <input type="checkbox" :checked="previewItemView.draft.reverse"
+                                        </div>
+                                        <div :data-setting="previewItemView.draft.fields.reverse.setting" class="flex items-center gap-2 text-xs text-slate-700">
+                                            <label class="flex items-center gap-2"><input type="checkbox" :checked="previewItemView.draft.reverse"
                                                    @change="setPreviewRecordField(previewItemView, 'reverse', $event.target.checked)"
                                                    :disabled="!semanticMutationAvailable || !previewItemView.draft.reverseAvailable"
-                                                   class="form-checkbox"> {{ t('Reverse complement') }}
-                                        </label>
+                                                   class="form-checkbox"> {{ t('Reverse complement') }}</label> <setting-note :setting="previewItemView.draft.fields.reverse.setting"></setting-note>
+                                        </div>
                                     </section>
                                     <div v-if="previewItemView.draft" class="match-actions">
                                         <button type="button" class="match-link" @click="showPreviewRecordSettings(previewItemView)">
@@ -8998,18 +9011,18 @@
 
 <script type="text/x-template" id="linear-record-names-template">
   <div class="min-w-0 space-y-2" :data-linear-record-names="seq.uid">
-    <div>
+    <div data-setting="record-names">
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>{{ t('Organism / strain (optional)') }}</span>
+        <span>{{ t('Organism / strain (optional)') }} <setting-note setting="record-names"></setting-note></span>
         <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
         <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="$emit('reset-definition', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>
       <input type="text" v-model="seq.definition" :aria-label="t('Definition for sequence {n}', { n: idx + 1 })" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || t('e.g., {example}', { example: 'Escherichia coli O157:H7 Sakai' })" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
       <markup-preview :text="seq.definition || resolveLinearRecordEffectiveDefinition(seq, source)"></markup-preview>
     </div>
-    <div>
+    <div data-setting="inputs">
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>{{ t('Subtitle / title (optional)') }}</span>
+        <span>{{ t('Subtitle / title (optional)') }} <setting-note setting="inputs"></setting-note></span>
         <span v-if="!seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
         <button v-if="seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" type="button" @click="$emit('reset-subtitle', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>

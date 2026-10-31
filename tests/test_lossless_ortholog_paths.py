@@ -219,9 +219,16 @@ def test_alias_keys_and_equal_protein_order_keys_preserve_legacy_order(tmp_path)
 # them the blocks, orthogroups, and names stay the same by protein; 27 record-local paralog
 # and co-ortholog edges take the opposite direction of the same protein pair, and member
 # products and core-support values follow.
+# Re-pinned for chained Collinear blocks (OV-2294..2296): the same orthogroups and
+# anchors, split into 492 blocks (287 singletons) instead of 500 (298 singletons).
+# Re-pinned for self hits out of the within-record fit (OV-2299, D-07 A): the same
+# blocks and anchors; members by role go from coortholog 47, inparalog 23, local
+# paralog 77, low confidence 8 in 587 groups to 35, 35, 78, 7 in 586 groups
+# (gallery-collinear), and from 45, 23, 67, 7 in 577 groups to 35, 33, 68, 7 in 576
+# groups (gallery-orthogroup).
 S04_SCIENCE_SHA256 = {
-    "gallery-collinear": "9552e6fb931a68cc52b2efa1ba1daf83aac4708e773f0dc3a3160ba8dfb1b303",
-    "gallery-orthogroup": "86ba4bf37097529161babd24e4e2cd25c7e03e863aaef77f31ddb71514cd8d5b",
+    "gallery-collinear": "5e8906d08476581a830c1ffa175df22d0b1225cda383f992d2a2a138808a9427",
+    "gallery-orthogroup": "60ba9eb1747a87c2320706501cf94da858c09150a55e1d485c4b6fa00d4a371b",
 }
 
 

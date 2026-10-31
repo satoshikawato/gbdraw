@@ -219,6 +219,16 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     }
   };
 
+  // A color input picked without a pointer first (a picker opened from the
+  // keyboard, scripted input) opens its step on the first `input`; `change`
+  // closes it, so one pick is one step (OV-2243).
+  /** @param {Event} event */
+  const onInputCapture = (event) => {
+    const target = findControl(event.target);
+    if (String(target?.type || '').toLowerCase() === 'color') void beginForElement(target);
+    else beginEditableControl(event);
+  };
+
   /** @param {KeyboardEvent} event */
   const onKeyDown = (event) => {
     // A shortcut chord is not an edit of the focused control.
@@ -276,7 +286,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
   appRoot.addEventListener('pointerdown', onPointerDown, true);
   appRoot.addEventListener('focusin', beginEditableControl, true);
   appRoot.addEventListener('keydown', onKeyDown, true);
-  appRoot.addEventListener('input', beginEditableControl, true);
+  appRoot.addEventListener('input', onInputCapture, true);
   appRoot.addEventListener('change', onChangeCapture, true);
   appRoot.addEventListener('change', onChange, false);
   appRoot.addEventListener('focusout', onFocusOut, false);
@@ -287,7 +297,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     appRoot.removeEventListener('pointerdown', onPointerDown, true);
     appRoot.removeEventListener('focusin', beginEditableControl, true);
     appRoot.removeEventListener('keydown', onKeyDown, true);
-    appRoot.removeEventListener('input', beginEditableControl, true);
+    appRoot.removeEventListener('input', onInputCapture, true);
     appRoot.removeEventListener('change', onChangeCapture, true);
     appRoot.removeEventListener('change', onChange, false);
     appRoot.removeEventListener('focusout', onFocusOut, false);

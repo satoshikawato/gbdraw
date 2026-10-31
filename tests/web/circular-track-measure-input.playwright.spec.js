@@ -574,11 +574,20 @@ for (const continuation of ['disabled', 'inactive biological']) {
     await edit(page, '0.12345678901234567');
     // Save refuses a stack whose enabled row names a disabled slot, so the tint
     // row that extends to the GC track (`to_slot=gc_content`) is turned off with it.
-    if (continuation === 'disabled') await page.evaluate(() => {
-      window.__GBDRAW_APP__.adv.circular_track_slots
-        .filter(row => row.id === 'gc_content' || [row.params?.to_slot, row.params?.anchor_slot].includes('gc_content'))
-        .forEach(row => { row.enabled = false; });
-    });
+    // Turning the GC content row off hides its track live (PD-OI-104 rev 5,
+    // D-201); a History step starts the apply, so the rows are turned off in
+    // one. Save is refused while the apply runs, so the test waits for its
+    // request: the saved Result and request are the live ones.
+    if (continuation === 'disabled') {
+      await page.evaluate(() => window.__GBDRAW_HISTORY__.runUndoable('Turn off the GC content row', () => {
+        window.__GBDRAW_APP__.adv.circular_track_slots
+          .filter(row => row.id === 'gc_content' || [row.params?.to_slot, row.params?.anchor_slot].includes('gc_content'))
+          .forEach(row => { row.enabled = false; });
+      }));
+      await expect.poll(async () => canonicalSlots((await snapshot(page)).request).map(row => row.id), { timeout: 120_000 })
+        .not.toContain('gc_content');
+      await settleLive(page);
+    }
     // E1: each mode keeps its own Result. The Circular Result and its committed
     // request stay with Circular; Linear, which has no Result, shows none. The
     // Circular slots are the Circular drawing's (PR-1).

@@ -67,11 +67,13 @@ const generate = (mode) => {
   return request.buildCanonicalRenderRequest({ state, drawing, filesData, comparisonPlanSnapshot });
 };
 const liveRows = () => owner.SETTING_APPLICATION.filter((row) => row.requestPaths);
+// The Linear cards the live projectors read: none here, so no record name applies (the G2 file tests them).
+const inputs = request.liveSettingInputsOf({ linearSeqs: [] });
 const allPaths = () => owner.allLiveSettingRequestPaths();
 // The automatic rerender's request from `committed` with the live values of `drawing`.
 const liveCandidate = (committed, drawing) => request.projectCommittedEditorIntent({
   committed, state, drawing,
-  liveSettingWrites: request.projectLiveSettingWrites({ committed, drawing, requestPaths: allPaths() })
+  liveSettingWrites: request.projectLiveSettingWrites({ committed, drawing, requestPaths: allPaths(), inputs })
 });
 const LEGEND_KEYS = ['objects.legends.color_rect_size', 'objects.legends.font_size']
   .flatMap((path) => [`${path}.short`, `${path}.long`]);
@@ -80,7 +82,9 @@ const LIVE_LINEAR_KEYS = [...LEGEND_KEYS, LOCK_KEY];
 const pick = (object, keys) => Object.fromEntries(keys.filter((key) => Object.hasOwn(object, key)).map((key) => [key, object[key]]));
 
 test('the G1 rows are the live setting rows, and each request path has its projector', () => {
-  assert.deepEqual(liveRows().map((row) => row.id), ['legend', 'plot-title', 'multi-record-layout', 'definition-column']);
+  assert.deepEqual(liveRows().map((row) => row.id), ['legend', 'plot-title', 'multi-record-layout', 'definition-column',
+    'definition-text', 'species', 'dinucleotide-window', 'annotation-style', 'comparison-height', 'track-geometry', 'record-names',
+    'track-visibility']);
   for (const row of liveRows()) assert.equal(row.application, 'live', row.id);
   for (const id of ['colors', 'feature-visibility', 'legend-editor', 'features-editor', 'feature-appearance']) {
     const row = owner.SETTING_APPLICATION.find((candidate) => candidate.id === id);
@@ -90,8 +94,8 @@ test('the G1 rows are the live setting rows, and each request path has its proje
   assert.deepEqual(allPaths().filter((path) => !request.LIVE_SETTING_REQUEST_PATHS.includes(path)), []);
   assert.deepEqual(request.LIVE_SETTING_REQUEST_PATHS.filter((path) => !allPaths().includes(path)), []);
   // Lock Definition Column is live (PD-OI-103 G1), so its help names no Generate
-  // (computation-ownership guard); Species, Strain, Default font size and Keep
-  // Full Definition stay on Generate (PD-OI-059 rev 2).
+  // (computation-ownership guard); Strain and Keep Full Definition stay on
+  // Generate in their sections (PD-OI-059 rev 3).
   assert.equal(owner.settingApplicationSentence('definition-column'), '');
   assert.equal(owner.settingApplicationNote('layout').application, 'generate');
   assert.equal(owner.settingApplicationNote('titles').application, 'generate');
@@ -121,7 +125,7 @@ test('a History step names the live request paths of the shown drawing it change
   assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'multi_record_canvas'])),
     ['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition']);
   // Settings that apply on Generate name none.
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'species'], ['config', 'adv', 'def_font_size'])), []);
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'track_type'], ['config', 'adv', 'label_font_size'])), []);
   // A step that replaced the whole drawing config names every live config field.
   assert.ok(owner.liveSettingRequestPaths(step(['config'])).includes('diagramOptions.plotTitle'));
 });
@@ -130,7 +134,7 @@ test('a Linear live apply draws the G1 values as Generate does and keeps every o
   const drawing = modeDrawing(state, 'linear');
   const committed = generate('linear');
   drawing.form.legend = 'top';
-  Object.assign(drawing.adv, { legend_font_size: 21, legend_box_size: 13, plot_title_font_size: 27, def_font_size: 30 });
+  Object.assign(drawing.adv, { legend_font_size: 21, legend_box_size: 13, plot_title_font_size: 27, label_font_size: 30 });
   drawing.adv.plot_title_position = 'top';
   drawing.form.plot_title = '  Live title  ';
   drawing.form.align_center = !drawing.form.align_center;
@@ -160,12 +164,12 @@ test('a Linear live apply draws the G1 values as Generate does and keeps every o
     pick(generate('linear').renderRequest.diagramOptions.configOverrides, LEGEND_KEYS));
   // A value Generate refuses fails the apply.
   drawing.adv.legend_font_size = 'abc';
-  assert.throws(() => request.projectLiveSettingWrites({ committed, drawing, requestPaths: allPaths() }),
+  assert.throws(() => request.projectLiveSettingWrites({ committed, drawing, requestPaths: allPaths(), inputs }),
     (error) => error.code === 'INPUT_INVALID');
   // Values equal to the committed ones write nothing.
   drawing.adv.legend_font_size = 21;
   const applied = { ...committed, renderRequest: candidate };
-  assert.deepEqual(request.projectLiveSettingWrites({ committed: applied, drawing, requestPaths: allPaths() }), []);
+  assert.deepEqual(request.projectLiveSettingWrites({ committed: applied, drawing, requestPaths: allPaths(), inputs }), []);
 });
 
 test('a Circular live apply writes the plot title font override and the grid layout as Generate does', () => {
@@ -213,15 +217,15 @@ test('Lock Definition Column OFF on a CLI-shaped request that locks yields the r
   const committed = { ...generated, renderRequest };
   const lock = `diagramOptions.configOverrides.${LOCK_KEY}`;
   // Draft still locked: nothing differs, nothing is written.
-  assert.deepEqual(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock] }), []);
+  assert.deepEqual(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock], inputs }), []);
   drawing.form.keep_definition_left_aligned = false;
-  assert.equal(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock] }).length, 1, 'OFF writes false');
+  assert.equal(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock], inputs }).length, 1, 'OFF writes false');
   assert.equal(liveCandidate(committed, drawing).renderRequest.diagramOptions.configOverrides[LOCK_KEY], false);
   assert.equal(liveCandidate(committed, drawing).renderRequest.diagramOptions.configOverrides[LOCK_KEY],
     generate('linear').renderRequest.diagramOptions.configOverrides[LOCK_KEY]);
   // A request that draws OFF stays untouched by an OFF draft.
   delete renderRequest.diagramOptions.config;
-  assert.deepEqual(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock] }), []);
+  assert.deepEqual(request.projectLiveSettingWrites({ committed, drawing, requestPaths: [lock], inputs }), []);
   drawing.form.keep_definition_left_aligned = initialLock;
 });
 
@@ -232,7 +236,7 @@ test('Lock Definition Column applies only to a Linear Result', () => {
   const committed = generate('circular');
   circular.form.keep_definition_left_aligned = !circular.form.keep_definition_left_aligned;
   assert.equal(request.liveSettingApplies(committed.renderRequest, lock, circular), false);
-  assert.deepEqual(request.projectLiveSettingWrites({ committed, drawing: circular, requestPaths: [lock] }), []);
+  assert.deepEqual(request.projectLiveSettingWrites({ committed, drawing: circular, requestPaths: [lock], inputs }), []);
   delete circular.form.keep_definition_left_aligned;
 });
 
@@ -272,18 +276,18 @@ test('a live position applies only while the draft draws the canvas of the commi
   drawing.form.multi_record_canvas = true;
   Object.assign(drawing.layoutPreferences.circular.multi, { legend: 'bottom', plotTitlePosition: 'bottom' });
   assert.equal(drawing.form.legend, 'bottom');
-  assert.deepEqual(request.projectLiveSettingWrites({ committed: single, drawing, requestPaths: positions }), []);
+  assert.deepEqual(request.projectLiveSettingWrites({ committed: single, drawing, requestPaths: positions, inputs }), []);
   drawing.layoutPreferences.circular.single.legend = 'right';
-  assert.deepEqual(request.projectLiveSettingWrites({ committed: single, drawing, requestPaths: positions }), [],
+  assert.deepEqual(request.projectLiveSettingWrites({ committed: single, drawing, requestPaths: positions, inputs }), [],
     'a change of the committed canvas\'s position applies on Generate while Multi-Record Canvas is pending on');
   drawing.form.multi_record_canvas = false;
-  assert.deepEqual(request.projectLiveSettingWrites({ committed: single, drawing, requestPaths: positions }),
+  assert.deepEqual(request.projectLiveSettingWrites({ committed: single, drawing, requestPaths: positions, inputs }),
     [[['diagramOptions', 'output', 'legend'], 'right']]);
   drawing.form.multi_record_canvas = true;
   const grid = generate('circular');
   assert.equal(grid.renderRequest.grouping, 'grid');
   drawing.form.multi_record_canvas = false;
-  assert.deepEqual(request.projectLiveSettingWrites({ committed: grid, drawing, requestPaths: positions }), [],
+  assert.deepEqual(request.projectLiveSettingWrites({ committed: grid, drawing, requestPaths: positions, inputs }), [],
     'a grid keeps the multi-record positions while Multi-Record Canvas is pending off');
   Object.assign(drawing.layoutPreferences.circular.single, { legend: 'left', plotTitlePosition: 'none' });
   Object.assign(drawing.layoutPreferences.circular.multi, { legend: null, plotTitlePosition: null });
@@ -311,7 +315,7 @@ test('a live apply onto a committed request without configOverrides creates them
   assert.equal(linearOverrides['objects.legends.font_size.short'], 19);
   // A blank value removes nothing and creates nothing.
   Object.assign(linear.adv, { legend_font_size: '', legend_box_size: '' });
-  assert.deepEqual(request.projectLiveSettingWrites({ committed: linearCommitted, drawing: linear, requestPaths: allPaths() })
+  assert.deepEqual(request.projectLiveSettingWrites({ committed: linearCommitted, drawing: linear, requestPaths: allPaths(), inputs })
     .filter(([path]) => path.includes('configOverrides')), []);
 
   const circular = modeDrawing(state, 'circular');
@@ -332,7 +336,7 @@ test('a successful apply commits only its paths, as a new committed Session', ()
   const before = structuredClone(committed);
   const revision = config.readCommittedCanonicalRevision();
   drawing.adv.legend_font_size = 18;
-  const writes = request.projectLiveSettingWrites({ committed, drawing, requestPaths: allPaths() });
+  const writes = request.projectLiveSettingWrites({ committed, drawing, requestPaths: allPaths(), inputs });
   assert.deepEqual(writes.map(([path]) => path.join('.')),
     ['diagramOptions.configOverrides.objects.legends.font_size.short', 'diagramOptions.configOverrides.objects.legends.font_size.long']);
   config.commitLiveSettingValues(writes);
@@ -361,7 +365,11 @@ test('History reports each step, checkpoint, Undo and Redo with its changes, and
     buildCheckpoint: () => structuredClone(value),
     applyCheckpoint: (checkpoint) => { value = checkpoint; }
   });
-  history.setSettingsStepListener((changes) => steps.push(changes && changes.map((change) => change.path.join('.'))));
+  const directions = [];
+  history.setSettingsStepListener((changes, direction) => {
+    steps.push(changes && changes.map((change) => change.path.join('.')));
+    directions.push(direction);
+  });
   await history.captureBaseline('initial');
   await history.runUndoable('Legend font size', () => { value.config.adv.legend_font_size = 14; });
   assert.deepEqual(steps, [['config.adv.legend_font_size']]);
@@ -369,6 +377,7 @@ test('History reports each step, checkpoint, Undo and Redo with its changes, and
   await history.redo();
   assert.deepEqual(steps, [['config.adv.legend_font_size'], ['config.adv.legend_font_size'], ['config.adv.legend_font_size']],
     'an Undo and a Redo name the paths of the step they restore');
+  assert.deepEqual(directions, [undefined, 'undo', 'redo'], 'only a restore of an intent step says which way it went');
   steps.length = 0;
   await history.runUndoableCheckpoint('Reset', () => { value.config.adv.legend_font_size = 8; });
   assert.deepEqual(steps, [['config.adv.legend_font_size']], 'a committed checkpoint names the settings it changed');
@@ -401,7 +410,7 @@ test('a live setting row the shown Result cannot draw says Applies on Generate',
   assert.deepEqual(note('plot-title', { mode: 'circular', grouping: 'grid' }, false), partial);
   assert.equal(note('legend', { mode: 'linear', grouping: 'single' }, false).text, 'Live edit');
   // A row without request paths keeps its own note.
-  assert.equal(owner.settingApplicationNote('track-visibility', () => false).qualified, true);
+  assert.equal(owner.settingApplicationNote('depth-sources', () => false).qualified, true);
 });
 
 test('no live note text is written outside the owner', async () => {

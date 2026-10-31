@@ -284,14 +284,9 @@ code writes a mounted root into a Result.
 A setting that none of these applies is **Applies on Generate**: say so beside
 the control, write only the draft, and leave the Result unchanged. Never patch
 the Result from a draft value outside the declared live rows or with a helper's
-SVG fragment. The one exception is the drawn-track hide and show that
-`PD-OI-104` keeps (`web.layout.track-toggle-application`): `applyTrackVisibility`
-in `app/svg-styles.js` hides or shows a track the Result draws at once (rows
-`track-visibility` and `depth-sources`); a track the Result lacks and the
-layout apply on Generate. A Generate reply's
-pieces are not a helper fragment: they are the Generate compiler's input and
-are admitted whole into one new Result. A new Python helper that
-returns SVG text (`DIAGRAM_HELPER_OPERATIONS` in
+SVG fragment. A Generate reply's pieces are not a helper fragment: they are the
+Generate compiler's input and are admitted whole into one new Result. A new
+Python helper that returns SVG text (`DIAGRAM_HELPER_OPERATIONS` in
 `services/diagram-worker-protocol.js`) needs architecture review.
 
 Guards:
@@ -454,9 +449,13 @@ parity case or a step of the random walk compares a live path with Python's
 Generate from the same draft; a case that compares one Web path with another
 through the same executor is not kept. The pull-request random walk
 (`tests/web/live-generate-random-walk.playwright.spec.js`, over
-`tests/web/helpers/live-random-walk.mjs`) draws every edit kind of its list on
-every run, with a fixed seed, and after each step checks that the Result equals
-a fresh Generate and that the drawing the step did not edit keeps its slices.
+`tests/web/helpers/live-random-walk.mjs` and its covering plan) draws every
+ordered pair of edit kinds of its list that one fixture can run (a Result
+switch runs only in the two-Result batch, Reset Settings and a drawing switch
+only outside it), and every kind with the popup opened
+and not and with Auto Reflow on and off, on every run, with a fixed seed, and
+after each step checks that the Result equals a fresh Generate and that the
+drawing the step did not edit keeps its slices.
 A change to a live-edit path is done when the walk passes, and, for a path or
 an editor state the walk does not draw, when the case for its edit kind in
 `tests/web/live-generate-parity.playwright.spec.js` passes with the popup
@@ -481,9 +480,10 @@ the edits made on another Result, also after Undo, Save, and Load),
 `tests/web/feature-visibility-actions.test.mjs`,
 `tests/web/feature-color-actions.test.mjs`,
 `tests/web/live-generate-random-walk.playwright.spec.js` with
-`tests/web/helpers/live-random-walk.mjs` (every edit kind of the walk on every
-run, a step kind for each work allowlist row, and each matrix case the walk
-replaced drawn in that case's states),
+`tests/web/helpers/live-random-walk.mjs` (every ordered pair of edit kinds of
+the walk that one fixture can run and every kind in each popup and Auto Reflow state on every run, a
+step kind for each work allowlist row, and each matrix case the walk replaced
+drawn in that case's states),
 `tests/web/live-generate-parity.playwright.spec.js` (the work guard over
 `tests/web/helpers/live-work-allowlist.mjs`, the matrix cases the walk does not
 replace, and named regression cases) with

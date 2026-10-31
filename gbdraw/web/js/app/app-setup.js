@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
@@ -74,7 +75,8 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
-  committedLiveSettingApplies,
+  committedSettingNotePredicate,
+  committedTrackHideDrawing,
   commitLiveSettingValues,
   readCommittedCanonicalRevision,
   getLoadedTrackSettings,
@@ -127,7 +129,7 @@ import { toRaw } from '../utils/vue-raw.js';
 import { readHostedBuild } from '../utils/hosted-build.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
-import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES } from '../services/setting-application.js';
+import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES, changedTrackHides } from '../services/setting-application.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
   disposeDiagramGenerationWorker,
@@ -179,6 +181,7 @@ import {
 import { createRightDrawerController } from './right-drawer.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
+import { askingTrackRowSwitch } from './track-slot-edits.js';
 import { createAnnotationEditor } from './annotations.js';
 import { buildLegendStyleRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
@@ -433,7 +436,7 @@ export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement}
 const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: msg('Undo or Redo in progress. Retry after it finishes.') });
 const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule edit is being matched. Retry after it finishes.' });
 export const createAppSetup = () => {
-  provide(SETTING_NOTE_APPLIES, committedLiveSettingApplies);
+  provide(SETTING_NOTE_APPLIES, committedSettingNotePredicate);
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
     payload
@@ -799,8 +802,9 @@ export const createAppSetup = () => {
       adjacentEdgeKeys: adjacentRowPairs(drawing.drawnLinearSeqs.value, effectiveLinearComparisonLayout(drawing), true)
         .map(([queryUid, subjectUid]) => linearComparisonEdgeKey(queryUid, subjectUid)),
       losatProgram: drawing.losatProgram.value,
-      blastpMode: drawing.losat.blastp?.mode,
-      inferOrthogroups: drawing.losat.blastp?.collinearInferOrthogroups === true,
+      blastpMode: drawing.losat.blastp.mode,
+      inferOrthogroups: drawing.losat.blastp.collinearInferOrthogroups === true,
+      anchorMode: drawing.losat.blastp.collinearAnchorMode,
       filters: {
         min_bitscore: drawing.adv.min_bitscore,
         evalue: drawing.adv.evalue,
@@ -1892,10 +1896,14 @@ export const createAppSetup = () => {
     return trackLegendRows(readDrawnTracks(), pythonRows, sharedLegendKeys);
   };
   // The keys of the displayed Result's Legend rows whose drawn track the draft
-  // hides (OV-1198, OV-1215): the live compile deletes them, and the Legend
-  // list leaves them out, so a hidden track's rows leave and return with it.
+  // hides (OV-1198, OV-1215), by the hide answer the live track projection
+  // reads: the Legend list leaves them out, so a hidden track's rows leave and
+  // return with it. A Result without a request, and one whose live track apply
+  // is refused, keeps every row until Generate.
   /** @param {DrawingState} drawing @returns {string[]} */
-  const hiddenTrackLegendRows = (drawing) => hiddenTrackLegendKeys(displayedTrackLegendRows(drawing), drawing.mode, drawing);
+  const hiddenTrackLegendRows = (drawing) => hiddenTrackLegendKeys(
+    displayedTrackLegendRows(drawing), getCommittedCanonicalRenderRequest(), committedTrackHideDrawing(drawing)
+  );
   const svgActions = createSvgStyles({
     state,
     watch,
@@ -2210,6 +2218,14 @@ export const createAppSetup = () => {
   const linearTrackSlotEditor = createLinearTrackSlotEditor({
     state, changeTrackLayout, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions
   });
+  // PD-OI-104 scenario revision 6: a row's own switch asks before it turns off a
+  // drawn row of the shown stack that other rows start at or extend to.
+  /** @template {SwitchedTrackRow} Row @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+  const askingRowSwitch = (setEnabled, slotsKey) => askingTrackRowSwitch({
+    askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability,
+    rows: () => /** @type {readonly Row[]} */ (state.activeDrawing().adv[slotsKey]),
+    mode: slotsKey === 'circular_track_slots' ? 'circular' : 'linear'
+  }, setEnabled);
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, askChoice,
@@ -3306,16 +3322,6 @@ export const createAppSetup = () => {
       // a loaded Session show bytes already laid out.
       const drawn = !context.bindingOptions.isIncrementalEdit
         || Boolean(context.bindingOptions.replaceGeneratedLegend);
-      // An automatic rerender and a record transform draw the committed
-      // request again, so they draw a track the draft hid since (Show Depth
-      // off, its last source removed, a Reset Settings): the track and its
-      // Legend rows leave the new Result at once, as they left the one it
-      // replaces (OV-1198 H2), also when the track claims no row (R3 H-B). A
-      // selected Result was drawn before the draft hid it; its rows left with
-      // the projection above. Generate draws none, so its Result stays Python's.
-      const redrawn = context.phase === 'label-reflow' || context.phase === 'target-record-transform';
-      if (selecting || redrawn) svgActions.applyTrackVisibility();
-      if (redrawn && hiddenTrackLegendRows(drawing).length > 0) showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendRows });
       const adopt = () => {
         // It shows the Legend editor's edits laid out as Python lays the edited
         // rows out, before its entries are read (zero shift; OV-122, OV-124,
@@ -3336,6 +3342,7 @@ export const createAppSetup = () => {
         // mode's Results only.
         legendActions.extractLegendEntries({
           replaceGeneratedInventory: !selecting && drawn,
+          liveRedraw: context.bindingOptions.liveRedrawLegend ?? null,
           liveResultIdentities: results.value.map(previewRuntime.getResultIdentity)
         });
       };
@@ -3464,7 +3471,8 @@ export const createAppSetup = () => {
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, drawing) => (
       serializeActiveRenderFiles(state.mode.value, state, drawing, {
         comparisonPlan: comparisonPlanSnapshot,
-        linearRecordCatalog
+        linearRecordCatalog,
+        hiddenDepth: true
       })
     ),
     prepareLinearRecordCatalog,
@@ -3502,6 +3510,7 @@ export const createAppSetup = () => {
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,
     commitLiveSettingValues,
+    readLiveRedrawLegend: legendActions.liveRedrawLegend,
     captureDecorationContinuity: legendLayout.captureDecorationContinuity,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     displayedArtifactDrawing: historySnapshots.displayedArtifactDrawing,
@@ -3536,8 +3545,9 @@ export const createAppSetup = () => {
   // preset), and their Undo and Redo that change live setting rows of the
   // shown drawing ask the automatic rerender to apply them (the router passes
   // the shown drawing's steps only).
-  history.setSettingsStepListener((changes) => {
-    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value);
+  history.setSettingsStepListener((changes, direction) => {
+    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value,
+      changes ? changedTrackHides(changes) : undefined, direction === 'undo');
   });
   /** @param {{ recordKey: string, biologicalFeatureId: string }} identity */
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
@@ -4079,13 +4089,6 @@ export const createAppSetup = () => {
     });
     if (!projected) return;
     await nextTick();
-    // The restored form decides which track groups the mounted Result shows.
-    // The visibility watcher is suppressed while a step restores files (a Depth
-    // source), so the step applies it here once the restored container is
-    // mounted. The mounted Result is the shown drawing's (OV-66, R3).
-    if (changedDomains.has('files') && changedDomains.has('config')) {
-      svgActions.applyTrackVisibility();
-    }
   });
 
   // A displayed Result whose label intent changed since it was last shown
@@ -4182,8 +4185,7 @@ export const createAppSetup = () => {
           // The committed request may be one a Session stored (unchecked): its options are read as unvalidated.
           ? featureDrawnContext(drawing, { diagramOptions: /** @type {UnvalidatedFields<'selectedFeaturesSet'>} */ (getCommittedCanonicalRenderRequest()?.diagramOptions) })
           : null,
-        ruleRows,
-        hiddenTrackRows: hiddenTrackLegendRows(drawing)
+        ruleRows
       } : null
     });
     return plan.operationsByResult[resultIndex] || null;
@@ -7243,7 +7245,7 @@ export const createAppSetup = () => {
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
     canDuplicateCircularTrackSlot: circularTrackSlotEditor.canDuplicateCircularTrackSlot,
     removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
-    setCircularTrackSlotEnabled: circularTrackSlotEditor.setCircularTrackSlotEnabled,
+    setCircularTrackSlotEnabled: askingRowSwitch(circularTrackSlotEditor.setCircularTrackSlotEnabled, 'circular_track_slots'),
     circularTrackSlotEffectiveEnabled: circularTrackSlotEditor.circularTrackSlotEffectiveEnabled,
     circularTrackSlotHiddenBySuppress: circularTrackSlotEditor.circularTrackSlotHiddenBySuppress,
     circularTrackSlotSuppressMessage: circularTrackSlotEditor.circularTrackSlotSuppressMessage,
@@ -7300,7 +7302,7 @@ export const createAppSetup = () => {
     duplicateLinearTrackSlot: linearTrackSlotEditor.duplicateLinearTrackSlot,
     canDuplicateLinearTrackSlot: linearTrackSlotEditor.canDuplicateLinearTrackSlot,
     removeLinearTrackSlot: linearTrackSlotEditor.removeLinearTrackSlot,
-    setLinearTrackSlotEnabled: linearTrackSlotEditor.setLinearTrackSlotEnabled,
+    setLinearTrackSlotEnabled: askingRowSwitch(linearTrackSlotEditor.setLinearTrackSlotEnabled, 'linear_track_slots'),
     moveLinearTrackSlot: linearTrackSlotEditor.moveLinearTrackSlot,
     canMoveLinearTrackSlot: linearTrackSlotEditor.canMoveLinearTrackSlot,
     moveLinearTrackSlotAbove: linearTrackSlotEditor.moveLinearTrackSlotAbove,

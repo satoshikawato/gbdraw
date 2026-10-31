@@ -26,6 +26,7 @@ import {
   withImportedBlacklistWords,
   importedDefaultColors
 } from './file-imports.js';
+/** @import { UndoneTrackHide } from './setting-application.js' */
 /** @import { FileImports } from './file-imports.js' */
 import {
   buildBulkLabelProjection,
@@ -41,7 +42,11 @@ import {
   applyCircularGeometryShortcuts,
   buildCircularTrackSlotPayload,
   CIRCULAR_TRACK_RENDERERS,
+  GLOBAL_SUPPRESS_PARAM,
+  circularTrackSlotHiddenBySuppressForm,
   createDefaultCircularTrackSlots,
+  normalizeNt,
+  placeCircularStackForGenerate,
   hasCircularGeometryShortcuts,
   inferLegacyAxisIndexFromFeature,
   parseCircularTrackSlotSpecs
@@ -51,13 +56,19 @@ import { downloadSafeName } from '../utils/download-names.js';
 import { projectCircularMeasureDraft } from './circular-track-measure.js';
 import {
   buildLinearTrackSlotPayload,
+  linearTrackSlotHeightPayload,
   LINEAR_TRACK_RENDERERS,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   migrateLinearTrackSlotsToCurrentSchema,
-  parseLinearTrackSlotSpecs
+  parseLinearTrackSlotSpecs,
+  placeLinearStackForGenerate
 } from './linear-track-slot-model.js';
+import { draftDrawsDepth, drawnTrackHidden, requestTrackSlots } from './track-legend-rows.js';
+/** @import { TrackVisibilityDrawing } from './track-legend-rows.js' */
 import {
   activeDepthTrackIndices,
+  depthFileSlotsFromValue,
+  syncDepthSlotLabels,
   defaultDepthSeriesLabel,
   depthSeriesDefaultColor,
   importedDepthSeriesColor,
@@ -72,7 +83,7 @@ import {
   isSingleCircularJourney,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
-import { circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey } from './record-draw-selection.js';
+import { circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey, recordKeyExpansion } from './record-draw-selection.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -83,21 +94,29 @@ import {
 } from './linear-sources.js';
 import {
   linearRecordLayoutHasSharedRow,
+  recordTranslationsFor,
   resolveEffectiveLinearRecordRows
 } from './linear-record-layout.js';
 import { resolveLinearLabelVisibility } from './linear-label-visibility.js';
 import {
+  CustomTrackPlanValidationError,
   assertValidCustomTrackPlan,
+  emittedCustomTrackAxisIndex,
+  overlayReferenceIssues,
+  trackSlotRowEnabled,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from './track-slot-validation.js';
-/** @import { CustomTrackPlan, CustomTrackPlanInput } from './track-slot-validation.js' */
-import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annotation-state.js';
+/** @import { CustomTrackPlan, CustomTrackPlanInput, OverlayCheckRow } from './track-slot-validation.js' */
+import {
+  annotationOptionsPayload, createDefaultAnnotationStyle, draftAnnotationSetsOfRequest, normalizeAnnotationSets
+} from './annotation-state.js';
 import { classifyOptionalPositiveNumber, integerSettingOr, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 import { loadRepair } from '../utils/load-repairs.js';
 import { repairByDescription } from '../utils/contract-repair.js';
 import { isPlainObject } from '../utils/contract-shape.js';
+import { DEFINITION_LINE_STYLE_KINDS, requireDefinitionLineFontSizes } from './definition-line-style-state.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
@@ -161,6 +180,7 @@ import {
 import {
   readCollinearAnchorMode,
   readCollinearColorMode,
+  readCollinearMergeOrientation,
   readCollinearSearchScope,
   readCollinearUnitMode,
   readOrthogroupMembershipMode
@@ -183,7 +203,8 @@ import {
   adoptCurrentSessionResources,
   createCombinedSessionResourceFileView,
   createSessionResourceFileView,
-  validateWebFileBindings
+  validateWebFileBindings,
+  webFileBindingsWithoutDepth
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
@@ -191,6 +212,7 @@ import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
   getResourcePayloadIdentity,
   getResourcePayloadOwner,
+  resourceIdOwnedBy,
   setResourcePayloadOwner
 } from './resource-payload-owner.js';
 import { sha256Hex } from './byte-utils.js';
@@ -206,6 +228,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { OrderedConservationSource } from './conservation-series.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
+/** @import { DefinitionLineStyle } from './definition-line-style-state.js' */
 /** @import { LabelFitTrackOptions } from './label-fit.js' */
 /**
  * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata, SessionResourceTable, WebFileBindingRow,
@@ -215,7 +238,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { CircularTrackSlot } from './circular-track-slot-model.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
-/** @import { DepthFileSlots } from './depth-track-state.js' */
+/** @import { DepthFileSlots, DepthSlotRow } from './depth-track-state.js' */
 /** @import { CatalogStateView } from './feature-catalog.js' */
 /** @import { ModeProfileName } from '../mode-profiles.js' */
 /** @import { ExportRef } from './svg-serialization.js' */
@@ -295,6 +318,13 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * @property {RequestCircularFileRecord[]} [circularRecords]
  * @property {{ id?: unknown, file?: ResourceEntry | null }[]} [linearComparisons]
  * @property {RequestCanonicalComparison[]} [linearCanonicalComparisons]
+ * @property {HiddenDepthFiles} [hiddenDepth] The Depth slot values a draft that draws no Depth holds: a Generate
+ *   that keeps the track parts reads them (F1); the request never does.
+ */
+/**
+ * The Depth files of a draft that draws no Depth, in the shape the mode's request reads them: the Circular
+ * `c_depth`, or one value per Linear card (`RequestLinearSeq.depth`).
+ * @typedef {{ readonly circular: DepthFileSlots | DepthFileSlots[] } | { readonly linear: readonly DepthFileSlots[] }} HiddenDepthFiles
  */
 /**
  * A Circular record the draft keeps with its canonical request pieces.
@@ -376,7 +406,8 @@ export { CANONICAL_REQUEST_SCHEMA };
 /**
  * @import {
  *   CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalCircularDiagramOptions,
- *   CanonicalCircularLayout, CanonicalComparison, CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalRecord, CanonicalRenderRequest,
+ *   CanonicalCircularLayout, CanonicalComparison, CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalLinearTrackSlot, CanonicalCircularTrackSlot, CanonicalRecord,
+ *   CanonicalRenderRequest,
  *   CanonicalSimilarityAlignmentPlan, CanonicalTableRef
  * } from '../contracts/request.generated.js'
  */
@@ -732,12 +763,13 @@ const labelBlacklistOverride = (drawing) => (drawing.filterMode.value === 'Black
 
 const LINEAR_DEFINITION_STYLE_PATHS = Object.freeze(
   Object.fromEntries(
-    ['name', 'subtitle', 'replicon', 'accession', 'length'].map((kind) => [
+    DEFINITION_LINE_STYLE_KINDS.map((kind) => [
       kind,
       `objects.definition.linear.line_styles.${kind}`
     ])
   )
 );
+/** @type {readonly (keyof DefinitionLineStyle)[]} */
 const LINEAR_DEFINITION_STYLE_FIELDS = Object.freeze(['font_size', 'font_weight', 'fill']);
 const LINEAR_DEFINITION_WEIGHT_PATHS = new Set(
   Object.values(LINEAR_DEFINITION_STYLE_PATHS).map((prefix) => `${prefix}.font_weight`)
@@ -1217,6 +1249,22 @@ const selectorPayload = (rawValue) => {
   }
   return { kind: 'recordId', value: raw };
 };
+/**
+ * The record a Linear card's Generate selects (`buildRecords`): its region's
+ * selector, or its own when it has no region.
+ * @param {{ region_record_id?: unknown } | null | undefined} seq
+ */
+const linearCardSelector = (seq) => selectorPayload(seq?.region_record_id);
+/**
+ * The record a request record selects: its region's selector, else its own.
+ * @param {{ region?: CanonicalRecord['region'], selector?: CanonicalRecord['selector'] } | null | undefined} record
+ * @returns {CanonicalRecord['selector']}
+ */
+const requestRecordSelector = (record) => record?.region?.selector || record?.selector || null;
+/** @param {CanonicalRecord['selector']} a @param {CanonicalRecord['selector']} b */
+const sameRecordSelector = (a, b) => (a === null || b === null ? a === b
+  : a.kind === 'recordIndex' ? b.kind === 'recordIndex' && a.index === b.index
+    : b.kind === 'recordId' && a.value === b.value);
 
 /** @param {{ label?: unknown, subtitle?: unknown, reverseComplement?: unknown, gridRow?: number | null, gridColumn?: number | null }} [options] */
 const presentationPayload = ({
@@ -1234,16 +1282,63 @@ const presentationPayload = ({
 });
 
 /**
+ * The label fields a Circular single record draws: its Record label and
+ * Subtitle (Generate and the live Record names apply, R3).
+ * @param {{ circular_record_label?: unknown, circular_record_subtitle?: unknown }} form
+ */
+const circularRecordLabels = (form) => {
+  const { label, subtitle } = presentationPayload({ label: form.circular_record_label, subtitle: form.circular_record_subtitle });
+  return { label, subtitle };
+};
+
+/**
  * @param {{ circular_record_label?: unknown, circular_record_subtitle?: unknown, circular_reverse?: unknown }} form
  * @param {{ hasRegion?: boolean }} [options]
  */
-const circularPresentationPayload = (form, { hasRegion = false } = {}) => (
-  presentationPayload({
-    label: form.circular_record_label,
-    subtitle: form.circular_record_subtitle,
-    reverseComplement: !hasRegion && form.circular_reverse
-  })
-);
+const circularPresentationPayload = (form, { hasRegion = false } = {}) => ({
+  ...presentationPayload({ reverseComplement: !hasRegion && form.circular_reverse }),
+  ...circularRecordLabels(form)
+});
+
+/**
+ * The record key Generate gives a Linear card (`buildRecords`); a card that
+ * draws several records splits into its `expandedRecordKey` members.
+ * @param {{ uid?: unknown }} seq @param {number} index
+ */
+const linearSeqRecordKey = (seq, index) => String(seq.uid || `record-${index + 1}`);
+/** The label a Linear card's records draw. @param {RequestLinearSeq} seq */
+const linearRecordLabel = (seq) => presentationPayload({ label: resolveLinearRecordEffectiveDefinition(seq) }).label;
+/**
+ * A file default and the record's own value of one Linear name line.
+ * @typedef {{ file: string, record: string }} LinearRecordNameLine
+ */
+/** @param {RequestLinearSeq} seq @returns {LinearRecordNameLine} */
+const linearRecordDefinitionLine = (seq) => ({
+  file: String(seq.file_definition || '').trim(), record: String(seq.definition || '')
+});
+/**
+ * One entry of `webFiles.linearRecordMetadata`: the record's key and LOSAT
+ * genetic code, and the file default and record value of its definition and
+ * subtitle. presentation.label and presentation.subtitle carry the resolved
+ * value; the entry records the per-record value too, so an override that
+ * happens to equal the file default is restored as an override rather than
+ * as inheritance. Generate and the live Record names apply (F-2) build it here.
+ * @param {{ recordKey: string, losatGencode: number }} identity
+ * @param {LinearRecordNameLine} definition @param {LinearRecordNameLine} subtitle
+ * @returns {LinearRecordMetadataEntry}
+ */
+const linearRecordMetadataEntry = ({ recordKey, losatGencode }, definition, subtitle) => ({
+  recordKey,
+  losatGencode,
+  ...(definition.file ? { fileDefinition: definition.file } : {}),
+  ...(subtitle.file ? { fileSubtitle: subtitle.file } : {}),
+  ...(definition.file ? { recordDefinition: definition.record } : {}),
+  ...(subtitle.file ? { recordSubtitle: subtitle.record } : {})
+});
+/**
+ * @typedef {{ recordKey: string, losatGencode: number, fileDefinition?: string, fileSubtitle?: string,
+ *   recordDefinition?: string, recordSubtitle?: string }} LinearRecordMetadataEntry
+ */
 
 /**
  * @param {CircularRegionForm & { circular_reverse?: unknown }} form
@@ -1274,7 +1369,7 @@ const linearRegionPayload = (seq) => {
     throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
   }
   return {
-    selector: selectorPayload(seq?.region_record_id),
+    selector: linearCardSelector(seq),
     start: Math.min(start, end),
     end: Math.max(start, end),
     reverseComplement: Boolean(seq?.region_reverse) || start > end
@@ -1346,9 +1441,9 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     const records = (filesData.linearSeqs || []).map((seq, index) => {
       const source = linearRecordSource(resources, state.lInputType.value, seq, index);
       const region = linearRegionPayload(seq);
-      const selector = region ? null : selectorPayload(seq.region_record_id);
+      const selector = region ? null : linearCardSelector(seq);
       return {
-        recordKey: String(seq.uid || `record-${index + 1}`),
+        recordKey: linearSeqRecordKey(seq, index),
         cardinality: canonicalCardinalityByUid.get(seq.uid)
           || seq.cardinality || (selector || region ? 'exactly_one' : 'all'),
         source,
@@ -1356,7 +1451,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
         region,
         presentation: {
           ...presentationPayload({
-            label: resolveLinearRecordEffectiveDefinition(seq),
+            label: linearRecordLabel(seq),
             subtitle: resolveLinearRecordEffectiveSubtitle(seq),
             gridRow: drawing.linearRecordLayoutEnabled?.value
               ? (resolvedRows[index]?.row ?? null)
@@ -1576,6 +1671,48 @@ const effectiveKeepDefinitionLeftAligned = (request) => {
 };
 /** @param {Record<string, unknown>} adv */
 const requestPlotTitleFontSize = (adv) => projectOptionalNumber(adv.plot_title_font_size, { field: 'plot_title_font_size' });
+// G2 request fields (PD-OI-103 rev 2, PD-OI-059 rev 3), each owned by one
+// function that Generate and the live apply of its row both call (R3).
+/** @param {Record<string, unknown>} form */
+const requestSpecies = (form) => String(form.species || '').trim() || null;
+/** @param {Record<string, unknown>} adv */
+const requestWindow = (adv) => projectOptionalNumber(adv.window_size, { field: 'window' });
+/** @param {Record<string, unknown>} adv */
+const requestCenterReservedRadius = (adv) => projectOptionalNumber(adv.center_reserved_radius, { field: 'center_reserved_radius' });
+/**
+ * The Linear Match height override: null for Auto (no override). Throws for a
+ * value Generate refuses.
+ * @param {Record<string, unknown>} adv
+ * @returns {number | null}
+ */
+const requestComparisonHeight = (adv) => {
+  const height = classifyOptionalPositiveNumber(adv.comparison_height);
+  if (height.status === 'invalid') throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
+  return height.status === 'auto' ? null : height.value;
+};
+/**
+ * The Linear definition row styles as config overrides: each of the 15
+ * leaves (five rows, three fields), null where the row does not set it.
+ * The draft holds what the row inputs store (the Size input stores its text);
+ * each font size is the number `requireDefinitionLineFontSizes` reads, for
+ * Generate and the live apply alike, and a font size the engine refuses fails
+ * here (PD-OI-081, OV-1270, OV-2244). Weight and Color go as stored: a lifted
+ * legacy request keeps its `normal` weight (legacy-request-load record).
+ * @param {Record<string, unknown>} adv
+ * @returns {Record<string, unknown>}
+ */
+const linearDefinitionStyleOverrides = (adv) => {
+  const stored = adv.linear_definition_line_styles;
+  const sizes = requireDefinitionLineFontSizes(stored);
+  return Object.fromEntries(DEFINITION_LINE_STYLE_KINDS.flatMap((kind) => {
+    const style = isPlainObject(stored) ? stored[kind] : undefined;
+    const fields = isPlainObject(style) ? style : {};
+    return LINEAR_DEFINITION_STYLE_FIELDS.map((field) => [
+      `${LINEAR_DEFINITION_STYLE_PATHS[kind]}.${field}`,
+      field === 'font_size' ? sizes[kind].font_size : fields[field] ?? null
+    ]);
+  }));
+};
 /**
  * The Circular multi-record canvas layout, field by field. The draft keys each
  * record's row by its file selector `#N`; the request names the drawn records
@@ -1622,22 +1759,489 @@ const circularRecordSourceIndexes = (records) => records.map((record, index) => 
 });
 
 /**
- * One request write of a live setting: the path in the render request and its
- * value; `undefined` leaves the key out, as Generate leaves out a blank
- * config override.
+ * One write of a live setting: the path in the render request and its value;
+ * `undefined` leaves the key out, as Generate leaves out a blank config
+ * override. A path that starts with `webFiles` names the committed Session's
+ * Web file record instead (`LIVE_WEB_FILES_ROOT`, F-2); a request has no
+ * such key. A write replaces a whole array, never one of its items (F-1).
  * @typedef {[readonly string[], unknown]} LiveSettingWrite
+ */
+const LIVE_WEB_FILES_ROOT = 'webFiles';
+// The committed Session's roots beside the request that a write may name: its
+// Web file record, its resources, and the kept track parts of its request.
+const LIVE_SESSION_ROOTS = new Set([LIVE_WEB_FILES_ROOT, 'resources', 'keptTrackParts']);
+/**
+ * The draft values outside the drawing that a live projector reads, given by
+ * its caller (the request owner never reads `state`): the Linear cards (each
+ * with its Depth files) and the Circular Depth files (`files.c_depth`).
+ * @typedef {{ readonly linearSeqs: readonly RequestLinearSeq[], readonly circularDepth: RequestFilesData['c_depth'] | null }} LiveSettingInputs
+ */
+/**
+ * The live projector inputs, read from the project's draft inputs. Every
+ * caller builds them here.
+ * @param {{ readonly linearSeqs: readonly RequestLinearSeq[], readonly files?: { readonly c_depth?: RequestFilesData['c_depth'] | null } | null }} sources
+ * @returns {LiveSettingInputs}
+ */
+export const liveSettingInputsOf = (sources) => ({ linearSeqs: sources.linearSeqs, circularDepth: sources.files?.c_depth ?? null });
+/**
+ * The committed Session's resources, which name the files each committed
+ * record was drawn from.
+ * @typedef {Readonly<Record<string, unknown>> | null | undefined} LiveSettingResources
+ */
+/**
+ * The identity of one item whose live value a setting note states: an
+ * annotation item by its set and item id, a Linear row by its slot id.
+ * @typedef {{ readonly setId: string, readonly itemId: string } | { readonly slotId: string }} LiveSettingItem
+ */
+/**
+ * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources, undoneHides?: ReadonlySet<UndoneTrackHide> }} LiveSettingContext
+ * @typedef {(drawing: RequestDrawing, request: CanonicalRenderRequest, context: LiveSettingContext) => LiveSettingWrite[]} LiveSettingProjector
  */
 /** @param {string} path @param {unknown} value @returns {LiveSettingWrite[]} */
 const configWrites = (path, value) => {
   const overrides = sharedLengthOverrides(path, value);
   return [`${path}.short`, `${path}.long`].map((key) => [['diagramOptions', 'configOverrides', key], overrides[key]]);
 };
+/** @param {string} key @param {unknown} value @returns {LiveSettingWrite} */
+const configWrite = (key, value) => [['diagramOptions', 'configOverrides', key], value ?? undefined];
+
+/**
+ * Whether a draft card still draws a committed record: the committed resource
+ * the record's source names holds the card's File (`resourceIdOwnedBy`, by
+ * payload identity; a replaced File does not, whatever its definition says),
+ * and the card's Generate selects the same record: the record under the
+ * card's key the card's selector (`linearCardSelector`), a split member
+ * (F-18) none. A changed selection applies on Generate (G3), and the card's
+ * definition follows it.
+ * @param {RequestLinearSeq} seq @param {string} cardKey @param {CanonicalRecord} record
+ * @param {LiveSettingResources} resources
+ */
+const cardDrawsRecord = (seq, cardKey, record, resources) => {
+  const { source } = record;
+  return (source.kind === 'genbank'
+    ? resourceIdOwnedBy(resources, seq.gb, 'genbank') === source.resourceId
+    : resourceIdOwnedBy(resources, seq.gff, 'gff3') === source.gffResourceId
+      && resourceIdOwnedBy(resources, seq.fasta, 'fasta') === source.fastaResourceId)
+    && (record.recordKey === cardKey
+      ? sameRecordSelector(linearCardSelector(seq), requestRecordSelector(record))
+      : linearCardSelector(seq) === null);
+};
+/**
+ * The draft card index of each committed Linear record: the card whose
+ * Generate key is the record's key or expands to it (a split member, F-18).
+ * Null when a committed record has no card, the cards were moved, or a card
+ * no longer draws the record (`cardDrawsRecord`: a replaced File or another
+ * selected record): then the record names wait for Generate.
+ * @param {CanonicalRenderRequest} request @param {LiveSettingInputs} inputs
+ * @param {LiveSettingResources} resources
+ * @returns {number[] | null}
+ */
+const linearRecordCardIndexes = (request, inputs, resources) => {
+  const cards = inputs.linearSeqs.map((seq, index) => linearSeqRecordKey(seq, index));
+  const indexes = request.records.map(({ recordKey }) => cards.findIndex(
+    (key) => key === recordKey || recordKeyExpansion(recordKey, key) !== null
+  ));
+  return indexes.every((index, position) => index >= 0 && (position === 0 || index >= indexes[position - 1])
+    && cardDrawsRecord(inputs.linearSeqs[index], cards[index], request.records[position], resources))
+    ? indexes : null;
+};
+/**
+ * The committed `webFiles.linearRecordMetadata`, when it has one entry per
+ * request record (Generate's), else null.
+ * @param {CanonicalRenderRequest} request @param {Readonly<Record<string, unknown>>} webFiles
+ * @returns {LinearRecordMetadataEntry[] | null}
+ */
+const linearRecordMetadataOf = (request, webFiles) => {
+  const entries = webFiles?.linearRecordMetadata;
+  return Array.isArray(entries) && entries.length === request.records.length ? entries : null;
+};
+
+const ANNOTATION_SETS_REQUEST_PATH = 'diagramOptions.annotations.sets';
+const LINEAR_TRACK_SLOTS_REQUEST_PATH = 'diagramOptions.tracks.linearTrackSlots';
+/**
+ * Whether the draft Fill and Stroke color of a committed annotation item draw
+ * live: not while the item or its set has a Legend label, which draws the
+ * colors in a Legend row (O-8). An item the committed request lacks waits
+ * (its targets and the omitted record keys stay committed, F-11).
+ * @param {{ legendLabel?: string | null }} set @param {{ legendLabel?: string | null }} item
+ */
+const annotationItemColorsLive = (set, item) => !set.legendLabel && !item.legendLabel;
+/**
+ * Whether the draft Height of a committed Linear row draws live: not for a
+ * row a Python request states as a spec string, a features row, which
+ * reserves the record layout, or a Depth row, whose Height also writes the
+ * Depth track height (F-15).
+ * @param {string | CanonicalLinearTrackSlot} slot @returns {slot is CanonicalLinearTrackSlot}
+ */
+const linearSlotHeightLive = (slot) => typeof slot !== 'string' && slot.renderer !== 'features' && slot.renderer !== 'depth';
+/**
+ * Whether the committed request draws the live value of one item: the
+ * committed set and item of that id whose colors are live, or the committed
+ * row of that slot id whose Height is live. Any other path or item applies
+ * as its path does.
+ * @param {CanonicalRenderRequest} request @param {string} requestPath @param {LiveSettingItem} item
+ */
+const liveSettingItemApplies = (request, requestPath, item) => {
+  if (requestPath === ANNOTATION_SETS_REQUEST_PATH && 'setId' in item) {
+    const set = request.diagramOptions.annotations?.sets?.find((candidate) => candidate.id === item.setId);
+    const committed = set?.annotations.find((candidate) => candidate.id === item.itemId);
+    return Boolean(set && committed && annotationItemColorsLive(set, committed));
+  }
+  if (requestPath === LINEAR_TRACK_SLOTS_REQUEST_PATH && 'slotId' in item) {
+    const slots = request.diagramOptions.tracks?.linearTrackSlots;
+    return Array.isArray(slots) && slots.some((slot) => linearSlotHeightLive(slot) && slot.id === item.slotId);
+  }
+  return true;
+};
+
+// The GT set (PD-OI-104 rev 5, D-199..D-202, D-207): the GC content, GC skew
+// and Depth toggles, the slot switches that hide or show one of those tracks,
+// and Use custom stack. One projection writes the five request keys.
+const GT_REQUEST_PATHS = Object.freeze({
+  gc: `diagramOptions.configOverrides.${CONFIG_OVERRIDE_PATHS.showGc}`,
+  skew: `diagramOptions.configOverrides.${CONFIG_OVERRIDE_PATHS.showSkew}`,
+  depth: 'diagramOptions.depthTracks',
+  circularSlots: 'diagramOptions.tracks.circularTrackSlots',
+  linearSlots: LINEAR_TRACK_SLOTS_REQUEST_PATH
+});
+/** @type {ReadonlySet<string>} */
+const GT_REQUEST_PATH_SET = new Set(Object.values(GT_REQUEST_PATHS));
+/**
+ * What the track projection writes, by request path, whether it leaves a
+ * show pending (a track the draft draws that the kept parts cannot give),
+ * the error Generate's check gives the stack it would draw (`refused`:
+ * nothing applies; only the writer, `trackPlanApplied`, throws it), and the
+ * drawing whose hides it applies (`judged`: the draft, with Use custom stack
+ * set back to the drawn switch while that switch waits; null while nothing
+ * applies).
+ * @typedef {{ readonly writes: Readonly<Record<string, LiveSettingWrite[]>>, readonly complete: boolean,
+ *   readonly slots: readonly TrackSlotEntry[] | null, readonly refused: Error | null,
+ *   readonly judged: TrackVisibilityDrawing | null }} TrackPlanProjection
+ */
+/** @type {WeakMap<object, { readonly request: CanonicalRenderRequest, readonly projection: TrackPlanProjection }>} */
+const trackPlanProjections = new WeakMap();
+/**
+ * The Use custom stack switch a committed request shows it was drawn with: a
+ * Linear request has slots only with the stack on; a Circular request without
+ * slots was drawn with it off. A Circular request with slots does not show it
+ * (Circular track widths or radii draw slots with the switch off): null.
+ * @param {CanonicalRenderRequest} request @returns {boolean | null}
+ */
+const requestDrawnStack = (request) => {
+  const tracks = request.diagramOptions.tracks;
+  if (request.mode === 'linear') return Array.isArray(tracks?.linearTrackSlots);
+  return Array.isArray(tracks?.circularTrackSlots) ? null : false;
+};
+/**
+ * The committed Session's own track parts, as a Generate would have kept them
+ * without its hidden ones: the parts a live hide after a Load completes.
+ * @param {CanonicalRenderRequest} request @param {KeptPlan} plan `committedPlanOf(request)`
+ * @param {LiveSettingResources} resources @param {Readonly<Record<string, unknown>>} webFiles
+ * @returns {KeptTrackParts}
+ */
+const committedTrackParts = (request, plan, resources, webFiles) => {
+  const depthTracks = request.diagramOptions.depthTracks;
+  const ids = Object.keys(resources || {}).filter((id) => /** @type {{ kind?: unknown }} */ ((resources || {})[id])?.kind === 'depth-track-file');
+  const names = /** @type {Record<string, string>} */ (webFiles?.resourceOriginalNames || {});
+  return {
+    drawnStack: requestDrawnStack(request),
+    plans: { drawn: plan, other: null },
+    depth: Array.isArray(depthTracks) ? {
+      depthTracks,
+      resources: Object.fromEntries(ids.map((id) => [id, /** @type {RawSessionResourceDescriptor} */ ((resources || {})[id])])),
+      originalNames: Object.fromEntries(ids.filter((id) => names[id]).map((id) => [id, names[id]])),
+      ...(webFiles?.bindings ? { bindings: /** @type {WebFileBindings} */ (webFiles.bindings) } : {})
+    } : null,
+    waiting: new Set()
+  };
+};
+/**
+ * Whether the draft's Depth sources are those of the kept Depth parts: every
+ * draft source, read as Generate reads it, is the File of the kept resource
+ * of the same series and record (by payload identity), with as many series.
+ * @param {KeptDepth} depth @param {CanonicalRenderRequest} request @param {LiveSettingInputs} inputs
+ * @param {LiveSettingResources} resources
+ */
+const depthSourcesKept = (depth, request, inputs, resources) => {
+  const records = request.records.length;
+  /** @type {unknown[][] | null} */
+  let rows;
+  if (request.mode === 'circular') {
+    const indexes = circularRecordSourceIndexes(request.records);
+    const all = normalizeRecordMajorDepthFileRows(inputs.circularDepth, Math.max(records, ...indexes.map((index) => index + 1)));
+    rows = isRecordMajorDepthFileMatrix(inputs.circularDepth) ? indexes.map((index) => all[index] || []) : all.slice(0, records);
+  } else {
+    const cards = linearRecordCardIndexes(request, inputs, resources);
+    rows = cards && cards.map((index) => depthFileSlotsFromValue(/** @type {DepthFileSlots} */ (inputs.linearSeqs[index]?.depth)));
+  }
+  if (!rows) return false;
+  const width = Math.max(0, ...rows.map((row) => row.length));
+  if (width !== depth.depthTracks.length) return false;
+  return depth.depthTracks.every((track, series) => {
+    const source = /** @type {unknown} */ (track.source);
+    return rows.every((row, record) => {
+      const ref = Array.isArray(source) ? source[record] : source;
+      const id = ref && typeof ref === 'object' ? /** @type {{ resourceId?: unknown }} */ (ref).resourceId : null;
+      const file = /** @type {object | null | undefined} */ (row[series]);
+      return file ? resourceIdOwnedBy(depth.resources, file, 'depth-track-file') === id : !id;
+    });
+  });
+};
+/**
+ * The live track projection (GT-RUNTIME-DELTA rev 2, 1.5): the committed
+ * plan, or the kept plan of the draft's Use custom stack switch, filtered by
+ * the one hide answer (`drawnTrackHidden`). A track the committed request
+ * draws keeps its committed entry (a spec string stays one); one it lacks
+ * returns from the kept parts by slot id, between its kept neighbours, while
+ * the kept parts can give it (a Depth track while the draft's Depth sources
+ * are the kept ones). Kept payloads hold the values of the last Generate, so
+ * no pending row value rides along (PD-OI-103 rev 2). A show the parts cannot
+ * give waits (`complete` false), and a hide always applies. When the drawn
+ * switch is unknown and nothing is kept yet, or the draft's Use custom stack
+ * is the other one without a kept plan of it (after a Load), only the hides
+ * apply, from what the committed request draws; a show and the switch wait
+ * (D-212). The parts such an apply completes give back what a later hide
+ * removes (D-214 (e)). A stack Generate's Overlay check refuses is
+ * returned as `refused`, with nothing written. Committed
+ * slots the slot parser does not read wait whole: nothing is written (the
+ * Legend list knows no track of them either, `drawnTracks`).
+ * @param {CanonicalRenderRequest} request @param {RequestDrawing} drawing @param {LiveSettingContext} context
+ * @returns {TrackPlanProjection}
+ */
+const projectTrackPlan = (request, drawing, context) => {
+  const memo = trackPlanProjections.get(context);
+  if (memo && memo.request === request) return memo.projection;
+  const projection = trackPlanProjection(request, drawing, context);
+  trackPlanProjections.set(context, { request, projection });
+  return projection;
+};
+/** @type {TrackPlanProjection} */
+const TRACK_PLAN_WAITS = Object.freeze({
+  writes: Object.freeze(Object.fromEntries(Object.values(GT_REQUEST_PATHS).map((path) => [path, []]))),
+  complete: false,
+  slots: null,
+  refused: null,
+  judged: null
+});
+/**
+ * The track projection the live apply writes: a refused one throws its
+ * error, as Generate of the same draft does.
+ * @param {CanonicalRenderRequest} request @param {RequestDrawing} drawing @param {LiveSettingContext} context
+ * @returns {TrackPlanProjection}
+ */
+const trackPlanApplied = (request, drawing, context) => {
+  const projection = projectTrackPlan(request, drawing, context);
+  if (projection.refused) throw projection.refused;
+  return projection;
+};
+/** @param {CanonicalRenderRequest} request @param {RequestDrawing} drawing @param {LiveSettingContext} context @returns {TrackPlanProjection} */
+const trackPlanProjection = (request, drawing, context) => {
+  recordStructuralMetric('liveTrackPlanProjectionCount');
+  const { inputs, resources, webFiles } = context;
+  const circular = request.mode === 'circular';
+  const [stackKey, slotsKey, requestSlotsKey, requestAxisKey] = circular
+    ? ['circular_track_slots_enabled', 'circular_track_slots', 'circularTrackSlots', 'circularTrackAxisIndex']
+    : ['linear_track_slots_enabled', 'linear_track_slots', 'linearTrackSlots', 'linearTrackAxisIndex'];
+  const draftStack = Boolean(drawing.adv[stackKey]);
+  const kept = keptTrackPartsOf(request);
+  const nt = normalizeNt(request.diagramOptions.dinucleotide ?? 'GC');
+  /** @type {KeptPlan | null} */
+  let committedPlan;
+  try {
+    committedPlan = committedPlanOf(request);
+  } catch {
+    committedPlan = null;
+  }
+  if (!committedPlan) return TRACK_PLAN_WAITS;
+  const committedSlots = committedPlan.slots;
+  const committedIds = new Set((committedSlots || []).map((slot) => slot.id));
+  const committedDepth = Array.isArray(request.diagramOptions.depthTracks);
+  let complete = true;
+  // 1. The base plan: the plan of the switch the request was drawn with, or
+  // the plan of the other one. The drawn switch is the kept parts' or what
+  // the request shows (`requestDrawnStack`), never read from the draft. The
+  // plan of the other switch is the kept one; for a Linear request drawn with
+  // the stack, the plan without it needs no kept parts: no slots (D-214 C').
+  // When the switch is unknown and nothing is kept yet (the first apply after
+  // a Load of a Circular request with slots), only hides apply: each track
+  // the draft hides leaves what the committed request draws, and a show
+  // waits (D-212). The parts that apply completes (the loaded plan) give back
+  // by slot id what a later live hide removes (D-199 (ii), D-214 (e)).
+  const drawnStack = kept ? kept.drawnStack : requestDrawnStack(request);
+  const otherPlan = kept?.plans.other ?? (drawnStack === true && !circular ? NO_TRACK_SLOTS_PLAN : null);
+  // Use custom stack set the other way cannot apply alone without a plan of
+  // that switch, or while the draft's Region Annotation sets are not the
+  // committed ones (the plan places the draft's sets, Generate-only values):
+  // it waits whole, with every hide or show it brings, and the rest applies
+  // as the drawn switch would draw it (D-214 (f)).
+  // While the drawn switch is unknown, a switch changed from the one Load
+  // recorded (`loadedStackSwitches`) waits whole too, judged as loaded (D-214 B).
+  const loadedStack = drawnStack === null ? loadedStackSwitches.get(toRaw(request)) ?? null : null;
+  const switchWaits = drawnStack !== null
+    ? drawnStack !== draftStack && (!otherPlan || !sameAnnotationSetIds(drawing.annotationSets, request))
+    : loadedStack !== null && loadedStack !== draftStack;
+  const stackOn = switchWaits ? Boolean(drawnStack ?? loadedStack) : draftStack;
+  const judged = { form: drawing.form, adv: switchWaits ? { ...drawing.adv, [stackKey]: stackOn } : drawing.adv };
+  const other = drawnStack !== null && drawnStack !== stackOn;
+  const hidesOnly = drawnStack === null && !kept;
+  const baseIsOther = other;
+  const base = hidesOnly ? committedPlan : baseIsOther ? /** @type {KeptPlan} */ (otherPlan) : kept ? kept.plans.drawn : committedPlan;
+  if (hidesOnly || switchWaits) complete = false;
+  const depthShowable = !hidesOnly && Boolean(kept?.depth && depthSourcesKept(kept.depth, request, inputs, resources));
+  /** @param {'content' | 'skew' | 'depth'} kind @param {string | null} slotId @param {string | null} slotNt */
+  const hidden = (kind, slotId, slotNt) => drawnTrackHidden({ slotId, kind, nt: slotNt }, request, judged);
+  const waiting = new Set(kept?.waiting || []);
+  const draftRows = /** @type {readonly unknown[]} */ (stackOn && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
+  /** @param {string} id The draft row that draws this slot, by id; -1 when none does. */
+  const drawnDraftRow = (id) => draftRows.findIndex((row) => trackSlotRowEnabled(row) && String(/** @type {{ id?: unknown }} */ (row).id) === id);
+  /** @type {Set<OverlayCheckRow>} */
+  const returning = new Set();
+  /** @type {TrackSlotEntry[] | null} */
+  let slots = null;
+  /** @type {number | null} */
+  let axis = null;
+  let depthPresent = false;
+  if (base.slots) {
+    /** @type {KeptSlot[]} */
+    const present = [];
+    for (const kept_ of base.slots) {
+      const kind = trackKindOf(kept_.renderer);
+      const inCommitted = committedIds.has(kept_.id) && !baseIsOther;
+      const committedSlot = inCommitted ? (committedSlots || []).find((slot) => slot.id === kept_.id) : undefined;
+      // A features, ticks, spacer or Overlay row stays as the committed stack
+      // has it; a stack the committed request does not draw (Use custom stack
+      // turned on again, or the other kept plan) returns whole from the kept
+      // parts. A row a live apply took out with the slot it names (the check
+      // below) returns from them when the draft draws it again (an Undo of
+      // that choice), unless the slot it names stays out.
+      if (!kind) {
+        if (inCommitted || baseIsOther || !committedSlots) present.push(committedSlot ?? kept_);
+        else if (kept && !hidesOnly && (!stackOn || drawnDraftRow(kept_.id) >= 0)) {
+          present.push(kept_);
+          returning.add(kept_.read);
+        }
+        continue;
+      }
+      const slotNt = kind === 'depth' ? null : normalizeNt(kept_.nt, nt);
+      if (hidden(kind, kept_.id, slotNt)) {
+        if (circular && kind !== 'depth' && inCommitted && circularTrackSlotHiddenBySuppressForm(
+          { renderer: kept_.renderer, params: { nt: slotNt } }, drawing.form, nt)) waiting.add(kept_.id);
+        continue;
+      }
+      if (kind !== 'depth' && context.undoneHides?.has(kind)) waiting.delete(kept_.id);
+      if (committedSlot) present.push(committedSlot);
+      else if (kept && !hidesOnly && !waiting.has(kept_.id) && (kind !== 'depth' || depthShowable)) present.push(kept_);
+      else complete = false;
+    }
+    // A GC, skew or Depth row the draft draws that the base lacks waits.
+    const baseIds = new Set(base.slots.map((slot) => slot.id));
+    if (stackOn) {
+      const rows = Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : [];
+      if (/** @type {readonly ({ id?: unknown, renderer?: unknown } | null)[]} */ (rows).some((row) => row && trackSlotRowEnabled(row)
+        && trackKindOf(row.renderer) && !baseIds.has(String(row.id)))) complete = false;
+    } else if (circular) {
+      for (const kind of /** @type {const} */ (['content', 'skew'])) {
+        if (!hidden(kind, null, nt) && !present.some((slot) => trackKindOf(slot.renderer) === kind)) complete = false;
+      }
+      if (draftDrawsDepth('circular', judged) && !present.some((slot) => slot.renderer === 'depth')) complete = false;
+    }
+    if ([...committedIds].some((id) => !baseIds.has(id)) && !baseIsOther) complete = false;
+    // Generate's Overlay check (`overlayReferenceIssues`) reads the stack the
+    // apply draws. A row it refuses names a track slot the apply leaves out
+    // (an Overlay row's anchor or Extend to slot): it leaves with it while
+    // the draft does not draw that row either (`trackSlotRowEnabled`), and
+    // one the draft draws refuses the apply with the issue Generate gives
+    // that draft row.
+    const issues = overlayReferenceIssues(present.map((slot) => slot.read), request.mode, (read) => drawnDraftRow(String(read.id)));
+    const refused = issues.filter(({ issue, row }) => issue.rowIndex >= 0 && !returning.has(row)).map(({ issue }) => issue);
+    if (refused.length > 0) return { ...TRACK_PLAN_WAITS, refused: new CustomTrackPlanValidationError(refused) };
+    const leaving = new Set(issues.map(({ row }) => row));
+    present.splice(0, present.length, ...present.filter((slot) => !leaving.has(slot.read)));
+    slots = present.map((slot) => slot.payload);
+    const presentIds = new Set(present.map((slot) => slot.id));
+    // A null Axis index (a Python-written request) stays null: each slot keeps its own side.
+    axis = base.axisNull ? null : emittedCustomTrackAxisIndex(base.slots.map((slot) => ({ enabled: presentIds.has(slot.id) })),
+      base.slots.filter((slot) => slot.before).length);
+    depthPresent = present.some((slot) => slot.renderer === 'depth');
+  } else {
+    const draws = !hidden('depth', null, null);
+    depthPresent = draws && (committedDepth || depthShowable);
+    if (draws && !depthPresent) complete = false;
+  }
+  // 2. The Depth parts.
+  /** @type {LiveSettingWrite[]} */
+  const depthWrites = [];
+  const committedResources = /** @type {Readonly<Record<string, { kind?: unknown }>>} */ (resources || {});
+  const names = /** @type {Record<string, string>} */ ({ ...(/** @type {Record<string, unknown>} */ (webFiles?.resourceOriginalNames) || {}) });
+  if (depthPresent && !committedDepth && kept?.depth) {
+    depthWrites.push([['diagramOptions', 'depthTracks'], kept.depth.depthTracks]);
+    Object.entries(kept.depth.resources).forEach(([id, descriptor]) => depthWrites.push([[LIVE_RESOURCES_ROOT, id], descriptor]));
+    Object.assign(names, kept.depth.originalNames);
+    depthWrites.push([[LIVE_WEB_FILES_ROOT, 'resourceOriginalNames'], names]);
+    if (kept.depth.bindings) depthWrites.push([[LIVE_WEB_FILES_ROOT, 'bindings'], kept.depth.bindings]);
+  } else if (!depthPresent && committedDepth) {
+    depthWrites.push([['diagramOptions', 'depthTracks'], undefined]);
+    const dropped = Object.keys(committedResources).filter((id) => committedResources[id]?.kind === 'depth-track-file');
+    dropped.forEach((id) => {
+      depthWrites.push([[LIVE_RESOURCES_ROOT, id], undefined]);
+      delete names[id];
+    });
+    depthWrites.push([[LIVE_WEB_FILES_ROOT, 'resourceOriginalNames'], Object.keys(names).length > 0 ? names : undefined]);
+    // A Session's Web input inventory names those files too; the candidate's binding check reads it.
+    const bindings = /** @type {WebFileBindings | undefined} */ (webFiles?.bindings);
+    if (bindings) depthWrites.push([[LIVE_WEB_FILES_ROOT, 'bindings'], webFileBindingsWithoutDepth(bindings, new Set(dropped))]);
+  }
+  // A request without a flag (a CLI Session without overrides) draws the
+  // mode's track default, as Load reads it; a flag equal to it creates nothing.
+  const committedOverrides = /** @type {Record<string, unknown>} */ (request.diagramOptions.configOverrides || {});
+  const defaults = trackDefaultsForMode(request.mode);
+  /** @type {Record<string, boolean>} */
+  const drawnFlags = {
+    [CONFIG_OVERRIDE_PATHS.showGc]: defaults.gc, [CONFIG_OVERRIDE_PATHS.showSkew]: defaults.skew,
+    [CONFIG_OVERRIDE_PATHS.showDepth]: committedDepth
+  };
+  /** @param {string} key */
+  const committedFlag = (key) => (Object.hasOwn(committedOverrides, key) ? Boolean(committedOverrides[key]) : drawnFlags[key]);
+  // Only hides, or a switch that waits: a GC or skew flag turns off for a default track the draft hides, and stays otherwise.
+  const flags = hidesOnly || switchWaits ? {
+    [CONFIG_OVERRIDE_PATHS.showGc]: committedFlag(CONFIG_OVERRIDE_PATHS.showGc) && !hidden('content', null, nt),
+    [CONFIG_OVERRIDE_PATHS.showSkew]: committedFlag(CONFIG_OVERRIDE_PATHS.showSkew) && !hidden('skew', null, nt),
+    [CONFIG_OVERRIDE_PATHS.showDepth]: depthPresent
+  } : trackFlagOverrides(drawing.form, circular, depthPresent);
+  /** @param {string} key @returns {LiveSettingWrite[]} */
+  const flagWrite = (key) => (!Object.hasOwn(committedOverrides, key) && flags[key] === drawnFlags[key]
+    ? [] : [configWrite(key, flags[key])]);
+  // 3. The kept parts after this apply: completed after a Load, with the rows a live suppress removed.
+  const keptAfter = !kept ? { ...committedTrackParts(request, committedPlan, resources, webFiles), waiting }
+    : waiting.size !== kept.waiting.size || [...waiting].some((id) => !kept.waiting.has(id)) ? { ...kept, waiting } : kept;
+  /** @type {LiveSettingWrite[]} */
+  const slotWrites = [
+    [['diagramOptions', 'tracks', requestSlotsKey], slots],
+    [['diagramOptions', 'tracks', requestAxisKey], axis]
+  ];
+  return {
+    writes: {
+      [GT_REQUEST_PATHS.gc]: flagWrite(CONFIG_OVERRIDE_PATHS.showGc),
+      [GT_REQUEST_PATHS.skew]: flagWrite(CONFIG_OVERRIDE_PATHS.showSkew),
+      [GT_REQUEST_PATHS.depth]: [
+        ...flagWrite(CONFIG_OVERRIDE_PATHS.showDepth),
+        ...depthWrites,
+        [[KEPT_TRACK_PARTS_ROOT], keptAfter]
+      ],
+      [GT_REQUEST_PATHS[circular ? 'circularSlots' : 'linearSlots']]: slotWrites
+    },
+    complete,
+    slots,
+    refused: null,
+    judged
+  };
+};
 /**
  * The projector of each request path a live `SETTING_APPLICATION` row names
  * (services/setting-application.js). Context a value depends on (the mode,
  * the grouping, the drawn records) is the committed request's, never the
- * draft's (`liveSettingApplies`).
- * @type {Readonly<Record<string, (drawing: RequestDrawing, request: CanonicalRenderRequest) => LiveSettingWrite[]>>}
+ * draft's (`liveSettingApplies`). A projector writes only its own fields.
+ * @type {Readonly<Record<string, LiveSettingProjector>>}
  */
 const LIVE_SETTING_PROJECTORS = Object.freeze({
   'diagramOptions.output.legend': (drawing, request) => [
@@ -1674,31 +2278,208 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
     (/** @type {RequestDrawing} */ drawing, /** @type {CanonicalRenderRequest} */ request) => (
       /** @type {LiveSettingWrite[]} */ ([[['layout', field], project(drawing.adv, circularRecordSourceIndexes(request.records))]])
     )
-  ]))
+  ])),
+  // G2 (PD-OI-103 rev 2, PD-OI-059 rev 3). Default font size: the Circular
+  // leaf, or the Linear `.short` / `.long` pair.
+  'diagramOptions.configOverrides.objects.definition.font_size': (drawing, request) => (request.mode === 'circular'
+    ? [configWrite(CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize,
+        configLeaf(CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize, drawing.adv.def_font_size))]
+    : configWrites(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearDefinitionFontSize, drawing.adv.def_font_size)),
+  // A cleared row style is a removal of its leaf.
+  'diagramOptions.configOverrides.objects.definition.linear.line_styles': (drawing) => (
+    Object.entries(linearDefinitionStyleOverrides(drawing.adv)).map(([key, value]) => configWrite(key, value))
+  ),
+  'diagramOptions.species': (drawing) => [[['diagramOptions', 'species'], requestSpecies(drawing.form)]],
+  'diagramOptions.window': (drawing) => [[['diagramOptions', 'window'], requestWindow(drawing.adv)]],
+  // Auto is a removal of the override.
+  [`diagramOptions.configOverrides.${CONFIG_OVERRIDE_PATHS.comparisonHeight}`]: (drawing) => [
+    configWrite(CONFIG_OVERRIDE_PATHS.comparisonHeight, requestComparisonHeight(drawing.adv))
+  ],
+  'diagramOptions.tracks.centerReservedRadius': (drawing) => [
+    [['diagramOptions', 'tracks', 'centerReservedRadius'], requestCenterReservedRadius(drawing.adv)]
+  ],
+  // The Fill and Stroke color of each committed item whose colors are live
+  // (`annotationItemColorsLive`), matched by set and item id. A draft item
+  // without its own style follows the committed set's Default, whose change
+  // is not live.
+  [ANNOTATION_SETS_REQUEST_PATH]: (drawing, request) => {
+    const committedSets = request.diagramOptions.annotations?.sets;
+    if (!Array.isArray(committedSets)) return [];
+    const draftSets = normalizeAnnotationSets(drawing.annotationSets);
+    return [[['diagramOptions', 'annotations', 'sets'], committedSets.map((set) => {
+      const draftSet = draftSets.find((candidate) => candidate.id === set.id);
+      if (!draftSet) return set;
+      return { ...set, annotations: set.annotations.map((item) => {
+        const draftItem = draftSet.annotations.find((candidate) => candidate.id === item.id);
+        if (!draftItem || !annotationItemColorsLive(set, item)) return item;
+        const drawn = item.style ?? createDefaultAnnotationStyle(set.defaultStyle);
+        const draft = draftItem.style ?? createDefaultAnnotationStyle(set.defaultStyle);
+        return drawn.fill === draft.fill && drawn.stroke === draft.stroke
+          ? item : { ...item, style: { ...drawn, fill: draft.fill, stroke: draft.stroke } };
+      }) };
+    })]];
+  },
+  // The GT set: one track projection (`trackPlanApplied`), each key its own leaves.
+  [GT_REQUEST_PATHS.gc]: (drawing, request, context) => trackPlanApplied(request, drawing, context).writes[GT_REQUEST_PATHS.gc],
+  [GT_REQUEST_PATHS.skew]: (drawing, request, context) => trackPlanApplied(request, drawing, context).writes[GT_REQUEST_PATHS.skew],
+  [GT_REQUEST_PATHS.depth]: (drawing, request, context) => trackPlanApplied(request, drawing, context).writes[GT_REQUEST_PATHS.depth],
+  [GT_REQUEST_PATHS.circularSlots]: (drawing, request, context) => (
+    trackPlanApplied(request, drawing, context).writes[GT_REQUEST_PATHS.circularSlots] || []
+  ),
+  // The Linear rows the track projection keeps, then the Height of each row
+  // whose Height is live (`linearSlotHeightLive`), matched by slot id; a new
+  // row waits.
+  [LINEAR_TRACK_SLOTS_REQUEST_PATH]: (drawing, request, context) => {
+    const projection = trackPlanApplied(request, drawing, context);
+    const own = projection.writes[LINEAR_TRACK_SLOTS_REQUEST_PATH] || [];
+    const { slots } = projection;
+    if (!Array.isArray(slots)) return own;
+    const draft = Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : [];
+    /** @type {Map<string, ReturnType<typeof linearTrackSlotHeightPayload>['height']>} */
+    const heights = new Map();
+    for (const row of draft) {
+      try {
+        const { id, height } = linearTrackSlotHeightPayload(row);
+        heights.set(id, height);
+      } catch {
+        throw diagnosticError('INPUT_INVALID', { field: 'height', reason: 'POSITIVE_OR_AUTO' });
+      }
+    }
+    return [[['diagramOptions', 'tracks', 'linearTrackSlots'], slots.map((slot) => (
+      linearSlotHeightLive(slot) && heights.has(slot.id) ? { ...slot, height: heights.get(slot.id) ?? null } : slot
+    ))], ...own.filter(([path]) => path[path.length - 1] !== 'linearTrackSlots')];
+  },
+  // Record names write the label fields only: Reverse, the Linear subtitle,
+  // the grid rows and the LOSAT genetic code stay committed. A Linear record
+  // takes its card's label, each split member too, with the definition
+  // fields of its `webFiles` entry (F-2); a Circular single record its Record
+  // label and Subtitle.
+  records: (drawing, request, { inputs, webFiles, resources }) => {
+    if (request.mode === 'circular') {
+      const labels = circularRecordLabels(drawing.form);
+      return [[['records'], request.records.map((record) => ({ ...record, presentation: { ...record.presentation, ...labels } }))]];
+    }
+    const indexes = /** @type {number[]} */ (linearRecordCardIndexes(request, inputs, resources));
+    const cards = indexes.map((index) => inputs.linearSeqs[index]);
+    /** @type {LiveSettingWrite[]} */
+    const writes = [[['records'], request.records.map((record, position) => ({
+      ...record, presentation: { ...record.presentation, label: linearRecordLabel(cards[position]) }
+    }))]];
+    const entries = linearRecordMetadataOf(request, webFiles);
+    if (entries) {
+      writes.push([[LIVE_WEB_FILES_ROOT, 'linearRecordMetadata'], entries.map((entry, position) => linearRecordMetadataEntry(
+        entry, linearRecordDefinitionLine(cards[position]), { file: entry.fileSubtitle || '', record: entry.recordSubtitle || '' }
+      ))]);
+    }
+    return writes;
+  }
 });
 /** The request paths that live setting rows may name. */
 export const LIVE_SETTING_REQUEST_PATHS = Object.freeze(Object.keys(LIVE_SETTING_PROJECTORS));
 const CIRCULAR_GRID_REQUEST_PATHS = new Set(Object.keys(CIRCULAR_MULTI_RECORD_LAYOUT).map((field) => `layout.${field}`));
 const CANVAS_POSITION_REQUEST_PATHS = new Set(['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition']);
-const LINEAR_REQUEST_PATHS = new Set([`diagramOptions.configOverrides.${CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned}`]);
+const COMPARISON_HEIGHT_REQUEST_PATH = `diagramOptions.configOverrides.${CONFIG_OVERRIDE_PATHS.comparisonHeight}`;
+/**
+ * The request paths only one mode's request draws.
+ * @type {Readonly<Record<string, 'circular' | 'linear'>>}
+ */
+const LIVE_SETTING_MODES = Object.freeze({
+  [`diagramOptions.configOverrides.${CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned}`]: 'linear',
+  'diagramOptions.configOverrides.objects.definition.linear.line_styles': 'linear',
+  [COMPARISON_HEIGHT_REQUEST_PATH]: 'linear',
+  [LINEAR_TRACK_SLOTS_REQUEST_PATH]: 'linear',
+  [GT_REQUEST_PATHS.circularSlots]: 'circular',
+  'diagramOptions.species': 'circular',
+  'diagramOptions.tracks.centerReservedRadius': 'circular'
+});
 /**
  * Whether the committed request can show the drawing's live value of
- * `requestPath`: a Circular multi-record layout field only a committed grid
- * draws; a Circular Legend or Plot Title position only while the draft draws
- * the committed canvas, since each canvas keeps its own positions and a
- * pending Multi-Record Canvas change selects the other canvas's at Generate
- * (OV-1074, OV-1077); Lock Definition Column only a Linear request draws.
+ * `requestPath`: a path of one mode only that mode's request draws; a
+ * Circular multi-record layout field only a committed grid draws; a Circular
+ * Legend or Plot Title position only while the draft draws the committed
+ * canvas, since each canvas keeps its own positions and a pending
+ * Multi-Record Canvas change selects the other canvas's at Generate (OV-1074,
+ * OV-1077); Match height only a committed comparison draws (the Web's
+ * comparison intent sends the match style, F-10; a Python-written request
+ * omits a default style but carries its pairs, and a CLI request's disabled
+ * protein pipeline draws none, `drawsNoComparison`); Circular record names only a
+ * single record draws (a batch or grid of one draws no record presentation),
+ * Linear ones only while the committed records follow the draft cards
+ * (`linearRecordCardIndexes`). With an `item`, the value of that one item
+ * only (`liveSettingItemApplies`): the projector writes the items it admits.
  * Otherwise the value applies on Generate (PD-OI-103), and the setting note
  * says so (`SettingNote`).
  * @param {CanonicalRenderRequest} request @param {string} requestPath @param {RequestDrawing} drawing
+ * @param {LiveSettingInputs} inputs @param {LiveSettingResources} [resources]
+ * @param {LiveSettingItem | null} [item]
  */
-export const liveSettingApplies = (request, requestPath, drawing) => {
+export const liveSettingApplies = (request, requestPath, drawing, inputs, resources = null, item = null) => {
+  if (item && !liveSettingItemApplies(request, requestPath, item)) return false;
   const grid = request.grouping === 'grid';
+  const mode = LIVE_SETTING_MODES[requestPath];
+  if (mode) {
+    if (request.mode !== mode) return false;
+    if (requestPath !== COMPARISON_HEIGHT_REQUEST_PATH) return true;
+    return Object.hasOwn(request.diagramOptions, 'pairwiseMatchStyle')
+      || (request.comparisons.length > 0 && !drawsNoComparison(request.comparisons));
+  }
   if (CIRCULAR_GRID_REQUEST_PATHS.has(requestPath)) return grid;
-  if (LINEAR_REQUEST_PATHS.has(requestPath)) return request.mode === 'linear';
+  if (requestPath === 'records') {
+    return request.mode === 'circular'
+      ? request.grouping === 'single'
+      : linearRecordCardIndexes(request, inputs, resources) !== null;
+  }
   return !CANVAS_POSITION_REQUEST_PATHS.has(requestPath) || request.mode !== 'circular'
     || Boolean(drawing.form.multi_record_canvas) === grid;
 };
+// The context of the notes read with one inputs object: a note render reads
+// every path of its row with the same inputs, so the track projection runs
+// once for its five keys.
+/** @type {WeakMap<LiveSettingInputs, LiveSettingContext>} */
+const noteContexts = new WeakMap();
+/** @param {LiveSettingInputs} inputs @param {LiveSettingResources} resources @param {ReadonlySet<UndoneTrackHide>} [undoneHides] @returns {LiveSettingContext} */
+const noteContextOf = (inputs, resources, undoneHides) => {
+  const memo = noteContexts.get(inputs);
+  if (memo && memo.resources === resources && memo.undoneHides === undoneHides) return memo;
+  /** @type {LiveSettingContext} */
+  const context = { inputs, webFiles: {}, resources, undoneHides };
+  noteContexts.set(inputs, context);
+  return context;
+};
+/**
+ * The `applies` of a setting note (`settingApplicationNote`): a path of the
+ * other mode draws nothing in this Result and waits for nothing, so a row
+ * with paths of both modes shows its note by the shown mode's paths alone.
+ * The paths of one note render pass one `inputs` object.
+ * @param {CanonicalRenderRequest} request @param {string} requestPath @param {RequestDrawing} drawing
+ * @param {LiveSettingInputs} inputs @param {LiveSettingResources} [resources]
+ * @param {LiveSettingItem | null} [item]
+ * @param {ReadonlySet<UndoneTrackHide>} [undoneHides] The hides an Undo took back, as its rerender projects them.
+ */
+export const liveSettingNoteApplies = (request, requestPath, drawing, inputs, resources = null, item = null, undoneHides = undefined) => {
+  const mode = LIVE_SETTING_MODES[requestPath];
+  if (Boolean(mode) && request.mode !== mode) return true;
+  // A GT key applies while its projection leaves no show pending and is not
+  // refused; a Linear row's Height note keeps its own answer (G2).
+  if (GT_REQUEST_PATH_SET.has(requestPath) && !item) {
+    return projectTrackPlan(request, drawing, noteContextOf(inputs, resources, undoneHides)).complete;
+  }
+  return liveSettingApplies(request, requestPath, drawing, inputs, resources, item);
+};
+/**
+ * The drawing whose hides the live track apply applies to the committed
+ * request (the track projection's `judged`), which the Legend list reads
+ * (`hiddenTrackLegendKeys`): the draft, or, while Use custom stack waits, the
+ * draft with the drawn switch (D-214 (f)). Null while nothing applies (a
+ * refused apply, as Generate refuses the same draft): the Result keeps every
+ * track it draws.
+ * @param {CanonicalRenderRequest} request @param {RequestDrawing} drawing
+ * @param {LiveSettingInputs} inputs @param {LiveSettingResources} [resources]
+ * @returns {TrackVisibilityDrawing | null}
+ */
+export const liveTrackHideDrawing = (request, drawing, inputs, resources = null) => (
+  projectTrackPlan(request, drawing, noteContextOf(inputs, resources)).judged
+);
 
 /** @param {unknown} root @param {readonly string[]} path */
 const valueAtPath = (root, path) => path.reduce(
@@ -1706,37 +2487,52 @@ const valueAtPath = (root, path) => path.reduce(
 );
 /**
  * The writes that apply the draft values of `requestPaths` to the committed
- * request, without those already equal to it. Throws `INPUT_INVALID` for a
+ * Session, without those already equal to it. Throws `INPUT_INVALID` for a
  * value Generate would refuse.
- * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string> }} input
+ * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs, undoneHides?: ReadonlySet<UndoneTrackHide> }} input
+ *   `undoneHides`: the hides an Undo took back (`state.undoneTrackHides`).
  * @returns {LiveSettingWrite[]}
  */
-export const projectLiveSettingWrites = ({ committed, drawing, requestPaths }) => {
+export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs, undoneHides }) => {
   const request = requireCurrentCommittedRequest(committed);
-  return [...new Set(requestPaths)].flatMap((requestPath) => {
+  const webFiles = committed.webFiles || {};
+  const { resources } = committed;
+  // One context per call: the track projection runs once for its five keys.
+  /** @type {LiveSettingContext} */
+  const context = { inputs, webFiles, resources, undoneHides };
+  let trackWrites = 0;
+  const writes = [...new Set(requestPaths)].flatMap((requestPath) => {
     const project = LIVE_SETTING_PROJECTORS[requestPath];
     if (!project) throw diagnosticError('INPUT_INVALID', { field: requestPath, reason: 'UNKNOWN_CONFIG_PATH' });
-    if (!liveSettingApplies(request, requestPath, drawing)) return [];
-    return project(drawing, request).filter(([path, value]) => (
-      JSON.stringify(valueAtPath(request, path)) !== JSON.stringify(value)
-    ));
+    if (!liveSettingApplies(request, requestPath, drawing, inputs, resources)) return [];
+    const own = project(drawing, request, context).filter(([path, value]) => {
+      // The resources and the kept track parts go by reference (payload identity).
+      if (path[0] === KEPT_TRACK_PARTS_ROOT) return !Object.is(keptTrackPartsOf(request), value);
+      if (path[0] === LIVE_RESOURCES_ROOT) return !Object.is(valueAtPath({ resources }, path), value);
+      return JSON.stringify(valueAtPath(path[0] === LIVE_WEB_FILES_ROOT ? { webFiles } : request, path)) !== JSON.stringify(value);
+    });
+    if (GT_REQUEST_PATH_SET.has(requestPath)) trackWrites += own.filter(([path]) => path[0] !== KEPT_TRACK_PARTS_ROOT).length;
+    return own;
   });
+  // Kept parts alone draw nothing: they ride with a track write.
+  return trackWrites > 0 ? writes : writes.filter(([path]) => path[0] !== KEPT_TRACK_PARTS_ROOT);
 };
 /**
- * Writes live setting values into a render request in place. A request a
- * Session was loaded with may lack an optional object a write enters
+ * Writes live setting values into `root` in place. A request a Session was
+ * loaded with may lack, or hold null for, an optional object a write enters
  * (`diagramOptions.configOverrides`): a value creates it, as Generate sends
- * it, and a removal of a key it would hold has nothing to remove.
- * @param {object} request
- * @param {readonly LiveSettingWrite[]} writes
+ * it, and a removal of a key it would hold has nothing to remove. A path
+ * through an array or a scalar throws: a live write replaces a whole array
+ * (F-1).
+ * @param {Record<string, unknown>} root @param {readonly LiveSettingWrite[]} writes
  */
-export const applyLiveSettingWrites = (request, writes) => {
+const writeLiveValues = (root, writes) => {
   writes.forEach(([path, value]) => {
-    /** @type {Record<string, unknown>} */
-    let parent = /** @type {Record<string, unknown>} */ (request);
+    let parent = root;
     for (const key of path.slice(0, -1)) {
       const node = parent[key];
       if (isPlainObject(node)) parent = node;
+      else if (node != null) throw diagnosticError('INPUT_INVALID', { field: path.join('.'), reason: 'UNKNOWN_CONFIG_PATH' });
       else if (value === undefined) return;
       else parent = parent[key] = {};
     }
@@ -1745,6 +2541,61 @@ export const applyLiveSettingWrites = (request, writes) => {
     else parent[key] = cloneCanonicalJsonValue(value);
   });
 };
+/**
+ * Writes the request writes of live setting values into a render request in
+ * place; the Web file writes are `applyLiveWebFileWrites`'.
+ * @param {object} request
+ * @param {readonly LiveSettingWrite[]} writes
+ */
+export const applyLiveSettingWrites = (request, writes) => writeLiveValues(
+  /** @type {Record<string, unknown>} */ (request), writes.filter(([path]) => !LIVE_SESSION_ROOTS.has(path[0]))
+);
+/**
+ * The committed Session's resources with the resource writes of live setting
+ * values: set entries by reference, so each keeps its File (`resourceIdOwnedBy`),
+ * and removed ones left out; the same object when there are none (H1).
+ * @param {Readonly<Record<string, unknown>>} resources
+ * @param {readonly LiveSettingWrite[]} writes
+ * @returns {Readonly<Record<string, unknown>>}
+ */
+export const applyLiveResourceWrites = (resources, writes) => {
+  const own = writes.filter(([path]) => path[0] === LIVE_RESOURCES_ROOT);
+  if (own.length === 0) return resources;
+  /** @type {Record<string, unknown>} */
+  const next = { ...resources };
+  own.forEach(([path, value]) => {
+    if (value === undefined) delete next[path[1]];
+    else next[path[1]] = value;
+  });
+  return next;
+};
+/**
+ * The committed Session's Web file record with the Web file writes of live
+ * setting values (F-2); the same record when there are none.
+ * @param {Readonly<Record<string, unknown>>} webFiles
+ * @param {readonly LiveSettingWrite[]} writes
+ * @returns {Readonly<Record<string, unknown>>}
+ */
+export const applyLiveWebFileWrites = (webFiles, writes) => {
+  const own = writes.filter(([path]) => path[0] === LIVE_WEB_FILES_ROOT);
+  if (own.length === 0) return webFiles;
+  const root = { [LIVE_WEB_FILES_ROOT]: cloneJsonData(webFiles || {}) };
+  writeLiveValues(root, own);
+  return root[LIVE_WEB_FILES_ROOT];
+};
+
+/**
+ * The track flags a request sends, one owner for Generate and the live track
+ * projection: Circular Hide GC Content and Hide GC Skew, Linear Show GC
+ * Content and Show GC Skew, and whether the request draws Depth.
+ * @param {Record<string, unknown>} form @param {boolean} circular @param {boolean} depthRequested
+ * @returns {Record<string, boolean>}
+ */
+const trackFlagOverrides = (form, circular, depthRequested) => ({
+  [CONFIG_OVERRIDE_PATHS.showGc]: circular ? !form.suppress_gc : Boolean(form.show_gc),
+  [CONFIG_OVERRIDE_PATHS.showSkew]: circular ? !form.suppress_skew : Boolean(form.show_skew),
+  [CONFIG_OVERRIDE_PATHS.showDepth]: Boolean(depthRequested)
+});
 
 /**
  * @param {RequestState} state
@@ -1769,12 +2620,6 @@ const buildConfigOverrides = (
   const linearTrackLayout = circular
     ? null
     : requireCurrentLinearTrackLayout(form.linear_track_layout);
-  const comparisonHeight = !circular && hasComparisonIntent
-    ? classifyOptionalPositiveNumber(adv.comparison_height)
-    : null;
-  if (comparisonHeight?.status === 'invalid') {
-    throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
-  }
   // An axis color still at the Linear default follows the ruler.
   const linearAxisManaged = isModeProfileDefault('linear', 'axis_stroke_color', adv.axis_stroke_color);
   const linearAxisStrokeColor = circular
@@ -1794,11 +2639,7 @@ const buildConfigOverrides = (
     [CONFIG_OVERRIDE_PATHS.lineStrokeColor]: adv.line_stroke_color || null,
     [CONFIG_OVERRIDE_PATHS.fontFamily]: adv.font_family || null,
     [CONFIG_OVERRIDE_PATHS.labelRendering]: effectiveLabelRendering(form, adv, circular, linearLabelPlacement),
-    [CONFIG_OVERRIDE_PATHS.showGc]: circular ? !form.suppress_gc : Boolean(form.show_gc),
-    [CONFIG_OVERRIDE_PATHS.showSkew]: circular
-      ? !form.suppress_skew
-      : Boolean(form.show_skew),
-    [CONFIG_OVERRIDE_PATHS.showDepth]: Boolean(depthRequested),
+    ...trackFlagOverrides(form, circular, depthRequested),
     [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: labelScopeOverride(form, circular),
     // The mode's packaged style is left unstated, as a request that predates the setting leaves it.
     [MODE_LABEL_STYLE_PATHS[state.mode.value].label_line]:
@@ -1885,11 +2726,7 @@ const buildConfigOverrides = (
           [CONFIG_OVERRIDE_PATHS.linearRulerOnAxis]: Boolean(form.linear_ruler_on_axis),
           ...(hasComparisonIntent
             ? {
-                [CONFIG_OVERRIDE_PATHS.comparisonHeight]:
-                  // hasComparisonIntent && !circular holds here, so comparisonHeight is set.
-                  /** @type {NonNullable<typeof comparisonHeight>} */ (comparisonHeight).status === 'auto'
-                    ? null
-                    : /** @type {NonNullable<typeof comparisonHeight>} */ (comparisonHeight).value,
+                [CONFIG_OVERRIDE_PATHS.comparisonHeight]: requestComparisonHeight(adv),
                 [CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle]: adv.pairwise_match_style
               }
             : {}),
@@ -1925,18 +2762,7 @@ const buildConfigOverrides = (
   for (const [path, value] of Object.entries(sharedLengthValues)) {
     Object.assign(overrides, sharedLengthOverrides(path, value));
   }
-  if (!circular) {
-    for (const [kind, prefix] of Object.entries(LINEAR_DEFINITION_STYLE_PATHS)) {
-      const style = adv.linear_definition_line_styles?.[kind];
-      if (!style || typeof style !== 'object' || Array.isArray(style)) continue;
-      for (const field of LINEAR_DEFINITION_STYLE_FIELDS) {
-        const value = style[field];
-        if (value !== null && value !== undefined) {
-          overrides[`${prefix}.${field}`] = value;
-        }
-      }
-    }
-  }
+  if (!circular) Object.assign(overrides, linearDefinitionStyleOverrides(adv));
   const managedOverrides = Object.fromEntries(
     Object.entries(overrides).filter(([, value]) => value !== null && value !== undefined)
   );
@@ -2397,7 +3223,7 @@ const buildTrackPlan = ({
         circularTrackAxisIndex: validation.emittedAxisIndex,
         linearTrackSlots: null,
         linearTrackAxisIndex: null,
-        centerReservedRadius: projectOptionalNumber(drawing.adv.center_reserved_radius, { field: 'center_reserved_radius' })
+        centerReservedRadius: requestCenterReservedRadius(drawing.adv)
       }
     };
   }
@@ -2469,7 +3295,7 @@ const buildTrackPlan = ({
           circularTrackAxisIndex: validation.emittedAxisIndex,
           linearTrackSlots: null,
           linearTrackAxisIndex: null,
-          centerReservedRadius: projectOptionalNumber(drawing.adv.center_reserved_radius, { field: 'center_reserved_radius' })
+          centerReservedRadius: requestCenterReservedRadius(drawing.adv)
         }
       };
     }
@@ -2482,7 +3308,7 @@ const buildTrackPlan = ({
       circularTrackAxisIndex: null,
       linearTrackSlots: null,
       linearTrackAxisIndex: null,
-      centerReservedRadius: circular ? projectOptionalNumber(drawing.adv.center_reserved_radius, { field: 'center_reserved_radius' }) : null
+      centerReservedRadius: circular ? requestCenterReservedRadius(drawing.adv) : null
     }
   };
 };
@@ -2538,7 +3364,7 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
           : nonNegativeInteger(blastp.collinearMaxConflictsInMergeGap, 1),
         mergeOrientation: blastpMode === 'collinear'
           ? requireCurrentCollinearMergeOrientation(blastp.collinearMergeOrientation)
-          : (baselineParameters.mergeOrientation || 'either')
+          : readCollinearMergeOrientation(baselineParameters.mergeOrientation).value
       }
     },
     collinearityUnitMode,
@@ -2997,8 +3823,11 @@ const buildLayout = (state, drawing, records = []) => {
       recordKeys,
       'renderRequest.layout.similarityAlignment'
     );
+    // The page's translations may name records the draft no longer draws, or
+    // lack one the draft added; the request carries one per drawn record.
+    const stored = state.linearRecordTranslations?.value;
     const translations = canonicalRecordTranslations(
-      state.linearRecordTranslations?.value || [],
+      Array.isArray(stored) && stored.length ? recordTranslationsFor(stored, recordKeys) : stored || [],
       recordKeys,
       'renderRequest.layout.recordTranslations',
       { requireCoverage: plan !== null }
@@ -3141,6 +3970,236 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     featurePlacementOverrides: publicationClone(config.featurePlacementOverrides || {})
   } };
 };
+// PD-OI-104 rev 5, D-199 (PQ-1 B): the GC, skew and Depth parts the last
+// Generate built, also those its draft hid, kept unsaved beside the committed
+// request so that a live show re-inserts them as Generate would draw them.
+/**
+ * A slot of a kept plan: its request entry (a slot object, or the spec string
+ * a Python API request states), its id, renderer and own dinucleotide as the
+ * slot parser reads the entry, whether it lies before the Axis, and the
+ * slot as read (what Generate's Overlay check reads).
+ * @typedef {{ readonly id: string, readonly payload: TrackSlotEntry, readonly renderer: string,
+ *   readonly nt: unknown, readonly before: boolean, readonly read: OverlayCheckRow }} KeptSlot
+ */
+/** @typedef {string | CanonicalCircularTrackSlot | CanonicalLinearTrackSlot} TrackSlotEntry */
+/**
+ * A plan's slots (null: no explicit slots) and whether its Axis index is
+ * null, which Python reads as "each slot's own side".
+ * @typedef {{ readonly slots: readonly KeptSlot[] | null, readonly axisNull: boolean }} KeptPlan
+ */
+/**
+ * The Depth parts of a Generate: its series, their resources (the descriptors,
+ * by reference, so each keeps its File) and original names. `bindings` is the
+ * loaded Web input inventory (`webFiles.bindings`): only a Session's committed
+ * Web file record has one, and a Generate's has none.
+ * @typedef {{ readonly depthTracks: readonly Record<string, unknown>[],
+ *   readonly resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
+ *   readonly originalNames: Readonly<Record<string, string>>,
+ *   readonly bindings?: WebFileBindings }} KeptDepth
+ */
+/**
+ * @typedef {object} KeptTrackParts
+ * @property {boolean | null} drawnStack The Use custom stack switch the request was built with; for parts
+ *   completed from a loaded Session, what the request shows (`requestDrawnStack`); null: a Circular request
+ *   with slots, which does not show it (only hides apply, D-212).
+ * @property {{ readonly drawn: KeptPlan, readonly other: KeptPlan | null }} plans The plan of that switch and of
+ *   the other one, every GC, skew and Depth row on except a row Hide GC Content or Hide GC Skew hid (PQ-4 A).
+ * @property {KeptDepth | null} depth
+ * @property {ReadonlySet<string>} waiting The Circular rows a live Hide GC Content or Hide GC Skew removed: they
+ *   wait for Generate when the hide is turned off by hand (PQ-4 A); an Undo of a step that changed the hide
+ *   takes them out (`state.undoneTrackHides`), so it returns them at once.
+ */
+/** @type {WeakMap<object, KeptTrackParts>} */
+const keptTrackParts = new WeakMap();
+const KEPT_TRACK_PARTS_ROOT = 'keptTrackParts';
+const LIVE_RESOURCES_ROOT = 'resources';
+/**
+ * The kept track parts of a committed request, by the request object: a
+ * clone (Save, Load) has none.
+ * @param {unknown} request @returns {KeptTrackParts | null}
+ */
+export const keptTrackPartsOf = (request) => (
+  request && typeof request === 'object' ? keptTrackParts.get(toRaw(request)) ?? null : null
+);
+/**
+ * Gives the request a live apply commits the kept parts of the request it
+ * replaced, or those the apply wrote.
+ * @param {object} from @param {object} to @param {readonly LiveSettingWrite[]} writes
+ */
+export const carryKeptTrackParts = (from, to, writes) => {
+  const written = writes.find(([path]) => path[0] === KEPT_TRACK_PARTS_ROOT);
+  const parts = written ? /** @type {KeptTrackParts} */ (written[1]) : keptTrackPartsOf(from);
+  if (parts) keptTrackParts.set(toRaw(to), parts);  const loaded = loadedStackSwitches.get(toRaw(from));
+  if (loaded !== undefined) loadedStackSwitches.set(toRaw(to), loaded);
+};
+/**
+ * The Use custom stack switch as it stood at Load, beside a loaded Circular
+ * request with slots, which does not show the switch it was drawn with
+ * (`requestDrawnStack`). The drawn switch stays unknown (D-212); a draft
+ * switch changed from this value waits whole (D-214 B). Unsaved, carried with
+ * the request by `carryKeptTrackParts`.
+ * @type {WeakMap<object, boolean>}
+ */
+const loadedStackSwitches = new WeakMap();
+/**
+ * Records, at Load, the Use custom stack switch of the loaded draft beside a
+ * loaded Circular request with slots (`loadedStackSwitches`).
+ * @param {CommittedCanonicalSession} loaded A committed Session Load installs.
+ * @param {RequestDrawing} drawing The loaded draft of the drawing whose Session it is.
+ */
+export const recordLoadedStackSwitch = (loaded, drawing) => {
+  const request = loaded.renderRequest;
+  if (request.mode !== 'circular' || drawing.mode !== 'circular' || keptTrackPartsOf(request) || requestDrawnStack(request) !== null) return;
+  loadedStackSwitches.set(toRaw(request), Boolean(drawing.adv.circular_track_slots_enabled));
+};
+/** @param {unknown} renderer @returns {'content' | 'skew' | 'depth' | null} */
+const trackKindOf = (renderer) => (renderer === 'dinucleotide_content' ? 'content'
+  : renderer === 'dinucleotide_skew' ? 'skew' : renderer === 'depth' ? 'depth' : null);
+/**
+ * A plan's slots with each GC, skew and Depth row on, except a row Hide GC
+ * Content or Hide GC Skew turned off (PQ-4 A).
+ * @template {{ renderer?: unknown, enabled?: unknown, params?: object | null } | null} T
+ * @param {readonly T[]} slots
+ * @returns {T[]}
+ */
+const forcedTrackRows = (slots) => slots.map((slot) => (
+  slot && trackKindOf(slot.renderer) && slot.enabled === false && !Object.hasOwn(slot.params || {}, GLOBAL_SUPPRESS_PARAM)
+    ? { ...slot, enabled: true } : slot
+));
+/**
+ * A plan from its slot entries, each with the slot it is read as.
+ * @param {readonly TrackSlotEntry[] | null} entries
+ * @param {readonly (OverlayCheckRow & { readonly id: unknown, readonly renderer: unknown, readonly params?: { readonly nt?: unknown } | null })[]} read
+ * @param {number | null | undefined} axisIndex
+ * @returns {KeptPlan}
+ */
+const keptPlanOf = (entries, read, axisIndex) => {
+  const axis = Number(axisIndex);
+  return {
+    slots: entries ? entries.map((payload, index) => ({
+      id: String(read[index].id), payload, renderer: String(read[index].renderer), nt: read[index].params?.nt, before: index < axis,
+      read: read[index]
+    })) : null,
+    axisNull: axisIndex === null || axisIndex === undefined
+  };
+};
+/**
+ * The plan of a track plan the Web built (`buildTrackPlan`): slot objects.
+ * @param {{ circularTrackSlots: unknown[] | null, linearTrackSlots: unknown[] | null,
+ *   circularTrackAxisIndex: number | null, linearTrackAxisIndex: number | null }} tracks
+ * @param {boolean} circular
+ * @returns {KeptPlan}
+ */
+const builtPlanOf = (tracks, circular) => {
+  const slots = /** @type {(CanonicalCircularTrackSlot | CanonicalLinearTrackSlot)[] | null} */ (
+    circular ? tracks.circularTrackSlots : tracks.linearTrackSlots);
+  return keptPlanOf(slots, slots || [], circular ? tracks.circularTrackAxisIndex : tracks.linearTrackAxisIndex);
+};
+/** The plan without explicit slots (the default tracks). @type {KeptPlan} */
+const NO_TRACK_SLOTS_PLAN = Object.freeze({ slots: null, axisNull: true });
+/**
+ * Whether the draft's Region Annotation sets are those the committed request
+ * draws, by set id (`normalizeAnnotationSets`, the reader Generate uses).
+ * @param {unknown} draftSets @param {CanonicalRenderRequest} request
+ */
+const sameAnnotationSetIds = (draftSets, request) => {
+  const committed = request.diagramOptions.annotations?.sets;
+  const ids = (/** @type {readonly { id: string }[]} */ sets) => JSON.stringify(sets.map((set) => set.id));
+  return ids(normalizeAnnotationSets(/** @type {Parameters<typeof normalizeAnnotationSets>[0]} */ (draftSets)))
+    === ids(Array.isArray(committed) ? committed : []);
+};
+/**
+ * The plan of a committed request: its slot entries as it states them, read
+ * by the slot parser (`requestTrackSlots`), so a spec string keeps its id.
+ * Null when an entry was not read; throws for an entry the parser rejects.
+ * @param {CanonicalRenderRequest} request
+ * @returns {KeptPlan | null}
+ */
+const committedPlanOf = (request) => {
+  const parsed = requestTrackSlots(request);
+  const tracks = request.diagramOptions.tracks;
+  const axis = request.mode === 'circular' ? tracks?.circularTrackAxisIndex : tracks?.linearTrackAxisIndex;
+  if (!parsed) return NO_TRACK_SLOTS_PLAN;
+  return parsed.slots ? keptPlanOf(/** @type {readonly TrackSlotEntry[]} */ (parsed.entries), parsed.slots, axis) : null;
+};
+/**
+ * The kept track parts of a Generate (D-199, D-201): built in the same call as
+ * its request, from the same draft and files, so an edit made while Python
+ * runs never enters. A plan that cannot be built (no Depth file, an invalid
+ * other stack) is null and never fails the Generate.
+ * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData, recordCount: number,
+ *   resolvedCircularConservation: ResolvedConservationEntry[] | undefined, drawnTracks: Parameters<typeof builtPlanOf>[0],
+ *   depthRequested: boolean, diagramOptions: Readonly<Record<string, unknown>>, resources: ResourceBuilder }} input
+ * @returns {KeptTrackParts}
+ */
+const buildKeptTrackParts = ({ state, drawing, filesData, recordCount, resolvedCircularConservation, drawnTracks,
+  depthRequested, diagramOptions, resources }) => {
+  const circular = state.mode.value === 'circular';
+  const [stackKey, slotsKey, axisKey] = circular
+    ? ['circular_track_slots_enabled', 'circular_track_slots', 'circular_track_slots_axis_index']
+    : ['linear_track_slots_enabled', 'linear_track_slots', 'linear_track_slots_axis_index'];
+  const drawnStack = Boolean(drawing.adv[stackKey]);
+  const hidden = filesData.hiddenDepth;
+  /** @type {RequestFilesData} */
+  const files = !hidden ? filesData : 'circular' in hidden
+    ? { ...filesData, c_depth: hidden.circular }
+    : { ...filesData, linearSeqs: (filesData.linearSeqs || []).map((seq, index) => ({ ...seq, depth: hidden.linear[index] ?? null })) };
+  const depthSeriesCount = logicalDepthTrackCountForRequest({ state, filesData: files, recordCount });
+  /** @param {boolean} stackOn @returns {KeptPlan | null} */
+  const plan = (stackOn) => {
+    try {
+      /** @type {Record<string, unknown>} */
+      let adv = { ...drawing.adv, [stackKey]: stackOn };
+      if (stackOn) {
+        // The drawn stack is the one Generate placed in the draft; the other is placed here as Generate places it.
+        const placed = stackOn === drawnStack
+          ? { slots: drawing.adv[slotsKey], axisIndex: drawing.adv[axisKey] }
+          : circular
+            ? placeCircularStackForGenerate({ slots: drawing.adv[slotsKey], nt: drawing.adv.nt, trackType: drawing.form.track_type,
+                axisIndex: drawing.adv[axisKey], form: drawing.form })
+            : placeLinearStackForGenerate({ slots: drawing.adv[slotsKey], nt: drawing.adv.nt, trackLayout: drawing.form.linear_track_layout,
+                axisIndex: drawing.adv[axisKey], depthTracks: drawing.adv.depth_tracks || [], depthSeriesCount });
+        const rows = forcedTrackRows(/** @type {DepthSlotRow[]} */ (placed.slots || []));
+        if (stackOn !== drawnStack) syncDepthSlotLabels({ slots: rows, depthTracks: drawing.adv.depth_tracks, activeCount: depthSeriesCount });
+        adv = { ...adv, [slotsKey]: rows, [axisKey]: placed.axisIndex };
+      }
+      const forced = { ...drawing, form: { ...drawing.form, show_depth: true }, adv };
+      return builtPlanOf(buildTrackPlan({ state, drawing: forced, filesData: files, recordCount, resolvedCircularConservation,
+        omitUnsourcedDepth: true }).tracks, circular);
+    } catch {
+      return null;
+    }
+  };
+  /** @returns {KeptDepth | null} */
+  const depth = () => {
+    if (depthRequested && Array.isArray(diagramOptions.depthTracks)) {
+      const ids = Object.keys(resources.resources).filter((id) => resources.resources[id].kind === 'depth-track-file');
+      return {
+        depthTracks: /** @type {Record<string, unknown>[]} */ (diagramOptions.depthTracks),
+        resources: Object.fromEntries(ids.map((id) => [id, resources.resources[id]])),
+        originalNames: Object.fromEntries(ids.filter((id) => resources.resourceOriginalNames[id])
+          .map((id) => [id, resources.resourceOriginalNames[id]]))
+      };
+    }
+    try {
+      const builder = createResourceBuilder();
+      /** @type {{ depthTracks?: unknown }} */
+      const options = {};
+      buildDepthResources({ state, drawing, filesData: files, resources: builder, diagramOptions: options, recordCount });
+      return Array.isArray(options.depthTracks)
+        ? { depthTracks: /** @type {Record<string, unknown>[]} */ (options.depthTracks), resources: builder.resources, originalNames: builder.resourceOriginalNames }
+        : null;
+    } catch {
+      return null;
+    }
+  };
+  return {
+    drawnStack,
+    plans: { drawn: plan(drawnStack) ?? builtPlanOf(drawnTracks, circular), other: plan(!drawnStack) },
+    depth: depth(),
+    waiting: new Set()
+  };
+};
 // `recordDisplayRows` are the record display rows of the draft sources
 // (`recordDisplayControls.allRows`); the caller reads them from the owner that
 // the composition root wires, never from `state` (R13).
@@ -3162,6 +4221,8 @@ const projectCanonicalRenderInput = ({
   omittedAnnotationRecordKeys = [],
   // A Save of a mode not generated yet leaves out a Depth row without a source (BA-OD114).
   omitUnsourcedDepth = false,
+  // Generate keeps the track parts of its request (PD-OI-104 rev 5); a Save never does.
+  keepTrackParts = false,
   resources = createResourceBuilder()
 }) => {
   recordStructuralMetric('canonicalRequestProjectionCount');
@@ -3197,7 +4258,7 @@ const projectCanonicalRenderInput = ({
     const sourceUid = state.mode.value === 'linear'
       ? String(filesData.linearSeqs?.[index]?.uid || record.recordKey) : 'circular';
     const sourceRows = recordDisplayRows.filter((/** @type {RecordDisplayRow} */ row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
-    const selector = record.region?.selector || record.selector;
+    const selector = requestRecordSelector(record);
     const selectedRows = sourceRows.filter((/** @type {RecordDisplayRow} */ row) => !selector
       || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
     /** @param {RecordDisplayRow} row */
@@ -3341,7 +4402,7 @@ const projectCanonicalRenderInput = ({
       ...normalizeFeatureRenderingMap(drawing.adv.feature_shapes || {})
     },
     dinucleotide: String(drawing.adv.nt || 'GC').toUpperCase(),
-    window: projectOptionalNumber(drawing.adv.window_size, { field: 'window' }),
+    window: requestWindow(drawing.adv),
     step: projectOptionalNumber(drawing.adv.step_size, { field: 'step' }),
     depthWindow: projectOptionalNumber(drawing.adv.depth_window_size, { field: 'depth_window' }),
     depthStep: projectOptionalNumber(drawing.adv.depth_step_size, { field: 'depth_step' }),
@@ -3356,7 +4417,7 @@ const projectCanonicalRenderInput = ({
   }
   if (state.mode.value === 'circular') {
     diagramOptions.keepFullDefinitionWithPlotTitle = Boolean(drawing.adv.keep_full_definition_with_plot_title);
-    diagramOptions.species = String(drawing.form.species || '').trim() || null;
+    diagramOptions.species = requestSpecies(drawing.form);
     diagramOptions.strain = String(drawing.form.strain || '').trim() || null;
     const conservationSource = String(
       drawing.circularConservation.source || ''
@@ -3493,27 +4554,17 @@ const projectCanonicalRenderInput = ({
   }
   if (state.mode.value === 'linear') {
     webFiles.linearRecordMetadata = sourceInputIndexes.map((sourceIndex, index) => {
-      /** @type {{ recordKey: string, losatGencode: number, fileDefinition?: string, fileSubtitle?: string, recordDefinition?: string, recordSubtitle?: string }} */
-      const entry = {
-        recordKey: String(records[index]?.recordKey || filesData.linearSeqs[sourceIndex]?.uid || `record-${index + 1}`),
-        losatGencode: integerSettingOr(filesData.linearSeqs[sourceIndex]?.losat_gencode, 1, 1)
-      };
-      const fileDefinition = String(filesData.linearSeqs[sourceIndex]?.file_definition || '').trim();
-      const fileSubtitle = String(filesData.linearSeqs[sourceIndex]?.file_subtitle || '').trim();
-      if (fileDefinition) entry.fileDefinition = fileDefinition;
-      if (fileSubtitle) entry.fileSubtitle = fileSubtitle;
-      // presentation.label and presentation.subtitle carry the resolved value.
-      // Record the per-record value too, so an override that happens to equal
-      // the file default is restored as an override rather than as inheritance.
-      const recordDefinition = String(filesData.linearSeqs[sourceIndex]?.definition || '');
-      const recordSubtitle = String(filesData.linearSeqs[sourceIndex]?.record_subtitle || '');
-      if (fileDefinition) entry.recordDefinition = recordDefinition;
-      if (fileSubtitle) entry.recordSubtitle = recordSubtitle;
-      return entry;
+      const seq = filesData.linearSeqs[sourceIndex];
+      return linearRecordMetadataEntry({
+        recordKey: String(records[index]?.recordKey || seq?.uid || `record-${index + 1}`),
+        losatGencode: integerSettingOr(seq?.losat_gencode, 1, 1)
+      }, linearRecordDefinitionLine(seq), {
+        file: String(seq?.file_subtitle || '').trim(), record: String(seq?.record_subtitle || '')
+      });
     });
   }
 
-  return /** @satisfies {CanonicalRenderEnvelope} */ ({
+  const envelope = /** @satisfies {CanonicalRenderEnvelope} */ ({
     // The mode decides the options, the layout, the comparisons and the output
     // together; tsc cannot see that the builders above agree on it.
     renderRequest: /** @type {CanonicalRenderRequest} */ ({
@@ -3536,6 +4587,24 @@ const projectCanonicalRenderInput = ({
     resources: resources.resources,
     webFiles
   });
+  if (keepTrackParts) {
+    const hidden = filesData.hiddenDepth;
+    keptTrackParts.set(envelope.renderRequest, buildKeptTrackParts({
+      state,
+      drawing,
+      filesData: state.mode.value === 'linear'
+        ? { ...filesData, linearSeqs: sourceInputIndexes.map((index) => /** @type {RequestLinearSeq[]} */ (filesData.linearSeqs)[index]),
+            hiddenDepth: hidden && 'linear' in hidden ? { linear: sourceInputIndexes.map((index) => hidden.linear[index]) } : hidden }
+        : selectedCircularFilesData,
+      recordCount: records.length,
+      resolvedCircularConservation,
+      drawnTracks: trackPlan.tracks,
+      depthRequested: trackPlan.depthRequested,
+      diagramOptions,
+      resources
+    }));
+  }
+  return envelope;
 };
 
 // The request writer and the inexpensive comparison use the same projection.
@@ -6760,6 +7829,8 @@ export const projectCommittedRecordTransform = ({ committed, target, transform }
     ...(candidateTarget.presentation || {}),
     reverseComplement: transform.reverseComplement
   };
+  // The kept track parts follow a request whose records keep their count.
+  if (!materialized) carryKeptTrackParts(request, candidate.renderRequest, []);
 
   projectCanonicalSessionRequest({
     renderRequest: candidate.renderRequest,
@@ -6822,9 +7893,11 @@ export const projectCommittedEditorIntent = ({
   const candidate = {
     ...committed,
     renderRequest: cloneCanonicalJsonValue(request),
-    resources: { ...committed.resources }
+    resources: { ...applyLiveResourceWrites(committed.resources, liveSettingWrites) },
+    webFiles: applyLiveWebFileWrites(committed.webFiles, liveSettingWrites)
   };
   applyLiveSettingWrites(candidate.renderRequest, liveSettingWrites);
+  carryKeptTrackParts(request, candidate.renderRequest, liveSettingWrites);
   const options = candidate.renderRequest.diagramOptions || {};
   candidate.renderRequest.diagramOptions = options;
   /** @type {Readonly<Record<string, boolean>>} */
@@ -6891,6 +7964,7 @@ export const projectCommittedSimilarityAlignment = ({ committed, plan, translati
   request.layout = { recordGapPx: DEFAULT_LINEAR_RECORD_GAP_PX, multiRecordPositions: null, ...request.layout,
     similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
     recordTranslations: cloneCanonicalJsonValue(translations) };
+  carryKeptTrackParts(committedRequest, request, []);
   projectCanonicalSessionRequest({ ...canonical, deferResourceContent: true });
   return canonical;
 };
@@ -6912,6 +7986,10 @@ const normalizePublicationRequestAliases = (request, resources) => {
       comparison.settings.collinearInferOrthogroups = resolvePipelineCollinearInference(
         comparison.settings, comparison.mode
       );
+      // A released writer stored "either", which reads as "strand" (OV-2301).
+      const parameters = comparison.settings.collinearityParams?.parameters;
+      const orientation = readCollinearMergeOrientation(parameters?.mergeOrientation);
+      if (parameters && !orientation.lost) parameters.mergeOrientation = orientation.value;
     }
   }
   if (drawsNoComparison(normalized.comparisons || [])) normalized.comparisons = [];

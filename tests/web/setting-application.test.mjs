@@ -18,7 +18,10 @@
 // settings are the Result's Feature placement selects (popup and selection
 // toolbar) and the record popup's definition fields, found by their handler
 // names; every other Result control is an editor edit (live), a review with
-// its own Apply, or a dialog.
+// its own Apply, or a dialog. A record popup field names its row through
+// `:data-setting` and its note through `:setting`, both bound to the field's
+// entry of `RECORD_POPUP_FIELDS` (app/preview-item-popup.js), whose rows
+// tests/web/live-setting-application-g2.test.mjs checks.
 //
 // What this catches: a control without any scope (the Basic card, a new
 // section, a new Result writer with a known handler), a scope or note without
@@ -36,6 +39,7 @@ import {
   SETTING_APPLICATION, settingApplicationNote, settingApplicationSentence
 } from '../../gbdraw/web/js/services/setting-application.js';
 import { SETTINGS_SECTIONS } from '../../gbdraw/web/js/services/settings-sections.js';
+import { RECORD_POPUP_FIELDS } from '../../gbdraw/web/js/app/preview-item-popup.js';
 
 const html = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'utf8');
 const lineOf = (offset) => html.slice(0, offset).split('\n').length;
@@ -125,7 +129,10 @@ const ancestorsOrSelf = function* ancestorsOrSelf(element) {
   for (let node = element; node; node = node.parent) yield node;
 };
 const allElements = [...descendants(tree)];
-const scopeOf = (element) => [...ancestorsOrSelf(element)].find((node) => node.attributes.has('data-setting')) || null;
+const scopeOf = (element) => [...ancestorsOrSelf(element)]
+  .find((node) => node.attributes.has('data-setting') || node.attributes.has(':data-setting')) || null;
+// The bound row of a record popup field: its entry of `RECORD_POPUP_FIELDS`.
+const popupFieldSetting = (field) => `previewItemView.draft.fields.${field}.setting`;
 const enclosingScope = (scope) => (scope.parent ? scopeOf(scope.parent) : null);
 const ROWS = new Map(SETTING_APPLICATION.map((row) => [row.id, row]));
 const describe = (element) => `line ${element.line}: <${element.tag}${element.attributes.has('aria-label')
@@ -152,7 +159,9 @@ const RESULT_DRAFT_WRITERS = /featurePlacementActions\.setPlacement\(|setPreview
 const resultDraftControls = allElements.filter((element) => !sections.some((section) => [...ancestorsOrSelf(element)].includes(section))
   && RESULT_DRAFT_WRITERS.test(element.attributes.get('@change') || ''));
 const scopes = allElements.filter((element) => element.attributes.has('data-setting'));
-const notes = allElements.filter((element) => element.tag === 'setting-note');
+const notes = allElements.filter((element) => element.tag === 'setting-note' && element.attributes.has('setting'));
+const boundScopes = allElements.filter((element) => element.attributes.has(':data-setting'));
+const boundNotes = allElements.filter((element) => element.tag === 'setting-note' && !element.attributes.has('setting'));
 
 test('the owner has one row per key with a known application', () => {
   const ids = SETTING_APPLICATION.map((row) => row.id);
@@ -191,6 +200,27 @@ test('every scope and note names a row, and every row is used', () => {
     const scope = scopeOf(note);
     assert.equal(scope?.attributes.get('data-setting'), note.attributes.get('setting'), `the note at ${describe(note)} sits in its own scope`);
   }
+  // A bound scope is a record popup field's, with the note bound to the same row.
+  const fields = ['name', 'subtitle', 'reverse'];
+  assert.deepEqual(boundScopes.map((scope) => scope.attributes.get(':data-setting')), fields.map(popupFieldSetting));
+  for (const note of boundNotes) {
+    assert.equal(scopeOf(note)?.attributes.get(':data-setting'), note.attributes.get(':setting'), `the note at ${describe(note)} sits in its own scope`);
+  }
+  for (const scope of boundScopes) {
+    assert.equal([...descendants(scope)].filter((element) => boundNotes.includes(element) && scopeOf(element) === scope).length, 1, describe(scope));
+  }
+});
+
+// A note inside a <label> joins the name of the control the label names (the
+// record popup's "Reverse complement" was read as "Reverse complement Applies
+// on Generate"): a label that holds a note holds no control named by it.
+test('a timing note never joins the accessible name of a control', () => {
+  const named = allElements.filter((element) => element.tag === 'label'
+    && [...descendants(element)].some((inside) => inside.tag === 'setting-note'))
+    .flatMap((label) => [...descendants(label)].filter((element) => ['input', 'select', 'textarea'].includes(element.tag)
+      && !element.attributes.has('aria-label') && !element.attributes.has(':aria-label')))
+    .map(describe);
+  assert.deepEqual(named, []);
 });
 
 test('every scope that applies on Generate shows its note, and a nested scope that differs shows its own', () => {
@@ -207,8 +237,32 @@ test('every scope that applies on Generate shows its note, and a nested scope th
   }
   assert.deepEqual(missing, []);
   for (const control of resultDraftControls) {
-    assert.equal(ROWS.get(scopeOf(control).attributes.get('data-setting')).application, 'generate', describe(control));
+    const scope = scopeOf(control);
+    const field = /setPreviewRecordField\(previewItemView, '([a-z]+)'/.exec(control.attributes.get('@change'))?.[1];
+    if (field) {
+      assert.equal(scope.attributes.get(':data-setting'), popupFieldSetting(field), describe(control));
+    } else {
+      assert.equal(ROWS.get(scope.attributes.get('data-setting')).application, 'generate', describe(control));
+    }
   }
+});
+
+test('the Linear record names component gives each field the note of its popup row', () => {
+  // A component template sits in a <script> the tree parser skips.
+  const template = html.match(/<script type="text\/x-template" id="linear-record-names-template">([\s\S]*?)<\/script>/)[1];
+  // Each field block: its scope, the note on its own caption line, then its input.
+  const blocks = [...template.matchAll(/<div data-setting="([^"]+)">\s*<div [^>]*>\s*<span>\{\{ t\('[^']+'\) \}\} <setting-note setting="([^"]+)"><\/setting-note><\/span>([\s\S]*?)\n {4}<\/div>\n/g)];
+  assert.deepEqual(blocks.map(([, scope, note, body]) => [scope, note, body.match(/v-model="seq\.(\w+)"/)?.[1]]), [
+    [RECORD_POPUP_FIELDS.linear.name.setting, RECORD_POPUP_FIELDS.linear.name.setting, RECORD_POPUP_FIELDS.linear.name.key],
+    [RECORD_POPUP_FIELDS.linear.subtitle.setting, RECORD_POPUP_FIELDS.linear.subtitle.setting, RECORD_POPUP_FIELDS.linear.subtitle.key]
+  ], 'Organism / strain and Subtitle each sit in their own scope with its note on the caption line');
+  assert.equal(template.match(/data-setting=/g).length, 2);
+  assert.equal(template.match(/<setting-note /g).length, 2);
+  // A component renders <setting-note> only when it registers SettingNote.
+  const components = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'components.js'), 'utf8');
+  const registered = components.match(/template: '#linear-record-names-template',\s*components: \{([^}]*)\}/);
+  assert.ok(registered, 'LinearRecordNames names its components');
+  assert.match(registered[1], /\bSettingNote\b/, 'LinearRecordNames registers SettingNote, so its note renders');
 });
 
 test('the selection toolbar placement select has the note of the popup Feature placement (OV-1038)', () => {
@@ -237,20 +291,23 @@ test('every row renders its note or its class text', () => {
   assert.ok(component, 'components.js defines SettingNote');
   // A live setting row says Applies on Generate while the committed request
   // cannot draw one of its request paths (review F2 of #1145).
-  assert.match(component[1], /const applies = .*\(inject\(SETTING_NOTE_APPLIES, \(\) => true\)\);\n\s*return \{ note: computed\(\(\) => settingApplicationNote\(props\.setting, applies\)\) \};/);
+  assert.match(component[1], /const appliesFor = .*\(inject\(SETTING_NOTE_APPLIES, \(\) => \(\) => true\)\);\n\s*return \{ note: computed\(\(\) => settingApplicationNote\(props\.setting, appliesFor\(props\.item\)\)\) \};/);
   // The app setup provides the predicate of the committed request.
   const setup = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'app', 'app-setup.js'), 'utf8');
-  assert.match(setup, /provide\(SETTING_NOTE_APPLIES, committedLiveSettingApplies\);/);
+  assert.match(setup, /provide\(SETTING_NOTE_APPLIES, committedSettingNotePredicate\);/);
   assert.match(component[1], /:data-applies-on-generate="note\.application === 'generate' \? setting : null"/);
   assert.match(component[1], /\{\{ note\.text \}\}/);
 });
 
-test('the GC, skew and Depth toggles state today\'s split timing (OV-1036)', () => {
+test('the GC, skew and Depth toggles are live, and the waits name Generate (OV-1036, PD-OI-104 rev 5)', () => {
   const toggles = settingsControls.filter((element) => /show_gc|show_skew|setTrackShown|setCircularGcSuppressed|setCircularSkewSuppressed/
     .test(`${element.attributes.get('v-model') || ''} ${element.attributes.get('@change') || ''}`));
   assert.equal(toggles.length, 6, toggles.map(describe).join('\n'));
   for (const toggle of toggles) assert.equal(scopeOf(toggle).attributes.get('data-setting'), 'track-visibility', describe(toggle));
-  assert.match(settingApplicationNote('track-visibility').text, /at once.*Generate/);
+  const note = settingApplicationNote('track-visibility');
+  assert.equal(note.application, 'live');
+  assert.equal(note.text, 'Live edit');
+  assert.match(SETTING_APPLICATION.find((row) => row.id === 'track-visibility').partialNote, /^Live edit\. Showing a track applies on Generate if the Result did not draw it when its Session was loaded/);
 });
 
 test('adding a Depth file or series shows and removing the last Depth file or its File hides the drawn Depth track at once, and the Depth blocks and the removal dialog say so (OV-1041, OV-1043)', () => {

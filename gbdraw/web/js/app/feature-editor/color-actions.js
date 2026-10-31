@@ -55,8 +55,12 @@ import { msg } from '../../utils/i18n.js';
  * @property {(feature: Record<string, any>) => string} getIndividualFeatureLabel
  * @property {(feature: Record<string, any>) => { qual: string, val: string } | null} getFeatureQualifier
  * @property {(key: PythonLegendKey) => Record<string, any>[]} getLegendRowRules
- * @property {(features: readonly ColorFeature[], color: string, caption: string, scope: RuleSynthesisScope) => SpecificRuleBuild} groupColorRules
- *   The next rule table of a color edit: Python's rules for coloring exactly `features` (OV-244).
+ * @property {(features: readonly ColorFeature[], color: string, caption: string, scope: RuleSynthesisScope, joins?: PythonLegendKey | null) => SpecificRuleBuild} groupColorRules
+ *   The next rule table of a color edit: Python's rules for coloring exactly `features` (OV-244), before the
+ *   first rule of the listed row of key `joins` that the edit joins (OV-2193).
+ * @property {(rows: readonly ColorRule[], patch: { cap: string, color: string }, joins: PythonLegendKey | null) => SpecificRuleBuild} reviseColorRules
+ *   The next rule table of a rename of a row's rules: `rows` take `patch`, each in its row, unless they join the
+ *   listed row of key `joins`, which keeps its place (OV-2193).
  * @property {(rules: Record<string, any>[], commit: () => any) => any} runWithRuleMatches
  *   Runs an action once the color rule matches of `rules` are prepared: the rule owner prepares the rules it builds.
  */
@@ -253,6 +257,7 @@ export const createFeatureColorActions = ({
     getFeatureQualifier,
     getLegendRowRules,
     groupColorRules,
+    reviseColorRules,
     runWithRuleMatches
   } = ruleActions;
   // This owner's rule writes are part of its caller's History step (a popup,
@@ -835,17 +840,21 @@ export const createFeatureColorActions = ({
       // and every record stored under its key. The one decision that the
       // edit takes the row whole places the live row and, as the "row"
       // scope, Python's new rules (OV-2192, Owner 2026-10-29), unless the
-      // rename joins another listed row, which keeps its own place.
+      // rename joins another listed row, which keeps its own place: live,
+      // and at Generate, where its rules go before that row's first rule
+      // (OV-2193, Owner 2026-10-29).
       const retireOld = Boolean(oldEntry) && features.length > 0 && takesWholeRow(request.sourceKey, features);
-      /** @type {SpecificRuleBuild} */
+      const joins = request.joins ?? null;
       const rules = request.sourceScope === 'group' && sourceRules.length
-        ? (current, revise) => current.map(rule => (sourceRules.includes(rule) ? revise(rule, { cap: caption, color }) : rule))
-        : groupColorRules(features, color, caption, retireOld && !request.joins ? 'row' : 'group');
+        ? reviseColorRules(sourceRules, { cap: caption, color }, joins)
+        : groupColorRules(features, color, caption, retireOld && !joins ? 'row' : 'group', joins);
       return commitRuleWrite(rules, msg('Rename legend item'), {
         drawing,
         previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: listedRowColor(drawing, oldEntry) }] : [],
-        // A row that joins another row keeps that row's place.
-        // Features that Keep both split off go right after the target row (D-29).
+        // Features that Keep both split off go right after the target row
+        // (D-29); other rows go where Python's answer puts them: a row split
+        // off its row, a joined row, and an old row that moves (OV-2194,
+        // OV-2247, OV-2248, Owner 2026-10-29).
         legendPlacement: retireOld && oldEntry ? { name: caption, color, at: request.sourceKey, replaces: true }
           : request.keepBothAfter ? { name: caption, color, at: request.keepBothAfter } : null,
         afterCommit: () => {
@@ -1353,8 +1362,8 @@ export const createFeatureColorActions = ({
     }
 
     if (choice === 'rule') {
-      if (matchingRule) await commitRuleWrite((current, revise) => current.map(rule => (rule === matchingRule
-        ? revise(rule, { color }) : rule)), msg('Change specific color rule'), { drawing, afterCommit: () => showClickedFeatureColor(feat, color) });
+      if (matchingRule) await commitRuleWrite(reviseColorRules([matchingRule], { cap: matchingRule.cap, color }, null),
+        msg('Change specific color rule'), { drawing, afterCommit: () => showClickedFeatureColor(feat, color) });
     } else if (choice === 'caption') {
       const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
       if (!targetLegendName) {

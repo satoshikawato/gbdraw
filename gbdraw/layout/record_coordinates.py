@@ -47,13 +47,24 @@ def _step(value: int) -> None:
         raise ValidationError("Orientation step must be +1 or -1.")
 
 
+def strand_ordered(first: bool, second: bool, strand: int | None) -> tuple[bool, bool]:
+    """Swap a pair of end flags between biological (5', 3') and ascending (low, high) order.
+
+    On the minus strand the 5' end is the high one; any other strand reads low to high.
+    The map is its own inverse, so it converts in both directions.
+    """
+    return (second, first) if strand == -1 else (first, second)
+
+
 @dataclass(frozen=True)
 class SourceInterval:
     """Ascending half-open boundaries, with a direction of biological traversal.
 
     Parts must be supplied in biological order; part_index is the original part
     identity (or the input ordinal when omitted). Terminal flags denote real
-    biological ends, not every exon boundary. Empty spans cover no bases.
+    biological ends, not every exon boundary. Partial flags mark a biological end
+    that the source location writes as partial (``<``/``>``): the feature
+    continues past it, so it is not a terminal either. Empty spans cover no bases.
     """
 
     start: int
@@ -62,6 +73,8 @@ class SourceInterval:
     part_index: int | None = None
     biological_start: bool = True
     biological_end: bool = True
+    partial_start: bool = False
+    partial_end: bool = False
 
     def __post_init__(self) -> None:
         if isinstance(self.end, bool) or not isinstance(self.end, int) or self.end < 0:
@@ -81,6 +94,13 @@ class SourceInterval:
             self.biological_end, bool
         ):
             raise ValidationError("Biological terminal flags must be booleans.")
+        if not isinstance(self.partial_start, bool) or not isinstance(
+            self.partial_end, bool
+        ):
+            raise ValidationError(
+                "Partial end flags must be booleans.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
 
 
 @dataclass(frozen=True)
@@ -90,6 +110,9 @@ class DisplayFragment:
     orientation is biological strand * display step. biological_start/end refer
     to the biological traversal; artificial_start/end refer to the geometric
     display_start/end. An artificial seam can never create a biological end.
+    open_start/open_end also refer to display_start/end: the drawing continues
+    past that edge, at an artificial seam or at a partial end of the source
+    location, so a glyph draws no arrowhead, cap, or edge stroke there.
     """
 
     source_start: int
@@ -104,6 +127,8 @@ class DisplayFragment:
     artificial_start: bool
     artificial_end: bool
     part_index: int
+    open_start: bool
+    open_end: bool
 
 
 @dataclass(frozen=True)
@@ -239,6 +264,10 @@ class RecordDisplayTransform:
         if interval.strand == -1:
             spans.reverse()
         local_anchor = self.source_base - (self.source_step == 1)
+        # Biological ends lie at the low source boundary on +1 and the high one on -1.
+        partial_lo, partial_hi = strand_ordered(
+            interval.partial_start, interval.partial_end, interval.strand
+        )
         fragments = []
         for index, (start, end) in enumerate(spans):
             leading = start if self.source_step == 1 else end
@@ -250,6 +279,8 @@ class RecordDisplayTransform:
                 )
             )
             artificial_low, artificial_high = start != lo, end != hi
+            open_low = artificial_low or partial_lo
+            open_high = artificial_high or partial_hi
             fragments.append(
                 DisplayFragment(
                     start,
@@ -265,6 +296,8 @@ class RecordDisplayTransform:
                     artificial_low if self.source_step == 1 else artificial_high,
                     artificial_high if self.source_step == 1 else artificial_low,
                     interval.part_index if interval.part_index is not None else 0,
+                    open_low if self.source_step == 1 else open_high,
+                    open_high if self.source_step == 1 else open_low,
                 )
             )
         return tuple(fragments)
@@ -272,7 +305,7 @@ class RecordDisplayTransform:
     def project_parts(
         self, parts: Sequence[SourceInterval]
     ) -> tuple[DisplayFragment, ...]:
-        """Preserve input part identities/order; only outer parts have terminals."""
+        """Preserve input part identities/order; only outer parts have terminals or partial ends."""
         for part in parts:
             self._validate_interval(part)
         occupied = [i for i, part in enumerate(parts) if part.start != part.end]
@@ -289,6 +322,8 @@ class RecordDisplayTransform:
                     else i,
                     biological_start=parts[i].biological_start and i == occupied[0],
                     biological_end=parts[i].biological_end and i == occupied[-1],
+                    partial_start=parts[i].partial_start and i == occupied[0],
+                    partial_end=parts[i].partial_end and i == occupied[-1],
                 )
             )
         )

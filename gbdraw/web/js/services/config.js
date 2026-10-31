@@ -100,7 +100,13 @@ import {
   draftFieldsForConfigValues,
   featureEditsOverProjection,
   linearDefinitionVisibilityOf,
-  liveSettingApplies,
+  liveSettingNoteApplies,
+  liveTrackHideDrawing,
+  applyLiveResourceWrites,
+  applyLiveWebFileWrites,
+  carryKeptTrackParts,
+  recordLoadedStackSwitch,
+  liveSettingInputsOf,
   managedConfigOverridePathsForMode,
   projectCanonicalSessionRequest,
   projectSettingsOnlySession,
@@ -306,7 +312,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { StoredDrawing } from './main-session-comparison-frame.js' */
-/** @import { CommittedCanonicalSession, LiveSettingWrite, RequestCanonicalComparison, SessionRequestProjection,
+/** @import { CommittedCanonicalSession, LiveSettingItem, LiveSettingWrite, RequestCanonicalComparison, SessionRequestProjection,
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
@@ -3662,7 +3668,9 @@ export const heldDepthFiles = (mode, sourceState, drawing) => {
  * @param {string} mode
  * @param {Record<string, any>} sourceState The project inputs (`state`).
  * @param {DrawingState} drawing The drawing whose settings choose the inputs.
- * @param {Record<string, any> | null} [comparisonPlanOrOptions]
+ * @param {Record<string, any> | null} [comparisonPlanOrOptions] A comparison plan, or options:
+ *   `comparisonPlan`, `linearRecordCatalog`, and `hiddenDepth` (Generate: also serialize the Depth files a
+ *   draft that draws no Depth holds, as `hiddenDepth`).
  */
 export const serializeActiveRenderFiles = async (
   mode,
@@ -3703,7 +3711,8 @@ export const serializeActiveRenderFiles = async (
     && typeof comparisonPlanOrOptions === 'object'
     && (
       Object.prototype.hasOwnProperty.call(comparisonPlanOrOptions, 'comparisonPlan') ||
-      Object.prototype.hasOwnProperty.call(comparisonPlanOrOptions, 'linearRecordCatalog')
+      Object.prototype.hasOwnProperty.call(comparisonPlanOrOptions, 'linearRecordCatalog') ||
+      Object.prototype.hasOwnProperty.call(comparisonPlanOrOptions, 'hiddenDepth')
     )
     ? comparisonPlanOrOptions
     : null;
@@ -3770,6 +3779,12 @@ export const serializeActiveRenderFiles = async (
     c_depth: mode === 'circular' && depthRequested
       ? await serializeFileValue(depthSlots[0])
       : null,
+    // Generate keeps the Depth files a draft that draws no Depth holds, so showing Depth again applies live.
+    ...(optionBag?.hiddenDepth === true && !depthRequested
+      ? { hiddenDepth: mode === 'circular'
+          ? { circular: await serializeFileValue(depthSlots[0]) }
+          : { linear: await Promise.all(depthSlots.map((slot) => serializeFileValue(slot))) } }
+      : {}),
     c_conservation_blasts: includeConservationBlasts
       ? await serializeFileValue(sourceFiles.c_conservation_blasts)
       : [],
@@ -3929,14 +3944,37 @@ export const getCommittedCanonicalRenderRequest = () => {
 };
 
 /**
- * Whether the committed request can show the live value of `requestPath` of
- * its mode's drawing (`liveSettingApplies`); without a committed Session every
- * path can. The app setup gives it to `SettingNote` (`SETTING_NOTE_APPLIES`).
- * @param {string} requestPath
+ * For one note render: whether the committed request can show the live value
+ * of each `requestPath` of its mode's drawing, or of its one `item`
+ * (`liveSettingNoteApplies`), read with one set of draft inputs. Without a
+ * committed request every path can while no Result is shown; a Result shown
+ * without one (a Session 27 to 30) applies nothing live, so no path can
+ * (OV-2237). The app setup gives it to `SettingNote` (`SETTING_NOTE_APPLIES`).
+ * @param {LiveSettingItem | null} [item]
+ * @returns {(requestPath: string) => boolean}
  */
-export const committedLiveSettingApplies = (requestPath) => {
+export const committedSettingNotePredicate = (item = null) => {
   const request = getCommittedCanonicalRenderRequest();
-  return !request || liveSettingApplies(request, requestPath, state.drawingOfMode(request.mode));
+  if (!request) {
+    const applies = !(Array.isArray(state.results.value) && state.results.value.length > 0);
+    return () => applies;
+  }
+  const drawing = state.drawingOfMode(request.mode);
+  const inputs = liveSettingInputsOf(state);
+  const resources = committedCanonicalSession?.resources;
+  const undoneHides = state.undoneTrackHides.value.get(drawing.id);
+  return (requestPath) => liveSettingNoteApplies(request, requestPath, drawing, inputs, resources, item, undoneHides);
+};
+
+/**
+ * The drawing whose hides the live track apply of `drawing` applies to the
+ * committed request (`liveTrackHideDrawing`); null while nothing applies (a
+ * refused apply) and without a committed request.
+ * @param {DrawingState} drawing
+ */
+export const committedTrackHideDrawing = (drawing) => {
+  const request = getCommittedCanonicalRenderRequest();
+  return request ? liveTrackHideDrawing(request, drawing, liveSettingInputsOf(state), committedCanonicalSession?.resources) : null;
 };
 
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.
@@ -3949,16 +3987,24 @@ export const readCommittedCanonicalRevision = () => committedCanonicalRevision.v
 
 // R1 (c): an automatic rerender that applied live setting values commits them
 // to the committed Session, which then names what the shown Result draws
-// (Save writes them as committed, PD-OI-102). Only those request paths
-// change; the resources, the Web file record and the draft stay. The Session
-// is replaced, not edited, so a History artifact that holds the previous one
-// keeps it.
+// (Save writes them as committed, PD-OI-102). Only those request paths, the
+// Web file entries a Record names write keeps beside them (F-2), and the
+// Depth resources a live Depth show or hide adds or drops change, and the
+// request keeps the track parts its Generate kept; the draft stays. The
+// Session is replaced, not edited, so a History artifact that holds the
+// previous one keeps it.
 /** @param {readonly LiveSettingWrite[]} writes */
 export const commitLiveSettingValues = (writes) => {
   if (!committedCanonicalSession || writes.length === 0) return;
   const renderRequest = cloneJsonData(committedCanonicalSession.renderRequest);
   applyLiveSettingWrites(renderRequest, writes);
-  const next = { ...committedCanonicalSession, renderRequest };
+  carryKeptTrackParts(committedCanonicalSession.renderRequest, renderRequest, writes);
+  const resources = applyLiveResourceWrites(committedCanonicalSession.resources, writes);
+  if (resources !== committedCanonicalSession.resources && activeSessionResourceTable) {
+    activeSessionResourceTable = adoptCurrentSessionResources(resources);
+  }
+  const next = { ...committedCanonicalSession, renderRequest, resources,
+    webFiles: applyLiveWebFileWrites(committedCanonicalSession.webFiles, writes) };
   setCommittedCanonicalSession(isAdoptedCanonicalSession(committedCanonicalSession) ? adoptRuntimeCanonicalSession(next) : next);
 };
 
@@ -5536,6 +5582,16 @@ class UncomposedResultSet extends Error {
 }
 
 /**
+ * Records the Use custom stack switch beside a committed Session Load installs
+ * (`recordLoadedStackSwitch`). Load holds it untyped, as the committed Session
+ * variable does; it is read as `getCommittedCanonicalSession` reads it.
+ * @param {Readonly<Record<string, unknown>> | null} loaded
+ * @param {DrawingState} drawing The drawing whose Session it is.
+ */
+const recordLoadedStack = (loaded, drawing) => {
+  if (loaded) recordLoadedStackSwitch(/** @type {CommittedCanonicalSession} */ (loaded), drawing);
+};
+/**
  * @param {{ target: { files: ArrayLike<File>, value?: string } }} e
  * @param {Record<string, any>} [options] The options of `importSession` with
  * `isCurrent` and `signal`; `transformLegacyResultSvg` is the composition
@@ -6560,6 +6616,14 @@ const importSessionDocument = async (e, options = {}) => {
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
+    // Beside each loaded Circular request with slots, the Use custom stack
+    // switch of its own drawing's loaded draft (D-214 B): the shown Session's
+    // is the shown drawing's, an artifact slot's is its drawing's.
+    if (currentSchemaSession) recordLoadedStack(adoptedCanonicalSession, shownDrawing);
+    for (const slot of [otherArtifactSlot, topArtifactSlot]) {
+      // The committed Session `buildLoadedArtifactSlot` gave the slot.
+      if (slot) recordLoadedStack(slot.runtimeState?.canonical.committedCanonicalSession ?? null, state.drawingOf(slot.drawingId));
+    }
     // The composition root keeps the loaded artifacts: the opening one is shown, the stashed one waits.
     /** @type {((slots: LoadedArtifactSlots) => void) | undefined} */
     const installLoadedArtifactSlots = options.installLoadedArtifactSlots;
@@ -6612,6 +6676,7 @@ const importSessionDocument = async (e, options = {}) => {
       const committed = stored && await convertDetachedProteinResultFrames(
         sourceSessionVersion, stored, canonicalProjectionInput
       );
+      recordLoadedStack(committed, shownDrawing);
       if (!committed && logicalImportedResults.length > 0) {
         const { adv } = shownDrawing;
         loadedTrackSettings = Object.freeze({

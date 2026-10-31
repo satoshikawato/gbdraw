@@ -14,7 +14,7 @@ Session 49 stores the Circular **Show Definition** setting in each Circular
 slice (`modes.circular.config.adv.show_definition`). Off is saved in the
 render request as `objects.definition.circular.show: false`; on is left out
 of the request, as earlier writers left it. An older Session reads it as on and
-draws as before. gbdraw 0.14.3 writes Session 49; gbdraw 0.14.0 to 0.14.2 read
+draws as before. gbdraw 0.14.3 and 0.14.4 write Session 49; gbdraw 0.14.0 to 0.14.2 read
 Sessions up to 48 and refuse a Session 49 file.
 
 Session 48 stores the saved protein results (LOSATP tables, Similarity groups,
@@ -53,6 +53,14 @@ command line as typed. The web app loads the drawing's palette and a queued
 palette as `herbal_garden`. Until the next **Generate**, a Session it saves
 keeps the former name in the palette of the shown Result and in its render
 request; both still draw `herbal_garden`.
+
+Two Collinear values were removed after gbdraw 0.14.4. The merge orientation
+`either`, which drew as `strand`, reads as `strand` with no change to the
+drawing. The anchor mode `one_to_one` (or a spelling of it such as `top1`)
+reads as `rbh`: the web app lists the change when it loads the Session, and
+the CLI and the Python API log a warning. Collinear similarity-group inference
+is now off by default on every surface; a Session, request or recorded command
+that names Collinear without it replays with inference on, as it was drawn.
 
 Session 44 documents written with canonical request schema 7 or 8 remain
 readable. Current saves promote that request to schema 9 and the Session to 49,
@@ -826,7 +834,8 @@ record their upstream raw keys and requested settings. Collinear results
 also record the effective `cds` or `locus` unit kinds produced by `auto` and
 whether orthogroup inference was enabled. Sessions preserve each LOSATP mode's
 hit-limit drafts. A saved Collinear pipeline without `collinearInferOrthogroups`
-uses its historical inference behavior (ON); new Web state defaults to OFF.
+uses its historical inference behavior (ON); new state defaults to OFF on the
+Web, the CLI and the Python API.
 In the Web, any derived result read from a Session loads unchanged and is
 recomputed once from the raw search rows when the analysis runs again.
 The Web, the CLI, and the Python API compute the cache key of a derived result

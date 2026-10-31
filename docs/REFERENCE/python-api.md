@@ -110,6 +110,7 @@ Important `LinearComparisonOptions` defaults are:
 | `collinearity_anchor` | `rbh` |
 | `collinearity_scope` | `adjacent` |
 | `collinearity_color` | `orientation` |
+| `collinearity_infer_orthogroups` | `False` (Collinear blocks without within-record searches or similarity groups) |
 | `losat_executable` | `None` |
 | `ncbi_blast_executable` | `None` |
 | `threads` | `None` |
@@ -119,7 +120,7 @@ Important `LinearComparisonOptions` defaults are:
 | `member_max_hits` | `None` (unbounded) |
 | `max_paralog_links` | `2` |
 
-`losat` takes `"losatn"`, `"tlosatx"`, or `"losatp"` and runs that search; `losat=None` runs no search. `gencodes` is one translation table for every record or one per record. `pairs` lists explicit `(query, subject)` record indexes for any program (LOSATP: Pairwise only). `losatp_mode` accepts `similarity_groups`, `collinear`, or `pairwise`. `similarity_groups` means gbdraw Similarity groups; it does not claim phylogenetic orthology. `losat_executable` and `ncbi_blast_executable` are mutually exclusive; `None` selects the runtime automatically.
+`losat` takes `"losatn"`, `"tlosatx"`, or `"losatp"` and runs that search; `losat=None` runs no search. `gencodes` is one translation table for every record or one per record. `pairs` lists explicit `(query, subject)` record indexes for any program (LOSATP: Pairwise only). `losatp_mode` accepts `similarity_groups`, `collinear`, or `pairwise`. With `losatp_mode="collinear"`, `collinearity_anchor` takes `rbh` or `all`, and `collinearity_infer_orthogroups=True` adds within-record searches and builds similarity groups before blocks, like the CLI `--collinear_infer_orthogroups on`. `similarity_groups` means gbdraw Similarity groups; it does not claim phylogenetic orthology. `losat_executable` and `ncbi_blast_executable` are mutually exclusive; `None` selects the runtime automatically.
 
 `similarity_alignment` defaults to `None`. With `losat="losatp"` and `losatp_mode="similarity_groups"`,
 `SimilarityAlignmentReference(feature_id="CAG38695.1")` aligns the records on

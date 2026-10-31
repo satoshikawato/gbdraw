@@ -1,4 +1,4 @@
-import { evaluatePythonRules, groupColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
+import { evaluatePythonRules, groupColorRulesOver, reviseColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -215,7 +215,8 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLege
     getIndividualFeatureLabel: (feature) => feature.product || '',
     // FE-09 (rule-actions.js): a feature's single-feature condition is its stable hash.
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureColorRuleHash(feature) }),
-    groupColorRules: groupColorRulesOver(actionsPreparation, (feature) => [feature.displayLabel || feature.product || '', feature.product || ''])
+    groupColorRules: groupColorRulesOver(actionsPreparation, (feature) => [feature.displayLabel || feature.product || '', feature.product || '']),
+    reviseColorRules: reviseColorRulesOver(actionsPreparation, (caption) => manualSpecificRules.filter((rule) => rule.cap === caption))
   },
   getFeatureElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
   getFeatureFillElements: (_svg, featureId) => featureElementsById.get(featureId) || []
@@ -894,7 +895,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       findFeaturesWithSameIndividualLabel: () => [],
       getDisplayedFeatureLabel: (feature) => feature.product,
       getIndividualFeatureLabel: (feature) => feature.product,
-      groupColorRules: groupColorRulesOver(resetPreparation, (feature) => [feature.product])
+      groupColorRules: groupColorRulesOver(resetPreparation, (feature) => [feature.product]),
+      reviseColorRules: reviseColorRulesOver(resetPreparation, (caption) => legendRowRules(caption, { rules: resetRules, pythonRows: new Map() }))
     },
     getFeatureElements: () => [],
     getFeatureFillElements: () => []
@@ -959,6 +961,13 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const featureList = ref(features.map((feature) => ({ record_key: 'record-1', biological_feature_id: feature.svg_id, ...feature })));
     const renameState = { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules };
     const renamePreparation = createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules });
+    // Python's rows of the displayed Result: the listed rows as Python drew them.
+    /** @param {string} caption */
+    const rowRules = (caption) => legendRowRules(caption, {
+      rules, originalLegendOrder: originalOrder.value, pythonRows: new Map(stateLegendEntries.value.map((entry) => [
+        entry.originalCaption, { key: entry.originalCaption, color: entry.color }
+      ]))
+    });
     const renameActions = createFeatureColorActions({ readDrawnTracks: () => [], writeLegendRowColor: recordLegendRowColor, legendRowIsNamed, legendRowName, findLegendRowNamed, keepBothNamesOf,
       state: withDrawings({
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
@@ -981,17 +990,13 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
           return true;
         },
         effectiveLegendCaptions: () => (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
-        // Python's rows of the displayed Result: the listed rows as Python drew them.
-        getLegendRowRules: (caption) => legendRowRules(caption, {
-          rules, originalLegendOrder: originalOrder.value, pythonRows: new Map(stateLegendEntries.value.map((entry) => [
-            entry.originalCaption, { key: entry.originalCaption, color: entry.color }
-          ]))
-        }),
+        getLegendRowRules: rowRules,
         getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
         findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
         findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: (feature) => feature.product,
         getIndividualFeatureLabel: (feature) => feature.product,
-        groupColorRules: groupColorRulesOver(renamePreparation, (feature) => [feature.product]),
+        groupColorRules: groupColorRulesOver(renamePreparation, (feature) => [feature.product], rowRules),
+        reviseColorRules: reviseColorRulesOver(renamePreparation, rowRules),
         ...ruleOverrides
       },
       getFeatureElements: () => [],
@@ -1233,8 +1238,9 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
 
   // A popup Legend name that joins another listed row of the same color is
   // not a row renamed in its place: Python writes the rules as for any group
-  // edit (here the feature's hash rule, last), and the joined row stays where
-  // it is, as live keeps it (review of OV-2192).
+  // edit (here the feature's hash rule), before the joined row's first rule,
+  // so the joined row stays where it is, as live keeps it (review of OV-2192,
+  // OV-2193).
   {
     const betaRule = { feat: 'tRNA', qual: 'locus_tag', val: '^T1$', color: '#2a9d8f', cap: 'beta' };
     const deltaRule = { feat: 'tRNA', qual: 'product', val: '^delta$', color: '#e9c46a', cap: 'delta' };
@@ -1251,7 +1257,52 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     await fixture.renameActions.handleLegendNameCommit();
     assert.equal(fixture.errorLog.value, null);
     assert.deepEqual(fixture.committed.at(-1).map(({ qual, cap }) => [qual, cap]),
-      [['locus_tag', 'beta'], ['product', 'delta'], ['product', 'alpha'], ['hash', 'alpha']], 'the joined rule goes last');
+      [['locus_tag', 'beta'], ['product', 'delta'], ['hash', 'alpha'], ['product', 'alpha']], 'the joined rule goes before the joined row');
+  }
+
+  // OV-2193 (Owner 2026-10-29): a rename that joins a listed row of the same
+  // color through a rule of the same pattern puts the joined rule just before
+  // the joined row's first rule, so Generate keeps the joined row in place as
+  // the live Legend does: the popup Legend name on the row's only feature
+  // (Python's rules), and the Legend editor's rename (the row's rules,
+  // re-captioned, then moved by Python). The fixture's rule owner is a
+  // stand-in (`reviseColorRulesOver`): this owner only chooses the build and
+  // its `joins`; specific-color-actions.test.mjs runs the rule owner's own
+  // `reviseColorRules`.
+  {
+    const tealRule = (val, cap) => ({ feat: 'tRNA', qual: 'product', val, color: '#2a9d8f', cap });
+    const deltaRule = { feat: 'tRNA', qual: 'product', val: '^delta$', color: '#e9c46a', cap: 'delta' };
+    const feature = (id, product, legendCaption, start) => ({ ...trna, id, svg_id: id, product, qualifiers: { product: [product] },
+      start, end: start + 69, legendCaption });
+    const joinRows = (rules, features, legendName = 'alpha') => build({
+      entries: [{ caption: 'beta', color: '#2a9d8f', featureIds: features.filter((f) => f.legendCaption === 'beta').map((f) => f.id) },
+        { caption: 'delta', color: '#e9c46a', featureIds: ['t3'] }, { caption: 'alpha', color: '#2a9d8f', featureIds: ['t4'] }],
+      order: ['beta', 'delta', 'alpha'], rules, features,
+      clicked: { svg_id: 't1', feat: features[0], color: '#2a9d8f', legendName, appliedLegendName: 'beta' } });
+    const only = [feature('t1', 'dup alpha', 'beta', 1), feature('t3', 'delta', 'delta', 201), feature('t4', 'alpha', 'alpha', 301)];
+    const popup = joinRows([tealRule('^dup alpha$', 'beta'), deltaRule, tealRule('^alpha$', 'alpha')], only);
+    await popup.renameActions.handleLegendNameCommit();
+    assert.equal(popup.errorLog.value, null);
+    assert.deepEqual(popup.committed.at(-1).map(({ val, cap }) => [val, cap]),
+      [['^delta$', 'delta'], ['^dup alpha$', 'alpha'], ['^alpha$', 'alpha']], 'the popup join goes before the joined row');
+    const both = [feature('t1', 'dup alpha', 'beta', 1), feature('t2', 'dup beta', 'beta', 101), ...only.slice(1)];
+    const editor = joinRows([tealRule('^dup', 'beta'), deltaRule, tealRule('^alpha$', 'alpha')], both);
+    await editor.renameActions.renameLegendEntry(0, 'alpha');
+    assert.equal(editor.errorLog.value, null);
+    assert.deepEqual(editor.committed.at(-1).map(({ val, cap }) => [val, cap]),
+      [['^delta$', 'delta'], ['^dup', 'alpha'], ['^alpha$', 'alpha']], 'the Legend editor join goes before the joined row');
+
+    // OV-2194 (Owner 2026-10-29): a popup Legend name on one feature of the
+    // row, split off it ("This feature"), takes no placement of its own: the
+    // rule owner places it by Python's answer.
+    const split = joinRows([tealRule('^dup alpha$', 'beta'), tealRule('^dup beta$', 'beta'), tealRule('^alpha$', 'alpha')], both, 'gamma');
+    await split.renameActions.handleLegendNameCommit();
+    assert.equal(split.legendRenameDialog.mode, 'scope');
+    await split.renameActions.handleLegendRenameChoice('single');
+    assert.equal(split.errorLog.value, null);
+    assert.deepEqual(split.committed.at(-1).map(({ val, cap }) => [val, cap]),
+      [['^dup alpha$', 'gamma'], ['^dup beta$', 'beta'], ['^alpha$', 'alpha']], 'the rule is re-captioned in its place');
+    assert.equal(split.commitOptions.at(-1).legendPlacement, null);
   }
 
   // PD-OI-061 scenario revision 5: the dialog names what Keep both draws (the

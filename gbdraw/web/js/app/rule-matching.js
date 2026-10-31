@@ -10,7 +10,7 @@ import {
 /** @import { FeatureLike } from '../services/feature-utils.js' */
 /** @import { ColorRule, RuleFeature, VisibilityRule } from '../services/rule-matchers.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { RuleFeaturePayload, SynthesizeColorRulesRequest, SynthesizedColorRules } from '../contracts/rule-synthesis.generated.js' */
+/** @import { JoinedLegendRow, RuleFeaturePayload, SynthesizeColorRulesRequest, SynthesizedColorRules } from '../contracts/rule-synthesis.generated.js' */
 
 // A feature of a catalog before schema 5 has no drawn selector values. Where
 // its rendered ID carries its source hash, its record was drawn with the
@@ -123,6 +123,22 @@ export const synthesizedRuleTable = (table, current) => table.map((row) => (
   typeof row === 'number' ? current[row] : 'row' in row ? { ...current[row.row], val: row.val } : row
 ));
 
+/**
+ * The listed Legend row an edit joins, as a synthesis request names it
+ * (OV-2193): the place in `current` of the first of the rules `drawn` that the
+ * row draws, and the places of the `rows` that join it; null for a row that
+ * no rule of `current` draws, which has no place in the table.
+ * @param {readonly unknown[]} drawn
+ * @param {readonly Partial<SpecificColorRule>[]} current
+ * @param {readonly Partial<SpecificColorRule>[]} rows
+ * @returns {JoinedLegendRow | null}
+ */
+export const joinedLegendRow = (drawn, current, rows) => {
+  const own = new Set(drawn);
+  const at = current.findIndex((rule) => own.has(rule));
+  return at < 0 ? null : { at, rows: rows.map((rule) => current.indexOf(rule)).filter((index) => index >= 0) };
+};
+
 // A run (`runWhenPrepared`) that fails, in its preparation or its commit,
 // shows its error as the caller's `operation`, unless another error replaced
 // the one shown when it started. Every owner that runs through the rule
@@ -226,12 +242,17 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * the label texts each shows (aligned with `features`), and the color and
  * caption they take; `scope` "features" colors each feature by itself, and "row"
  * colors them as a group that takes their Legend row whole, in its place.
+ * `joins` is the listed Legend row the edit joins, which keeps its place (OV-2193), else null.
+ * `drawn` are the features the displayed Result draws, in the order it draws them, found by
+ * identity among the catalog features: Python answers the Legend order of the next table for them.
  * @typedef {object} GroupColorEdit
  * @property {SynthesizeColorRulesRequest['scope']} scope
  * @property {readonly (RuleMatchedFeature & { svg_id?: string | null })[]} features
  * @property {readonly string[][]} labels
  * @property {string} color
  * @property {string} caption
+ * @property {SynthesizeColorRulesRequest['joins']} joins
+ * @property {Iterable<object>} drawn
  */
 
 /**
@@ -423,8 +444,10 @@ export const createRulePreparation = ({
   // Every catalog feature goes to Python, which refuses a condition that
   // matches an unselected one.
   /** @type {RulePreparation['synthesizeGroup']} */
-  const synthesizeGroup = ({ scope, features: selected, labels, color, caption }, rules) => {
+  const synthesizeGroup = ({ scope, features: selected, labels, color, caption, joins, drawn }, rules) => {
     const targets = features();
+    /** @type {Map<object, number>} */
+    const indexOf = new Map(targets.map((feature, index) => [feature, index]));
     /** @type {Map<string, string[]>} */
     const labelsById = new Map();
     selected.forEach((feature, index) => { if (feature.svg_id) labelsById.set(feature.svg_id, [...labels[index]]); });
@@ -439,7 +462,12 @@ export const createRulePreparation = ({
       labels: picked.map((index) => labelsById.get(/** @type {{ svg_id: string }} */ (targets[index]).svg_id) || []),
       rules: rules.map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })),
       color,
-      caption
+      caption,
+      joins,
+      drawn: [...drawn].flatMap((feature) => {
+        const index = indexOf.get(feature);
+        return index === undefined ? [] : [index];
+      })
     });
   };
   return {

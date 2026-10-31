@@ -360,6 +360,47 @@ test.describe('record identity moves (OV-1949)', () => {
     await expect.poll(async () => (await shown(page, targets, uid)).label, 'the live label edit shows').toEqual([LABEL_LIVE]);
   });
 
+  // GT B11 (PD-OI-104 rev 5, review 2 M4): a live Depth hide replaces the
+  // committed Session's resources; the record identities the Generate read stay
+  // with them, so the next Generate moves the rows by those identities and never
+  // reads the committed records again against the current sources (the fallback).
+  test('GT B11: after a live Depth hide the view-switch Generate moves the rows by the identities of the last Generate', async ({ page }) => {
+    await page.addInitScript(() => {
+      const fallbacks = window.__RI_FALLBACKS__ = [];
+      window.__GBDRAW_TEST_HOOKS__ = {
+        onStructuralMetric: (metric) => { if (metric.name === 'recordIdentityFallbackCount') fallbacks.push(metric); }
+      };
+    });
+    await startCircular(page);
+    const depth = ['BGC0000708', 'BGC0000709']
+      .flatMap((id) => [0, 1, 2, 3].map((index) => `${id}\t${index * 9000 + 1}\t${10 + index}`)).join('\n');
+    await page.evaluate((text) => {
+      const app = window.__GBDRAW_APP__;
+      app.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+      app.setTrackShown('show_depth', true);
+    }, depth);
+    await generate(page);
+    const targets = await pickTargets(page, CANVAS_KEY);
+    await editFill(page, CANVAS_KEY, targets.fill);
+    const depthGroups = () => page.evaluate(async () => {
+      const drawnGroups = await import('/gbdraw/web/js/services/drawn-groups.js');
+      const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+      return drawnGroups.findTrackGroups(svg, drawnGroups.DEPTH_GROUPS).filter((group) => group.getAttribute('display') !== 'none').length;
+    });
+    expect(await depthGroups(), 'the Generate draws Depth').toBeGreaterThan(0);
+    // A History step, as the Show Depth checkbox makes one: the live apply runs from it.
+    await page.evaluate(() => window.__GBDRAW_HISTORY__.runUndoable('Show Depth',
+      () => window.__GBDRAW_APP__.setTrackShown('show_depth', false)));
+    await settled(page);
+    await expect.poll(depthGroups, { message: 'the live hide removes Depth', timeout: 120_000 }).toBe(0);
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
+    await page.getByLabel('Circular record', { exact: true }).selectOption('BGC0000709');
+    await generate(page);
+    expect(await page.evaluate(() => window.__RI_FALLBACKS__.length), 'no Generate read the record identities again').toBe(0);
+    expect(await fillOf(page, SINGLE_KEY, targets.fill), 'record 2 drawn alone keeps the canvas fill').toEqual([FILL]);
+    expect((await drafts(page, targets)).fill).toEqual([SINGLE_KEY]);
+  });
+
   test('identical features: a "This feature only" fill stays on its own copy in every view', async ({ page }) => {
     // No labels: the twin CDS share one place, so their labels would overlap.
     await startCircular(page, identicalTwins, { labels_mode: 'none' });

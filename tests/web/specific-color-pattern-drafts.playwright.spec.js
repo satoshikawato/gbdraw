@@ -220,12 +220,14 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   const field = await reject(page, '[PRIVATE_DRAFT_SENTINEL');
   const before = await snapshot(page);
   // An unrelated checkpoint replaces the rules while restoring its own setting
-  // (`def_font_size` applies on Generate, so no live apply runs).
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.runUndoableCheckpoint('Unrelated font', () => { window.__GBDRAW_APP__.adv.def_font_size = 17; }));
+  // (the label font size applies on Generate, so no live apply runs and Save
+  // is not refused as busy, PD-OI-102; the definition font size is live, G2).
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.runUndoableCheckpoint('Unrelated font', () => { window.__GBDRAW_APP__.adv.label_font_size = 17; }));
   await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
   await expect(field).toHaveValue('[PRIVATE_DRAFT_SENTINEL');
   await page.evaluate(() => window.__GBDRAW_APP__.redoHistory());
   await expect(field).toHaveValue('[PRIVATE_DRAFT_SENTINEL');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.sessionBusyReason)).toBe('');
   // Save and fresh Load must carry only the accepted rule and current Result.
   const downloaded = page.waitForEvent('download');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());

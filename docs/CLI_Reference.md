@@ -41,7 +41,7 @@ rewritten, see [Retired inputs](./REFERENCE/session-and-request-compatibility.md
 ## Main command
 
 ```text
-gbdraw v. 0.14.3: A diagram generator for small genomes
+gbdraw v. 0.14.4: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]
@@ -134,6 +134,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--conservation_reference {query,subject,auto}]
               [--conservation_labels LABEL [LABEL ...]]
               [--conservation_colors COLOR [COLOR ...]]
+              [--conservation_color_scheme {same,ten,per_five}]
               [--conservation_ring_width CONSERVATION_RING_WIDTH]
               [--conservation_ring_gap CONSERVATION_RING_GAP]
               [--losat {losatn,tlosatx,losatp}]
@@ -352,7 +353,15 @@ options:
                         index.
   --conservation_colors COLOR [COLOR ...]
                         Colors for similarity rings, aligned by logical source
-                        index. Accepts SVG color names or #RRGGBB.
+                        index. Accepts SVG color names, #RRGGBB, or auto (the
+                        ring takes the --conservation_color_scheme color of
+                        its position).
+  --conservation_color_scheme {same,ten,per_five}
+                        Colors of the similarity rings without a color of
+                        their own, by drawn position from the outermost ring:
+                        same (every ring the default color), ten (ten colors,
+                        repeating from ring 11), or per_five (one color per
+                        five rings, repeating from ring 31) (default: same).
   --conservation_ring_width CONSERVATION_RING_WIDTH
                         Similarity ring width for circular mode (in px; must
                         be > 0).
@@ -907,7 +916,7 @@ Allowed columns:
 | `comparison_sequence` | optional; required with `--losat` | Comparison genome (FASTA, GenBank, or DDBJ): the ring query with `--losat`, otherwise used only for interactive comparison-span export. |
 | `losat_gencode` | optional | TLOSATX genetic code of the ring with `--losat tlosatx` (empty cells use 1); rejected with `--losat losatn`, unused without `--losat`. |
 | `label` | optional | Similarity ring label. If the column is present, row order supplies the label list. |
-| `color` | optional | SVG color name or `#RRGGBB`. If the column is present, row order supplies the color list. |
+| `color` | optional | SVG color name or `#RRGGBB`. If the column is present, row order supplies the color list; an empty cell takes the `--conservation_color_scheme` color. |
 
 The row order defines the ring order. Thresholds and geometry still stay on the CLI, for example `--conservation_reference`, `--bitscore`, `--evalue`, `--identity`, `--alignment_length`, `--conservation_ring_width`, and `--conservation_ring_gap`.
 
@@ -918,6 +927,31 @@ blast	label	color
 ref_a.blast.tsv	Reference A	#E15759
 ref_b.blast.tsv	Reference B	#4E79A7
 ```
+
+### Similarity-ring colors and legend
+
+`--conservation_color_scheme` colors every ring without a color of its own,
+by its position among the drawn rings counted from the outermost ring:
+
+| Value | Ring colors |
+| --- | --- |
+| `same` (default) | Every ring `#8b9cc1`, the configured default (`objects.conservation.max_color`). |
+| `ten` | `#6e91b7 #f4a251 #8fc4c0 #e67577 #c6bebb #77b26f #be92b2 #f0d369 #ae8e7c #ffafb7`, repeating from ring 11. |
+| `per_five` | One color per five rings: `#8b9cc1 #c88890 #62ad9a #bf89ab #7caa7e #bc9464`, repeating from ring 31. |
+
+A color given with `--conservation_colors` or in the `color` column of
+`--conservation_table` wins under every scheme. Write `auto` in
+`--conservation_colors` (an empty cell in the table) for a ring that takes the
+scheme color. A ring with a color draws its identity from a light tint of that
+color to the color; a ring without one (`same`) draws the default gradient
+(`objects.conservation.min_color` to `max_color`). The config key is
+`objects.conservation.color_scheme`.
+
+The legend lists the drawn rings by name from `outer` to `inner`, then one
+`identity` band with the minimum identity and `100%`. When the drawn rings
+differ in color, each name shows a swatch of its ring color and the band is
+grey; otherwise the names have no swatch and the band is the outermost ring's
+gradient. A ring without a color counts as `objects.conservation.max_color`.
 
 The single-track geometry options `--feature_width`, `--depth_width`,
 `--gc_content_width`, `--gc_content_radius`, `--gc_skew_width`, and
@@ -1016,11 +1050,16 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               --ncbi_blast_bin PATH] [--losat_threads N] [--losatp_max_hits N]
               [--losatp_max_target_seqs N] [--losatp_member_max_hits N]
               [--losat_output_dir DIR] [--similarity_alignment_feature ID]
+              [--collinear_unit_mode {auto,cds,locus}]
               [--collinear_search_scope {adjacent,all}]
               [--collinear_infer_orthogroups {on,off}]
+              [--collinear_anchor_mode {all,rbh}]
+              [--collinear_merge_orientation {strand,order}]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
               [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
               [--collinear_max_diagonal_drift COLLINEAR_MAX_DIAGONAL_DRIFT]
+              [--collinear_max_conflicts_in_merge_gap COLLINEAR_MAX_CONFLICTS_IN_MERGE_GAP]
+              [--collinear_max_paralog_links_per_orthogroup COLLINEAR_MAX_PARALOG_LINKS_PER_ORTHOGROUP]
               [--collinear_color_mode {average_identity,orientation,orientation_identity}]
               [-t TABLE] [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT]
               [--overwrite] [-n NT] [-w WINDOW] [-s STEP] [--separate_strands]
@@ -1179,9 +1218,12 @@ options:
                         --losatp_mode pairwise links (default: 5).
   --losatp_max_target_seqs N
                         LOSATP -max_target_seqs per query; 'none' for no cap
-                        (default: none).
+                        (default: none). In a within-record search the
+                        protein's hit to itself takes one of these slots.
   --losatp_member_max_hits N
-                        Maximum hits per protein used for Similarity group and
+                        Maximum distinct subject proteins, not counting the
+                        protein itself, kept per query protein in each
+                        directed record-pair search for Similarity group and
                         Collinear membership; 'none' for no cap (default:
                         none).
   --losat_output_dir DIR
@@ -1195,26 +1237,62 @@ options:
                         or protein ID; Similarity Group IDs are not accepted.
                         Requires --losat losatp with --losatp_mode
                         similarity_groups.
+  --collinear_unit_mode {auto,cds,locus}
+                        Units that order Collinear anchors: auto (the CDSs
+                        that share a locus ID form one unit; any other CDS is
+                        a unit of its own), cds (one unit per CDS), or locus
+                        (one unit per locus ID; every CDS needs one) (default:
+                        auto).
   --collinear_search_scope {adjacent,all}
-                        Collinear protein blastp scope: adjacent displayed
-                        records/rows or all record pairs. With multi-record
-                        rows, adjacent searches every cross-record pair
-                        between neighboring rows; all uses every pair as
-                        grouping evidence but renders only pairs across
-                        adjacent rows (default: adjacent).
+                        Record pairs whose protein searches supply Collinear
+                        similarity-group evidence: adjacent (records in
+                        neighboring rows) or all (every record pair). It
+                        changes the group evidence only, never the blocks,
+                        which always connect adjacent rows, so it has an
+                        effect only with --collinear_infer_orthogroups on
+                        (default: adjacent).
   --collinear_infer_orthogroups {on,off}
-                        Infer Similarity groups from the Collinear evidence
-                        and color blocks by group (default: on).
+                        Add within-record protein searches and group proteins,
+                        paralogs included, into Similarity groups before
+                        Collinear blocks are built (default: off).
+  --collinear_anchor_mode {all,rbh}
+                        Between-record hits that become Collinear anchors: rbh
+                        (reciprocal best hits; with
+                        --collinear_infer_orthogroups on, the links of the
+                        Similarity groups) or all (every hit that passes the
+                        filters) (default: rbh).
+  --collinear_merge_orientation {strand,order}
+                        How neighboring anchors of a Collinear block must
+                        agree: strand (the anchor strands follow the block
+                        orientation and the gene order) or order (the gene
+                        order only) (default: strand).
   --collinear_min_anchors COLLINEAR_MIN_ANCHORS
                         Minimum anchors/genes required for a rendered
                         Collinear block; 1 allows singleton links (default:
                         1).
   --collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP
-                        Maximum unit gap between neighboring collinear anchors
+                        Maximum number of units (see --collinear_unit_mode)
+                        between two neighboring anchors of a Collinear block,
+                        on both records; 0 joins adjacent units only. With
+                        --collinear_max_diagonal_drift 0, a gap is bridged
+                        only when both records skip the same number of units
                         (default: 0).
   --collinear_max_diagonal_drift COLLINEAR_MAX_DIAGONAL_DRIFT
-                        Maximum order-space diagonal drift allowed within or
-                        between collinear runs (default: 0).
+                        Maximum difference between the unit gaps on the two
+                        records for two neighboring anchors of a Collinear
+                        block. It needs --collinear_max_unit_gap 1 or more; a
+                        value above that gap acts as the gap (default: 0).
+  --collinear_max_conflicts_in_merge_gap COLLINEAR_MAX_CONFLICTS_IN_MERGE_GAP
+                        Maximum other anchors that may lie strictly inside the
+                        gap between two neighboring anchors of a Collinear
+                        block, on both records; those anchors stay in blocks
+                        of their own. It needs --collinear_max_unit_gap 1 or
+                        more (default: 1).
+  --collinear_max_paralog_links_per_orthogroup COLLINEAR_MAX_PARALOG_LINKS_PER_ORTHOGROUP
+                        Maximum paralog links kept for each Similarity group,
+                        in --losatp_mode similarity_groups and with
+                        --collinear_infer_orthogroups on; it does not change
+                        Collinear blocks (default: 2).
   --collinear_color_mode {average_identity,orientation,orientation_identity}
                         Collinear ribbon color mode: average_identity,
                         orientation, or orientation_identity (default:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import runpy
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -186,11 +187,19 @@ def test_capture_semantics_parse_translation_only_chains() -> None:
 
 def test_capture_environment_is_pinned_and_loopback_only() -> None:
     config = runpy.run_path(str(CONFIG_PATH))
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    lock = json.loads((REPO_ROOT / "package-lock.json").read_text(encoding="utf-8"))
+    python_pin = re.search(r'"playwright==([^"]+)"', pyproject)
+    node_pin = lock["packages"]["node_modules/@playwright/test"]["version"]
 
-    assert config["PYTHON_PLAYWRIGHT_VERSION"] == "1.61.0"
-    assert config["NODE_PLAYWRIGHT_VERSION"] == "1.61.1"
-    assert config["CHROMIUM_VERSION"] == "149.0.7827.55"
-    assert config["CHROMIUM_REVISION"] == "v1228"
+    # CI installs Chromium with one Playwright and drives it with the other, so both
+    # pins move together and share one browser build (major.minor).
+    assert python_pin is not None
+    assert config["PYTHON_PLAYWRIGHT_VERSION"] == python_pin.group(1)
+    assert config["NODE_PLAYWRIGHT_VERSION"] == node_pin
+    assert python_pin.group(1).split(".")[:2] == node_pin.split(".")[:2]
+    assert config["CHROMIUM_VERSION"] == "156.0.8078.4"
+    assert config["CHROMIUM_REVISION"] == "v1248"
     assert (config["VIEWPORT_WIDTH"], config["VIEWPORT_HEIGHT"]) == (1440, 900)
     assert config["DEVICE_SCALE_FACTOR"] == 1
     assert config["LOCALE"] == "en-US"
@@ -1369,10 +1378,11 @@ def test_capture_readme_records_versions_regeneration_and_download_checks() -> N
     readme = README_PATH.read_text(encoding="utf-8")
     normalized_readme = " ".join(readme.split())
 
-    assert "Python Playwright 1.61.0" in readme
-    assert "Node Playwright 1.61.1" in readme
-    assert "Chrome for Testing 149.0.7827.55" in readme
-    assert "Playwright Chromium revision v1228" in readme
+    config = runpy.run_path(str(CONFIG_PATH))
+    assert f"Python Playwright {config['PYTHON_PLAYWRIGHT_VERSION']}" in readme
+    assert f"Node Playwright {config['NODE_PLAYWRIGHT_VERSION']}" in readme
+    assert f"Chrome for Testing {config['CHROMIUM_VERSION']}" in readme
+    assert f"Playwright Chromium revision {config['CHROMIUM_REVISION']}" in readme
     assert "writes every manifest-owned screenshot" in readme
     assert (
         "each file is checked for its name, structure, biological endpoints"

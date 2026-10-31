@@ -103,6 +103,20 @@ test('a request that needs no repair comes back as the stored object (RK-3); sch
   }
 });
 
+test('a saved Collinear anchor mode that was removed reads as rbh with a row; "either" reads without one (OV-2303, OV-2301)', () => {
+  // The released writer stored "either"; the Gallery Session now stores "strand",
+  // so the stored value comes from the released fixture (as in the Python twin).
+  const session = read('tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
+  const index = session.renderRequest.comparisons.findIndex((item) => item.settings);
+  assert.equal(session.renderRequest.comparisons[index].settings.collinearityParams.parameters.mergeOrientation, 'either');
+  assert.deepEqual(rows(readRequest(session)), []);
+  const result = readRequest(session, (request) => { request.comparisons[index].settings.collinearityAnchorMode = 'one_to_one'; });
+  assert.deepEqual(rows(result), [{
+    code: 'setting-replaced', path: `renderRequest.comparisons[${index}].settings.collinearityAnchorMode`, used: 'rbh'
+  }]);
+  assert.equal(result.value.comparisons[index].settings.collinearityAnchorMode, 'rbh');
+});
+
 test('a request of schema 5 to 8 is promoted once, with the Load context, without a row (OV-770)', () => {
   for (const path of ['tests/fixtures/sessions/lambda_basic_linear.v40-schema5.json',
     'tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json',

@@ -1284,7 +1284,11 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         maxUnitGap: Object.freeze({kind: "integer"}),
         maxDiagonalDrift: Object.freeze({kind: "integer"}),
         maxConflicts: Object.freeze({kind: "integer"}),
-        mergeOrientation: Object.freeze({kind: "literal", values: Object.freeze(["strand", "order", "either"])})
+        mergeOrientation: Object.freeze({
+          kind: "literal",
+          values: Object.freeze(["strand", "order", "either"]),
+          spellings: Object.freeze({aliases: Object.freeze({either: "strand"}), blank: "strand"})
+        })
       }),
       optional: Object.freeze([]),
       open: false
@@ -1315,18 +1319,13 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         }),
         collinearityAnchorMode: Object.freeze({
           kind: "literal",
-          values: Object.freeze(["all", "one_to_one", "rbh"]),
+          values: Object.freeze(["all", "rbh"]),
           spellings: Object.freeze({
             aliases: Object.freeze({
               all_hits: "all",
-              mutual_best: "one_to_one",
-              one2one: "one_to_one",
-              one_to_ones: "one_to_one",
               raw: "all",
               reciprocal_best: "rbh",
               strict_rbh: "rbh",
-              top1: "one_to_one",
-              top_1: "one_to_one",
               top_n: "all",
               topn: "all"
             }),
@@ -1398,6 +1397,7 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       open: false,
       defaults: Object.freeze({
         collinearInferOrthogroups: true,
+        collinearityAnchorMode: "rbh",
         collinearityParams: null,
         losatpBin: null,
         losatpThreads: null,

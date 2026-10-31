@@ -99,6 +99,15 @@ EXPECTED_CDS_COUNTS = {
     contract[3]: contract[5]
     for contract in FIXTURES
 }
+EXPECTED_HEADLESS_PARTIAL_CDS_IDS = {
+    "fd8d1e4a8_record_1",
+    "f84df1d26_record_4",
+    "ffb1842f3_record_4",
+}
+EXPECTED_PARTIAL_CDS_IDS = EXPECTED_HEADLESS_PARTIAL_CDS_IDS | {
+    "f01147906_record_2",
+    "f1e833943_record_2",
+}
 EXPECTED_ADJACENT_PAIRS = {
     ("BGC0000708", "BGC0000709"),
     ("BGC0000709", "BGC0000711"),
@@ -403,7 +412,6 @@ def test_bgc_flow_pins_gallery_presentation_and_losatp_values() -> None:
         '"Linear comparison minimum alignment length", exact=True',
         'settings.get_by_label("Collinear max unit gap", exact=True).fill("1")',
         '"Collinear minimum block genes", exact=True',
-        '"Collinear search between", exact=True',
         '"orientation_identity"',
         'match_style.select_option("curve")',
         'losatp_mode.select_option(mode)',
@@ -441,22 +449,33 @@ def test_bgc_flow_pins_gallery_presentation_and_losatp_values() -> None:
 def test_gallery_svg_is_the_frozen_similarity_group_reference() -> None:
     root = ET.parse(GALLERY_SVG_PATH).getroot()
     elements = list(root.iter())
-    feature_paths = [
+    drawn_paths = [
         element
         for element in elements
         if element.get("data-gbdraw-feature-id")
+    ]
+    feature_paths = [
+        element
+        for element in drawn_paths
+        if not element.get("id", "").endswith("__outline")
     ]
     assert len(feature_paths) == 155
     assert {_local_name(element.tag) for element in feature_paths} == {"path"}
     assert Counter(
         element.get("data-gbdraw-record-id") for element in feature_paths
     ) == Counter(EXPECTED_CDS_COUNTS)
-    assert {element.get("stroke-width") for element in feature_paths} == {"2.0"}
-    assert all(
-        "-18.75" in element.get("d", "")
-        and "18.75" in element.get("d", "")
+    assert {element.get("stroke-width") for element in drawn_paths} == {"2.0"}
+    # A partial CDS has a stroke-only outline, and no arrowhead at its open end.
+    assert {
+        element.get("id") for element in drawn_paths
+    } - {element.get("id") for element in feature_paths} == {
+        f"{feature_id}__outline" for feature_id in EXPECTED_PARTIAL_CDS_IDS
+    }
+    assert {
+        element.get("id")
         for element in feature_paths
-    )
+        if "-18.75" not in element.get("d", "")
+    } == EXPECTED_HEADLESS_PARTIAL_CDS_IDS
 
     labels = {
         text
@@ -533,7 +552,7 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         'name="Build similarity groups with within-record searches", exact=True',
         "infer_orthogroups.check()",
         'settings.get_by_label("LOSATP Max target seqs", exact=True)',
-        'max_target_seqs.fill("")',
+        'member_max_hits.fill("5")',
         'state.get("inferOrthogroups") is not True',
         'state.get("candidateLimit") is not None',
         "_frame_collinear_settings(settings)",
@@ -727,7 +746,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         "cache_hits=0",
         "cache_misses=13",
         "worker_jobs=13",
-        "svg.collinear_matches=500",
+        "svg.collinear_matches=492",
         "detail_match_inside_preview=true",
         "popup.selected_match_class=true",
         "popup.scrolled_to_details=true",
@@ -738,7 +757,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     assert "Max target seqs | Blank (**Unbounded**)" in gallery_collinear
     assert "Advanced comparison and layout | Execution" not in gallery_collinear
     assert "Open **Selected pairs (4)**" in gallery_collinear
-    assert "500 rendered Collinear match elements" in gallery_collinear
+    assert "492 rendered Collinear match elements" in gallery_collinear
     normalized_gallery_collinear = " ".join(gallery_collinear.split())
     assert "six times to reach **40%**" in normalized_gallery_collinear
     assert "four times to reach **80%**" in normalized_gallery_collinear
@@ -831,7 +850,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         "cache_hits=0",
         "cache_misses=25",
         "worker_jobs=25",
-        "svg.collinear_matches=500",
+        "svg.collinear_matches=492",
         "adjacent_display_pairs=true",
         "orientation_match=true",
         "color_mode=orientation_identity",

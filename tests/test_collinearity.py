@@ -27,7 +27,6 @@ from gbdraw.analysis.collinearity import (
     CollinearityResult,
     LosslessCollinearityParameters,
     build_collinearity_blocks_from_hits,
-    calculate_collinearity_block_evalue,
     call_collinearity_blocks,
     cluster_lossless_collinearity_anchors,
     convert_collinearity_blocks_to_comparisons,
@@ -186,11 +185,12 @@ def _record_local_mixed_fixture():
 
 
 @pytest.mark.parametrize("search_scope", ["adjacent", "all"])
-@pytest.mark.parametrize("edge_mode", ["rbh", "one_to_one", "all_hits"])
+@pytest.mark.parametrize("edge_mode", ["rbh", "all_hits"])
 def test_collinear_record_local_mixed_fixture(search_scope, edge_mode):
     records, extraction, hits = _record_local_mixed_fixture()
     result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
         hits, extraction, records=records, search_scope=search_scope, edge_mode=edge_mode,
+        infer_orthogroups=True,
     )
     groups = result.orthogroups
     assert groups is not None
@@ -209,6 +209,7 @@ def test_collinear_record_local_mixed_fixture(search_scope, edge_mode):
     geometry_only = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
         {pair: table for pair, table in hits.items() if pair[0] != pair[1]},
         extraction, records=records, search_scope=search_scope, edge_mode=edge_mode,
+        infer_orthogroups=True,
     )
     assert len(result.blocks) == len(geometry_only.blocks) == 1
     anchor = result.blocks[0].anchors[0]
@@ -233,7 +234,7 @@ def test_collinear_record_local_mixed_fixture(search_scope, edge_mode):
 
 
 @pytest.mark.parametrize("search_scope", ["adjacent", "all"])
-@pytest.mark.parametrize("edge_mode", ["one_to_one", "all_hits"])
+@pytest.mark.parametrize("edge_mode", ["all_hits"])
 def test_collinear_scope_partitions_table_identity(monkeypatch, search_scope, edge_mode):
     records, extraction, hits = _record_local_mixed_fixture()
     records.append(_record("record_c", [_cds(0, 9, {"protein_id": ["c0"]})]))
@@ -260,6 +261,7 @@ def test_collinear_scope_partitions_table_identity(monkeypatch, search_scope, ed
     monkeypatch.setattr(collinearity_module, "_select_orthogroup_edges", capture_geometry)
     collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
         hits, extraction, records=records, search_scope=search_scope, edge_mode=edge_mode,
+        infer_orthogroups=True,
     )
     cross_pairs = {(0, 1), (1, 0), (1, 2), (2, 1)}
     if search_scope == "all":
@@ -399,41 +401,6 @@ def test_collinearity_blocks_are_called_with_lossless_parameters() -> None:
 
     assert len(result.blocks) == 1
     assert result.blocks[0].kind == "cluster"
-    assert result.blocks[0].block_evalue is None
-
-
-@pytest.mark.linear
-def test_collinearity_block_evalue_uses_genomic_coordinates_not_unit_order() -> None:
-    assert "calculate_collinearity_block_evalue" in collinearity_module.__all__
-    positions = [100, 110, 120, 130, 1100]
-    anchors = [
-        _anchor(
-            index,
-            index,
-            query_start=position,
-            query_end=position + 8,
-            subject_start=position,
-            subject_end=position + 8,
-        )
-        for index, position in enumerate(positions)
-    ]
-
-    observed = calculate_collinearity_block_evalue(
-        SimpleNamespace(orientation="plus", score=250.0, anchors=tuple(anchors)),
-        anchors,
-    )
-    m = len(positions)
-    expected_log = math.log(2.0) + math.lgamma(m + 1)
-    region_length = positions[-1] - positions[0]
-    for previous, current in zip(positions, positions[1:]):
-        expected_log += math.log(current - previous) * 2.0
-    expected_log -= (m - 1) * (math.log(region_length) * 2.0)
-    expected = math.exp(expected_log)
-    old_unit_order_value = 2.0 * math.factorial(m) / ((m - 1) ** (2 * (m - 1)))
-
-    assert observed == pytest.approx(expected)
-    assert observed < 1e-5
-    assert old_unit_order_value > 1e-5
 
 
 @pytest.mark.linear
@@ -504,11 +471,14 @@ def test_collinearity_color_mode_defaults_to_orientation_and_aliases_identity() 
 
 
 @pytest.mark.linear
-def test_collinearity_anchor_mode_defaults_to_rbh_and_aliases_top1() -> None:
+def test_collinearity_anchor_mode_defaults_to_rbh_and_refuses_one_to_one() -> None:
     assert normalize_collinearity_anchor_mode(None) == "rbh"
-    assert normalize_collinearity_anchor_mode("top1") == "one_to_one"
-    assert normalize_collinearity_anchor_mode("mutual-best") == "one_to_one"
     assert normalize_collinearity_anchor_mode("reciprocal-best") == "rbh"
+    # The removed anchor mode one_to_one and its spellings (OV-2303); a stored
+    # value is read as rbh by the request and Session readers instead.
+    for retired in ("one_to_one", "top1", "mutual-best"):
+        with pytest.raises(ValidationError):
+            normalize_collinearity_anchor_mode(retired)
 
 
 @pytest.mark.linear
@@ -547,7 +517,7 @@ def test_iter_collinearity_search_pairs_all_returns_every_unordered_pair() -> No
 
 
 @pytest.mark.linear
-def test_build_blocks_from_hits_one_to_one_removes_query_to_many_noise() -> None:
+def test_build_blocks_from_hits_rbh_removes_query_to_many_noise() -> None:
     records = [
         _record(
             "record_a",
@@ -582,21 +552,23 @@ def test_build_blocks_from_hits_one_to_one_removes_query_to_many_noise() -> None
         params=params,
         anchor_mode="all",
         reverse_hits_by_pair=[reverse_hits],
+        infer_orthogroups=True,
     )
-    one_to_one = build_collinearity_blocks_from_hits(
+    rbh = build_collinearity_blocks_from_hits(
         [hits],
         extraction,
         records=records,
         params=params,
-        anchor_mode="one_to_one",
+        anchor_mode="rbh",
         reverse_hits_by_pair=[reverse_hits],
+        infer_orthogroups=True,
     )
 
     assert len(all_hits.blocks) == 2
     assert all_hits.blocks[0].anchors[0].subject_protein_id == "sb0"
     assert all_hits.blocks[0].anchors[0].subject_orthogroup_member_count == 2
-    assert len(one_to_one.blocks) == 1
-    assert one_to_one.blocks[0].anchors[0].subject_protein_id == "sb0"
+    assert len(rbh.blocks) == 1
+    assert rbh.blocks[0].anchors[0].subject_protein_id == "sb0"
 
 
 @pytest.mark.linear
@@ -631,12 +603,13 @@ def test_build_blocks_from_hits_rbh_uses_reverse_best_hits() -> None:
         max_unit_gap=0,
     )
 
-    one_to_one = build_collinearity_blocks_from_hits(
+    all_hits = build_collinearity_blocks_from_hits(
         [forward_hits],
         extraction,
         records=records,
         params=params,
-        anchor_mode="one_to_one",
+        anchor_mode="all",
+        infer_orthogroups=True,
     )
     rbh = build_collinearity_blocks_from_hits(
         [forward_hits],
@@ -645,9 +618,10 @@ def test_build_blocks_from_hits_rbh_uses_reverse_best_hits() -> None:
         params=params,
         anchor_mode="rbh",
         reverse_hits_by_pair=[reverse_hits],
+        infer_orthogroups=True,
     )
 
-    assert sum(len(block.anchors) for block in one_to_one.blocks) == 2
+    assert sum(len(block.anchors) for block in all_hits.blocks) == 2
     assert len(rbh.blocks) == 1
     assert rbh.blocks[0].anchors[0].query_protein_id == "qa0"
     assert rbh.blocks[0].anchors[0].subject_protein_id == "sb0"
@@ -950,6 +924,299 @@ def test_lossless_min_anchors_filters_blocks_after_clustering() -> None:
     assert min_three.unblocked_anchors == tuple(anchors)
 
 
+def _block_orders(result: CollinearityResult) -> list[list[tuple[int, int]]]:
+    return [
+        [(anchor.query_order, anchor.subject_order) for anchor in block.anchors]
+        for block in result.blocks
+    ]
+
+
+@pytest.mark.linear
+def test_lossless_chaining_keeps_a_run_when_each_query_unit_has_a_second_anchor() -> None:
+    # OV-2294: a second anchor per query unit used to break the run into 12 singletons.
+    anchors = [_anchor(index, index) for index in range(6)] + [
+        _anchor(index, index + 50) for index in range(6)
+    ]
+
+    result = cluster_lossless_collinearity_anchors(anchors)
+
+    assert _block_orders(result) == [
+        [(index, index) for index in range(6)],
+        [(index, index + 50) for index in range(6)],
+    ]
+    assert [block.kind for block in result.blocks] == ["cluster", "cluster"]
+
+
+@pytest.mark.linear
+def test_lossless_chaining_keeps_a_run_past_a_lone_second_anchor() -> None:
+    # OV-2294: one unrelated second anchor in the run is its own block, not a split.
+    result = cluster_lossless_collinearity_anchors(
+        [_anchor(0, 0), _anchor(1, 1), _anchor(1, 5), _anchor(2, 2)]
+    )
+
+    assert _block_orders(result) == [[(0, 0), (1, 1), (2, 2)], [(1, 5)]]
+    assert [block.kind for block in result.blocks] == ["cluster", "singleton"]
+
+
+@pytest.mark.linear
+def test_lossless_chaining_bridges_an_unrelated_anchor_within_the_unit_gap() -> None:
+    # OV-2295: an anchor off the run between two anchors within max_unit_gap.
+    params = LosslessCollinearityParameters(max_unit_gap=1)
+
+    assert _block_orders(
+        cluster_lossless_collinearity_anchors([_anchor(0, 0), _anchor(2, 2)], params=params)
+    ) == [[(0, 0), (2, 2)]]
+    assert _block_orders(
+        cluster_lossless_collinearity_anchors(
+            [_anchor(0, 0), _anchor(1, 9), _anchor(2, 2)], params=params
+        )
+    ) == [[(0, 0), (2, 2)], [(1, 9)]]
+
+
+@pytest.mark.linear
+def test_lossless_chaining_joins_runs_across_an_off_diagonal_run() -> None:
+    # OV-2296: an off-diagonal run with no anchor in the gap box no longer blocks the join.
+    params = LosslessCollinearityParameters(max_unit_gap=2)
+    anchors = [
+        _anchor(0, 0),
+        _anchor(1, 1),
+        _anchor(2, 40),
+        _anchor(3, 41),
+        _anchor(4, 4),
+        _anchor(5, 5),
+    ]
+
+    result = cluster_lossless_collinearity_anchors(anchors, params=params)
+
+    assert _block_orders(result) == [
+        [(0, 0), (1, 1), (4, 4), (5, 5)],
+        [(2, 40), (3, 41)],
+    ]
+
+
+@pytest.mark.linear
+def test_lossless_chaining_keeps_runs_when_inference_adds_coortholog_anchors() -> None:
+    # OV-2294: the CLI default (inference on) gave 8 singletons for a duplicated subject region.
+    records = [
+        _record(
+            f"record_{record}",
+            [
+                _cds(index * 60, index * 60 + 30, {"locus_tag": [f"r{record}g{index}"], "protein_id": [f"r{record}g{index}"]})
+                for index in range(count)
+            ],
+        )
+        for record, count in ((0, 4), (1, 8))
+    ]
+    extraction = extract_cds_proteins(records)
+    forward = [_hit_row(f"r0g{i}", f"r1g{i}", 400.0) for i in range(4)] + [
+        _hit_row(f"r0g{i}", f"r1g{i + 4}", 390.0) for i in range(4)
+    ]
+    reverse = [_hit_row(f"r1g{i}", f"r0g{i}", 400.0) for i in range(4)] + [
+        _hit_row(f"r1g{i + 4}", f"r0g{i}", 390.0) for i in range(4)
+    ]
+    tables = {
+        (0, 1): pd.DataFrame.from_records(forward, columns=COMPARISON_COLUMNS),
+        (1, 0): pd.DataFrame.from_records(reverse, columns=COMPARISON_COLUMNS),
+        (0, 0): pd.DataFrame(columns=COMPARISON_COLUMNS),
+        (1, 1): pd.DataFrame(columns=COMPARISON_COLUMNS),
+    }
+
+    blocks_by_inference = {
+        infer: _block_orders(
+            collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+                tables,
+                extraction,
+                records=records,
+                infer_orthogroups=infer,
+                edge_mode="rbh",
+            )
+        )
+        for infer in (False, True)
+    }
+
+    assert blocks_by_inference[False] == [[(index, index) for index in range(4)]]
+    assert blocks_by_inference[True][0] == [(index, index) for index in range(4)]
+    assert all(len(block) == 4 for block in blocks_by_inference[True])
+
+
+def _random_anchors(rng, count: int) -> list[CollinearityAnchor]:
+    anchors = []
+    seen = set()
+    for _ in range(count):
+        q, s = rng.randrange(20), rng.randrange(20)
+        if (q, s) in seen:
+            continue
+        seen.add((q, s))
+        anchors.append(
+            _anchor(
+                q,
+                s,
+                bitscore=float(rng.choice((50, 100, 200))),
+                query_strand=rng.choice((1, -1, None)),
+                subject_strand=rng.choice((1, -1, None)),
+            )
+        )
+    return anchors
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("seed", range(20))
+def test_lossless_chaining_is_deterministic_under_input_order(seed: int) -> None:
+    import random
+
+    rng = random.Random(seed)
+    anchors = [
+        replace(anchor, query_record_index=pair[0], subject_record_index=pair[1])
+        for pair in ((0, 1), (1, 2))
+        for anchor in _random_anchors(rng, 30)
+    ]
+    params = LosslessCollinearityParameters(
+        max_unit_gap=seed % 4,
+        max_diagonal_drift=seed % 3,
+        max_conflicts=seed % 2,
+        merge_orientation=("strand", "order", "either")[seed % 3],
+    )
+    first = cluster_lossless_collinearity_anchors(anchors, params=params)
+    shuffled = list(anchors)
+    rng.shuffle(shuffled)
+
+    assert cluster_lossless_collinearity_anchors(anchors, params=params) == first
+    assert cluster_lossless_collinearity_anchors(shuffled, params=params) == first
+    assert sorted(
+        (anchor for block in first.blocks for anchor in block.anchors),
+        key=collinearity_module._anchor_sort_key,
+    ) == sorted(anchors, key=collinearity_module._anchor_sort_key)
+
+
+def _rechained_from_scratch(
+    anchors: list[CollinearityAnchor],
+    params: LosslessCollinearityParameters,
+) -> list[tuple[str, list[tuple[int, int]]]]:
+    """The chaining rule restated without incremental updates: every round
+    recomputes each orientation's best chains over all remaining anchors."""
+
+    subjects = collinearity_module._pair_order_index(anchors)
+    remaining = list(range(len(anchors)))
+    chains = []
+    while True:
+        best = None
+        for orientation_rank, orientation in enumerate(("plus", "minus")):
+            nodes = sorted(
+                (
+                    index
+                    for index in remaining
+                    if collinearity_module._lossless_anchor_supports_orientation(
+                        anchors[index], orientation, params
+                    )
+                ),
+                key=lambda index: collinearity_module._path_sort_key(anchors[index], orientation),
+            )
+            value: dict[int, tuple[int, float, int | None]] = {}
+            for rank, node in enumerate(nodes):
+                count, score, previous = 1, float(anchors[node].bitscore), None
+                for previous_node in nodes[:rank]:
+                    if not collinearity_module._lossless_anchors_are_compatible(
+                        anchors[previous_node], anchors[node], orientation=orientation, params=params
+                    ) or collinearity_module._lossless_step_conflicts_exceed(
+                        anchors[previous_node], anchors[node], subjects, int(params.max_conflicts)
+                    ):
+                        continue
+                    candidate_count = value[previous_node][0] + 1
+                    candidate_score = value[previous_node][1] + float(anchors[node].bitscore)
+                    if (candidate_count, candidate_score) > (count, score):
+                        count, score, previous = candidate_count, candidate_score, previous_node
+                value[node] = (count, score, previous)
+                key = (-count, -score, orientation_rank, rank)
+                if count > 1 and (best is None or key < best[0]):
+                    best = (key, orientation, node, value)
+        if best is None:
+            break
+        _key, orientation, node, value = best
+        taken = []
+        while node is not None:
+            taken.append(node)
+            node = value[node][2]
+        remaining = [index for index in remaining if index not in taken]
+        chains.append(
+            (orientation, sorted((anchors[i].query_order, anchors[i].subject_order) for i in taken))
+        )
+    return chains + [
+        (
+            collinearity_module._lossless_singleton_orientation(anchors[index]),
+            [(anchors[index].query_order, anchors[index].subject_order)],
+        )
+        for index in remaining
+    ]
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("seed", range(40))
+def test_lossless_chaining_matches_the_rule_recomputed_from_scratch(seed: int) -> None:
+    import random
+
+    rng = random.Random(seed)
+    anchors = _random_anchors(rng, 40)
+    params = LosslessCollinearityParameters(
+        max_unit_gap=seed % 4,
+        max_diagonal_drift=seed % 3,
+        max_conflicts=seed % 3,
+        merge_orientation=("strand", "order", "either")[seed % 3],
+    )
+
+    result = cluster_lossless_collinearity_anchors(anchors, params=params)
+
+    assert sorted(
+        (block.orientation, sorted((a.query_order, a.subject_order) for a in block.anchors))
+        for block in result.blocks
+    ) == sorted(_rechained_from_scratch(anchors, params))
+
+
+@pytest.mark.linear
+def test_lossless_chaining_with_a_huge_unit_gap_visits_only_existing_units() -> None:
+    # Review of OV-2294: the step window walked every unit index up to max_unit_gap;
+    # it now visits only the query orders that hold an anchor (a huge gap stays fast).
+    anchors = [_anchor(3 * index, 3 * index) for index in range(200)] + [
+        _anchor(3 * index + 1, 3 * index + 5000) for index in range(200)
+    ]
+
+    def blocks(max_unit_gap: int):
+        return _block_orders(
+            cluster_lossless_collinearity_anchors(
+                anchors,
+                params=LosslessCollinearityParameters(
+                    max_unit_gap=max_unit_gap, max_diagonal_drift=5
+                ),
+            )
+        )
+
+    assert blocks(10**9) == blocks(10)
+    assert [len(block) for block in blocks(10)] == [200, 200]
+
+@pytest.mark.linear
+@pytest.mark.parametrize("seed", range(30))
+def test_lossless_settings_without_effect_keep_their_contract(seed: int) -> None:
+    import random
+
+    rng = random.Random(1000 + seed)
+    anchors = _random_anchors(rng, 25)
+
+    def blocks(**kwargs):
+        return _block_orders(
+            cluster_lossless_collinearity_anchors(
+                anchors, params=LosslessCollinearityParameters(**kwargs)
+            )
+        )
+
+    # Diagonal drift and merge conflicts have no effect at max_unit_gap 0 (OV-2302).
+    assert blocks(max_diagonal_drift=0) == blocks(max_diagonal_drift=7)
+    assert blocks(max_conflicts=0) == blocks(max_conflicts=5)
+    # "either" is the old spelling of "strand" (OV-2301).
+    gap = seed % 4
+    assert blocks(max_unit_gap=gap, merge_orientation="strand") == blocks(
+        max_unit_gap=gap, merge_orientation="either"
+    )
+
+
 @pytest.mark.linear
 def test_build_blocks_from_hits_maps_proteins_to_units() -> None:
     records = [
@@ -977,8 +1244,9 @@ def test_build_blocks_from_hits_maps_proteins_to_units() -> None:
         extraction,
         records=records,
         params=LosslessCollinearityParameters(min_anchors=3, max_unit_gap=1),
-        anchor_mode="one_to_one",
+        anchor_mode="rbh",
         reverse_hits_by_pair=[reverse_hits],
+        infer_orthogroups=True,
     )
     comparisons = convert_collinearity_blocks_to_comparisons(result, records=records, color_mode="orientation")
 
@@ -1017,8 +1285,9 @@ def test_true_global_singleton_orthogroup_does_not_create_link() -> None:
         extraction,
         records=records,
         params=LosslessCollinearityParameters(min_anchors=1),
-        anchor_mode="one_to_one",
+        anchor_mode="rbh",
         reverse_hits_by_pair=[reverse_hits],
+        infer_orthogroups=True,
     )
 
     assert len(result.blocks) == 1
@@ -1064,6 +1333,7 @@ def test_anchor_core_membership_adds_strong_non_rbh_member_without_new_anchor() 
         edge_mode="rbh",
         orthogroup_membership_mode="anchor_core_v1",
         orthogroup_member_max_hits=2,
+        infer_orthogroups=True,
     )
 
     assert result.orthogroups is not None
@@ -1124,6 +1394,7 @@ def test_anchor_core_unions_connected_near_reciprocal_groups() -> None:
         edge_mode="rbh",
         orthogroup_membership_mode="anchor_core_v1",
         orthogroup_member_max_hits=2,
+        infer_orthogroups=True,
     )
 
     assert result.orthogroups is not None
@@ -1720,6 +1991,7 @@ def test_shared_node_paths_are_serialized_without_collapsing_to_one_to_one() -> 
         edge_mode="rbh",
         orthogroup_membership_mode="anchor_core_v1",
         orthogroup_member_max_hits=2,
+        infer_orthogroups=True,
     )
 
     assert result.orthogroups is not None
@@ -1746,8 +2018,9 @@ def test_build_blocks_from_hits_adjacent_scope_ignores_non_adjacent_tables() -> 
         extraction,
         records=records,
         params=LosslessCollinearityParameters(),
-        edge_mode="one_to_one",
+        edge_mode="all",
         search_scope="adjacent",
+        infer_orthogroups=True,
     )
 
     assert result.blocks == ()
@@ -1772,9 +2045,10 @@ def test_build_blocks_from_hits_adjacent_scope_uses_explicit_adjacent_row_pairs(
         extraction,
         records=records,
         params=LosslessCollinearityParameters(min_anchors=1),
-        edge_mode="one_to_one",
+        edge_mode="all",
         search_scope="adjacent",
         comparison_pairs=((0, 2),),
+        infer_orthogroups=True,
     )
 
     assert len(result.blocks) == 1
@@ -1802,8 +2076,9 @@ def test_build_blocks_from_hits_all_scope_uses_non_adjacent_connectivity_only_as
         extraction,
         records=records,
         params=LosslessCollinearityParameters(),
-        edge_mode="one_to_one",
+        edge_mode="all",
         search_scope="all",
+        infer_orthogroups=True,
     )
     comparisons = convert_collinearity_blocks_to_comparisons(
         result,
@@ -1842,9 +2117,10 @@ def test_build_blocks_from_hits_can_render_selected_non_adjacent_pairs() -> None
         extraction,
         records=records,
         params=LosslessCollinearityParameters(),
-        edge_mode="one_to_one",
+        edge_mode="all",
         search_scope="all",
         comparison_pairs=((0, 2),),
+        infer_orthogroups=True,
     )
     comparisons = convert_collinearity_blocks_to_pair_comparisons(
         result,
@@ -1890,6 +2166,7 @@ def test_orthogroup_collinearity_rbh_search_defaults_to_uncapped_candidates(monk
         records,
         params=LosslessCollinearityParameters(),
         edge_mode="rbh",
+        infer_orthogroups=True,
     )
 
     assert observed_limits == [None, None, None, None, None, None, None]
@@ -1940,6 +2217,7 @@ def test_orthogroup_collinearity_member_hit_depth_is_post_search(monkeypatch) ->
         edge_mode="rbh",
         orthogroup_membership_mode="anchor_core_v1",
         orthogroup_member_max_hits=3,
+        infer_orthogroups=True,
     )
 
     assert observed_limits == [None, None, None, None, None, None, None]
@@ -1980,6 +2258,7 @@ def test_orthogroup_collinearity_all_hits_keeps_uncapped_search(monkeypatch) -> 
         params=LosslessCollinearityParameters(),
         edge_mode="all",
         search_scope="all",
+        infer_orthogroups=True,
     )
 
     assert observed_limits == [None, None, None, None, None, None, None, None, None]
@@ -2032,6 +2311,7 @@ def test_orthogroup_collinearity_all_scope_rbh_searches_every_direction(monkeypa
         params=LosslessCollinearityParameters(),
         edge_mode="rbh",
         search_scope="all",
+        infer_orthogroups=True,
     )
 
     assert observed_pairs == [
@@ -2134,8 +2414,6 @@ def test_linear_cli_help_omits_removed_collinearity_options(capsys: pytest.Captu
         "orthogroup-membership-mode",
         "orthogroup_member_max_hits",
         "orthogroup-member-max-hits",
-        "collinear_anchor_mode",
-        "collinear-anchor-mode",
         "collinear_orthogroup_edge_mode",
         "collinear-orthogroup-edge-mode",
         "collinear_blocks",
@@ -2388,12 +2666,13 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
         1,
         "cds",
         "orientation",
-        "one_to_one",
+        "rbh",
         25,
         1,
         2,
         "adjacent",
         "rbh",
+        collinear_infer_orthogroups=True,
     )
     result = json.loads(str(raw_result))
 
@@ -2410,7 +2689,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     assert rows[0]["collinearity_block_kind"] == "cluster"
     assert rows[0]["collinearity_anchor_count"] == 8
     assert rows[0]["collinearity_color_mode"] == "orientation"
-    assert pd.isna(rows[0]["collinearity_block_evalue"])
+    assert "collinearity_block_evalue" not in rows[0]  # OV-2300: the block E-value is removed
     assert rows[0]["group_kind"] == "collinear_gene_group"
     assert rows[0]["group_scope"] == "adjacent_local"
     assert rows[0]["collinear_group_scope"] == "adjacent_local"
@@ -2433,7 +2712,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
         "requested": "cds",
         "effectiveKinds": ["cds"],
     }
-    assert result["provenance"]["collinear"]["anchorMode"] == "one_to_one"
+    assert result["provenance"]["collinear"]["anchorMode"] == "rbh"
 
 
 @pytest.mark.linear
@@ -2441,7 +2720,8 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     ("anchor_mode", "merge_orientation", "expected_anchor_count"),
     (
         ("all", "strand", 2),
-        ("one_to_one", "order", 2),
+        ("all", "order", 2),
+        # "either" is the old spelling of "strand" (OV-2301).
         ("rbh", "either", 1),
     ),
 )
@@ -2548,6 +2828,7 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
         "anchor_core_v1",
         5,
         merge_orientation,
+        collinear_infer_orthogroups=True,
     )
     result = json.loads(str(raw_result))
 
@@ -2558,7 +2839,7 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
     assert result["provenance"]["collinear"]["anchorMode"] == anchor_mode
     assert (
         result["provenance"]["collinear"]["parameters"]["mergeOrientation"]
-        == merge_orientation
+        == {"either": "strand"}.get(merge_orientation, merge_orientation)
     )
 
     if anchor_mode == "rbh":
@@ -2579,6 +2860,7 @@ def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
             25,
             1,
             2,
+            collinear_infer_orthogroups=True,
         )
         min_two = json.loads(str(raw_min_two))
 
@@ -2707,14 +2989,14 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
             0,
             "cds",
             "orientation",
-            "one_to_one",
+            "all",
             25,
             1,
             2,
             scope,
             "rbh",
             None,
-            "either",
+            "strand",
             True,
             None,
             explicit_display_pairs,
@@ -2810,7 +3092,8 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
                 orientation="plus",
                 score=150.0,
                 block_evalue=1e-9,
-                anchors=(_anchor(0, 0), _anchor(1, 1), _anchor(2, 2)),
+                # The rows name a group scope only when an anchor has a group (OV-2302).
+                anchors=(replace(_anchor(0, 0), orthogroup_id="og_1"), _anchor(1, 1), _anchor(2, 2)),
             ),
             CollinearityBlock(
                 block_id="block_minus",
@@ -2818,7 +3101,6 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
                 subject_record_index=1,
                 orientation="minus",
                 score=150.0,
-                block_evalue=2e-9,
                 anchors=(_anchor(0, 2), _anchor(1, 1), _anchor(2, 0)),
             ),
         )
@@ -2840,7 +3122,8 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
     assert rows.loc["block_minus", "qend"] == 29
     assert rows.loc["block_minus", "sstart"] == 29
     assert rows.loc["block_minus", "send"] == 1
-    assert rows.loc["block_plus", "collinearity_block_evalue"] == pytest.approx(1e-9)
+    # OV-2300: a caller-supplied block E-value no longer reaches the rows.
+    assert "collinearity_block_evalue" not in rows.columns
     assert set(rows["group_kind"]) == {"collinear_gene_group"}
     assert set(rows["group_scope"]) == {"adjacent_local"}
     assert set(rows["collinear_group_scope"]) == {"adjacent_local"}
@@ -2905,7 +3188,7 @@ def test_collinearity_match_path_with_metadata_serializes() -> None:
     assert 'data-collinearity-block-kind="singleton"' in svg_text
     assert 'data-orthogroup-id="og_1"' in svg_text
     assert 'data-collinearity-block-score="42.5"' in svg_text
-    assert 'data-collinearity-block-evalue="1e-09"' in svg_text
+    assert "data-collinearity-block-evalue" not in svg_text  # OV-2300
     assert 'data-collinearity-anchor-index="1"' in svg_text
     assert 'data-collinearity-anchor-count="1"' in svg_text
     assert 'data-collinearity-color-mode="orientation"' in svg_text
@@ -3631,8 +3914,10 @@ def test_collinearity_match_group_draws_inversions_above_plus_blocks() -> None:
     )
 
 
-@pytest.mark.parametrize("scope,pair_count", [("adjacent", 4), ("all", 6)])
-@pytest.mark.parametrize("anchor_mode", ["rbh", "one_to_one", "all"])
+# Without inference Search between changes nothing: both scopes search the edges
+# and draw the same blocks (effective_collinear_search_scope).
+@pytest.mark.parametrize("scope,pair_count", [("adjacent", 4), ("all", 4)])
+@pytest.mark.parametrize("anchor_mode", ["rbh", "all"])
 def test_collinear_without_orthogroups_skips_self_search_and_inference(
     monkeypatch, scope, pair_count, anchor_mode,
 ):
@@ -3679,115 +3964,6 @@ def test_collinear_without_inference_applies_member_limit_after_raw_filters():
         edge_mode="all", orthogroup_member_max_hits=limit,
     ) for limit in [1, None]]
     assert [sum(len(block.anchors) for block in result.blocks) for result in results] == [1, 2]
-
-
-@pytest.mark.parametrize("orientation", ["plus", "minus"])
-def test_merge_conflict_index_preserves_exact_count_boundaries_and_exclusions(orientation):
-    from tests.prototypes.cluster_merge import _lossless_conflicts_between_clusters as oracle
-
-    def anchor(q, s):
-        return _anchor(q, 20 - s if orientation == "minus" else s,
-                       subject_strand=-1 if orientation == "minus" else 1)
-
-    # The deliberately overlapping left cluster exercises membership exclusion
-    # even for a private exact-count call outside the normal merge order.
-    left = collinearity_module._lossless_block_from_anchors(
-        block_id="left", pair=(0, 1), orientation=orientation,
-        anchors=[anchor(0, 0), anchor(3, 3), anchor(6, 6)])
-    right = collinearity_module._lossless_block_from_anchors(
-        block_id="right", pair=(0, 1), orientation=orientation,
-        anchors=[anchor(2, 2), anchor(4, 4), anchor(8, 8)])
-    anchors = [*left.anchors, *right.anchors,
-               anchor(2, 3), anchor(6, 3), anchor(3, 2), anchor(3, 6),
-               anchor(3, 4), anchor(3, 4), anchor(5, 5)]
-    anchors.sort(key=lambda a: a.query_order)
-    expected = oracle(left, right, anchors)
-    assert expected == 3  # duplicate retained rows each count, cluster members do not
-    count = collinearity_module._lossless_conflicts_between_clusters
-    assert count(left.anchors, right.anchors, anchors) == expected
-    for maximum in (0, 1, 2, 3, 4):
-        assert count(left.anchors, right.anchors, anchors, max_conflicts=maximum) == min(expected, maximum + 1)
-    assert count((), right.anchors, anchors) == 0
-    assert count(left.anchors, (), anchors) == 0
-
-
-@pytest.mark.parametrize("seed", range(40))
-def test_lossless_merge_matches_frozen_oracle_for_all_result_fields(seed, monkeypatch):
-    import random
-    from tests.prototypes.cluster_merge import _merge_lossless_clusters as oracle
-    from gbdraw.session_request_codec import encode_canonical_typed_resource
-
-    rng = random.Random(seed)
-    anchors = []
-    for pair in ((0, 1), (1, 2), (0, 2)):
-        for i in range(30):
-            q = rng.randrange(20)
-            s = rng.choice((q, 20 - q, rng.randrange(20)))
-            anchor = replace(
-                _anchor(q, s, subject_strand=rng.choice((-1, 1, None))),
-                query_record_index=pair[0], subject_record_index=pair[1],
-                query_protein_id=f"q{pair[0]}_{i}", subject_protein_id=f"s{pair[1]}_{i}",
-                orthogroup_id=f"og{i % 4}", rbh_orthogroup_id=f"rbh{i % 3}",
-                ortholog_path_id=f"og{i % 4}.path_{i}", edge_kind="core",
-                render_role="representative", query_orthogroup_representative=bool(i % 2),
-                subject_orthogroup_representative=bool(i % 3),
-                query_orthogroup_member_count=i, subject_orthogroup_member_count=i + 1,
-                query_view_feature_svg_id=f"qv{i}", subject_view_feature_svg_id=f"sv{i}",
-                query_feature_index=i, subject_feature_index=i + 1,
-                bitscore=rng.choice((0.1, 1e16, 1.0, 200.0)))
-            anchors.extend([anchor] * (2 if i % 7 == 0 else 1))
-    rng.shuffle(anchors)
-    params = LosslessCollinearityParameters(
-        min_anchors=1 + seed % 4, max_unit_gap=seed % 7,
-        max_diagonal_drift=seed % 5, max_conflicts=seed % 3,
-        merge_orientation=("strand", "order", "either")[seed % 3])
-    actual = cluster_lossless_collinearity_anchors(anchors, params=params)
-    with monkeypatch.context() as m:
-        m.setattr(collinearity_module, "_merge_lossless_clusters", oracle)
-        expected = cluster_lossless_collinearity_anchors(anchors, params=params)
-    assert actual == expected
-    assert encode_canonical_typed_resource("result", actual) == encode_canonical_typed_resource("result", expected)
-    for scope in ("adjacent", "all"):
-        a = convert_collinearity_blocks_to_pair_comparisons(actual, record_ids=["a", "b", "c"], search_scope=scope)
-        b = convert_collinearity_blocks_to_pair_comparisons(expected, record_ids=["a", "b", "c"], search_scope=scope)
-        assert a.keys() == b.keys()
-        for pair in a:
-            pd.testing.assert_frame_equal(a[pair], b[pair])
-
-
-def test_chain_merge_materializes_once_and_visits_only_query_gap(monkeypatch):
-    from tools.benchmark_protein_comparison import merge_case, operation_probe
-    from tests.prototypes.cluster_merge import _merge_lossless_clusters as oracle
-
-    _, operations = merge_case(collinearity_module, "merge-300")
-    actual, counters, _ = operation_probe(protein_colinearity_module, collinearity_module, operations["cluster"])
-    with monkeypatch.context() as m:
-        m.setattr(collinearity_module, "_merge_lossless_clusters", oracle)
-        expected = operations["cluster"]()
-    assert actual == expected
-    assert counters["merge.conflictCandidateVisits"] == 99
-    assert counters["merge.materializationCalls"] == 1
-    assert counters["merge.materializationAnchorReferences"] == 200
-    assert counters.get("merge.conflictEndpointSortCalls", 0) == 0
-    assert len(actual.blocks) == 101  # the 100 intervening singletons survive
-
-
-@pytest.mark.parametrize("reverse", [False, True])
-@pytest.mark.parametrize("min_anchors", [1, 2, 80])
-def test_chain_merge_preserves_float_score_and_final_order(reverse, min_anchors, monkeypatch):
-    from tests.prototypes.cluster_merge import _merge_lossless_clusters as oracle
-
-    anchors = [_anchor(i, (180 - s if reverse else s),
-                       subject_strand=-1 if reverse else 1,
-                       bitscore=(0.1, 1e16, 1.0)[i % 3])
-               for i in range(60) for s in [i if i % 3 != 2 else 120 + i]]
-    params = LosslessCollinearityParameters(
-        max_unit_gap=2, max_conflicts=0, min_anchors=min_anchors)
-    actual = cluster_lossless_collinearity_anchors(anchors, params=params)
-    with monkeypatch.context() as m:
-        m.setattr(collinearity_module, "_merge_lossless_clusters", oracle)
-        expected = cluster_lossless_collinearity_anchors(anchors, params=params)
-    assert actual == expected
 
 
 def _left_to_right_sum(values, /, start=0):

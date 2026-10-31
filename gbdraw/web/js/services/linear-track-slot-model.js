@@ -3,7 +3,8 @@
 // normalization and schema migration, axis placement, and the request payload,
 // as the request, Session and Gallery services read them. The Linear
 // track-slot editor (app/linear-track-slots.js) edits it.
-import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
+import { parseDepthTrackIndexIdentity, syncDepthSlotLabels } from './depth-track-state.js';
+/** @import { RawDepthTrackConfig } from './depth-track-state.js' */
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
@@ -446,24 +447,44 @@ const canonicalLinearParams = (slot) => {
   return params;
 };
 
+/** @param {LinearTrackSlotInput} slot */
+const normalizedLinearTrackSlot = (slot) => {
+  const normalized = normalizeLinearTrackSlots([slot])[0];
+  if (!normalized) throw new Error('Linear track slot must be an object.');
+  return normalized;
+};
+/** @param {LinearTrackSlotInput} normalized A row `normalizeLinearTrackSlots` returned. */
+const linearHeightPayload = (normalized) => linearScalarPayload(
+  normalized.height,
+  `Linear track '${normalized.id}' height`,
+  { allowZero: false }
+);
+
+/**
+ * The id and the canonical `height` of one Web draft row, as
+ * `buildLinearTrackSlotPayload` encodes them: the live Height of a committed
+ * row (services/session-request.js) and Generate read this one encoder (R3).
+ * Throws for a height Generate refuses.
+ * @param {LinearTrackSlotInput} slot
+ */
+export const linearTrackSlotHeightPayload = (slot) => {
+  const normalized = normalizedLinearTrackSlot(slot);
+  return { id: normalized.id, height: linearHeightPayload(normalized) };
+};
+
 /**
  * Encode one Web draft row as the canonical LinearTrackSlot object.
  * @param {LinearTrackSlotInput} slot
  */
 export const buildLinearTrackSlotPayload = (slot) => {
-  const normalized = normalizeLinearTrackSlots([slot])[0];
-  if (!normalized) throw new Error('Linear track slot must be an object.');
+  const normalized = normalizedLinearTrackSlot(slot);
   return {
     kind: 'linearTrackSlot',
     id: normalized.id,
     renderer: normalized.renderer,
     enabled: normalized.enabled,
     side: normalized.side,
-    height: linearScalarPayload(
-      normalized.height,
-      `Linear track '${normalized.id}' height`,
-      { allowZero: false }
-    ),
+    height: linearHeightPayload(normalized),
     spacing: linearScalarPayload(
       normalized.spacing,
       `Linear track '${normalized.id}' spacing`,
@@ -758,3 +779,43 @@ export const applyLinearTrackOrderPlacements = (slots, axisIndex = null, nt = 'G
 };
 
 export { SUPPORTED_RENDERERS as LINEAR_TRACK_RENDERERS };
+
+/**
+ * Generate's placement of a Linear custom track stack, as a new list: the
+ * normalized rows; each Depth row its series (a row without one the series
+ * after the previous Depth row's; a disabled row with a binding error none)
+ * and its series' stored height and Legend title (TK-03); the Axis index; and
+ * the rows ordered around it. `depthTracks` are the drawing's Depth series
+ * settings as Generate shaped them. Generate writes the result into the
+ * draft (run-analysis.js); the kept track parts place a stack the last
+ * Generate did not draw with it.
+ * @param {{ slots: unknown, nt: unknown, trackLayout: unknown, axisIndex: unknown,
+ *   depthTracks: readonly RawDepthTrackConfig[], depthSeriesCount: number }} input
+ * @returns {{ slots: LinearTrackSlot[], axisIndex: number }}
+ */
+export const placeLinearStackForGenerate = ({ slots, nt, trackLayout, axisIndex, depthTracks, depthSeriesCount }) => {
+  const normalized = normalizeLinearTrackSlots(Array.isArray(slots) ? slots : [], /** @type {string} */ (nt), /** @type {string} */ (trackLayout));
+  let nextDepthIndex = 0;
+  normalized.forEach((slot) => {
+    if (slot.renderer !== 'depth') return;
+    slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
+    if (slot.enabled === false && slot.depth_binding_error) {
+      delete slot.params.track_index;
+      return;
+    }
+    const rawTrackIndex = Number(slot.params.track_index);
+    if (!Number.isInteger(rawTrackIndex) || rawTrackIndex < 0) slot.params.track_index = nextDepthIndex;
+    const trackIndex = Number(slot.params.track_index);
+    const config = depthTracks[trackIndex];
+    const height = config && typeof config === 'object' ? config.height : null;
+    const numeric = height === null || height === undefined || height === '' ? NaN : Number(height);
+    if (Number.isFinite(numeric) && numeric > 0) slot.height = String(numeric);
+    nextDepthIndex = trackIndex + 1;
+  });
+  syncDepthSlotLabels({ slots: normalized, depthTracks, activeCount: depthSeriesCount });
+  const resolvedAxis = resolveLinearTrackAxisIndex(normalized, clampLinearTrackAxisIndex(axisIndex, normalized.length));
+  return {
+    slots: applyLinearTrackOrderPlacements(normalized, resolvedAxis, /** @type {string} */ (nt), /** @type {string} */ (trackLayout)),
+    axisIndex: resolvedAxis
+  };
+};

@@ -346,7 +346,7 @@ def test_rotated_mixed_groups_keep_semantic_membership_and_presentation_scope(st
         item.annotations["topology"] = "circular"
     source = copy.deepcopy(items)
     before_hits = {key: frame.copy(deep=True) for key, frame in hits.items()}
-    result = build_orthogroup_collinearity_blocks_from_hits(hits, extraction, records=items)
+    result = build_orthogroup_collinearity_blocks_from_hits(hits, extraction, records=items, infer_orthogroups=True)
     groups = result.orthogroups
     assert {gid: {m.protein_id for m in members} for gid, members in groups.orthogroups.items()} == {"og_1": {"a0", "a1", "b0"}, "og_2": {"a3", "a4"}}
     assert groups.scope_by_orthogroup_id == {"og_1": "cross_record", "og_2": "record_local"}

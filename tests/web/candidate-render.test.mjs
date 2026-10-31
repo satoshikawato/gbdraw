@@ -632,14 +632,21 @@ test('a rule commit\'s Legend rows show once on the displayed Result and never a
   }).operationsByResult[0];
   assert.deepEqual(live.legendAdds, [{ caption: 'Rule', color: '#123456', xPos: null, yPos: null, ifAbsent: true, before: 'Old' }]);
   assert.deepEqual(live.legendDeletes, [{ caption: 'Old', allowMissing: true, retire: true }]);
+  assert.deepEqual(live.legendOrder, [], 'the list keeps the default order');
+  // Python's answer in the default order, when it moves a listed row, is shown at once too.
+  const ordered = compileDirectEditorMutationPlan({
+    ...intent,
+    livePreview: { domains: ['legendOrder'], ruleRows: { ...ruleRows, order: ['Rule', 'CDS'] }, drawnTracks: [] }
+  }).operationsByResult[0];
+  assert.deepEqual(ordered.legendOrder.map(({ captions }) => [...captions]), [['Rule', 'CDS']]);
   const generated = compileDirectEditorMutationPlan(intent).operationsByResult[0];
-  assert.deepEqual([generated.legendAdds, generated.legendDeletes], [[], []]);
+  assert.deepEqual([generated.legendAdds, generated.legendDeletes, generated.legendOrder], [[], [], []]);
 });
 
-// OV-1198 (PD-OI-104): the Legend row of a drawn track the draft hides leaves
-// the displayed Result with the track, as a recorded deletion; Generate
-// compiles none, and an explicit deletion is not repeated.
-test('the Legend row of a hidden drawn track leaves the displayed Result at once and never at Generate', () => {
+// PD-OI-104 scenario revision 5: a hidden drawn track leaves the Result
+// through the live redraw, which draws no Legend row for it, so the live
+// compile deletes no track row of its own: it compiles what Generate does.
+test('the live compile deletes no Legend row of a drawn track: the live redraw leaves it out', () => {
   const intent = {
     catalogAdmission: admission(),
     legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' }],
@@ -648,11 +655,11 @@ test('the Legend row of a hidden drawn track leaves the displayed Result at once
   };
   const live = compileDirectEditorMutationPlan({
     ...intent,
-    livePreview: { domains: ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'], hiddenTrackRows: ['depth', 'Gone'], drawnTracks: [] }
+    livePreview: { domains: ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'], drawnTracks: [] }
   }).operationsByResult[0];
-  assert.deepEqual(live.legendDeletes, [{ caption: 'Gone', allowMissing: true }, { caption: 'depth', allowMissing: true }]);
   const generated = compileDirectEditorMutationPlan(intent).operationsByResult[0];
-  assert.deepEqual(generated.legendDeletes, [{ caption: 'Gone', allowMissing: true }]);
+  assert.deepEqual(live.legendDeletes, [{ caption: 'Gone', allowMissing: true }]);
+  assert.deepEqual(live.legendDeletes, generated.legendDeletes);
 });
 
 // PR 3 (D-25): the Legend stores, an editor row's addition, and the order

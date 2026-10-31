@@ -92,7 +92,7 @@ import { normalizeOptionalText } from './track-slot-display.js';
 /**
  * @typedef {object} SyncDepthSlotLabelsOptions
  * @property {DepthSlotRow[]} [slots]
- * @property {RawDepthTrackConfig[]} [depthTracks]
+ * @property {readonly RawDepthTrackConfig[]} [depthTracks]
  * @property {number | null} [activeCount]
  */
 

@@ -565,7 +565,7 @@ export const createHistoryManager = ({
   // reserves its number when `openStep` starts (some numbers stay unused).
   let intentStepSerial = 0;
   let totalEntryBytes = 0;
-  /** @type {(changes: readonly HistoryIntentChange[] | null) => void} */
+  /** @type {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo') => void} */
   let settingsStepListener = () => {};
   // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
   // is entry k+1's `before`), so its bytes count once while any live entry
@@ -1847,7 +1847,7 @@ export const createHistoryManager = ({
       fileIds: collectIntentFileIds(nextIntent)
     });
     // The restored live setting values return to the Result once applied (6.4).
-    settingsStepListener(entry.changes);
+    settingsStepListener(entry.changes, direction);
   };
 
   /** @param {CheckpointRecord} record */
@@ -2049,7 +2049,8 @@ export const createHistoryManager = ({
    * commits, or an Undo or Redo restores (`null`: any setting, a checkpoint
    * restore). The composition root registers it once both History and the
    * automatic rerender exist (R1 (c), PD-OI-102).
-   * @param {(changes: readonly HistoryIntentChange[] | null) => void} listener
+   * @param {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo') => void} listener
+   *   `direction`: set when the call restores an intent step, which way it went.
    */
   const setSettingsStepListener = (listener) => { settingsStepListener = listener; };
 
@@ -2513,7 +2514,7 @@ export const createHistoryRouter = ({
     },
     /** @param {Parameters<DrawingHistory['setSettingsStepListener']>[0]} listener */
     setSettingsStepListener: (listener) => managers.forEach((manager, drawingId) => manager.setSettingsStepListener(
-      (changes) => { if (drawingId === activeDrawingId()) listener(changes); }
+      (changes, direction) => { if (drawingId === activeDrawingId()) listener(changes, direction); }
     )),
     mutationPending: () => every().some((manager) => manager.mutationPending()),
     traversalPending: () => projectTraversals.value > 0 || every().some((manager) => manager.traversalPending())

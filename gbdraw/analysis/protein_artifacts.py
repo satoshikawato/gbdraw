@@ -15,7 +15,7 @@ from gbdraw.exceptions import ValidationError
 if TYPE_CHECKING:
     from pandas import DataFrame
 
-    from .collinearity import CollinearityResult, LosslessCollinearityParameters
+    from .collinearity import CollinearityMergeOrientation, CollinearityResult, LosslessCollinearityParameters
     from .protein_colinearity import ProteinIdentityManifest
 
 CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA = 3
@@ -390,7 +390,7 @@ def validate_current_derived_protein_artifacts(
 # the `buildProteinLosatCacheKeys` reply) and the Python API call it, so equal
 # inputs give one key on every surface.
 
-DERIVED_LOSATP_SEMANTICS = "derived-option-conformance-v3"
+DERIVED_LOSATP_SEMANTICS = "derived-option-conformance-v4"
 DERIVED_LOSATP_CONVERTER = "convert_losatp_blastp_pairs_to_genomic_payload"
 
 DerivedLosatpMode = Literal["pairwise", "orthogroup", "collinear"]
@@ -436,9 +436,7 @@ class DerivedLosatpSettings:
             max_unit_gap=self.max_unit_gap,
             max_diagonal_drift=self.max_diagonal_drift,
             max_conflicts=self.max_conflicts,
-            merge_orientation=cast(
-                Literal["strand", "order", "either"], self.merge_orientation
-            ),
+            merge_orientation=cast("CollinearityMergeOrientation", self.merge_orientation),
         )
 
 
@@ -559,9 +557,10 @@ def normalize_derived_losatp_settings(
             max_unit_gap=_setting_int(max_unit_gap, 0),
             max_diagonal_drift=_setting_int(max_diagonal_drift, 0),
             max_conflicts=_setting_int(max_conflicts, 1),
+            # The parameters read the old spelling "either" as "strand".
             merge_orientation=cast(
-                Literal["strand", "order", "either"],
-                _setting_text(merge_orientation, "either").strip().lower(),
+                "CollinearityMergeOrientation",
+                _setting_text(merge_orientation, LosslessCollinearityParameters.merge_orientation),
             ),
         )
         params.validate()
