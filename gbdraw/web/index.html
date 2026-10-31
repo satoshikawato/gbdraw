@@ -3547,7 +3547,7 @@
                                 <div>
                                     <setting-note setting="species-strain"></setting-note>
                                     <span class="input-label">{{ t('Strain') }} <help-tip id="help-strain" :text="t('Strain or isolate name used in the circular center label.')"></help-tip></span>
-                                    <input type="text" v-model="form.strain" :aria-label="t('Strain')" aria-describedby="help-strain" class="form-input" placeholder="e.g. K-12" :disabled="!semanticMutationAvailable">
+                                    <input type="text" v-model="form.strain" :aria-label="t('Strain')" aria-describedby="help-strain" class="form-input" :placeholder="t('e.g., {example}', { example: 'K-12' })" :disabled="!semanticMutationAvailable">
                                 </div>
                             </div>
                         </div>

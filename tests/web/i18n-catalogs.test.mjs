@@ -255,6 +255,17 @@ test('no stylesheet, template or module of the Web UI selects by a translated at
   assert.deepEqual(problems, []);
 });
 
+// A static placeholder shows in every language as written, so it holds only a
+// code value (slot_id, product,gene,locus_tag); an example sentence goes
+// through t('e.g., {example}', …) like its siblings (OV-2329: "e.g. K-12").
+test('index.html has no static placeholder that is an English example', () => {
+  const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
+  const problems = html.split('\n').flatMap((line, index) => (
+    /(?:^|\s)placeholder="(?:e\.g\.|for example)/i.test(line) ? [`index.html:${index + 1}: ${line.trim()}`] : []
+  ));
+  assert.deepEqual(problems, []);
+});
+
 test('every t(), tn() and tx() call in the Web UI has a literal key', () => {
   const problems = sourceCalls().filter((call) => call.problem).map((call) => call.problem);
   assert.deepEqual(problems, []);
