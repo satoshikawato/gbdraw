@@ -89,7 +89,7 @@ from gbdraw.annotations import (
     resolve_annotations,
 )
 from gbdraw.api.config import apply_config_overrides
-from gbdraw.api.record_planning import ComparisonRecordBinding
+from gbdraw.api.record_planning import ComparisonRecordBinding, decide_linear_wrap
 from gbdraw.api.options import (
     AnnotationOptions,
     CircularDiagramOptions,
@@ -140,7 +140,6 @@ from gbdraw.diagrams.circular.assemble import (
     circular_legend_table,
     plan_circular_annotation_slots,
 )
-from gbdraw.diagrams.circular.positioning import _parse_svg_number
 from gbdraw.diagrams.circular.radial_layout import track_layout_reason
 from gbdraw.diagrams.linear import assemble_linear_diagram
 from gbdraw.exceptions import LabelLayoutError, LabelsDoNotFitError, ValidationError
@@ -195,6 +194,14 @@ from gbdraw.layout.composition import (
     plan_composition,
 )
 from gbdraw.layout.linear_multi_record import record_key_at, record_pairs_between_adjacent_rows
+from gbdraw.layout.linear_wrap import (
+    LinearWrapSummary,
+    drawn_axis_length,
+    refuse_undrawable_wrap,
+    resolve_wrap,
+    resolve_wrap_length,
+    wrap_blocking_inputs,
+)
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
@@ -216,6 +223,8 @@ from gbdraw.mode_profiles import (
     LINEAR_MODE_PROFILE,
     ComparisonThresholds,
 )
+from gbdraw.render.document import drawing_size
+from gbdraw.render.export_limits import bind_export_wrap
 from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
@@ -279,6 +288,8 @@ class LinearDiagramMetadata:
     # Each record's search-frame binding, set by the plan's build when the
     # values above hold source-bound results: a Session stores them in F (R5).
     search_frame_bindings: tuple[ComparisonRecordBinding, ...] = ()
+    # What a wrapped figure drew; ``None`` when no record is longer than one row.
+    wrap: LinearWrapSummary | None = None
 
 
 @dataclass(frozen=True)
@@ -1938,6 +1949,22 @@ class ProteinComparisonAnalysis:
     cache_writes: tuple[LosatCacheWrite, ...]
 
 
+def _protein_comparison_frames(
+    pairs: Sequence[tuple[int, int]] | None,
+    comparisons: Sequence[DataFrame],
+) -> ProteinComparisonFrames:
+    """An analysis's comparisons: one per listed pair, else consecutive ordered frames."""
+
+    if pairs is None:
+        return ProteinComparisonFrames(ordered=tuple(comparisons))
+    return ProteinComparisonFrames(
+        pairs=tuple(
+            LinearComparison(query_index, subject_index, matches)
+            for (query_index, subject_index), matches in zip(pairs, comparisons, strict=True)
+        )
+    )
+
+
 def _invoke_protein_analysis_helper(
     mode: ProteinBlastpMode,
     records: Sequence[SeqRecord],
@@ -1960,7 +1987,7 @@ def _invoke_protein_analysis_helper(
     collinearity_search_scope: CollinearitySearchScope,
     collinearity_color_mode: CollinearityColorMode,
     collinear_infer_orthogroups: bool,
-    collinearity_comparison_pairs: Sequence[tuple[int, int]] | None,
+    row_comparison_pairs: Sequence[tuple[int, int]] | None,
     cache_state: LosatpCacheState | None,
     protein_extraction: ProteinExtractionResult | None,
     feature_visibility_rules: list[dict[str, object]] | None,
@@ -1992,18 +2019,7 @@ def _invoke_protein_analysis_helper(
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=cache_filenames,
         )
-        comparisons = (
-            ProteinComparisonFrames(
-                pairs=tuple(
-                    LinearComparison(query_index, subject_index, matches)
-                    for (query_index, subject_index), matches in zip(
-                        pairwise_pairs, result.comparisons, strict=True
-                    )
-                )
-            )
-            if pairwise_pairs is not None
-            else ProteinComparisonFrames(ordered=tuple(result.comparisons))
-        )
+        comparisons = _protein_comparison_frames(pairwise_pairs, result.comparisons)
     elif mode == "orthogroup":
         result = build_rbh_orthogroup_protein_blastp_comparisons(
             records,
@@ -2022,8 +2038,9 @@ def _invoke_protein_analysis_helper(
             protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=cache_filenames,
+            comparison_pairs=row_comparison_pairs,
         )
-        comparisons = ProteinComparisonFrames(ordered=tuple(result.comparisons))
+        comparisons = _protein_comparison_frames(row_comparison_pairs, result.comparisons)
     elif mode == "collinear":
         result = build_orthogroup_collinearity_blocks(
             records,
@@ -2043,7 +2060,7 @@ def _invoke_protein_analysis_helper(
             unit_mode=collinearity_unit_mode,
             edge_mode=collinearity_anchor_mode,
             search_scope=collinearity_search_scope,
-            comparison_pairs=collinearity_comparison_pairs,
+            comparison_pairs=row_comparison_pairs,
             losatp_cache=losatp_cache,
             protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
@@ -2054,7 +2071,7 @@ def _invoke_protein_analysis_helper(
             records,
             color_mode=collinearity_color_mode,
             search_scope=collinearity_search_scope,
-            comparison_pairs=collinearity_comparison_pairs,
+            comparison_pairs=row_comparison_pairs,
         )
     else:
         raise ValidationError(f"Unsupported protein analysis mode: {mode!r}.")
@@ -2092,7 +2109,7 @@ def assemble_linear_diagram_from_records(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
-    collinear_infer_orthogroups: bool = True,
+    collinear_infer_orthogroups: bool = LinearDiagramOptions.collinear_infer_orthogroups,
     collinear_max_paralog_links_per_orthogroup: int = 2,
     similarity_alignment: SimilarityAlignmentPlan | None = None,
     color_table: Optional[DataFrame] = None,
@@ -2179,6 +2196,25 @@ def assemble_linear_diagram_from_records(
             "render it with gbdraw.api.render_request().",
             diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
         )
+    wrap_length = cfg.canvas.linear.wrap_length
+    wrap_summary = None
+    if resolve_wrap_length(wrap_length, [len(record.seq) for record in records]) is not None:
+        refuse_undrawable_wrap(
+            cfg,
+            resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
+            wrap_blocking_inputs(
+                blast_files=blast_files,
+                linear_comparisons=linear_comparisons,
+                protein_comparisons=protein_comparisons,
+                orthogroups=orthogroups,
+                collinearity_blocks=collinearity_blocks,
+                losat_search=losat_search,
+                similarity_alignment=similarity_alignment,
+            ),
+        )
+        _record_transforms, wrap_summary = resolve_wrap(wrap_length, records, _record_transforms)
+        # Rows carry their ruler on the axis: there is no other place for it.
+        cfg = replace(cfg, canvas=replace(cfg.canvas, linear=replace(cfg.canvas.linear, ruler_on_axis=True)))
     normalized_protein_blastp_mode = losatp_analysis_mode(losat_search)
     runtime = losat_search.runtime if losat_search is not None else LosatRuntimeOptions()
     normalized_protein_pairs: tuple[tuple[int, int], ...] | None = None
@@ -2213,17 +2249,22 @@ def assemble_linear_diagram_from_records(
     normalized_collinearity_search_scope = normalize_collinearity_search_scope(str(collinearity_search_scope))
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     normalized_orthogroup_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
-    collinearity_comparison_pairs: tuple[tuple[int, int], ...] | None = None
+    # The displayed pairs of a computed protein analysis when a row holds
+    # several records: every pair across adjacent rows (OV-2297).
+    row_comparison_pairs: tuple[tuple[int, int], ...] | None = None
     if (
-        (normalized_protein_blastp_mode == "collinear" or collinearity_blocks is not None)
+        (
+            normalized_protein_blastp_mode in {"orthogroup", "collinear"}
+            or collinearity_blocks is not None
+        )
         and layout is not None
     ):
-        _ordered_indices, collinearity_rows = resolve_record_row_positions(
+        _ordered_indices, analysis_rows = resolve_record_row_positions(
             records,
             layout.multi_record_positions,
         )
-        if len(set(collinearity_rows)) < len(records):
-            collinearity_comparison_pairs = record_pairs_between_adjacent_rows(collinearity_rows)
+        if len(set(analysis_rows)) < len(records):
+            row_comparison_pairs = record_pairs_between_adjacent_rows(analysis_rows)
     if int(collinear_max_paralog_links_per_orthogroup) <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
     if normalized_protein_blastp_mode != "none" and protein_comparisons is not None:
@@ -2384,7 +2425,7 @@ def assemble_linear_diagram_from_records(
             collinearity_search_scope=normalized_collinearity_search_scope,
             collinearity_color_mode=normalized_collinearity_color_mode,
             collinear_infer_orthogroups=collinear_infer_orthogroups,
-            collinearity_comparison_pairs=collinearity_comparison_pairs,
+            row_comparison_pairs=row_comparison_pairs,
             cache_state=losatp_cache.state() if losatp_cache is not None else None,
             protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
@@ -2411,7 +2452,7 @@ def assemble_linear_diagram_from_records(
             tuple(records),
             color_mode=normalized_collinearity_color_mode,
             search_scope=normalized_collinearity_search_scope,
-            comparison_pairs=collinearity_comparison_pairs,
+            comparison_pairs=row_comparison_pairs,
         )
     elif normalized_protein_blastp_mode == "pairwise" and normalized_protein_pairs is not None:
         # One plan for every pair, so records of one file share a database.
@@ -2426,7 +2467,13 @@ def assemble_linear_diagram_from_records(
     elif normalized_protein_blastp_mode == "pairwise":
         resolved_protein_frames = invoke_protein_analysis("pairwise", records).comparisons
     elif normalized_protein_blastp_mode == "orthogroup":
-        analysis = invoke_protein_analysis("orthogroup", records)
+        analysis = invoke_protein_analysis(
+            "orthogroup",
+            records,
+            analysis_cache_filenames=_linear_losat_cache_filenames(
+                records, _record_presentations, row_comparison_pairs
+            ),
+        )
         resolved_protein_frames = analysis.comparisons
         resolved_orthogroups = cast(ProteinBlastpResult, analysis.result).orthogroups
     elif normalized_protein_blastp_mode == "collinear":
@@ -2486,7 +2533,11 @@ def assemble_linear_diagram_from_records(
 
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=len(records),
-        longest_genome=longest_genome,
+        # The canvas sizes what it draws: one row of a wrapped record.
+        longest_genome=max(
+            drawn_axis_length(record, _record_transforms[index] if _record_transforms is not None else None)
+            for index, record in enumerate(records)
+        ),
         profile=profile,
         legend=legend,
         output_prefix=output_prefix,
@@ -2567,8 +2618,10 @@ def assemble_linear_diagram_from_records(
             orthogroups=resolved_orthogroups,
             collinearity_result=resolved_collinearity_result,
             comparison_warnings=getattr(canvas, "_gbdraw_comparison_record_id_warnings", ()),
+            wrap=wrap_summary,
         ),
     )
+    bind_export_wrap(canvas, wrap_summary)
     return build_result if _return_build_result else canvas
 
 
@@ -3738,13 +3791,6 @@ def _circular_label_layouts(drawing: Drawing) -> tuple[CircularLabelLayout, ...]
     return tuple(layout for layout in layouts if isinstance(layout, CircularLabelLayout))
 
 
-def _drawing_size(drawing: Drawing) -> tuple[float, float]:
-    return (
-        _parse_svg_number(drawing.attribs.get("width")),
-        _parse_svg_number(drawing.attribs.get("height")),
-    )
-
-
 # The reason of a row whose settings leave the tracks no room (OV-1266, D-07).
 _TRACKS_DO_NOT_FIT_REASON = "The tracks do not fit with this setting"
 
@@ -3794,7 +3840,7 @@ def _checked_circular_drawing(
         layouts = _circular_label_layouts(verified)
         return LabelFitVerification(
             outcome=circular_label_outcome(layouts),
-            canvas_size=_drawing_size(verified),
+            canvas_size=drawing_size(verified),
             fit=sum((layout.fit for layout in layouts), FITS),
         )
 
@@ -3992,7 +4038,12 @@ def _build_linear_diagram(
 ) -> Drawing | LinearDiagramBuildResult:
     """Build a linear diagram using mode-specific typed options."""
 
-    options = _linear_builder_options(options)
+    options = decide_linear_wrap(
+        _linear_builder_options(options),
+        records=records,
+        layout=layout,
+        similarity_alignment=similarity_alignment,
+    )
     output = options.output
     tracks = options.tracks
     cfg = _resolve_diagram_options_config(options)
@@ -4135,7 +4186,7 @@ def _checked_linear_build(
                 raise
             return unfit
         label_fit = _linear_label_fit(verified)
-        return LabelFitVerification(label_fit.outcome, _drawing_size(verified), label_fit.fit)
+        return LabelFitVerification(label_fit.outcome, drawing_size(verified), label_fit.fit)
 
     drawing = _linear_drawing(result)
     report = check_linear_label_fit(_linear_label_fit(drawing), verify, features_separated=features_separated)

@@ -148,15 +148,22 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
   expect((await snapshot(page)).history[0]).toBe(before.history[0] + 1);
 });
 
-// OV-1302: the tobacco tint row extends to gc_content, so turning only gc_content
-// off makes Save refuse; the alert names the row and the Extend to reason.
+// OV-1302: the tobacco tint row (Track row 2) extends to gc_content, so a draft
+// with gc_content off and the tint row on makes Save refuse; the alert names the
+// row and the Extend to reason. Turning gc_content off while the tint row is on
+// now asks to turn the tint row off with it (PD-OI-104 scenario revision 6), so
+// the draft is reached the way a user still can: the tint row off, gc_content
+// off (nothing reaches it then), the tint row back on.
 test('Save refuses a disabled Extend to slot with a named alert and no download', async ({ page }) => {
   test.setTimeout(360_000);
   await load(page, fixture);
   const panel = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
   await reveal(panel);
   if (await panel.getAttribute('aria-expanded') !== 'true') await panel.click();
-  await page.locator('[data-capture="circular-track-slot-gc_content"]').getByTitle('Enabled', { exact: true }).uncheck();
+  const enabled = id => page.getByRole('checkbox', { name: `Enable circular track slot ${id}`, exact: true });
+  await enabled('plastome_tint').uncheck();
+  await enabled('gc_content').uncheck();
+  await enabled('plastome_tint').check();
   let downloaded = false;
   page.on('download', () => { downloaded = true; });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();

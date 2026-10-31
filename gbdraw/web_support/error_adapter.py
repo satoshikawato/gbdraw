@@ -41,7 +41,7 @@ losatp_max_hits losatp_max_target_seqs losatp_member_max_hits losatp_mode losatn
 losat losat_search program pairs source losat_gencode comparison_sequence comparison_sequence_source comparison_fasta
 conservation_blast_files conservation_dataframes conservation_reference conservation_sequence_files
 conservation_labels conservation_colors conservation_losat_gencodes conservation_search_results
-alignment_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
+alignment_length wrap_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
 collinear_singleton_merge_gap collinear_max_diagonal_drift collinear_gap_penalty
 collinear_nearby_duplicate_window collinear_constant_anchor_score
 collinear_infer_orthogroups collinear_min_score collinear_min_block_span
@@ -59,10 +59,10 @@ DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE NO_RECORDS REGION_I
 DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER REQUIRED FIELDS POSITIVE_UNIT_INTERVAL
 POSITIVE_OR_AUTO POSITIVE_INTEGER_OR_AUTO NONNEGATIVE_INTEGER PERCENT UNKNOWN_CONFIG_PATH
 DINUCLEOTIDE CANNOT_FIT CENTER_RESERVED THREE_COLUMNS DEPTH_VALUES FILENAME FILENAME_LENGTH
-REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR SEARCH_FRAME
+REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLLINEAR_MERGE_ORIENTATION COLOR SEARCH_FRAME
 LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
 RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES ANNOTATION_LANE_CONFLICT CIRCULAR_SETTING LINEAR_SETTING
-ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GZIP_INPUT GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER LABEL_CAPACITY""".split())
+ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GZIP_INPUT GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER LABEL_CAPACITY WRAP""".split())
 # The room each side's labels need when they were not placed (CAPACITY-STOP): bounded numbers, by the key the producer
 # derives from the label kind.
 _LABEL_CAPACITY_KEYS = frozenset(label_capacity_context_key(kind) for kind in get_args(HorizontalLabelKind))
@@ -125,7 +125,6 @@ _EXACT = {
     "The staged Web render workspace is incomplete.": ("RESOURCE_INVALID", {"reason": "WORKSPACE"}),
     "The temporary staged Web render workspace could not be cleaned up.": ("CLEANUP_FAILED", {}),
     "The temporary Web render workspace could not be cleaned up.": ("CLEANUP_FAILED", {}),
-    "collinear_merge_orientation must be one of: strand, order, either": ("INPUT_INVALID", {"field": "collinear_merge_orientation", "reason": "COLLINEAR_MERGE_ORIENTATION"}),
     "Protein FASTA contains duplicate transport IDs.": ("COMPARISON_INPUT", {"reason": "UNIQUE_IDS"}),
     "Protein FASTA and protein map contain different transport IDs.": ("COMPARISON_INPUT", {"reason": "MATCH_IDS"}),
     "Reverse display transform requires a positive length.": ("REGION_INVALID", {"field": "recordLength", "reason": "POSITIVE_INTEGER"}),

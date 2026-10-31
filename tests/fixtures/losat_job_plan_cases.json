@@ -1712,7 +1712,7 @@
       }
     },
     {
-      "name": "LOSATP Collinear all pairs without inference, single-record files",
+      "name": "LOSATP Collinear without inference searches the edges whatever Search between holds",
       "program": "blastp",
       "mode": "collinear",
       "inferOrthogroups": false,
@@ -1767,6 +1767,233 @@
           0
         ],
         [
+          1,
+          2
+        ],
+        [
+          2,
+          1
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "between-sources",
+            "args": [],
+            "specs": [
+              [
+                0,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              1
+            ],
+            "queryIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ]
+            },
+            "subjectIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "queryHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
+            "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "searchContext": null
+          },
+          {
+            "scope": "between-sources",
+            "args": [],
+            "specs": [
+              [
+                1,
+                0
+              ]
+            ],
+            "queryIndexes": [
+              1
+            ],
+            "subjectIndexes": [
+              0
+            ],
+            "queryIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "subjectIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ]
+            },
+            "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "subjectHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
+            "searchContext": null
+          },
+          {
+            "scope": "between-sources",
+            "args": [],
+            "specs": [
+              [
+                1,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              1
+            ],
+            "subjectIndexes": [
+              2
+            ],
+            "queryIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "subjectIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "searchContext": null
+          },
+          {
+            "scope": "between-sources",
+            "args": [],
+            "specs": [
+              [
+                2,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              2
+            ],
+            "subjectIndexes": [
+              1
+            ],
+            "queryIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "subjectIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "queryHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "searchContext": null
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            1,
+            "e34e4223b14135388fcfdae7bc68ec4d6a3094c17362599ffdd95ffecba8278d"
+          ],
+          [
+            1,
+            0,
+            "dbc21fe29e1ec79ef1e817ccda0d2b2dd25315b7ffa76ce2a7dfe982e2fadc5a"
+          ],
+          [
+            1,
+            2,
+            "31635841754d3986a7802a95233f2df68786e5b93fa1b86d830b7f827c29cbde"
+          ],
+          [
+            2,
+            1,
+            "2d9bab028692c1fc95f35e68ab84711cedc3b5c1d4ca9d9a82fe29422e733ce0"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "LOSATP Collinear all pairs with inference, single-record files",
+      "program": "blastp",
+      "mode": "collinear",
+      "inferOrthogroups": true,
+      "searchScope": "all",
+      "args": [],
+      "edges": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gbk",
+          "fasta": ">p_1a\nMKTAYIAKQRQISFVKSHFSRQ1LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:8f5bc4cbf15c1d7f9d3e4f7f50acfdb7ddcebb2d955ba3a737272093bbfa3346",
+            "runtimeBindingHash": "sha256:6c127732fb7197db58e1c1c3ee45b5c0b4badf8c41c2e6a1c4cba245f6d87f22"
+          }
+        },
+        {
+          "uid": "record-2",
+          "source": "b.gbk",
+          "fasta": ">p_2a\nMKTAYIAKQRQISFVKSHFSRQ2LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:7801f2b3a6fc7b6b268e53ef2d076d399553eedcd188592bcc34823e23097c81",
+            "runtimeBindingHash": "sha256:b36a05a9c62f6adb883f8849dc75c1d0baf5251519ce10ffa458278bb07d3954"
+          }
+        },
+        {
+          "uid": "record-3",
+          "source": "c.gbk",
+          "fasta": ">p_3a\nMKTAYIAKQRQISFVKSHFSRQ3LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:3dbc19c021269b0f7c073d119002e68087c350f53a3af4c8ddc6a24a222f422c",
+            "runtimeBindingHash": "sha256:7664680353a5c6c00dcb48bc77971b0004ef2ff6c739b53d009f23d15187bcc1"
+          }
+        }
+      ],
+      "specs": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
           0,
           2
         ],
@@ -1785,6 +2012,99 @@
       ],
       "expected": {
         "jobs": [
+          {
+            "scope": "self",
+            "args": [],
+            "specs": [
+              [
+                0,
+                0
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              0
+            ],
+            "queryIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ]
+            },
+            "subjectIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ]
+            },
+            "queryHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
+            "subjectHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
+            "searchContext": null
+          },
+          {
+            "scope": "self",
+            "args": [],
+            "specs": [
+              [
+                1,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              1
+            ],
+            "subjectIndexes": [
+              1
+            ],
+            "queryIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "subjectIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "searchContext": null
+          },
+          {
+            "scope": "self",
+            "args": [],
+            "specs": [
+              [
+                2,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              2
+            ],
+            "subjectIndexes": [
+              2
+            ],
+            "queryIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "subjectIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "queryHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "searchContext": null
+          },
           {
             "scope": "between-sources",
             "args": [],
@@ -1973,6 +2293,21 @@
           }
         ],
         "rawKeys": [
+          [
+            0,
+            0,
+            "365edede60d5f0a9f94b485520c85090f34f7dc09db8269b59bae31b99e9a5af"
+          ],
+          [
+            1,
+            1,
+            "346fe00e246e5a8b6ba2440806e174c1813ea1d6d7ed7f1006356aa98b4825fe"
+          ],
+          [
+            2,
+            2,
+            "7f1578cb7b622464c9da795cd27b214b8311efe77ed20057bda9f91f445b2486"
+          ],
           [
             0,
             1,

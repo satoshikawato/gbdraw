@@ -2016,9 +2016,9 @@ def test_gallery_session_features_seed_biological_catalog() -> None:
         "expected_hidden_members",
     ),
     [
-        # 2565: the current derivation leaves record-2 f2b985ad0 out of the og_570 local-paralog
-        # cluster that older code stored (OV-1031 refresh from the raw cache).
-        ("hepatoplasmataceae_orthogroup", 577, 2565, 0),
+        # 576 groups and 2566 members: the Session as the current derivation stores it, after
+        # the self-hit and normalization changes of #1497 (OV-2306).
+        ("hepatoplasmataceae_orthogroup", 576, 2566, 0),
         ("majanivirus_orthogroup", 152, 826, 0),
     ],
 )

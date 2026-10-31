@@ -967,8 +967,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.collinearSearchScope ?? 'adjacent',
         payload.orthogroupMembershipMode ?? ORTHOGROUP_INFERENCE_VERSION,
         payload.orthogroupMemberMaxHits ?? null,
-        payload.collinearMergeOrientation ?? 'either',
-        payload.collinearInferOrthogroups ?? true,
+        payload.collinearMergeOrientation,
+        payload.collinearInferOrthogroups,
         canonicalPath,
         payload.explicitDisplayPairs === true
       ]

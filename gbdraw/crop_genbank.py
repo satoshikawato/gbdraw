@@ -8,7 +8,7 @@ from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import (
     SeqFeature, FeatureLocation, CompoundLocation,
-    BeforePosition, AfterPosition
+    BeforePosition, AfterPosition, ExactPosition
 )
 from gbdraw.core.numeric import argparse_integer
 from gbdraw.core.record_metadata import (
@@ -83,53 +83,36 @@ def check_start_end_coords(record, start, end):
         )
     return start_0, end_0
 
-def _crop_and_shift_location(loc_before, loc_current, loc_next, crop_start_0, crop_end_0):
-    """
-    Takes a single FeatureLocation (loc) and crops/shifts it
-    relative to the crop window (crop_start_0, crop_end_0).
-    Returns a new FeatureLocation with < and > boundaries if partial.
+def _part_in_window(part, crop_start_0, crop_end_0):
+    """Whether a location part keeps any base inside the crop window."""
+    return part.start < crop_end_0 and part.end > crop_start_0
 
-    This version relies on Biopython's Position arithmetic,
-    which correctly preserves existing < and > markers when shifting.
+
+def _crop_and_shift_location(loc_before, loc_current, loc_next, crop_start_0, crop_end_0):
+    """Crop one location part to the window and shift it to window coordinates.
+
+    An end is marked partial (``<`` low, ``>`` high) when the part is cut by the
+    window, when the neighbouring part on that side (in biological order) is
+    dropped, or when the source already marks it partial. Biopython position
+    arithmetic returns plain integers, so the source markers are read before the
+    shift, not carried by it.
     """
     new_seq_len = crop_end_0 - crop_start_0
-
-    strand = loc_current.strand
-    if strand == 1:
-        if loc_before and loc_before.end < crop_start_0:
-            final_start_pos = BeforePosition(max(0, loc_current.start - crop_start_0))
-        elif loc_current.start < crop_start_0:
-            final_start_pos = BeforePosition(max(0, loc_current.start - crop_start_0))
-        else:
-            final_start_pos = max(0, loc_current.start - crop_start_0)
-
-        if loc_next and loc_next.start > crop_end_0:
-            final_end_pos = AfterPosition(min(new_seq_len, loc_current.end - crop_start_0))
-        elif loc_current.end > crop_end_0:
-            final_end_pos = AfterPosition(min(new_seq_len, loc_current.end - crop_start_0))
-        else:
-            final_end_pos = min(new_seq_len, loc_current.end - crop_start_0)
-        return FeatureLocation(
-            final_start_pos,
-            final_end_pos,
-            strand=loc_current.strand
-        )
-    else:
-        if loc_before and loc_before.start > crop_end_0:
-            final_end_pos = AfterPosition(min(new_seq_len, loc_current.end - crop_start_0))
-        else:
-            final_end_pos = min(new_seq_len, loc_current.end - crop_start_0)
-
-        if loc_next and loc_next.end < crop_start_0:
-            final_start_pos = BeforePosition(max(0, loc_current.start - crop_start_0))
-        else:
-            final_start_pos = max(0, loc_current.start - crop_start_0)
-
-        return FeatureLocation(
-            final_start_pos,
-            final_end_pos,
-            strand=loc_current.strand
-        )
+    dropped_before = loc_before is not None and not _part_in_window(loc_before, crop_start_0, crop_end_0)
+    dropped_next = loc_next is not None and not _part_in_window(loc_next, crop_start_0, crop_end_0)
+    # Parts are in biological order: on the minus strand the part before lies above this one.
+    dropped_low, dropped_high = (
+        (dropped_next, dropped_before) if loc_current.strand == -1 else (dropped_before, dropped_next)
+    )
+    open_low = dropped_low or loc_current.start < crop_start_0 or isinstance(loc_current.start, BeforePosition)
+    open_high = dropped_high or loc_current.end > crop_end_0 or isinstance(loc_current.end, AfterPosition)
+    start = max(0, int(loc_current.start) - crop_start_0)
+    end = min(new_seq_len, int(loc_current.end) - crop_start_0)
+    return FeatureLocation(
+        BeforePosition(start) if open_low else ExactPosition(start),
+        AfterPosition(end) if open_high else ExactPosition(end),
+        strand=loc_current.strand,
+    )
 
 def crop_and_shift_features(
     original_features,
@@ -164,7 +147,7 @@ def crop_and_shift_features(
             for n in range(num_parts):
                 part = old_loc.parts[n]
 
-                if not (part.start < end_0 and part.end > start_0):
+                if not _part_in_window(part, start_0, end_0):
                     continue
 
                 part_before = old_loc.parts[n - 1] if n > 0 else None

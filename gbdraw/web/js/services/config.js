@@ -101,6 +101,7 @@ import {
   applyLiveResourceWrites,
   applyLiveWebFileWrites,
   carryKeptTrackParts,
+  recordLoadedStackSwitch,
   liveSettingInputsOf,
   managedConfigOverridePathsForMode,
   projectCanonicalSessionRequest,
@@ -4398,7 +4399,8 @@ export const committedSettingNotePredicate = (item = null) => {
   const drawing = state.drawingOf(state.generatedDrawingId.value);
   const inputs = liveSettingInputsOf(drawing, state.inputFiles.fileOf);
   const resources = committedCanonicalSession?.resources;
-  return (requestPath) => liveSettingNoteApplies(request, requestPath, drawing, inputs, resources, item);
+  const undoneHides = state.undoneTrackHides.value.get(drawing.id);
+  return (requestPath) => liveSettingNoteApplies(request, requestPath, drawing, inputs, resources, item, undoneHides);
 };
 
 /**
@@ -6491,6 +6493,16 @@ const drawnResultModes = ({ ui, committedMode, invocationMode, canonical }) => {
  * @typedef {{ results: unknown[], selectedResultIndex: number, failedGeneratePreservedResult: boolean }} StoredFigureWithdrawal
  */
 /**
+ * Records the Use custom stack switch beside a committed Session Load installs
+ * (`recordLoadedStackSwitch`). Load holds it untyped, as the committed Session
+ * variable does; it is read as `getCommittedCanonicalSession` reads it.
+ * @param {Readonly<Record<string, unknown>> | null} loaded
+ * @param {DrawingState} drawing The drawing whose Session it is.
+ */
+const recordLoadedStack = (loaded, drawing) => {
+  if (loaded) recordLoadedStackSwitch(/** @type {CommittedCanonicalSession} */ (loaded), drawing);
+};
+/**
  * @param {{ target: { files: ArrayLike<File>, value?: string } }} e
  * @param {Record<string, any>} [options] The options of `importSession` with
  * `isCurrent` and `signal`; `transformLegacyResultSvg` is the composition
@@ -7833,6 +7845,14 @@ const importSessionDocument = async (e, options = {}) => {
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
+    // Beside each loaded Circular request with slots, the Use custom stack
+    // switch of its own drawing's loaded draft (D-214 B): the committed set's
+    // is its drawing's, an artifact slot's is its drawing's.
+    if (currentSchemaSession) recordLoadedStack(adoptedCanonicalSession, committedDrawing);
+    for (const slot of [...(committedSetSlot ? [committedSetSlot] : []), ...storedSetSlots]) {
+      // The committed Session `buildLoadedArtifactSlot` gave the slot.
+      if (slot) recordLoadedStack(slot.runtimeState?.canonical.committedCanonicalSession ?? null, state.drawingOf(slot.drawingId));
+    }
     // The composition root keeps the loaded artifacts: the opening one is shown, the stashed one waits.
     /** @type {((slots: LoadedArtifactSlots) => void) | undefined} */
     const installLoadedArtifactSlots = options.installLoadedArtifactSlots;
@@ -7888,6 +7908,7 @@ const importSessionDocument = async (e, options = {}) => {
       committedSession = stored && await convertDetachedProteinResultFrames(
         proteinFrameSource, stored, canonicalProjectionInput, committedDrawing
       );
+      recordLoadedStack(committedSession, committedDrawing);
       setCommittedCanonicalSession(committedSession, loadedConservationPairsOf(committedSetDrawingId));
       activeSessionResourceTable = null;
     } else {

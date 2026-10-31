@@ -9,7 +9,7 @@ const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction'
   'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readFeatureOverrideTable', 'registerFonts', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'synthesizeColorRules', 'upgradeLegacySession', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
-  'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'parse', 'drawing-list']);
+  'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'write', 'parse', 'drawing-list']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
 recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick font_size font_family plot_title_font_size height large_tick_interval small_tick_interval tick_font_size
 inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_shaft_width_ratio keep_definition_left_aligned color action feature_type qualifier value record_id label_text
@@ -19,7 +19,7 @@ losatp_max_hits losatp_max_target_seqs losatp_member_max_hits losatp_mode losatn
 losat losat_search program pairs source losat_gencode comparison_sequence comparison_sequence_source comparison_fasta
 conservation_blast_files conservation_dataframes conservation_reference conservation_sequence_files
 conservation_labels conservation_colors conservation_losat_gencodes conservation_search_results
-alignment_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
+alignment_length wrap_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
 collinear_singleton_merge_gap collinear_max_diagonal_drift collinear_gap_penalty
 collinear_nearby_duplicate_window collinear_constant_anchor_score collinear_infer_orthogroups
 collinear_min_score collinear_min_block_span record_gap_px record_axis_height depth_window depth_step
@@ -53,13 +53,14 @@ const REASONS = Object.freeze({
   PROTEIN_BLASTP_MODE: 'Choose pairwise, orthogroup, or collinear.',
   COLLINEAR_SEARCH_SCOPE: 'Choose adjacent or all.',
   COLLINEAR_UNIT_MODE: 'Choose auto, cds, or locus.',
-  COLLINEAR_ANCHOR_MODE: 'Choose all, one_to_one, or rbh.',
-  COLLINEAR_MERGE_ORIENTATION: 'Choose strand, order, or either.',
+  COLLINEAR_ANCHOR_MODE: 'Choose all or rbh.',
+  COLLINEAR_MERGE_ORIENTATION: 'Choose strand or order.',
   COLLINEAR_COLOR_MODE: 'Choose average_identity, orientation, or orientation_identity.',
   ORTHOGROUP_MEMBERSHIP_MODE: 'Choose anchor_core_v1.',
 
   UNKNOWN_CONFIG_PATH: 'Remove unknown configuration overrides or use a supported setting.',
   CIRCULAR_SETTING: 'It applies only to Circular diagrams. Reset it under Preserved session settings, or switch to Circular.',
+  WRAP: 'A wrapped figure draws no comparisons. Remove the comparison inputs or set the wrap length to none.',
   LINEAR_SETTING: 'It applies only to Linear diagrams. Reset it under Preserved session settings, or switch to Linear.',
   TRACK_SCHEMA: 'Recreate Custom Track Slots with the current schema.',
   SESSION_FIELDS: 'Remove unsupported top-level Session fields.',
@@ -247,7 +248,7 @@ const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pa
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',
-  evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length',
+  evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length', wrap_length: 'Wrap length',
   plot_title_font_size: 'Plot Title Font Size', font_family: 'Font', feature_width_circular: 'Feature Width',
   depth_width_circular: 'Depth Width', gc_content_width_circular: 'GC Content Width',
   gc_content_radius_circular: 'GC Content Radius', gc_skew_width_circular: 'GC Skew Width',
@@ -302,6 +303,11 @@ const PHRASES = Object.freeze({
   exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
   schema: 'Load a supported Session file or recreate it with the current writer.',
   notASession: 'This file is not a gbdraw Session: it is not valid JSON.',
+  // OV-2240: Save refuses a Session that Load could not open (the cap of services/session-file.js).
+  sessionNotSaved: 'The Session was not saved: it is {size} MB expanded, and the browser loads at most {limit} MB.',
+  sessionFileNotSaved: 'The Session was not saved: its file would be {size} MB, and the browser loads files of at most {limit} MB.',
+  largestInputs: 'Largest inputs: {inputs}.',
+  sessionSaveRemedy: 'Remove or replace the largest inputs with smaller ones, then save again.',
   liveEditFailed: 'Live edit failed: direct edits already applied are kept; geometry may still need updating.',
   liveEditRetry: 'Retry the live edit or use Generate.',
   liveEditChange: 'Change the edit, or change the settings and use Generate.',
@@ -416,6 +422,10 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [sessionVersion] The version of a Session file this app does not read.
  * @property {number} [latestSessionVersion] The newest Session version this app reads.
  * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
+ * @property {number} [sessionBytes] The expanded size in bytes of a Session that Save refused.
+ * @property {number} [sessionByteLimit] The size in bytes that Load opens at most.
+ * @property {'file'} [sessionSizeKind] Set when the two sizes are those of the gzip file, not of its expanded JSON.
+ * @property {string} [largestInputs] The file names of the largest inputs of a Session that Save refused.
  */
 
 /**
@@ -500,8 +510,7 @@ for (const [label, field, options] of [
   ['Protein BLASTP mode', 'protein_blastp_mode', 'pairwise, orthogroup, collinear'],
   ['Collinear search scope', 'collinear_search_scope', 'adjacent, all'],
   ['Collinear unit mode', 'collinear_unit_mode', 'auto, cds, locus'],
-  ['Collinear anchor mode', 'collinear_anchor_mode', 'all, one_to_one, rbh'],
-  ['Collinear merge orientation', 'collinear_merge_orientation', 'strand, order, either'],
+  ['Collinear anchor mode', 'collinear_anchor_mode', 'all, rbh'],
   ['Collinear color mode', 'collinear_color_mode', 'average_identity, orientation, orientation_identity'],
   ['Protein BLASTP orthogroup membership mode', 'orthogroup_membership_mode', 'anchor_core_v1']
 ]) {
@@ -674,6 +683,15 @@ const contextFor = (value) => {
   if (typeof value.readSessionVersions === 'string' && /^[0-9\u2013, and]{1,200}$/.test(value.readSessionVersions)) {
     context.readSessionVersions = value.readSessionVersions;
   }
+  // A refused Save: both sizes together, or neither; the names are one line of at most 200 characters.
+  if (Number.isSafeInteger(value.sessionBytes) && Number.isSafeInteger(value.sessionByteLimit)
+    && value.sessionBytes > 0 && value.sessionByteLimit > 0) {
+    context.sessionBytes = value.sessionBytes;
+    context.sessionByteLimit = value.sessionByteLimit;
+  }
+  if (context.sessionBytes !== undefined && value.sessionSizeKind === 'file') context.sessionSizeKind = 'file';
+  const inputs = typeof value.largestInputs === 'string' ? value.largestInputs.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
+  if (inputs) context.largestInputs = inputs;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
   if (typeof value.drawingId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value.drawingId)) context.drawingId = value.drawingId;
@@ -771,10 +789,18 @@ export const normalizeUserFacingError = (value, {
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
   const { queryRecordIndex, subjectRecordIndex, labelFitCounts, labelCapacityOuter, labelCapacityInner, exceptionType } = result.context;
+  const { sessionBytes, sessionByteLimit, sessionSizeKind, largestInputs } = result.context;
+  // A Save over the cap: the file would not load again, and saving again fails the same way.
+  const saveOverCap = result.code === 'SESSION_SIZE_LIMIT' && result.operation === 'session-save'
+    && sessionBytes !== undefined && sessionByteLimit !== undefined;
   // One part per sentence, in the order the summary shows them.
   /** @type {(ErrorTextPart | null | false | '' | undefined)[]} */
   const pieces = [
-    { text: message },
+    saveOverCap
+      ? { text: sessionSizeKind === 'file' ? PHRASES.sessionFileNotSaved : PHRASES.sessionNotSaved, params: { size: (/** @type {number} */ (sessionBytes) / 1048576).toFixed(1), limit: Math.round(/** @type {number} */ (sessionByteLimit) / 1048576) } }
+      : { text: message },
+    saveOverCap && largestInputs !== undefined && { text: PHRASES.largestInputs, params: { inputs: largestInputs } },
+    saveOverCap && { text: PHRASES.sessionSaveRemedy },
     diagramMode !== undefined && { text: diagramMode === 'linear' ? PHRASES.diagramLinear : PHRASES.diagramCircular },
     sessionTable !== undefined && { text: PHRASES.sessionTable, params: { table: { text: SESSION_TABLE_LABELS[sessionTable] } } },
     inputOrdinal !== undefined && { text: ORDINAL_LABELS[result.code] || PHRASES.sequence, params: { n: inputOrdinal } },
@@ -820,7 +846,7 @@ export const normalizeUserFacingError = (value, {
   result.details = [{ label: 'Diagnostics', text: detail.slice(0,
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
   // A table stored in a Session is corrected in the Session file, not in this page.
-  result.actions = sessionTable !== undefined ? ['select-input'] : [...actions];
+  result.actions = sessionTable !== undefined || saveOverCap ? ['select-input'] : [...actions];
   return result;
 };
 

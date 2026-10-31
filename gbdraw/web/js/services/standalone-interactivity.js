@@ -1669,7 +1669,6 @@ const buildStandaloneMatchPayloads = (svg) => {
       group_kind: standaloneAttr(element, 'data-group-kind'),
       block_color_mode: standaloneAttr(element, 'data-collinearity-color-mode'),
       block_score: standaloneAttr(element, 'data-collinearity-block-score'),
-      block_evalue: standaloneAttr(element, 'data-collinearity-block-evalue'),
       anchor_index: standaloneAttr(element, 'data-collinearity-anchor-index'),
       anchor_count: standaloneAttr(element, 'data-collinearity-anchor-count'),
       query_feature_svg_id: standaloneAttr(element, 'data-query-feature-svg-id'),

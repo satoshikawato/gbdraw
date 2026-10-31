@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import math
 from numbers import Integral
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping, TypeAlias, cast
 
-from gbdraw.core.numeric import ascii_float, ascii_int
+from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, ascii_int, parse_length_bp
 from gbdraw.exceptions import ValidationError
 
 LinearTrackLayoutMode: TypeAlias = Literal["above", "middle", "below"]
@@ -21,6 +21,45 @@ def _positive_finite_float(value: Any, *, field_name: str) -> float:
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValidationError(f"{field_name} must be a positive finite number")
     return parsed
+
+
+# A dataclass field's metadata key: the function that validates the leaf's value in place of its annotation, for a
+# leaf that accepts more spellings than it stores. A config override reads it, so one rule serves both.
+LEAF_VALIDATOR = "gbdraw_leaf_validator"
+
+
+LinearWrapLength: TypeAlias = int | Literal["auto", "none"]
+LINEAR_WRAP_LENGTH_PATH = "canvas.linear.wrap_length"
+
+
+def linear_wrap_length_from_config(value: object) -> LinearWrapLength:
+    """The one validator of ``canvas.linear.wrap_length``, for a config and an override alike.
+
+    It accepts a positive integer, ``"auto"``, ``"none"``, ``None`` (read as ``"none"``), and a length in text
+    with an optional unit (``"50kb"``), and returns a positive int, ``"auto"``, or ``"none"``.
+    """
+
+    if value is None:
+        return "none"
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("auto", "none"):
+            return cast(LinearWrapLength, normalized)
+        parsed = parse_length_bp(normalized)
+    else:
+        in_range = isinstance(value, int) and not isinstance(value, bool) and 0 < value <= JS_MAX_SAFE_INTEGER
+        parsed = cast(int, value) if in_range else None
+    if parsed is None:
+        raise ValidationError(
+            f'{LINEAR_WRAP_LENGTH_PATH} must be "none", "auto", or a positive length in bp '
+            f"(an integer, or text with an optional kb or Mb unit); got {value!r}.",
+            diagnostic={"code": "INPUT_INVALID", "configPath": LINEAR_WRAP_LENGTH_PATH},
+        )
+    return parsed
+
+
+# The scale leaves an axis ruler takes from the axis color unless a request sets them.
+LINEAR_AXIS_RULER_COLOR_PATHS = ("objects.scale.stroke_color", "objects.scale.label_color")
 
 
 def linear_axis_ruler_applies(
@@ -170,6 +209,8 @@ class LinearCanvasConfig:
     normalize_length: bool
     default_cds_height: LinearCanvasDefaultCdsHeightConfig
     arrow_length_parameter: LinearCanvasArrowLengthParameterConfig
+    # Asks to wrap; whether anything is cut is known only with the record lengths (``layout.linear_wrap``).
+    wrap_length: LinearWrapLength = field(default="none", metadata={LEAF_VALIDATOR: linear_wrap_length_from_config})
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LinearCanvasConfig":
@@ -234,6 +275,7 @@ class LinearCanvasConfig:
             normalize_length=bool(d["normalize_length"]),
             default_cds_height=LinearCanvasDefaultCdsHeightConfig.from_dict(d["default_cds_height"]),
             arrow_length_parameter=LinearCanvasArrowLengthParameterConfig.from_dict(d["arrow_length_parameter"]),
+            wrap_length=linear_wrap_length_from_config(d.get("wrap_length")),
         )
 
 
@@ -278,5 +320,9 @@ __all__ = [
     "CircularCanvasConfig",
     "LinearCanvasConfig",
     "LinearTrackLayoutMode",
+    "LEAF_VALIDATOR",
+    "LINEAR_WRAP_LENGTH_PATH",
+    "LinearWrapLength",
     "linear_axis_ruler_applies",
+    "linear_wrap_length_from_config",
 ]

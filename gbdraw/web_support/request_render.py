@@ -414,6 +414,18 @@ def _render_canonical_web_request(
         if item.linear_metadata is not None
         for warning in item.linear_metadata.comparison_warnings
     ]
+    metadata["linearWrap"] = [
+        {
+            "resultIndex": result_index,
+            "resultName": results[result_index]["name"],
+            "rowLength": item.linear_metadata.wrap.row_length,
+            "rowCount": item.linear_metadata.wrap.row_count,
+            "requested": item.linear_metadata.wrap.requested,
+            "recordRows": list(item.linear_metadata.wrap.record_rows),
+        }
+        for result_index, item in enumerate(items)
+        if item.linear_metadata is not None and item.linear_metadata.wrap is not None
+    ]
     # Crossing label leaders drawn anyway: the counts, and a token that names
     # the figure whose rows the dialog computes later (OD-F14).
     row_tokens = (

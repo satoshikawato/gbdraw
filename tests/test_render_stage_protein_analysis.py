@@ -69,8 +69,11 @@ def _request(mode: str, directory: Path) -> tuple[LinearDiagramRequest, dict]:
             RecordInput(source=GenBankInputSource(path), record_key=f"record-{index}")
             for index, path in enumerate(paths)
         ),
+        # Collinear group inference on, as the recorded identities were built
+        # before its default became off (OV-2303).
         options=LinearDiagramOptions(
-            losat_search=LosatSearchOptions(program="losatp", losatp_mode=mode)
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode=mode),
+            collinear_infer_orthogroups=True,
         ),
     )
     identities = {

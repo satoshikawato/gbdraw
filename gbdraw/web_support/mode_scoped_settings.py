@@ -99,6 +99,7 @@ _FORM_ROWS = _rows(
     ("show_scale", "both", "copy"),
     ("scale_style", "linear", "own"),
     ("linear_ruler_on_axis", "linear", "own"),
+    ("linear_wrap_length", "linear", "own"),
     ("labels_mode", "circular", "own"),
     ("show_labels_linear", "linear", "own"),
     ("multi_record_canvas", "circular", "own"),

@@ -2271,6 +2271,44 @@ assertLabelStyleRoundTrip(() => buildCanonicalRenderRequestRaw({
   }));
 }
 
+// OV-2291: the request carries the translations of the records it draws. After
+// a File was removed, its translation is left out and the others keep theirs;
+// a File added after the translations were written starts at (0, 0).
+{
+  const translatedState = {
+    ...state,
+    linearRecordTranslations: ref([
+      { recordKey: 'first', x: 12, y: 0 }, { recordKey: 'second', x: 0, y: 0 }, { recordKey: 'third', x: 3, y: 4 }
+    ])
+  };
+  const seq = (uid) => ({
+    uid, gb: genbank, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null, region_reverse: false
+  });
+  const layoutOf = (uids) => {
+    const filesData = { linearSeqs: uids.map(seq), linearComparisons: [] };
+    return buildCanonicalRenderRequestRaw({
+      state: translatedState, filesData,
+      comparisonPlanSnapshot: resolveLinearComparisonPlan({
+        plan: { mode: 'none', defaultSource: 'losat', edges: [] }, sequences: filesData.linearSeqs
+      })
+    }).renderRequest.layout;
+  };
+  assert.deepEqual(layoutOf(['first', 'third']).recordTranslations, [
+    { recordKey: 'first', x: 12, y: 0 }, { recordKey: 'third', x: 3, y: 4 }
+  ]);
+  assert.deepEqual(layoutOf(['first', 'second', 'third', 'fourth']).recordTranslations, [
+    { recordKey: 'first', x: 12, y: 0 }, { recordKey: 'second', x: 0, y: 0 },
+    { recordKey: 'third', x: 3, y: 4 }, { recordKey: 'fourth', x: 0, y: 0 }
+  ]);
+  // The page's translations are not rewritten by the projection.
+  assert.equal(translatedState.linearRecordTranslations.value.length, 3);
+  // The request's validation still refuses a duplicate key and a value that is not a finite number.
+  translatedState.linearRecordTranslations.value = [{ recordKey: 'first', x: 1, y: 0 }, { recordKey: 'first', x: 2, y: 0 }];
+  assert.throws(() => layoutOf(['first']), /recordTranslations contains duplicate record keys/);
+  translatedState.linearRecordTranslations.value = [{ recordKey: 'first', x: null, y: 0 }];
+  assert.throws(() => layoutOf(['first']), /x and y must be finite numbers/);
+}
+
 const oneSourceFilesData = {
   linearSeqs: [{
     uid: 'one-source', gb: genbank, cardinality: 'all', losat_gencode: 1,
@@ -2940,6 +2978,22 @@ assert.equal(
   projectCanonicalSessionRequest(losatPairCanonical).files.linearComparisons[0].source,
   'losat'
 );
+// Outside Collinear the writer keeps the stored merge orientation as read: a
+// 0.14.3 request's "either" is written as "strand" (OV-2301: writers write strand).
+linearFilesData.linearCanonicalComparisons = [{
+  kind: 'generatedProteinComparison', mode: 'collinear', pairs: [],
+  settings: { collinearityParams: { kind: 'lossless', parameters: { mergeOrientation: 'either' } } }
+}];
+assert.equal(
+  // Raw: this request stays out of the characterized corpus below.
+  buildCanonicalRenderRequestRaw({
+    state, filesData: linearFilesData, comparisonPlanSnapshot: comparisonSnapshotForState(state, linearFilesData)
+  }).renderRequest.comparisons.find(
+    (comparison) => comparison.kind === 'generatedProteinComparison'
+  ).settings.collinearityParams.parameters.mergeOrientation,
+  'strand'
+);
+linearFilesData.linearCanonicalComparisons = [];
 const resolvedPlanReference = {
   recordKey: 'first', biologicalFeatureId: 'feature-first',
   sourceFeatureIndex: 1, stableFeatureSvgId: 'stable-first'
@@ -5200,7 +5254,7 @@ const inactiveProteinDefaults = {
   collinearMaxConflicts: 1,
   collinearityUnitMode: 'auto',
   collinearityAnchorMode: 'rbh',
-  collinearityMergeOrientation: 'either',
+  collinearityMergeOrientation: 'strand',
   collinearitySearchScope: 'adjacent',
   collinearityColorMode: 'orientation'
 };
@@ -5558,7 +5612,8 @@ assert.deepEqual(resolvedProteinMarker.pairs, []);
 // other 81 requests are the 83 recorded before, byte for byte.
 assert.equal(characterizedRequests.length, 81);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  '9f0a68dde640b4645bbbef3813fbdce3d59072167910543562c539ca3bbbfea3',
+  // Re-recorded when the default merge orientation became "strand" (OV-2301).
+  '226ee05fe6c482311ca894941631c6f1e22590b494cbc79970024f1ad9e156dd',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 // The Python tests hand this bridge a Session of any version; a 49 is read as the one-drawing view of its shown drawing.

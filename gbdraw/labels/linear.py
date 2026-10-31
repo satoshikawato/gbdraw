@@ -734,6 +734,7 @@ def linear_record_labels(
                 longest_segment_end = end
                 longest_segment_length = segment_length
 
+        projected_segment = None
         if getattr(feature_object, "display_parts", None) is not None:
             projected_segment = display_label_segment(feature_object, genome_length, record_transform=record_transform)
             if projected_segment is None:
@@ -855,6 +856,8 @@ def linear_record_labels(
             "middle_y": label_y,
             "is_embedded": is_embedded,
         }
+        if projected_segment is not None and record_transform is not None and record_transform.wrap_length is not None:
+            label_entry["wrap_row"] = projected_segment.row
         if force_above_feature:
             # A horizontal label moves to the first row off its feature when its row is placed
             # (``place_linear_label_row``, LP-D120); the row's tallest label sets the row pitch.
@@ -1035,6 +1038,62 @@ def linear_label_in_row(label: LinearLabel, side: tuple[float, float], row: int)
 
     origin, pitch = side
     return {**label, "middle_y": linear_row_y(origin, pitch, row), "track_id": f"track_{row}"}
+
+
+def place_wrapped_record_labels(
+    record: LinearRecordLabels,
+    x: float,
+    row_count: int,
+    *,
+    profile: LinearRenderProfile,
+    track_layout: str,
+) -> list[LinearLabel]:
+    """A wrapped record's labels, stacked row by row, so that one row's labels never push another's. Its
+    definition text stands beside its first row, so only that row keeps clear of it."""
+
+    by_row: dict[int, list[LinearLabel]] = {}
+    for label in record.labels:
+        by_row.setdefault(label["wrap_row"], []).append(label)
+    placed: list[LinearLabel] = []
+    for row in range(row_count):
+        labels = by_row.get(row)
+        if labels:
+            placed.extend(
+                place_linear_label_row(
+                    [
+                        (
+                            record._replace(
+                                labels=labels,
+                                max_label_height=max(float(label["height_px"]) for label in labels),
+                                keep_clear=record.keep_clear if row == 0 else (),
+                            ),
+                            x,
+                        )
+                    ],
+                    profile=profile,
+                    track_layout=track_layout,
+                )[0]
+            )
+    return placed
+
+
+def linear_label_on_its_wrap_row(label: LinearLabel, shift_y: float) -> LinearLabel:
+    """A copy of a label placed in its row's frame, moved ``shift_y`` down into the record's first-row frame:
+    from here on the labels of a wrapped record are read and counted as one list that does not overlap by row."""
+
+    moved: LinearLabel = {
+        **label,
+        "middle_y": float(label["middle_y"]) + shift_y,
+        "feature_middle_y": float(label["feature_middle_y"]) + shift_y,
+        "feature_top_y": float(label["feature_top_y"]) + shift_y,
+        "feature_bottom_y": float(label["feature_bottom_y"]) + shift_y,
+    }
+    if "leader_start_y" in label:
+        moved["leader_start_y"] = float(label["leader_start_y"]) + shift_y
+        moved["leader_end_y"] = float(label["leader_end_y"]) + shift_y
+    if "row_origin_y" in label:
+        moved["row_origin_y"] = float(label["row_origin_y"]) + shift_y
+    return moved
 
 
 class FeatureLabelRow(NamedTuple):

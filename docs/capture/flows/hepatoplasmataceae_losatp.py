@@ -44,8 +44,9 @@ RECORD_LENGTH_TEXT = {
     for _, _, _, record_id, length, _ in GUI_HEPATOPLASMATACEAE_FIXTURES
 }
 ADJACENT_PAIRS = set(zip(RECORD_IDS[:-1], RECORD_IDS[1:], strict=True))
-EXPECTED_FEATURE_ELEMENTS = 2_994
-EXPECTED_COLLINEAR_MATCH_ELEMENTS = 500
+# 2,994 features plus 9 `__outline` paths: an open partial end draws fill and outline apart.
+EXPECTED_FEATURE_ELEMENTS = 3_003
+EXPECTED_COLLINEAR_MATCH_ELEMENTS = 492
 ALL_RECORD_GENERATION_TIMEOUT_MS = 1_200_000
 POPUP_MARGIN_PX = 12
 PREVIEW_INSET_PX = 12
@@ -236,24 +237,22 @@ def _configure_all_record_collinear(
     losatp_mode.select_option("collinear")
     expect(losatp_mode).to_have_value("collinear")
 
-    # Since 65f231af (#533), fresh Web Collinear leaves self-comparison
-    # orthogroup inference off and caps raw LOSATP hits at 5. The Gallery
-    # request and the CLI/Python recipes use inference with an unbounded raw
-    # search, so this Gallery reproduction selects those values explicitly.
+    # Fresh Web Collinear leaves within-record inference off and both hit
+    # limits unbounded. The Gallery request uses inference, an
+    # unbounded raw search and 5 hits per protein for groups, so this Gallery
+    # reproduction selects those values explicitly.
     infer_orthogroups = settings.get_by_role(
         "checkbox", name="Build similarity groups with within-record searches", exact=True
     )
     expect(infer_orthogroups).not_to_be_checked()
     infer_orthogroups.check()
     expect(infer_orthogroups).to_be_checked()
-    max_target_seqs = settings.get_by_label("LOSATP Max target seqs", exact=True)
-    expect(max_target_seqs).to_have_value("5")
-    max_target_seqs.fill("")
-    max_target_seqs.press("Tab")
-    expect(max_target_seqs).to_have_value("")
-    expect(
-        settings.get_by_label("Max hits per protein for groups", exact=True)
-    ).to_have_value("5")
+    expect(settings.get_by_label("LOSATP Max target seqs", exact=True)).to_have_value("")
+    member_max_hits = settings.get_by_label("Max hits per protein for groups", exact=True)
+    expect(member_max_hits).to_have_value("")
+    member_max_hits.fill("5")
+    member_max_hits.press("Tab")
+    expect(member_max_hits).to_have_value("5")
 
     settings.get_by_label("Collinear max unit gap", exact=True).fill("0")
     settings.get_by_label(
@@ -316,7 +315,7 @@ def _assert_records(report: dict[str, Any]) -> None:
         )
     if report.get("featureElementCount") != EXPECTED_FEATURE_ELEMENTS:
         raise AssertionError(
-            "Expected 2,994 rendered feature elements, found "
+            f"Expected {EXPECTED_FEATURE_ELEMENTS} rendered feature elements, found "
             f"{report.get('featureElementCount')}"
         )
     texts = set(report.get("texts", []))
@@ -351,8 +350,8 @@ def _assert_collinear(
         raise AssertionError("No LOSATP Collinear blocks were rendered")
     if len(matches) != EXPECTED_COLLINEAR_MATCH_ELEMENTS:
         raise AssertionError(
-            "Expected 500 rendered Collinear match elements, found "
-            f"{len(matches)}"
+            f"Expected {EXPECTED_COLLINEAR_MATCH_ELEMENTS} rendered Collinear match "
+            f"elements, found {len(matches)}"
         )
     endpoints = {(match.get("query"), match.get("subject")) for match in matches}
     if endpoints != ADJACENT_PAIRS:

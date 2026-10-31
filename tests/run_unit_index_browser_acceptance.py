@@ -55,7 +55,7 @@ def main():
         case['parameters'].update(collinearUnitMode='auto', collinearAnchorMode='rbh',
             collinearSearchScope='adjacent', collinearMinAnchors=1, collinearMaxUnitGap=0,
             collinearMaxDiagonalDrift=0, collinearMaxConflictsInMergeGap=1,
-            collinearMaxParalogLinksPerOrthogroup=2, collinearMergeOrientation='either',
+            collinearMaxParalogLinksPerOrthogroup=2, collinearMergeOrientation='strand',
             orthogroupMembershipMode='anchor_core_v1', maxHits=5)
     helper = benchmark.helpers(ROOT)['convert_losatp_blastp_pairs_to_genomic_payload']
     expected = {}

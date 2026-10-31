@@ -798,8 +798,9 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
       blastnTask: 0, gencode: 0, pairwiseHits: 0, groupHits: 1, collinearGap: 0,
       matchStyle: 1, matchHeight: 1, paralogLinks: 1
     }],
+    // Without similarity groups and with RBH anchors the member limit changes nothing (OV-2302).
     ['collinear', {
-      blastnTask: 0, gencode: 0, pairwiseHits: 0, groupHits: 1, collinearGap: 1,
+      blastnTask: 0, gencode: 0, pairwiseHits: 0, groupHits: 0, collinearGap: 1,
       matchStyle: 1, matchHeight: 1, paralogLinks: 0
     }],
     ['pairwise', {
@@ -817,19 +818,22 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
       const scope = page.getByRole('combobox', {
         name: 'Collinear search between'
       });
-      await expect(scope).toHaveValue('adjacent');
-      await expect(scope.locator('option:checked')).toHaveText('Adjacent pairs');
-      // Collinear shows Paralog links per group only while it infers orthogroups.
+      // Collinear shows Search between and Paralog links per group only while
+      // it infers orthogroups (OV-2302).
       const infer = page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches', exact: true });
       const paralogLinks = page.getByRole('spinbutton', {
         name: 'Paralog links per group', exact: true, includeHidden: true
       });
+      await expect(scope).toHaveCount(0);
       await infer.check();
+      await expect(scope).toHaveValue('adjacent');
+      await expect(scope.locator('option:checked')).toHaveText('Adjacent pairs');
       await expect(paralogLinks).toHaveCount(1);
       await expect(page.locator('[data-linear-advanced-comparison]'))
         .toContainText('Advanced collinear search');
       await infer.uncheck();
       await expect(paralogLinks).toHaveCount(0);
+      await expect(scope).toHaveCount(0);
     }
     if (value === 'orthogroup') {
       await expect(page.locator('[data-linear-advanced-comparison]'))
@@ -1073,13 +1077,17 @@ test('comparison controls drive appearance and current Session round trips', { t
 
   await losatpMode.selectOption('collinear');
   await expect(candidate).toBeVisible();
-  await expect(candidate).toHaveValue('5');
-  await expect(memberHits).toHaveValue('5');
+  // Unbounded like the CLI; the group controls show only with groups (OV-2302).
+  await expect(candidate).toHaveValue('');
   const inference = page.getByRole('checkbox', { name: 'Build similarity groups with within-record searches' });
+  const searchBetween = page.getByRole('combobox', { name: 'Collinear search between' });
   await expect(inference).not.toBeChecked();
+  await expect(memberHits).toHaveCount(0);
+  await expect(searchBetween).toHaveCount(0);
   await candidate.fill('23');
-  await memberHits.fill('11');
   await inference.check();
+  await expect(memberHits).toHaveValue('');
+  await memberHits.fill('11');
   await advanced.locator('summary').click();
   await page.getByRole('combobox', { name: 'Collinear search between' }).selectOption('all');
   await page.getByRole('combobox', { name: 'Collinear color mode' })
@@ -1254,9 +1262,9 @@ test('comparison controls drive appearance and current Session round trips', { t
   await expect(candidate).toHaveValue('');
   await expect(memberHits).toHaveValue('');
   await losatpMode.selectOption('collinear');
-  await expect(candidate).toHaveValue('5');
-  await expect(memberHits).toHaveValue('5');
+  await expect(candidate).toHaveValue('');
   await expect(inference).not.toBeChecked();
+  await expect(memberHits).toHaveCount(0);
 });
 
 const configureLinearRecords = (page, records) => page.evaluate((contents) => {

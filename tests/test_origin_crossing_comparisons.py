@@ -96,6 +96,7 @@ def _blocks(strand: int):
         [forward], extraction, records=records,
         params=LosslessCollinearityParameters(min_anchors=3, max_unit_gap=1),
         reverse_hits_by_pair=[reverse],
+        infer_orthogroups=True,
     )
     return records, extraction, result
 

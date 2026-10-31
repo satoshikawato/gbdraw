@@ -3,6 +3,7 @@ import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection
 import { msg } from '../utils/i18n.js';
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 /** @import { InputFileRef } from './history-files.js' */
+/** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
 /** @typedef {(leaf: FieldLeaf) => void} PlanLossCollector Told each stored value the plan does not use as stored. */
 /**
  * @typedef {'none' | 'adjacent' | 'selected'} LinearComparisonMode
@@ -1066,6 +1067,21 @@ export const losatEdgeOfPair = (edges, queryIndex, subjectIndex) => {
     || null;
 };
 
+/**
+ * The Search between scope a LOSATP run uses (Python
+ * `effective_collinear_search_scope`). Search between widens only the
+ * similarity-group evidence: Collinear blocks without inferred groups read the
+ * displayed edges alone, so Collinear with inference off searches the edges
+ * whatever the stored scope holds. The job plan and the reuse check read it here.
+ * @param {string} mode The LOSATP mode.
+ * @param {boolean} inferOrthogroups
+ * @param {CanonicalProteinComparisonSettings['collinearitySearchScope']} searchScope The stored scope.
+ * @returns {CanonicalProteinComparisonSettings['collinearitySearchScope']}
+ */
+export const effectiveCollinearSearchScope = (mode, inferOrthogroups, searchScope) => (
+  mode === 'collinear' && !inferOrthogroups ? 'adjacent' : searchScope
+);
+
 // The record-pair searches one Generate requests. Generate and the Settings
 // job-count estimate both expand them here (N-10). Similarity groups always
 // include within-record evidence; Collinear includes it only when inference is
@@ -1077,9 +1093,9 @@ export const losatEdgeOfPair = (edges, queryIndex, subjectIndex) => {
  *   recordUids?: string[],
  *   program?: string,
  *   blastpMode?: string,
- *   collinearInferOrthogroups?: boolean,
- *   collinearSearchScope?: string
- * }} [options]
+ *   collinearInferOrthogroups: boolean,
+ *   collinearSearchScope?: CanonicalProteinComparisonSettings['collinearitySearchScope']
+ * }} options
  * @returns {readonly LosatJobSpec[]}
  */
 export const buildLosatJobSpecs = ({
@@ -1088,9 +1104,9 @@ export const buildLosatJobSpecs = ({
   recordUids = [],
   program = 'blastn',
   blastpMode = 'pairwise',
-  collinearInferOrthogroups = true,
+  collinearInferOrthogroups,
   collinearSearchScope = 'adjacent'
-} = {}) => {
+}) => {
   const normalizedProgram = String(program || '').trim().toLowerCase();
   const mode = String(blastpMode || '').trim().toLowerCase();
   if (normalizedProgram !== 'blastp' || !['orthogroup', 'collinear'].includes(mode)) {
@@ -1134,10 +1150,10 @@ export const buildLosatJobSpecs = ({
     pushPairs(true);
     return Object.freeze(specs);
   }
-  if (collinearInferOrthogroups !== false) {
+  if (collinearInferOrthogroups) {
     for (let i = 0; i < recordCount; i += 1) push(i, i, Math.min(i, lastOrdinal));
   }
-  if (collinearSearchScope === 'all') {
+  if (effectiveCollinearSearchScope(mode, collinearInferOrthogroups, collinearSearchScope) === 'all') {
     pushPairs(false);
   } else {
     edges.forEach((edge) => {

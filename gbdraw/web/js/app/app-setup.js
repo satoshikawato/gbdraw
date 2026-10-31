@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
@@ -150,7 +151,7 @@ import { toRaw } from '../utils/vue-raw.js';
 import { readHostedBuild } from '../utils/hosted-build.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings, withNewDrawingDefaults } from '../services/reset.js';
-import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES } from '../services/setting-application.js';
+import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES, changedTrackHides } from '../services/setting-application.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
   disposeDiagramGenerationWorker,
@@ -202,6 +203,7 @@ import {
 import { createRightDrawerController } from './right-drawer.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
+import { askingTrackRowSwitch } from './track-slot-edits.js';
 import { createAnnotationEditor } from './annotations.js';
 import { createDrawingLegendRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
@@ -859,8 +861,9 @@ export const createAppSetup = () => {
       adjacentEdgeKeys: adjacentRowPairs(drawing.drawnLinearSeqs.value, effectiveLinearComparisonLayout(drawing), true)
         .map(([queryUid, subjectUid]) => linearComparisonEdgeKey(queryUid, subjectUid)),
       losatProgram: drawing.losatProgram.value,
-      blastpMode: drawing.losat.blastp?.mode,
-      inferOrthogroups: drawing.losat.blastp?.collinearInferOrthogroups === true,
+      blastpMode: drawing.losat.blastp.mode,
+      inferOrthogroups: drawing.losat.blastp.collinearInferOrthogroups === true,
+      anchorMode: drawing.losat.blastp.collinearAnchorMode,
       filters: {
         min_bitscore: drawing.adv.min_bitscore,
         evalue: drawing.adv.evalue,
@@ -2327,6 +2330,14 @@ export const createAppSetup = () => {
   const linearTrackSlotEditor = createLinearTrackSlotEditor({
     state, changeTrackLayout, changeTrackVisibility: retireShownLegendStyles
   });
+  // PD-OI-104 scenario revision 6: a row's own switch asks before it turns off a
+  // drawn row of the shown stack that other rows start at or extend to.
+  /** @template {SwitchedTrackRow} Row @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+  const askingRowSwitch = (setEnabled, slotsKey) => askingTrackRowSwitch({
+    askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability,
+    rows: () => /** @type {readonly Row[]} */ (state.activeDrawing().adv[slotsKey]),
+    mode: slotsKey === 'circular_track_slots' ? 'circular' : 'linear'
+  }, setEnabled);
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: () => getAnnotationRecordCatalog(state.activeDrawing()), retireLegendStylesOfUnnamedCaptions: retireShownLegendStyles, askChoice,
@@ -3657,8 +3668,9 @@ export const createAppSetup = () => {
   // preset), and their Undo and Redo that change live setting rows of the
   // shown drawing ask the automatic rerender to apply them (the router passes
   // the shown drawing's steps only).
-  history.setSettingsStepListener((changes) => {
-    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value);
+  history.setSettingsStepListener((changes, direction) => {
+    requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value,
+      changes ? changedTrackHides(changes) : undefined, direction === 'undo');
   });
   /** @param {{ recordKey: string, biologicalFeatureId: string }} identity */
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
@@ -7654,7 +7666,7 @@ export const createAppSetup = () => {
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
     canDuplicateCircularTrackSlot: circularTrackSlotEditor.canDuplicateCircularTrackSlot,
     removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
-    setCircularTrackSlotEnabled: circularTrackSlotEditor.setCircularTrackSlotEnabled,
+    setCircularTrackSlotEnabled: askingRowSwitch(circularTrackSlotEditor.setCircularTrackSlotEnabled, 'circular_track_slots'),
     circularTrackSlotEffectiveEnabled: circularTrackSlotEditor.circularTrackSlotEffectiveEnabled,
     circularTrackSlotHiddenBySuppress: circularTrackSlotEditor.circularTrackSlotHiddenBySuppress,
     circularTrackSlotSuppressMessage: circularTrackSlotEditor.circularTrackSlotSuppressMessage,
@@ -7711,7 +7723,7 @@ export const createAppSetup = () => {
     duplicateLinearTrackSlot: linearTrackSlotEditor.duplicateLinearTrackSlot,
     canDuplicateLinearTrackSlot: linearTrackSlotEditor.canDuplicateLinearTrackSlot,
     removeLinearTrackSlot: linearTrackSlotEditor.removeLinearTrackSlot,
-    setLinearTrackSlotEnabled: linearTrackSlotEditor.setLinearTrackSlotEnabled,
+    setLinearTrackSlotEnabled: askingRowSwitch(linearTrackSlotEditor.setLinearTrackSlotEnabled, 'linear_track_slots'),
     moveLinearTrackSlot: linearTrackSlotEditor.moveLinearTrackSlot,
     canMoveLinearTrackSlot: linearTrackSlotEditor.canMoveLinearTrackSlot,
     moveLinearTrackSlotAbove: linearTrackSlotEditor.moveLinearTrackSlotAbove,

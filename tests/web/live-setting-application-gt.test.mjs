@@ -25,6 +25,7 @@ const config = await import('../../gbdraw/web/js/services/config.js');
 const request = await import('../../gbdraw/web/js/services/session-request.js');
 const owner = await import('../../gbdraw/web/js/services/setting-application.js');
 const legendRows = await import('../../gbdraw/web/js/services/track-legend-rows.js');
+const { changedTrackHides, trackHidesOn } = await import('../../gbdraw/web/js/services/setting-application.js');
 const { getResourcePayloadOwner, resourceIdOwnedBy, setResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
@@ -120,8 +121,8 @@ const generate = (mode, { keepTrackParts = true, hiddenDepth = true } = {}) => {
   const built = request.buildCanonicalRenderRequest({ state, drawing, filesData, comparisonPlanSnapshot, keepTrackParts });
   return { renderRequest: built.renderRequest, resources: built.resources, webFiles: built.webFiles || {} };
 };
-const project = (committed, mode, requestPaths = GT) => request.projectLiveSettingWrites({
-  committed, drawing: modeDrawing(state, mode), requestPaths, inputs
+const project = (committed, mode, requestPaths = GT, undoneHides = undefined) => request.projectLiveSettingWrites({
+  committed, drawing: modeDrawing(state, mode), requestPaths, inputs, undoneHides
 });
 // The committed Session after an apply, as the commit writes it.
 const applied = (committed, writes) => {
@@ -135,7 +136,7 @@ const applied = (committed, writes) => {
   request.carryKeptTrackParts(committed.renderRequest, next.renderRequest, writes);
   return next;
 };
-const live = (committed, mode, requestPaths = GT) => applied(committed, project(committed, mode, requestPaths));
+const live = (committed, mode, requestPaths = GT, undoneHides = undefined) => applied(committed, project(committed, mode, requestPaths, undoneHides));
 
 // Draft values that apply on Generate and stay pending through every case:
 // a Depth colour and tick interval (G3), the track type, a row width.
@@ -400,6 +401,119 @@ test('N3 (PQ-4 A): in a Circular stack Hide GC off after a live hide waits; the 
   undoAll();
 });
 
+// Undo of a live Hide GC Content or Hide GC Skew applies at once, and turning
+// the hide off by hand still waits: the rerender of that Undo names the hide it
+// changed (`changedTrackHides`), and the same projection gives the row back.
+const undoCases = [['suppress_gc', 'dinucleotide_content', 'config.form.suppress_gc'], ['suppress_skew', 'dinucleotide_skew', 'config.form.suppress_skew']];
+for (const [flag, renderer, path] of undoCases) {
+  test(`Undo of a live ${flag} in a Circular stack gives the committed request back; off by hand still waits`, () => {
+    const drawing = circularStack();
+    const committed = generate('circular');
+    const undone = changedTrackHides([{ path: path.split('.') }, { path: ['config', 'adv', 'legend_font_size'] }]);
+    setSuppress(drawing, flag, true);
+    const hidden = live(committed, 'circular');
+    assert.ok(!hidden.renderRequest.diagramOptions.tracks.circularTrackSlots.some((slot) => slot.renderer === renderer));
+    setSuppress(drawing, flag, false);
+    const byHand = live(hidden, 'circular');
+    assert.ok(!byHand.renderRequest.diagramOptions.tracks.circularTrackSlots.some((slot) => slot.renderer === renderer), 'off by hand waits');
+    const back = live(hidden, 'circular', GT, undone);
+    assert.deepEqual(back.renderRequest.diagramOptions.tracks.circularTrackSlots, committed.renderRequest.diagramOptions.tracks.circularTrackSlots);
+    assert.deepEqual(back.renderRequest.diagramOptions.tracks.circularTrackAxisIndex, committed.renderRequest.diagramOptions.tracks.circularTrackAxisIndex);
+    assert.equal(request.liveSettingNoteApplies(back.renderRequest, K.CSLOTS, drawing, inputs, back.resources), true, 'no note remains');
+    setSuppress(drawing, flag, true);
+    const again = live(back, 'circular');
+    assert.ok(!again.renderRequest.diagramOptions.tracks.circularTrackSlots.some((slot) => slot.renderer === renderer), 'Redo hides again');
+    setSuppress(drawing, flag, false);
+    assert.ok(!live(again, 'circular').renderRequest.diagramOptions.tracks.circularTrackSlots.some((slot) => slot.renderer === renderer), 'off by hand after a Redo still waits');
+    undoAll();
+  });
+}
+// Any Undo of a step that changed the hide and leaves it off gives the row back:
+// the toggle reads as shown and the Result draws it.
+test('Hide, off by hand (waits), Hide by hand again, Undo: the track returns at once', () => {
+  const drawing = circularStack();
+  const committed = generate('circular');
+  const undone = changedTrackHides([{ path: ['config', 'form', 'suppress_gc'] }]);
+  setSuppress(drawing, 'suppress_gc', true);
+  const hidden = live(committed, 'circular');
+  setSuppress(drawing, 'suppress_gc', false);
+  const waits = live(hidden, 'circular');
+  setSuppress(drawing, 'suppress_gc', true);
+  const again = live(waits, 'circular');
+  setSuppress(drawing, 'suppress_gc', false);
+  const back = live(again, 'circular', GT, undone);
+  assert.deepEqual(back.renderRequest.diagramOptions.tracks.circularTrackSlots, committed.renderRequest.diagramOptions.tracks.circularTrackSlots);
+  undoAll();
+});
+test('An Undo of another step, or with the hide still on, returns no track', () => {
+  const drawing = circularStack();
+  const committed = generate('circular');
+  setSuppress(drawing, 'suppress_gc', true);
+  const hidden = live(committed, 'circular');
+  assert.deepEqual([...changedTrackHides([{ path: ['config', 'adv', 'legend_font_size'] }])], []);
+  const stays = live(hidden, 'circular', GT, changedTrackHides([{ path: ['config', 'form', 'suppress_gc'] }]));
+  assert.ok(!stays.renderRequest.diagramOptions.tracks.circularTrackSlots.some((slot) => slot.renderer === 'dinucleotide_content'), 'the hide is still on');
+  setSuppress(drawing, 'suppress_gc', false);
+  const skewOnly = live(hidden, 'circular', GT, changedTrackHides([{ path: ['config', 'form', 'suppress_skew'] }]));
+  assert.ok(!skewOnly.renderRequest.diagramOptions.tracks.circularTrackSlots.some((slot) => slot.renderer === 'dinucleotide_content'), 'only the undone hide returns');
+  // A name applied while the hide stays on releases nothing, and the wait of
+  // both kinds of Undo survives: turning the hide off by hand waits.
+  for (const after of [stays, live(hidden, 'circular', GT, changedTrackHides([{ path: ['config', 'adv', 'legend_font_size'] }]))]) {
+    assert.ok(!live(after, 'circular').renderRequest.diagramOptions.tracks.circularTrackSlots.some((slot) => slot.renderer === 'dinucleotide_content'), 'off by hand waits');
+  }
+  undoAll();
+});
+test('A name applied with its hide still on releases nothing when the same apply changes something else', () => {
+  const drawing = circularStack();
+  const committed = generate('circular');
+  setSuppress(drawing, 'suppress_gc', true);
+  const hidden = live(committed, 'circular');
+  setSuppress(drawing, 'suppress_skew', true);
+  const both = live(hidden, 'circular', GT, changedTrackHides([{ path: ['config', 'form', 'suppress_gc'] }]));
+  setSuppress(drawing, 'suppress_gc', false);
+  assert.ok(!live(both, 'circular').renderRequest.diagramOptions.tracks.circularTrackSlots.some((slot) => slot.renderer === 'dinucleotide_content'), 'off by hand waits');
+  undoAll();
+});
+test('An apply that releases one row and adds another keeps the added one waiting', () => {
+  const drawing = circularStack();
+  const committed = generate('circular');
+  setSuppress(drawing, 'suppress_gc', true);
+  const hidden = live(committed, 'circular');
+  setSuppress(drawing, 'suppress_gc', false);
+  setSuppress(drawing, 'suppress_skew', true);
+  const swapped = live(hidden, 'circular', GT, changedTrackHides([{ path: ['config', 'form', 'suppress_gc'] }]));
+  const renderers = (session) => session.renderRequest.diagramOptions.tracks.circularTrackSlots.map((slot) => slot.renderer);
+  assert.ok(renderers(swapped).includes('dinucleotide_content'), 'the Undo returns the GC Content row');
+  assert.ok(!renderers(swapped).includes('dinucleotide_skew'), 'the hide removes the GC Skew row');
+  setSuppress(drawing, 'suppress_skew', false);
+  assert.ok(!renderers(live(swapped, 'circular')).includes('dinucleotide_skew'), 'off by hand waits for the row it added');
+  undoAll();
+});
+test('The note reads what the Undo names: an applying Undo waits for nothing, an off by hand does', () => {
+  const drawing = circularStack();
+  const committed = generate('circular');
+  setSuppress(drawing, 'suppress_gc', true);
+  const hidden = live(committed, 'circular');
+  setSuppress(drawing, 'suppress_gc', false);
+  const note = (names) => request.liveSettingNoteApplies(hidden.renderRequest, K.CSLOTS, drawing, inputs, hidden.resources, null, names);
+  assert.equal(note(undefined), false, 'off by hand waits');
+  assert.equal(note(changedTrackHides([{ path: ['config', 'form', 'suppress_skew'] }])), false, 'another hide waits');
+  assert.equal(note(changedTrackHides([{ path: ['config', 'form', 'suppress_gc'] }])), true, 'the Undo applies');
+  undoAll();
+});
+test('Undo of a live hide with a pending row value draws the last Generate\'s value (Circular stack)', () => {
+  const drawing = circularStack();
+  const committed = generate('circular');
+  setSuppress(drawing, 'suppress_gc', true);
+  const hidden = live(committed, 'circular');
+  const row = drawing.adv.circular_track_slots.find((slot) => slot.id === 'gc_content');
+  set(row, 'width', '77');
+  setSuppress(drawing, 'suppress_gc', false);
+  const back = live(hidden, 'circular', GT, changedTrackHides([{ path: ['config', 'form', 'suppress_gc'] }]));
+  assert.deepEqual(back.renderRequest.diagramOptions.tracks.circularTrackSlots, committed.renderRequest.diagramOptions.tracks.circularTrackSlots);
+  undoAll();
+});
+
 test('N11/N12: Use custom stack switches from the kept parts; a pending width and an added row stay out', () => {
   const drawing = linearStack();
   set(drawing.adv, 'linear_track_slots_enabled', false);
@@ -567,6 +681,38 @@ test('N7: after a Load a live Depth hide completes the kept parts, and its Undo 
     assert.equal(request.liveSettingNoteApplies(hidden.renderRequest, K.DEPTH, drawing, inputs, hidden.resources), true);
     const undone = withPending(mode, () => live(hidden, mode));
     assertLiveEqualsGenerate(undone.next, mode, undone.revert, `${mode}: Undo of the hide after a Load`);
+    undoAll();
+  }
+});
+
+// A Session a Save wrote names its Depth files in `webFiles.bindings`. The
+// binding check runs on every candidate, so a hide that drops the resources
+// and keeps their bindings is refused.
+test('N7b: after a Load of a Session with Web file bindings a live Depth hide clears the Depth bindings, and its Undo restores them', async () => {
+  const { webFileBindingFaults } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
+  for (const [mode, setup] of [['circular', circularStack], ['linear', linearStack]]) {
+    const drawing = setup({ depthSeries: 1 });
+    const generated = generate(mode);
+    const loaded = structuredClone(generated);
+    Object.keys(loaded.resources).forEach((id) => setResourcePayloadOwner(loaded.resources[id], getResourcePayloadOwner(generated.resources[id])));
+    const ids = Object.keys(loaded.resources);
+    const depthId = ids.find((id) => loaded.resources[id].kind === 'depth-track-file');
+    const otherId = ids.find((id) => loaded.resources[id].kind !== 'depth-track-file');
+    const leaf = (id) => ({ resourceId: id, name: `${id}.tsv`, type: 'text/plain', lastModified: 0 });
+    const bindings = { schema: 2, c_gb: leaf(otherId), c_gff: null, c_fasta: null,
+      c_depth: mode === 'circular' ? [[leaf(depthId)]] : null, linearSeqs: mode === 'linear' ? [{ uid: 'r1', gb: leaf(otherId), depth: [leaf(depthId)] }] : [] };
+    loaded.webFiles = { ...loaded.webFiles, bindings };
+    assert.deepEqual(webFileBindingFaults(loaded.webFiles, loaded.resources), [], `${mode}: the fixture is valid`);
+    set(drawing.form, 'show_depth', false);
+    rowOf(drawing, mode, (row) => row.renderer === 'depth').enabled = false;
+    const hidden = live(loaded, mode);
+    assert.deepEqual(webFileBindingFaults(hidden.webFiles, hidden.resources), [], `${mode}: no binding names a resource the hide dropped`);
+    assert.equal(hidden.webFiles.bindings.c_gb.resourceId, otherId, `${mode}: the other bindings stay`);
+    rowOf(drawing, mode, (row) => row.renderer === 'depth').enabled = true;
+    set(drawing.form, 'show_depth', true);
+    const shown = live(hidden, mode);
+    assert.deepEqual(shown.webFiles.bindings, bindings, `${mode}: the show restores the bindings`);
+    assert.deepEqual(webFileBindingFaults(shown.webFiles, shown.resources), []);
     undoAll();
   }
 });
@@ -1140,4 +1286,164 @@ test('DRAWINGS-B: the note predicate and the Legend hide drawing read the shown 
     state.removeDrawing(second.id, { takeSlot: () => null });
     undoAll();
   }
+});
+
+// PD-OI-104 scenario revision 6 (D-217, D-219): a hide of a drawn track row
+// that other rows start at or extend to turns those rows off with it (the
+// question's choice, `askTrackHide`, over `overlayRowsReaching`). The draft it
+// leaves applies live and equals Generate, in Circular and Linear, for a GC
+// content row and a Depth row (the stack's Depth off).
+const reachRow = (id, anchor, to = null) => ({ id, renderer: 'annotations', enabled: true, side: 'overlay',
+  z: to ? -1 : 1, params: { set_id: 'tint_set', anchor_slot: anchor, layer: to ? 'underlay' : 'foreground', marks: ['highlight'],
+    ...(to ? { to_slot: to } : {}) } });
+const turnOffWithReach = (drawing, mode, rowId) => {
+  const rows = mode === 'circular' ? drawing.adv.circular_track_slots : drawing.adv.linear_track_slots;
+  const reaching = validation.overlayRowsReaching(rows, mode, new Set([rowId]));
+  assert.ok(reaching.length > 0, `${rowId}: a row reaches it`);
+  for (const index of [rows.findIndex((row) => row.id === rowId), ...reaching]) set(rows[index], 'enabled', false);
+  return reaching.map((index) => rows[index].id);
+};
+test('rev 6: a GC content or Depth row turned off with the rows that reach it applies live, equal to Generate', () => {
+  for (const mode of ['circular', 'linear']) {
+    for (const [rowId, reach] of [['gc_content', reachRow('tint', 'features', 'gc_content')], ['depth', reachRow('mark', 'depth')]]) {
+      for (const loaded of [false, true]) {
+        const label = `${mode} ${rowId}${loaded ? ' after a Load' : ''}`;
+        const drawing = mode === 'circular' ? circularStack({ depthSeries: 1, extra: [reach] }) : linearStack({ depthSeries: 1 });
+        if (mode === 'linear') set(drawing.adv, 'linear_track_slots', [...drawing.adv.linear_track_slots, reach]);
+        withTintSet(drawing);
+        const generated = generate(mode);
+        const committed = loaded ? loadOf(generated) : generated;
+        if (loaded) request.recordLoadedStackSwitch(committed, drawing);
+        assert.deepEqual(turnOffWithReach(drawing, mode, rowId), [reach.id], label);
+        const hidden = withPending(mode, () => live(committed, mode));
+        const slotsKey = mode === 'circular' ? 'circularTrackSlots' : 'linearTrackSlots';
+        const ids = hidden.next.renderRequest.diagramOptions.tracks[slotsKey].map((slot) => slot.id);
+        assert.ok(!ids.includes(rowId) && !ids.includes(reach.id), `${label}: ${ids}`);
+        assertLiveEqualsGenerate(hidden.next, mode, hidden.revert, label);
+        undoAll();
+      }
+    }
+  }
+});
+
+// Review 3 R3-1b, D-214 B: Load records the Use custom stack switch of the
+// loaded draft beside a Circular request with slots, whose drawn switch stays
+// unknown (D-212). A switch turned from it after the Load waits whole (with
+// the Depth hide the simple Show Depth brings), as it waits after a Generate
+// without a plan of the other switch.
+test('R3-1b: after a Load of a Circular stack, Use custom stack off with Show Depth off waits whole', () => {
+  const drawing = circularStack({ depthSeries: 1 });
+  const committed = loadOf(generate('circular'));
+  request.recordLoadedStackSwitch(committed, drawing);
+  assert.equal(request.keptTrackPartsOf(committed.renderRequest), null, 'Load keeps no parts: the drawn switch stays unknown');
+  set(drawing.form, 'show_depth', false);
+  set(drawing.adv, 'circular_track_slots_enabled', false);
+  assert.deepEqual(project(committed, 'circular'), [], 'the switch and the hide it brings write nothing');
+  assert.equal(request.liveSettingNoteApplies(committed.renderRequest, K.CSLOTS, drawing, inputs, committed.resources), false);
+  // A row hide of the drawn stack still applies.
+  set(rowOf(drawing, 'circular', (row) => row.renderer === 'dinucleotide_skew'), 'enabled', false);
+  const next = live(committed, 'circular');
+  assert.ok(!drawsKind(next.renderRequest, 'dinucleotide_skew') && drawsKind(next.renderRequest, 'depth'), 'the stack stays, without its skew row');
+  // The switch recorded at Load rides with the request the apply commits.
+  assert.deepEqual(project(next, 'circular'), [], 'the switch still waits after the apply');
+  undoAll();
+  const linear = linearStack({ depthSeries: 1 });
+  const linearLoaded = loadOf(generate('linear'));
+  request.recordLoadedStackSwitch(linearLoaded, linear);
+  assert.equal(request.keptTrackPartsOf(linearLoaded.renderRequest), null);
+  undoAll();
+});
+
+// Review 4 M1: a Session saved while a Use custom stack change was still
+// waiting, with Circular track widths set. Load records the switch as saved,
+// never the drawn one: the draft unchanged since the Load keeps the hides-only
+// outcome (Use custom stack shows Applies on Generate), and the switch turned
+// back to what the Result draws waits whole.
+test('M1 (review 4): after a Load of a Session saved with the switch pending, Use custom stack applies on Generate', () => {
+  for (const [label, drawnOn] of [['R1 drawn with the stack, saved off', true], ['R2 drawn without it, saved on', false]]) {
+    const drawing = drawnOn ? circularStack({ depthSeries: 1 }) : circularPlain();
+    set(drawing.adv, 'gc_content_width_circular', 40);
+    set(drawing.adv, 'circular_track_slots', (drawnOn ? drawing.adv.circular_track_slots
+      : createDefaultCircularTrackSlots({ showDepth: false })).filter((slot) => slot.renderer !== 'ticks'));
+    const committed = loadOf(generate('circular'));
+    set(drawing.adv, 'circular_track_slots_enabled', !drawnOn);
+    request.recordLoadedStackSwitch(committed, drawing);
+    const noteOf = () => request.liveSettingNoteApplies(committed.renderRequest, K.CSLOTS, drawing, inputs, committed.resources);
+    assert.equal(noteOf(), false, `${label}: Applies on Generate`);
+    set(drawing.adv, 'circular_track_slots_enabled', drawnOn);
+    assert.equal(noteOf(), false, `${label}: turned from the loaded switch, it waits whole`);
+    assert.deepEqual(project(committed, 'circular'), [], `${label}: and writes nothing`);
+    undoAll();
+  }
+});
+
+// Review 4 L3: the rows a hide reaches are those Generate's Overlay check
+// (`overlayReferenceIssues`) refuses for the hidden slot; a row it refuses for
+// its own fault (an Extend to slot equal to its anchor) is not one of them.
+test('L3 (review 4): the rows a hide reaches come from Generate\'s Overlay check', () => {
+  const rows = [
+    { id: 'features', renderer: 'features', enabled: true },
+    { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true },
+    reachRow('tint', 'features', 'gc_content'),
+    reachRow('same', 'gc_content', 'gc_content'),
+    { ...reachRow('off', 'features', 'gc_content'), enabled: false }
+  ];
+  assert.deepEqual(validation.overlayRowsReaching(rows, 'circular', new Set(['gc_content'])), [2]);
+  assert.deepEqual(validation.overlayRowsReaching(rows, 'linear', new Set(['features'])), [2]);
+});
+
+// A row that left with the slot it names (`overlayReferenceIssues`) returns
+// with it: Undo of the choice restores the draft, and the live apply gives the
+// committed request back what it held. A row
+// whose own switch stays off stays out, and one the draft draws while the slot
+// it names stays hidden does not refuse the apply that holds it out.
+test('A row that left with its anchor returns when the draft draws both again', () => {
+  for (const [mode, setup, key] of [['circular', circularStack, 'circularTrackSlots'], ['linear', linearStack, 'linearTrackSlots']]) {
+    for (const loaded of [false, true]) {
+      const label = `${mode} ${loaded ? 'after a Load' : 'after a Generate'}`;
+      const drawing = setup({ depthSeries: 1 });
+      withTintSet(drawing);
+      const stack = mode === 'circular' ? 'circular_track_slots' : 'linear_track_slots';
+      const depthRow = rowOf(drawing, mode, (row) => row.renderer === 'depth');
+      set(drawing.adv, stack, [...drawing.adv[stack], reachRow('mark', depthRow.id)]);
+      const generated = generate(mode);
+      const committed = loaded ? loadOf(generated) : generated;
+      const slotsOf = (session) => session.renderRequest.diagramOptions.tracks[key];
+      const ids = (session) => slotsOf(session).map((slot) => slot.id);
+      assert.ok(ids(committed).includes('mark'), `${label}: drawn`);
+      const mark = rowOf(drawing, mode, (row) => row.id === 'mark');
+      // The choice: both rows off, as one step.
+      depthRow.enabled = false;
+      mark.enabled = false;
+      const hidden = live(committed, mode);
+      assert.ok(!ids(hidden).includes('mark') && !ids(hidden).includes(depthRow.id), `${label}: both leave: ${ids(hidden)}`);
+      // Undo: the draft is back.
+      depthRow.enabled = true;
+      mark.enabled = true;
+      const undone = live(hidden, mode);
+      assert.deepEqual(slotsOf(undone), slotsOf(committed), `${label}: Undo gives the rows back`);
+      assert.deepEqual(undone.renderRequest.diagramOptions.tracks, committed.renderRequest.diagramOptions.tracks, `${label}: and the axis`);
+      assert.deepEqual(undone.renderRequest.diagramOptions.depthTracks, committed.renderRequest.diagramOptions.depthTracks, `${label}: Depth`);
+      assert.deepEqual(project(undone, mode), [], `${label}: nothing is left to apply`);
+      // Redo.
+      depthRow.enabled = false;
+      mark.enabled = false;
+      assert.deepEqual(slotsOf(live(undone, mode)), slotsOf(hidden), `${label}: Redo removes them again`);
+      // The anchor back, the row's own switch off: Generate does not draw it.
+      depthRow.enabled = true;
+      assert.deepEqual(ids(live(hidden, mode)), ids(committed).filter((id) => id !== 'mark'), `${label}: its own switch keeps it out`);
+      // The row on, its anchor off: it stays out, and the apply is not refused.
+      depthRow.enabled = false;
+      mark.enabled = true;
+      assert.ok(!ids(live(hidden, mode)).includes('mark'), `${label}: it does not return without its anchor`);
+      undoAll();
+    }
+  }
+});
+
+test('The hide controls that are on name their tracks', () => {
+  assert.deepEqual([...trackHidesOn({ suppress_gc: false, suppress_skew: false })], []);
+  assert.deepEqual([...trackHidesOn({ suppress_gc: true, suppress_skew: false })], ['content']);
+  assert.deepEqual([...trackHidesOn({ suppress_gc: false, suppress_skew: true })], ['skew']);
+  assert.deepEqual([...trackHidesOn({ suppress_gc: true, suppress_skew: true })].sort(), ['content', 'skew']);
 });

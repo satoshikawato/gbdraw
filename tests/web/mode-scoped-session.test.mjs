@@ -1014,6 +1014,25 @@ test('Save writes each Session 50 drawing\'s own CLI options, found by drawing I
   }
 });
 
+// A wrap length is one per Linear drawing (Session 50). The Web has no control
+// for it: it lists a length held as a config override under the drawing that
+// holds it, the unopened one's too, and Save keeps it there.
+test('a Session 50 keeps each Linear drawing\'s own wrap length override through Load and Save', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  session.drawings.find((entry) => entry.id === 'linear-2').config.unmanagedConfigOverrides = { 'canvas.linear.wrap_length': 30000 };
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  assert.deepEqual({ ...state.drawingOf('linear-2').unmanagedConfigOverrides }, { 'canvas.linear.wrap_length': 30000 });
+  assert.deepEqual({ ...state.drawingOf('linear').unmanagedConfigOverrides }, {});
+  const result = await exportSession('wrap-length', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const overridesOf = (id) => saved.drawings.find((entry) => entry.id === id).config.unmanagedConfigOverrides ?? {};
+  assert.deepEqual(overridesOf('linear-2'), { 'canvas.linear.wrap_length': 30000 });
+  assert.deepEqual(overridesOf('linear'), {});
+});
+
 test('Save checks each Session 50 drawing it writes with Save\'s checks, not Load\'s: an input type of no type is refused', async () => {
   const session = v49Session('drawings-linear-pair-losat');
   resetDrawings();

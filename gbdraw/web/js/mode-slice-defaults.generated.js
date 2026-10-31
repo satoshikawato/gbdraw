@@ -14,6 +14,7 @@
  * @typedef {{
  *   readonly registryRevision: number,
  *   readonly normalize: readonly UnarrangedFieldRule[],
+ *   readonly earlierDefaults: readonly (ModeSliceDefault & { readonly reason: string })[],
  *   readonly defaults: Readonly<Record<'circular' | 'linear', readonly ModeSliceDefault[]>>
  * }} ModeSliceDefaults
  */
@@ -33,6 +34,7 @@ const deepFreeze = (value) => {
 export const MODE_SLICE_DEFAULTS = deepFreeze({
   "registryRevision": 5,
   "normalize": [{"domain":"config","path":"linearRecordLayout","field":"rows","emptyWhenUnarranged":{"entryKeys":["row","uid"],"positionKey":"row"},"reason":"The Web fills the layout with one entry per sequence row, keyed by a uid it makes at run time."}],
+  "earlierDefaults": [{"domain":"config.losat","path":"blastp","reason":"gbdraw 0.14.3 and earlier saved these Collinear defaults (merge either, hit limits 5).","value":{"mode":"orthogroup","hitLimitsByMode":{"pairwise":{"candidateLimit":null,"orthogroupMemberMaxHits":null},"orthogroup":{"candidateLimit":null,"orthogroupMemberMaxHits":null},"collinear":{"candidateLimit":5,"orthogroupMemberMaxHits":5}},"maxHits":5,"candidateLimit":null,"orthogroupMembershipMode":"anchor_core_v1","orthogroupMemberMaxHits":null,"collinearInferOrthogroups":false,"collinearMinAnchors":1,"collinearMaxUnitGap":0,"collinearMaxDiagonalDrift":0,"collinearMaxConflictsInMergeGap":1,"collinearMaxParalogLinksPerOrthogroup":2,"collinearColorMode":"orientation","collinearUnitMode":"auto","collinearAnchorMode":"rbh","collinearMergeOrientation":"either","collinearSearchScope":"adjacent"}}],
   "defaults": {
     "circular": [
       {"domain":"config.form","path":"prefix","value":""},
@@ -170,6 +172,7 @@ export const MODE_SLICE_DEFAULTS = deepFreeze({
       {"domain":"config.form","path":"show_scale","value":true},
       {"domain":"config.form","path":"scale_style","value":"bar"},
       {"domain":"config.form","path":"linear_ruler_on_axis","value":false},
+      {"domain":"config.form","path":"linear_wrap_length"},
       {"domain":"config.form","path":"show_labels_linear","value":"none"},
       {"domain":"config.form","path":"separate_strands","value":true},
       {"domain":"config.form","path":"align_center","value":false},
@@ -252,7 +255,7 @@ export const MODE_SLICE_DEFAULTS = deepFreeze({
       {"domain":"config.adv","path":"alignment_length","value":0},
       {"domain":"config.losat","path":"outfmt","value":"6"},
       {"domain":"config.losat","path":"blastn","value":{"task":"megablast"}},
-      {"domain":"config.losat","path":"blastp","value":{"mode":"orthogroup","hitLimitsByMode":{"pairwise":{"candidateLimit":null,"orthogroupMemberMaxHits":null},"orthogroup":{"candidateLimit":null,"orthogroupMemberMaxHits":null},"collinear":{"candidateLimit":5,"orthogroupMemberMaxHits":5}},"maxHits":5,"candidateLimit":null,"orthogroupMembershipMode":"anchor_core_v1","orthogroupMemberMaxHits":null,"collinearInferOrthogroups":false,"collinearMinAnchors":1,"collinearMaxUnitGap":0,"collinearMaxDiagonalDrift":0,"collinearMaxConflictsInMergeGap":1,"collinearMaxParalogLinksPerOrthogroup":2,"collinearColorMode":"orientation","collinearUnitMode":"auto","collinearAnchorMode":"rbh","collinearMergeOrientation":"either","collinearSearchScope":"adjacent"}},
+      {"domain":"config.losat","path":"blastp","value":{"mode":"orthogroup","hitLimitsByMode":{"pairwise":{"candidateLimit":null,"orthogroupMemberMaxHits":null},"orthogroup":{"candidateLimit":null,"orthogroupMemberMaxHits":null},"collinear":{"candidateLimit":null,"orthogroupMemberMaxHits":null}},"maxHits":5,"candidateLimit":null,"orthogroupMembershipMode":"anchor_core_v1","orthogroupMemberMaxHits":null,"collinearInferOrthogroups":false,"collinearMinAnchors":1,"collinearMaxUnitGap":0,"collinearMaxDiagonalDrift":0,"collinearMaxConflictsInMergeGap":1,"collinearMaxParalogLinksPerOrthogroup":2,"collinearColorMode":"orientation","collinearUnitMode":"auto","collinearAnchorMode":"rbh","collinearMergeOrientation":"strand","collinearSearchScope":"adjacent"}},
       {"domain":"config","path":"colors","value":{"CDS":"#54bcf8","rRNA":"#71ee7d","tRNA":"#e8b441","tmRNA":"#ded44e","ncRNA":"#c4fac3","repeat_region":"#d3d3d3","misc_feature":"#d3d3d3","default":"#d3d3d3","skew_high":"#6dded3","skew_low":"#ad72e3","gc_content":"#a1a1a1","pairwise_match":"#d3d3d3","pairwise_match_min":"#FFE7E7","pairwise_match_max":"#FF7272","collinear_block_plus_min":"#f0f1f5","collinear_block_plus":"#8b9cc1","collinear_block_minus_min":"#FFE7E7","collinear_block_minus":"#E15759"}},
       {"domain":"config","path":"palette","value":"default"},
       {"domain":"config","path":"rules","value":[]},

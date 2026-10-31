@@ -1,0 +1,4 @@
+set_id	id	mark	start	end	label	fill
+regions	late	band	22000	31000	Late region	#88aaff
+regions	early	band	25000	27000	Early	#ffaa88
+regions	third	bracket	3000	14500	Across origin side	

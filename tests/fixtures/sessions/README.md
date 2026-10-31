@@ -324,7 +324,7 @@ added white boxes to its turned labels, whose text is unchanged, once more for f
 owner placed the Linear records, when `above_feature` labels kept their row gap, and when the
 gradient Legend block took its title's width and the plot title its painted width, and both
 replays when the composition metadata recorded the Linear scale bounds and when the
-Legend took the drawn text width and once more for the OV-165 labels, ticks, definition and canvas change (`.v47.provenance.json`), and `tests/test_api_session.py`
+Legend took the drawn text width and once more for the OV-165 labels, ticks, definition and canvas change, and the BGC replay when partial feature ends were drawn open (`.v47.provenance.json`), and `tests/test_api_session.py`
 upgrades and re-saves the BGC Session.
 
 `BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz` and

@@ -12,21 +12,24 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Session 50 stores a project and its list of drawings
+## Unreleased: Session 50 stores a project and its list of drawings, and the Linear wrap length
 
 Session version 50 replaces the two diagram-mode slices of Sessions 46 to 49
 with a list of drawings, so a project can hold several drawings of one mode
-(PD-OI-090). The project keeps `format`, `version`, `createdAt`, `title`,
-`resources`, `ui` (the project's view keys and `ui.activeDrawingId`), and
-`legacyArtifacts`. Each `drawings[]` entry holds one drawing: `id`, `name`,
-`mode`, `renderRequest` (or null, with no `results`), `results`, `editorState`,
-`features`, `config`, `ui`, `webFiles.bindings` (only the slots of its mode, and
-the five file cards), `orthogroupState`, `runMetadata`, `cliInvocation`,
-`cliOptions`, `losatCache`, `losatDerivedCache`, and `proteinIdentityManifest`.
-Array order is tab order. The top-level `modes`, `otherModeResult`,
-`renderRequest`, `results`, `config`, `features`, `files`, and `ui.mode` are
-retired. There is no settings-only form: a drawing without a request has no
-Results.
+(PD-OI-090), and it stores the Linear wrap length in each Linear drawing. Session
+49 reached `main` with 0.14.3 as the mode-scoped Session below, so both changes
+take 50 (CLAUDE.md, "Persisted-format compatibility").
+
+The project keeps `format`, `version`, `createdAt`, `title`, `resources`, `ui`
+(the project's view keys and `ui.activeDrawingId`), and `legacyArtifacts`. Each
+`drawings[]` entry holds one drawing: `id`, `name`, `mode`, `renderRequest` (or
+null, with no `results`), `results`, `editorState`, `features`, `config`, `ui`,
+`webFiles.bindings` (only the slots of its mode, and the five file cards),
+`orthogroupState`, `runMetadata`, `cliInvocation`, `cliOptions`, `losatCache`,
+`losatDerivedCache`, and `proteinIdentityManifest`. Array order is tab order. The
+top-level `modes`, `otherModeResult`, `renderRequest`, `results`, `config`,
+`features`, `files`, and `ui.mode` are retired. There is no settings-only form: a
+drawing without a request has no Results.
 
 The owner of the layout is `gbdraw/session_drawings.py`
 (`read_session_drawings`, `write_session_drawings`); the admission band is
@@ -36,9 +39,32 @@ part into its own drawing (`circular`, `linear`), the rules of
 `services/session-drawings-upgrade.js` in the Web app and of the 46-49 step of
 `upgrade_session_document` in Python; Sessions 27 to 44 are converted by Python
 once at Load. A Session 49's Circular `adv.show_definition` becomes the
-Circular drawing's `config.adv.show_definition`. Session 49 reached `main` with
-0.14.3 as the mode-scoped Session above, so the list takes 50 (CLAUDE.md,
-"Persisted-format compatibility"). Fixtures: `tests/fixtures/sessions/`.
+Circular drawing's `config.adv.show_definition`. Fixtures:
+`tests/fixtures/sessions/`.
+
+The wrap length is the config leaf `canvas.linear.wrap_length` (`"none"`,
+`"auto"`, or a positive length in bp) and a Linear drawing's
+`config.form.linear_wrap_length`, an `own` row of the mode-scoped registry
+(`gbdraw/web_support/mode_scoped_settings.py`) whose replay flag is
+`--wrap_length`. Wrapped rows are drawn now: Python, the CLI and a loaded Session
+draw a record longer than the length over several rows, so a writer can produce
+a wrapped file.
+
+Measured against `main`'s build (Session 49): it refuses any file of version 50
+with "Session version 50 is newer than this gbdraw supports (49)", so it reads
+neither the list nor a wrap length. The same build, given version 49, refuses
+`modes.linear.config.form.linear_wrap_length` (the slice's `form` is closed,
+`_validate_mode_slice_fields`) and a `configOverrides` entry
+`canvas.linear.wrap_length` (`UNKNOWN_CONFIG_PATH`), and it accepts a CLI Session
+with a stored `canvas.linear.wrap_length` leaf and silently draws the record on
+one row (`from_dict` ignores the unknown leaf). That is why a stored length needs
+the version.
+
+A Session up to 49 has no length and loads with no wrap (`"none"`); no reader
+converts it. A Web **Save Session** keeps a length loaded from a Session in the
+request's `configOverrides`; the Web has no control for it yet. The Gallery and
+test-input Sessions were refreshed to 50 (`tools/refresh_gallery_sessions.py`).
+Positive fixtures of Session 49: `tests/fixtures/sessions/*.v49.*`.
 
 ## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
 
@@ -62,6 +88,73 @@ and Web binding schema 2, in `gbdraw/session_io.py` and
 current one, so Session 48 keeps its settings-only form. The Gallery and
 test-input Sessions were refreshed to 49 (`tools/refresh_gallery_sessions.py`).
 Positive fixtures of Session 48: `tests/fixtures/sessions/*.v48.*`.
+
+## Unreleased: Collinear defaults and value sets
+
+No Session or request version changes; the generated request description and
+`LEGACY_REQUEST_TABLES` change (`tools/generate_web_contracts.py`).
+
+- Merge orientation: the typed values are `strand` and `order`
+  (`CollinearityMergeOrientation` in `gbdraw/analysis/collinearity.py`). The
+  stored value set of `collinearityParams.parameters.mergeOrientation` keeps
+  `either`, which released writers stored (it was the Web and Python default)
+  and which drew as `strand`; its spellings read it as `strand` with no row
+  (`LosslessCollinearityParameters.__post_init__`,
+  `readCollinearMergeOrientation` in `services/losat-normalization.js`).
+  Writers write `strand`, in every LOSATP mode: outside Collinear the Web
+  writer writes the stored value as read. The schema 1-2 `standard` reading
+  uses `strand`.
+- Anchor mode: `one_to_one` and its spellings (`top1`, `mutual_best`, ...) are
+  removed from `collinearityAnchorMode`. A stored one reads as `rbh`
+  (`RETIRED_COLLINEARITY_ANCHOR_MODES`): Python logs a warning
+  (`_read_retired_anchor_mode`, applied before the schema 9 description check
+  by `_as_decoded_settings`); the Web request repair takes the description
+  default `rbh` with a `setting-replaced` row, and the Web draft reader
+  (`readCollinearAnchorMode`) does the same. That description default is the
+  repair target, not a writer's empty form: the Web repair replaces every
+  unreadable stored anchor mode (an unknown word as well) by `rbh` with the
+  row, where Python refuses an unknown word.
+- Inference: the CLI and Python default of `collinear_infer_orthogroups`
+  becomes off, as on the Web. A request without `collinearInferOrthogroups`
+  still reads it as on (`_ABSENT_PROTEIN_SETTINGS`). A Session below 31
+  replays its recorded command line with `--collinear_infer_orthogroups on`
+  added when it names Collinear without the flag
+  (`_keep_recorded_collinear_inference`), and a pre-canonical Web Session
+  replays with the flag written from its draft.
+- Search between: Collinear with inference off searches the displayed pairs
+  whatever `collinearitySearchScope` holds (`effective_collinear_search_scope`
+  in `gbdraw/comparisons/losat_jobs.py`, `effectiveCollinearSearchScope` in
+  `services/linear-comparisons.js`), because without similarity groups the
+  blocks read only those pairs. The stored value is unchanged and written as
+  before. Raw cache keys hold no scope, so the raw entries of those pairs are
+  reused; the derived identity keeps the stored scope and names the searches
+  of the run, so a derived entry of an inference-off **All records** run is
+  recomputed once from the raw cache. The drawn result is the same.
+- Hit limits: the Web Collinear defaults of `hitLimitsByMode.collinear` become
+  unbounded (`null`), as on the CLI; a draft that stores a limit keeps it.
+- Derived entries: the default merge orientation text is now `strand`, so a
+  derived entry written with `either` in its identity is recomputed once from
+  the raw cache (token v4, not yet on `main`).
+
+Positive fixtures: the Gallery Sessions that store `either`
+(`gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json` and
+others); `tests/test_collinear_option_surfaces.py` and
+`tests/web/stored-request-read.test.mjs` set `one_to_one` in that Session.
+Release tag `v0.14.3` offered `one_to_one` (`gbdraw/web/index.html`,
+`<option value="one_to_one">`; the request literal listed it), so a released
+writer could store it; no stored file holds it.
+
+## Unreleased: derived LOSATP token v4 for chained Collinear blocks
+
+No Session, request, or derived envelope version changes. Collinear blocks are
+now the longest compatible chains of anchors (OV-2294..2296), and the block
+rows no longer carry `collinearity_block_evalue` (OV-2300), so a derived entry
+written before would replay the old blocks. The derived LOSATP identity token
+becomes `derived-option-conformance-v4`: earlier derived entries are cache
+misses and are recomputed once from the raw cache; no search runs again and no
+reader reads them. Saved `collinearity-result` resources keep their shape:
+`CollinearityBlock` still has `blockEvalue`, `label`, and the `syntenic` kind,
+which the block caller no longer writes.
 
 ## Unreleased: LOSAT runtime records without `cli` or `bundled`
 

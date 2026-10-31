@@ -13,6 +13,7 @@ from dataclasses import MISSING, Field, asdict, dataclass, fields, is_dataclass,
 from functools import lru_cache
 from io import StringIO
 import json
+import logging
 import math
 from pathlib import Path
 import re
@@ -41,8 +42,11 @@ from gbdraw.analysis.collinearity import (
     COLLINEARITY_ANCHOR_MODES,
     COLLINEARITY_COLOR_MODE_SPELLINGS,
     COLLINEARITY_COLOR_MODES,
+    COLLINEARITY_MERGE_ORIENTATION_SPELLINGS,
+    COLLINEARITY_MERGE_ORIENTATIONS,
     COLLINEARITY_SEARCH_SCOPE_SPELLINGS,
     COLLINEARITY_SEARCH_SCOPES,
+    RETIRED_COLLINEARITY_ANCHOR_MODES,
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityResult,
@@ -248,6 +252,7 @@ _TOP_LEVEL_FIELDS = frozenset(
 _TOP_LEVEL_FIELDS_V5 = _TOP_LEVEL_FIELDS | {"grouping"}
 _DEFAULT_CIRCULAR_OPTIONS = CircularDiagramOptions()
 _DEFAULT_LINEAR_OPTIONS = LinearDiagramOptions()
+logger = logging.getLogger(__name__)
 _SHARED_OPTION_WRONG_MODE_DEFAULTS: dict[str, dict[str, object]] = {
     "circular": {
         "depth_track_heights": None,
@@ -300,7 +305,8 @@ _LEGACY_STANDARD_COLLINEARITY_FIELDS = {
     "max_diagonal_drift": "max_diagonal_drift",
     "max_conflicts_in_merge_gap": "max_conflicts",
 }
-_LEGACY_STANDARD_MERGE_ORIENTATION: Literal["either"] = "either"
+# The standard payload's merge rule, which the lossless "strand" keeps (OV-2301).
+_LEGACY_STANDARD_MERGE_ORIENTATION: Literal["strand"] = "strand"
 # The paralog link setting a ``kind=standard`` payload's own value replaces
 # in collinear mode, when the setting holds this default.
 _LEGACY_PARALOG_LINKS_DEFAULT = 2
@@ -489,6 +495,10 @@ _SETTING_NAMES_SCHEMA = 9
 # Schemas 1-7 also stored the retired alignment target in the settings.
 _LEGACY_ALIGNMENT_SETTING = "alignOrthogroupFeature"
 _OPTIONAL_PROTEIN_SETTINGS = frozenset({"collinearInferOrthogroups"})
+# What a request without an optional setting held. A request written before
+# `collinearInferOrthogroups` existed always inferred Collinear groups; the
+# reading stays when the option's default changes.
+_ABSENT_PROTEIN_SETTINGS: dict[str, object] = {"collinearInferOrthogroups": True}
 _WIRE_LOSATP_MODES = cast(
     "dict[str, LosatpMode | Literal['none']]",
     {wire: typed for typed, wire in LOSATP_MODE_WIRE.items()},
@@ -1755,6 +1765,8 @@ def _decode_linear_layout(
     return result, None
 
 
+# The planner consumes it: a Session stores what the figure drew with.
+_PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults"})
 _PLACEMENT_INPUT_FIELDS = frozenset({
     "feature_placements", "feature_placement_table", "feature_placement_table_file",
     "feature_overrides", "feature_override_table", "feature_override_table_file",
@@ -1802,7 +1814,12 @@ def _encode_diagram_options(
     ], "featureOverrides": [row.to_mapping() for row in options.feature_overrides]}
     for item in fields(options):
         name = item.name
-        if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
+        if (
+            name in _COMPARISON_FIELDS
+            or name in _ALL_DEPTH_INPUT_FIELDS
+            or name in _PLACEMENT_INPUT_FIELDS
+            or name in _PLANNER_ONLY_FIELDS
+        ):
             continue
         if name == "conservation_search_results":
             assert isinstance(options, CircularDiagramOptions)
@@ -1899,6 +1916,7 @@ def _decode_diagram_options(
         and item.name not in _PLACEMENT_INPUT_FIELDS
         and item.name not in _RING_SEARCH_FIELDS
         and item.name not in _TABLE_PATH_FIELDS
+        and item.name not in _PLANNER_ONLY_FIELDS
     }
     unknown = set(payload) - set(known)
     if unknown:
@@ -4261,6 +4279,8 @@ def _decode_pipeline(
                 source_schema=schema,
             )
             continue
+        if name == "collinearity_anchor_mode":
+            raw = _read_retired_anchor_mode(raw, path=f"{path}.settings.{key}")
         names = _setting_names(name)
         if names and schema >= _SETTING_NAMES_SCHEMA and raw not in names:
             raise CanonicalRequestDecodingError(
@@ -4299,8 +4319,24 @@ def _decode_pipeline(
 def _absent_protein_setting(key: str) -> object:
     """The value of an optional protein setting (``_OPTIONAL_PROTEIN_SETTINGS``) that a request does not hold."""
 
-    name = next(name for wire, _owner, name in _PROTEIN_SETTINGS_WIRE if wire == key)
-    return getattr(_DEFAULT_LINEAR_OPTIONS, name)
+    return _ABSENT_PROTEIN_SETTINGS[key]
+
+
+def _read_retired_anchor_mode(raw: object, *, path: str) -> object:
+    """A retired anchor mode, read as its replacement with a warning."""
+
+    if not isinstance(raw, str):
+        return raw
+    replacement = RETIRED_COLLINEARITY_ANCHOR_MODES.get(raw.strip().lower().replace("-", "_"))
+    if replacement is None:
+        return raw
+    logger.warning(
+        "%s: the Collinear anchor mode %r was removed; it is read as %r.",
+        path,
+        raw,
+        replacement,
+    )
+    return replacement
 
 
 def _setting_names(name: str) -> tuple[str, ...]:
@@ -5345,7 +5381,34 @@ def _undescribed_parts(payload: object) -> list[str]:
     if type(schema) is not int or schema != CANONICAL_REQUEST_SCHEMA:
         return []
     description = _current_request_description()
-    return violations(payload, ref(description["root"]), description["types"], "renderRequest")
+    return violations(
+        _as_decoded_settings(payload), ref(description["root"]), description["types"], "renderRequest"
+    )
+
+
+def _as_decoded_settings(payload: object) -> object:
+    """``payload`` with the retired anchor mode "one_to_one", which a released
+    schema 9 writer stored, read as "rbh" (``_read_retired_anchor_mode``); the
+    Web repair of the request reads it as the description's default, with a
+    row."""
+
+    if not isinstance(payload, MappingABC):
+        return payload
+    comparisons = payload.get("comparisons")
+    if not isinstance(comparisons, list):
+        return payload
+    read: list[object] = []
+    for item in comparisons:
+        settings = item.get("settings") if isinstance(item, MappingABC) else None
+        if not isinstance(settings, MappingABC):
+            read.append(item)
+            continue
+        settings = dict(settings)
+        mode = settings.get("collinearityAnchorMode")
+        if isinstance(mode, str) and mode in RETIRED_COLLINEARITY_ANCHOR_MODES:
+            settings["collinearityAnchorMode"] = RETIRED_COLLINEARITY_ANCHOR_MODES[mode]
+        read.append({**item, "settings": settings})
+    return {**payload, "comparisons": read}
 
 
 def describe_legacy_request_tables() -> dict[str, Any]:
@@ -5622,7 +5685,7 @@ def describe_canonical_request() -> dict[str, Any]:
     # stores every depth input as depthTracks).
     unwritten = (
         _COMPARISON_FIELDS | _PLACEMENT_INPUT_FIELDS | _RING_SEARCH_FIELDS | _DEPTH_COMPATIBILITY_FIELDS
-        | _TABLE_PATH_FIELDS
+        | _TABLE_PATH_FIELDS | _PLANNER_ONLY_FIELDS
     )
 
     def option(name: str, hint: object, mode: Literal["circular", "linear"]) -> Shape:
@@ -5713,7 +5776,16 @@ def describe_canonical_request() -> dict[str, Any]:
     # _encode_comparisons; _PROTEIN_SETTINGS_WIRE names each setting's typed owner.
     wire[LosslessCollinearityParameters] = named("CollinearityParameters", obj({
         "kind": literal("lossless"),
-        "parameters": data(LosslessCollinearityParameters),
+        "parameters": data(LosslessCollinearityParameters, replace={
+            # Released schema 9 writers stored "either" (the Web default),
+            # which every reader reads as "strand" (OV-2301); writers write
+            # only the typed names.
+            "merge_orientation": literal(
+                *COLLINEARITY_MERGE_ORIENTATIONS,
+                *COLLINEARITY_MERGE_ORIENTATION_SPELLINGS["aliases"],
+                spellings=COLLINEARITY_MERGE_ORIENTATION_SPELLINGS,
+            ),
+        }),
     }))
     setting_hints = {
         "options": _class_type_hints(LinearDiagramOptions),
@@ -5759,7 +5831,11 @@ def describe_canonical_request() -> dict[str, Any]:
                     for key, owner, name in _PROTEIN_SETTINGS_WIRE
                 },
                 optional=sorted(_OPTIONAL_PROTEIN_SETTINGS),
-                defaults={key: _absent_protein_setting(key) for key in _OPTIONAL_PROTEIN_SETTINGS},
+                # A stored retired anchor mode reads as its replacement.
+                defaults={
+                    **{key: _absent_protein_setting(key) for key in _OPTIONAL_PROTEIN_SETTINGS},
+                    "collinearityAnchorMode": RETIRED_COLLINEARITY_ANCHOR_MODES["one_to_one"],
+                },
             )),
         },
     })

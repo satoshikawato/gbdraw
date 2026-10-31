@@ -357,7 +357,8 @@ def _validate_migrated_tutorial(
             for element in root.iter()
             if element.attrib.get("data-match-kind") == "collinear"
         ]
-        if len(matches) != 500:
+        # 492 blocks since chaining joins runs split by a second anchor (OV-2294..2296).
+        if len(matches) != 492:
             raise RecipeContractError("T-PY-07 changed its Collinear match set.")
 
 

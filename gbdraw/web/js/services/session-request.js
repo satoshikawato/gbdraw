@@ -26,6 +26,7 @@ import {
   withImportedBlacklistWords,
   importedDefaultColors
 } from './file-imports.js';
+/** @import { UndoneTrackHide } from './setting-application.js' */
 /** @import { FileImports } from './file-imports.js' */
 import {
   buildBulkLabelProjection,
@@ -93,6 +94,7 @@ import {
 } from './linear-sources.js';
 import {
   linearRecordLayoutHasSharedRow,
+  recordTranslationsFor,
   resolveEffectiveLinearRecordRows
 } from './linear-record-layout.js';
 import { resolveLinearLabelVisibility } from './linear-label-visibility.js';
@@ -177,6 +179,7 @@ import {
 import {
   readCollinearAnchorMode,
   readCollinearColorMode,
+  readCollinearMergeOrientation,
   readCollinearSearchScope,
   readCollinearUnitMode,
   readOrthogroupMembershipMode
@@ -200,7 +203,8 @@ import {
   createCombinedSessionResourceFileView,
   createSessionResourceFileView,
   validateWebFileBindings,
-  webBindingInputSlot
+  webBindingInputSlot,
+  webFileBindingsWithoutDepth
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
@@ -1812,7 +1816,7 @@ export const liveSettingInputsOf = (drawing, fileOf) => ({
  * @typedef {{ readonly setId: string, readonly itemId: string } | { readonly slotId: string }} LiveSettingItem
  */
 /**
- * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources }} LiveSettingContext
+ * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources, undoneHides?: ReadonlySet<UndoneTrackHide> }} LiveSettingContext
  * @typedef {(drawing: RequestDrawing, request: CanonicalRenderRequest, context: LiveSettingContext) => LiveSettingWrite[]} LiveSettingProjector
  */
 /** @param {string} path @param {unknown} value @returns {LiveSettingWrite[]} */
@@ -1968,7 +1972,8 @@ const committedTrackParts = (request, plan, resources, webFiles) => {
     depth: Array.isArray(depthTracks) ? {
       depthTracks,
       resources: Object.fromEntries(ids.map((id) => [id, /** @type {RawSessionResourceDescriptor} */ ((resources || {})[id])])),
-      originalNames: Object.fromEntries(ids.filter((id) => names[id]).map((id) => [id, names[id]]))
+      originalNames: Object.fromEntries(ids.filter((id) => names[id]).map((id) => [id, names[id]])),
+      ...(webFiles?.bindings ? { bindings: /** @type {WebFileBindings} */ (webFiles.bindings) } : {})
     } : null,
     waiting: new Set()
   };
@@ -2093,9 +2098,13 @@ const trackPlanProjection = (request, drawing, context) => {
   // committed ones (the plan places the draft's sets, Generate-only values):
   // it waits whole, with every hide or show it brings, and the rest applies
   // as the drawn switch would draw it (D-214 (f)).
-  const switchWaits = drawnStack !== null && drawnStack !== draftStack
-    && (!otherPlan || !sameAnnotationSetIds(drawing.annotationSets, request));
-  const stackOn = switchWaits ? Boolean(drawnStack) : draftStack;
+  // While the drawn switch is unknown, a switch changed from the one Load
+  // recorded (`loadedStackSwitches`) waits whole too, judged as loaded (D-214 B).
+  const loadedStack = drawnStack === null ? loadedStackSwitches.get(toRaw(request)) ?? null : null;
+  const switchWaits = drawnStack !== null
+    ? drawnStack !== draftStack && (!otherPlan || !sameAnnotationSetIds(drawing.annotationSets, request))
+    : loadedStack !== null && loadedStack !== draftStack;
+  const stackOn = switchWaits ? Boolean(drawnStack ?? loadedStack) : draftStack;
   const judged = { form: drawing.form, adv: switchWaits ? { ...drawing.adv, [stackKey]: stackOn } : drawing.adv };
   const other = drawnStack !== null && drawnStack !== stackOn;
   const hidesOnly = drawnStack === null && !kept;
@@ -2106,6 +2115,11 @@ const trackPlanProjection = (request, drawing, context) => {
   /** @param {'content' | 'skew' | 'depth'} kind @param {string | null} slotId @param {string | null} slotNt */
   const hidden = (kind, slotId, slotNt) => drawnTrackHidden({ slotId, kind, nt: slotNt }, request, judged);
   const waiting = new Set(kept?.waiting || []);
+  const draftRows = /** @type {readonly unknown[]} */ (stackOn && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
+  /** @param {string} id The draft row that draws this slot, by id; -1 when none does. */
+  const drawnDraftRow = (id) => draftRows.findIndex((row) => trackSlotRowEnabled(row) && String(/** @type {{ id?: unknown }} */ (row).id) === id);
+  /** @type {Set<OverlayCheckRow>} */
+  const returning = new Set();
   /** @type {TrackSlotEntry[] | null} */
   let slots = null;
   /** @type {number | null} */
@@ -2118,11 +2132,18 @@ const trackPlanProjection = (request, drawing, context) => {
       const kind = trackKindOf(kept_.renderer);
       const inCommitted = committedIds.has(kept_.id) && !baseIsOther;
       const committedSlot = inCommitted ? (committedSlots || []).find((slot) => slot.id === kept_.id) : undefined;
-      // A features, ticks or spacer row stays as the committed stack has it; a
-      // stack the committed request does not draw (Use custom stack turned on
-      // again, or the other kept plan) returns whole from the kept parts.
+      // A features, ticks, spacer or Overlay row stays as the committed stack
+      // has it; a stack the committed request does not draw (Use custom stack
+      // turned on again, or the other kept plan) returns whole from the kept
+      // parts. A row a live apply took out with the slot it names (the check
+      // below) returns from them when the draft draws it again (an Undo of
+      // that choice), unless the slot it names stays out.
       if (!kind) {
         if (inCommitted || baseIsOther || !committedSlots) present.push(committedSlot ?? kept_);
+        else if (kept && !hidesOnly && (!stackOn || drawnDraftRow(kept_.id) >= 0)) {
+          present.push(kept_);
+          returning.add(kept_.read);
+        }
         continue;
       }
       const slotNt = kind === 'depth' ? null : normalizeNt(kept_.nt, nt);
@@ -2131,6 +2152,7 @@ const trackPlanProjection = (request, drawing, context) => {
           { renderer: kept_.renderer, params: { nt: slotNt } }, drawing.form, nt)) waiting.add(kept_.id);
         continue;
       }
+      if (kind !== 'depth' && context.undoneHides?.has(kind)) waiting.delete(kept_.id);
       if (committedSlot) present.push(committedSlot);
       else if (kept && !hidesOnly && !waiting.has(kept_.id) && (kind !== 'depth' || depthShowable)) present.push(kept_);
       else complete = false;
@@ -2154,10 +2176,8 @@ const trackPlanProjection = (request, drawing, context) => {
     // the draft does not draw that row either (`trackSlotRowEnabled`), and
     // one the draft draws refuses the apply with the issue Generate gives
     // that draft row.
-    const draftRows = /** @type {readonly unknown[]} */ (stackOn && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
-    const issues = overlayReferenceIssues(present.map((slot) => slot.read), request.mode, (read) => draftRows.findIndex((row) => (
-      trackSlotRowEnabled(row) && String(/** @type {{ id?: unknown }} */ (row).id) === String(read.id))));
-    const refused = issues.filter(({ issue }) => issue.rowIndex >= 0).map(({ issue }) => issue);
+    const issues = overlayReferenceIssues(present.map((slot) => slot.read), request.mode, (read) => drawnDraftRow(String(read.id)));
+    const refused = issues.filter(({ issue, row }) => issue.rowIndex >= 0 && !returning.has(row)).map(({ issue }) => issue);
     if (refused.length > 0) return { ...TRACK_PLAN_WAITS, refused: new CustomTrackPlanValidationError(refused) };
     const leaving = new Set(issues.map(({ row }) => row));
     present.splice(0, present.length, ...present.filter((slot) => !leaving.has(slot.read)));
@@ -2182,13 +2202,18 @@ const trackPlanProjection = (request, drawing, context) => {
     Object.entries(kept.depth.resources).forEach(([id, descriptor]) => depthWrites.push([[LIVE_RESOURCES_ROOT, id], descriptor]));
     Object.assign(names, kept.depth.originalNames);
     depthWrites.push([[LIVE_WEB_FILES_ROOT, 'resourceOriginalNames'], names]);
+    if (kept.depth.bindings) depthWrites.push([[LIVE_WEB_FILES_ROOT, 'bindings'], kept.depth.bindings]);
   } else if (!depthPresent && committedDepth) {
     depthWrites.push([['diagramOptions', 'depthTracks'], undefined]);
-    Object.keys(committedResources).filter((id) => committedResources[id]?.kind === 'depth-track-file').forEach((id) => {
+    const dropped = Object.keys(committedResources).filter((id) => committedResources[id]?.kind === 'depth-track-file');
+    dropped.forEach((id) => {
       depthWrites.push([[LIVE_RESOURCES_ROOT, id], undefined]);
       delete names[id];
     });
     depthWrites.push([[LIVE_WEB_FILES_ROOT, 'resourceOriginalNames'], Object.keys(names).length > 0 ? names : undefined]);
+    // A Session's Web input inventory names those files too; the candidate's binding check reads it.
+    const bindings = /** @type {WebFileBindings | undefined} */ (webFiles?.bindings);
+    if (bindings) depthWrites.push([[LIVE_WEB_FILES_ROOT, 'bindings'], webFileBindingsWithoutDepth(bindings, new Set(dropped))]);
   }
   // A request without a flag (a CLI Session without overrides) draws the
   // mode's track default, as Load reads it; a flag equal to it creates nothing.
@@ -2212,7 +2237,7 @@ const trackPlanProjection = (request, drawing, context) => {
     ? [] : [configWrite(key, flags[key])]);
   // 3. The kept parts after this apply: completed after a Load, with the rows a live suppress removed.
   const keptAfter = !kept ? { ...committedTrackParts(request, committedPlan, resources, webFiles), waiting }
-    : waiting.size !== kept.waiting.size ? { ...kept, waiting } : kept;
+    : waiting.size !== kept.waiting.size || [...waiting].some((id) => !kept.waiting.has(id)) ? { ...kept, waiting } : kept;
   /** @type {LiveSettingWrite[]} */
   const slotWrites = [
     [['diagramOptions', 'tracks', requestSlotsKey], slots],
@@ -2436,12 +2461,12 @@ export const liveSettingApplies = (request, requestPath, drawing, inputs, resour
 // once for its five keys.
 /** @type {WeakMap<LiveSettingInputs, LiveSettingContext>} */
 const noteContexts = new WeakMap();
-/** @param {LiveSettingInputs} inputs @param {LiveSettingResources} resources @returns {LiveSettingContext} */
-const noteContextOf = (inputs, resources) => {
+/** @param {LiveSettingInputs} inputs @param {LiveSettingResources} resources @param {ReadonlySet<UndoneTrackHide>} [undoneHides] @returns {LiveSettingContext} */
+const noteContextOf = (inputs, resources, undoneHides) => {
   const memo = noteContexts.get(inputs);
-  if (memo && memo.resources === resources) return memo;
+  if (memo && memo.resources === resources && memo.undoneHides === undoneHides) return memo;
   /** @type {LiveSettingContext} */
-  const context = { inputs, webFiles: {}, resources };
+  const context = { inputs, webFiles: {}, resources, undoneHides };
   noteContexts.set(inputs, context);
   return context;
 };
@@ -2453,14 +2478,15 @@ const noteContextOf = (inputs, resources) => {
  * @param {CanonicalRenderRequest} request @param {string} requestPath @param {RequestDrawing} drawing
  * @param {LiveSettingInputs} inputs @param {LiveSettingResources} [resources]
  * @param {LiveSettingItem | null} [item]
+ * @param {ReadonlySet<UndoneTrackHide>} [undoneHides] The hides an Undo took back, as its rerender projects them.
  */
-export const liveSettingNoteApplies = (request, requestPath, drawing, inputs, resources = null, item = null) => {
+export const liveSettingNoteApplies = (request, requestPath, drawing, inputs, resources = null, item = null, undoneHides = undefined) => {
   const mode = LIVE_SETTING_MODES[requestPath];
   if (Boolean(mode) && request.mode !== mode) return true;
   // A GT key applies while its projection leaves no show pending and is not
   // refused; a Linear row's Height note keeps its own answer (G2).
   if (GT_REQUEST_PATH_SET.has(requestPath) && !item) {
-    return projectTrackPlan(request, drawing, noteContextOf(inputs, resources)).complete;
+    return projectTrackPlan(request, drawing, noteContextOf(inputs, resources, undoneHides)).complete;
   }
   return liveSettingApplies(request, requestPath, drawing, inputs, resources, item);
 };
@@ -2487,16 +2513,17 @@ const valueAtPath = (root, path) => path.reduce(
  * The writes that apply the draft values of `requestPaths` to the committed
  * Session, without those already equal to it. Throws `INPUT_INVALID` for a
  * value Generate would refuse.
- * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs }} input
+ * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs, undoneHides?: ReadonlySet<UndoneTrackHide> }} input
+ *   `undoneHides`: the hides an Undo took back (`state.undoneTrackHides`).
  * @returns {LiveSettingWrite[]}
  */
-export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs }) => {
+export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs, undoneHides }) => {
   const request = requireCurrentCommittedRequest(committed);
   const webFiles = committed.webFiles || {};
   const { resources } = committed;
   // One context per call: the track projection runs once for its five keys.
   /** @type {LiveSettingContext} */
-  const context = { inputs, webFiles, resources };
+  const context = { inputs, webFiles, resources, undoneHides };
   let trackWrites = 0;
   const writes = [...new Set(requestPaths)].flatMap((requestPath) => {
     const project = LIVE_SETTING_PROJECTORS[requestPath];
@@ -3361,7 +3388,7 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
           : nonNegativeInteger(blastp.collinearMaxConflictsInMergeGap, 1),
         mergeOrientation: blastpMode === 'collinear'
           ? requireCurrentCollinearMergeOrientation(blastp.collinearMergeOrientation)
-          : (baselineParameters.mergeOrientation || 'either')
+          : readCollinearMergeOrientation(baselineParameters.mergeOrientation).value
       }
     },
     collinearityUnitMode,
@@ -3820,8 +3847,11 @@ const buildLayout = (state, drawing, records = []) => {
       recordKeys,
       'renderRequest.layout.similarityAlignment'
     );
+    // The page's translations may name records the draft no longer draws, or
+    // lack one the draft added; the request carries one per drawn record.
+    const stored = state.linearRecordTranslations?.value;
     const translations = canonicalRecordTranslations(
-      state.linearRecordTranslations?.value || [],
+      Array.isArray(stored) && stored.length ? recordTranslationsFor(stored, recordKeys) : stored || [],
       recordKeys,
       'renderRequest.layout.recordTranslations',
       { requireCoverage: plan !== null }
@@ -3984,10 +4014,13 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
  */
 /**
  * The Depth parts of a Generate: its series, their resources (the descriptors,
- * by reference, so each keeps its File) and original names.
+ * by reference, so each keeps its File) and original names. `bindings` is the
+ * loaded Web input inventory (`webFiles.bindings`): only a Session's committed
+ * Web file record has one, and a Generate's has none.
  * @typedef {{ readonly depthTracks: readonly Record<string, unknown>[],
  *   readonly resources: Readonly<Record<string, RawSessionResourceDescriptor>>,
- *   readonly originalNames: Readonly<Record<string, string>> }} KeptDepth
+ *   readonly originalNames: Readonly<Record<string, string>>,
+ *   readonly bindings?: WebFileBindings }} KeptDepth
  */
 /**
  * @typedef {object} KeptTrackParts
@@ -3998,7 +4031,8 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
  *   the other one, every GC, skew and Depth row on except a row Hide GC Content or Hide GC Skew hid (PQ-4 A).
  * @property {KeptDepth | null} depth
  * @property {ReadonlySet<string>} waiting The Circular rows a live Hide GC Content or Hide GC Skew removed: they
- *   wait for Generate (PQ-4 A).
+ *   wait for Generate when the hide is turned off by hand (PQ-4 A); an Undo of a step that changed the hide
+ *   takes them out (`state.undoneTrackHides`), so it returns them at once.
  */
 /** @type {WeakMap<object, KeptTrackParts>} */
 const keptTrackParts = new WeakMap();
@@ -4020,7 +4054,28 @@ export const keptTrackPartsOf = (request) => (
 export const carryKeptTrackParts = (from, to, writes) => {
   const written = writes.find(([path]) => path[0] === KEPT_TRACK_PARTS_ROOT);
   const parts = written ? /** @type {KeptTrackParts} */ (written[1]) : keptTrackPartsOf(from);
-  if (parts) keptTrackParts.set(toRaw(to), parts);
+  if (parts) keptTrackParts.set(toRaw(to), parts);  const loaded = loadedStackSwitches.get(toRaw(from));
+  if (loaded !== undefined) loadedStackSwitches.set(toRaw(to), loaded);
+};
+/**
+ * The Use custom stack switch as it stood at Load, beside a loaded Circular
+ * request with slots, which does not show the switch it was drawn with
+ * (`requestDrawnStack`). The drawn switch stays unknown (D-212); a draft
+ * switch changed from this value waits whole (D-214 B). Unsaved, carried with
+ * the request by `carryKeptTrackParts`.
+ * @type {WeakMap<object, boolean>}
+ */
+const loadedStackSwitches = new WeakMap();
+/**
+ * Records, at Load, the Use custom stack switch of the loaded draft beside a
+ * loaded Circular request with slots (`loadedStackSwitches`).
+ * @param {CommittedCanonicalSession} loaded A committed Session Load installs.
+ * @param {RequestDrawing} drawing The loaded draft of the drawing whose Session it is.
+ */
+export const recordLoadedStackSwitch = (loaded, drawing) => {
+  const request = loaded.renderRequest;
+  if (request.mode !== 'circular' || drawing.mode !== 'circular' || keptTrackPartsOf(request) || requestDrawnStack(request) !== null) return;
+  loadedStackSwitches.set(toRaw(request), Boolean(drawing.adv.circular_track_slots_enabled));
 };
 /** @param {unknown} renderer @returns {'content' | 'skew' | 'depth' | null} */
 const trackKindOf = (renderer) => (renderer === 'dinucleotide_content' ? 'content'
@@ -7858,7 +7913,8 @@ export const projectCommittedEditorIntent = ({
   const candidate = {
     ...committed,
     renderRequest: cloneCanonicalJsonValue(request),
-    resources: { ...applyLiveResourceWrites(committed.resources, liveSettingWrites) }
+    resources: { ...applyLiveResourceWrites(committed.resources, liveSettingWrites) },
+    webFiles: applyLiveWebFileWrites(committed.webFiles, liveSettingWrites)
   };
   applyLiveSettingWrites(candidate.renderRequest, liveSettingWrites);
   carryKeptTrackParts(request, candidate.renderRequest, liveSettingWrites);
@@ -7950,6 +8006,10 @@ const normalizePublicationRequestAliases = (request, resources) => {
       comparison.settings.collinearInferOrthogroups = resolvePipelineCollinearInference(
         comparison.settings, comparison.mode
       );
+      // A released writer stored "either", which reads as "strand" (OV-2301).
+      const parameters = comparison.settings.collinearityParams?.parameters;
+      const orientation = readCollinearMergeOrientation(parameters?.mergeOrientation);
+      if (parameters && !orientation.lost) parameters.mergeOrientation = orientation.value;
     }
   }
   if (drawsNoComparison(normalized.comparisons || [])) normalized.comparisons = [];

@@ -25,6 +25,9 @@ await Promise.all([
   // The feature-edits and paint slices the record Delete settings writes through.
   ...['services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'services/json-clone.js', 'utils/reactivity.js', 'contracts/schema.generated.js']
     .map((path) => cp(join(repoRoot, 'gbdraw', 'web', 'js', path), join(tempRoot, 'js', path))),
+  // The Collinear anchor-mode default comes from the generated request description.
+  ...['services/losat-normalization.js', 'contracts/request-shape.generated.js', 'utils/contract-shape.js']
+    .map((path) => cp(join(repoRoot, 'gbdraw', 'web', 'js', path), join(tempRoot, 'js', path))),
   cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.js'),
     join(tempRoot, 'js', 'mode-profiles.js')
@@ -266,10 +269,10 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatpKey: 'collinear',
       settings: [
         'losat-mode', 'losatp-mode', 'collinear-primary',
-        'result-filters', 'comparison-appearance', 'losatp-candidate', 'member-hits', 'losat-runtime'
+        'result-filters', 'comparison-appearance', 'losatp-candidate', 'losat-runtime'
       ],
       absent: [
-        'blastn-task', 'record-genetic-codes', 'blastp-max-hits'
+        'blastn-task', 'record-genetic-codes', 'blastp-max-hits', 'member-hits', 'collinear-search-scope'
       ],
       advanced: 'collinear-details'
     }
@@ -349,6 +352,24 @@ test('Paralog links per group projects for Similarity groups and inferring Colli
   for (const [plan, losatProgram, blastpMode, inferOrthogroups, shown] of cases) {
     const { advanced } = project(plan, { losatProgram, blastpMode, inferOrthogroups }).sectionKeys;
     assert.equal(advanced.includes('paralog-links'), shown, JSON.stringify([plan.mode, losatProgram, blastpMode, inferOrthogroups]));
+  }
+});
+
+test('Collinear shows Search between and the group member limit only where they change the result (OV-2302)', () => {
+  const adjacent = { mode: 'adjacent', defaultSource: 'losat', edges: [] };
+  const cases = [
+    [false, 'rbh', false, false],
+    [false, 'all', false, true],
+    [true, 'rbh', true, true],
+    [true, 'all', true, true]
+  ];
+  for (const [inferOrthogroups, anchorMode, searchScope, memberHits] of cases) {
+    const { settings } = project(adjacent, {
+      losatProgram: 'blastp', blastpMode: 'collinear', inferOrthogroups, anchorMode
+    }).sectionKeys;
+    const label = JSON.stringify([inferOrthogroups, anchorMode]);
+    assert.equal(settings.includes('collinear-search-scope'), searchScope, label);
+    assert.equal(settings.includes('member-hits'), memberHits, label);
   }
 });
 

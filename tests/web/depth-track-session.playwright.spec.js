@@ -3677,6 +3677,86 @@ test('a Circular Session keeps a Depth series without a file and a row whose fil
   expect(await depthState()).toEqual(before);
 });
 
+// OV-2240: Save refuses a Session whose expanded JSON is over the cap that Load
+// enforces: nothing is downloaded, and the notice names the size, the cap, and
+// the largest inputs by the names they were uploaded under. The cap is the test
+// hook's small stand-in for 512 MiB.
+test('Save Session over the Load size cap downloads nothing and names the size and the largest inputs (OV-2240)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
+    .toBeGreaterThan(0);
+  const depthTsv = Array.from({ length: 2000 }, (_, index) => `NC_012920.1\t${index * 8 + 1}\t${10 + (index % 7)}`).join('\n');
+  await page.evaluate(async (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularDepthFile(0, new File([text], 'My depth (run 1).tsv', { type: 'text/tab-separated-values' }));
+    await window.Vue.nextTick();
+  }, depthTsv);
+  const downloads = [];
+  page.on('download', (download) => downloads.push(download.suggestedFilename()));
+  const capBytes = 4096;
+  await page.evaluate((cap) => {
+    window.__GBDRAW_TEST_HOOKS__ = { ...(window.__GBDRAW_TEST_HOOKS__ || {}), maxExpandedSessionBytes: cap };
+  }, capBytes);
+  const saved = await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'ov-2240-over-cap';
+    const result = await window.__GBDRAW_APP__.saveSessionWithTitle();
+    return { status: result.status, error: window.__GBDRAW_APP__.errorLog };
+  });
+  expect(saved.status).toBe('error');
+  expect(saved.error.code).toBe('SESSION_SIZE_LIMIT');
+  expect([saved.error.operation, saved.error.stage]).toEqual(['session-save', 'write']);
+  expect(saved.error.context.sessionByteLimit).toBe(capBytes);
+  expect(saved.error.context.sessionBytes).toBeGreaterThan(capBytes);
+  expect(saved.error.context.largestInputs).toContain('My depth (run 1).tsv');
+  expect(saved.error.summary).toContain('The Session was not saved');
+  expect(saved.error.summary).toContain('My depth (run 1).tsv');
+  expect(saved.error.actions).toEqual(['select-input']);
+  await page.waitForTimeout(500);
+  expect(downloads).toEqual([]);
+});
+
+// OV-2245: Save also refuses a Session whose gzip file is over the cap that Load
+// reads; the notice says "file", and nothing is downloaded. The cap is the test
+// hook's small stand-in for 200 MiB.
+test('Save Session over the Load file cap downloads nothing and names the file size and the largest inputs (OV-2245)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
+    .toBeGreaterThan(0);
+  const depthTsv = Array.from({ length: 2000 }, (_, index) => `NC_012920.1\t${index * 8 + 1}\t${10 + (index % 7)}`).join('\n');
+  await page.evaluate(async (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularDepthFile(0, new File([text], 'My depth (run 1).tsv', { type: 'text/tab-separated-values' }));
+    await window.Vue.nextTick();
+  }, depthTsv);
+  const downloads = [];
+  page.on('download', (download) => downloads.push(download.suggestedFilename()));
+  const capBytes = 1024;
+  await page.evaluate((cap) => {
+    window.__GBDRAW_TEST_HOOKS__ = { ...(window.__GBDRAW_TEST_HOOKS__ || {}), maxSessionFileBytes: cap };
+  }, capBytes);
+  const saved = await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'ov-2245-over-file-cap';
+    const result = await window.__GBDRAW_APP__.saveSessionWithTitle();
+    return { status: result.status, error: window.__GBDRAW_APP__.errorLog };
+  });
+  expect(saved.status).toBe('error');
+  expect(saved.error.code).toBe('SESSION_SIZE_LIMIT');
+  expect([saved.error.operation, saved.error.stage]).toEqual(['session-save', 'write']);
+  expect(saved.error.context.sessionSizeKind).toBe('file');
+  expect(saved.error.context.sessionByteLimit).toBe(capBytes);
+  expect(saved.error.context.sessionBytes).toBeGreaterThan(capBytes);
+  expect(saved.error.context.largestInputs).toContain('My depth (run 1).tsv');
+  expect(saved.error.summary).toContain('its file would be');
+  expect(saved.error.summary).toContain('My depth (run 1).tsv');
+  expect(saved.error.actions).toEqual(['select-input']);
+  await page.waitForTimeout(500);
+  expect(downloads).toEqual([]);
+});
+
 test('a Load takes the loaded Session\'s Depth series, not the previous document\'s (OV-1164)', async ({ page }) => {
   test.setTimeout(180_000);
   await openApp(page);
@@ -3872,4 +3952,66 @@ test('Show Depth after hide reuses the held Depth file and its stages', async ({
       { label: 'Unsourced', color: '#445566', large_tick_interval: null, small_tick_interval: null, tick_font_size: null });
   });
   ok(await generate({ show_depth: false }));
+});
+
+// Owner decision D-220 (2026-10-30): one Depth file added to two series, as two
+// uploads of the same bytes, is stored once by Save Session; Load gives both
+// series the file, and Load + Generate draws the Result Save held.
+test('Save Session stores one Depth file used by two series once (D-220)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
+    .toBeGreaterThan(0);
+  const depthTsv = Array.from({ length: 16569 }, (_, index) => `NC_012920.1\t${index + 1}\t${10 + (index % 37)}`).join('\n');
+  await page.evaluate(async (text) => {
+    const app = window.__GBDRAW_APP__;
+    const upload = () => new File([text], 'reads.depth.tsv', { type: 'text/tab-separated-values', lastModified: 1 });
+    app.setCircularDepthFile(0, upload());
+    app.addCircularDepthTrack();
+    app.setCircularDepthFile(1, upload());
+    app.setTrackShown('show_depth', true);
+    await window.Vue.nextTick();
+  }, depthTsv);
+  await generateAndWaitForResult(page);
+  const shown = () => page.evaluate(() => String(window.__GBDRAW_APP__.currentResults()[0]?.content || ''));
+  const generated = await shown();
+  expect(generated).toContain('<svg');
+
+  const pending = page.waitForEvent('download');
+  const saved = await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'd220-depth-once';
+    return await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  expect(saved.status, JSON.stringify(saved)).toBe('saved');
+  const savedPath = await (await pending).path();
+  const bytes = readFileSync(savedPath);
+  const text = (bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8');
+  const session = JSON.parse(text);
+  test.info().annotations.push({ type: 'session-size', description: `expanded ${text.length}, gzip ${bytes.length}` });
+  const depthIds = Object.keys(session.resources).filter((id) => session.resources[id].kind === 'depth-track-file');
+  expect(depthIds).toHaveLength(1);
+  expect(shownSavedDrawing(session).renderRequest.diagramOptions.depthTracks.flatMap((track) => [track.source].flat().map((s) => s.resourceId ?? s)))
+    .toEqual([depthIds[0], depthIds[0]]);
+  expect(shownSavedDrawing(session).webFiles.bindings.c_depth.flat().map((binding) => binding.resourceId)).toEqual([depthIds[0], depthIds[0]]);
+  // One base64 copy of the TSV: before D-220 the Session held two.
+  const copy = Buffer.byteLength(Buffer.from(depthTsv).toString('base64'));
+  expect(text.length).toBeLessThan(1.5 * copy + 400_000);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await expectSessionLoadedWithoutWarnings(page);
+  await waitForLoadedSessionResult(page);
+  expect(await page.evaluate(async () => {
+    const { readSessionResourceBytes } = await import('/gbdraw/web/js/services/session-resource-backing.js');
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return Promise.all(state.activeDrawing().files.c_depth.flat().map(async (ref) => {
+      const file = state.inputFiles.fileOf(ref);
+      return [file.name, (await readSessionResourceBytes(file)).byteLength];
+    }));
+  })).toEqual([['reads.depth.tsv', Buffer.byteLength(depthTsv)], ['reads.depth.tsv', Buffer.byteLength(depthTsv)]]);
+  expect(await shown()).toBe(generated);
+  await generateAndWaitForResult(page);
+  expect(await shown()).toBe(generated);
 });

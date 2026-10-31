@@ -604,6 +604,42 @@ def test_a_cli_protein_session_stores_the_results_the_web_stores(
     assert _protein_comparison_kinds(replayed) == _STORED_PROTEIN_FORMS[mode]
 
 
+def test_a_cli_similarity_groups_session_on_a_row_layout_replays_its_links(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OV-2297: with two records in one row, the Session stores each drawn
+    adjacent-row pair's table with its endpoints, so its replay draws the same
+    links and searches nothing."""
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from tests.test_render_stage_protein_analysis import _no_search
+
+    rows = ("#1@1", "#2@1", "#3@2")
+    sidecar = _fresh_protein_session(
+        tmp_path, monkeypatch, "similarity_groups",
+        *(argument for position in rows for argument in ("--multi_record_position", position)),
+    )
+
+    def stored_pairs(session: dict[str, Any]) -> list[tuple[int, int]]:
+        return [
+            (comparison["queryRecordIndex"], comparison["subjectRecordIndex"])
+            for comparison in session["renderRequest"]["comparisons"]
+            if comparison["kind"] == "precomputedProteinComparison"
+        ]
+
+    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert stored_pairs(session) == [(0, 2), (1, 2)]
+    fresh = (tmp_path / "fresh.svg").read_text(encoding="utf-8")
+    assert fresh.count("data-query-record-index=") > 0
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
+    resaved = tmp_path / "replayed.gbdraw-session.json"
+    _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "replayed"),
+         "-f", "svg", "--session_output", str(resaved))
+    assert (tmp_path / "replayed.svg").read_text(encoding="utf-8") == fresh
+    assert stored_pairs(json.loads(resaved.read_text(encoding="utf-8"))) == [(0, 2), (1, 2)]
+
+
 def test_a_cli_protein_session_stores_the_tables_a_gallery_rebuild_stores(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

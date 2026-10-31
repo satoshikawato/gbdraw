@@ -129,9 +129,58 @@ from left to right.
 
 `--track_layout above|below` with `--scale_style ruler` allows
 `--ruler_on_axis`; other layout combinations ignore the on-axis ruler with a
-warning. `--hide_scale` hides genome-coordinate ticks and labels but keeps
-the record axes. Quantitative axes remain independent, and `--hide_length`
-separately controls Linear definition text.
+warning. With `--wrap_length` that warning is not given: rows always have the
+on-axis ruler, and with nothing to cut the flag has no effect. `--hide_scale`
+hides genome-coordinate ticks and labels but keeps the record axes. Quantitative
+axes remain independent, and `--hide_length` separately controls Linear
+definition text.
+
+### Wrap one record over several rows
+
+`--wrap_length` draws each record longer than the given length over several
+rows of that length, all at one scale. It takes a length in bp with an optional
+unit (`10000`, `10kb`, `0.5Mb`) or `auto`, which picks 10, 20, or 50 kb so the
+longest record takes at most five rows, and 50 kb when none does.
+
+The option has no effect on a figure with nothing to cut. When no record is
+longer than the row (or, under `auto`, none is longer than 10 kb), the figure and
+the exit status are those of the same command without `--wrap_length`: the same
+layout, the same scale style, and none of the refusals below. A figure draws
+middle with a bar for a short genome and rows for a long one from the same
+command.
+
+The record stays one record. Each row has its own height from its own labels, a
+cut feature keeps one identity and one label, on the row with its longest part,
+and GC content, GC skew, and depth are computed over the whole record. A shorter
+record in the same figure stays one row at the same scale.
+
+When a record is cut, `--track_layout` defaults to `above`, `--scale_style` to
+`ruler`, and the ruler stands on each row's axis. `--track_layout middle`, a
+feature slot with `side=overlay`, `--scale_style bar`, `--normalize_length`,
+comparison inputs, and several records in one `--multi_record_position` row are
+refused, comparison inputs before any search runs. A wrapped figure can pass the
+[PNG and PDF size limits](output-formats-and-export.md#png-and-pdf-size-limits).
+
+<!-- executable:H-CLI-15:start -->
+```bash
+gbdraw linear \
+  --gbk NC_001416.gb \
+  --qualifier_priority cds_gene_qualifier_priority.tsv \
+  --show_labels all \
+  --resolve_overlaps \
+  --gc \
+  --skew \
+  --wrap_length 10kb \
+  --legend right \
+  -o lambda_wrapped \
+  -f svg
+```
+<!-- executable:H-CLI-15:end -->
+
+The command writes `lambda_wrapped.svg` and logs `Wrapping at 10 kb per row: 5
+rows`.
+
+![Lambda phage genome wrapped at 10 kb per row with labels, GC content, GC skew, and a legend](../images/h-cli-15/lambda_wrapped.svg)
 
 ## Tracks, annotations, and presentation
 

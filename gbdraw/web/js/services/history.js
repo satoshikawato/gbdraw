@@ -598,7 +598,7 @@ export const createHistoryManager = ({
   // reserves its number when `openStep` starts (some numbers stay unused).
   let intentStepSerial = 0;
   let totalEntryBytes = 0;
-  /** @type {(changes: readonly HistoryIntentChange[] | null) => void} */
+  /** @type {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo') => void} */
   let settingsStepListener = () => {};
   /** @type {HistoryTransaction | null} */
   let activeTransaction = null;
@@ -1852,7 +1852,7 @@ export const createHistoryManager = ({
       fileIds: collectIntentFileIds(nextIntent)
     });
     // The restored live setting values return to the Result once applied (6.4).
-    settingsStepListener(entry.changes);
+    settingsStepListener(entry.changes, direction);
   };
 
   /** @param {CheckpointRecord} record */
@@ -2054,7 +2054,8 @@ export const createHistoryManager = ({
    * commits, or an Undo or Redo restores (`null`: any setting, a checkpoint
    * restore). The composition root registers it once both History and the
    * automatic rerender exist (R1 (c), PD-OI-102).
-   * @param {(changes: readonly HistoryIntentChange[] | null) => void} listener
+   * @param {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo') => void} listener
+   *   `direction`: set when the call restores an intent step, which way it went.
    */
   const setSettingsStepListener = (listener) => { settingsStepListener = listener; };
 
@@ -2340,7 +2341,7 @@ export const createHistoryRouter = ({
   /** @param {DrawingId} drawingId @param {DrawingHistory} manager */
   const listenToSettingsSteps = (drawingId, manager) => {
     const listener = settingsStepListener;
-    if (listener) manager.setSettingsStepListener((changes) => { if (drawingId === activeDrawingId()) listener(changes); });
+    if (listener) manager.setSettingsStepListener((changes, direction) => { if (drawingId === activeDrawingId()) listener(changes, direction); });
   };
   /** @param {DrawingId} drawingId An empty History for a drawing that has none (R11). */
   const installMember = (drawingId) => {

@@ -2,15 +2,74 @@
 # coding: utf-8
 
 import logging
-from typing import List, Tuple, cast
+from typing import List, NamedTuple, Sequence, Tuple, cast
 
-from Bio.SeqFeature import SimpleLocation
+from Bio.SeqFeature import AfterPosition, BeforePosition, SimpleLocation
 
 from .objects import FeatureDisplayPart, FeatureLocation, FeatureLocationPart, Strand
-from ..layout.record_coordinates import DisplayFragment, RecordDisplayTransform, SourceInterval
+from ..layout.record_coordinates import DisplayFragment, RecordDisplayTransform, SourceInterval, strand_ordered
 
 
 logger = logging.getLogger(__name__)
+
+
+class PartialEnds(NamedTuple):
+    """Whether a location part's biological start (5') and end (3') are partial."""
+
+    start: bool
+    end: bool
+
+
+NOT_PARTIAL = PartialEnds(False, False)
+
+
+def location_partial_ends(exons: Sequence[SimpleLocation]) -> tuple[PartialEnds, ...]:
+    """The partial ends of each part, in biological order, for feature drawing.
+
+    The source writes ``<`` on a low boundary and ``>`` on a high one, whether the
+    file or a gbdraw crop wrote it. Only the outer ends of a location can be
+    partial: the first part's start and the last part's end. A part without a
+    strand is read low to high. CDS translation reads the 5' marker on its own
+    (``gbdraw.core.sequence._cds_five_prime_is_complete``, which also reads the
+    GFF3 ``start_range``/``end_range`` attributes).
+    """
+    last = len(exons) - 1
+    ends = []
+    for index, exon in enumerate(exons):
+        low = isinstance(exon.start, BeforePosition)
+        high = isinstance(exon.end, AfterPosition)
+        start, end = strand_ordered(low, high, exon.strand)
+        ends.append(PartialEnds(start and index == 0, end and index == last))
+    return tuple(ends)
+
+
+def _unrotated_connector_gaps(previous: SourceInterval, part: SourceInterval, strand: object) -> list[tuple[int, int]]:
+    """What an unrotated record connects: the parts ``get_intron_coordinate`` connects, by the first part's strand.
+
+    Wrapping is a display format, so it adds and drops no connection. Parts in the other order have none.
+    """
+
+    if strand == 1:
+        return [(previous.end, part.start)] if previous.end < part.start else []
+    if strand == -1:
+        return [(part.end, previous.start)] if part.end < previous.start else []
+    return []
+
+
+def _rotated_connector_gaps(
+    previous: SourceInterval, part: SourceInterval, previous_strand: object, strand: object, length: int
+) -> list[tuple[int, int]]:
+    """What a rotated record connects: also over the origin, for parts of one strand."""
+
+    if previous_strand == strand == 1:
+        if previous.end < part.start:
+            return [(previous.end, part.start)]
+        return [(previous.end, length), (0, part.start)] if previous.start >= part.end else []
+    if previous_strand == strand == -1:
+        if part.end < previous.start:
+            return [(part.end, previous.start)]
+        return [(0, previous.start), (part.end, length)] if part.start >= previous.end else []
+    return []
 
 
 def project_feature_parts(
@@ -24,16 +83,18 @@ def project_feature_parts(
     The +1 traversal for an undirected block orders geometry only. It does not
     assert biological strand or terminals, and never changes the source feature.
     """
-    if transform.start_coordinate is None:
+    if not transform.projects:
         raise ValueError("Unset feature geometry must use the existing local path")
     parts = [SourceInterval(
         int(exon.start), int(exon.end),
         exon.strand if exon.strand in (-1, 1) else 1,
         index,
-        biological_start=exon.strand in (-1, 1),
-        biological_end=exon.strand in (-1, 1),
-    ) for index, exon in enumerate(exons)]
-    # With start_coordinate set (checked above) project_local_parts returns DisplayFragments.
+        biological_start=exon.strand in (-1, 1) and not partial.start,
+        biological_end=exon.strand in (-1, 1) and not partial.end,
+        partial_start=partial.start,
+        partial_end=partial.end,
+    ) for index, (exon, partial) in enumerate(zip(exons, location_partial_ends(exons), strict=True))]
+    # A projecting transform (checked above) makes project_local_parts return DisplayFragments.
     by_part: dict[int, list[DisplayFragment]] = {}
     for fragment in cast("tuple[DisplayFragment, ...]", transform.project_local_parts(parts)):
         by_part.setdefault(fragment.part_index, []).append(fragment)
@@ -44,17 +105,10 @@ def project_feature_parts(
             continue
         if previous_index is not None and not is_trans_spliced:
             previous = parts[previous_index]
-            gaps = []
-            if exons[previous_index].strand == exons[index].strand == 1:
-                if previous.end < part.start:
-                    gaps = [(previous.end, part.start)]
-                elif previous.start >= part.end:
-                    gaps = [(previous.end, transform.length), (0, part.start)]
-            elif exons[previous_index].strand == exons[index].strand == -1:
-                if part.end < previous.start:
-                    gaps = [(part.end, previous.start)]
-                elif part.start >= previous.end:
-                    gaps = [(0, previous.start), (part.end, transform.length)]
+            if transform.start_coordinate is None:
+                gaps = _unrotated_connector_gaps(previous, part, exons[previous_index].strand)
+            else:
+                gaps = _rotated_connector_gaps(previous, part, exons[previous_index].strand, exons[index].strand, transform.length)
             for start, end in gaps:
                 if start == end:
                     continue
@@ -71,10 +125,16 @@ def project_feature_parts(
 
 
 def get_exon_coordinate(
-    exon_line: SimpleLocation, previous_exon_count: int, last_or_not: bool
+    exon_line: SimpleLocation,
+    previous_exon_count: int,
+    last_or_not: bool,
+    partial: PartialEnds = NOT_PARTIAL,
 ) -> Tuple[int, FeatureLocationPart]:
     """
     Calculates the coordinate of an exon.
+
+    A partial 3' end is not a known biological end, so the block is not the
+    arrowhead block; a partial end opens the block's edge on that side.
 
     Returns:
         (exon_count, exon_coordinate)
@@ -89,7 +149,11 @@ def get_exon_coordinate(
     exon_end = int(exon_line.end)
     if exon_end < 1:
         exon_end = 1
-    exon_coordinate = FeatureLocationPart("block", exon_id, exon_strand, exon_start, exon_end, last_or_not)
+    open_start, open_end = strand_ordered(partial.start, partial.end, exon_line.strand)
+    exon_coordinate = FeatureLocationPart(
+        "block", exon_id, exon_strand, exon_start, exon_end, last_or_not and not partial.end,
+        open_start, open_end,
+    )
     return exon_count, exon_coordinate
 
 
@@ -184,15 +248,16 @@ def get_exon_and_intron_coordinates(
 
     if num_exons == 0:
         return []
+    partial_ends = location_partial_ends(exons)
 
     if num_exons == 1:
-        exon_count, exon_coord = get_exon_coordinate(exons[0], exon_count, True)
+        exon_count, exon_coord = get_exon_coordinate(exons[0], exon_count, True, partial_ends[0])
         coordinates_list.append(exon_coord)
 
     elif num_exons > 1 and not is_trans_spliced:
         for i, exon in enumerate(exons):
             is_last_exon = i == num_exons - 1
-            exon_count, exon_coord = get_exon_coordinate(exon, i, is_last_exon)
+            exon_count, exon_coord = get_exon_coordinate(exon, i, is_last_exon, partial_ends[i])
 
             if i > 0:
                 previous_exon_coord = coordinates_list[-1]
@@ -206,7 +271,7 @@ def get_exon_and_intron_coordinates(
     elif num_exons > 1 and is_trans_spliced:
         for i, exon in enumerate(exons):
             is_last = i == num_exons - 1
-            exon_count, exon_coord = get_exon_coordinate(exon, i, is_last)
+            exon_count, exon_coord = get_exon_coordinate(exon, i, is_last, partial_ends[i])
             coordinates_list.append(exon_coord)
 
     return coordinates_list
@@ -237,11 +302,13 @@ def get_strand(strand_value: int) -> Strand:
 
 
 __all__ = [
+    "PartialEnds",
     "get_coordinate",
     "get_exon_and_intron_coordinates",
     "get_exon_coordinate",
     "get_intron_coordinate",
     "get_strand",
+    "location_partial_ends",
 ]
 
 

@@ -230,6 +230,7 @@ gbdraw linear \
   --losat_threads 1 \
   --identity 30 \
   --collinear_search_scope adjacent \
+  --collinear_infer_orthogroups on \
   --collinear_min_anchors 2 \
   --collinear_max_unit_gap 1 \
   --collinear_max_diagonal_drift 1 \

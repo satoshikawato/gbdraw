@@ -498,6 +498,7 @@ def test_linear_cli_gc_percent_options_forward_to_api(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)

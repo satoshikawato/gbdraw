@@ -135,6 +135,7 @@ def _capture_cli_options(monkeypatch, tmp_path, argv):
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -272,7 +273,8 @@ def test_cli_defaults_keep_current_losatp_behavior(monkeypatch, tmp_path):
     assert search.losatp_max_target_seqs is None
     assert search.losatp_member_max_hits is None
     assert search.runtime.losat_executable is None
-    assert options.collinear_infer_orthogroups is True
+    # One set of defaults on every surface: no Collinear group inference (OV-2303).
+    assert options.collinear_infer_orthogroups is False
     assert _capture_cli_options(monkeypatch, tmp_path, []).losat_search is None
 
 
@@ -410,6 +412,16 @@ def _protein_marker(payload: dict) -> dict:
     return markers[0]
 
 
+def _as_written(marker):
+    """The marker as the writer writes it back: the merge orientation "either"
+    is the old spelling of "strand" (OV-2301)."""
+
+    parameters = (marker["settings"].get("collinearityParams") or {}).get("parameters") or {}
+    if parameters.get("mergeOrientation") == "either":
+        parameters["mergeOrientation"] = "strand"
+    return marker
+
+
 def _round_trip(session_path: Path, tmp_path: Path):
     from gbdraw.session import load_session_document, materialize_session, session_to_request
     from gbdraw.session_request_codec import encode_canonical_request
@@ -435,7 +447,7 @@ def test_schema_7_protein_marker_round_trips_wire_names(fixture, tmp_path):
 
     assert session["renderRequest"]["schema"] == 7
     assert request.options.losat_search is None
-    before = copy.deepcopy(_protein_marker(session["renderRequest"]))
+    before = _as_written(copy.deepcopy(_protein_marker(session["renderRequest"])))
     # Schemas 1-7 also stored the retired alignment target; schema 8 does not.
     assert before["settings"].pop("alignOrthogroupFeature") is None
     assert _protein_marker(payload) == before
@@ -460,5 +472,5 @@ def test_protein_marker_settings_round_trip_through_typed_options(
     assert search.program == "losatp"
     assert search.losatp_mode == mode
     assert search.runtime.threads == threads
-    before = copy.deepcopy(_protein_marker(session["renderRequest"]))
+    before = _as_written(copy.deepcopy(_protein_marker(session["renderRequest"])))
     assert _protein_marker(payload) == before

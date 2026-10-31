@@ -12,6 +12,24 @@
 /** @typedef {{ uid?: unknown } | null | undefined} LayoutSequence A record slot; the layout reads only its uid. */
 /** @typedef {{ records: { sequence?: LayoutSequence | null }[] }} LinearSourceGroup One File's records, as the Record Layout groups them. */
 /** @typedef {Partial<Omit<LinearRecordRow, 'uid' | 'row'>> & { uid?: unknown, row?: unknown }} LayoutEntry A saved layout row. */
+/** @typedef {{ recordKey?: unknown, x?: unknown, y?: unknown } | null | undefined} StoredRecordTranslation A translation as the page holds it, before the request validates it. */
+
+/**
+ * The stored translations of a set of records, in the records' order: each
+ * record's stored entries as they are, or one at (0, 0) for a record that has
+ * none. An entry of a record outside the set is left out, so a request carries
+ * the translations of the records it draws after a File was removed, replaced,
+ * or added, or a record turned off (OV-2291); the alignment owner takes the
+ * base of a plan the same way. Nothing is converted: the request's validation
+ * still refuses a duplicate key or a value that is not a finite number.
+ * @param {readonly StoredRecordTranslation[]} stored
+ * @param {readonly string[]} recordKeys
+ * @returns {StoredRecordTranslation[]}
+ */
+export const recordTranslationsFor = (stored, recordKeys) => recordKeys.flatMap((recordKey) => {
+  const entries = stored.filter((entry) => String(entry?.recordKey) === recordKey);
+  return entries.length ? entries : [{ recordKey, x: 0, y: 0 }];
+});
 
 /**
  * A row field that the Web fills from run-time identities, and that a reader

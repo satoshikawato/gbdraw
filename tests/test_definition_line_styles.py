@@ -216,6 +216,7 @@ def test_linear_cli_definition_line_style_forwards(monkeypatch: pytest.MonkeyPat
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)

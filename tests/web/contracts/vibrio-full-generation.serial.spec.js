@@ -915,7 +915,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     memberMaxHits: null,
     unitMode: 'auto',
     anchorMode: 'rbh',
-    mergeOrientation: 'either',
+    mergeOrientation: 'strand',
     searchScope: 'adjacent'
   });
   expect(preFirstGenerateActiveIntent.linearRecordLayout).toMatchObject({
@@ -1020,7 +1020,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
       memberMaxHits: 0,
       unitMode: 'auto',
       anchorMode: 'rbh',
-      mergeOrientation: 'either',
+      mergeOrientation: 'strand',
       searchScope: 'adjacent'
     }]
   });
@@ -1030,7 +1030,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     memberMaxHits: 6,
     unitMode: 'auto',
     anchorMode: 'rbh',
-    mergeOrientation: 'either',
+    mergeOrientation: 'strand',
     searchScope: 'adjacent'
   }]);
   expect(capturedCanonicalRequests[0].layout.multiRecordPositions ?? null).toBeNull();
@@ -1096,10 +1096,11 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   const firstComparisonSummary = svgComparisonSummary(firstGeneratedSvg);
   const secondComparisonSummary = svgComparisonSummary(secondGeneratedSvg);
   // File-level LOSATP databases (PD-OI-018 revision 4) on chromosomes that
-  // start at their replication initiator yield 116 blocks.
+  // start at their replication initiator draw 115 matches: 113 longest-chain
+  // Collinear blocks, one of them in three pieces.
   expect(loadedComparisonSummary).toEqual({
     comparisonGroups: 4,
-    pairwiseMatches: 116,
+    pairwiseMatches: 115,
     comparisonLegends: 2
   });
   expect(firstComparisonSummary).toEqual(loadedComparisonSummary);

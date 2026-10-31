@@ -13,6 +13,11 @@ Python, once, at Load (the Web app waits for it); a Session 45 is not read.
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
 | Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–50 |
 
+Session 50 stores the Linear **wrap length** (see
+[Linear wrap length](#linear-wrap-length)) in a Linear drawing: the form key
+`config.form.linear_wrap_length` and the config leaf `canvas.linear.wrap_length`.
+gbdraw 0.14.4 and earlier refuse a Session 50 file.
+
 Session 49 stores the Circular **Show Definition** setting in each Circular
 slice (`modes.circular.config.adv.show_definition`). Off is saved in the
 render request as `objects.definition.circular.show: false`; on is left out
@@ -59,8 +64,16 @@ palette as `herbal_garden`. Until the next **Generate**, a Session it saves
 keeps the former name in the palette of the shown Result and in its render
 request; both still draw `herbal_garden`.
 
+Two Collinear values were removed after gbdraw 0.14.4. The merge orientation
+`either`, which drew as `strand`, reads as `strand` with no change to the
+drawing. The anchor mode `one_to_one` (or a spelling of it such as `top1`)
+reads as `rbh`: the web app lists the change when it loads the Session, and
+the CLI and the Python API log a warning. Collinear similarity-group inference
+is now off by default on every surface; a Session, request or recorded command
+that names Collinear without it replays with inference on, as it was drawn.
+
 Session 44 documents written with canonical request schema 7 or 8 remain
-readable. Current saves promote that request to schema 9 and the Session to 49,
+readable. Current saves promote that request to schema 9 and the Session to 50,
 and keep the saved preview until the next Generate. Schema 9 adds
 `diagramOptions.featureOverrides` (see
 [Feature identity overrides](typed-requests.md#feature-identity-overrides));
@@ -109,13 +122,13 @@ own slice, `modes.circular` and `modes.linear`:
 - `editorState`: the Legend edits and per-feature strokes.
 - `ui`: the mode's layout, padding, and pending palette.
 
-A field missing from a slice reads as that mode's default. A Session 46 to 49 rejects
+A field missing from a slice reads as that mode's default. A Session 46 to 50 rejects
 the top-level `config` and `features` of Sessions 44 and older. Reading an
 older Session splits its draft into the two slices. A Session that the CLI or
 the Python API writes from a request has no slices; a CLI re-save keeps or
 splits the source's draft.
 
-Sessions 47 to 49 store each slice's Legend color and stroke edits
+Sessions 47 to 50 store each slice's Legend color and stroke edits
 (`editorState.legend.colorOverrides` and `strokeOverrides`) under the row's
 key: the caption gbdraw drew for the row (`originalCaption`), not the name the
 row shows. Two rows can then show one name and keep their own edits. Session 46
@@ -130,7 +143,7 @@ kept; a stroke takes its color and its width each from the last edit that sets
 it. The Web app, a CLI re-save, and `upgrade_session_document()` read
 these edits the same way.
 
-Sessions 46 to 49 store the per-feature edits (Feature visibility, Label visibility,
+Sessions 46 to 50 store the per-feature edits (Feature visibility, Label visibility,
 and label text) in each slice's `features.featureOverrides`. There is one row
 per original-source feature, named by `recordKey` and `biologicalFeatureId`, as
 in the request. Feature placement drafts and the `featureIdentity` targets of
@@ -225,7 +238,7 @@ and two readings keep older files usable:
   `Coverage` row, and the edits saved for the second row are not used. Two
   GC content tracks always have equal colors.
 
-A Session 46 to 49 can also hold `otherModeResult`: the Result set of the diagram
+A Session 46 to 50 can also hold `otherModeResult`: the Result set of the diagram
 mode that the top-level set does not draw (Circular or Linear), written when
 both modes have a Result. Its `renderRequest`, `results`, `editorState`
 (`featureCatalog`, `alignmentResetReceipt`, and the Result's generated Legend
@@ -351,9 +364,9 @@ Python options still refuse such a size.
 
 When the saved diagram's settings cannot be read at all (for example, their
 `schema` is not an integer), or are missing, the file loads as settings only if it holds the web app's own settings: a Session
-of version 42, 44, or 46 to 49 saved by the web app. A row says that the saved
+of version 42, 44, or 46 to 50 saved by the web app. A row says that the saved
 Results, the GenBank, GFF and FASTA inputs, the feature list and the caches
-are left out. A Session of version 42, 44, or 47 to 49 written by the CLI or the
+are left out. A Session of version 42, 44, or 47 to 50 written by the CLI or the
 Python API, and a Session of version 31–41, has no saved settings that can be
 read without them, so it is refused; so is a Session of version 31–41 whose
 request names a record file the Session does not hold. A `null` request
@@ -401,7 +414,7 @@ The Web app refuses these files and shows an error instead:
   would be dropped or replaced by its default. A settings-only Session whose
   `modes` is not an object, or whose settings hold nothing or were all
   dropped, is such a file, and so is a Session of version 31–41, or one of
-  version 42, 44, or 47 to 49 written by the CLI or the Python API, whose saved
+  version 42, 44, or 47 to 50 written by the CLI or the Python API, whose saved
   settings cannot be read. A Session of version 27–30 that holds only its
   `format` and `version` loads.
 
@@ -549,6 +562,22 @@ Schema 2 is accepted with sessions 41–42, 44, and 46–50. Python refuses unkn
 bindings; the Web app drops each one and lists it in the **Load this file?** dialog
 before the import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
+
+## Linear wrap length
+
+A [wrap length](command-line.md#wrap-one-record-over-several-rows) is stored as
+`canvas.linear.wrap_length` in the request's config. `--session` and
+`session_to_request()` draw the same rows. A row has no identity in a Session:
+the file holds the one record and the length. The file also holds the layout and
+scale style the figure drew with, so a Session of a figure with nothing to cut
+holds the same leaves as one without the option, besides the length.
+
+The Web app has no control for it yet. When it loads such a Session it draws the
+rows and lists the length under the settings that are not editable in the Web
+UI. Generate and **Save Session** keep it, as a config override in the saved
+request, and that row's **Reset** removes it.
+When a record is cut, Generate stops with an error if the form asks for a Track
+layout of Middle or a bar scale, which cannot draw rows; the last Result stays.
 
 ## Fonts
 
@@ -843,7 +872,8 @@ record their upstream raw keys and requested settings. Collinear results
 also record the effective `cds` or `locus` unit kinds produced by `auto` and
 whether orthogroup inference was enabled. Sessions preserve each LOSATP mode's
 hit-limit drafts. A saved Collinear pipeline without `collinearInferOrthogroups`
-uses its historical inference behavior (ON); new Web state defaults to OFF.
+uses its historical inference behavior (ON); new state defaults to OFF on the
+Web, the CLI and the Python API.
 In the Web, any derived result read from a Session loads unchanged and is
 recomputed once from the raw search rows when the analysis runs again.
 The Web, the CLI, and the Python API compute the cache key of a derived result

@@ -457,11 +457,45 @@ class ResolvedRegionAnnotation:
         return tuple((part.display_start, part.display_end) for part in self.display_parts)
 
     @property
+    def _label_part(self) -> DisplayFragment:
+        """The display part a label stands on: the longest, ties to the earlier row, then the earlier start."""
+        assert self.display_parts is not None
+        return min(
+            self.display_parts,
+            key=lambda part: (part.display_start - part.display_end, part.row, part.display_start),
+        )
+
+    @property
     def geometry_midpoint_bp(self) -> float:
         if self.display_parts is None:
             return self.midpoint_bp
-        start, end = min(self.geometry_segments, key=lambda span: (span[0] - span[1], span[0]))
-        return (start + end) / 2.0
+        part = self._label_part
+        return (part.display_start + part.display_end) / 2.0
+
+    @property
+    def label_row(self) -> int:
+        """The row of a wrapped record the annotation's label stands on (0 otherwise)."""
+        return 0 if self.display_parts is None else self._label_part.row
+
+    @property
+    def label_room_bp(self) -> int:
+        """What the annotation's label can stand over: its span, or on several rows the fragment it stands on."""
+        if self.display_parts is None or len({part.row for part in self.display_parts}) == 1:
+            return self.span_bp
+        return self._label_part.display_end - self._label_part.display_start
+
+    @property
+    def geometry_rows(self) -> tuple[int, ...]:
+        """The rows of a wrapped record the annotation draws on, in order."""
+        if self.display_parts is None:
+            return (0,)
+        return tuple(sorted({part.row for part in self.display_parts}))
+
+    def row_segments(self, row: int) -> tuple[tuple[int, int], ...]:
+        """The drawn segments on one row, local to it."""
+        if self.display_parts is None:
+            return self.segments
+        return tuple((part.display_start, part.display_end) for part in self.display_parts if part.row == row)
 
 
 @dataclass(frozen=True)

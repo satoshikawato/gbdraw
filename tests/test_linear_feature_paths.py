@@ -315,6 +315,7 @@ def test_open_end_outline_keeps_the_top_edge_when_the_bottom_y_is_a_prefix_of_th
         {"feat_start": 100, "feat_end": 200, "open_end": True}, 1000, 1000.0, 10.0, "positive", True, 0,
         feature_y_positions=lane_y,
     )
-    # The open end drops only the cut edge at x = 200 (OV-1841); the top edge before it is still stroked.
+    # The open end drops only the cut edge at x = 200 (OV-1841); the top edge before it is still stroked,
+    # in the same subpath as the closed tail so its corners join (OV-2275).
     assert fill == f"M 100,{top} L 200,{top} L 200,{bottom} L 100,{bottom} z"
-    assert outline == f"M 100,{top} L 200,{top} M 200,{bottom} L 100,{bottom} L 100,{top}"
+    assert outline == f"M 200,{bottom} L 100,{bottom} L 100,{top} L 200,{top}"

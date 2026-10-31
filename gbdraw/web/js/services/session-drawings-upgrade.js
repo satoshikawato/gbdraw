@@ -455,7 +455,10 @@ const changedRowValue = (modeSlice, mode, row) => {
   const value = rowValue(modeSlice, row);
   if (value === ABSENT) return ABSENT;
   const fallback = defaultValue(mode, row);
-  return fallback !== ABSENT && canonical(value) === canonical(fallback) ? ABSENT : value;
+  if (fallback !== ABSENT && canonical(value) === canonical(fallback)) return ABSENT;
+  // A default a released writer stored is a default, not a setting.
+  return MODE_SLICE_DEFAULTS.earlierDefaults.some((earlier) => earlier.domain === row.domain && earlier.path === row.path
+    && canonical(earlier.value) === canonical(value)) ? ABSENT : value;
 };
 
 /**

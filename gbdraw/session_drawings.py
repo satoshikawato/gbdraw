@@ -746,6 +746,7 @@ class ModeSliceDefaults(TypedDict):
     description: str
     registryRevision: int
     normalize: list[ModeSliceNormalizeRule]
+    earlierDefaults: list[ModeSliceDefault]
     defaults: dict[DrawingMode, list[ModeSliceDefault]]
 
 
@@ -783,6 +784,16 @@ def _default_value(mode: DrawingMode, row: ModeScopedSetting) -> object:
         if (default["domain"], default["path"]) == (row.domain, row.path):
             return default.get("value", _ABSENT)
     return _ABSENT
+
+
+def _is_earlier_default(row: ModeScopedSetting, value: object) -> bool:
+    """Whether ``value`` is a default of ``row`` that a released writer stored."""
+
+    return any(
+        (earlier["domain"], earlier["path"]) == (row.domain, row.path)
+        and _canonical(earlier.get("value")) == _canonical(value)
+        for earlier in _mode_slice_defaults()["earlierDefaults"]
+    )
 
 
 def _row_value(mode_slice: Mapping[str, object], row: ModeScopedSetting) -> object:
@@ -844,6 +855,8 @@ def _used_by_settings(
             continue
         default = _default_value(mode, row)
         if default is not _ABSENT and _canonical(value) == _canonical(default):
+            continue
+        if _is_earlier_default(row, value):
             continue
         if row.modes == mode:
             return True

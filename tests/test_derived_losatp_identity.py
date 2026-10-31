@@ -139,7 +139,7 @@ _COLLINEAR_TABLE = {
         ("the unit mode", _set(unit_mode="cds")),
         ("the color mode", _set(color_mode="orientation_identity")),
         ("the anchor mode", _set(anchor_mode="all")),
-        ("the merge orientation", _set(merge_orientation="strand")),
+        ("the merge orientation", _set(merge_orientation="order")),
         ("the maximum diagonal drift", _set(max_diagonal_drift=6)),
         ("the maximum conflicts in a merge gap", _set(max_conflicts=2)),
         ("orthogroup inference", _set(infer_orthogroups=False)),
@@ -149,7 +149,11 @@ _COLLINEAR_TABLE = {
         ("explicit display pairs (CLI row grid)", _set(explicit_display_pairs=True)),
     ],
     "displayOnly": [row for row in _DISPLAY_ONLY if row[0] != "Collinear-only settings"]
-    + [("Pairwise-only settings", _set(max_hits=99))],
+    + [
+        ("Pairwise-only settings", _set(max_hits=99)),
+        # "either" was the old spelling of "strand" (OV-2301).
+        ("the merge orientation spelled strand", _set(merge_orientation="strand")),
+    ],
 }
 
 
@@ -211,7 +215,7 @@ def test_the_sensitivity_table_flags_a_builder_that_drops_an_input() -> None:
 
 def test_derived_identity_shape_and_semantics() -> None:
     identity = _identity(_COLLINEAR)
-    assert identity["semantics"] == DERIVED_LOSATP_SEMANTICS == "derived-option-conformance-v3"
+    assert identity["semantics"] == DERIVED_LOSATP_SEMANTICS == "derived-option-conformance-v4"
     assert identity["cacheSchema"] == 3
     assert identity["pathRepresentation"] == "lossless-graph-v1"
     assert identity["rawCacheKeys"] == ["raw-a-a", "raw-a-b", "raw-b-a"]

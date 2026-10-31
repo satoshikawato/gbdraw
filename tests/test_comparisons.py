@@ -184,6 +184,7 @@ def test_linear_cli_alignment_length_is_forwarded(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)

@@ -51,7 +51,6 @@ from gbdraw.analysis.protein_colinearity import (
     promote_legacy_protein_raw_cache_entries,
     select_best_hits_per_query,
     select_reciprocal_best_hit_edges,
-    select_reciprocal_best_hits,
     select_rbh_orthogroup_edges_from_directional_hits,
     select_top_hits_per_query,
     validate_protein_identity_manifest,
@@ -60,6 +59,7 @@ from gbdraw.analysis.protein_colinearity import (
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.options import (
     LinearDiagramOptions,
+    LinearMultiRecordOptions,
     LosatRuntimeOptions,
     LosatSearchOptions,
 )
@@ -1568,23 +1568,6 @@ def test_select_best_hits_per_query_avoids_secondary_paralog_merge() -> None:
 
     assert selected[["query", "subject"]].to_records(index=False).tolist() == [
         ("a", "b1")
-    ]
-
-
-@pytest.mark.linear
-def test_select_reciprocal_best_hits_rejects_many_to_one_nonreciprocal_hit() -> None:
-    hits = pd.DataFrame.from_records(
-        [
-            _hit_row("a1", "b", bitscore=300),
-            _hit_row("a2", "b", bitscore=250),
-        ],
-        columns=COMPARISON_COLUMNS,
-    )
-
-    selected = select_reciprocal_best_hits(hits)
-
-    assert selected[["query", "subject"]].to_records(index=False).tolist() == [
-        ("a1", "b")
     ]
 
 
@@ -4827,6 +4810,7 @@ def test_linear_cli_forwards_protein_blastp_options(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -4896,6 +4880,7 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -4955,6 +4940,153 @@ def test_orthogroup_display_pairs_do_not_restrict_all_record_membership(reverse:
     )
     assert without_display.adjacent_display_edges_by_pair == {}
     assert without_display.orthogroups == result.orthogroups
+
+
+def _all_pairs_losatp(query_fasta: str, subject_fasta: str, **kwargs) -> pd.DataFrame:
+    """Every query protein hits every subject protein, itself included."""
+
+    query_ids = [line[1:].split()[0] for line in query_fasta.splitlines() if line.startswith(">")]
+    subject_ids = [line[1:].split()[0] for line in subject_fasta.splitlines() if line.startswith(">")]
+    text = "".join(
+        f"{query}\t{subject}\t90\t1000\t0\t0\t1\t1000\t1\t1000\t1e-50\t1000\n"
+        for query in query_ids
+        for subject in subject_ids
+    )
+    callback = kwargs.get("raw_output_callback")
+    if callback is not None:
+        callback(text)
+    return parse_losatp_outfmt6(text)
+
+
+_TWO_RECORDS_ON_ROW_ONE = ("#1@1", "#2@1", "#3@2")
+
+
+@pytest.mark.linear
+def test_similarity_groups_with_two_records_on_one_row_link_adjacent_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OV-2297: Similarity groups draws every pair between adjacent rows, as Collinear does."""
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _all_pairs_losatp)
+    records = [_long_record(f"record_{index}", f"p{index}") for index in range(3)]
+
+    result = api_diagram_module.build_linear_diagram_result(
+        records,
+        options=LinearDiagramOptions(
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="similarity_groups")
+        ),
+        layout=LinearMultiRecordOptions(multi_record_positions=_TWO_RECORDS_ON_ROW_ONE),
+    )
+
+    links = {
+        (comparison.query_record_index, comparison.subject_record_index): comparison.matches
+        for comparison in result.metadata.linear_comparisons
+    }
+    # Records 1 and 2 share row 1; record 3 sits in row 2.
+    assert set(links) == {(0, 2), (1, 2)}
+    for (query, subject), frame in links.items():
+        assert list(zip(frame["query_protein_id"], frame["subject_protein_id"])) == [
+            (f"p{query}", f"p{subject}")
+        ]
+    assert result.metadata.protein_comparisons is None
+    orthogroups = result.metadata.orthogroups
+    assert orthogroups is not None
+    assert sorted(
+        sorted(member.protein_id for member in members) for members in orthogroups.orthogroups.values()
+    ) == [["p0", "p1", "p2"]]
+
+
+@pytest.mark.linear
+def test_cli_similarity_groups_with_multi_record_rows_draws_adjacent_row_links(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """OV-2297: the CLI row layout with --losatp_mode similarity_groups renders."""
+
+    import re
+
+    records_by_path = {
+        f"{name}.gb": _long_record(f"record_{index}", f"p{index}") for index, name in enumerate("abc")
+    }
+    monkeypatch.setattr(
+        request_render_module,
+        "load_gbks",
+        lambda paths, **_kwargs: [records_by_path[str(path)] for path in paths],
+    )
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _all_pairs_losatp)
+    output_prefix = tmp_path / "rows"
+
+    linear_cli_module.linear_main(
+        [
+            "--gbk", "a.gb", "b.gb", "c.gb",
+            *(argument for position in _TWO_RECORDS_ON_ROW_ONE for argument in ("--multi_record_position", position)),
+            "--losat", "losatp",
+            "--losatp_mode", "similarity_groups",
+            "-f", "svg",
+            "-o", str(output_prefix),
+        ]
+    )
+
+    svg = output_prefix.with_suffix(".svg").read_text(encoding="utf-8")
+    drawn = {
+        (int(query), int(subject))
+        for query, subject in re.findall(
+            r'data-query-record-index="(\d+)"[^>]*?data-subject-record-index="(\d+)"', svg
+        )
+    }
+    # Records 1 and 2 share row 1; record 3 sits in row 2.
+    assert drawn == {(0, 2), (1, 2)}
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("member_max_hits", [None, 1, 2])
+def test_member_max_hits_does_not_count_the_self_hit(member_max_hits: int | None) -> None:
+    """OV-2298: the limit counts distinct non-self subject proteins per query and table.
+
+    Record r0 holds A1 and its paralog A2; record r1 holds B1, the reciprocal
+    best hit of A1. Each protein's self hit scores highest in its
+    within-record table, so a limit of 1 must still keep the paralog.
+    """
+
+    records = [
+        _record(
+            "r0",
+            sequence="ATG" * 2000,
+            features=[
+                _cds(start, start + 303, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": [protein_id]})
+                for start, protein_id in ((0, "A1"), (1200, "A2"))
+            ],
+        ),
+        _record(
+            "r1",
+            sequence="ATG" * 1000,
+            features=[_cds(0, 303, qualifiers={"translation": ["M" * 100 + "*"], "protein_id": ["B1"]})],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+
+    def table(*rows: tuple[str, str, float]) -> pd.DataFrame:
+        return pd.DataFrame.from_records(
+            [_hit_row(query, subject, bitscore=bitscore) for query, subject, bitscore in rows],
+            columns=COMPARISON_COLUMNS,
+        )
+
+    hits = {
+        (0, 0): table(("A1", "A1", 200), ("A1", "A2", 170), ("A2", "A2", 200), ("A2", "A1", 170)),
+        (1, 1): table(("B1", "B1", 200)),
+        (0, 1): table(("A1", "B1", 180)),
+        (1, 0): table(("B1", "A1", 180)),
+    }
+
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        hits, extraction.protein_map, orthogroup_member_max_hits=member_max_hits,
+    )
+
+    assert sorted(
+        sorted(member.protein_id for member in members) for members in result.orthogroups.orthogroups.values()
+    ) == [["A1", "A2", "B1"]]
 
 
 def test_manifest_presentation_identity_check_normalizes_each_distinct_key_once(
@@ -5061,3 +5193,119 @@ def test_raw_protein_tsv_validation_checks_each_text_and_pair_once(
     assert parse_calls == 2
     assert matches(comment)
     assert parse_calls == 3  # A distinct text parses once, even without rows.
+
+
+def _proteins_record(record_id: str, lengths: dict[str, int]) -> SeqRecord:
+    """One record whose CDS translate to the named proteins of the given lengths."""
+
+    features = [
+        _cds(
+            index * 1200,
+            index * 1200 + 3 * length + 3,
+            qualifiers={"translation": ["M" * length + "*"], "protein_id": [protein_id]},
+        )
+        for index, (protein_id, length) in enumerate(lengths.items())
+    ]
+    return _record(record_id, sequence="ATG" * (400 * len(lengths) + 200), features=features)
+
+
+@pytest.mark.linear
+def test_self_hits_do_not_set_the_normalization_scale(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OV-2299 (D-07 A): the expected-bitscore fit leaves out self hits.
+
+    Twelve reciprocal pairs P_i/Q_i of different lengths across two records,
+    and PX, an in-paralog of P0 in record r0. Only the self-hit bitscores
+    differ between the runs; they say nothing about any relationship, so
+    PX's normalized score, role and confidence must not change.
+    """
+
+    lengths = {f"P{index}": 60 + 10 * index for index in range(12)}
+    record_r0 = {**lengths, "PX": lengths["P0"]}
+    record_r1 = {f"Q{index}": 60 + 10 * index for index in range(12)}
+    records = [_proteins_record("r0", record_r0), _proteins_record("r1", record_r1)]
+    extraction = extract_cds_proteins(records)
+    all_lengths = {**record_r0, **record_r1}
+
+    def hit(query: str, subject: str, bitscore: float, evalue: float = 1e-30) -> dict[str, object]:
+        length = min(all_lengths[query], all_lengths[subject])
+        return _hit_row(
+            query, subject, alignment_length=length, qend=all_lengths[query], send=all_lengths[subject],
+            bitscore=bitscore, evalue=evalue,
+        )
+
+    def frame(rows: list[dict[str, object]]) -> pd.DataFrame:
+        return pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
+
+    cross = [
+        hit(f"P{index}", f"Q{index}", 1.8 * lengths[f"P{index}"]) for index in range(12)
+    ]
+    reverse = [hit(f"Q{index}", f"P{index}", 1.8 * lengths[f"P{index}"]) for index in range(12)]
+    paralog = [hit("P0", "PX", 1.7 * lengths["P0"]), hit("PX", "P0", 1.7 * lengths["P0"])]
+
+    def tables(self_factor: float) -> dict[tuple[int, int], pd.DataFrame]:
+        def selfs(proteins: dict[str, int]) -> list[dict[str, object]]:
+            return [hit(protein, protein, self_factor * length, evalue=0.0) for protein, length in proteins.items()]
+
+        return {
+            (0, 0): frame([*paralog, *selfs(record_r0)]),
+            (1, 1): frame(selfs(record_r1)),
+            (0, 1): frame(cross),
+            (1, 0): frame(reverse),
+        }
+
+    observed = []
+    for self_factor in (2.0, 4.0):
+        directional = tables(self_factor)
+        within = protein_colinearity_module._normalize_directional_hit_table(
+            directional[(0, 0)], extraction.protein_map, min_coverage=0.0
+        )
+        score = within.loc[(within["query"] == "P0") & (within["subject"] == "PX"), "normalized_score"]
+        member = select_rbh_orthogroup_edges_from_directional_hits(
+            directional, extraction.protein_map
+        ).orthogroups.member_by_protein_id["PX"]
+        observed.append((round(float(score.iloc[0]), 9), member.role, member.confidence))
+    assert observed[0] == observed[1]
+    assert observed[0][1:] == ("inparalog", "high")
+
+    # A cross-record table holds no self hits, so its fit is unchanged.
+    between = protein_colinearity_module._normalize_directional_hit_table(
+        frame(cross), extraction.protein_map, min_coverage=0.0
+    )
+    assert set(between["record_pair_normalization_source"]) == {"fit"}
+    assert between["normalized_score"].tolist() == pytest.approx([1.0] * 12)
+
+
+@pytest.mark.linear
+def test_a_within_record_fit_equals_the_fit_of_its_non_self_hits() -> None:
+    """OV-2299 (D-07 A): with enough non-self hits to fit, a within-record
+    table's model is the one its non-self hits alone give; the self hits
+    (the top rows of every length bin) do not move it."""
+
+    lengths = {f"W{index}": 60 + 10 * index for index in range(14)}
+    extraction = extract_cds_proteins([_proteins_record("w", lengths)])
+
+    def hit(query: str, subject: str, bitscore: float, evalue: float = 1e-30) -> dict[str, object]:
+        return _hit_row(
+            query, subject, alignment_length=min(lengths[query], lengths[subject]),
+            qend=lengths[query], send=lengths[subject], bitscore=bitscore, evalue=evalue,
+        )
+
+    proteins = list(lengths)
+    others = [
+        hit(query, subject, (1.2 + 0.05 * (index % 3)) * min(lengths[query], lengths[subject]))
+        for index, (query, subject) in enumerate(zip(proteins, proteins[1:]))
+    ]
+    selfs = [hit(protein, protein, 4.0 * length, evalue=0.0) for protein, length in lengths.items()]
+
+    def normalized(rows: list[dict[str, object]]) -> pd.DataFrame:
+        table = protein_colinearity_module._normalize_directional_hit_table(
+            pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS), extraction.protein_map, min_coverage=0.0
+        )
+        return table.loc[table["query"] != table["subject"]].sort_values(["query", "subject"])
+
+    with_self = normalized([*others, *selfs])
+    alone = normalized(others)
+    assert len(alone) == 13
+    assert set(with_self["record_pair_normalization_source"]) == {"fit"}
+    assert set(alone["record_pair_normalization_source"]) == {"fit"}
+    assert with_self["normalized_score"].tolist() == alone["normalized_score"].tolist()

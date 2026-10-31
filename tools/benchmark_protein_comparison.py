@@ -417,25 +417,6 @@ def merge_case(cc, name):
 
 
 
-def isolated_merge_operations(cc, operations):
-    """Capture real merge inputs once; preparation is outside every measured run."""
-    isolated = {}
-    original = cc._merge_lossless_clusters
-    for stage, fn in operations.items():
-        if stage not in {"cluster", "post_search", "max_conflicts_0", "max_conflicts_1", "reverse"}:
-            continue
-        inputs = []
-        def capture(blocks, *, anchors, params):
-            inputs.append((tuple(blocks), tuple(anchors), params))
-            return original(blocks, anchors=anchors, params=params)
-        with patch.object(cc, "_merge_lossless_clusters", capture):
-            fn()
-        def replay(inputs=inputs):
-            return tuple(cc._merge_lossless_clusters(blocks, anchors=anchors, params=params)
-                         for blocks, anchors, params in inputs)
-        isolated[stage + "_merge"] = replay
-    return isolated
-
 def cache_case(root, pc, name):
     """Real Web conversion of `size` raw tables: cold, display-only change, threshold change, smaller comparison.
 
@@ -732,80 +713,6 @@ def operation_probe(pc, cc, fn):
         stack.enter_context(patch.object(cu, "sorted", unit_sorted, create=True))
         stack.enter_context(patch.object(cu, "set", unit_set, create=True))
         stack.enter_context(patch.object(cu, "_unit_aliases", unit_aliases))
-        merge_depth = 0
-        conflict_depth = 0
-        bisect_depth = 0
-        class CountedAnchors:
-            def __init__(self, values):
-                self.values = values
-            def __len__(self):
-                return len(self.values)
-            def __getitem__(self, index):
-                counters["merge.queryIndexReads" if bisect_depth else "merge.conflictCandidateVisits"] += 1
-                return self.values[index]
-            def __iter__(self):
-                for anchor in self.values:
-                    counters["merge.conflictCandidateVisits"] += 1
-                    yield anchor
-        original_merge = cc._merge_lossless_clusters
-        def merge_probe(*args, **kwargs):
-            nonlocal merge_depth
-            merge_depth += 1
-            counters["merge.calls"] += 1
-            try:
-                return original_merge(*args, **kwargs)
-            finally:
-                merge_depth -= 1
-        stack.enter_context(patch.object(cc, "_merge_lossless_clusters", merge_probe))
-        original_can_merge = cc._lossless_clusters_can_merge
-        def can_merge_probe(left, right, **kwargs):
-            counters["merge.boundaryTests"] += 1
-            left_path = left.anchors if hasattr(left, "anchors") else left
-            orientation = left.orientation if hasattr(left, "orientation") else kwargs["orientation"]
-            if orientation == right.orientation and left_path and right.anchors:
-                counters["merge.endpointReads"] += 2
-            accepted = original_can_merge(left, right, **kwargs)
-            if accepted:
-                counters["merge.accepted"] += 1
-                counters["merge.rightAnchorReferencesJoined"] += len(right.anchors)
-            return accepted
-        stack.enter_context(patch.object(cc, "_lossless_clusters_can_merge", can_merge_probe))
-        original_conflicts = cc._lossless_conflicts_between_clusters
-        def conflict_probe(left, right, anchors, **kwargs):
-            nonlocal conflict_depth
-            conflict_depth += 1
-            counters["merge.conflictCalls"] += 1
-            if (left.anchors if hasattr(left, "anchors") else left) and (right.anchors if hasattr(right, "anchors") else right):
-                counters["merge.endpointReads"] += 2
-            try:
-                return original_conflicts(left, right, CountedAnchors(anchors), **kwargs)
-            finally:
-                conflict_depth -= 1
-        stack.enter_context(patch.object(cc, "_lossless_conflicts_between_clusters", conflict_probe))
-        for name in ("bisect_left", "bisect_right"):
-            if not hasattr(cc, name):
-                continue
-            original = getattr(cc, name)
-            def bisect_probe(*args, _original=original, **kwargs):
-                nonlocal bisect_depth
-                bisect_depth += 1
-                try:
-                    return _original(*args, **kwargs)
-                finally:
-                    bisect_depth -= 1
-            stack.enter_context(patch.object(cc, name, bisect_probe))
-        for name in ("_path_sorted_anchors", "_lossless_block_from_anchors"):
-            original = getattr(cc, name)
-            def merge_work(*args, _name=name, _original=original, **kwargs):
-                if merge_depth:
-                    kind = "pathSort" if _name == "_path_sorted_anchors" else "materialization"
-                    values = args[0] if args else kwargs["anchors"]
-                    counters["merge." + kind + "Calls"] += 1
-                    counters["merge." + kind + "AnchorReferences"] += len(values)
-                    if conflict_depth and kind == "pathSort":
-                        counters["merge.conflictEndpointSortCalls"] += 1
-                return _original(*args, **kwargs)
-            stack.enter_context(patch.object(cc, name, merge_work))
         if hasattr(metadata, "_index_rbh_groups"):
             original_rbh_index = metadata._index_rbh_groups
             def rbh_index(groups):
@@ -889,7 +796,6 @@ def operation_probe(pc, cc, fn):
             (pc, "_build_core_support_candidate", None),
             (pc, "_edge_metadata_for_protein_pair", edge_amount),
             (pc, "_build_ortholog_path_indexes" if hasattr(pc, "_build_ortholog_path_indexes") else "_build_ortholog_paths", None),
-            (cc, "_lossless_conflicts_between_clusters", lambda a, k: len(a[2])),
         ):
             if not hasattr(module, name):
                 continue
@@ -1082,7 +988,6 @@ def main(argv=None):
     run.add_argument("--path-representation", choices=("graph", "exhaustive"), default="graph",
                      help="Same-source explicit-output control, restricted to R<=16 path cases")
     run.add_argument("--unit-stages", action="store_true", help="Add prepared extraction -> full unit index for Collinear cases")
-    run.add_argument("--merge-stages", action="store_true", help="Add isolated merge stages with captured production inputs")
     run.add_argument("--stages", nargs="+", help="Measure only named stages; preparation remains outside stage timing")
     run.add_argument("--artifacts", type=Path)
     run.add_argument("--output", type=Path, required=True)
@@ -1142,8 +1047,6 @@ def main(argv=None):
         for name in args.cases:
             print(f"{args.measure}: {name}", file=sys.stderr, flush=True)
             fixture, operations = build_case(root, pc, cc, name, args.seed, args.path_representation, args.unit_stages)
-            if args.merge_stages:
-                operations.update(isolated_merge_operations(cc, operations))
             if args.path_representation != "graph":
                 fixture["pathRepresentation"] = args.path_representation
             if args.stages:

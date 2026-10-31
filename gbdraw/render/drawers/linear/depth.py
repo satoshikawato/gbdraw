@@ -12,9 +12,11 @@ from ....layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
     LINEAR_SCALAR_AXIS_STROKE_PX,
     LINEAR_SCALAR_AXIS_TICK_PX,
+    ScalarRow,
     _depth_axis_bounds,
     _format_depth_tick,
     _prepare_depth_plot_dataframe,
+    plot_data_once,
     _scaled_depth_fraction,
     linear_scalar_axis_tick_font_size_px,
     scalar_axis_small_tick_values,
@@ -155,12 +157,16 @@ class DepthDrawer:
         start_y: float,
         axis_group_id: str = "depth_axis",
         record_transform: RecordDisplayTransform | None = None,
+        row: ScalarRow | None = None,
     ) -> Group:
-        plot_df = _prepare_depth_plot_dataframe(
-            depth_df,
-            self.min_depth,
-            self.max_depth,
-            normalize=self.normalize,
+        plot_df = plot_data_once(
+            row,
+            lambda: _prepare_depth_plot_dataframe(
+                depth_df,
+                self.min_depth,
+                self.max_depth,
+                normalize=self.normalize,
+            ),
         )
         depth_path_desc = calculate_depth_path_desc(
             start_x,
@@ -170,6 +176,7 @@ class DepthDrawer:
             alignment_width,
             track_height,
             record_transform=record_transform,
+            row=row,
         )
         if not depth_path_desc:
             return group

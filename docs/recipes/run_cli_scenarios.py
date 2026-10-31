@@ -939,6 +939,14 @@ def _assert_linear_regions_orientation_layout(
         raise RecipeContractError("H-CLI-04 record labels or subtitles are missing.")
 
 
+def _assert_wrapped_figure_rows(path: Path, *, expected_rows: int) -> None:
+    root = ElementTree.parse(path).getroot()
+    rows = {element.attrib["data-gbdraw-wrap-row"] for element in root.iter() if "data-gbdraw-wrap-row" in element.attrib}
+    records = {element.attrib["data-gbdraw-record-id"] for element in root.iter() if "data-gbdraw-record-id" in element.attrib}
+    if len(rows) != expected_rows or len(records) != 1:
+        raise RecipeContractError(f"H-CLI-15 drew {len(rows)} rows of {len(records)} records.")
+
+
 def _match_elements(root: ElementTree.Element) -> list[ElementTree.Element]:
     return [
         element
@@ -1154,7 +1162,8 @@ def _assert_hepatoplasmataceae_collinear(
         )
         for element in matches
     }
-    if len(matches) != 500 or observed_pairs != expected_pairs:
+    # 492 blocks since chaining joins runs split by a second anchor (OV-2294..2296).
+    if len(matches) != 492 or observed_pairs != expected_pairs:
         raise RecipeContractError("T-CLI-10 changed its adjacent Collinear evidence.")
     required_text = {
         "LOSATP Collinear blocks across Hepatoplasmataceae",
@@ -2545,6 +2554,8 @@ def run_scenario(
                     _assert_linear_regions_orientation_layout(chapter, generated_path)
                 elif scenario_id == "H-CLI-14":
                     validate_joint_chloroplast(chapter, output_path=generated_path)
+                elif scenario_id == "H-CLI-15":
+                    _assert_wrapped_figure_rows(generated_path, expected_rows=5)
                 elif scenario_id in {"T-CLI-06", "T-CLI-10"}:
                     inspect_standard_svg(chapter, output_path=generated_path)
                 else:

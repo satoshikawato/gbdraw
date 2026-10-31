@@ -3606,14 +3606,6 @@ def _sort_hits_for_query_best(hits: DataFrame) -> DataFrame:
     )
 
 
-def _sort_hits_for_subject_best(hits: DataFrame) -> DataFrame:
-    return hits.sort_values(
-        ["subject", "bitscore", "evalue", "identity", "alignment_length", "query"],
-        ascending=[True, False, True, False, False, True],
-        kind="mergesort",
-    )
-
-
 def select_top_hits_per_query(
     hits: DataFrame,
     *,
@@ -3635,6 +3627,15 @@ def select_top_hits_per_query(
     )
 
 
+def _self_hit_mask(hits: DataFrame) -> np.ndarray:
+    """Rows whose query protein is its own subject (a within-record search's self hits)."""
+
+    return np.asarray(
+        hits["query"].to_numpy(dtype=object) == hits["subject"].to_numpy(dtype=object),
+        dtype=bool,
+    )
+
+
 def _select_member_candidate_hits_per_query(
     hits: DataFrame,
     *,
@@ -3642,8 +3643,10 @@ def _select_member_candidate_hits_per_query(
 ) -> DataFrame:
     """Keep every HSP for the strongest distinct member candidates.
 
-    Without a limit every HSP is kept, and the result shares the columns of
-    ``hits`` instead of copying them; callers only read it.
+    ``max_hits`` counts distinct subject proteins other than the query itself
+    (OV-2298): a within-record table's self hits pass through and take no
+    slot. Without a limit every HSP is kept, and the result shares the
+    columns of ``hits`` instead of copying them; callers only read it.
     """
 
     if max_hits is None:
@@ -3651,40 +3654,15 @@ def _select_member_candidate_hits_per_query(
         shared = hits.copy(deep=False)
         shared.index = pd.RangeIndex(len(shared))
         return shared
-    selected_pairs = select_top_hits_per_query(hits, max_hits=max_hits)
-    if selected_pairs.empty:
+    _validate_max_hits(max_hits)
+    if hits.empty:
         return hits.iloc[0:0].copy()
+    _validate_comparison_columns(hits)
+    self_hit = _self_hit_mask(hits)
+    selected_pairs = select_top_hits_per_query(hits.loc[~self_hit], max_hits=max_hits)
     pair_index = pd.MultiIndex.from_arrays([selected_pairs["query"], selected_pairs["subject"]])
     hit_index = pd.MultiIndex.from_arrays([hits["query"], hits["subject"]])
-    return hits.loc[hit_index.isin(pair_index)].reset_index(drop=True)
-
-
-def select_reciprocal_best_hits(hits: DataFrame) -> DataFrame:
-    """Keep query-subject pairs that are mutual best hits in one adjacent-pair table."""
-
-    if hits.empty:
-        return hits.copy()
-    _validate_comparison_columns(hits)
-
-    coerced_hits = _coerce_outfmt6_numeric_columns(hits)
-    query_best = (
-        _sort_hits_for_query_best(coerced_hits)
-        .drop_duplicates("query", keep="first")
-    )
-    subject_best = (
-        _sort_hits_for_subject_best(coerced_hits)
-        .drop_duplicates("subject", keep="first")
-    )
-    reciprocal_pairs = {
-        (str(query), str(subject))
-        for query, subject in zip(subject_best["query"], subject_best["subject"])
-    }
-    return query_best.loc[
-        [
-            (str(query), str(subject)) in reciprocal_pairs
-            for query, subject in zip(query_best["query"], query_best["subject"])
-        ]
-    ].reset_index(drop=True)
+    return hits.loc[self_hit | hit_index.isin(pair_index)].reset_index(drop=True)
 
 
 def select_best_hits_per_query(
@@ -4049,8 +4027,11 @@ def _normalize_directional_hit_table(
     if normalized_hits.empty:
         return _empty_normalized_hit_table(tuple(coerced_hits.columns))
 
+    # The fit reads hits between two proteins only: a self hit scores the
+    # protein against itself, so it would set a within-record table's scale
+    # (OV-2299). Self rows stay in the table until the directed hits drop them.
     model = _fit_expected_bitscore_model(
-        normalized_hits,
+        normalized_hits.loc[~_self_hit_mask(normalized_hits)],
         top_fraction=top_fraction,
     )
     fallback = model is None
@@ -6074,20 +6055,32 @@ def _split_protein_hits(
     }
 
 
+def _display_filenames(
+    pairs: Sequence[RecordPair],
+    cache_filenames: Sequence[str] | None,
+) -> dict[RecordPair, str]:
+    """The raw TSV name of each displayed pair; ``cache_filenames[i]`` names ``pairs[i]``."""
+
+    return {
+        pair: (
+            str(cache_filenames[index])
+            if cache_filenames is not None and index < len(cache_filenames)
+            else ""
+        )
+        for index, pair in enumerate(pairs)
+    }
+
+
 def _consecutive_display_filenames(
     record_count: int,
     cache_filenames: Sequence[str] | None,
 ) -> dict[RecordPair, str]:
     """Displayed pairs are the consecutive records; ``cache_filenames[i]`` names (i, i+1)."""
 
-    return {
-        (index, index + 1): (
-            str(cache_filenames[index])
-            if cache_filenames is not None and index < len(cache_filenames)
-            else ""
-        )
-        for index in range(max(0, record_count - 1))
-    }
+    return _display_filenames(
+        tuple((index, index + 1) for index in range(max(0, record_count - 1))),
+        cache_filenames,
+    )
 
 
 def _search_losatp_record_pairs(
@@ -6667,7 +6660,9 @@ def build_pairwise_protein_blastp_comparisons(
         records,
         feature_visibility_rules=feature_visibility_rules,
     )
-    specs = losatp_job_specs("pairwise", record_count=len(records), pairs=pairs)
+    specs = losatp_job_specs(
+        "pairwise", record_count=len(records), pairs=pairs, infer_orthogroups=False
+    )
     searched = sorted({index for pair in specs for index in pair})
     _validate_extraction_has_proteins(
         [records[index] for index in searched],
@@ -6688,12 +6683,7 @@ def build_pairwise_protein_blastp_comparisons(
         max_hsps_per_subject=1,
         runner=runner,
         losatp_cache=losatp_cache,
-        display_filenames={
-            pair: str(cache_filenames[index])
-            if cache_filenames is not None and index < len(cache_filenames)
-            else ""
-            for index, pair in enumerate(specs)
-        },
+        display_filenames=_display_filenames(specs, cache_filenames),
     )
     comparisons: list[DataFrame] = []
     for pair in specs:
@@ -6735,8 +6725,15 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
     protein_extraction: ProteinExtractionResult | None = None,
     feature_visibility_rules: list[dict[str, object]] | None = None,
     cache_filenames: Sequence[str] | None = None,
+    comparison_pairs: Sequence[RecordPair] | None = None,
 ) -> ProteinBlastpResult:
-    """Infer all-vs-all RBH-seeded orthogroups and return adjacent display links."""
+    """Infer all-vs-all RBH-seeded orthogroups and return their display links.
+
+    ``comparison_pairs`` are the displayed (query, subject) record indexes;
+    omitted, they are the consecutive records. ``comparisons`` follows them
+    and ``cache_filenames`` names the raw TSV of each. Membership always
+    reads every search.
+    """
 
     if path_representation not in {"graph", "exhaustive"}:
         raise ValidationError("path_representation must be graph or exhaustive")
@@ -6762,7 +6759,12 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
         option_name="protein_blastp_mode='orthogroup'",
     )
 
-    specs = losatp_job_specs("orthogroup", record_count=len(records))
+    specs = losatp_job_specs("orthogroup", record_count=len(records), infer_orthogroups=True)
+    display_pairs: tuple[RecordPair, ...] = (
+        tuple(comparison_pairs)
+        if comparison_pairs is not None
+        else tuple((index, index + 1) for index in range(len(records) - 1))
+    )
     hits_by_pair = _search_losatp_record_pairs(
         records,
         extraction,
@@ -6774,7 +6776,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
         max_hsps_per_subject=None,
         runner=runner,
         losatp_cache=losatp_cache,
-        display_filenames=_consecutive_display_filenames(len(records), cache_filenames),
+        display_filenames=_display_filenames(display_pairs, cache_filenames),
     )
     directional_hits_by_pair: dict[tuple[int, int], DataFrame] = {
         pair: filter_protein_hits_by_thresholds(
@@ -6795,17 +6797,15 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
         orthogroup_membership_mode=normalized_membership_mode,
         orthogroup_member_max_hits=orthogroup_member_max_hits,
         max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
+        comparison_pairs=display_pairs,
     )
     comparisons = [
         convert_protein_hits_to_genomic_links(
-            edge_selection.adjacent_display_edges_by_pair.get(
-                (record_index, record_index + 1),
-                _empty_comparison_hits(),
-            ),
+            edge_selection.adjacent_display_edges_by_pair.get(pair, _empty_comparison_hits()),
             extraction.protein_map,
             orthogroups=edge_selection.orthogroups,
         )
-        for record_index in range(len(records) - 1)
+        for pair in display_pairs
     ]
     return ProteinBlastpResult(comparisons=comparisons, orthogroups=edge_selection.orthogroups)
 
@@ -6877,7 +6877,6 @@ __all__ = [
     "select_best_hits_per_query",
     "select_rbh_orthogroup_edges_from_directional_hits",
     "select_reciprocal_best_hit_edges",
-    "select_reciprocal_best_hits",
     "select_top_hits_per_query",
     "is_legacy_protein_losat_cache_entry",
     "is_protein_losat_cache_entry",

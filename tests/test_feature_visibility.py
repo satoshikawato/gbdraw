@@ -877,6 +877,7 @@ def test_linear_cli_feature_visibility_table_is_forwarded(
             protein_identity_manifest=None,
             annotation_warnings=(),
             feature_identity_notices=(),
+            linear_metadata=None,
             request=resolved,
         )
 
@@ -991,6 +992,7 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
             protein_identity_manifest=None,
             annotation_warnings=(),
             feature_identity_notices=(),
+            linear_metadata=None,
             request=resolved,
         )
 

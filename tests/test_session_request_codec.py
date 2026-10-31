@@ -1300,7 +1300,7 @@ def test_supported_schemas_privately_migrate_standard_collinearity_parameters(
         max_unit_gap=7,
         max_diagonal_drift=4,
         max_conflicts=2,
-        merge_orientation="either",
+        merge_orientation="strand",
     )
     assert decoded.options.collinear_max_paralog_links_per_orthogroup == 9
     latest_pipeline = next(

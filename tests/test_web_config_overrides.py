@@ -282,3 +282,10 @@ def test_json_boundary_names_its_check(source):
     named = json.loads(validate_web_config_overrides_json(
         "circular", "null", json.dumps({"gc_stroke_color": "red"}), "[]", "storedRequest"))
     assert named == {"overrides": {"objects.gc_content.stroke_color": "red"}}
+
+
+def test_a_wrap_length_alone_is_valid_because_the_form_owns_the_track_layout() -> None:
+    """Saving a loaded wrapped Session checks the unmanaged leaves alone; the wrap conflicts are read at Generate."""
+
+    wrap = {"canvas.linear.wrap_length": 10_000}
+    assert validate_and_project_web_config_overrides(mode="linear", overrides=wrap, managed_paths=[]) == wrap

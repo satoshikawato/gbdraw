@@ -39,7 +39,9 @@ from ...labels.linear import (
     linear_label_rows,
     linear_record_labels,
     place_linear_label_row,
+    place_wrapped_record_labels,
 )
+from ...layout.linear_wrap import drawn_axis_length
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
 from ...layout.spatial import Aabb
@@ -57,6 +59,7 @@ def _resolve_linear_diagram_label_font_size(
     *,
     canvas_config: LinearCanvasConfigurator,
     profile: LinearRenderProfile,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> float:
     """Resolve one auto label size for all labels drawn in a linear diagram.
 
@@ -65,7 +68,13 @@ def _resolve_linear_diagram_label_font_size(
     """
 
     cfg = profile.config
-    sized_lengths = linear_label_size_lengths([len(record.seq) for record in records], profile.label_scope)
+    sized_lengths = linear_label_size_lengths(
+        [
+            drawn_axis_length(record, record_transforms[index] if record_transforms is not None else None)
+            for index, record in enumerate(records)
+        ],
+        profile.label_scope,
+    )
     if sized_lengths:
         return linear_label_font_size(sized_lengths, cfg)
     return cfg.labels.font_size.linear.for_length_param(canvas_config.length_param)
@@ -181,6 +190,7 @@ def _precalculate_label_dimensions(
         records,
         canvas_config=canvas_config,
         profile=profile,
+        record_transforms=record_transforms,
     )
     max_required_height: float = 0
     record_labels: list[LinearRecordLabels | None] = []
@@ -214,7 +224,8 @@ def _precalculate_label_dimensions(
             )
             feature_dict = feature_result.foreground_features
 
-        record_length = len(record.seq)
+        record_transform = record_transforms[i] if record_transforms is not None else None
+        record_length = drawn_axis_length(record, record_transform)
         # Label x-positions use the record's drawn axis width (its placement's ``sequence_width``).
         labels = linear_record_labels(
             feature_dict,
@@ -234,7 +245,7 @@ def _precalculate_label_dimensions(
                 if feature_lane_geometries is not None
                 else None
             ),
-            record_transform=(record_transforms[i] if record_transforms is not None else None),
+            record_transform=record_transform,
             label_filtering=label_filtering,
         )
         if label_keep_clear is not None:
@@ -244,6 +255,23 @@ def _precalculate_label_dimensions(
     placed_by_record: dict[int, list[LinearLabel]] = {}
     for row in linear_label_rows(label_frames, len(records)):
         members = [(i, x, unplaced) for i, x in row if (unplaced := record_labels[i]) is not None]
+        # A wrapped record has its grid row to itself (``refuse_undrawable_wrap``).
+        wrapped = [
+            (i, x, unplaced, transform)
+            for i, x, unplaced in members
+            if record_transforms is not None
+            and (transform := record_transforms[i]).wrap_length is not None
+        ]
+        if wrapped:
+            for i, x, unplaced, transform in wrapped:
+                placed_by_record[i] = place_wrapped_record_labels(
+                    unplaced,
+                    x,
+                    transform.row_count,
+                    profile=profile,
+                    track_layout=render_context.feature_track_layout,
+                )
+            continue
         placed = place_linear_label_row(
             [(unplaced, x) for _i, x, unplaced in members],
             profile=profile,

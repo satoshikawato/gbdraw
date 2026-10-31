@@ -2970,8 +2970,8 @@
                 "orthogroupMemberMaxHits": null
               },
               "collinear": {
-                "candidateLimit": 5,
-                "orthogroupMemberMaxHits": 5
+                "candidateLimit": null,
+                "orthogroupMemberMaxHits": null
               }
             },
             "maxHits": 5,
@@ -2987,7 +2987,7 @@
             "collinearColorMode": "orientation",
             "collinearUnitMode": "auto",
             "collinearAnchorMode": "rbh",
-            "collinearMergeOrientation": "either",
+            "collinearMergeOrientation": "strand",
             "collinearSearchScope": "adjacent"
           },
           "projected": false
@@ -5257,8 +5257,8 @@
                 "orthogroupMemberMaxHits": null
               },
               "collinear": {
-                "candidateLimit": 5,
-                "orthogroupMemberMaxHits": 5
+                "candidateLimit": null,
+                "orthogroupMemberMaxHits": null
               }
             },
             "maxHits": 5,
@@ -5274,7 +5274,7 @@
             "collinearColorMode": "orientation",
             "collinearUnitMode": "auto",
             "collinearAnchorMode": "rbh",
-            "collinearMergeOrientation": "either",
+            "collinearMergeOrientation": "strand",
             "collinearSearchScope": "adjacent"
           },
           "projected": false

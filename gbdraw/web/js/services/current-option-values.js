@@ -1,7 +1,7 @@
 // @ts-check
 import { DEFAULT_FEATURE_RENDERINGS, normalizeFeatureRendering, normalizedPersistedArrowGeometryState } from '../utils/feature-rendering.js';
 import { renameLegacyLinearLabelVisibility, requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
-import { requireComparisonSetting } from './losat-normalization.js';
+import { requireCollinearMergeOrientation, requireComparisonSetting } from './losat-normalization.js';
 import { integerSettingOr } from '../utils/optional-positive-number.js';
 
 /**
@@ -222,14 +222,7 @@ export const requireCurrentCollinearAnchorMode = (value) => (
 );
 
 /** @param {unknown} value */
-export const requireCurrentCollinearMergeOrientation = (value) => (
-  requireCurrentValue(
-    value,
-    'either',
-    ['strand', 'order', 'either'],
-    'Collinear merge orientation'
-  )
-);
+export const requireCurrentCollinearMergeOrientation = requireCollinearMergeOrientation;
 
 /** @param {unknown} value */
 export const requireCurrentCollinearColorMode = (value) => (

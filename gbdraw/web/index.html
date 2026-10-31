@@ -3439,14 +3439,14 @@
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                         <div>
-                                            <span class="linear-primary-label mb-1">{{ t('Max unit gap') }} <help-tip id="help-comparison-max-unit-gap" :text="t('Maximum CDS-order gap between neighboring anchors merged into one block.')"></help-tip></span>
+                                            <span class="linear-primary-label mb-1">{{ t('Max unit gap') }} <help-tip id="help-comparison-max-unit-gap" :text="t('Maximum number of units (loci, or CDSs without a locus identifier; see Unit mode) between neighboring anchors of one block, on both records. 0 joins adjacent units only. With Diagonal drift 0, a gap is bridged only when both records skip the same number of units.')"></help-tip></span>
                                             <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxUnitGap" :aria-label="t('Collinear max unit gap')" aria-describedby="help-comparison-max-unit-gap" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
                                             <span class="linear-primary-label mb-1">{{ t('Min block genes') }} <help-tip id="help-comparison-min-block-genes" :text="t('Minimum connected genes required for a Collinear ribbon.')"></help-tip></span>
                                             <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" :aria-label="t('Collinear minimum block genes')" aria-describedby="help-comparison-min-block-genes" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
-                                        <div>
+                                        <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-search-scope')">
                                             <label class="linear-primary-label mb-1">{{ t('Search between') }}</label>
                                             <select v-model="losat.blastp.collinearSearchScope" :aria-label="t('Collinear search between')" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                 <option value="adjacent">{{ t('Adjacent pairs') }}</option>
@@ -3510,11 +3510,11 @@
                                         <div class="linear-primary-label">{{ t('Search limits') }}</div>
                                         <div class="grid min-w-0 grid-cols-1 gap-2">
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('losatp-candidate')">
-                                        <span class="linear-primary-label mb-1">{{ t('Max target seqs') }} <help-tip id="help-comparison-max-target-seqs" :text="t('Raw LOSATP search limit per query protein (--max-target-seqs). Leave blank for an unbounded search. Changing this value requires matching raw search results. Defaults: 5 for Collinear, unbounded for Similarity groups. Each mode remembers its own hit limits.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Max target seqs') }} <help-tip id="help-comparison-max-target-seqs" :text="t('Raw LOSATP search limit per query protein (--max-target-seqs). In a within-record search the query protein itself counts as one target. Leave blank for an unbounded search, the default. Changing this value requires matching raw search results. Each mode remembers its own hit limits.')"></help-tip></span>
                                         <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.candidateLimit" :aria-label="t('LOSATP Max target seqs')" aria-describedby="help-comparison-max-target-seqs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
-                                        <span class="linear-primary-label mb-1">{{ t('Max hits per protein for groups') }} <help-tip id="help-comparison-member-hits-per-protein" :text="t('Maximum directional subject hits used to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Max hits per protein for groups') }} <help-tip id="help-comparison-member-hits-per-protein" :text="t('Maximum distinct subject proteins, not counting the protein itself, kept per query protein in each directed record-pair search to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches.')"></help-tip></span>
                                         <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.orthogroupMemberMaxHits" :aria-label="t('Max hits per protein for groups')" aria-describedby="help-comparison-member-hits-per-protein" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                         </div>
@@ -3776,19 +3776,17 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <span class="linear-primary-label mb-1">{{ t('Anchor mode') }} <help-tip id="help-comparison-anchor-mode" :text="t('Choose all directional hits, one-to-one hits, or reciprocal best hits as Collinear anchors.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Anchor mode') }} <help-tip id="help-comparison-anchor-mode" :text="t('Reciprocal best hits makes two proteins an anchor when each is the best hit of the other; with similarity groups, the links of the groups are the anchors. All hits makes every hit that passes the result filters an anchor.')"></help-tip></span>
                                         <select v-model="losat.blastp.collinearAnchorMode" :aria-label="t('Collinear anchor mode')" aria-describedby="help-comparison-anchor-mode" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="all">{{ t('All hits') }}</option>
-                                            <option value="one_to_one">{{ t('One-to-one') }}</option>
                                             <option value="rbh">{{ t('Reciprocal best hits') }}</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <span class="linear-primary-label mb-1">{{ t('Merge orientation') }} <help-tip id="help-comparison-merge-orientation" :text="t('Require compatible strand, gene order, or accept either orientation when merging Collinear anchors.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Merge orientation') }} <help-tip id="help-comparison-merge-orientation" :text="t('Strand: neighboring anchors of a block follow its strand orientation and the gene order. Gene order: they follow the gene order only.')"></help-tip></span>
                                         <select v-model="losat.blastp.collinearMergeOrientation" :aria-label="t('Collinear merge orientation')" aria-describedby="help-comparison-merge-orientation" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="strand">{{ t('Strand') }}</option>
                                             <option value="order">{{ t('Gene order') }}</option>
-                                            <option value="either">{{ t('Either') }}</option>
                                         </select>
                                     </div>
                                     <div>

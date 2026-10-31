@@ -1208,6 +1208,61 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
+// A Session a Save wrote names its Depth files in `webFiles.bindings`: a live
+// hide of the only Depth track clears them with its resources, and the show
+// restores them. Otherwise the rerender fails its binding check, **Live edit
+// failed**, and the track stays in the Result until the next Generate.
+const LOADED_DEPTH_HIDES = {
+  'Show Depth': { stack: false, turn: (page) => toggleDepth(page) },
+  "a Depth row's switch": {
+    stack: true,
+    turn: async (page, mode, shown) => { await slotSwitch(page, mode, 'depth', 0, shown); await settleLive(page); }
+  }
+};
+for (const mode of ['circular', 'linear']) {
+  for (const [name, { stack, turn }] of Object.entries(LOADED_DEPTH_HIDES)) {
+    test(`${name} after a Load of a saved Session hides and shows the only Depth track live, with Undo and Redo (${mode})`, async ({ page, browser }, testInfo) => {
+      test.setTimeout(400_000);
+      await open(page, { mode, results: 'single', reflow: 'off' });
+      await addDepthFile(page, 'depth.tsv', mode);
+      if (stack) {
+        await page.evaluate((linear) => {
+          const app = window.__GBDRAW_APP__;
+          if (linear) app.setLinearTrackSlotsEnabled(true);
+          else app.setCircularTrackSlotsEnabled(true);
+        }, mode === 'linear');
+      }
+      await settleLive(page);
+      await generate(page);
+      const file = testInfo.outputPath('depth.gbdraw-session.json');
+      const titled = await page.evaluate(async () => Boolean((await import('./js/state.js')).state.sessionTitle?.value));
+      await download(page, 'Save Session', file, titled ? {} : { title: 'depth' });
+      const loaded = await load(browser, file);
+      const expectApplied = async (count, step) => {
+        expect(await loaded.evaluate(async () => (await import('./js/state.js')).state.labelReflowLastError.value?.summary ?? null), `${mode}: ${step}: no Live edit failed`).toBeNull();
+        const groups = await shownTrackGroups(loaded, 'DEPTH_GROUPS');
+        if (count === 0) expect(groups, `${mode}: ${step}: the track is gone at once`).toBe(0);
+        else expect(groups, `${mode}: ${step}: the track is drawn`).toBe(count);
+      };
+      try {
+        const drawn = await shownTrackGroups(loaded, 'DEPTH_GROUPS');
+        expect(drawn).toBeGreaterThan(0);
+        await turn(loaded, mode, false);
+        await expectApplied(0, 'off');
+        await turn(loaded, mode, true);
+        await expectApplied(drawn, 'on');
+        await turn(loaded, mode, false);
+        await expectApplied(0, 'off again');
+        await history(loaded, 'undo');
+        await expectApplied(drawn, 'Undo');
+        await history(loaded, 'redo');
+        await expectApplied(0, 'Redo');
+        await expectLiveEqualsGenerate(loaded, { label: `${mode}: ${name} off after a Load` });
+      } finally { await loaded.context().close(); }
+    });
+  }
+}
+
 test('GT B5: Use custom stack turned on after a Generate with it off applies live, with a spacer row (Linear)', async ({ page }) => {
   test.setTimeout(300_000);
   await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
@@ -1278,6 +1333,38 @@ test('GT B1: Hide GC Skew keeps an AT skew row in the Result and the Legend list
   }
 });
 
+// PD-OI-104 scenario revision 6 (D-217, D-219): Hide GC Content in the tobacco
+// Session, whose Track row 2 (plastome_tint) extends to the GC content track,
+// asks; the choice that turns that row off with the hide applies live as one
+// History step, equal to Generate; its Undo turns both back on in the draft.
+test('GT B12 (rev 6): Hide GC Content with a row that extends to it turns that row off too (tobacco)', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
+  try {
+    await settleLive(page);
+    const rows = () => page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.adv.circular_track_slots
+      .filter((slot) => ['plastome_tint', 'gc_content'].includes(slot.id)).map((slot) => [slot.id, slot.enabled !== false])));
+    expect(await rows()).toEqual({ plastome_tint: true, gc_content: true });
+    expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), 'the Session draws GC content').toBeGreaterThan(0);
+    await clickTrackCheckbox(page, 'Hide GC Content');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Track row 2 (plastome_tint)');
+    await dialog.getByRole('button', { name: 'Hide GC content and turn off Track row 2', exact: true }).click();
+    await settleLive(page);
+    expect(await rows(), 'both rows are off').toEqual({ plastome_tint: false, gc_content: false });
+    expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), 'hidden live').toBe(0);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError ?? null), 'no refusal').toBeNull();
+    await history(page, 'undo');
+    expect(await rows(), 'Undo turns both on again').toEqual({ plastome_tint: true, gc_content: true });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.suppress_gc), 'Undo clears Hide GC Content').toBe(false);
+    await history(page, 'redo');
+    expect(await rows(), 'Redo turns both off').toEqual({ plastome_tint: false, gc_content: false });
+    await expectLiveEqualsGenerate(page, { label: 'Hide GC Content with Track row 2 turned off' });
+  } finally {
+    await page.context().close();
+  }
+});
+
 test('GT B10 (OV-2237): on a Result loaded without a request a hide waits for Generate and the note says so', async ({ browser }) => {
   test.setTimeout(300_000);
   const page = await load(browser, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v29.gbdraw-session.json.gz');
@@ -1296,4 +1383,417 @@ test('GT B10 (OV-2237): on a Result loaded without a request a hide waits for Ge
   } finally {
     await page.context().close();
   }
+});
+
+// Undo of a row switch's choice: the row switched off and the Overlay row that
+// reaches it leave the Result and the committed request together, and Undo and
+// Redo return both to what they were. A Save after the Undo holds the row.
+const UNDO_SESSIONS = {
+  circular: { session: 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json', record: 'NC_001879.2', set: 'plastome_tint', tint: 'plastome_tint' },
+  linear: { session: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', record: 'NC_001416.1', set: 'marks', tint: 'tint' }
+};
+// A stack with one Depth row, `mark` anchored on it, and a tint row that
+// extends to the GC content row, generated.
+const openReachingRows = async (browser, mode) => {
+  const { session, record, set } = UNDO_SESSIONS[mode];
+  const page = await load(browser, session);
+  if (mode === 'linear') {
+    await page.locator('[data-setting="region-annotations"] input[type=file]').first().setInputFiles({
+      name: 'regions.tsv', mimeType: 'text/tab-separated-values',
+      buffer: Buffer.from(`set_id\tid\tmark\trecord\tstart\tend\nmarks\tm1\thighlight\t${record}\t100\t900\n`)
+    });
+    await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().annotationSets.length)).toBe(1);
+    await page.evaluate(() => window.__GBDRAW_APP__.setLinearTrackSlotsEnabled(true));
+  }
+  await evaluateWithRetainedPromise(page, async ({ stackMode, tsv, setId }) => {
+    const { state } = await import('./js/state.js');
+    const app = window.__GBDRAW_APP__;
+    const file = new File([tsv], 's1.tsv', { type: 'text/tab-separated-values' });
+    await window.__GBDRAW_HISTORY__.runUndoable('Setup', () => {
+      if (stackMode === 'circular') app.setCircularDepthFile(0, file);
+      else app.setLinearDepthFile(app.linearSeqs[0], 0, file);
+    });
+    await window.__GBDRAW_HISTORY__.runUndoable('Setup', () => {
+      const rows = state.activeDrawing().adv[`${stackMode}_track_slots`];
+      const row = (id, params) => ({ id, renderer: 'annotations', enabled: true, side: 'overlay', z: params.to_slot ? -1 : 1,
+        ...(stackMode === 'linear' ? { height: '', spacing: '' } : {}),
+        params: { set_id: setId, marks: ['highlight'], ...params } });
+      rows.push(row('mark', { anchor_slot: 'depth', layer: 'foreground' }));
+      if (stackMode === 'linear') rows.push(row('tint', { anchor_slot: 'features', to_slot: 'gc_content', layer: 'underlay' }));
+    });
+    await app.runAnalysis();
+  }, { stackMode: mode, tsv: [0, 1, 2, 3].map((index) => `${record}\t${index * 700 + 1}\t${10 + index}`).join('\n'), setId: set });
+  await settleLive(page);
+  return page;
+};
+const savedUndoSession = async (page, file) => {
+  const titled = await page.evaluate(async () => Boolean((await import('./js/state.js')).state.sessionTitle?.value));
+  await download(page, 'Save Session', file, titled ? {} : { title: 'undo' });
+  return JSON.parse(gunzipSync(readFileSync(file)).toString('utf8'));
+};
+const committedSlots = (page, mode) => page.evaluate(async (stackMode) => {
+  const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+  const tracks = getCommittedCanonicalSession().renderRequest.diagramOptions.tracks;
+  return JSON.parse(JSON.stringify(tracks[`${stackMode}TrackSlots`]));
+}, mode);
+const overlayElements = (page, id) => page.evaluate((slotId) => window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+  .querySelectorAll(`[data-gbdraw-slot-id="${slotId}"] > *`).length, id);
+const slotIds = (slots) => slots.map((slot) => (typeof slot === 'string' ? slot.split(':')[0] : slot.id));
+const chooseToHide = async (page) => {
+  await page.locator('[data-choice-prompt] [data-choice-prompt-action="hide"]').click();
+  await settleLive(page);
+};
+for (const mode of ['circular', 'linear']) {
+  for (const [target, reacher] of [['depth', 'mark'], ['gc_content', UNDO_SESSIONS[mode].tint]]) {
+    for (const after of ['Generate', 'Load']) {
+      test(`Undo and Redo of a row switch's choice return the Overlay row to the Result and the committed request (${mode}, ${target} row, after ${after})`, async ({ browser }, testInfo) => {
+        test.setTimeout(420_000);
+        let page = await openReachingRows(browser, mode);
+        try {
+          if (after === 'Load') {
+            const file = testInfo.outputPath('reached.gbdraw-session.json');
+            await savedUndoSession(page, file);
+            await page.context().close();
+            page = await load(browser, file);
+          }
+          const drawnBefore = await overlayElements(page, reacher);
+          const slotsBefore = await committedSlots(page, mode);
+          expect(drawnBefore, 'the Result draws the Overlay row').toBeGreaterThan(0);
+          expect(slotIds(slotsBefore)).toContain(reacher);
+          expect((await semanticSnapshot(page)).overlays).toContain(reacher);
+
+          await page.evaluate(async ({ stackMode, id }) => {
+            const { state } = await import('./js/state.js');
+            const app = window.__GBDRAW_APP__;
+            const row = state.activeDrawing().adv[`${stackMode}_track_slots`].find((each) => each.id === id);
+            void app[stackMode === 'circular' ? 'setCircularTrackSlotEnabled' : 'setLinearTrackSlotEnabled'](row, false);
+          }, { stackMode: mode, id: target });
+          await chooseToHide(page);
+          expect(await overlayElements(page, reacher), 'the choice takes it out').toBe(0);
+          const slotsHidden = await committedSlots(page, mode);
+          expect(slotIds(slotsHidden)).not.toContain(reacher);
+
+          await history(page, 'undo');
+          expect(await overlayElements(page, reacher), 'Undo draws it again').toBe(drawnBefore);
+          expect(await committedSlots(page, mode), 'Undo gives the committed request back').toEqual(slotsBefore);
+          const saved = await savedUndoSession(page, testInfo.outputPath('after-undo.gbdraw-session.json'));
+          expect(slotIds(savedDrawing(saved, mode).renderRequest.diagramOptions.tracks[`${mode}TrackSlots`]), 'a Save after the Undo holds the row').toContain(reacher);
+
+          await history(page, 'redo');
+          expect(await overlayElements(page, reacher), 'Redo takes it out again').toBe(0);
+          expect(await committedSlots(page, mode)).toEqual(slotsHidden);
+
+          await history(page, 'undo');
+          await expectLiveEqualsGenerate(page, { label: `${mode} ${target} after ${after}: Undo of the choice` });
+        } finally { await page.context().close(); }
+      });
+    }
+  }
+}
+
+// Undo of a live Hide GC Content or Hide GC Skew applies at once, with the
+// rows that left with it, and no note stays; Redo hides again at once. Turning
+// the hide off by hand still waits for Generate, with the note.
+const noteOf = (page) => trackScopeText(page);
+const committedTracks = (page) => page.evaluate(async () => {
+  const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+  const { renderRequest } = getCommittedCanonicalSession();
+  return JSON.parse(JSON.stringify({ tracks: renderRequest.diagramOptions.tracks, overrides: renderRequest.diagramOptions.configOverrides }));
+});
+const hideStep = async (page, box, ask) => {
+  await clickTrackCheckbox(page, box);
+  if (ask) await chooseToHide(page);
+  else await settleLive(page);
+};
+const undoOnce = async (page) => { await history(page, 'undo'); await settleLive(page); };
+const redoOnce = async (page) => { await history(page, 'redo'); await settleLive(page); };
+const WAIT_NOTE = 'Showing a track applies on Generate';
+
+test('Undo of Hide GC Content with the dialog\'s choice applies at once, with the row that extends to it; Save and Load after it hold them (tobacco, after Load)', async ({ browser }, testInfo) => {
+  test.setTimeout(420_000);
+  let page = await load(browser, UNDO_SESSIONS.circular.session);
+  try {
+    const before = await committedTracks(page);
+    const tint = await overlayElements(page, 'plastome_tint');
+    const groups = await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS');
+    expect(tint).toBeGreaterThan(0);
+    await hideStep(page, 'Hide GC Content', true);
+    expect(await overlayElements(page, 'plastome_tint')).toBe(0);
+    expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS')).toBe(0);
+
+    await undoOnce(page);
+    expect(await overlayElements(page, 'plastome_tint'), 'Undo returns the row').toBe(tint);
+    expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), 'Undo returns the track').toBe(groups);
+    expect(await committedTracks(page), 'the committed request is what it was').toEqual(before);
+    expect(await noteOf(page), 'no note remains').not.toContain(WAIT_NOTE);
+
+    await redoOnce(page);
+    expect(await shownTrackGroups(page, 'DINUCLEOTIDE_CONTENT_GROUPS'), 'Redo hides again at once').toBe(0);
+    expect(await overlayElements(page, 'plastome_tint')).toBe(0);
+    await undoOnce(page);
+    const saved = await savedUndoSession(page, testInfo.outputPath('after-undo.gbdraw-session.json'));
+    expect(slotIds(savedDrawing(saved, 'circular').renderRequest.diagramOptions.tracks.circularTrackSlots)).toEqual(expect.arrayContaining(['gc_content', 'plastome_tint']));
+    await expectLiveEqualsGenerate(page, { label: 'Undo of Hide GC Content with its choice' });
+    await page.context().close();
+    page = await load(browser, testInfo.outputPath('after-undo.gbdraw-session.json'));
+    expect(await overlayElements(page, 'plastome_tint'), 'the loaded Result draws the row').toBe(tint);
+    await expectLiveEqualsGenerate(page, { label: 'Load after the Undo' });
+  } finally { await page.context().close(); }
+});
+
+for (const [box, groupsName, kind] of [['Hide GC Content', 'DINUCLEOTIDE_CONTENT_GROUPS', 'gc_content'], ['Hide GC Skew', 'DINUCLEOTIDE_SKEW_GROUPS', 'gc_skew']]) {
+  test(`Undo of ${box} in a Circular stack applies at once after a Generate; a pending value stays out; off by hand still waits`, async ({ page }) => {
+    test.setTimeout(420_000);
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true));
+    await generate(page);
+    const before = await committedTracks(page);
+    const groups = await shownTrackGroups(page, groupsName);
+    expect(groups).toBeGreaterThan(0);
+    // A pending row value stays in the draft through the Undo and out of the Result.
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const rows = state.activeDrawing().adv.circular_track_slots;
+      await window.__GBDRAW_HISTORY__.runUndoable('Pending', () => { rows.find((row) => row.id === 'gc_skew').width = '8'; });
+    });
+    await hideStep(page, box, true);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError ?? null), 'no refusal').toBeNull();
+    expect(await shownTrackGroups(page, groupsName)).toBe(0);
+    await undoOnce(page);
+    expect(await shownTrackGroups(page, groupsName), 'Undo returns the track').toBe(groups);
+    expect(await committedTracks(page)).toEqual(before);
+    expect(await noteOf(page), 'no note remains').not.toContain(WAIT_NOTE);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.circular_track_slots.find((row) => row.id === 'gc_skew').width), 'the value stays pending').toBe('8');
+    await redoOnce(page);
+    expect(await shownTrackGroups(page, groupsName), 'Redo hides again').toBe(0);
+    await clickTrackCheckbox(page, box);
+    await settleLive(page);
+    expect(await shownTrackGroups(page, groupsName), 'off by hand waits').toBe(0);
+    expect(slotIds((await committedTracks(page)).tracks.circularTrackSlots)).not.toContain(kind);
+    await expect.poll(() => noteOf(page), 'the note names the wait').toContain('Showing a track applies on Generate');
+    await generate(page);
+    expect(await shownTrackGroups(page, groupsName)).toBe(groups);
+  });
+
+  test(`Undo of ${box} with Circular track widths applies at once (stack off, after a Generate)`, async ({ page }) => {
+    test.setTimeout(420_000);
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await page.evaluate(() => { window.__GBDRAW_APP__.adv.gc_content_width_circular = 40; });
+    await generate(page);
+    const before = await committedTracks(page);
+    const groups = await shownTrackGroups(page, groupsName);
+    expect(groups).toBeGreaterThan(0);
+    await hideStep(page, box, false);
+    expect(await shownTrackGroups(page, groupsName)).toBe(0);
+    await undoOnce(page);
+    expect(await shownTrackGroups(page, groupsName), 'Undo returns the track').toBe(groups);
+    expect(await committedTracks(page)).toEqual(before);
+    expect(await noteOf(page), 'no note remains').not.toContain(WAIT_NOTE);
+    await expectLiveEqualsGenerate(page, { label: `Undo of ${box} with a track width` });
+  });
+}
+
+// A later change of the hide ends what its Undo named, also inside that Undo's
+// rerender. The rerender's reply is held, so each step lands inside it.
+const CONTENT_GROUPS = 'DINUCLEOTIDE_CONTENT_GROUPS';
+const SKEW_GROUPS = 'DINUCLEOTIDE_SKEW_GROUPS';
+const generateWithTrackWidth = async (page) => {
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await page.evaluate(() => { window.__GBDRAW_APP__.adv.gc_content_width_circular = 40; });
+  await generate(page);
+};
+const holdNextRerender = (page) => page.evaluate(() => {
+  const hold = { entered: false };
+  const released = new Promise((resolve) => { hold.release = resolve; });
+  window.__UNDO_HOLD__ = hold;
+  window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = async () => {
+    if (hold.entered) return;
+    hold.entered = true;
+    await released;
+  };
+});
+const insideHeldRerender = (page) => expect.poll(() => page.evaluate(() => window.__UNDO_HOLD__.entered), { timeout: 120_000 }).toBe(true);
+const releaseRerender = async (page) => {
+  await page.evaluate(() => {
+    window.__UNDO_HOLD__.release();
+    delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+  });
+  await settleLive(page);
+};
+const step = (page, name) => page.evaluate((each) => window.__GBDRAW_HISTORY__[each](), name);
+const undoWithHeldRerender = async (page) => {
+  await holdNextRerender(page);
+  await step(page, 'undo');
+  await insideHeldRerender(page);
+};
+const handOffStates = [
+  ['Redo, Redo', async (page) => { await step(page, 'redo'); await step(page, 'redo'); }],
+  ['two clicks on the hide', async (page) => { await clickTrackCheckbox(page, 'Hide GC Content'); await clickTrackCheckbox(page, 'Hide GC Content'); }]
+];
+for (const [name, handOff] of handOffStates) {
+  test(`Off by hand after a live hide keeps its wait when ${name} land inside the rerender of an Undo`, async ({ page }) => {
+    test.setTimeout(420_000);
+    await generateWithTrackWidth(page);
+    await hideStep(page, 'Hide GC Content', false);
+    await hideStep(page, 'Hide GC Content', false);
+    await undoOnce(page);
+    await undoWithHeldRerender(page);
+    await handOff(page);
+    await releaseRerender(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.suppress_gc), 'the hide is off in the draft').toBe(false);
+    expect(await shownTrackGroups(page, CONTENT_GROUPS), 'it waits for Generate').toBe(0);
+    expect(await noteOf(page), 'the note names the wait').toContain(WAIT_NOTE);
+  });
+}
+
+test('Hide, off by hand, Undo, Redo keeps the wait', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  await hideStep(page, 'Hide GC Content', false);
+  await hideStep(page, 'Hide GC Content', false);
+  await undoOnce(page);
+  await redoOnce(page);
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'it waits for Generate').toBe(0);
+  expect(await noteOf(page), 'the note names the wait').toContain(WAIT_NOTE);
+});
+
+test('Undo, Undo inside the rerender returns both tracks, with no note while it runs; Undo, Redo, Undo inside it returns the track', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  const before = await committedTracks(page);
+  const groups = [await shownTrackGroups(page, CONTENT_GROUPS), await shownTrackGroups(page, SKEW_GROUPS)];
+  await hideStep(page, 'Hide GC Content', false);
+  await hideStep(page, 'Hide GC Skew', false);
+  await undoWithHeldRerender(page);
+  expect(await noteOf(page), 'the Undo is applying: nothing waits for Generate').not.toContain(WAIT_NOTE);
+  await step(page, 'undo');
+  expect(await noteOf(page), 'nor after the second Undo').not.toContain(WAIT_NOTE);
+  await releaseRerender(page);
+  expect([await shownTrackGroups(page, CONTENT_GROUPS), await shownTrackGroups(page, SKEW_GROUPS)], 'both tracks return').toEqual(groups);
+  expect(await committedTracks(page)).toEqual(before);
+  expect(await noteOf(page), 'no note remains').not.toContain(WAIT_NOTE);
+
+  await hideStep(page, 'Hide GC Content', false);
+  await undoWithHeldRerender(page);
+  await step(page, 'redo');
+  await step(page, 'undo');
+  await releaseRerender(page);
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'the last Undo returns the track').toBe(groups[0]);
+  expect(await committedTracks(page)).toEqual(before);
+});
+
+test('An Undo whose rerender fails keeps the Result and shows the wait; the next off by hand waits too', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  await hideStep(page, 'Hide GC Content', false);
+  await page.evaluate(() => { window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => { throw new Error('forced rerender failure'); }; });
+  await undoOnce(page);
+  await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), 'the failure is reported').not.toBeNull();
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'the Result stays').toBe(0);
+  await expect.poll(() => noteOf(page), 'the note is back').toContain(WAIT_NOTE);
+  await hideStep(page, 'Hide GC Content', false);
+  await hideStep(page, 'Hide GC Content', false);
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'off by hand waits').toBe(0);
+  await expect.poll(() => noteOf(page)).toContain(WAIT_NOTE);
+});
+
+const resetSettings = async (page) => {
+  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); });
+};
+const hideIsOn = (page) => page.evaluate(() => window.__GBDRAW_APP__.form.suppress_gc);
+
+test('Redo of Reset Settings inside the rerender of an Undo keeps the wait: a restore that turns the hide on drops its name', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  await hideStep(page, 'Hide GC Content', false);
+  await resetSettings(page);
+  await settleLive(page);
+  await hideStep(page, 'Hide GC Content', false);
+  await undoWithHeldRerender(page);
+  await step(page, 'undo');
+  expect(await hideIsOn(page), 'the Undo of Reset Settings turned the hide on').toBe(true);
+  await step(page, 'redo');
+  expect(await noteOf(page), 'the Redo of Reset Settings hands the hide off').toContain(WAIT_NOTE);
+  await releaseRerender(page);
+  expect(await hideIsOn(page)).toBe(false);
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'it waits for Generate').toBe(0);
+  expect(await noteOf(page), 'the note names the wait').toContain(WAIT_NOTE);
+});
+
+test('An Undo that leaves its hide on names nothing', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  await hideStep(page, 'Hide GC Content', false);
+  await hideStep(page, 'Hide GC Content', false);
+  await holdNextRerender(page);
+  await clickTrackCheckbox(page, 'Hide GC Skew');
+  await insideHeldRerender(page);
+  await step(page, 'undo');
+  await step(page, 'undo');
+  expect(await hideIsOn(page), 'the second Undo leaves the hide on').toBe(true);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return [...state.undoneTrackHides.value.get('circular')];
+  })).toEqual(['skew']);
+  await releaseRerender(page);
+});
+
+test('Undo, Undo through Reset Settings inside the rerender returns the track: a restore that leaves the hide off keeps the name', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  const shown = await shownTrackGroups(page, CONTENT_GROUPS);
+  await resetSettings(page);
+  await settleLive(page);
+  await hideStep(page, 'Hide GC Content', false);
+  await undoWithHeldRerender(page);
+  await step(page, 'undo');
+  expect(await hideIsOn(page)).toBe(false);
+  await releaseRerender(page);
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'the track returns').toBe(shown);
+  expect(await noteOf(page), 'no note remains').not.toContain(WAIT_NOTE);
+});
+
+// A Generate waits for the running rerender; its Cancel ends that rerender too.
+const generateAndCancel = async (page) => {
+  await page.evaluate(() => { void window.__GBDRAW_APP__.runAnalysis(); });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.processing)).toBe(true);
+  await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.cancelGeneration(); });
+  await releaseRerender(page);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.processing)).toBe(false);
+  await settleLive(page);
+};
+const resultContent = (page) => page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+
+test('Cancel of a Generate inside the rerender of an Undo leaves the Result and shows the wait; the next off by hand waits too', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  await hideStep(page, 'Hide GC Content', false);
+  const tracks = await committedTracks(page);
+  const result = await resultContent(page);
+  expect(result).toContain('<svg');
+  await undoWithHeldRerender(page);
+  await generateAndCancel(page);
+  expect(await hideIsOn(page)).toBe(false);
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'the track stays out').toBe(0);
+  await expect.poll(() => noteOf(page), 'the note is back').toContain(WAIT_NOTE);
+  expect(await committedTracks(page), 'the committed tracks are unchanged').toEqual(tracks);
+  expect((await resultContent(page)) === result, 'the Result is unchanged').toBe(true);
+  await hideStep(page, 'Hide GC Content', false);
+  await hideStep(page, 'Hide GC Content', false);
+  expect(await shownTrackGroups(page, CONTENT_GROUPS), 'off by hand waits').toBe(0);
+  await expect.poll(() => noteOf(page)).toContain(WAIT_NOTE);
+});
+
+test('Cancel of a Generate inside the rerender of an Undo keeps the names when another Undo queued an iteration', async ({ page }) => {
+  test.setTimeout(420_000);
+  await generateWithTrackWidth(page);
+  const groups = [await shownTrackGroups(page, CONTENT_GROUPS), await shownTrackGroups(page, SKEW_GROUPS)];
+  await hideStep(page, 'Hide GC Content', false);
+  await hideStep(page, 'Hide GC Skew', false);
+  await undoWithHeldRerender(page);
+  await step(page, 'undo');
+  await generateAndCancel(page);
+  expect([await shownTrackGroups(page, CONTENT_GROUPS), await shownTrackGroups(page, SKEW_GROUPS)], 'both tracks return').toEqual(groups);
+  expect(await noteOf(page), 'no note remains').not.toContain(WAIT_NOTE);
 });

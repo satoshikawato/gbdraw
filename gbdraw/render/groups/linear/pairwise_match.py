@@ -125,7 +125,6 @@ _OPTIONAL_METADATA_ATTRIBUTES = (
     ("collinearity_block_kind", "data-collinearity-block-kind"),
     ("collinearity_orientation", "data-collinearity-orientation"),
     ("collinearity_block_score", "data-collinearity-block-score"),
-    ("collinearity_block_evalue", "data-collinearity-block-evalue"),
     ("collinearity_anchor_index", "data-collinearity-anchor-index"),
     ("collinearity_anchor_count", "data-collinearity-anchor-count"),
     ("collinearity_color_mode", "data-collinearity-color-mode"),

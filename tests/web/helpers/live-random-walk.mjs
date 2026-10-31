@@ -339,13 +339,15 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (step)
       let finished = false;
       applied.then(() => { finished = true; }, () => { finished = true; });
       const deadline = Date.now() + 150_000;
-      // A dialog is answered once, until it has closed.
+      // A dialog is answered once, until it has closed or moved on: the Legend
+      // name dialog asks its scope, then, still open, a name conflict.
       let answering = '';
       while (Date.now() < deadline) {
         const style = app.featureStyleScopeDialog;
         const visibility = app.featureVisibilityScopeDialog;
-        const shown = ['featureStyleScopeDialog', 'featureVisibilityScopeDialog', 'labelOnDialog', 'labelTextScopeDialog',
-          'hiddenLabelTextDialog', 'legendRenameDialog', 'paletteColorsDialog'].find((name) => app[name].show) || '';
+        const open = ['featureStyleScopeDialog', 'featureVisibilityScopeDialog', 'labelOnDialog', 'labelTextScopeDialog',
+          'hiddenLabelTextDialog', 'legendRenameDialog', 'paletteColorsDialog'].find((name) => app[name].show);
+        const shown = open ? `${open} ${app[open].mode || ''}`.trim() : '';
         if (!shown) answering = '';
         if (shown && shown === answering) {
           await sleep(20);
@@ -382,7 +384,8 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (step)
           notes.push(`hidden label text ${choice}`);
           answer(app.handleHiddenLabelTextChoice(choice));
         } else if (app.legendRenameDialog.show) {
-          const choice = choose(app.legendRenameDialog.mode === 'target' ? ['merge', 'keep-both'] : ['single', 'group']);
+          const { mode, mergeAvailable } = app.legendRenameDialog;
+          const choice = choose(mode !== 'target' ? ['single', 'group'] : mergeAvailable ? ['merge', 'keep-both'] : ['keep-both']);
           notes.push(`legend rename ${app.legendRenameDialog.mode} ${choice}`);
           answer(app.handleLegendRenameChoice(choice));
         } else if (app.paletteColorsDialog.show) {
@@ -399,6 +402,7 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (step)
           await (finished ? sleep(20) : Promise.race([applied.catch(() => {}), sleep(20)]));
         }
       }
+      if (Date.now() >= deadline) throw new Error(`the edit did not finish; dialog answered and still open: "${answering}"`);
       await Promise.all([applied, ...answers]);
     };
 
@@ -534,7 +538,7 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (step)
 // A step that never settles (for example, a dialog no answer covers) fails with
 // the dialogs that are open, instead of waiting for the test deadline.
 const STEP_TIMEOUT_MS = 180_000;
-const applyStepWithin = async (page, step) => {
+const withinStepTimeout = async (page, work) => {
   let timer;
   const expired = new Promise((_, reject) => {
     timer = setTimeout(async () => {
@@ -545,11 +549,12 @@ const applyStepWithin = async (page, step) => {
     }, STEP_TIMEOUT_MS);
   });
   try {
-    return await Promise.race([applyStep(page, step), expired]);
+    return await Promise.race([work(), expired]);
   } finally {
     clearTimeout(timer);
   }
 };
+const applyStepWithin = (page, step) => withinStepTimeout(page, () => applyStep(page, step));
 
 // Save Session, then Load that file into the page.
 const saveAndLoad = async (page, path) => {
@@ -601,7 +606,8 @@ const runStep = async (page, step, sessionPath) => {
   switch (step.kind) {
     case 'resultSwitch': await showResult(page, step.index); return [];
     case 'drawingSwitch': await switchDrawing(page, step.mode); return [];
-    case 'load': await saveAndLoad(page, sessionPath); return [];
+    // A click on Save Session behind an open dialog has no timeout of its own.
+    case 'load': await withinStepTimeout(page, () => saveAndLoad(page, sessionPath)); return [];
     case 'reset': return resetKeepingGenerateSettings(page);
     case 'trackData':
       if (!step.prepare) return applyStepWithin(page, step);

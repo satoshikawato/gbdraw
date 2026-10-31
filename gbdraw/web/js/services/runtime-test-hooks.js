@@ -4,6 +4,17 @@ const testHooks = () => globalThis.__GBDRAW_TEST_HOOKS__;
 export const runtimeTestHooksEnabled = () => Boolean(testHooks());
 
 /**
+ * A test's stand-in for a cap on a saved Session, so a browser case needs no
+ * Session of 200 or 512 MiB.
+ * @param {'maxExpandedSessionBytes' | 'maxSessionFileBytes'} name The cap it stands in for.
+ * @returns {number | undefined}
+ */
+export const testSessionByteCap = (name) => {
+  const cap = testHooks()?.[name];
+  return Number.isSafeInteger(cap) && cap > 0 ? cap : undefined;
+};
+
+/**
  * @param {unknown} name
  * @param {unknown} [value]
  * @param {unknown} [detail]
