@@ -52,13 +52,13 @@ test('a write stores the display, and a write that throws changes nothing and re
 });
 
 test('the UI language is read under its own key, and anything else gives English', () => {
-  for (const tag of ['en', 'id', 'es', 'fr', 'pt', 'vi', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
+  for (const tag of ['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
     assert.equal(readUiLanguage(() => storageWith({ [LANGUAGE_KEY]: tag })), tag);
   }
   // A first visit has nothing stored: English, whatever the browser's language.
   assert.equal(readUiLanguage(() => storageWith()), 'en');
   assert.equal(readUiLanguage(() => storageWith({ [KEY]: 'ja' })), 'en', 'the display key is not the language');
-  for (const value of ['', 'JA', 'ja-JP', 'zh', 'zh-CN', 'zh-TW', 'fr-FR', 'pt-BR', 'pt-PT', 'es-ES', 'ko-KR', 'KO', 'de', ' ja', '{"tag":"ja"}']) {
+  for (const value of ['', 'JA', 'ja-JP', 'zh', 'zh-CN', 'zh-TW', 'fr-FR', 'pt-BR', 'pt-PT', 'es-ES', 'ko-KR', 'KO', 'de-DE', 'DE', 'tr-TR', 'xx', ' ja', '{"tag":"ja"}']) {
     assert.equal(readUiLanguage(() => storageWith({ [LANGUAGE_KEY]: value })), 'en', JSON.stringify(value));
   }
   assert.equal(readUiLanguage(failing('The operation is insecure.')), 'en');
