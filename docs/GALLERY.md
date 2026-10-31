@@ -2,7 +2,7 @@
 
 # Gallery
 
-Finished figures made with gbdraw. The ten Web Gallery examples come first, in the order of the [interactive Gallery](https://gbdraw.app/gallery/), where you can zoom, open feature popups, download the Session, and follow a step-by-step web app guide. Five of them also have a Tutorial that builds the figure from downloaded inputs in the web app, on the command line, and in Python.
+Finished figures made with gbdraw. The twelve Web Gallery examples come first, in the order of the [interactive Gallery](https://gbdraw.app/gallery/), where you can zoom, open feature popups, download the Session, and follow a step-by-step web app guide. Five of them also have a Tutorial that builds the figure from downloaded inputs in the web app, on the command line, and in Python. The last two have no step-by-step guide.
 
 ## Web Gallery examples
 
@@ -85,6 +85,22 @@ Five aminoglycoside biosynthetic gene clusters from MIBiG (lividomycin, two neom
 Nine majanivirus genomes from penaeid shrimp, one per row, linked by LOSATP similarity groups at 20% identity or more. A color table marks WSSV-like proteins, BIRP, and tyrosine recombinase by product name. The Litopenaeus vannamei majanivirus genome is shown reverse-complemented, so its synteny with the other genomes reads left to right. The first five genomes share dense, high-identity links, while links further down are paler and sparser; the links show protein similarity, not orthology.
 
 [Open in the interactive Gallery](https://gbdraw.app/gallery/#majanivirus_orthogroup)
+
+### tblastx comparison of four majanivirus genomes without GC tracks
+
+<a href="https://gbdraw.app/gallery/#majanivirus-tblastx"><img src="../gbdraw/web/gallery/thumbnails/majanivirus-tblastx.webp" alt="Four majanivirus genomes as rows of gene arrows joined by red tblastx match ribbons, with a ruler" width="640"></a>
+
+Four majanivirus genomes of about 290 to 530 kbp as stacked rows of gene arrows, joined by precomputed tblastx tables between neighboring rows, with a ruler and no GC tracks. Matches below 150 bits, 50% identity, or 100 aligned residues are hidden. Match ribbons shade from pale to saturated red with identity, and an inverted match is drawn as a crossed ribbon, as in the middle of the second comparison. Inverted BLAST matches are not colored differently; orientation colors belong to LOSATP collinear blocks.
+
+[Open in the interactive Gallery](https://gbdraw.app/gallery/#majanivirus-tblastx)
+
+### Similarity rings of three <i>Staphylococcus aureus</i> genomes around NCTC 8325
+
+<a href="https://gbdraw.app/gallery/#saureus-similarity-rings"><img src="../gbdraw/web/gallery/thumbnails/saureus-similarity-rings.webp" alt="Circular Staphylococcus aureus map with three colored similarity rings, a gene ring outside, and GC content and GC skew inside" width="640"></a>
+
+Three <i>Staphylococcus aureus</i> genomes (N315, COL, MW2) as one ring each around the NCTC 8325 reference, with the gene ring outside and GC content and GC skew inside. Each ring has its own color and shades from pale to full with BLAST identity, from the 50% threshold to 100%; the legend shows that continuous scale. Gaps in a ring are regions without a hit above the threshold.
+
+[Open in the interactive Gallery](https://gbdraw.app/gallery/#saureus-similarity-rings)
 
 ## More figures
 

@@ -1,0 +1,76 @@
+{
+  "id": "majanivirus-tblastx",
+  "version": 1,
+  "title": "Compare four genomes with precomputed tblastx tables",
+  "summary": "Compare four majanivirus genomes with precomputed tblastx tables and read the match ribbons.",
+  "appMode": "Linear",
+  "primaryWorkflow": "Draw a BLAST comparison",
+  "downloads": [
+    {
+      "label": "MjeNMV",
+      "source": "gbdraw repository",
+      "targetName": "MjeNMV.gb",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/examples/MjeNMV.gb",
+      "note": "GenBank record, one Linear row."
+    },
+    {
+      "label": "MelaMJNV",
+      "source": "gbdraw repository",
+      "targetName": "MelaMJNV.gb",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/examples/MelaMJNV.gb",
+      "note": "GenBank record, one Linear row."
+    },
+    {
+      "label": "PemoMJNVA",
+      "source": "gbdraw repository",
+      "targetName": "PemoMJNVA.gb",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/examples/PemoMJNVA.gb",
+      "note": "GenBank record, one Linear row."
+    },
+    {
+      "label": "PeseMJNV",
+      "source": "gbdraw repository",
+      "targetName": "PeseMJNV.gb",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/examples/PeseMJNV.gb",
+      "note": "GenBank record, one Linear row."
+    },
+    {
+      "label": "MjeNMV.MelaMJNV",
+      "source": "gbdraw repository",
+      "targetName": "MjeNMV.MelaMJNV.tblastx.out",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/examples/MjeNMV.MelaMJNV.tblastx.out",
+      "note": "tblastx outfmt 7 table, query then subject."
+    },
+    {
+      "label": "MelaMJNV.PemoMJNVA",
+      "source": "gbdraw repository",
+      "targetName": "MelaMJNV.PemoMJNVA.tblastx.out",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/examples/MelaMJNV.PemoMJNVA.tblastx.out",
+      "note": "tblastx outfmt 7 table, query then subject."
+    },
+    {
+      "label": "PemoMJNVA.PeseMJNV",
+      "source": "gbdraw repository",
+      "targetName": "PemoMJNVA.PeseMJNV.tblastx.out",
+      "href": "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/examples/PemoMJNVA.PeseMJNV.tblastx.out",
+      "note": "tblastx outfmt 7 table, query then subject."
+    }
+  ],
+  "requirements": [
+    "Select Linear mode and add the four records. Open gbdraw.app, select Linear, and add the four GenBank files in this order, one file per row. Row: 1, GenBank / DDBJ File: MjeNMV.gb; Row: 2, GenBank / DDBJ File: MelaMJNV.gb; Row: 3, GenBank / DDBJ File: PemoMJNVA.gb; Row: 4, GenBank / DDBJ File: PeseMJNV.gb.",
+    "Upload the tblastx tables. Open Pairwise Comparisons, choose Upload BLAST TSV, and attach one table to each neighboring pair. The three searches are already done, and no search runs in the browser. Pair: Row 1 to row 2, Table: MjeNMV.MelaMJNV.tblastx.out; Pair: Row 2 to row 3, Table: MelaMJNV.PemoMJNVA.tblastx.out; Pair: Row 3 to row 4, Table: PemoMJNVA.PeseMJNV.tblastx.out.",
+    "Set the filters and the layout. Matches below the thresholds are hidden. Leave GC content and GC skew off, and show the ruler. Control: Bitscore, Value: 150; Control: Min identity (%), Value: 50; Control: Min length, Value: 100; Control: Align to Center, Value: On; Control: Scale Style, Value: Ruler (Ticks); Control: Legend position, Value: Right.",
+    "Generate and read the figure. Click Generate Diagram. Ribbons shade from pale to saturated red with identity. A parallel ribbon joins regions in the same orientation; a crossed ribbon, such as the bow tie in the middle of the second comparison, is an inverted match. Inverted BLAST matches are not colored differently from forward ones."
+  ],
+  "manualSteps": [],
+  "related": [
+    {
+      "label": "Tutorial: Show where the Lambda and DE3 phage genomes match",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/compare-genomes-losatn.md"
+    },
+    {
+      "label": "Open the gbdraw web app",
+      "href": "../"
+    }
+  ]
+}

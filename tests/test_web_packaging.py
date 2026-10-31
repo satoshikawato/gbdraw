@@ -612,6 +612,8 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "hepatoplasmataceae_orthogroup",
         "BGC0000708-BGC0000713",
         "majanivirus_orthogroup",
+        "majanivirus-tblastx",
+        "saureus-similarity-rings",
     ]
     examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
     expected_tags = {
@@ -651,6 +653,8 @@ def test_interactive_gallery_examples_are_wired() -> None:
             "LOSAT",
             "Interactive SVG",
         ],
+        "majanivirus-tblastx": ["Linear", "BLAST table", "Interactive SVG"],
+        "saureus-similarity-rings": ["Circular", "Comparison rings", "LOSAT", "Interactive SVG"],
     }
 
     assert [entry["id"] for entry in examples] == expected_ids
@@ -669,6 +673,8 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "Protein similarity groups across five genomes (Hepatoplasmataceae)",
         "Protein similarity among aminoglycoside biosynthetic gene clusters (<i>Streptomyces</i> spp.)",
         "Protein similarity across nine majanivirus genomes",
+        "tblastx comparison of four majanivirus genomes without GC tracks",
+        "Similarity rings of three <i>Staphylococcus aureus</i> genomes around NCTC 8325",
     ]
     for entry in examples:
         assert entry["title"]

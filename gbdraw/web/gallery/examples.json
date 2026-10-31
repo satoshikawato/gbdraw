@@ -321,5 +321,69 @@
     "displayOrder": 90,
     "tutorial": "./tutorials/majanivirus_orthogroup.json",
     "tutorialStatus": "ready"
+  },
+  {
+    "id": "majanivirus-tblastx",
+    "title": "tblastx comparison of four majanivirus genomes without GC tracks",
+    "tags": [
+      "Linear",
+      "BLAST table",
+      "Interactive SVG"
+    ],
+    "svg": "./examples/majanivirus-tblastx.svg",
+    "svgType": "interactive",
+    "session": "./sessions/majanivirus-tblastx.gbdraw-session.json.gz",
+    "thumbnail": "./thumbnails/majanivirus-tblastx.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/majanivirus-tblastx.gbdraw-session.json.gz",
+    "sourceOutput": "gbdraw/web/gallery/examples/majanivirus-tblastx.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/majanivirus-tblastx.svg",
+    "sourceNote": "The complete gzip-compressed Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "MjeNMV.gb",
+      "MelaMJNV.gb",
+      "PemoMJNVA.gb",
+      "PeseMJNV.gb"
+    ],
+    "fileSizeLabel": "12.8 MB",
+    "command": "gbdraw linear --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb -b MjeNMV.MelaMJNV.tblastx.out MelaMJNV.PemoMJNVA.tblastx.out PemoMJNVA.PeseMJNV.tblastx.out --align_center --scale_style ruler --legend right --bitscore 150 --identity 50 --alignment_length 100 -f interactive_svg -o majanivirus-tblastx",
+    "commandKind": "runnable",
+    "commandNote": "Download the four GenBank files and three tblastx tables from Files, then run this command in the same directory.",
+    "description": "Four majanivirus genomes of about 290 to 530 kbp as stacked rows of gene arrows, joined by precomputed tblastx tables between neighboring rows, with a ruler and no GC tracks. Matches below 150 bits, 50% identity, or 100 aligned residues are hidden. Match ribbons shade from pale to saturated red with identity, and an inverted match is drawn as a crossed ribbon, as in the middle of the second comparison. Inverted BLAST matches are not colored differently; orientation colors belong to LOSATP collinear blocks.",
+    "workflow": "Draw a BLAST comparison",
+    "inputSummary": "4 GenBank + 3 tblastx tables",
+    "displayOrder": 100,
+    "tutorial": "./tutorials/majanivirus-tblastx.json",
+    "tutorialStatus": "ready"
+  },
+  {
+    "id": "saureus-similarity-rings",
+    "title": "Similarity rings of three <i>Staphylococcus aureus</i> genomes around NCTC 8325",
+    "tags": [
+      "Circular",
+      "Comparison rings",
+      "LOSAT",
+      "Interactive SVG"
+    ],
+    "svg": "./examples/saureus-similarity-rings.svg",
+    "svgType": "interactive",
+    "session": "./sessions/saureus-similarity-rings.gbdraw-session.json.gz",
+    "thumbnail": "./thumbnails/saureus-similarity-rings.webp",
+    "sourceSession": "gbdraw/web/gallery/sessions/saureus-similarity-rings.gbdraw-session.json.gz",
+    "sourceOutput": "gbdraw/web/gallery/examples/saureus-similarity-rings.svg",
+    "sourceFigure": "gbdraw/web/gallery/sources/saureus-similarity-rings.svg",
+    "sourceNote": "The complete gzip-compressed Session JSON and generated SVG output are stored with the gallery assets.",
+    "featureSources": [
+      "NC_007795.gb"
+    ],
+    "fileSizeLabel": "24.4 MB",
+    "command": "gbdraw circular --gbk NC_007795.gb --losat losatn --conservation_sequence NC_002745.gb NC_002951.gb NC_003923.gb --conservation_labels 'S. aureus N315' 'S. aureus COL' 'S. aureus MW2' --conservation_colors '#c0392b' '#2471a3' '#1e8449' --identity 50 --track_type tuckin -l right -f interactive_svg -o saureus-similarity-rings",
+    "commandKind": "runnable",
+    "commandNote": "Download the four GenBank files from Files. The command runs LOSATN locally; no BLAST database is built.",
+    "description": "Three <i>Staphylococcus aureus</i> genomes (N315, COL, MW2) as one ring each around the NCTC 8325 reference, with the gene ring outside and GC content and GC skew inside. Each ring has its own color and shades from pale to full with BLAST identity, from the 50% threshold to 100%; the legend shows that continuous scale. Gaps in a ring are regions without a hit above the threshold.",
+    "workflow": "Compare genomes around a reference",
+    "inputSummary": "4 GenBank files",
+    "displayOrder": 110,
+    "tutorial": "./tutorials/saureus-similarity-rings.json",
+    "tutorialStatus": "ready"
   }
 ]

@@ -9,12 +9,14 @@
     "vibrio-harveyi-group-collinear",
     "hepatoplasmataceae_orthogroup",
     "BGC0000708-BGC0000713",
-    "majanivirus_orthogroup"
+    "majanivirus_orthogroup",
+    "majanivirus-tblastx",
+    "saureus-similarity-rings"
   ],
   "files": {
     "gallery/examples.json": {
-      "bytes": 26165,
-      "sha256": "12f81ea92ccb9a75278090e0233e4e96b16372f7a6d064369de526104e7d6602"
+      "bytes": 30375,
+      "sha256": "339b68a9a461b7cb51979b0b8a236587f2d571724de25d4640f9e06c73b972aa"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1319101,
@@ -44,9 +46,17 @@
       "bytes": 869931,
       "sha256": "0751e5b7eea1cf39563577d0768623ded237de5d859b20a5b4c2d0f1206cd016"
     },
+    "gallery/examples/majanivirus-tblastx.svg": {
+      "bytes": 13393830,
+      "sha256": "3ecbaa0880cc08f2adf58cfbb4a1982e113290fbed66d815810ee49dc699caa7"
+    },
     "gallery/examples/majanivirus_orthogroup.svg": {
       "bytes": 7343919,
       "sha256": "39b2c4327d9fc0a6bb22b522e01ea93b7de6b37f48d161fef9c99ed4ce619ccf"
+    },
+    "gallery/examples/saureus-similarity-rings.svg": {
+      "bytes": 25611222,
+      "sha256": "0b2b45f0715cd28fda6797756e3b804d4967401e0d5aa91e0f056f2e0de822ae"
     },
     "gallery/examples/tobacco-chloroplast.svg": {
       "bytes": 1400003,
@@ -84,9 +94,17 @@
       "bytes": 851723,
       "sha256": "1a3908a57112cac6daea39c7366fda0888f50bee51b319530453630684c74a38"
     },
+    "gallery/sessions/majanivirus-tblastx.gbdraw-session.json.gz": {
+      "bytes": 3677780,
+      "sha256": "3d20c157edc50ba49b1a1994595597ab22a6999d125f88aac2c69b30901313b7"
+    },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
       "bytes": 6223089,
       "sha256": "37aee68aff7395ea46118fa7c7cba4633b73c110120b869d5501bd1acb95f06d"
+    },
+    "gallery/sessions/saureus-similarity-rings.gbdraw-session.json.gz": {
+      "bytes": 15043642,
+      "sha256": "51b7682972a3a858d7557230217dd8b125e41c6cf1cb7c84c38a7fce5c5943f2"
     },
     "gallery/sessions/tobacco-chloroplast.gbdraw-session.json": {
       "bytes": 1595155,
@@ -124,9 +142,17 @@
       "bytes": 129527,
       "sha256": "98c8a993f3ef82c48508e8bacf5b21562afc5c29b0d8c6c049dd3d481abe39de"
     },
+    "gallery/sources/majanivirus-tblastx.svg": {
+      "bytes": 6595580,
+      "sha256": "9d919051585507019096cb792aa7c761477f699c6d333ff2b074cc041ff29760"
+    },
     "gallery/sources/majanivirus_orthogroup.svg": {
       "bytes": 1689442,
       "sha256": "0d6585c7df0bf20db02bc74bc55453fdefff5e4a977a55b305e4883efa25b3c7"
+    },
+    "gallery/sources/saureus-similarity-rings.svg": {
+      "bytes": 5933643,
+      "sha256": "616f987c4734e1a65eb2f9f04ccd9d6ab1495563838ec788b776718a37819a36"
     },
     "gallery/sources/tobacco-chloroplast.svg": {
       "bytes": 226185,
@@ -164,9 +190,17 @@
       "bytes": 24090,
       "sha256": "51945b2564fbb469509b1c95bfb304491a04143ad12a292369379d78d4112103"
     },
+    "gallery/thumbnails/majanivirus-tblastx.webp": {
+      "bytes": 11996,
+      "sha256": "22c449e97e537e2360b88ffda54b90837a875728454d51456ccd10c7a9a7f302"
+    },
     "gallery/thumbnails/majanivirus_orthogroup.webp": {
       "bytes": 15904,
       "sha256": "60e2035a5ec7cc6fb02cd512bb09d646df0a3c63734343863da328670038b13b"
+    },
+    "gallery/thumbnails/saureus-similarity-rings.webp": {
+      "bytes": 25000,
+      "sha256": "fb5b86bf15c02f11a08cb1ed8f41196d297706d2139034b77a011391b5492dc5"
     },
     "gallery/thumbnails/tobacco-chloroplast.webp": {
       "bytes": 20996,

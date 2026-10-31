@@ -54,8 +54,8 @@ const examples = JSON.parse(
 );
 const sessionNames = examples.map((example) => String(example.session).split('/').pop());
 
-assert.equal(sessionNames.length, 10);
-assert.equal(new Set(sessionNames).size, 10);
+assert.equal(sessionNames.length, 12);
+assert.equal(new Set(sessionNames).size, 12);
 
 const loadSessionFile = async (path) => {
   const bytes = await readFile(path);

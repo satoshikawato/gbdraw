@@ -249,6 +249,22 @@ VIBRIO_HARVEYI_GROUP_COMMAND = (
     "-o vibrio-harveyi-group-collinear -f interactive_svg"
 )
 
+MAJANIVIRUS_TBLASTX_COMMAND = (
+    "gbdraw linear --gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb "
+    "-b MjeNMV.MelaMJNV.tblastx.out MelaMJNV.PemoMJNVA.tblastx.out "
+    "PemoMJNVA.PeseMJNV.tblastx.out --align_center --scale_style ruler "
+    "--legend right --bitscore 150 --identity 50 --alignment_length 100 "
+    "-f interactive_svg -o majanivirus-tblastx"
+)
+
+SAUREUS_SIMILARITY_RINGS_COMMAND = (
+    "gbdraw circular --gbk NC_007795.gb --losat losatn "
+    "--conservation_sequence NC_002745.gb NC_002951.gb NC_003923.gb "
+    "--conservation_labels 'S. aureus N315' 'S. aureus COL' 'S. aureus MW2' "
+    "--conservation_colors '#c0392b' '#2471a3' '#1e8449' --identity 50 "
+    "--track_type tuckin -l right -f interactive_svg -o saureus-similarity-rings"
+)
+
 EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="HmmtDNA_basic_circular",
@@ -465,6 +481,52 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command_kind="runnable",
         command_note="Download the nine accession-pinned records and both repository-managed color tables from Files.",
         command=MAJANIVIRUS_COMMAND,
+        compressed_session=True,
+        source_note=GZIP_SESSION_SOURCE_NOTE,
+    ),
+    GallerySessionExample(
+        id="majanivirus-tblastx",
+        title="tblastx comparison of four majanivirus genomes without GC tracks",
+        tags=("Linear", "BLAST table", "Interactive SVG"),
+        description=(
+            "Four majanivirus genomes of about 290 to 530 kbp as stacked "
+            "rows of gene arrows, joined by precomputed tblastx tables between neighboring "
+            "rows, with a ruler and no GC tracks. Matches below 150 bits, 50% identity, or 100 aligned residues are hidden. Match ribbons shade from pale to saturated "
+            "red with identity, and an inverted match is drawn as a crossed ribbon, as in the "
+            "middle of the second comparison. Inverted BLAST matches are not "
+            "colored differently; orientation colors belong to LOSATP collinear blocks."
+        ),
+        workflow="Draw a BLAST comparison",
+        input_summary="4 GenBank + 3 tblastx tables",
+        display_order=100,
+        command_kind="runnable",
+        command_note="Download the four GenBank files and three tblastx tables from Files, then run this command in the same directory.",
+        command=MAJANIVIRUS_TBLASTX_COMMAND,
+        session_from_command=True,
+        command_dir="examples",
+        compressed_session=True,
+        source_note=GZIP_SESSION_SOURCE_NOTE,
+    ),
+    GallerySessionExample(
+        id="saureus-similarity-rings",
+        title="Similarity rings of three <i>Staphylococcus aureus</i> genomes around NCTC 8325",
+        tags=("Circular", "Comparison rings", "LOSAT", "Interactive SVG"),
+        description=(
+            "Three <i>Staphylococcus aureus</i> genomes (N315, COL, MW2) as "
+            "one ring each around the NCTC 8325 reference, with the gene ring outside and GC "
+            "content and GC skew inside. Each ring has its own color and shades from pale to "
+            "full with BLAST identity, from the 50% threshold to 100%; the legend shows that "
+            "continuous scale. Gaps in a ring are "
+            "regions without a hit above the threshold."
+        ),
+        workflow="Compare genomes around a reference",
+        input_summary="4 GenBank files",
+        display_order=110,
+        command_kind="runnable",
+        command_note="Download the four GenBank files from Files. The command runs LOSATN locally; no BLAST database is built.",
+        command=SAUREUS_SIMILARITY_RINGS_COMMAND,
+        session_from_command=True,
+        command_dir="tests/test_inputs",
         compressed_session=True,
         source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
