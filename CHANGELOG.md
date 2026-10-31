@@ -37,6 +37,11 @@ write-up of a release.
   and Collinear blocks do, instead of failing with "Ordered BLAST/protein comparison
   inputs are ambiguous". `-b/--blast` on such a layout is still refused; the
   message now says to list the tables in `--comparisons_table` (OV-2371).
+- Fixed: a threaded LOSAT search in the Web app could stop with "memory access
+  out of bounds" and run the whole pair again (the console said "running the
+  pair again"), or fail after the third stop. In Chromium a copy into memory
+  that another LOSAT thread had just grown could trap; the Web app now checks
+  each such copy and first brings the thread's view of the memory up to date.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 
