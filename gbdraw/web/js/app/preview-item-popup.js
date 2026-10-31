@@ -226,7 +226,7 @@ const alignmentText = (decision) => {
   if (!decision) return t('Not aligned');
   if (decision.status === 'reference') return t('Reference ({anchor})', { anchor: text(decision.anchorLabel) });
   if (decision.status === 'aligned') return t('Aligned on {anchor}', { anchor: text(decision.anchorLabel) });
-  return t('Not moved ({reason})', { reason: text(decision.rationaleLabel).toLowerCase() || t('skipped') });
+  return t('Not moved ({reason})', { reason: text(decision.rationaleLabel) || t('skipped') });
 };
 
 /**
