@@ -13,7 +13,9 @@ from Bio.SeqRecord import SeqRecord
 from pandas.testing import assert_frame_equal
 
 from gbdraw.analysis import collinearity as cc, protein_colinearity as pc
-from tests.prototypes.protein_local_reductions import frozen, fit_oracle, hit_ordinals, frozen_collinear_callers
+from tests.prototypes.protein_local_reductions import (
+    frozen, fit_oracle, hit_ordinals, frozen_collinear_callers, ids_in_cds_order,
+)
 from tests.test_protein_comparison_benchmark import benchmark
 from gbdraw.session_request_codec import encode_canonical_typed_resource
 
@@ -23,19 +25,6 @@ NO_PROTEINS: dict = {}
 
 def live_map(module):
     return {} if module is frozen else {'protein_map': NO_PROTEINS}
-
-
-def ids_in_cds_order(pm, tables):
-    """Rename the proteins so that ID order is CDS order.
-
-    The frozen copies break a score tie on the protein ID, the live code on the
-    CDS (OV-2370); with both orders equal, a differential compares the rest.
-    """
-    order = sorted(pm, key=lambda pid: pc._protein_sort_key(pm[pid]))
-    names = {pid: f'c{rank:04d}_{pid}' for rank, pid in enumerate(order)}
-    renamed = {names[pid]: replace(pm[pid], protein_id=names[pid]) for pid in order}
-    return renamed, {pair: table.assign(query=table['query'].map(names), subject=table['subject'].map(names))
-                     for pair, table in tables.items()}
 
 
 def fit_frame(size, ids='string', duplicate_index=False):

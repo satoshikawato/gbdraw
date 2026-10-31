@@ -232,8 +232,8 @@ def test_alias_keys_and_equal_protein_order_keys_preserve_legacy_order(tmp_path)
 # 158 of 351 related edges change direction, and 117 groups list their related edges
 # in another order (gallery-collinear; 30, 115, and 96 in gallery-orthogroup).
 S04_SCIENCE_SHA256 = {
-    "gallery-collinear": "73af847f5e4cec1159be21d031eaa61f2a9ab3f1697d804a5573a5ebd1f5f208",
-    "gallery-orthogroup": "ecae825a9fa0c2e5bae3bbe7716fa53f252a96a1b723f513bea6e31f4d1d90b8",
+    "gallery-collinear": "373cf5d6603d74d5d0af848234addb5ed132385059ca75c3c83f62418b769376",
+    "gallery-orthogroup": "9a3c28b3c556e0ec418777d678d3f37a7c77fc34611a321565807e502fca2856",
 }
 
 

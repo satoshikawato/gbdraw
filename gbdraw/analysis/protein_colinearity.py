@@ -5649,6 +5649,8 @@ def _build_anchor_core_orthogroups(
             group_id: sorted(
                 edges,
                 key=lambda edge: (
+                    edge.query_record_index,
+                    edge.subject_record_index,
                     _protein_sort_key(protein_map[edge.query_protein_id]),
                     _protein_sort_key(protein_map[edge.subject_protein_id]),
                     edge.edge_kind,
@@ -5685,6 +5687,8 @@ def _build_anchor_core_orthogroups(
                     edges,
                     key=lambda edge: (
                         ORTHOLOG_DISPLAY_EDGE_KIND_RANK.get(str(edge.edge_kind), 99),
+                        edge.query_record_index,
+                        edge.subject_record_index,
                         _protein_sort_key(protein_map[edge.query_protein_id]),
                         _protein_sort_key(protein_map[edge.subject_protein_id]),
                     ),

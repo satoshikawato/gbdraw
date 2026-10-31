@@ -7,6 +7,7 @@ function-to-function call stays in the frozen namespace.
 """
 import ast
 from contextlib import ExitStack, contextmanager
+from dataclasses import replace
 import gzip
 import math
 from pathlib import Path
@@ -89,6 +90,19 @@ def without_protein_map(name, function):
     def call(*args, protein_map=None, **kwargs):
         return function(*(args if arity is None else args[:arity]), **kwargs)
     return call
+
+
+def ids_in_cds_order(pm, tables):
+    """Rename the proteins so that ID order is CDS order.
+
+    The frozen copies break a score tie on the protein ID, the live code on the
+    CDS (OV-2370); with both orders equal, a differential compares the rest.
+    """
+    order = sorted(pm, key=lambda pid: pc._protein_sort_key(pm[pid]))
+    names = {pid: f'c{rank:04d}_{pid}' for rank, pid in enumerate(order)}
+    renamed = {names[pid]: replace(pm[pid], protein_id=names[pid]) for pid in order}
+    return renamed, {pair: table.assign(query=table['query'].map(names), subject=table['subject'].map(names))
+                     for pair, table in tables.items()}
 
 
 @contextmanager
