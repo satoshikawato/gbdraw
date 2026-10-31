@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Added: Web UI: German, Italian, Polish and Turkish in the Language menu.
+  Polish and Turkish letters use the bundled Inter Latin Extended subset.
+- Fixed: in the Web UI record popup, the Alignment line of a record that was
+  not moved shows the reason as its label reads, for example "Not moved
+  (Skipped by user)"; it was lower-cased, which damaged German nouns and the
+  Turkish dotted I.
 - Added: `--wrap_length AUTO|LENGTH` and the config key
   `canvas.linear.wrap_length` draw one Linear record over several rows at one
   scale, each row with its own height. The record stays one record, and a figure

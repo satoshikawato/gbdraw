@@ -56,11 +56,13 @@ nothing states that they are reviewed.
   BLAST outfmt 6/7, DPI, CLI, Python, JavaScript, WebAssembly, Pyodide,
   SharedArrayBuffer, Web Workers, IGV, Bakta, Pharokka, Liberation Sans /
   Serif / Mono, and the Circular presets Tuckin, Middle, Spreadout.
-- **The Language menu entries** (English, Bahasa Indonesia, Español, Français,
-  Português, Tiếng Việt, ไทย, 日本語, 简体中文, 繁體中文, 한국어; the menu
-  order) are endonyms and are not translated; the menu's own label is
-  (言語 / 语言 / 語言 / 언어 / Idioma / Langue / Idioma / Bahasa / Ngôn ngữ /
-  ภาษา for ja / zh-Hans / zh-Hant / ko / es / fr / pt / id / vi / th). Gallery
+- **The Language menu entries** (English, Bahasa Indonesia, Deutsch, Español,
+  Français, Italiano, Polski, Português, Tiếng Việt, Türkçe, ไทย, 日本語,
+  简体中文, 繁體中文, 한국어; the menu order) are endonyms and are not
+  translated; the menu's own label is (言語 / 语言 / 語言 / 언어 / Idioma /
+  Langue / Idioma / Bahasa / Ngôn ngữ / ภาษา / Sprache / Lingua / Język / Dil
+  for ja / zh-Hans / zh-Hant / ko / es / fr / pt / id / vi / th / de / it /
+  pl / tr). Gallery
   example titles from `tutorial-data/manifest.json` stay English too.
 - **Names fixed in English by PD-OI-093 and PD-OI-105** stay English in the
   English UI only. Other locales translate them with the glossary (D-11).
