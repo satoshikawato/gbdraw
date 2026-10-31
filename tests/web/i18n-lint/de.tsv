@@ -4,10 +4,10 @@ de-du-pronoun	\b(du|dir|dich|dein|deine|deinen|deinem|deiner|deines|euch|euer|eu
 de-du-imperative	(^|[.:;!?] )(Wähle|Klicke|Lade|Speichere|Gib|Prüfe|Lösche|Verwende|Nutze|Starte|Versuche|Öffne|Schließe|Beachte|Achte|Füge|Entferne|Ändere|Korrigiere|Wähl)\b	u	Du-imperative; write the Sie imperative (Wählen Sie, Klicken Sie) or the infinitive on buttons (STYLE 12.2).	error
 de-bitte	(^|[.:;!?] )(Bitte)\b	u	Microsoft German drops Bitte in instructions; write the Sie imperative alone (STYLE 12.2).	warn
 de-spelling	[Gg]ross|[Gg]röss|[Ss]chliess|[Ss]trasse|[Aa]usser|[Mm]assstab|Fuss|\b(daß|muß|mußte|läßt|Schluß|Prozeß|Fluß)\b|\b(fuer|ueber|zurueck|koennen|muessen|moeglich|waehlen|pruefen|loeschen|oeffnen|aender\w*|groesse)\b	iu	Write German (Germany) spelling: ß where Duden has it (Größe, schließen, außerhalb, groß), 1996 forms (dass, muss, Prozess), and real umlauts, not ss, ae / oe / ue or old ß spellings (STYLE 12.3).	error
-de-quote-straight	"	u	Straight double quotes; write German quotes „…“ (U+201E and U+201C) around a quoted name (STYLE 12.3).	error
+de-quote-straight	(?<!=)(?<!="[^"\s]*)(?!(?<= )"(?= ))"	u	Straight double quotes; write German quotes „…“ (U+201E and U+201C) around a quoted name (STYLE 12.3). Exempt: code-like /key="value" and a lone " between spaces in a literal list of characters.	error
 de-quote-closing	”	u	U+201D never occurs in German quotes; the closing mark is U+201C: „Name“ (STYLE 12.3).	error
 de-quote-other	[«»‹›]|(^|[^‚])‘[^‘’]*’|(^|[\s(])'[^']+'	u	French guillemets, English single quotes or straight single quotes; use „…“ and nested ‚…‘ (STYLE 12.3).	warn
-de-space-before-punct	[   ][:;?!]	u	No space before a colon, semicolon, question mark or exclamation mark in German (STYLE 12.3).	error
+de-space-before-punct	(?<![\\*])[   ][:;?!]	u	No space before a colon, semicolon, question mark or exclamation mark in German (STYLE 12.3). Exempt: the file-name rule lists the literal characters \ : * ? " < > | (a space follows \ and *), as the English shows them.	error
 de-hyphen-dash	 - 	u	A hyphen with spaces used as a dash; write the en dash with spaces " – " (STYLE 12.3).	warn
 de-three-dots	\.\.\.| …$	u	Three dots or a space before the final ellipsis; write one … directly after the word: Laden… (STYLE 12.3).	error
 de-decimal-comma	(?<![\d,.])\d+,\d{1,2}(?![\d,])	u	Decimal comma; numbers keep the English decimal point and grouping: 0.65, 1,000.5 (D-05, STYLE 12.3).	error
