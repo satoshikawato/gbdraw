@@ -623,7 +623,7 @@ def test_a_cli_similarity_groups_session_on_a_row_layout_replays_its_links(
     def stored_pairs(session: dict[str, Any]) -> list[tuple[int, int]]:
         return [
             (comparison["queryRecordIndex"], comparison["subjectRecordIndex"])
-            for comparison in session["renderRequest"]["comparisons"]
+            for comparison in drawing_view(session)["renderRequest"]["comparisons"]
             if comparison["kind"] == "precomputedProteinComparison"
         ]
 

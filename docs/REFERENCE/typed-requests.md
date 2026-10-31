@@ -211,7 +211,7 @@ drawing with ID `circular` and a Linear drawing with ID `linear`.
 `SessionDrawingSpec(request, mode=, id=, name=, state=)` values, where `state`
 holds Web-owned drawing fields such as `results`, `editorState`, or the
 drawing's slice in `modes`; `active_drawing=` names the drawing to open. It
-rejects what version 50 cannot hold: two drawings of one mode, a second drawing
+rejects what version 49 cannot hold: two drawings of one mode, a second drawing
 without its Results, other IDs or names, or a second drawing whose shared
 fields differ from the first's.
 

@@ -558,7 +558,16 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   // target. Python's encoder writes the promoted request: it names the result
   // resources and writes the optional setting's default.
   const { alignOrthogroupFeature: _target, ...heldSettings } = generatedProteinComparison.settings;
-  const promotedSettings = { ...heldSettings, collinearInferOrthogroups: true };
+  // Its decoder reads a released writer's "either" as "strand", the one it drew
+  // as (OV-2301): the spelling of a retired value, not today's default.
+  const promotedSettings = {
+    ...heldSettings,
+    collinearInferOrthogroups: true,
+    collinearityParams: {
+      ...heldSettings.collinearityParams,
+      parameters: { ...heldSettings.collinearityParams.parameters, mergeOrientation: 'strand' }
+    }
+  };
   const committed = getCommittedCanonicalSession();
   assert.equal(committed.renderRequest.schema, 9);
   const committedComparisons = committed.renderRequest.comparisons;

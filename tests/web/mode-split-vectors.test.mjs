@@ -209,6 +209,18 @@ const isModePointer = (pointer) => pointer.startsWith('/modes/');
  */
 const loadExpectOf = (vector) => ({ ...(vector.expect || {}), ...(vector.loadExpect || {}) });
 
+// `loadExpect` of F1: Load reads the retired spelling "either" as "strand" (OV-2301). Only that
+// spelling moves: a stored value is never replaced by today's default.
+test('Load keeps a stored Collinear setting that differs from today\'s default', async () => {
+  const session = readFixture('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
+  session.config.losat.blastp.collinearMergeOrientation = 'order';
+  const { convertedModes, modes } = await loadedOf({ input: session });
+  for (const { config } of [convertedModes.linear, modes.linear]) {
+    assert.equal(config.losat.blastp.collinearMergeOrientation, 'order');
+    assert.deepEqual(config.losat.blastp.hitLimitsByMode.collinear, { candidateLimit: 5, orthogroupMemberMaxHits: 5 });
+  }
+});
+
 for (const vector of VECTORS.cases) {
   const wholeSession = Boolean(vector.fixture) || vector.input?.format === 'gbdraw-session';
   test(vector.name, async () => {
