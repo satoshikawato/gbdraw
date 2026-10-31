@@ -304,7 +304,7 @@ With `--session`, only output and format overrides, session-output options,
 `--font_file`, `--no_font_embedding`, `--drawing`, and `--overwrite` are accepted; other diagram flags would mix
 persisted and new settings.
 
-A Session holds one or more drawings, one per diagram. Session 49 holds at most
+A Session holds one or more drawings, one per diagram. Session 50 holds at most
 a Circular drawing (ID `circular`) and a Linear drawing (ID `linear`).
 `gbdraw render --session FILE` renders every drawing with a committed render
 and skips a drawing without one (a settings-only Session) with a notice.

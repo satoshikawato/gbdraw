@@ -323,7 +323,7 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 49 or historical versions 31-33\/39-44\/46-48/
+    /supports current version 50 or historical versions 31-33\/39-44\/46-49/
   );
 }
 

@@ -775,7 +775,7 @@
  * @property {unknown} [runMetadata]
  * @property {unknown} [cliInvocation]
  * @property {'gbdraw-session'} format
- * @property {46 | 47 | 48 | 49} version
+ * @property {46 | 47 | 48 | 49 | 50} version
  * @property {unknown} [createdAt]
  * @property {unknown} renderRequest
  * @property {Record<string, unknown>} resources

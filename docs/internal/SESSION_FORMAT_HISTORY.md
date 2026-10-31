@@ -12,19 +12,29 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Linear wrap length
+## Unreleased: Session 50 stores the Linear wrap length
 
-The config leaf `canvas.linear.wrap_length` (`"none"`, `"auto"`, or a positive
-length in bp) and the Linear slice's `form.linear_wrap_length`, an `own` row of
-the mode-scoped registry whose replay flag is `--wrap_length`, are new. No Web
-writer writes the form key yet, and Python draws no record over several rows
-yet, so no writer can produce a wrapped file and `SESSION_VERSION` stays 49. An
-unwrapped CLI Session holds the leaf as `"none"` in its full config, which a
-`main` build ignores and draws the same. A `main` build would refuse the form
-key (the slice's `form` is closed, `_validate_mode_slice_fields`) and an override
-path (`UNKNOWN_CONFIG_PATH`), and would draw a stored full config with a length
-on one row. The change that first draws wrapped rows therefore raises the
-version, or keeps a version that has not reached `main`.
+Session version 50 adds the config leaf `canvas.linear.wrap_length` (`"none"`,
+`"auto"`, or a positive length in bp) and the Linear slice's
+`form.linear_wrap_length`, an `own` row of the mode-scoped registry
+(`gbdraw/web_support/mode_scoped_settings.py`) whose replay flag is
+`--wrap_length`. Wrapped rows are drawn now: Python, the CLI and a loaded Session
+draw a record longer than the length over several rows, so a writer can produce
+a wrapped file. Session 49 reached `main` with 0.14.3, so the format needs a new
+version. Measured against `main`'s build: it refuses a Session with
+`modes.linear.config.form.linear_wrap_length` (the slice's `form` is closed,
+`_validate_mode_slice_fields`) and a `configOverrides` entry
+`canvas.linear.wrap_length` (`UNKNOWN_CONFIG_PATH`), and it accepts a CLI Session
+with a stored `canvas.linear.wrap_length` leaf and silently draws the record on
+one row (`from_dict` ignores the unknown leaf). An unwrapped CLI Session holds
+the leaf as `"none"`, which an older build ignores and draws the same.
+
+A Session up to 49 has no key and loads with no wrap (`"none"`); no reader
+converts it. A Web **Save Session** keeps a length loaded from a Session in the
+request's `configOverrides`; the Web has no control for it yet. The Gallery and
+test-input Sessions were refreshed to 50 (`tools/refresh_gallery_sessions.py`);
+they differ from Session 49 in the version and the `"none"` leaf. Positive
+fixtures of Session 49: `tests/fixtures/sessions/*.v49.*`.
 
 ## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
 

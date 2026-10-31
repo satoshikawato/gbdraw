@@ -207,7 +207,7 @@ def test_a_request_reference_must_resolve() -> None:
 # table existed (3522c0bc): a table without seed resources must reproduce the
 # single-request writer byte for byte. A codec change that changes a fixture's
 # single-request output updates its digest here; so does a Session version
-# bump (46, 47, 48, 49: only the version field changed) and a change of the packaged
+# bump (46, 47, 48, 49, 50: only the version field changed) and a change of the packaged
 # config a stored full config is completed with (the label style keys, LP-D98;
 # the Linear box default, LP-D106; the Circular track narrowing leaves, PD-OI-078;
 # the Circular definition show leaf, PD-OI-109; the ring colour scheme leaf, PD-OI-110).
