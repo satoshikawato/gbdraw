@@ -3285,7 +3285,7 @@
                                         <div class="linear-primary-label">{{ t('Search limits') }}</div>
                                         <div class="grid min-w-0 grid-cols-1 gap-2">
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('losatp-candidate')">
-                                        <span class="linear-primary-label mb-1">{{ t('Max target seqs') }} <help-tip id="help-comparison-max-target-seqs" :text="t('Raw LOSATP search limit per query protein (--max-target-seqs). In a within-record search the query protein itself takes one slot. Leave blank for an unbounded search, the default. Changing this value requires matching raw search results. Each mode remembers its own hit limits.')"></help-tip></span>
+                                        <span class="linear-primary-label mb-1">{{ t('Max target seqs') }} <help-tip id="help-comparison-max-target-seqs" :text="t('Raw LOSATP search limit per query protein (--max-target-seqs). In a within-record search the query protein itself counts as one target. Leave blank for an unbounded search, the default. Changing this value requires matching raw search results. Each mode remembers its own hit limits.')"></help-tip></span>
                                         <input type="number" min="1" step="1" :placeholder="t('Unbounded')" v-model.number="losat.blastp.candidateLimit" :aria-label="t('LOSATP Max target seqs')" aria-describedby="help-comparison-max-target-seqs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
