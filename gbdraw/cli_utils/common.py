@@ -24,7 +24,7 @@ from gbdraw.io.cli_tables import RecordsTable
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 from gbdraw.mode_profiles import CIRCULAR_MODE_PROFILE, DEFAULT_FEATURE_TYPES
 from gbdraw.render.export import require_cairosvg
-from gbdraw.io.colors import require_palette_name
+from gbdraw.io.colors import BUILTIN_COLOR_TABLE_PREFIX, BUILTIN_COLOR_TABLES, require_palette_name
 from gbdraw.render.formats import (
     SVG_FORMAT,
     is_cairosvg_format,
@@ -510,6 +510,13 @@ def cli_font_family(args: argparse.Namespace) -> str | None:
     return None
 
 
+# -t/--table of both modes: a color table file or a built-in table by name.
+COLOR_TABLE_HELP = (
+    "color table: a TSV file, or a built-in table "
+    f"({', '.join(BUILTIN_COLOR_TABLE_PREFIX + name for name in BUILTIN_COLOR_TABLES)}) (optional)"
+)
+
+
 def add_color_args(parser: argparse.ArgumentParser) -> None:
     """Add color-related arguments (-p, -t, -d)."""
     parser.add_argument(
@@ -521,7 +528,7 @@ def add_color_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '-t',
         '--table',
-        help='color table (optional)',
+        help=COLOR_TABLE_HELP,
         type=str,
         default="")
     parser.add_argument(
@@ -758,6 +765,7 @@ def _require_one_records_table_record(records_table: RecordsTable, row, loaded):
 
 __all__ = [
     "add_analysis_args",
+    "COLOR_TABLE_HELP",
     "add_color_args",
     "add_feature_args",
     "add_input_args",

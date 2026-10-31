@@ -199,34 +199,57 @@ test('Unicode regex corpus has identical live and generated color/label targets'
   expect(await fills(page)).toEqual([]);
 });
 
-test('Python preset rules update the legend and invalid replacements preserve the diagram', async ({ page }) => {
+// The presets are the built-in color tables (gbdraw/data/color_tables/, `-t
+// builtin:<id>` on the CLI): applying one writes its rows, and Undo, Redo and
+// Generate draw what the rows color.
+const presetFills = (page, color) => page.evaluate((fill) => window.__GBDRAW_APP__.extractedFeatures
+  .filter((feature) => document.querySelector(`.origin-top svg [data-gbdraw-feature-id="${feature.svg_id}"][fill="${fill}"]`))
+  .map((feature) => feature.svg_id).sort(), color);
+const legendTexts = (page) => page.evaluate(() => [...document.querySelectorAll('.origin-top svg text')].map((node) => node.textContent));
+
+test('the mitochondrion preset updates the legend; Undo, Redo and Generate agree', async ({ page }) => {
   test.setTimeout(180000);
-  const messages = [];
-  page.on('dialog', async dialog => { messages.push(dialog.message()); await dialog.accept(); });
   await loadSession(page);
-  const preset = await page.evaluate(() => window.__GBDRAW_APP__.specificRulePresets[0]);
-  let body = 'CDS\tproduct\t(?i)NADH\t#f01234\tPython preset\n';
-  await page.route(`**/${preset.path.replace(/^\.\//, '')}`, route => route.fulfill({ body, contentType: 'text/plain' }));
-  await page.evaluate(async id => {
+  const preset = await page.evaluate(() => window.__GBDRAW_APP__.specificRulePresets.find((entry) => entry.id === 'mitochondrion'));
+  const cox = preset.rules.find((rule) => rule.cap === 'complex IV (cytochrome c oxidase)');
+  await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
-    a.selectedSpecificPreset = id;
+    a.selectedSpecificPreset = 'mitochondrion';
     await a.applySpecificRulePreset();
-  }, preset.id);
+  });
   await rerendered(page);
-  expect(await fills(page)).toHaveLength(7);
-  expect(await page.locator('.origin-top svg text').filter({ hasText: /^Python preset$/ }).count()).toBe(1);
-  const snapshot = await page.evaluate(() => ({ rules: JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules), svg: window.__GBDRAW_APP__.svgContent }));
-  body = 'CDS\tproduct\t(?<enzyme>NADH)\t#abcdef\tInvalid\n';
-  await page.evaluate(() => window.__GBDRAW_APP__.applySpecificRulePreset());
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({code:'REGEX_SYNTAX',context:{reason:'UNKNOWN_EXTENSION'}});
-  expect(await page.evaluate(() => ({ rules: JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules), svg: window.__GBDRAW_APP__.svgContent }))).toEqual(snapshot);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.length)).toBe(preset.rules.length);
+  const matched = await presetFills(page, cox.color);
+  expect(matched).toHaveLength(3);
+  expect(await legendTexts(page)).toContain(cox.cap);
   await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
-  expect(await fills(page)).toEqual([]);
+  expect(await presetFills(page, cox.color)).toEqual([]);
   await page.evaluate(() => window.__GBDRAW_APP__.redoHistory());
   await rerendered(page);
-  expect(await fills(page)).toHaveLength(7);
+  expect(await presetFills(page, cox.color)).toEqual(matched);
   await generateAndWaitForResult(page);
-  expect(await fills(page)).toHaveLength(7);
+  expect(await presetFills(page, cox.color)).toEqual(matched);
+  expect(await legendTexts(page)).toContain(cox.cap);
+});
+
+test('the plastid preset replaces the tobacco Gallery rules through the Preset scheme select', async ({ page }) => {
+  test.setTimeout(180000);
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
+  const preset = await page.evaluate(() => window.__GBDRAW_APP__.specificRulePresets.find((entry) => entry.id === 'plastid'));
+  const select = page.getByLabel('Preset scheme', { exact: true });
+  await select.evaluate((element) => { for (let node = element.closest('details'); node; node = node.parentElement?.closest('details')) node.open = true; });
+  await select.selectOption('plastid');
+  await select.locator('xpath=..').getByRole('button', { name: 'Apply' }).click();
+  await page.waitForFunction((count) => window.__GBDRAW_APP__.manualSpecificRules.length === count, preset.rules.length);
+  await rerendered(page);
+  const psi = preset.rules.find((rule) => rule.cap === 'photosystem I');
+  const live = await presetFills(page, psi.color);
+  expect(live.length).toBeGreaterThan(0);
+  expect(await legendTexts(page)).toEqual(expect.arrayContaining(['photosystem I', 'transfer RNAs', 'origin of replication']));
+  await generateAndWaitForResult(page);
+  expect(await presetFills(page, psi.color)).toEqual(live);
 });
 
 test('invalid color TSV preserves the selected file, preview, rules and History', async ({ page }) => {

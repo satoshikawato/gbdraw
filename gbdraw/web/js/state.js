@@ -1,9 +1,10 @@
 // @ts-check
 /** @import { WebFontEntry } from './services/font-store.js' */
-/** @import { FileImports } from './services/file-imports.js' */
+/** @import { FileImports, ParsedSpecificRule } from './services/file-imports.js' */
 import { msg, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
+import { BUILTIN_COLOR_TABLES } from './builtin-color-tables.generated.js';
 import { DEFAULT_LINEAR_RECORD_GAP_PX } from './services/config-field-readers.js';
 import {
   featureDrawnContext,
@@ -348,18 +349,18 @@ const paletteInstantPreviewEnabled = ref(defaultPaletteDraftState.paletteInstant
 const appliedPaletteName = ref(defaultPaletteDraftState.appliedPaletteName);
 const appliedPaletteColors = ref(defaultPaletteDraftState.appliedPaletteColors);
 const newSpecRule = reactive(createDefaultSpecificRule());
-const specificRulePresets = [
-  {
-    id: 'pharokka',
-    label: 'Pharokka (function/phrog/vfdb)',
-    path: 'presets/pharokka_color_table.txt'
-  },
-  {
-    id: 'bakta',
-    label: 'Bakta (COG via note)',
-    path: 'presets/bakta_color_table.txt'
-  }
-];
+/**
+ * A built-in color table offered as a preset of the specific rules.
+ * @typedef {{ id: string, label: string, rules: readonly Readonly<ParsedSpecificRule>[] }} SpecificRulePreset
+ */
+// The built-in color tables (gbdraw/data/color_tables/, read by Python), by name
+// in Python's order; the CLI names the same table `-t builtin:<id>`.
+/** @type {readonly SpecificRulePreset[]} */
+const specificRulePresets = Object.freeze(Object.entries(BUILTIN_COLOR_TABLES).map(([id, table]) => Object.freeze({
+  id,
+  label: table.title,
+  rules: Object.freeze(table.rows.map(([feat, qual, val, color, cap]) => Object.freeze({ feat, qual, val, color, cap })))
+})));
 const selectedSpecificPreset = ref(defaultEditorDraftState.selectedSpecificPreset);
 const specificRulePresetLoading = ref(defaultEditorDraftState.specificRulePresetLoading);
 const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
