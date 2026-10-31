@@ -43,7 +43,8 @@ root => {
     .map((element) => String(element.getAttribute('data-gbdraw-record-id') || ''))
     .filter(Boolean);
   const featureElements = elements.filter((element) => (
-    Boolean(element.getAttribute('data-gbdraw-feature-id'))
+    Boolean(element.getAttribute('data-gbdraw-feature-id')) &&
+    !String(element.id || '').endsWith('__outline')
   ));
   const featureGeometry = featureElements.map((element) => {
     const bounds = element.getBBox();
@@ -333,7 +334,10 @@ def inspect_svg_file(path: Path) -> dict[str, Any]:
     ids = [element.attrib["id"] for element in elements if element.attrib.get("id")]
     by_id = {element.attrib["id"]: element for element in elements if element.attrib.get("id")}
     feature_elements = [
-        element for element in elements if element.attrib.get("data-gbdraw-feature-id")
+        element
+        for element in elements
+        if element.attrib.get("data-gbdraw-feature-id")
+        and not element.attrib.get("id", "").endswith("__outline")
     ]
     match_elements = [
         element
