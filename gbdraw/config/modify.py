@@ -24,7 +24,8 @@ from .models.canvas import (
     linear_axis_ruler_applies,
     validate_feature_overlap_tolerance,
 )
-from .models.objects import UNSET_NUMBER_SPELLINGS, circular_definition_interval_for_font
+from ..core.numeric import UNSET_NUMBER_SPELLINGS
+from .models.objects import circular_definition_interval_for_font
 from .models.root import validate_style_leaf
 
 

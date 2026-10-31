@@ -93,19 +93,44 @@ def test_the_factor_is_clamped_and_a_domain_without_width_colours_at_its_maximum
 
 @pytest.mark.parametrize("value", [None, "auto", "AUTO", ""])
 def test_auto_is_no_fixed_scale(value: object) -> None:
-    assert identity_scale_from_config(value) is None
+    assert identity_scale_from_config(value, path=LINEAR_IDENTITY_SCALE_PATH) is None
 
 
 @pytest.mark.parametrize("value", [[50, 100], (0, 12.5)])
 def test_two_ordered_percentages_are_a_fixed_scale(value: object) -> None:
-    assert identity_scale_from_config(value) == tuple(float(item) for item in value)  # type: ignore[union-attr]
+    assert identity_scale_from_config(value, path=LINEAR_IDENTITY_SCALE_PATH) == tuple(float(item) for item in value)  # type: ignore[union-attr]
 
 
-@pytest.mark.parametrize("value", [[90, 50], [50, 50], [-1, 50], [50, 101], [50], "50 100", [True, 100], [50, float("nan")]])
-def test_other_values_are_refused_with_the_config_path(value: object) -> None:
+@pytest.mark.parametrize(
+    ("value", "reason"),
+    [
+        ([90, 50], "INCREASING"),
+        ([50, 50], "INCREASING"),
+        ([100, 100], "INCREASING"),
+        ([-1, 50], "PERCENT"),
+        ([50, 101], "PERCENT"),
+        ([50], "FINITE"),
+        ("50 100", "FINITE"),
+        ([True, 100], "FINITE"),
+        ([50, float("nan")], "FINITE"),
+    ],
+)
+def test_other_values_are_refused_with_the_config_path_and_reason(value: object, reason: str) -> None:
     with pytest.raises(ValidationError) as error:
         apply_config_overrides(None, {CIRCULAR_IDENTITY_SCALE_PATH: value})
-    assert error.value.diagnostic == {"code": "INPUT_INVALID", "configPath": CIRCULAR_IDENTITY_SCALE_PATH}
+    assert error.value.diagnostic == {"code": "INPUT_INVALID", "reason": reason, "configPath": CIRCULAR_IDENTITY_SCALE_PATH}
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("ends", [("90", "40"), ("100", "100"), ("50", "101")])
+def test_the_cli_refuses_a_scale_naming_the_option(mode: str, ends: tuple[str, str], capsys) -> None:
+    from gbdraw import circular, linear
+
+    get_args = circular._get_args if mode == "circular" else linear._get_args
+    with pytest.raises(SystemExit) as raised:
+        get_args(["--gbk", "dummy.gb", "--identity_scale", *ends])
+    assert raised.value.code == 2
+    assert "argument --identity_scale: must be two percent identities MIN MAX" in capsys.readouterr().err
 
 
 def test_the_packaged_config_has_no_fixed_scale() -> None:
@@ -181,10 +206,12 @@ def test_linear_python_option_matches_the_cli(tmp_path, monkeypatch) -> None:
 def test_python_option_refuses_a_reversed_scale() -> None:
     import gbdraw
 
-    with pytest.raises(ValidationError, match="identity_scale"):
+    with pytest.raises(ValidationError) as linear_error:
         gbdraw.LinearComparisonOptions(identity_scale=(90, 40))
-    with pytest.raises(ValidationError, match="identity_scale"):
+    with pytest.raises(ValidationError) as circular_error:
         gbdraw.ComparisonRingOptions(identity_scale=(90, 40))
+    assert linear_error.value.diagnostic["configPath"] == LINEAR_IDENTITY_SCALE_PATH
+    assert circular_error.value.diagnostic["configPath"] == CIRCULAR_IDENTITY_SCALE_PATH
 
 
 # Circular: the ring drawer and the Legend

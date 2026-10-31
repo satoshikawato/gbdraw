@@ -91,6 +91,7 @@ from .tracks import (
 
 from .cli_utils.common import (
     COLOR_TABLE_HELP,
+    add_identity_scale_arg,
     _add_arrow_geometry_args,
     _add_block_stroke_args,
     _add_depth_axis_args,
@@ -667,14 +668,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='minimum BLAST alignment length threshold (default=0)',
         type=argparse_integer,
         default=LINEAR_MODE_PROFILE.comparison.alignment_length)
-    parser.add_argument(
-        '--identity_scale',
-        help='Fix the identity colour scale of the pairwise matches and their Legend to MIN..MAX percent '
-        '(0 <= MIN < MAX <= 100), so figures with different --identity thresholds share one scale '
-        '(default: from --identity to 100).',
-        nargs=2,
-        metavar=('MIN', 'MAX'),
-        type=argparse_float)
+    add_identity_scale_arg(parser, "pairwise matches")
     parser.add_argument(
         '--pairwise_match_style',
         dest='pairwise_match_style',

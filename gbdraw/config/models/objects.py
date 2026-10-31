@@ -17,7 +17,7 @@ from gbdraw.comparisons.identity_scale import (
     IdentityScale,
     identity_scale_from_config,
 )
-from gbdraw.core.numeric import ascii_float, ascii_int
+from gbdraw.core.numeric import UNSET_NUMBER_SPELLINGS, ascii_float, ascii_int
 from gbdraw.exceptions import ValidationError
 
 from .canvas import LEAF_VALIDATOR
@@ -31,8 +31,6 @@ _GC_CONTENT_MODES: tuple[GcContentMode, ...] = ("deviation", "percent")
 ScaleStyle = Literal["bar", "ruler"]
 _SCALE_STYLES: tuple[ScaleStyle, ...] = ("bar", "ruler")
 ArrowHeadLengthRatio = Literal["auto"] | float
-# The text an optional number of a config file reads as unset (None).
-UNSET_NUMBER_SPELLINGS = frozenset({"", "auto", "none", "null"})
 
 
 def normalize_pairwise_match_style(value: Any) -> PairwiseMatchStyle:

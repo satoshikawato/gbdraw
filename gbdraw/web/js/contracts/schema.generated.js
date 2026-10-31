@@ -124,7 +124,7 @@ export const CLI_RECORD_KEY_PREFIX = 'record-';
 // gbdraw/api/record_planning.py: EXPANDED_RECORD_KEY_SEPARATOR
 export const EXPANDED_RECORD_KEY_SEPARATOR = ':';
 
-// gbdraw/config/models/objects.py: UNSET_NUMBER_SPELLINGS
+// gbdraw/core/numeric.py: UNSET_NUMBER_SPELLINGS
 /** @type {readonly string[]} */
 export const CONFIG_UNSET_NUMBER_SPELLINGS = Object.freeze(['', 'auto', 'none', 'null']);
 

@@ -1645,6 +1645,20 @@ const effectiveLabelRendering = (form, adv, circular, linearLabelPlacement) => {
 // R7: a config leaf is projected literally; Python validates its domain.
 /** @param {string} configPath @param {unknown} value */
 const configLeaf = (configPath, value) => projectOptionalNumber(value, { configPath });
+/**
+ * A fixed identity scale is sent as the two numbers in the draft; no scale is
+ * left unstated. Anything else is refused with the leaf's path (R7); Python
+ * judges the range and the order.
+ * @param {string} configPath @param {unknown} value @returns {[number, number] | null}
+ */
+const identityScaleLeaf = (configPath, value) => {
+  if (value === null || value === undefined) return null;
+  const ends = Array.isArray(value) && value.length === 2 ? value.map((end) => configLeaf(configPath, end)) : [];
+  if (ends.length !== 2 || typeof ends[0] !== 'number' || typeof ends[1] !== 'number') {
+    throw diagnosticError('INPUT_INVALID', { configPath, reason: 'FINITE' });
+  }
+  return [ends[0], ends[1]];
+};
 // A shared length leaf is sent as its `.short` and `.long` overrides, and
 // blank sends neither.
 /** @param {string} path @param {unknown} value @returns {Record<string, number>} */
@@ -2660,7 +2674,7 @@ const buildConfigOverrides = (
       Boolean(adv.italic_gene_labels) === labelStyleForMode(state.mode.value).italic_gene_labels ? null : Boolean(adv.italic_gene_labels),
     // Without a fixed scale the colours run from the threshold to 100%, as before the setting.
     [MODE_ADV_CONFIG_PATHS[state.mode.value].identity_scale]:
-      Array.isArray(adv.identity_scale) ? [...adv.identity_scale] : null,
+      identityScaleLeaf(MODE_ADV_CONFIG_PATHS[state.mode.value].identity_scale, adv.identity_scale),
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
     [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: leaf(CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp, adv.feature_overlap_tolerance_bp),

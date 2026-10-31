@@ -18,6 +18,7 @@ from numbers import Real
 from types import MappingProxyType
 from typing import Mapping
 
+from gbdraw.core.numeric import UNSET_NUMBER_SPELLINGS
 from gbdraw.exceptions import ValidationError
 
 # A fixed scale: (minimum, maximum) percent identity, 0 <= minimum < maximum <= 100.
@@ -29,30 +30,38 @@ CIRCULAR_IDENTITY_SCALE_PATH = "objects.conservation.identity_scale"
 IDENTITY_SCALE_PATHS: Mapping[str, str] = MappingProxyType(
     {"circular": CIRCULAR_IDENTITY_SCALE_PATH, "linear": LINEAR_IDENTITY_SCALE_PATH}
 )
-# The text a config file or an override reads as "no fixed scale" (threshold to 100%).
-_AUTO_SPELLINGS = frozenset({"", "auto", "none", "null"})
+# What a fixed scale must be, in every surface's message.
+IDENTITY_SCALE_RULE = "two percent identities MIN MAX with 0 <= MIN < MAX <= 100"
 
 
-def identity_scale_from_config(value: object, *, path: str = LINEAR_IDENTITY_SCALE_PATH) -> IdentityScale | None:
-    """The one validator of an identity scale leaf, for a config file, an override, and the CLI.
+def identity_scale_from_config(value: object, *, path: str) -> IdentityScale | None:
+    """The one validator of an identity scale leaf, for a config file, an override, the CLI, and Python.
 
-    ``None`` and ``"auto"`` are no fixed scale; two finite numbers with
-    0 <= minimum < maximum <= 100 are one.
+    ``None`` and the unset spellings (``"auto"``) are no fixed scale; two
+    finite numbers with 0 <= minimum < maximum <= 100 are one. A refusal names
+    ``path`` and its reason: ``FINITE`` (not two finite numbers), ``PERCENT``
+    (an end outside 0..100), or ``INCREASING`` (the minimum is not below the maximum).
     """
 
-    if value is None or (isinstance(value, str) and value.strip().lower() in _AUTO_SPELLINGS):
+    if value is None or (isinstance(value, str) and value.strip().lower() in UNSET_NUMBER_SPELLINGS):
         return None
+    reason = "FINITE"
     if (
         isinstance(value, (list, tuple))
         and len(value) == 2
         and all(isinstance(item, Real) and not isinstance(item, bool) for item in value)
+        and all(math.isfinite(float(item)) for item in value)
     ):
         minimum, maximum = float(value[0]), float(value[1])
-        if math.isfinite(minimum) and math.isfinite(maximum) and 0.0 <= minimum < maximum <= 100.0:
+        if not (0.0 <= minimum <= 100.0 and 0.0 <= maximum <= 100.0):
+            reason = "PERCENT"
+        elif minimum >= maximum:
+            reason = "INCREASING"
+        else:
             return (minimum, maximum)
     raise ValidationError(
-        f'{path} must be "auto" or two percent identities [MIN, MAX] with 0 <= MIN < MAX <= 100; got {value!r}.',
-        diagnostic={"code": "INPUT_INVALID", "configPath": path},
+        f'{path} must be "auto" or {IDENTITY_SCALE_RULE}; got {value!r}.',
+        diagnostic={"code": "INPUT_INVALID", "reason": reason, "configPath": path},
     )
 
 
@@ -89,6 +98,7 @@ __all__ = [
     "CIRCULAR_IDENTITY_SCALE_PATH",
     "IdentityColorDomain",
     "IDENTITY_SCALE_PATHS",
+    "IDENTITY_SCALE_RULE",
     "IdentityScale",
     "LINEAR_IDENTITY_SCALE_PATH",
     "identity_color_domain",

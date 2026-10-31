@@ -378,7 +378,7 @@ class ComparisonRingOptions:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "identity_scale", identity_scale_from_config(self.identity_scale, path="identity_scale")
+            self, "identity_scale", identity_scale_from_config(self.identity_scale, path=CIRCULAR_IDENTITY_SCALE_PATH)
         )
 
 
@@ -458,7 +458,7 @@ class LinearComparisonOptions:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "identity_scale", identity_scale_from_config(self.identity_scale, path="identity_scale")
+            self, "identity_scale", identity_scale_from_config(self.identity_scale, path=LINEAR_IDENTITY_SCALE_PATH)
         )
 
 

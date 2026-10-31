@@ -349,8 +349,7 @@ def test_every_cli_float_option_refuses_non_finite_values(mode: str, capsys: pyt
     options = _float_options(mode)
     assert len(options) > 15
     for option, count in options:
-        # argparse reads a separate "-inf" word as an option, so an option taking more values refuses it as missing.
-        for text in ("nan", "inf") if count > 1 else ("nan", "inf", "-inf"):
+        for text in ("nan", "inf", "-inf"):
             with pytest.raises(SystemExit) as raised:
                 get_args(["--gbk", "dummy.gb", *_with_value(option, count, text)])
             assert raised.value.code == 2, (option, text)

@@ -1,13 +1,14 @@
 // A fixed identity colour scale (`--identity_scale MIN MAX`, the mode's
 // `objects.<blast_match|conservation>.identity_scale` leaf) keeps the match
-// colours and the Legend labels of a Linear comparison when the identity
-// threshold changes, as the CLI does; a live palette recolour reads the same
-// scale as Generate (R3).
+// colours (Linear) and ring colours (Circular) and the Legend labels when the
+// identity threshold changes, as the CLI does; a live palette recolour reads
+// the same scale as Generate (R3).
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { execFileSync } = require('node:child_process');
+const { readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
-const { openFresh, settle } = require('./helpers/audit-browser.cjs');
+const { openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { switchPalette } = require('./helpers/live-generate-parity-steps.cjs');
 
@@ -75,7 +76,11 @@ test('a fixed identity scale keeps match colours and Legend labels when the thre
   test.setTimeout(420_000);
   await openLinearComparison(page);
 
+  // Without a minimum there is no scale, so the maximum waits for one.
+  const maximum = page.getByLabel('Linear comparison identity scale maximum', { exact: true });
+  await expect(maximum).toBeDisabled();
   await setScaleMinimum(page, 30);
+  await expect(maximum).toBeEnabled();
   // The blank maximum takes the top of the identity domain.
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.identity_scale)).toEqual([30, 100]);
 
@@ -127,4 +132,68 @@ test('a live palette recolour of a fixed-scale comparison equals Generate', asyn
     expect(Math.max(...differences), `identity ${identity}: live ${live.fills[identity]}, Generate ${fill}`)
       .toBeLessThanOrEqual(1);
   }
+});
+
+// Three ring hits on the single-record fixture (subject FORCEDLBL), at 40, 60, and 95% identity.
+const RING_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
+const RING_BLAST = [40, 60, 95].map((identity, index) => [
+  'RING', 'FORCEDLBL', identity.toFixed(1), '300', '0', '0', String(1 + 300 * index), String(300 * (index + 1)),
+  String(1 + 300 * index), String(300 * (index + 1)), '1e-50', '200'
+].join('\t')).join('\n') + '\n';
+
+const drawRingsWithPython = (testInfo, threshold) => {
+  const table = testInfo.outputPath('ring.blast');
+  writeFileSync(table, RING_BLAST);
+  execFileSync(process.env.PYTHON || 'python', [
+    '-m', 'gbdraw.cli', 'circular', '--gbk', path.resolve(root, RING_FIXTURE), '--conservation_blast', table,
+    '--identity', String(threshold), '--identity_scale', '20', '90', '-o', testInfo.outputPath(`rings-${threshold}`), '-f', 'svg'
+  ], { cwd: root, stdio: 'pipe' });
+  return readFileSync(testInfo.outputPath(`rings-${threshold}.svg`), 'utf8');
+};
+
+// What comparisonView reads, from an SVG text drawn by Python.
+const svgView = (page, text) => page.evaluate((svgText) => {
+  const svg = new DOMParser().parseFromString(svgText, 'image/svg+xml').documentElement;
+  const fills = {};
+  for (const match of svg.querySelectorAll('path[data-identity]')) fills[match.getAttribute('data-identity')] = match.getAttribute('fill');
+  const labels = [...svg.querySelectorAll('text')].map((node) => node.textContent.trim())
+    .filter((label) => /^\d+(?:\.\d+)?%$/.test(label));
+  return { fills, labels: [...new Set(labels)] };
+}, text);
+
+test('a fixed identity scale keeps Circular ring colours and Legend labels, with the CLI Legend', async ({ page }, testInfo) => {
+  test.setTimeout(420_000);
+  await openWithGenBank(page, path.join(root, RING_FIXTURE));
+  await page.evaluate(async (table) => {
+    const app = window.__GBDRAW_APP__;
+    app.circularConservation.source = 'upload';
+    app.setCircularConservationUploadFiles([new File([table], 'ring.blast', { type: 'text/plain' })]);
+    await window.Vue.nextTick();
+  }, RING_BLAST);
+  await settle(page);
+  const maximum = page.getByLabel('Circular comparison identity scale maximum', { exact: true });
+  await expect(maximum).toBeDisabled();
+  await setInput(page, 'Circular comparison identity scale minimum', 20);
+  await setInput(page, 'Circular comparison identity scale maximum', 90);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.identity_scale)).toEqual([20, 90]);
+
+  const views = {};
+  for (const threshold of [30, 50]) {
+    await setInput(page, 'Circular comparison minimum identity', threshold);
+    await generateAndWaitForResult(page);
+    await settleLive(page);
+    views[threshold] = await comparisonView(page);
+    // The Web gives each ring its own series colour, so the CLI comparison reads the
+    // Legend labels and the drawn hits; tests/test_identity_scale.py pins the CLI colours.
+    const cli = await svgView(page, drawRingsWithPython(testInfo, threshold));
+    expect(views[threshold].labels, `Web Legend equals CLI at --identity ${threshold}`).toEqual(cli.labels);
+    expect(Object.keys(views[threshold].fills).sort(), `Web hits equal CLI at --identity ${threshold}`)
+      .toEqual(Object.keys(cli.fills).sort());
+  }
+  expect(views[30].labels).toEqual(['20%', '90%']);
+  expect(views[50].labels).toEqual(views[30].labels);
+  expect(Object.keys(views[30].fills).sort()).toEqual(['40.0', '60.0', '95.0']);
+  expect(Object.keys(views[50].fills).sort()).toEqual(['60.0', '95.0']);
+  for (const identity of ['60.0', '95.0']) expect(views[50].fills[identity], `identity ${identity}`).toBe(views[30].fills[identity]);
+  await expectLiveEqualsGenerate(page, { label: 'Circular rings with a fixed identity scale' });
 });

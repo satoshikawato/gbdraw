@@ -141,6 +141,29 @@ test('every projected numeric draft value is rejected with a diagnostic or sent 
   }
 });
 
+// The identity scale is a pair, so it is checked here rather than in NUMERIC_FIELDS:
+// a pair of finite numbers is sent as typed, no scale is left unstated, and
+// anything else is refused with the mode's leaf path (R7).
+test('a projected identity scale is two literal numbers, unstated, or refused with its path', () => {
+  const paths = { circular: 'objects.conservation.identity_scale', linear: 'objects.blast_match.identity_scale' };
+  for (const [mode, configPath] of Object.entries(paths)) {
+    for (const value of [Number.NaN, 7, '1e-50x', [5], [Number.NaN, 100], ['x', 100], [null, 100], [40, 90, 100]]) {
+      const label = `${mode}.identity_scale=${JSON.stringify(value)}`;
+      assert.throws(() => project(mode, { ...BLANK, identity_scale: value }), (error) => {
+        const model = normalizeUserFacingError(error);
+        assert.deepEqual([model.code, model.context.configPath, model.context.reason],
+          ['INPUT_INVALID', configPath, 'FINITE'], label);
+        return true;
+      }, label);
+    }
+    const overrides = (value) => project(mode, { ...BLANK, identity_scale: value }).diagramOptions.configOverrides;
+    assert.deepEqual(overrides([12.5, 90])[configPath], [12.5, 90], `${mode} sends the pair as typed`);
+    // Python judges range and order (tests/fixtures/option_domain_vectors.json).
+    assert.deepEqual(overrides([90, 40])[configPath], [90, 40], `${mode} sends a reversed pair as typed`);
+    assert.equal(Object.hasOwn(overrides(null), configPath), false, `${mode} leaves no scale unstated`);
+  }
+});
+
 test('the shared option-domain vectors reach the CLI field and reason through the Web projection', () => {
   const vectors = JSON.parse(readFileSync(new URL('../fixtures/option_domain_vectors.json', import.meta.url), 'utf8'));
   let checked = 0;
@@ -168,7 +191,7 @@ test('the shared option-domain vectors reach the CLI field and reason through th
         for (const [key, value] of Object.entries(expected)) {
           if (key === 'configOverrides') {
             for (const [path, leaf] of Object.entries(value)) {
-              assert.equal(request.diagramOptions.configOverrides[path], leaf, `${label} ${path}`);
+              assert.deepEqual(request.diagramOptions.configOverrides[path], leaf, `${label} ${path}`);
             }
           } else {
             assert.equal(request.diagramOptions[key], value, `${label} ${key}`);
