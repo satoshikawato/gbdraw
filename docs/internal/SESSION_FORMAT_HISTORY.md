@@ -12,7 +12,7 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Session 50 stores the Linear wrap length and italic gene names
+## Unreleased: Session 50 stores the Linear wrap length, italic gene names, and the identity colour scale
 
 Session version 50 adds the config leaf `canvas.linear.wrap_length` (`"none"`,
 `"auto"`, or a positive length in bp) and the Linear slice's
@@ -45,6 +45,19 @@ puts `labels.<mode>.italic_gene_labels: true` in the request's
 same request as before. The key reached no `main` Session before 50 and shares
 its version with the wrap length; a Session up to 49 has no key and loads with
 it off, and no reader converts it.
+
+Session 50 also adds the config leaves `objects.blast_match.identity_scale`
+(Linear) and `objects.conservation.identity_scale` (Circular), `"auto"` or
+`[MIN, MAX]` percent identities, and the slice key `adv.identity_scale`
+(`null` or `[MIN, MAX]`), a `copy` row of the mode-scoped registry next to
+`identity`, whose replay flag is `--identity_scale MIN MAX`. A Web writer puts
+the mode's leaf in the request's `configOverrides` only when a scale is set, so
+a Session without one has the same request as before. `main`'s build refuses
+that override (`UNKNOWN_CONFIG_PATH`) and the slice key (the slice's `adv` is
+closed); it ignores the leaf in a stored full config and draws the threshold
+scale, as a Session without a scale draws. The keys reached no `main` Session
+before 50 and share its version; a Session up to 49 has none and loads without
+a fixed scale, and no reader converts it.
 
 ## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
 

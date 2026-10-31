@@ -153,7 +153,7 @@ class LegendGroup:
         group.add(label_0)
 
         label_100 = generate_text_path(
-            "100%",
+            layout.max_label_text,
             0,
             0,
             0,

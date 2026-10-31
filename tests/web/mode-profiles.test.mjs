@@ -22,6 +22,9 @@ const {
   comparisonProfileDefault,
   comparisonStateForMode,
   effectiveLinearAxisColor,
+  IDENTITY_PERCENT_MAXIMUM,
+  identityScalePathForMode,
+  identityScaleWithEnd,
   managedAdvStateForMode,
   modeProfile,
   trackDefaultsForMode
@@ -645,3 +648,15 @@ assert.equal(
     assert.equal(index === -1 ? null : recipe.args[index + 1], flag, `stored scale_interval ${stored}`);
   }
 }
+
+// The fixed identity colour scale: Python names each mode's leaf; the minimum fixes the
+// scale, and a blank maximum is the top of the identity domain.
+assert.equal(identityScalePathForMode('linear'), 'objects.blast_match.identity_scale');
+assert.equal(identityScalePathForMode('circular'), 'objects.conservation.identity_scale');
+assert.equal(IDENTITY_PERCENT_MAXIMUM, 100);
+assert.deepEqual(identityScaleWithEnd(null, 0, '40'), [40, 100]);
+assert.equal(identityScaleWithEnd(null, 1, '90'), null);
+assert.deepEqual(identityScaleWithEnd([40, 100], 1, '95.5'), [40, 95.5]);
+assert.deepEqual(identityScaleWithEnd([40, 95.5], 1, ''), [40, 100]);
+assert.deepEqual(identityScaleWithEnd([40, 90], 0, '30'), [30, 90]);
+assert.equal(identityScaleWithEnd([40, 90], 0, ' '), null);

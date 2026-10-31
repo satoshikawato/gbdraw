@@ -91,6 +91,7 @@ from .tracks import (
 
 from .cli_utils.common import (
     COLOR_TABLE_HELP,
+    add_identity_scale_arg,
     _add_arrow_geometry_args,
     _add_block_stroke_args,
     _add_depth_axis_args,
@@ -145,6 +146,7 @@ from .cli_utils.losat_output import (
     parse_positive_int as _parse_positive_int,
     write_losat_output_files,
 )
+from .comparisons.identity_scale import LINEAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import losat_entry_filename, losat_pair_filename, unique_losat_filenames
 from .core.numeric import (
     argparse_float,
@@ -666,6 +668,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='minimum BLAST alignment length threshold (default=0)',
         type=argparse_integer,
         default=LINEAR_MODE_PROFILE.comparison.alignment_length)
+    add_identity_scale_arg(parser, "pairwise matches")
     parser.add_argument(
         '--pairwise_match_style',
         dest='pairwise_match_style',
@@ -1584,6 +1587,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "labels.linear.protection": args.label_protection,
         # Only the italic style is an override, so a default run's request is unchanged.
         "labels.linear.italic_gene_labels": True if args.italic_gene_labels else None,
+        LINEAR_IDENTITY_SCALE_PATH: list(args.identity_scale) if args.identity_scale else None,
         "labels.linear.placement": label_placement,
         "labels.linear.rotation": label_rotation,
         "objects.features.line_stroke_color": line_stroke_color,

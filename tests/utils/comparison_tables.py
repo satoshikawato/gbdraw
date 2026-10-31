@@ -9,6 +9,7 @@ from typing import Any
 
 import pandas as pd
 
+from gbdraw.comparisons.identity_scale import identity_color_domain
 from gbdraw.layout.linear_multi_record import LinearComparisonEndpoint
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 
@@ -45,6 +46,7 @@ def ribbon_config(**overrides: Any) -> SimpleNamespace:
     values: dict[str, Any] = {
         "fill_color": "#d3d3d3",
         "identity": 0,
+        "identity_domain": identity_color_domain(0, None),
         "min_color": "#ffffff",
         "max_color": "#000000",
         "fill_opacity": 0.75,

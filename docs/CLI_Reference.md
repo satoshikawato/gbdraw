@@ -144,12 +144,12 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--losat_bin PATH | --ncbi_blast_bin PATH] [--losat_threads N]
               [--losat_output_dir DIR] [--evalue EVALUE] [--bitscore BITSCORE]
               [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
-              [--depth_color DEPTH_COLOR] [--depth_width DEPTH_WIDTH]
-              [--depth_window DEPTH_WINDOW] [--depth_step DEPTH_STEP]
-              [--share_depth_axis] [--depth_min DEPTH_MIN]
-              [--depth_max DEPTH_MAX] [--depth_log_scale]
-              [--no_depth_log_scale] [--show_depth_axis] [--hide_depth_axis]
-              [--show_depth_ticks] [--hide_depth_ticks]
+              [--identity_scale MIN MAX] [--depth_color DEPTH_COLOR]
+              [--depth_width DEPTH_WIDTH] [--depth_window DEPTH_WINDOW]
+              [--depth_step DEPTH_STEP] [--share_depth_axis]
+              [--depth_min DEPTH_MIN] [--depth_max DEPTH_MAX]
+              [--depth_log_scale] [--no_depth_log_scale] [--show_depth_axis]
+              [--hide_depth_axis] [--show_depth_ticks] [--hide_depth_ticks]
               [--depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL]
               [--depth_small_tick_interval DEPTH_SMALL_TICK_INTERVAL]
               [--depth_tick_font_size DEPTH_TICK_FONT_SIZE] [-l LEGEND]
@@ -412,6 +412,12 @@ options:
   --alignment_length ALIGNMENT_LENGTH
                         Minimum BLAST alignment length retained for similarity
                         rings (default: 0).
+  --identity_scale MIN MAX
+                        Fix the identity colour scale of the similarity rings
+                        and their Legend to MIN..MAX percent (0 <= MIN < MAX
+                        <= 100), so figures with different --identity
+                        thresholds share one scale (default: from --identity
+                        to 100).
   --depth_color DEPTH_COLOR
                         Depth track fill color (optional; default: #4A90E2).
   --depth_width DEPTH_WIDTH
@@ -1098,7 +1104,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--depth_tick_font_size DEPTH_TICK_FONT_SIZE] [--align_center]
               [--keep_definition_left_aligned] [--evalue EVALUE]
               [--bitscore BITSCORE] [--identity IDENTITY]
-              [--alignment_length ALIGNMENT_LENGTH]
+              [--alignment_length ALIGNMENT_LENGTH] [--identity_scale MIN MAX]
               [--pairwise_match_style {ribbon,curve}] [-k FEATURES]
               [--feature_shape TYPE=SHAPE]
               [--arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO]
@@ -1429,6 +1435,12 @@ options:
   --identity IDENTITY   identity threshold (default=0)
   --alignment_length ALIGNMENT_LENGTH
                         minimum BLAST alignment length threshold (default=0)
+  --identity_scale MIN MAX
+                        Fix the identity colour scale of the pairwise matches
+                        and their Legend to MIN..MAX percent (0 <= MIN < MAX
+                        <= 100), so figures with different --identity
+                        thresholds share one scale (default: from --identity
+                        to 100).
   --pairwise_match_style {ribbon,curve}
                         Pairwise comparison link style: ribbon keeps straight
                         filled ribbons; curve draws curved filled ribbons that

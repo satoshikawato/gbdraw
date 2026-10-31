@@ -250,6 +250,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
         "evalue": 1e-05,
         "identity": 70.0
       },
+      "identityScalePath": "objects.conservation.identity_scale",
       "labelStyle": {
         "italicGeneLabels": false,
         "line": "none",
@@ -269,6 +270,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
         "evalue": 0.01,
         "identity": 0.0
       },
+      "identityScalePath": "objects.blast_match.identity_scale",
       "labelStyle": {
         "italicGeneLabels": false,
         "line": "under",

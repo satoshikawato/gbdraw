@@ -642,12 +642,13 @@ def prepare_legend_table(
             legend_table.add_source(gradient.label, {
                 "type": "gradient",
                 "min_color": (
-                    gradient.max_color if float(comparison.identity) >= 100 else gradient.min_color
+                    gradient.max_color if comparison.domain.minimum >= comparison.domain.maximum else gradient.min_color
                 ),
                 "max_color": gradient.max_color,
                 "stroke": "none",
                 "width": 0,
-                "min_value": comparison.identity,
+                "min_value": comparison.domain.minimum,
+                "max_value": comparison.domain.maximum,
             })
     return legend_table
 
