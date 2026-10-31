@@ -8,8 +8,8 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-losat-cache-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
-// losat-cache.js reads the generated schema constants.
-for (const module of ['services/losat-cache.js', 'contracts/schema.generated.js']) {
+// losat-cache.js reads the generated schema constants and the shipped LOSAT build.
+for (const module of ['services/losat-cache.js', 'contracts/schema.generated.js', 'services/losat-build.generated.js']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', module), join(tempRoot, module));
 }
 
@@ -68,7 +68,9 @@ const proteinEntry = {
   queryRuntimeBindingHash: 'sha256:runtime-binding-a',
   subjectRuntimeBindingHash: 'sha256:runtime-binding-b',
   queryRecordInstanceKey: 'record-1',
-  subjectRecordInstanceKey: 'record-2'
+  subjectRecordInstanceKey: 'record-2',
+  // Searched by this Web build, so a lookup may reuse it.
+  runtime: cache.webLosatRuntimeRecord('blastp')
 };
 const nucleotideEntry = {
   schema: 2,
@@ -80,7 +82,8 @@ const nucleotideEntry = {
   outfmt: '6',
   args: [],
   queryCanonicalHash: 'q',
-  subjectCanonicalHash: 's'
+  subjectCanonicalHash: 's',
+  runtime: cache.webLosatRuntimeRecord('blastn')
 };
 const legacyProteinEntry = {
   schema: 2,
@@ -116,6 +119,39 @@ assert.ok(cache.getCurrentRawLosatCacheEntry(
   'nucleotide-key',
   { program: 'blastn', outfmt: '6', args: [], queryCanonicalHash: 'q', subjectCanonicalHash: 's' }
 ));
+// The rows another LOSAT Wasm build searched are searched again once: gbdraw 0.14.4 and earlier recorded no
+// build (`version: null`), and its Wasm gave other blastn rows than this build (LOSAT dde737f18). So are
+// nucleotide rows without a runtime record (Sessions before version 44). Protein rows without one (promoted
+// legacy caches) are reused, as the session compatibility reference promises; a CLI search is reused as before.
+const { LOSAT_WASM_BUILD } = await import(pathToFileURL(join(tempRoot, 'services', 'losat-build.generated.js')));
+const nucleotideMetadata = { program: 'blastn', outfmt: '6', args: [], queryCanonicalHash: 'q', subjectCanonicalHash: 's' };
+const wasmRuntime = (version) => ({ kind: 'losat', source: 'wasm', version, program: 'blastn' });
+for (const [runtime, reused, proteinReused = reused] of [
+  [wasmRuntime(null), false],
+  [wasmRuntime('0.1.0'), false],
+  [wasmRuntime(LOSAT_WASM_BUILD.version), true],
+  [runtimeRecord, true],
+  [undefined, false, true]
+]) {
+  const { runtime: _nucleotideRuntime, ...nucleotideWithoutRuntime } = nucleotideEntry;
+  const { runtime: _proteinRuntime, ...proteinWithoutRuntime } = proteinEntry;
+  const entry = runtime === undefined ? nucleotideWithoutRuntime : { ...nucleotideEntry, runtime };
+  assert.equal(
+    Boolean(cache.getCurrentRawLosatCacheEntry(new Map([['nucleotide-key', entry]]), 'nucleotide-key', nucleotideMetadata)),
+    reused,
+    `runtime ${JSON.stringify(runtime)}`
+  );
+  assert.equal(
+    Boolean(cache.getCurrentRawLosatCacheEntry(
+      new Map([['protein-key', runtime === undefined ? proteinWithoutRuntime : { ...proteinEntry, runtime: { ...runtime, program: 'blastp' } }]]),
+      'protein-key',
+      { program: 'blastp', outfmt: '6', args: proteinEntry.args },
+      manifest
+    )),
+    proteinReused,
+    `protein runtime ${JSON.stringify(runtime)}`
+  );
+}
 assert.equal(
   cache.classifyRawLosatCacheEntry({ ...proteinEntry, schema: 3 }),
   'invalid',
