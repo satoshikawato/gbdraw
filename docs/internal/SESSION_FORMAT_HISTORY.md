@@ -12,7 +12,7 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Session 50 stores the Linear wrap length
+## Unreleased: Session 50 stores the Linear wrap length and italic gene names
 
 Session version 50 adds the config leaf `canvas.linear.wrap_length` (`"none"`,
 `"auto"`, or a positive length in bp) and the Linear slice's
@@ -35,6 +35,16 @@ request's `configOverrides`; the Web has no control for it yet. The Gallery and
 test-input Sessions were refreshed to 50 (`tools/refresh_gallery_sessions.py`);
 they differ from Session 49 in the version and the `"none"` leaf. Positive
 fixtures of Session 49: `tests/fixtures/sessions/*.v49.*`.
+
+Session 50 also adds the config leaf `labels.<mode>.italic_gene_labels` (true or
+false, default false) in both modes and the slice key
+`adv.italic_gene_labels`, a `copy` row of the mode-scoped registry next to
+`label_protection`, whose replay flag is `--italic_gene_labels`. A Web writer
+puts `labels.<mode>.italic_gene_labels: true` in the request's
+`configOverrides` only when the setting is on, so a Session with it off has the
+same request as before. The key reached no `main` Session before 50 and shares
+its version with the wrap length; a Session up to 49 has no key and loads with
+it off, and no reader converts it.
 
 ## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
 

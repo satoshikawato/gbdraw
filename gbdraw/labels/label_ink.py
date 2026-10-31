@@ -28,7 +28,14 @@ from ..layout.text_geometry import Point, TextAnchor, normalize_text_anchor
 from .circular_leaders import leader_polyline, rim_text_placement
 from .circular_types import CircularLabel
 from .linear_types import LinearLabel, is_above_feature_label, is_horizontal_label
-from .label_style import GAP_STOP_EM, UNDERLINE_GAP_EM, UNDERLINE_TRIM_EM, FeatureLabelStyle, leader_width_px
+from .label_style import (
+    GAP_STOP_EM,
+    UNDERLINE_GAP_EM,
+    UNDERLINE_TRIM_EM,
+    FeatureLabelStyle,
+    LabelFontStyle,
+    leader_width_px,
+)
 
 
 def segment_through_box(start: Point, end: Point, box: Aabb) -> bool:
@@ -144,6 +151,7 @@ def feature_label_ink(
     text: str,
     font_family: str,
     font_size: float,
+    font_style: LabelFontStyle,
     *,
     at: Point,
     anchor: TextAnchor,
@@ -159,7 +167,9 @@ def feature_label_ink(
     when ``style`` draws one under it and the label is not ``turned``."""
 
     size = float(font_size)
-    offsets = text_ink_offsets(text, font_family, size, dominant_baseline=dominant_baseline, text_anchor=anchor)
+    offsets = text_ink_offsets(
+        text, font_family, size, dominant_baseline=dominant_baseline, text_anchor=anchor, font_style=font_style
+    )
     if offsets is None:
         # The no-font estimate: 0.6 em per character.
         width = 0.6 * len(text) * size
@@ -171,7 +181,7 @@ def feature_label_ink(
     if style.draws_underline(turned):
         # The gap is measured to the line's edge, so its centre lies half its width further out.
         reach = UNDERLINE_GAP_EM * size + 0.5 * leader_width_px(size)
-        metrics = get_font_vertical_metrics(font_family)
+        metrics = get_font_vertical_metrics(font_family, "normal", font_style)
         shift = None if metrics is None else dominant_baseline_shift_em(dominant_baseline, metrics)
         under_y = (
             y + (shift + metrics.descent) * size + reach
@@ -202,6 +212,7 @@ def linear_label_ink(label: LinearLabel, leader: Sequence[Point], style: Feature
         label["label_text"],
         label["font_family"],
         float(label["font_size"]),
+        label["font_style"],
         at=(float(label["middle_x"]), float(label["middle_y"])),
         anchor=normalize_text_anchor(label["text_anchor"]),
         dominant_baseline="central",
@@ -221,6 +232,7 @@ def circular_label_ink(label: CircularLabel, record_length: int, style: FeatureL
         str(label["label_text"]),
         str(label["font_family"]),
         float(label["font_size"]),
+        label["font_style"],
         at=(x, y),
         anchor=normalize_text_anchor(anchor),
         dominant_baseline=baseline,

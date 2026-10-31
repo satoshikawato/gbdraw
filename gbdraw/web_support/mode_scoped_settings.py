@@ -138,6 +138,7 @@ _ADV_ROWS = _rows(
     ("label_rendering", "both", "copy"),
     ("label_line", "both", "copy"),
     ("label_protection", "both", "copy"),
+    ("italic_gene_labels", "both", "copy"),
     ("circular_label_placement", "circular", "own"),
     ("label_placement", "linear", "own"),
     ("label_rotation", "linear", "own"),

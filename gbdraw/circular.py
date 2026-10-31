@@ -1230,6 +1230,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "labels.rendering": label_rendering,
         "labels.circular.line": args.label_line,
         "labels.circular.protection": args.label_protection,
+        # Only the italic style is an override, so a default run's request is unchanged.
+        "labels.circular.italic_gene_labels": True if args.italic_gene_labels else None,
         "labels.circular.placement": circular_label_placement,
         "labels.filtering.raw": filtering_override,
         "labels.unified_adjustment.outer_labels.x_radius_offset": outer_label_x_radius_offset,

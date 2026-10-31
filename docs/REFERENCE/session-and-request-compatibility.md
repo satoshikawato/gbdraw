@@ -15,6 +15,10 @@ Session 50 stores the Linear **wrap length** (see
 `linear_wrap_length` and the config leaf `canvas.linear.wrap_length`. gbdraw
 0.14.4 and earlier refuse the form key and draw a stored config leaf on one row
 without a message, so a Session that holds a length is a Session 50 file.
+Session 50 also stores **Italic gene names** in each slice
+(`modes.<mode>.config.adv.italic_gene_labels`); on is saved in the render
+request as `labels.<mode>.italic_gene_labels: true`, and off is left out of the
+request. A Session up to 49 loads with upright gene names.
 gbdraw 0.14.4 and earlier refuse a Session 50 file.
 
 Session 49 stores the Circular **Show Definition** setting in each Circular
@@ -418,10 +422,11 @@ committed render request and generated Result of each diagram mode, and
 supported editor and comparison state. Replay does not depend on the original file path remaining valid.
 Treat the session as sensitive when its embedded source data is sensitive.
 
-Each diagram mode keeps its own feature label style, **Label Line** and
-**Label Protection** (`--label_line`, `--label_protection`). A Session saved
-before they existed loads with each mode's defaults: Linear Underline and Box,
-Circular None and None.
+Each diagram mode keeps its own feature label style, **Label Line**,
+**Label Protection**, and **Italic gene names** (`--label_line`,
+`--label_protection`, `--italic_gene_labels`). A Session saved before they
+existed loads with each mode's defaults: Linear Underline and Box, Circular
+None and None, and upright gene names in both.
 
 An embedded resource may declare `checksum`, the SHA-256 digest of its bytes as
 `sha256:<hex>` or as bare hex. gbdraw does not add one. The web app keeps it

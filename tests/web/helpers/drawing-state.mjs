@@ -130,7 +130,7 @@ export const TRANSIENT_KEYS = Object.freeze([
   'plotTitleAutoTransform', 'showCanvasControls', 'skipCaptureBaseConfig',
   'skipExtractOnSvgChange', 'trustedArtifactRestoreInProgress', 'newColorFeat', 'newColorVal',
   'newPriorityRule', 'newFeatureToAdd', 'displayedResultMetadata', 'featureList', 'featureListState', 'filteredFeatures',
-  'filteredEditableLabels', 'ruleMatchingPending'
+  'filteredEditableLabels', 'ruleMatchingPending', 'downloadTransparentBackground'
 ]);
 
 // The drawing store itself.

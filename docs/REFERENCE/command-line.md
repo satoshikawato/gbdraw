@@ -229,6 +229,18 @@ on its feature; labels move away from the axis off each other and off the
 record's definition text, a horizontal label by whole `auto` rows. In both modes region labels keep
 off a feature label's underline and box as off its letters.
 
+`--italic_gene_labels` draws in italics each feature label that the qualifier
+priority (`--qualifier_priority`, or the default order) takes from the `gene`
+qualifier. The label stays italic when a `--label_table` row or a feature
+override replaces its text; every other label stays upright. It is off by
+default. gbdraw measures an italic label with the italic face of its font, as
+the bundled Liberation fonts have, or with the regular face when the font has
+no italic face.
+
+gbdraw draws no background, so no option is needed for one: SVG output has no
+background shape, and PNG output keeps it transparent. See
+[Static, interactive, and raster output](output-formats-and-export.md#static-interactive-and-raster-output).
+
 `--font_family` sets the font of all diagram text: one family name such as
 `"DejaVu Serif"` or a CSS font-family list. The default is Liberation Sans.
 gbdraw measures text with the font file of the first family it finds: a

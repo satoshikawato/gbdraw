@@ -159,6 +159,7 @@ const refusedFontWarnings = (families) => families.map((family) => (
  * @property {string | null} [svgContent] `getSvgFromString` reads a null content as no SVG.
  * @property {StandaloneInteractivityOptions} [interactivity]
  * @property {number | string} [dpi]
+ * @property {boolean} [transparentBackground] the PNG keeps the drawing's transparent background
  */
 
 /**
@@ -549,8 +550,11 @@ export const downloadPNG = async (snapshot, { embedFonts } = {}) => {
       img.onerror = () => reject(new Error('The browser could not load the SVG for PNG export.'));
       img.src = url;
     });
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // The drawing has no background; the PNG paints it white unless asked to keep it transparent.
+    if (!snapshot.transparentBackground) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     const pngBlob = await new Promise((resolve, reject) => {
       canvas.toBlob((value) => {

@@ -22,7 +22,8 @@ const showResult = async (page, index) => {
 
 // The displayed Result as the reader sees it, keyed by stable IDs:
 // - features[renderedId]: drawn parts and their fill and stroke colors;
-// - labels[renderedId]: the text of each drawn label;
+// - labels[renderedId]: the text of each drawn label and the font style it is
+//   drawn in (of its textPath when it has one);
 // - leaders[renderedId]: the drawn leader segments of the label;
 // - legend: the drawn legend rows in reading order (caption, swatch colors);
 // - texts: every other drawn text (ticks, definitions, titles);
@@ -100,7 +101,11 @@ const semanticSnapshot = (page) => page.evaluate(() => {
   for (const element of boundParts) {
     const id = element.getAttribute('data-label-feature-id');
     if (element.localName === 'text') {
-      labels[id] = { text: [...(labels[id]?.text || []), textOf(element)].sort() };
+      const fontStyle = getComputedStyle(element.querySelector('textPath') || element).fontStyle;
+      labels[id] = {
+        text: [...(labels[id]?.text || []), textOf(element)].sort(),
+        fontStyle: sortedUnique([...(labels[id]?.fontStyle || []), fontStyle])
+      };
     } else if (element.matches(shapes)) {
       leaders[id] = { count: (leaders[id]?.count || 0) + 1, stroke: sortedUnique([...(leaders[id]?.stroke || []), paint(element, 'stroke')]) };
     }

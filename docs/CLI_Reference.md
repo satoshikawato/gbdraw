@@ -168,7 +168,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
-              [--label_table LABEL_TABLE]
+              [--label_table LABEL_TABLE] [--italic_gene_labels]
               [--feature_visibility_table FEATURE_TABLE]
               [--annotation_table ANNOTATION_TABLE]
               [--outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET]
@@ -511,6 +511,10 @@ options:
   --label_table LABEL_TABLE
                         Path to a TSV file defining post-filter label text
                         overrides (optional)
+  --italic_gene_labels  Draw each feature label that the qualifier priority
+                        names from the gene qualifier in italics, also when
+                        --label_table replaces its text; other labels stay
+                        upright (default: off).
   --feature_visibility_table FEATURE_TABLE
                         Path to a TSV file defining per-feature visibility
                         overrides (optional)
@@ -1129,7 +1133,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--resolve_overlaps] [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
-              [--label_table LABEL_TABLE]
+              [--label_table LABEL_TABLE] [--italic_gene_labels]
               [--feature_visibility_table FEATURE_TABLE]
               [--annotation_table ANNOTATION_TABLE]
               [--feature_height FEATURE_HEIGHT] [--gc_height GC_HEIGHT]
@@ -1575,6 +1579,10 @@ options:
   --label_table LABEL_TABLE
                         Path to a TSV file defining post-filter label text
                         overrides (optional)
+  --italic_gene_labels  Draw each feature label that the qualifier priority
+                        names from the gene qualifier in italics, also when
+                        --label_table replaces its text; other labels stay
+                        upright (default: off).
   --feature_visibility_table FEATURE_TABLE
                         Path to a TSV file defining per-feature visibility
                         overrides (optional)
