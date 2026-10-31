@@ -255,7 +255,7 @@ def _precalculate_label_dimensions(
     placed_by_record: dict[int, list[LinearLabel]] = {}
     for row in linear_label_rows(label_frames, len(records)):
         members = [(i, x, unplaced) for i, x in row if (unplaced := record_labels[i]) is not None]
-        # A wrapped record has its grid row to itself (``reject_wrap_in_one_grid_row``).
+        # A wrapped record has its grid row to itself (``refuse_undrawable_wrap``).
         wrapped = [
             (i, x, unplaced, transform)
             for i, x, unplaced in members

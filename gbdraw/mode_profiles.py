@@ -11,6 +11,7 @@ from types import MappingProxyType
 from typing import Literal, Mapping, cast, get_args
 
 from gbdraw.config.models.canvas import (
+    LINEAR_AXIS_RULER_COLOR_PATHS,
     LINEAR_WRAP_LENGTH_PATH,
     linear_axis_ruler_applies,
     linear_wrap_length_from_config,
@@ -179,7 +180,6 @@ _LINEAR_WRAP_DEFAULTS: Mapping[str, object] = MappingProxyType({
     "canvas.linear.track_layout": LINEAR_WRAP_DEFAULT_TRACK_LAYOUT,
     "objects.scale.style": "ruler",
 })
-_LINEAR_SCALE_COLORS = ("objects.scale.stroke_color", "objects.scale.label_color")
 
 
 def get_mode_profile(mode: DiagramMode | str) -> ModeProfile:
@@ -237,7 +237,7 @@ def linear_wrap_default_overrides(explicit_overrides: Mapping[str, object] | Non
         **{path: value for path, value in _LINEAR_WRAP_DEFAULTS.items() if path not in explicit},
         # Fixed while wrapping: the option's other value has nothing to draw (the CLI always sends one).
         "canvas.linear.ruler_on_axis": True,
-        **{path: explicit[path] for path in _LINEAR_SCALE_COLORS if explicit.get(path) is not None},
+        **{path: explicit[path] for path in LINEAR_AXIS_RULER_COLOR_PATHS if explicit.get(path) is not None},
     }
     if "objects.axis.linear.stroke_color" not in explicit:
         decisive = {**_packaged_axis_ruler_leaves(), **explicit, **defaults}

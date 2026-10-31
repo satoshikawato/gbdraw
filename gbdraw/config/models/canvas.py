@@ -58,6 +58,10 @@ def linear_wrap_length_from_config(value: object) -> LinearWrapLength:
     return parsed
 
 
+# The scale leaves an axis ruler takes from the axis color unless a request sets them.
+LINEAR_AXIS_RULER_COLOR_PATHS = ("objects.scale.stroke_color", "objects.scale.label_color")
+
+
 def linear_axis_ruler_applies(
     *,
     show_scale: object,

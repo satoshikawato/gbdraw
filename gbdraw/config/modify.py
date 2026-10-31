@@ -20,6 +20,7 @@ from .models import GbdrawConfig
 from .models.canvas import (
     FEATURE_OVERLAP_TOLERANCE_PATH,
     LEAF_VALIDATOR,
+    LINEAR_AXIS_RULER_COLOR_PATHS,
     linear_axis_ruler_applies,
     validate_feature_overlap_tolerance,
 )
@@ -32,7 +33,6 @@ _CIRCULAR_DEFINITION_FONT = "objects.definition.circular.font_size"
 _CIRCULAR_DEFINITION_INTERVAL = "objects.definition.circular.interval"
 _LINEAR_RULER_ON_AXIS = "canvas.linear.ruler_on_axis"
 _LINEAR_AXIS_COLOR = "objects.axis.linear.stroke_color"
-_AXIS_RULER_COLORS = ("objects.scale.stroke_color", "objects.scale.label_color")
 
 
 def _assert_safe_config_value(value: object, *, path: str) -> None:
@@ -493,7 +493,7 @@ def _apply_validated_config_overrides(
         track_layout=raw_config_value(updated, "canvas.linear.track_layout"),
     ):
         axis_color = raw_config_value(updated, _LINEAR_AXIS_COLOR)
-        for path in _AXIS_RULER_COLORS:
+        for path in LINEAR_AXIS_RULER_COLOR_PATHS:
             if path not in paths and axis_color is not None:
                 _set_raw_config_path(updated, path, axis_color)
     return updated

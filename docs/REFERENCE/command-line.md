@@ -127,6 +127,14 @@ reverse-complemented records. When every row contains only one record, rulers
 keep source-coordinate mapping, so a reverse-complemented region descends
 from left to right.
 
+`--track_layout above|below` with `--scale_style ruler` allows
+`--ruler_on_axis`; other layout combinations ignore the on-axis ruler with a
+warning. With `--wrap_length` that warning is not given: rows always have the
+on-axis ruler, and with nothing to cut the flag has no effect. `--hide_scale`
+hides genome-coordinate ticks and labels but keeps the record axes. Quantitative
+axes remain independent, and `--hide_length` separately controls Linear
+definition text.
+
 ### Wrap one record over several rows
 
 `--wrap_length` draws each record longer than the given length over several
@@ -173,12 +181,6 @@ The command writes `lambda_wrapped.svg` and logs `Wrapping at 10 kb per row: 5
 rows`.
 
 ![Lambda phage genome wrapped at 10 kb per row with labels, GC content, GC skew, and a legend](../images/h-cli-15/lambda_wrapped.svg)
-
-`--track_layout above|below` with `--scale_style ruler` allows
-`--ruler_on_axis`; other layout combinations ignore the on-axis ruler with a
-warning. `--hide_scale` hides genome-coordinate ticks and labels but keeps
-the record axes. Quantitative axes remain independent, and `--hide_length`
-separately controls Linear definition text.
 
 ## Tracks, annotations, and presentation
 
