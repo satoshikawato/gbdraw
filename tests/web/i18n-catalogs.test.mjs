@@ -665,20 +665,20 @@ test('OV-1506: Layout, Labels and Features have rail keys of their own', async (
   assert.deepEqual(rail.map(({ context, english }) => `${context}:${english}`), ['rail:Layout', 'rail:Features', 'rail:Labels']);
 });
 
-test('the UI languages are the eleven of the Language menu, Latin script first, then Thai, each named in itself', () => {
+test('the UI languages are the fifteen of the Language menu, Latin script first, then Thai, each named in itself', () => {
   assert.deepEqual(UI_LOCALES.map(({ tag, name }) => [tag, name]), [
-    ['en', 'English'], ['id', 'Bahasa Indonesia'], ['es', 'Español'], ['fr', 'Français'], ['pt', 'Português'],
-    ['vi', 'Tiếng Việt'], ['th', 'ไทย'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
+    ['en', 'English'], ['id', 'Bahasa Indonesia'], ['de', 'Deutsch'], ['es', 'Español'], ['fr', 'Français'], ['it', 'Italiano'],
+    ['pl', 'Polski'], ['pt', 'Português'], ['vi', 'Tiếng Việt'], ['tr', 'Türkçe'], ['th', 'ไทย'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
   ]);
   assert.ok(Object.isFrozen(UI_LOCALES) && UI_LOCALES.every(Object.isFrozen));
   for (const { tag } of UI_LOCALES) assert.equal(uiLocaleOf(tag), tag);
-  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de', null, undefined, 3, '../x']) {
+  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de-DE', 'DE', 'it-IT', 'pl-PL', 'tr-TR', 'xx', null, undefined, 3, '../x']) {
     assert.equal(uiLocaleOf(value), null, JSON.stringify(value));
   }
 });
 
 test('a locale outside the UI languages is refused', async () => {
-  await assert.rejects(setUiLocale('de', async () => ({ default: {} })), /Unknown UI locale/);
+  await assert.rejects(setUiLocale('xx', async () => ({ default: {} })), /Unknown UI locale/);
   assert.equal(uiLocale.value, SOURCE_LOCALE);
 });
 
@@ -686,7 +686,7 @@ test('two sentences are joined with a space in English, the other Latin-script l
   assert.equal(sentenceSeparator(), ' ');
   assert.equal(joinSentences('Exported a.svg.', 'Find it in your browser\'s downloads.'), 'Exported a.svg. Find it in your browser\'s downloads.');
   try {
-    for (const tag of ['id', 'es', 'fr', 'pt', 'vi', 'th', 'ko']) {
+    for (const tag of ['id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'th', 'ko']) {
       await setUiLocale(tag, async () => ({ default: {} }));
       assert.equal(sentenceSeparator(), ' ', tag);
       assert.equal(joinSentences('A.', 'B.'), 'A. B.', tag);
@@ -708,7 +708,7 @@ test('a list keeps today\'s English and uses the locale\'s list pattern in every
   assert.equal(listText(['A', 'B', 'C']), 'A, B, and C');
   assert.equal(listText(['A', 'B', 'C', '2 more']), 'A, B, C, and 2 more');
   try {
-    for (const tag of ['id', 'es', 'fr', 'pt', 'vi', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
+    for (const tag of ['id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
       await setUiLocale(tag, async () => ({ default: {} }));
       const expected = new Intl.ListFormat(tag, { type: 'conjunction' });
       assert.equal(listText(['A']), 'A', tag);
@@ -755,6 +755,12 @@ test('the shown locale\'s plural rules pick the form, and the English text of th
       ['pt', ['one:0', 'one:1', 'other:2', 'other:1000000']],
       // es and fr select `many` for 1000000, which takes `other`.
       ['es', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      // de and tr take `one` for 1 only; it selects `many` for 1000000, pl `few` for 2 and `many` for 0 and 1000000,
+      // and a string value shows its `other` text for those.
+      ['de', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      ['it', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      ['pl', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      ['tr', ['other:0', 'one:1', 'other:2', 'other:1000000']],
       ['ja', ['other:0', 'other:1', 'other:2', 'other:1000000']],
       ['zh-Hans', ['other:0', 'other:1', 'other:2', 'other:1000000']],
       ['zh-Hant', ['other:0', 'other:1', 'other:2', 'other:1000000']],
