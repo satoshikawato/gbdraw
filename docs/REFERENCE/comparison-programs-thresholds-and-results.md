@@ -187,6 +187,30 @@ by the CLI, shown beside the Result in the web app). See
 A start greater than its end marks reverse orientation; it does not by itself
 mean that a hit crosses a Circular origin.
 
+### Automatic Linear orientation
+
+`--auto_orient` (`auto_orient=True` in `LinearComparisonOptions` and in typed
+`LinearDiagramOptions`; off by default) reverse-complements Linear records
+from their nucleotide hits. It reads the `--blast` files, the
+`--comparisons_table` rows, and LOSATN and TLOSATX results, after the display
+filters, in each record's search frame. Protein comparisons (LOSATP, protein
+tables, and rows bound to source features) are not read, so with only protein
+comparisons every record keeps its orientation.
+
+Records are decided row by row, from the first row, which keeps its
+orientation. A hit between a record and a record of the row above weighs its
+alignment length (column 4). It is a reverse hit when its query and subject
+directions differ (`qstart <= qend` against `sstart <= send`), or when they
+agree and the record above is drawn reverse-complemented. The record is
+reverse-complemented when its reverse hits weigh more than half of all its hits
+against the row above. At exactly half, or without hits, the record keeps its
+orientation. A record that `--reverse_complement 1` or a region's `:rc`
+already reverses stays reversed, and the next row is decided against it as
+drawn. The figure equals the one the same explicit reverses draw; the CLI logs
+each record it reversed. A Session cannot store the option yet: with `--save_session` or
+`--session_output` the command stops with an error before it draws. The Web app does not
+offer it yet.
+
 For a Circular ring, the selected reference side is `query`, `subject`, or
 `auto`. The renderer paints retained spans from that side on the displayed
 record. It does not infer binned coverage or a wraparound hit from one BLAST

@@ -21,7 +21,6 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, Mapping, NamedTuple, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
-import pandas as pd
 from pandas import DataFrame
 from svgwrite import Drawing
 from svgwrite.container import Group
@@ -76,7 +75,7 @@ from ...render.groups.linear.length_bar import (
     RULER_TICK_LENGTH,
     format_linear_tick_label,
 )
-from ...io.comparisons import filter_comparison_dataframe, read_comparison_resource
+from ...io.comparisons import read_comparison_resource
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
     ComparisonLegendSource,
@@ -138,10 +137,9 @@ from ...linear_comparison import (
     ComparisonRecordIdWarning,
     LinearComparison,
     ProteinComparisonFrames,
-    merge_linear_comparisons,
     project_search_frame_comparisons,
+    search_frame_linear_comparisons,
     validate_linear_comparison_record_ids,
-    validate_linear_comparison_topology,
 )
 from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from ...layout.scalar_axis import (
@@ -725,44 +723,14 @@ def linear_comparison_rows(
 ) -> LinearComparisonRows:
     """Filter, merge, validate and project the comparisons (render stage ``comparison_rows``).
 
-    The ordered tables (comparison files, then protein comparisons) pair
-    record ``i`` with ``i + 1``; explicit comparisons (given, then protein
-    pairs) name their records.
+    :func:`search_frame_linear_comparisons` filters, merges and validates them;
+    this stage projects them onto the records.
     """
 
-    proteins = protein_comparisons or ProteinComparisonFrames()
-    sources = [
-        [filter_comparison_dataframe(table, thresholds) for table in source]
-        for source in (blast_tables, proteins.ordered)
-        if source
-    ]
-    ordered_frames: list[DataFrame] = []
-    for index in range(max((len(source) for source in sources), default=0)):
-        frames = [source[index] for source in sources if index < len(source)]
-        ordered_frames.append(frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True))
-    normalized = [
-        LinearComparison(
-            item.query_record_index,
-            item.subject_record_index,
-            filter_comparison_dataframe(item.matches, thresholds),
-        )
-        for item in (*linear_comparisons, *proteins.pairs)
-    ]
-    if ordered_frames:
-        if multi_record_enabled:
-            raise ValidationError(
-                "Ordered comparison tables pair record i with record i + 1, which is "
-                "ambiguous when a Linear row holds more than one record. On the command "
-                "line, list each table with its query and subject in --comparisons_table "
-                "instead of -b/--blast; in Python, pass LinearComparison values."
-            )
-        # A table past the last record fails the topology check below.
-        normalized.extend(
-            LinearComparison(index, index + 1, frame)
-            for index, frame in enumerate(ordered_frames)
-        )
-    normalized = list(merge_linear_comparisons(normalized))
-    validate_linear_comparison_topology(normalized, rows_by_record)
+    normalized = search_frame_linear_comparisons(
+        blast_tables, protein_comparisons, linear_comparisons, thresholds,
+        rows_by_record, multi_record_enabled,
+    )
     warnings = validate_linear_comparison_record_ids(normalized, records)
     return LinearComparisonRows(
         comparisons=tuple(project_search_frame_comparisons(normalized, records)),
