@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Added: Web UI: German, Italian, Polish and Turkish in the Language menu.
+  Polish and Turkish letters use the bundled Inter Latin Extended subset.
+- Fixed: in the Web UI record popup, the Alignment line of a record that was
+  not moved shows the reason as its label reads, for example "Not moved
+  (Skipped by user)"; it was lower-cased, which damaged German nouns and the
+  Turkish dotted I.
+
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
 
 - Patch release of 0.14.4. Sessions are saved as Session version 50 (0.14.4 writes 49); a Session
