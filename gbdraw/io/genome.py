@@ -46,8 +46,8 @@ _ABSENCE_MESSAGES = {
         "Give a FASTA file together with its GFF3 file (--gff with --fasta)."
     ),
     "NOT_GENBANK": (
-        "{path} is not a " + _FLAT_FILE_KINDS + ": no line starts a record with "
-        "'LOCUS' (GenBank, DDBJ) or 'ID   ' (EMBL)."
+        "{path} is not a " + _FLAT_FILE_KINDS + ": no line starts a record, which is "
+        "'LOCUS' and seven spaces (GenBank, DDBJ) or 'ID' and three spaces (EMBL)."
     ),
 }
 
