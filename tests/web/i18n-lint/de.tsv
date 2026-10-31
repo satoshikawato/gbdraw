@@ -1,0 +1,24 @@
+id	regex	flags	message	severity
+de-sie-lowercase	(^|[.:;!?] )[A-ZÄÖÜ][a-zäöüß]+en sie\b	u	The formal address Sie is capitalized: write "Wählen Sie", not "Wählen sie" (STYLE 12.2).	error
+de-du-pronoun	\b(du|dir|dich|dein|deine|deinen|deinem|deiner|deines|euch|euer|eure)\b	iu	Use the formal Sie form (Sie, Ihr, Ihnen), never du / dein / euch (STYLE 12.2).	error
+de-du-imperative	(^|[.:;!?] )(Wähle|Klicke|Lade|Speichere|Gib|Prüfe|Lösche|Verwende|Nutze|Starte|Versuche|Öffne|Schließe|Beachte|Achte|Füge|Entferne|Ändere|Korrigiere|Wähl)\b	u	Du-imperative; write the Sie imperative (Wählen Sie, Klicken Sie) or the infinitive on buttons (STYLE 12.2).	error
+de-bitte	(^|[.:;!?] )(Bitte)\b	u	Microsoft German drops Bitte in instructions; write the Sie imperative alone (STYLE 12.2).	warn
+de-spelling	[Gg]ross|[Gg]röss|[Ss]chliess|[Ss]trasse|[Aa]usser|[Mm]assstab|Fuss|\b(daß|muß|mußte|läßt|Schluß|Prozeß|Fluß)\b|\b(fuer|ueber|zurueck|koennen|muessen|moeglich|waehlen|pruefen|loeschen|oeffnen|aender\w*|groesse)\b	iu	Write German (Germany) spelling: ß where Duden has it (Größe, schließen, außerhalb, groß), 1996 forms (dass, muss, Prozess), and real umlauts, not ss, ae / oe / ue or old ß spellings (STYLE 12.3).	error
+de-quote-straight	"	u	Straight double quotes; write German quotes „…“ (U+201E and U+201C) around a quoted name (STYLE 12.3).	error
+de-quote-closing	”	u	U+201D never occurs in German quotes; the closing mark is U+201C: „Name“ (STYLE 12.3).	error
+de-quote-other	[«»‹›]|(^|[^‚])‘[^‘’]*’|(^|[\s(])'[^']+'	u	French guillemets, English single quotes or straight single quotes; use „…“ and nested ‚…‘ (STYLE 12.3).	warn
+de-space-before-punct	[   ][:;?!]	u	No space before a colon, semicolon, question mark or exclamation mark in German (STYLE 12.3).	error
+de-hyphen-dash	 - 	u	A hyphen with spaces used as a dash; write the en dash with spaces " – " (STYLE 12.3).	warn
+de-three-dots	\.\.\.| …$	u	Three dots or a space before the final ellipsis; write one … directly after the word: Laden… (STYLE 12.3).	error
+de-decimal-comma	(?<![\d,.])\d+,\d{1,2}(?![\d,])	u	Decimal comma; numbers keep the English decimal point and grouping: 0.65, 1,000.5 (D-05, STYLE 12.3).	error
+de-thousand-space	(?<![\d.,])\d{1,3}[   ]\d{3}(?!\d)	u	Space as a thousands separator; numbers keep the English grouping 10,000 (D-05, STYLE 12.3).	warn
+de-nonascii-digits	[٠-٩۰-۹०-९０-９]	u	Non-ASCII digits; use ASCII digits only (STYLE 1.2).	error
+de-placeholder-glue	\}[A-Za-zÄÖÜäöüß]|[A-Za-zÄÖÜäöüß]\{	u	A letter glued to a placeholder; a placeholder takes no suffix, prefix or case ending. Rephrase: "die Datei {file}" (STYLE 12.5).	error
+de-apostrophe-genitive	[A-Za-zÄÖÜäöüß}][’'][sS]\b	u	Apostrophe genitive; German has none (Features Name, des Datensatzes), rephrase (STYLE 12.4).	error
+de-compound-space	\b(GC|AT|TSV|BLAST|LOSAT|LOSATP|FASTA|GFF3|SVG|PNG|PDF|DPI|CLI|Locus|Feature|Track|Slot|Label|Query|Subject) (Gehalt|Skew|Datei|Tabelle|Format|Export|Wert|Werte|Typ|Spur|Modus|Cache|Ergebnis|Einstellung|Einstellungen|Tag|Layout|Platzierung|Sichtbarkeit|Auswahl|Filter|Popup|Slots|Voreinstellung|Priorität|Farbe|Sequenz)\b	u	A compound written as two words; join with a hyphen: GC-Gehalt, TSV-Datei, Locus-Tag, Feature-Typ, Track-Layout (STYLE 12.4).	warn
+de-feature-merkmal	\b[Mm]erkmal(e|en|s)?\b	u	Feature stays Feature (Merkmal is a phenotypic trait); write Feature, Features (glossary Feature).	warn
+de-generieren	[Gg]enerier\w*	u	Generate is erzeugen (Diagramm erzeugen, beim Erzeugen, Neu erzeugen), not generieren (glossary Generate).	error
+de-english-leftover	(?<![{\w#/_-])(?:records?|legends?|strands?|accessions?|settings|sessions?|generate|diagram|results?|undo|redo|apply|cancel)(?![\w}_-])	iu	English word left in a German value; use the glossary term (Datensatz, Legende, Strang, Zugangsnummer, Einstellungen, Sitzung, Erzeugen, Diagramm, Ergebnis, Rückgängig, Wiederholen, Anwenden, Abbrechen).	warn
+de-abbrev-spacing	\b(?:z|d|u)\.(?: )?(?:B|h|a)\.(?=\s|$|[,;)])	u	Write z. B., d. h., u. a. with a no-break space (U+00A0) between the parts (STYLE 12.3).	warn
+de-soft-hyphen	­	u	Soft hyphen; German values are never hyphenated, shorten the wording instead (D-11, STYLE 12.6).	error
+de-kollinear	\b[Kk]ollinear\w*	u	Collinear is kolinear with one l, as de.wikipedia Syntenie writes Kolinearität (glossary Collinear).	warn

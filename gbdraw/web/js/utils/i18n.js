@@ -23,7 +23,7 @@
 /**
  * The BCP 47 tag of a UI locale: `en`, or the name of a catalog module. It is
  * also the page's `lang`.
- * @typedef {'en' | 'id' | 'es' | 'fr' | 'pt' | 'vi' | 'th' | 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'} UiLocale
+ * @typedef {'en' | 'id' | 'de' | 'es' | 'fr' | 'it' | 'pl' | 'pt' | 'vi' | 'tr' | 'ru' | 'uk' | 'th' | 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko'} UiLocale
  */
 /**
  * A language the Web UI can be shown in (PD-OI-106).
@@ -67,17 +67,23 @@
 export const SOURCE_LOCALE = 'en';
 /**
  * The languages of the header Language menu, in its order: English, the
- * other Latin-script languages by name, Thai, then East Asian (PD-OI-106).
- * Japanese and Chinese put no space between sentences.
+ * Latin-script languages by name, the Cyrillic ones by name, Thai, then East
+ * Asian (PD-OI-106). Japanese and Chinese put no space between sentences.
  * @type {readonly Readonly<UiLocaleOption>[]}
  */
 export const UI_LOCALES = Object.freeze([
   Object.freeze({ tag: SOURCE_LOCALE, name: 'English', sentenceSeparator: ' ' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('id'), name: 'Bahasa Indonesia', sentenceSeparator: ' ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('de'), name: 'Deutsch', sentenceSeparator: ' ' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('es'), name: 'Español', sentenceSeparator: ' ' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('fr'), name: 'Français', sentenceSeparator: ' ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('it'), name: 'Italiano', sentenceSeparator: ' ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('pl'), name: 'Polski', sentenceSeparator: ' ' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('pt'), name: 'Português', sentenceSeparator: ' ' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('vi'), name: 'Tiếng Việt', sentenceSeparator: ' ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('tr'), name: 'Türkçe', sentenceSeparator: ' ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ru'), name: 'Русский', sentenceSeparator: ' ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('uk'), name: 'Українська', sentenceSeparator: ' ' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('th'), name: 'ไทย', sentenceSeparator: ' ' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '' }),
   Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '' }),
