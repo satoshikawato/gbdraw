@@ -16,7 +16,6 @@ from dataclasses import dataclass, field, replace
 from math import ceil, isfinite
 from typing import Literal, Mapping, Sequence, TypeVar, cast
 
-from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER
 from gbdraw.exceptions import ValidationError
 
 
@@ -227,7 +226,8 @@ class RecordDisplayTransform:
             anchor = self.start_coordinate
         object.__setattr__(self, "_anchor_boundary", anchor - (self.source_step == 1))
         if self.wrap_length is not None:
-            _integer(self.wrap_length, "Wrap length", 1, JS_MAX_SAFE_INTEGER)
+            # Any positive integer draws; the config leaf owns the upper limit of an accepted value.
+            _integer(self.wrap_length, "Wrap length", 1, self.wrap_length)
         if self.display_length is not None:
             _integer(self.display_length, "Display length", 1, self.length)
 
