@@ -1,10 +1,14 @@
 """OV-2258: a CDS across a circular record's origin covers only its own arc in comparisons."""
 from __future__ import annotations
 
+import dataclasses
+import json
+from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pandas as pd
 import pytest
+from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -12,15 +16,20 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.analysis.collinearity import (
     LosslessCollinearityParameters,
     build_collinearity_blocks_from_hits,
+    build_orthogroup_collinearity_blocks_from_hits,
     convert_collinearity_blocks_to_comparisons,
 )
 from gbdraw.analysis.collinearity_units import build_collinearity_unit_index
 from gbdraw.analysis.origin_arcs import cover_arcs, location_origin_arc
 from gbdraw.analysis.protein_colinearity import (
+    CdsProtein,
+    convert_pair_protein_hits_to_genomic_links,
     convert_protein_hits_to_genomic_links,
     extract_cds_proteins,
+    select_rbh_orthogroup_edges_from_directional_hits,
 )
 from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.diagram import project_collinearity_frames
 from gbdraw.api.options import LinearDiagramOptions
 from gbdraw.api.request_render import plan_request
 from gbdraw.api.requests import (
@@ -31,6 +40,8 @@ from gbdraw.api.requests import (
     RecordPresentation,
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
+from tests.utils.comparison_tables import converted_pair_rows
 
 LENGTH = 720
 
@@ -287,3 +298,189 @@ def test_parts_that_step_back_away_from_the_origin_keep_their_extent(topology, l
     protein = extract_cds_proteins([record]).protein_map["c0"]
     assert protein.origin_arc is None
     assert (protein.start, protein.end) == extent
+
+
+# The Web path: python-helpers.js extracts each record alone, sends the protein
+# map through the page, and converts the raw LOSATP tables from that map.
+
+
+def _web_helpers() -> dict[str, object]:
+    helpers_js = (Path(__file__).parents[1] / "gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
+    namespace: dict[str, object] = {}
+    exec(helpers_js.split("`", 1)[1].rsplit("`", 1)[0], namespace)
+    return namespace
+
+
+def _web_records(strand: int, reverse: bool) -> list[SeqRecord]:
+    """``_records``, whose subject a reversed view draws in the order that forms a block."""
+    query, subject = _records(strand)
+    return [query, crop_then_reverse_records([subject], [], [reverse])[0][0]]
+
+
+def _web_conversion(
+    tmp_path: Path, stage, mode: str, strand: int, *, reverse: bool = False, subject_region: str | None = None,
+) -> list[tuple[int, int, int, int]]:
+    """The rows the Web converter stores (search frame), from a real extraction of written files."""
+    helpers = _web_helpers()
+    locus_to_id: dict[str, str] = {}
+    payload_records = []
+    for index, record in enumerate(_web_records(strand, reverse)):
+        path = tmp_path / f"{record.id}.gb"
+        SeqIO.write([record], path, "genbank")
+        extracted = json.loads(json.dumps(json.loads(helpers["extract_cds_protein_fasta"](
+            str(path), "genbank",
+            region_spec=subject_region if index == 1 else None,
+            record_index=index, record_instance_key=f"r_{index + 1}",
+        ))))
+        assert "error" not in extracted
+        for protein_id, entry in extracted["protein_map"].items():
+            locus_to_id[str(entry["locus_tag"])] = protein_id
+        payload_records.append({
+            "recordIndex": index,
+            "recordId": extracted["record_id"],
+            "proteinMap": extracted["protein_map"],
+            "runtimeBindingHash": extracted["runtime_binding_hash"],
+            "displayBindingHash": extracted["display_binding_hash"],
+            "viewTransform": {"length": extracted["record_length"], "reverse": reverse and index == 1},
+        })
+
+    def table(rows: list[tuple[str, str]]) -> str:
+        return pd.DataFrame.from_records(
+            [_hit(locus_to_id[q], locus_to_id[s]) for q, s in rows if q in locus_to_id and s in locus_to_id],
+            columns=COMPARISON_COLUMNS,
+        ).to_csv(sep="\t", header=False, index=False, lineterminator="\n")
+
+    pairs = _pairs(strand)
+    payload = {
+        "records": payload_records,
+        "pairs": [
+            {"pairIndex": 0, "queryIndex": 0, "subjectIndex": 1, "displayPair": True,
+             "cacheKey": "forward", "blastText": table(pairs)},
+            # Pairwise searches each displayed pair in one direction.
+            *([] if mode == "pairwise" else [
+                {"pairIndex": 1, "queryIndex": 1, "subjectIndex": 0, "displayPair": False,
+                 "cacheKey": "reverse", "blastText": table([(s, q) for q, s in pairs])},
+            ]),
+        ],
+    }
+    pairs_path, raw_path = stage(tmp_path, payload)
+    settings = {
+        "collinear_min_anchors": 3, "collinear_max_unit_gap": 1, "collinear_anchor_mode": "rbh",
+        "collinear_merge_orientation": "strand", "collinear_infer_orthogroups": False,
+    }
+    result = json.loads(str(helpers["convert_losatp_blastp_pairs_to_genomic_payload"](
+        str(pairs_path), str(raw_path), mode, 5, 50, "1e-2", 0, 0, **(settings if mode == "collinear" else {}),
+    )))
+    assert "error" not in result, result.get("error")
+    return [
+        (int(row["qstart"]), int(row["qend"]), int(row["sstart"]), int(row["send"]))
+        for pair in result["pairs"]
+        for row in converted_pair_rows(pair)
+    ]
+
+
+def _cli_conversion(mode: str, strand: int, *, reverse: bool = False, region: str | None = None) -> list[tuple[int, int, int, int]]:
+    """The rows of the CLI's path for the same records, written in the search frame.
+
+    The CLI extracts from the drawn record, so a reversed subject's rows are mapped
+    back with x -> L + 1 - x, the rule of the planner's search-frame projection.
+    """
+    query, subject = _web_records(strand, reverse)
+    subject = crop_then_reverse_records([subject], parse_region_specs([region] if region else []), [False])[0][0]
+    drawn = crop_then_reverse_records([subject], [], [reverse])[0][0]
+    records = [query, drawn]
+    extraction = extract_cds_proteins(records)
+    pairs = [(q, s) for q, s in _pairs(strand) if s in extraction.protein_map]
+    tables = {
+        (0, 1): pd.DataFrame.from_records([_hit(q, s) for q, s in pairs], columns=COMPARISON_COLUMNS),
+        (1, 0): pd.DataFrame.from_records([_hit(s, q) for q, s in pairs], columns=COMPARISON_COLUMNS),
+    }
+    if mode == "collinear":
+        result = build_orthogroup_collinearity_blocks_from_hits(
+            tables, extraction,
+            params=LosslessCollinearityParameters(min_anchors=3, max_unit_gap=1),
+            edge_mode="rbh", search_scope="adjacent", infer_orthogroups=False, comparison_pairs=((0, 1),),
+        )
+        frames = project_collinearity_frames(
+            result, records, color_mode="orientation", search_scope="adjacent", comparison_pairs=((0, 1),),
+        ).pairs
+        frame = frames[0].matches if frames else pd.DataFrame(columns=["qstart", "qend", "sstart", "send"])
+    elif mode == "pairwise":
+        frame = convert_pair_protein_hits_to_genomic_links(
+            tables[(0, 1)], extraction.protein_map, extraction.protein_map,
+        )
+    else:
+        selection = select_rbh_orthogroup_edges_from_directional_hits(
+            tables, extraction.protein_map, comparison_pairs=((0, 1),),
+        )
+        frame = convert_pair_protein_hits_to_genomic_links(
+            selection.adjacent_display_edges_by_pair[(0, 1)], extraction.protein_map, extraction.protein_map,
+            orthogroups=selection.orthogroups,
+        )
+    rows = _spans(frame)
+    if not reverse:
+        return rows
+    length = len(subject)
+    return [(qstart, qend, length + 1 - sstart, length + 1 - send) for qstart, qend, sstart, send in rows]
+
+
+MODES = ["collinear", "pairwise", "orthogroup"]
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("strand", [1, -1])
+@pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
+def test_web_rows_of_an_origin_cds_equal_the_cli_rows(tmp_path, stage_web_losatp_transport, mode, strand, reverse) -> None:
+    rows = _web_conversion(tmp_path, stage_web_losatp_transport, mode, strand, reverse=reverse)
+    assert rows and sorted(rows) == sorted(_cli_conversion(mode, strand, reverse=reverse))
+    # The origin CDS (61 + 30 bp arc) never reads as the whole 720 bp record.
+    assert all(abs(sstart - send) < LENGTH / 2 for _, _, sstart, send in rows)
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_web_rows_of_a_crop_equal_the_cli_rows(tmp_path, stage_web_losatp_transport, mode) -> None:
+    rows = _web_conversion(tmp_path, stage_web_losatp_transport, mode, 1, subject_region="subject:1-400")
+    assert rows and sorted(rows) == sorted(_cli_conversion(mode, 1, region="subject:1-400"))
+
+
+# ``sequence`` travels in the FASTA, read back by _web_ordered_proteins_from_fasta,
+# so the map stays small. Every other field a comparison can read crosses in the map.
+TRANSPORT_EXEMPT = {"sequence"}
+
+
+@pytest.mark.parametrize("strand", [1, -1])
+def test_every_cds_protein_field_crosses_the_web_transport(strand: int) -> None:
+    helpers = _web_helpers()
+    records = _records(strand)
+    extraction = extract_cds_proteins(records)
+    subject = records[1]
+    raw_map = json.loads(json.dumps({
+        protein.protein_id: helpers["_serialize_cds_protein"](protein, subject)
+        for protein in extraction.proteins_by_record[1]
+    }))
+    rebuilt = helpers["_build_web_cds_protein_map"](raw_map)
+    missing = {
+        field.name
+        for protein in extraction.proteins_by_record[1]
+        for field in dataclasses.fields(CdsProtein)
+        if field.name not in TRANSPORT_EXEMPT
+        and getattr(rebuilt[protein.protein_id], field.name) != getattr(protein, field.name)
+    }
+    assert not missing
+    assert any(protein.origin_arc is not None for protein in rebuilt.values())
+
+
+@pytest.mark.parametrize("strand", [1, -1])
+def test_web_display_map_flips_the_arc_of_a_reversed_record(strand: int) -> None:
+    helpers = _web_helpers()
+    records = _records(strand)
+    flipped = crop_then_reverse_records([records[1]], [], [True])[0][0]
+    source = extract_cds_proteins([records[1]]).proteins_by_record[0]
+    expected = extract_cds_proteins([flipped]).proteins_by_record[0]
+    raw_map = json.loads(json.dumps({
+        protein.protein_id: helpers["_serialize_cds_protein"](protein, records[1]) for protein in source
+    }))
+    display = helpers["_build_display_web_cds_protein_map"](raw_map, {"length": LENGTH, "reverse": True})
+    assert sorted((protein.arc, protein.strand) for protein in display.values()) == sorted(
+        (protein.arc, protein.strand) for protein in expected
+    )

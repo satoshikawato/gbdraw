@@ -26,6 +26,7 @@ from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityResult,
     LosslessCollinearityParameters,
+    RecordExtent,
     build_collinearity_blocks_from_hits,
     call_collinearity_blocks,
     cluster_lossless_collinearity_anchors,
@@ -3109,7 +3110,7 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
 
     comparisons = convert_collinearity_blocks_to_comparisons(
         result,
-        record_ids=["record_a", "record_b"],
+        records=[RecordExtent("record_a", 1000), RecordExtent("record_b", 1000)],
         color_mode="orientation",
         search_scope="adjacent",
     )
@@ -3990,7 +3991,7 @@ def _protein_float_reductions():
         anchors=anchors,
     )
     (row,) = convert_collinearity_blocks_to_pair_comparisons(
-        CollinearityResult(blocks=(block,)), record_ids=["a", "b"]
+        CollinearityResult(blocks=(block,)), records=[RecordExtent("a", 10000), RecordExtent("b", 10000)]
     )[(0, 1)][["bitscore", "identity"]].itertuples(index=False)
     size = 12
     hits = pd.DataFrame(

@@ -137,6 +137,13 @@ def arc_link_endpoints(arc: Arc, forward: bool) -> tuple[int, int]:
     return (start + 1, end) if forward else (end, start + 1)
 
 
+def reversed_arc(arc: Arc, record_length: int) -> Arc:
+    """The same arc on the reverse complement of its record of ``record_length`` bases."""
+
+    start, end = arc
+    return int(record_length) - end, int(record_length) - start
+
+
 def _unwrapped(side: LinkSide) -> tuple[float, float]:
     """Boundaries where the traversal begins and ends, past ``L`` when it crosses."""
 
@@ -206,6 +213,7 @@ __all__ = [
     "directed_arc",
     "location_center",
     "location_origin_arc",
+    "reversed_arc",
     "rows_inside_records",
     "split_link_at_origin",
 ]

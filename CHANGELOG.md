@@ -23,6 +23,11 @@ write-up of a release.
   limit. A wrapped figure's PNG or PDF over its limit
   ([limits](./docs/REFERENCE/output-formats-and-export.md#png-and-pdf-size-limits))
   stops before writing, and the error names a longer row length that should fit.
+- Fixed: the Web app draws a LOSATP Pairwise link, Similarity group link, or
+  Collinear block that uses a CDS across a circular record's origin over the
+  CDS's own arc, as the command line and Python have since 0.14.4; it drew them
+  over the whole record. **Generate Diagram** again on a Session saved by 0.14.4
+  to redraw it: the derived LOSATP entries are rebuilt once from the raw searches.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

@@ -17,6 +17,7 @@ from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityResult,
     LosslessCollinearityParameters,
+    RecordExtent,
     convert_collinearity_blocks_to_pair_comparisons,
     normalize_collinearity_anchor_mode,
 )
@@ -163,7 +164,7 @@ def test_block_rows_name_a_group_scope_only_when_groups_exist(
         kind="cluster",
     )
     frames = convert_collinearity_blocks_to_pair_comparisons(
-        CollinearityResult(blocks=(block,)), record_ids=["A", "B"], search_scope="all"
+        CollinearityResult(blocks=(block,)), records=[RecordExtent("A", 10000), RecordExtent("B", 10000)], search_scope="all"
     )
     frame = frames[(0, 1)]
     if expected_scope is None:

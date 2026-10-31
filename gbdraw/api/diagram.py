@@ -33,6 +33,7 @@ from gbdraw.analysis.collinearity import (
     CollinearitySearchScope,
     LosslessCollinearityParameters,
     build_orthogroup_collinearity_blocks,
+    RecordExtent,
     convert_collinearity_blocks_to_comparisons,
     convert_collinearity_blocks_to_pair_comparisons,
     normalize_collinearity_anchor_mode,
@@ -1895,7 +1896,7 @@ def _linear_losat_cache_filenames(
 
 def project_collinearity_frames(
     result: CollinearityResult,
-    records: Sequence[SeqRecord],
+    records: Sequence[SeqRecord | RecordExtent],
     *,
     color_mode: CollinearityColorMode,
     search_scope: CollinearitySearchScope,

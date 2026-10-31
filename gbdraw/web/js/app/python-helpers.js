@@ -632,7 +632,8 @@ def _serialize_cds_protein(protein, record=None, view_hash_parts_index=None):
         "display_binding_hash": getattr(protein, "display_binding_hash", None),
         "coord_base": coord_base,
         "coord_step": coord_step,
-        "coord_length": len(record.seq) if record is not None else 0,
+        "origin_arc": None if protein.origin_arc is None else list(protein.origin_arc),
+        "record_length": protein.record_length,
     }
 
 def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None, feature_overrides_json=None):
@@ -750,6 +751,8 @@ def _build_web_cds_protein_map(raw_map):
             "sequence": str(data.get("sequence") or ""),
             "source_protein_id": data.get("source_protein_id"),
             "feature_svg_id": data.get("feature_svg_id"),
+            "origin_arc": None if data.get("origin_arc") is None else tuple(int(bound) for bound in data["origin_arc"]),
+            "record_length": None if data.get("record_length") is None else int(data["record_length"]),
         }
         supported_fields = getattr(CdsProtein, "__dataclass_fields__", {})
         for optional_field in (
@@ -1117,6 +1120,8 @@ def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
         return json.dumps({'status': 'error', 'error': serialize_web_error(error, operation='hydrateProteinLosatTsv', stage="helper")})
 
 def _build_display_web_cds_protein_map(raw_map, view_transform):
+    from gbdraw.analysis.origin_arcs import reversed_arc
+
     normalized = _normalize_web_view_transform(view_transform)
     if not normalized["reverse"]:
         return _build_web_cds_protein_map(raw_map)
@@ -1144,6 +1149,8 @@ def _build_display_web_cds_protein_map(raw_map, view_transform):
         display_data["end"] = end
         display_data["strand"] = strand
         display_data["view_feature_svg_id"] = view_feature_svg_id
+        if data.get("origin_arc") is not None:
+            display_data["origin_arc"] = reversed_arc(data["origin_arc"], normalized["length"])
         display_map[str(protein_id)] = display_data
     return _build_web_cds_protein_map(display_map)
 
@@ -1163,7 +1170,7 @@ def _web_protein_map_bindings(record_payloads):
         transform = record["view_transform"]
         reverse = bool(transform["reverse"])
         length = int(transform["length"]) or next(
-            (int(data.get("coord_length") or 0) for data in raw_map.values() if isinstance(data, dict)), 0
+            (int(data.get("record_length") or 0) for data in raw_map.values() if isinstance(data, dict)), 0
         )
         flipped = {"length": length, "reverse": True}
         source, current, opposite, current_spans, opposite_spans = {}, {}, {}, {}, {}
@@ -1253,9 +1260,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
     try:
         from gbdraw.analysis.collinearity import (
+            RecordExtent,
             build_orthogroup_collinearity_blocks_from_hits,
-            convert_collinearity_blocks_to_comparisons,
-            convert_collinearity_blocks_to_pair_comparisons,
         )
         from gbdraw.analysis.protein_artifacts import (
             DerivedLosatpPair,
@@ -1266,6 +1272,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             derived_pair_payload,
             effective_collinearity_unit_kinds,
         )
+        from gbdraw.api.diagram import project_collinearity_frames
         from gbdraw.analysis.protein_colinearity import (
             convert_pair_protein_hits_to_genomic_links,
             filter_protein_hits_by_thresholds,
@@ -1504,12 +1511,13 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             return _web_losatp_payload_json(*cached_payload, canonical_resource_path)
 
         if normalized_mode == "collinear":
-            record_ids = []
-            for record_proteins in extraction.proteins_by_record:
-                if record_proteins:
-                    record_ids.append(str(record_proteins[0].record_id))
-                else:
-                    record_ids.append("")
+            record_lengths = {
+                int(record["record_index"]): int(record["view_transform"]["length"]) for record in record_payloads
+            }
+            records = [
+                RecordExtent(str(record_proteins[0].record_id) if record_proteins else "", record_lengths.get(index, 0))
+                for index, record_proteins in enumerate(extraction.proteins_by_record)
+            ]
             anchor_mode = settings.anchor_mode
             search_scope = settings.search_scope
             max_paralog_links = settings.max_paralog_links
@@ -1547,7 +1555,13 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     else None
                 ),
             )
-            color_mode = settings.color_mode
+            frames = project_collinearity_frames(
+                collinearity_result,
+                records,
+                color_mode=settings.color_mode,
+                search_scope=search_scope,
+                comparison_pairs=display_pairs if use_display_pairs else None,
+            )
             if use_display_pairs:
                 display_pair_indices = {
                     tuple(sorted((
@@ -1557,26 +1571,22 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     for item in pair_payloads
                     if item["display_pair"]
                 }
-                converted_by_pair = convert_collinearity_blocks_to_pair_comparisons(
-                    collinearity_result,
-                    record_ids=record_ids,
-                    color_mode=color_mode,
-                    search_scope=search_scope,
+                drawn_pairs = sorted(
+                    (
+                        (
+                            display_pair_indices[(pair.query_record_index, pair.subject_record_index)],
+                            pair.query_record_index,
+                            pair.subject_record_index,
+                            pair.matches,
+                        )
+                        for pair in frames.pairs
+                    ),
+                    key=lambda drawn: drawn[1:3],
                 )
-                drawn_pairs = [
-                    (display_pair_indices[pair], pair[0], pair[1], converted_by_pair[pair])
-                    for pair in display_pairs
-                    if pair in converted_by_pair
-                ]
             else:
                 drawn_pairs = [
                     (pair_index, pair_index, pair_index + 1, converted)
-                    for pair_index, converted in enumerate(convert_collinearity_blocks_to_comparisons(
-                        collinearity_result,
-                        record_ids=record_ids,
-                        color_mode=color_mode,
-                        search_scope=search_scope,
-                    ))
+                    for pair_index, converted in enumerate(frames.ordered)
                 ]
             stored_pairs, collinearity_result = _web_search_frame_results(
                 _web_protein_map_bindings(record_payloads), drawn_pairs, collinearity_result,
