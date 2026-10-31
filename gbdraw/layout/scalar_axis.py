@@ -63,6 +63,34 @@ def project_scalar_line(
     )
 
 
+class ScalarRows:
+    """One track's samples on the rows of a wrapped record: projected once, read row by row."""
+
+    def __init__(self, transform: RecordDisplayTransform) -> None:
+        self._transform = transform
+        self._rows: dict[int, ProjectedScalarLine] | None = None
+
+    def line(self, positions: ArrayLike, values: ArrayLike, row: int) -> ProjectedScalarLine:
+        if self._rows is None:
+            self._rows = {
+                segment.row: ProjectedScalarLine(
+                    np.array([point.position for point in segment.points], dtype=float),
+                    np.array([point.value for point in segment.points], dtype=float),
+                    (),
+                )
+                for segment in project_scalar_samples(positions, values, self._transform)
+            }
+        empty = np.array([], dtype=float)
+        return self._rows.get(row, ProjectedScalarLine(empty, empty, ()))
+
+
+class ScalarRow(NamedTuple):
+    """The row of a wrapped record a track path draws."""
+
+    samples: ScalarRows
+    row: int
+
+
 def has_tick_value(values: list[float], candidate: float) -> bool:
     return any(math.isclose(candidate, value, rel_tol=1e-9, abs_tol=1e-9) for value in values)
 

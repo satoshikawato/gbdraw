@@ -89,6 +89,8 @@ def add_record_group(
     record_transform: RecordDisplayTransform | None = None,
     record_translation_x: float = 0.0,
     record_translation_y: float = 0.0,
+    axis_row_offsets: tuple[float, ...] = (),
+    feature_row_shifts: tuple[float, ...] = (),
     *,
     placement: LinearRecordPlacement,
     group_key: GroupKey,
@@ -119,6 +121,8 @@ def add_record_group(
         feature_offset_y=feature_offset_y,
         feature_lane_geometry=feature_lane_geometry,
         record_transform=record_transform,
+        axis_row_offsets=axis_row_offsets,
+        feature_row_shifts=feature_row_shifts,
     )
     record_group = place_content(canvas, content, group_key)
     if slot_id:
@@ -157,6 +161,7 @@ def add_gc_content_group(
     slot_id: str | None = None,
     slot_renderer: str | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    row_shifts: tuple[float, ...] = (),
     *,
     sequence_width: float,
     group_key: GroupKey,
@@ -173,6 +178,7 @@ def add_gc_content_group(
         group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
         record_transform=record_transform,
+        row_shifts=row_shifts,
     )
     gc_content_group = place_content(canvas, content, group_key)
     if slot_id:
@@ -201,6 +207,7 @@ def add_depth_group(
     slot_renderer: str | None = None,
     track_height: float | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    row_shifts: tuple[float, ...] = (),
     *,
     sequence_width: float,
     group_key: GroupKey,
@@ -218,6 +225,7 @@ def add_depth_group(
         axis_group_id=dom_axis_group_id or axis_group_id,
         sequence_width=sequence_width,
         record_transform=record_transform,
+        row_shifts=row_shifts,
     )
     depth_group = place_content(canvas, content, group_key)
     if slot_id:
@@ -244,6 +252,7 @@ def add_gc_skew_group(
     slot_id: str | None = None,
     slot_renderer: str | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    row_shifts: tuple[float, ...] = (),
     *,
     sequence_width: float,
     group_key: GroupKey,
@@ -260,6 +269,7 @@ def add_gc_skew_group(
         group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
         record_transform=record_transform,
+        row_shifts=row_shifts,
     )
     gc_skew_group = place_content(canvas, content, group_key)
     if slot_id:

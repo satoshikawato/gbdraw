@@ -44,16 +44,16 @@ def _config(**overrides):
     ("longest", "expected"),
     [
         (1, None),
-        (10_000, None),  # W-21: no shorter row than the floor, so a single row
+        (10_000, None),  # no shorter row than the floor, so a single row
         (10_001, 10_000),
-        (48_502, 10_000),  # phage lambda (W-07)
+        (48_502, 10_000),  # phage lambda
         (50_000, 10_000),
         (50_001, 20_000),
         (100_000, 20_000),
         (100_001, 50_000),
-        (155_943, 50_000),  # Nicotiana tabacum plastid (W-07)
+        (155_943, 50_000),  # Nicotiana tabacum plastid
         (250_000, 50_000),
-        (280_000, 50_000),  # LvMJNV (W-07), past five rows at the cap
+        (280_000, 50_000),  # LvMJNV, past five rows at the cap
         (13_033_779, 50_000),
     ],
 )
@@ -67,9 +67,9 @@ def test_auto_wrap_length_golden_table(longest: int, expected: int | None) -> No
         ("none", [100_000], None),
         (10_000, [100_000], 10_000),
         (10_000, [10_001, 5], 10_000),
-        (10_000, [10_000], None),  # W-08: no longer than one row
-        (100_000, [48_502, 90_000], None),  # W-27: draws as today
-        ("auto", [48_502, 3_000], 10_000),  # W-09: one length, from the longest
+        (10_000, [10_000], None),  # no longer than one row
+        (100_000, [48_502, 90_000], None),  # draws as today
+        ("auto", [48_502, 3_000], 10_000),  # one length, from the longest
         ("auto", [10_000], None),
     ],
 )
@@ -251,13 +251,6 @@ def test_a_record_shorter_than_the_row_draws_one_row(tmp_path: Path) -> None:
     assert "<svg" in _rendered_svg(tmp_path)
 
 
-def test_a_longer_record_says_wrapping_is_not_drawn_yet(tmp_path: Path) -> None:
-    with pytest.raises(ValidationError, match="not drawn yet") as caught:
-        render_request(_request(tmp_path, config_overrides={WRAP: 10_000}))
-    assert caught.value.diagnostic["reason"] == "WRAP_NOT_DRAWN"
-    assert not (tmp_path / "out.svg").exists()
-
-
 def _cli(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--gbk", str(LAMBDA), *args],
@@ -274,7 +267,6 @@ def _cli(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
         (("--wrap_length", "auto", "--track_layout", "middle"), "above or below"),
         (("--wrap_length", "auto", "--scale_style", "bar"), "ruler"),
         (("--wrap_length", "auto", "--normalize_length"), "normalize_length"),
-        (("--wrap_length", "10kb"), "not drawn yet"),
     ],
 )
 def test_cli_refuses_with_a_clear_message(tmp_path: Path, args, words) -> None:

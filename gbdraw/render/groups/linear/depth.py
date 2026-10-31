@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from collections.abc import Sequence
+
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from gbdraw.svg.elements import Group
@@ -8,6 +10,7 @@ from gbdraw.svg.elements import Group
 from ....analysis.depth import depth_df as build_depth_df
 from ....configurators import DepthConfigurator
 from ...drawers.linear.depth import DepthDrawer
+from ...drawers.linear.wrap_rows import draw_track_rows
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -29,8 +32,10 @@ class DepthGroup:
         group_id: str = "depth",
         axis_group_id: str = "depth_axis",
         record_transform: RecordDisplayTransform | None = None,
+        row_shifts: Sequence[float] = (),
     ) -> None:
         self.record_transform = record_transform
+        self.row_shifts = row_shifts
         self.depth_group = Group(id=group_id)
         self.start_x = float(start_x)
         self.start_y = float(start_y)
@@ -58,16 +63,25 @@ class DepthGroup:
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
-        self.depth_group = DepthDrawer(self.depth_config).draw(
+        drawer = DepthDrawer(self.depth_config)
+        self.depth_group = draw_track_rows(
             self.depth_group,
-            self.depth_df,
+            self.record_transform,
             self.record_len,
             self.sequence_width,
-            self.track_height,
-            self.start_x,
-            self.start_y,
-            self.axis_group_id,
-            record_transform=self.record_transform,
+            self.row_shifts,
+            lambda group, length, width, row: drawer.draw(
+                group,
+                self.depth_df,
+                length,
+                width,
+                self.track_height,
+                self.start_x,
+                self.start_y,
+                self.axis_group_id,
+                record_transform=self.record_transform,
+                row=row,
+            ),
         )
 
     def get_group(self) -> Group:

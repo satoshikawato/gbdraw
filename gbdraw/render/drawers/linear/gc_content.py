@@ -10,6 +10,7 @@ from ....layout.scalar_axis import (
     LINEAR_SCALAR_AXIS_LABEL_GAP_PX,
     LINEAR_SCALAR_AXIS_STROKE_PX,
     LINEAR_SCALAR_AXIS_TICK_PX,
+    ScalarRow,
     format_percent_tick,
     linear_scalar_axis_tick_font_size_px,
     scalar_axis_small_tick_values,
@@ -205,6 +206,7 @@ class GcContentDrawer:
         dinucleotide: str,
         group_id: str = "gc_content",
         record_transform: RecordDisplayTransform | None = None,
+        row: ScalarRow | None = None,
     ) -> Group:
         if self.mode == "percent":
             plot_df = gc_content_percent_df(
@@ -221,6 +223,7 @@ class GcContentDrawer:
                 alignment_width,
                 track_height,
                 record_transform=record_transform,
+                row=row,
             )
         else:
             gc_path_desc = calculate_gc_content_path_desc(
@@ -232,6 +235,7 @@ class GcContentDrawer:
                 track_height,
                 dinucleotide,
                 record_transform=record_transform,
+                row=row,
             )
         if not gc_path_desc:
             return group

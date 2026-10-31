@@ -8,10 +8,16 @@ record of a figure uses one row length, so all rows draw at one scale.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from math import ceil
 
+from Bio.SeqRecord import SeqRecord
+
 from gbdraw.config.models.canvas import LinearWrapLength
+from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ValidationError
+from gbdraw.layout.linear import VerticalBand
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 
 AUTO_WRAP_CAP_BP = 50_000
@@ -44,6 +50,78 @@ def resolve_wrap_length(requested: LinearWrapLength, record_lengths: Sequence[in
     longest = max(record_lengths)
     length = auto_wrap_length(longest) if requested == "auto" else requested
     return length if length is not None and longest > length else None
+
+
+def _length_words(length: int) -> str:
+    """A row length for a person: ``10 kb``, ``1.5 Mb``, ``800 bp``."""
+
+    if length >= 1_000_000:
+        return f"{length / 1_000_000:g} Mb"
+    return f"{length / 1_000:g} kb" if length >= 1_000 else f"{length} bp"
+
+
+@dataclass(frozen=True)
+class LinearWrapSummary:
+    """What a figure drew: its row length, its rows in all, what was asked for, and each record's rows."""
+
+    row_length: int
+    row_count: int
+    requested: LinearWrapLength
+    record_rows: tuple[int, ...]
+
+    @property
+    def message(self) -> str:
+        auto = " (auto)" if self.requested == "auto" else ""
+        return f"Wrapping at {_length_words(self.row_length)} per row{auto}: {self.row_count} rows"
+
+
+def drawn_axis_length(record: SeqRecord, transform: RecordDisplayTransform | None) -> int:
+    """The bases one drawn row of a record shows: the only source of a record's axis length.
+
+    A record's window, definition text and source coordinates read ``len(record.seq)`` instead.
+    """
+
+    return len(record.seq) if transform is None or transform.wrap_length is None else transform.axis_length
+
+
+def _unset_transform(record: SeqRecord) -> RecordDisplayTransform:
+    """The transform of a record no plan bound one to, from its coordinate map."""
+
+    base, step = _read_coord_map(record)
+    length = len(record.seq)
+    if step == 1:
+        return RecordDisplayTransform(base + length - 1, base, 1, None, False)
+    return RecordDisplayTransform(max(base, length), base, -1, None, False)
+
+
+def resolve_wrap(
+    requested: LinearWrapLength,
+    records: Sequence[SeqRecord],
+    transforms: Sequence[RecordDisplayTransform] | None,
+) -> tuple[Sequence[RecordDisplayTransform] | None, LinearWrapSummary | None]:
+    """The one place a wrap length becomes transforms: only a record longer than the row is cut."""
+
+    lengths = [len(record.seq) for record in records]
+    row_length = resolve_wrap_length(requested, lengths)
+    if row_length is None:
+        return transforms, None
+    bound = transforms if transforms is not None else [_unset_transform(record) for record in records]
+    wrapped = tuple(
+        transform.with_wrap(row_length, length) if length > row_length else transform
+        for transform, length in zip(bound, lengths, strict=True)
+    )
+    rows = tuple(ceil(length / row_length) for length in lengths)
+    return wrapped, LinearWrapSummary(row_length, sum(rows), requested, rows)
+
+
+def stack_row_offsets(row_bands: Sequence[VerticalBand], gap: float) -> tuple[float, ...]:
+    """Each row's axis offset from the first row's axis, each row taking its own height (``row_bands``,
+    local to its axis) with ``gap`` between neighbours."""
+
+    offsets = [0.0]
+    for above, below in zip(row_bands, row_bands[1:]):
+        offsets.append(offsets[-1] + above.bottom_y - below.top_y + gap)
+    return tuple(offsets)
 
 
 def wrap_blocking_inputs(
@@ -98,9 +176,13 @@ __all__ = [
     "AUTO_WRAP_CAP_BP",
     "AUTO_WRAP_FLOOR_BP",
     "AUTO_WRAP_MAX_ROWS",
+    "LinearWrapSummary",
     "auto_wrap_length",
+    "drawn_axis_length",
     "reject_wrap_in_one_grid_row",
     "reject_wrap_with_comparisons",
+    "resolve_wrap",
     "resolve_wrap_length",
+    "stack_row_offsets",
     "wrap_blocking_inputs",
 ]

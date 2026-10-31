@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from typing import NamedTuple
 
 from svgwrite.base import BaseElement
 
@@ -33,6 +34,7 @@ from gbdraw.render.drawers.annotation_marks import (
     past_span_edge,
 )
 from gbdraw.render.drawers.label_backing import backing_box, backing_rect
+from gbdraw.render.drawers.linear.wrap_rows import wrap_row_group
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
@@ -88,6 +90,13 @@ class LinearAnnotationLabel:
         return replace(self, x=x, ink=self.ink.translated(x - self.x, 0.0))
 
 
+class AnnotationRowFrame(NamedTuple):
+    """A slot on one row of a wrapped record: how far it lies below the slot's first-row frame, and its height there."""
+
+    shift_y: float
+    height_px: float
+
+
 def _band_height_factor(mark: str) -> float:
     """The share of its lane a ``highlight`` or ``band`` rectangle fills."""
 
@@ -120,6 +129,7 @@ def _label_boxes(
     lane_height: float,
     padding_px: float,
     scale: float,
+    segments: Sequence[tuple[int, int]],
 ) -> tuple[Aabb, ...]:
     """The filled rectangles of a mark a label may sit inside (LP-D75): a band or highlight
     with a solid fill; a hatched, unfilled, bracket or line mark has none."""
@@ -129,7 +139,7 @@ def _label_boxes(
         return ()
     lane_center = _lane_center(placement, lane_height, padding_px)
     boxes: list[Aabb] = []
-    for start, end in annotation.geometry_segments:
+    for start, end in segments:
         x, y, width, height = _band_rect(annotation.mark, lane_center, lane_height, float(start) * scale, float(end) * scale)
         boxes.append(Aabb(x, y, x + width, y + height))
     return tuple(boxes)
@@ -149,10 +159,20 @@ def _record_lanes(
     """The record's placements and the height of one lane."""
 
     placements = [item for item in track.placements if item.annotation.record_index == record_index]
+    return placements, _lane_height(track, placements, height_px, params)
+
+
+def _lane_height(
+    track: ResolvedAnnotationTrack,
+    placements: Sequence[PlacedRegionAnnotation],
+    height_px: float,
+    params: AnnotationTrackParams,
+) -> float:
+    """The height of one lane of the record's ``placements`` in a slot ``height_px`` high."""
+
     lane_count = max((item.lane for item in placements), default=-1) + 1
     usable_height = max(1.0, float(height_px) - 2.0 * params.padding_px)
-    lane_height = 14.0 if track.clipped else usable_height / max(1, lane_count)
-    return placements, lane_height
+    return 14.0 if track.clipped else usable_height / max(1, lane_count)
 
 
 def _label_rows(
@@ -164,8 +184,10 @@ def _label_rows(
     height_px: float,
     font_family: str,
     params: AnnotationTrackParams,
+    wrap_row: int | None = None,
 ) -> list[tuple[PlacedRegionAnnotation, RegionAnnotationStyle, float, tuple[float, float, float, float]]]:
-    """Each labelled region of the record: its style, the label's slot-local ``y`` and its ink offsets.
+    """Each labelled region of the record (of one row when ``wrap_row`` is given): its style, the label's
+    slot-local ``y`` and its ink offsets.
 
     The letters keep ``label_offset`` from the painted edge of the mark on the
     side ``linear_annotation_labels_above`` picks (OV-844). A slot that
@@ -187,7 +209,7 @@ def _label_rows(
     rows = []
     for placement in placements:
         annotation = placement.annotation
-        if not annotation.label:
+        if not annotation.label or (wrap_row is not None and annotation.label_row != wrap_row):
             continue
         style = effective_annotation_style(annotation, params)
         size = annotation_label_font_size(style, track.label_font_size)
@@ -223,8 +245,10 @@ def linear_annotation_label_room(
     height_px: float,
     font_family: str,
     params: AnnotationTrackParams,
+    wrap_row: int | None = None,
 ) -> float:
-    """How far the record's labels reach beyond the slot's ``height_px`` on their side.
+    """How far the record's labels (one row's, when ``wrap_row`` is given) reach beyond the slot's ``height_px``
+    on their side.
 
     The room holds the letters and ``label_offset`` beyond them too, so the
     axis line, the next slot or the record edge keeps that gap (OV-844).
@@ -240,6 +264,7 @@ def linear_annotation_label_room(
         height_px=height_px,
         font_family=font_family,
         params=params,
+        wrap_row=wrap_row,
     ):
         far = -(y + top) if above else y + bottom - float(height_px)
         room = max(room, far + float(style.label_offset))
@@ -257,24 +282,55 @@ def linear_annotation_labels(
     height_px: float,
     font_family: str,
     params: AnnotationTrackParams,
+    row_frames: Sequence[AnnotationRowFrame] = (),
 ) -> tuple[LinearAnnotationLabel, ...]:
-    """The labels of one record's annotation track at their ``label_position``."""
+    """The labels of one record's annotation track at their ``label_position``.
+
+    On a wrapped record (``row_frames``) a label stands over its marks on the row of its longest one, its y
+    moved from that row's frame into the slot's first-row frame.
+    """
 
     scale = float(bar_length_px) / max(1, int(record_length))
-    _placements, lane_height = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)
+    placements, _lane = _record_lanes(track, record_index=record_index, height_px=height_px, params=params)
     above = linear_annotation_labels_above(side, params)
     labels: list[LinearAnnotationLabel] = []
-    for placement, style, y, (left, right, top, bottom) in _label_rows(
-        track,
-        record_index=record_index,
-        side=side,
-        covers_slots=covers_slots,
-        height_px=height_px,
-        font_family=font_family,
-        params=params,
-    ):
+    candidates = (
+        [
+            (row_item, shift)
+            for row, (shift, row_height) in enumerate(row_frames)
+            for row_item in _label_rows(
+                track,
+                record_index=record_index,
+                side=side,
+                covers_slots=covers_slots,
+                height_px=row_height,
+                font_family=font_family,
+                params=params,
+                wrap_row=row,
+            )
+        ]
+        if row_frames
+        else [
+            (row_item, 0.0)
+            for row_item in _label_rows(
+                track,
+                record_index=record_index,
+                side=side,
+                covers_slots=covers_slots,
+                height_px=height_px,
+                font_family=font_family,
+                params=params,
+            )
+        ]
+    )
+    for (placement, style, row_y, (left, right, top, bottom)), shift_y in candidates:
         annotation = placement.annotation
-        segments = annotation.geometry_segments
+        row = annotation.label_row
+        y = row_y + shift_y
+        lane_height = _lane_height(
+            track, placements, row_frames[row].height_px if row_frames else height_px, params
+        )
+        segments = annotation.row_segments(row)
         anchor = _label_anchor(style)
         if anchor == "start":
             label_bp = float(segments[0][0])
@@ -298,7 +354,12 @@ def linear_annotation_labels(
                 # A clipped track may hide part of its marks.
                 boxes=()
                 if track.clipped
-                else _label_boxes(placement, style, lane_height=lane_height, padding_px=params.padding_px, scale=scale),
+                else tuple(
+                    box.translated(0.0, shift_y)
+                    for box in _label_boxes(
+                        placement, style, lane_height=lane_height, padding_px=params.padding_px, scale=scale, segments=segments
+                    )
+                ),
             )
         )
     return tuple(labels)
@@ -335,8 +396,11 @@ def linear_annotation_track_content(
     labels: Sequence[LinearAnnotationLabel] = (),
     dom_group_id: str | None = None,
     semantic_slot_id: str | None = None,
+    row_frames: tuple[AnnotationRowFrame, ...] = (),
 ) -> GroupContent:
     """Build an annotation track in record-local coordinates (render stage ``annotation_content``).
+
+    On a wrapped record (``row_frames``) each part of a mark goes into an id-less group of its row in its item.
 
     ``labels`` are the track's placed labels (``linear_annotation_labels``,
     moved by the record's label placement), drawn with their annotations.
@@ -380,10 +444,20 @@ def linear_annotation_track_content(
             )
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
         part_count = len(annotation.geometry_segments)
+        row_targets: dict[int, Group] = {}
         for part_index, (start, end) in enumerate(annotation.geometry_segments, start=1):
             x1, x2 = float(start) * scale, float(end) * scale
             fragment = annotation.display_parts[part_index - 1] if annotation.display_parts is not None else None
             cap_start, cap_end = capped_ends(annotation, part_index - 1)
+            part_target = item_group
+            if row_frames and fragment is not None:
+                frame = row_frames[fragment.row]
+                part_target = row_targets.get(fragment.row) or wrap_row_group(fragment.row, frame.shift_y)
+                if fragment.row not in row_targets:
+                    row_targets[fragment.row] = part_target
+                    item_group.add(part_target)
+                lane_height = _lane_height(track, placements, frame.height_px, params)
+                lane_center = float(y_offset_px) + _lane_center(placement, lane_height, params.padding_px)
             if annotation.mark in {"band", "highlight"}:
                 if style.hatch:
                     definitions.setdefault(hatch_pattern_id(style.hatch), hatch_pattern(style.hatch))
@@ -421,10 +495,10 @@ def linear_annotation_track_content(
                     border = Path(d=outline, fill="none", stroke=style.stroke, stroke_width=style.stroke_width, stroke_linecap="butt")
                     if dash:
                         border.attribs["stroke-dasharray"] = dash
-                    item_group.add(rect)
-                    item_group.add(border)
+                    part_target.add(rect)
+                    part_target.add(border)
                 else:
-                    item_group.add(rect)
+                    part_target.add(rect)
                 continue
             line = Line(
                 start=(x1, lane_center),
@@ -436,7 +510,7 @@ def linear_annotation_track_content(
             )
             if dash:
                 line.attribs["stroke-dasharray"] = dash
-            item_group.add(line)
+            part_target.add(line)
             if annotation.mark == "bracket" and style.line_cap != "none":
                 cap = cap_size(lane_height)
                 if style.line_cap == "arrow":
@@ -448,14 +522,14 @@ def linear_annotation_track_content(
                         stroke_width=style.stroke_width,
                     )
                     if cap_end:
-                        item_group.add(path)
+                        part_target.add(path)
                     if cap_start:
-                        item_group.add(Line(start=(x1, lane_center - cap), end=(x1, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
+                        part_target.add(Line(start=(x1, lane_center - cap), end=(x1, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
                 else:
                     if cap_start:
-                        item_group.add(Line(start=(x1, lane_center - cap), end=(x1, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
+                        part_target.add(Line(start=(x1, lane_center - cap), end=(x1, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
                     if cap_end:
-                        item_group.add(Line(start=(x2, lane_center - cap), end=(x2, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
+                        part_target.add(Line(start=(x2, lane_center - cap), end=(x2, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
 
         label = labels_by_id.get(annotation.id)
         # A backed label is drawn in front of the leader lines (linear_region_label_front_content).
@@ -474,7 +548,10 @@ def linear_annotation_track_content(
         clip_path.add(
             Rect(
                 insert=(0, float(y_offset_px)),
-                size=(float(bar_length_px), float(height_px)),
+                size=(
+                    float(bar_length_px),
+                    max((frame.shift_y + frame.height_px for frame in row_frames), default=float(height_px)),
+                ),
             )
         )
         clip_paths.append(clip_path)
@@ -517,6 +594,7 @@ def linear_region_label_front_content(
 
 
 __all__ = [
+    "AnnotationRowFrame",
     "LinearAnnotationLabel",
     "linear_annotation_label_room",
     "linear_annotation_labels",

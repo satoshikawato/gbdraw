@@ -212,10 +212,15 @@ def scalar_axis_tick_font_size(mode: DiagramMode, track_thickness_px: float) -> 
 
 @dataclass(frozen=True)
 class DrawnExtent:
-    """The records one drawing draws: its mode and lengths after crops, in drawing order."""
+    """The records one drawing draws: its mode and lengths after crops, in drawing order.
+
+    ``wrap_row_length`` is a wrapped drawing's row length: sizes and ticks follow what one row shows, the
+    windows the whole record.
+    """
 
     mode: DiagramMode
     record_lengths: tuple[int, ...]
+    wrap_row_length: int | None = None
 
     def __post_init__(self) -> None:
         if self.mode not in _MODE_LENGTH_PAIRS:
@@ -226,7 +231,13 @@ class DrawnExtent:
     def size_class(self, cfg: GbdrawConfig) -> SizeClass:
         """Return the drawing's size class: that of its longest record."""
         threshold = int(getattr(cfg.labels.length_threshold, self.mode))
-        return determine_length_parameter(max(self.record_lengths), threshold)
+        return determine_length_parameter(self.drawn_axis_length, threshold)
+
+    @property
+    def drawn_axis_length(self) -> int:
+        """The bases on the longest drawn axis."""
+        longest = max(self.record_lengths)
+        return longest if self.wrap_row_length is None else min(longest, self.wrap_row_length)
 
 
 def auto_setting_values(
@@ -245,7 +256,8 @@ def auto_setting_values(
     value at every length in that mode.
 
     ``cfg`` must hold no explicit size values (normally the packaged defaults).
-    The size class, windows and tick intervals follow the longest record; in a
+    The size class and tick intervals follow the longest drawn axis and the windows the
+    longest record; in a
     Circular canvas the records then share the long styles. The GC content and
     Depth tick fonts follow the track thickness: the Auto thickness unless
     ``track_thickness_px`` gives the drawing's own (keys ``gc_content`` and
@@ -272,8 +284,8 @@ def auto_setting_values(
             )
         values["objects.scale.interval"] = circular_tick_intervals(longest)[0]
     else:
-        values["labels.font_size.linear"] = linear_label_font_size(extent.record_lengths, cfg)
-        values["objects.scale.interval"] = linear_tick_interval(longest)
+        values["labels.font_size.linear"] = linear_label_font_size((extent.drawn_axis_length,), cfg)
+        values["objects.scale.interval"] = linear_tick_interval(extent.drawn_axis_length)
         values["canvas.linear.default_gc_height"] = float(cfg.canvas.linear.default_gc_height)
         values["canvas.linear.depth_height"] = float(cfg.canvas.linear.depth_height)
     thickness = {

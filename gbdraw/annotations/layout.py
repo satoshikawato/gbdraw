@@ -39,13 +39,16 @@ class ResolvedAnnotationTrack:
 
 def _expanded_intervals(
     annotation: ResolvedRegionAnnotation,
+    row: int,
     *,
     record_length: int,
     label_width_bp: float,
     padding_bp: float,
 ) -> tuple[tuple[float, float], ...]:
-    intervals = [(float(start), float(end)) for start, end in annotation.geometry_segments]
-    if annotation.label and label_width_bp > annotation.span_bp:
+    """What an annotation occupies on one row, with its label on the row that holds it."""
+
+    intervals = [(float(start), float(end)) for start, end in annotation.row_segments(row)]
+    if annotation.label and row == annotation.label_row and label_width_bp > annotation.span_bp:
         half = label_width_bp / 2.0
         center = float(annotation.geometry_midpoint_bp)
         start, end = center - half, center + half
@@ -85,8 +88,9 @@ def assign_annotation_lanes(
     padding_bp: Callable[[ResolvedRegionAnnotation], float] | float = 0.0,
     overflow: str = "error",
 ) -> tuple[PlacedRegionAnnotation, ...]:
-    """Assign stable lanes using greedy interval coloring.
+    """Assign stable lanes using greedy interval coloring, row by row on a wrapped record.
 
+    An annotation keeps one lane on every row it draws on; only annotations on the same row meet.
     Explicit lanes remain fixed. A collision in an explicit lane is rejected by
     the default ``error`` policy and retained for ``compress``/``clip`` so the
     caller can apply its visual policy.
@@ -95,60 +99,73 @@ def assign_annotation_lanes(
     if overflow not in {"error", "compress", "clip"}:
         raise ValidationError("overflow must be 'error', 'compress', or 'clip'.")
     width_func = label_width_bp or (lambda _annotation: 0.0)
-    bounds_by_annotation: dict[tuple[str, str, int], tuple[tuple[float, float], ...]] = {}
+    bounds_by_annotation: dict[tuple[str, str, int], dict[int, tuple[tuple[float, float], ...]]] = {}
     for annotation in annotations:
         length = int(record_lengths[annotation.record_index])
         annotation_padding = padding_bp(annotation) if callable(padding_bp) else padding_bp
-        bounds_by_annotation[(annotation.set_id, annotation.id, annotation.record_index)] = _expanded_intervals(
-            annotation,
-            record_length=length,
-            label_width_bp=max(0.0, float(width_func(annotation))),
-            padding_bp=max(0.0, float(annotation_padding)),
-        )
+        bounds_by_annotation[(annotation.set_id, annotation.id, annotation.record_index)] = {
+            row: _expanded_intervals(
+                annotation,
+                row,
+                record_length=length,
+                label_width_bp=max(0.0, float(width_func(annotation))),
+                padding_bp=max(0.0, float(annotation_padding)),
+            )
+            for row in annotation.geometry_rows
+        }
+
+    def first_place(annotation: ResolvedRegionAnnotation) -> tuple[int, int]:
+        row = annotation.geometry_rows[0]
+        return row, min(start for start, _ in annotation.row_segments(row))
 
     ordered = sorted(
         annotations,
         key=lambda item: (
             item.record_index,
-            min(start for start, _ in item.geometry_segments),
-            max(end for _, end in item.geometry_segments),
+            first_place(item),
+            max(end for _, end in item.row_segments(item.geometry_rows[-1])),
             item.set_id,
             item.id,
         ),
     )
-    lane_bounds: dict[tuple[int, int], list[tuple[tuple[float, float], ...]]] = {}
+    lane_bounds: dict[tuple[int, int, int], list[tuple[tuple[float, float], ...]]] = {}
     placements: list[PlacedRegionAnnotation] = []
     for annotation in ordered:
         key = (annotation.set_id, annotation.id, annotation.record_index)
-        bounds = bounds_by_annotation[key]
+        rows = bounds_by_annotation[key]
+
+        def lane_is_taken(lane: int) -> bool:
+            return any(
+                _overlaps(bounds, occupied)
+                for row, bounds in rows.items()
+                for occupied in lane_bounds.get((annotation.record_index, row, lane), ())
+            )
+
         if annotation.lane is not None:
             lane = int(annotation.lane)
-            collisions = lane_bounds.get((annotation.record_index, lane), ())
-            if overflow == "error" and any(_overlaps(bounds, occupied) for occupied in collisions):
+            if overflow == "error" and lane_is_taken(lane):
                 raise ValidationError(
                     f"Annotation {annotation.set_id}/{annotation.id} conflicts in explicit lane {lane}.",
                     diagnostic={"code": "TRACK_INVALID", "reason": "ANNOTATION_LANE_CONFLICT"},
                 )
         else:
             lane = 0
-            while any(
-                _overlaps(bounds, occupied)
-                for occupied in lane_bounds.get((annotation.record_index, lane), ())
-            ):
+            while lane_is_taken(lane):
                 lane += 1
-        lane_bounds.setdefault((annotation.record_index, lane), []).append(bounds)
+        for row, bounds in rows.items():
+            lane_bounds.setdefault((annotation.record_index, row, lane), []).append(bounds)
         placements.append(
             PlacedRegionAnnotation(
                 annotation=annotation,
                 lane=lane,
-                occupied_bounds=bounds,
+                occupied_bounds=tuple(bound for bounds in rows.values() for bound in bounds),
             )
         )
     placements.sort(
         key=lambda item: (
             item.annotation.record_index,
             item.lane,
-            min(start for start, _ in item.annotation.geometry_segments),
+            first_place(item.annotation),
             item.annotation.set_id,
             item.annotation.id,
         )

@@ -1871,6 +1871,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             warning.set_id, warning.annotation_id, warning.record_index + 1,
             warning.record_id, warning.message)
     log_feature_identity_notices(render_result.feature_identity_notices)
+    if render_result.linear_metadata is not None and render_result.linear_metadata.wrap is not None:
+        logger.info(render_result.linear_metadata.wrap.message)
     canvas = render_result.drawing
     interactive_context = render_result.interactive_context
     rendered_svg = make_rendered_svg(out_file_prefix, request_path.name)

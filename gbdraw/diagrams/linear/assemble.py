@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from gbdraw.features.placement import FeaturePlacementSlot
 from gbdraw.render_stages import render_stage
+from ...layout.linear_wrap import drawn_axis_length
 from ...layout.record_labels import source_ruler_ticks
 
 import copy
@@ -114,6 +115,7 @@ from ...layout.composition import (
     plan_composition,
 )
 from ...layout.spatial import Aabb, union_aabbs
+from ...layout.linear import union_vertical_bands
 from ...layout.linear_multi_record import (
     LinearFeatureAttachment,
     LinearRecordMeasurement,
@@ -159,6 +161,7 @@ from ...labels.linear import (
     LinearLabelFrame,
     calculate_label_bounds,
     linear_label_fit,
+    linear_label_on_its_wrap_row,
     linear_label_rows,
     with_feature_label_rows,
 )
@@ -194,6 +197,7 @@ from .annotation_labels import (
     LabelObstacle,
     PlacedAnnotationLabels,
     linear_annotation_label_inks,
+    linear_annotation_row_frames,
     linear_feature_glyph_boxes,
     linear_feature_label_obstacles,
     place_linear_annotation_labels,
@@ -233,6 +237,7 @@ from .track_slots import (
     LinearSlotFootprint,
     resolve_linear_record_vertical_plan,
     resolve_linear_track_layout,
+    stack_linear_wrap_rows,
 )
 
 
@@ -274,6 +279,17 @@ def _linear_track_slot_dom_id(
         group_id,
         ("linear-record", int(record_index), int(record_count)),
     )
+
+
+def _drawn_axis_lengths(
+    records: Sequence[SeqRecord], record_transforms: Sequence[RecordDisplayTransform] | None
+) -> list[int]:
+    """The bases on each record's drawn axis, its row length when it wraps."""
+
+    return [
+        drawn_axis_length(record, record_transforms[index] if record_transforms is not None else None)
+        for index, record in enumerate(records)
+    ]
 
 
 def _prepare_linear_annotation_tracks(
@@ -319,6 +335,7 @@ def _prepare_linear_annotation_tracks(
         auto_slot_ids=auto_slot_ids,
         label_font_size=label_font_size,
         sequence_widths=sequence_widths,
+        record_transforms=record_transforms,
     )
     return updated_slots, bundle, layouts, auto_slot_ids
 
@@ -331,6 +348,7 @@ def _layout_linear_annotation_tracks(
     auto_slot_ids: frozenset[str],
     label_font_size: float,
     sequence_widths: Sequence[float],
+    record_transforms: Sequence[RecordDisplayTransform] | None,
 ) -> tuple[list[LinearTrackSlot], dict[str, ResolvedAnnotationTrack]]:
     """Resolve annotation lanes for the records' drawn axis widths (their placements'
     ``sequence_width``).
@@ -340,11 +358,8 @@ def _layout_linear_annotation_tracks(
 
     if len(sequence_widths) != len(records):
         raise ValueError("sequence_widths must contain one width for every record")
-    record_lengths = {index: len(record.seq) for index, record in enumerate(records)}
-    bp_per_px = {
-        index: len(record.seq) / max(1.0, float(sequence_widths[index]))
-        for index, record in enumerate(records)
-    }
+    record_lengths = dict(enumerate(_drawn_axis_lengths(records, record_transforms)))
+    bp_per_px = {index: length / max(1.0, float(sequence_widths[index])) for index, length in record_lengths.items()}
     updated_slots: list[LinearTrackSlot] = []
     layouts: dict[str, ResolvedAnnotationTrack] = {}
     for slot in slots:
@@ -386,6 +401,7 @@ def _add_linear_feature_underlays(
     *,
     label_font_size: float,
     sequence_widths: Sequence[float],
+    record_transforms: Sequence[RecordDisplayTransform] | None,
 ) -> tuple[
     list[LinearTrackSlot],
     ResolvedAnnotationBundle,
@@ -427,6 +443,7 @@ def _add_linear_feature_underlays(
         auto_slot_ids=frozenset((slot_id,)),
         label_font_size=label_font_size,
         sequence_widths=sequence_widths,
+        record_transforms=record_transforms,
     )
     return (
         [*sized_underlay, *slots],
@@ -609,6 +626,20 @@ def _serialize_linear_track_slot_geometry(
                     )
                 ],
                 "slots": slots_payload,
+                # One record: the rows of a wrapped one are only where its slots repeat below its axis.
+                **(
+                    {
+                        "wrap": {
+                            "rowOffsets": list(plan.row_offsets),
+                            "rowCanvasBands": [
+                                band_payload(row.plan.canvas_band.translate(row.axis_offset_y), axis_y=axis_y)
+                                for row in plan.wrap_rows
+                            ],
+                        }
+                    }
+                    if plan.wrap_rows
+                    else {}
+                ),
             }
         )
     return {
@@ -854,7 +885,11 @@ def _linear_slot_footprints_for_record(
     depth_config_by_index: dict[int, DepthConfigurator],
     depth_by_index: Mapping[int, DepthTrackData],
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
+    wrap_row: int | None = None,
 ) -> tuple[dict[str, LinearSlotFootprint], float]:
+    """Each slot's footprint on the record, or on one row of a wrapped record (``wrap_row``, with that row's
+    ``labels``)."""
+
     footprints: dict[str, LinearSlotFootprint] = {}
     font_family = str(canvas_config._cfg.objects.text.font_family)
     label_band = measure_linear_label_band(labels)
@@ -933,6 +968,7 @@ def _linear_slot_footprints_for_record(
                 record_index=record_index,
                 annotation_layout=annotation_track_layouts.get(slot.id),
                 font_family=font_family,
+                wrap_row=wrap_row,
             )
             continue
 
@@ -951,8 +987,10 @@ def _linear_annotation_slot_footprint(
     annotation_layout: ResolvedAnnotationTrack | None,
     font_family: str,
     span_height: float | None = None,
+    wrap_row: int | None = None,
 ) -> LinearSlotFootprint:
-    """An annotation slot's own band with its labels' room on their side.
+    """An annotation slot's own band with its labels' room on their side (on one row of a wrapped record:
+    that row's labels, and paint only where the row holds a mark).
 
     ``span_height`` is the stretched height of an overlay the record's plan
     spans over slots (``spans_slots``): its labels then keep clear of every
@@ -970,6 +1008,7 @@ def _linear_annotation_slot_footprint(
             height_px=float(body_band.height if span_height is None else span_height),
             font_family=font_family,
             params=params,
+            wrap_row=wrap_row,
         )
         if annotation_layout is not None
         else 0.0
@@ -978,11 +1017,15 @@ def _linear_annotation_slot_footprint(
         expanded = body_band.expand(label_overhang, 0.0)
     else:
         expanded = body_band.expand(0.0, label_overhang)
-    available = annotation_layout is not None and any(
-        item.annotation.record_index == record_index for item in annotation_layout.placements
+    placed = (
+        [item for item in annotation_layout.placements if item.annotation.record_index == record_index]
+        if annotation_layout is not None
+        else []
     )
+    available = bool(placed)
+    painted = available and (wrap_row is None or any(wrap_row in item.annotation.geometry_rows for item in placed))
     return LinearSlotFootprint(
-        paint_band=expanded if available else None,
+        paint_band=expanded if painted else None,
         reserve_band=expanded,
         data_available=available,
     )
@@ -1193,6 +1236,7 @@ def _build_linear_record_vertical_plans(
     multi_record_enabled: bool,
     split_row_definitions: bool,
     render_context: LinearRecordRenderContext,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> tuple[list[LinearRecordVerticalPlan], list[_LinearRecordDefinitionGeometry]]:
     axis_band = _linear_axis_band(
         canvas_config,
@@ -1204,7 +1248,10 @@ def _build_linear_record_vertical_plans(
         (slot.id for slot in layout.slots if slot.renderer == "features"),
         None,
     )
-    for record_index, _record in enumerate(records):
+
+    def row_plan(record_index: int, wrap_row: int | None) -> tuple[LinearRecordVerticalPlan, float]:
+        """The packed slots of a record, or of one row of a wrapped record, and its feature lanes' center."""
+
         depth_by_index = (
             record_depth_by_index[record_index]
             if record_index < len(record_depth_by_index)
@@ -1214,18 +1261,20 @@ def _build_linear_record_vertical_plans(
         depth_configs.update(
             {index: track.config for index, track in depth_by_index.items()}
         )
+        labels = labels_by_record[record_index]
         footprints, feature_center_y = _linear_slot_footprints_for_record(
             record_index=record_index,
             layout=layout,
             feature_dict=feature_dicts[record_index],
             feature_geometry=feature_geometries[record_index],
-            labels=labels_by_record[record_index],
+            labels=labels if wrap_row is None else [label for label in labels if label.get("wrap_row") == wrap_row],
             canvas_config=canvas_config,
             gc_config_of=gc_config_of,
             skew_config=skew_config,
             depth_config_by_index=depth_configs,
             depth_by_index=depth_by_index,
             annotation_track_layouts=annotation_track_layouts,
+            wrap_row=wrap_row,
         )
         plan = resolve_linear_record_vertical_plan(
             layout,
@@ -1251,6 +1300,7 @@ def _build_linear_record_vertical_plans(
                         annotation_layout=annotation_track_layouts.get(slot.id),
                         font_family=font_family,
                         span_height=span_heights[slot.id],
+                        wrap_row=wrap_row,
                     )
                     for slot in layout.slots
                     if slot.id in span_heights
@@ -1261,6 +1311,12 @@ def _build_linear_record_vertical_plans(
                 axis_band=axis_band,
                 footprints=footprints,
             )
+        return plan, feature_center_y
+
+    for record_index, _record in enumerate(records):
+        bound = record_transforms[record_index] if record_transforms is not None else None
+        transform = bound if bound is not None and bound.wrap_length is not None else None
+        plan, feature_center_y = row_plan(record_index, 0 if transform is not None else None)
         feature_origin_y = (
             plan.slot_by_id(feature_slot_id).origin_y
             if feature_slot_id is not None
@@ -1268,6 +1324,7 @@ def _build_linear_record_vertical_plans(
         )
         feature_center_y += feature_origin_y
         canvas_band = plan.canvas_band
+        # A wrapped record's name and definition stand beside its first row, once.
         local_definition_height = (
             float(definition_heights[record_index])
             if record_index < len(definition_heights)
@@ -1308,9 +1365,34 @@ def _build_linear_record_vertical_plans(
 
         if local_band is not None:
             canvas_band = canvas_band.union(local_band)
-        plans.append(replace(plan, canvas_band=canvas_band))
+        plan = replace(plan, canvas_band=canvas_band)
+        plans.append(
+            stack_linear_wrap_rows(
+                [plan, *(row_plan(record_index, row)[0] for row in range(1, transform.row_count))],
+                _ordinary_row_gap(canvas_config),
+            )
+            if transform is not None
+            else plan
+        )
         definition_geometries.append(replace(beside, local_band=local_band))
     return plans, definition_geometries
+
+
+def _ordinary_row_gap(canvas_config: LinearCanvasConfigurator) -> float:
+    """The gap between stacked records, and between the rows of a wrapped record."""
+
+    return float(canvas_config.cds_padding) * 1.5
+
+
+def _labels_in_first_row_frame(
+    labels: list[LinearLabel], plan: LinearRecordVerticalPlan, feature_slot_id: str | None
+) -> list[LinearLabel]:
+    """A wrapped record's feature labels moved from each row's frame into its first row's."""
+
+    if not plan.wrap_rows or feature_slot_id is None:
+        return labels
+    shifts = plan.slot_row_shifts(feature_slot_id)
+    return [linear_label_on_its_wrap_row(label, shifts[label["wrap_row"]]) for label in labels]
 
 
 def _comparison_records_by_boundary(
@@ -1509,7 +1591,7 @@ def _linear_axis_ruler_bounds(
         tick += tick_interval
     projected_ticks = None
     if record_transform is not None and record_transform.projects:
-        projected_ticks = {tick.base: tick.offset for tick in source_ruler_ticks(record_transform, tick_interval)}
+        projected_ticks = {tick.base: tick for tick in source_ruler_ticks(record_transform, tick_interval)}
         ticks = list(projected_ticks)
     if not ticks:
         return None
@@ -1518,10 +1600,13 @@ def _linear_axis_ruler_bounds(
     font_size = cfg.objects.scale.ruler_label_font_size.for_length_param(
         canvas_config.length_param
     )
+    axis_length = drawn_axis_length(record, record_transform)
+    row_offsets = plan.row_offsets
     for coordinate in ticks:
-        offset = (projected_ticks[coordinate] / len(record.seq) if projected_ticks is not None
+        offset = (projected_ticks[coordinate].offset / axis_length if projected_ticks is not None
                   else abs(coordinate - start_coord) / float(span))
         x = placement.sequence_width * offset
+        row_y = row_offsets[projected_ticks[coordinate].row] if projected_ticks is not None else 0.0
         label = format_linear_tick_label(
             coordinate,
             context_length=max(1, int(canvas_config.longest_genome)),
@@ -1531,9 +1616,9 @@ def _linear_axis_ruler_bounds(
         bounds.append(
             Aabb(
                 placement.x + x - (0.5 * width),
-                placement.axis_y + plan.axis_band.top_y,
+                placement.axis_y + row_y + plan.axis_band.top_y,
                 placement.x + x + (0.5 * width),
-                placement.axis_y + plan.axis_band.bottom_y,
+                placement.axis_y + row_y + plan.axis_band.bottom_y,
             )
         )
     return union_aabbs(bounds)
@@ -1625,11 +1710,17 @@ def _linear_annotation_bounds(
     scale = placement.sequence_width / max(1, int(record_length))
     bounds: list[Aabb] = []
     for slot in plan.slots:
-        if slot.renderer != "annotations" or slot.paint_band is None:
+        if slot.renderer != "annotations":
             continue
+        painted = [
+            band.translate(row.axis_offset_y)
+            for row in plan.rows
+            if (band := row.plan.slot_by_id(slot.id).paint_band) is not None
+        ]
         track = annotation_track_layouts.get(slot.id)
-        if track is None:
+        if track is None or not painted:
             continue
+        paint_band = union_vertical_bands(painted)
         params = annotation_track_params_from_mapping(slot.params)
         labels = {label.annotation_id: label for label in annotation_labels.get(slot.id, ())}
         for item in track.placements:
@@ -1647,9 +1738,9 @@ def _linear_annotation_bounds(
             bounds.append(
                 Aabb(
                     placement.x + min_x - half_stroke,
-                    placement.axis_y + slot.paint_band.top_y,
+                    placement.axis_y + paint_band.top_y,
                     placement.x + max_x + half_stroke,
-                    placement.axis_y + slot.paint_band.bottom_y,
+                    placement.axis_y + paint_band.bottom_y,
                 )
             )
     return bounds
@@ -1658,6 +1749,7 @@ def _linear_annotation_bounds(
 def _place_linear_annotation_labels_by_record(
     *,
     records: Sequence[SeqRecord],
+    axis_lengths: Sequence[int],
     placements: Mapping[int, LinearRecordPlacement],
     plans: Sequence[LinearRecordVerticalPlan],
     collision_bands: Sequence[tuple[CollisionBand, ...]],
@@ -1696,7 +1788,7 @@ def _place_linear_annotation_labels_by_record(
 
     label_row_of = {index: row for row in linear_label_rows(label_frames, len(records)) for index, _x in row}
     placed: list[PlacedAnnotationLabels] = []
-    for index, record in enumerate(records):
+    for index, _record in enumerate(records):
         here = placements[index]
         obstacles = own_ink(index)
         label_row = label_row_of[index]
@@ -1719,7 +1811,7 @@ def _place_linear_annotation_labels_by_record(
         placed.append(
             place_linear_annotation_labels(
                 record_index=index,
-                record_length=len(record.seq),
+                record_length=axis_lengths[index],
                 sequence_width=here.sequence_width,
                 plan=plans[index],
                 annotation_track_layouts=annotation_track_layouts,
@@ -1731,7 +1823,7 @@ def _place_linear_annotation_labels_by_record(
                     feature_geometries[index],
                     plans[index],
                     separate_strands=separate_strands,
-                    scale=here.sequence_width / max(1, len(record.seq)),
+                    scale=here.sequence_width / max(1, axis_lengths[index]),
                     stroke_width=feature_stroke_width,
                 )
                 if any(slot.renderer == "annotations" and slot.id in annotation_track_layouts for slot in plans[index].slots)
@@ -1872,7 +1964,7 @@ def _collect_linear_primary_bounds(
             item.translated(horizontal_offset, 0.0)
             for item in _linear_annotation_bounds(
                 record_index,
-                len(record.seq),
+                drawn_axis_length(record, record_transforms[record_index] if record_transforms is not None else None),
                 placement,
                 plan,
                 annotation_track_layouts=annotation_track_layouts,
@@ -2104,14 +2196,15 @@ def assemble_linear_diagram(
     split_row_definitions = bool(multi_record_enabled)
     # Every record's horizontal place, solved once before its tracks and labels, in both row
     # modes: its x, width and scale, with zero vertical extents that the row stacking fills in.
+    axis_lengths = _drawn_axis_lengths(records, record_transforms)
     horizontal_layout = solve_linear_horizontal_layout(
         [
             LinearRecordMeasurement(
                 record_index=index,
                 record_key=RecordKey(str(record_keys[index])),
-                sequence_length=len(record.seq),
+                sequence_length=axis_lengths[index],
             )
-            for index, record in enumerate(records)
+            for index, _record in enumerate(records)
         ],
         rows_by_record,
         available_width=float(canvas_config.alignment_width),
@@ -2262,6 +2355,7 @@ def assemble_linear_diagram(
         auto_annotation_slot_ids,
         label_font_size=label_font_size,
         sequence_widths=sequence_widths,
+        record_transforms=record_transforms,
     )
     effective_linear_track_axis_index = (
         linear_track_axis_index + private_underlay_prefix_count
@@ -2497,7 +2591,14 @@ def assemble_linear_diagram(
         multi_record_enabled=multi_record_enabled,
         split_row_definitions=split_row_definitions,
         render_context=render_context,
+        record_transforms=record_transforms,
     )
+    # Every later reader counts a wrapped record's labels in one frame, where rows do not overlap.
+    feature_slot_id = next((slot.id for slot in linear_track_layout.slots if slot.renderer == "features"), None)
+    all_labels = [
+        _labels_in_first_row_frame(labels, plan, feature_slot_id)
+        for labels, plan in zip(all_labels, record_vertical_plans, strict=True)
+    ]
 
     canvas_config.vertical_offset = _linear_record_vertical_offset(
         record_vertical_plans,
@@ -2560,7 +2661,7 @@ def assemble_linear_diagram(
         else (0.0 if multi_record_enabled else max_def_width)
     )
     canvas_config.configure_plot_width(definition_reserve_width)
-    ordinary_row_gap = float(canvas_config.cds_padding) * 1.5
+    ordinary_row_gap = _ordinary_row_gap(canvas_config)
     definition_clear_gap = max(1.0, 0.5 * float(canvas_config.vertical_padding))
     comparison_endpoint_gap_px = (
         _COMPARISON_ENDPOINT_GAP_PX if has_blast else 0.0
@@ -2616,7 +2717,7 @@ def assemble_linear_diagram(
                 LinearRecordMeasurement(
                     record_index=index,
                     record_key=RecordKey(str(record_keys[index])),
-                    sequence_length=len(record.seq),
+                    sequence_length=axis_lengths[index],
                     top_extent=record_vertical_plans[index].canvas_top_extent,
                     bottom_extent=record_vertical_plans[index].canvas_bottom_extent,
                     comparison_top_extent=record_vertical_plans[index].comparison_top_extent,
@@ -2627,7 +2728,7 @@ def assemble_linear_diagram(
                         for band in record_collision_bands[index]
                     ),
                 )
-                for index, record in enumerate(records)
+                for index, _record in enumerate(records)
             ],
             horizontal_layout,
             first_axis_y=current_y,
@@ -2861,6 +2962,7 @@ def assemble_linear_diagram(
     # Annotation labels move along their spans off the feature labels and leaders (OV-845).
     placed_annotation_labels, all_labels = _place_linear_annotation_labels_by_record(
         records=records,
+        axis_lengths=axis_lengths,
         placements=record_placements,
         plans=record_vertical_plans,
         collision_bands=record_collision_bands,
@@ -2934,9 +3036,11 @@ def assemble_linear_diagram(
 
         if linear_track_layout is not None:
             feature_rendered = False
+            axis_row_offsets = record_vertical_plan.row_offsets if record_vertical_plan.wrap_rows else ()
 
             for slot in sorted(linear_track_layout.slots, key=lambda item: (item.z, item.slot_index)):
                 resolved_slot = record_vertical_plan.slot_by_id(slot.id)
+                row_shifts = record_vertical_plan.slot_row_shifts(slot.id)
                 slot_group_id = (
                     _linear_track_slot_dom_id(
                         slot_id=str(slot.id),
@@ -2981,6 +3085,8 @@ def assemble_linear_diagram(
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                         record_translation_x=final_translations[record_index][0],
                         record_translation_y=final_translations[record_index][1],
+                        axis_row_offsets=axis_row_offsets,
+                        feature_row_shifts=row_shifts,
                         group_key=GroupKey(str(record_keys[record_index]), GroupKind.FEATURES, str(slot.id)),
                     )
                     feature_rendered = True
@@ -2997,7 +3103,7 @@ def assemble_linear_diagram(
                         annotation_layout,
                         record_id=str(record.id),
                         record_index=record_index,
-                        record_length=len(record.seq),
+                        record_length=axis_lengths[record_index],
                         bar_length_px=float(sequence_width),
                         y_offset_px=0.0,
                         height_px=float(resolved_slot.height),
@@ -3008,6 +3114,7 @@ def assemble_linear_diagram(
                         semantic_slot_id=(
                             str(slot.id) if slot_group_id is not None else None
                         ),
+                        row_frames=linear_annotation_row_frames(record_vertical_plan, slot.id),
                     )
                     annotation_group = place_content(
                         canvas,
@@ -3054,6 +3161,7 @@ def assemble_linear_diagram(
                         track_offset_y=track_offset_y,
                         sequence_width=sequence_width,
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                        row_shifts=row_shifts,
                         group_key=GroupKey(str(record_keys[record_index]), GroupKind.DEPTH, str(slot.id)),
                     )
                     continue
@@ -3083,6 +3191,7 @@ def assemble_linear_diagram(
                         slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                        row_shifts=row_shifts,
                         group_key=GroupKey(str(record_keys[record_index]), GroupKind.GC_CONTENT, str(slot.id)),
                     )
                     continue
@@ -3111,6 +3220,7 @@ def assemble_linear_diagram(
                         slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                        row_shifts=row_shifts,
                         group_key=GroupKey(str(record_keys[record_index]), GroupKind.GC_SKEW, str(slot.id)),
                     )
 
@@ -3175,6 +3285,7 @@ def assemble_linear_diagram(
                     record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                     record_translation_x=final_translations[record_index][0],
                     record_translation_y=final_translations[record_index][1],
+                    axis_row_offsets=axis_row_offsets,
                     group_key=GroupKey(str(record_keys[record_index]), GroupKind.AXIS),
                 )
             add_record_definition_group(

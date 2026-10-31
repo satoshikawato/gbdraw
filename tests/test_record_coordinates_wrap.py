@@ -6,6 +6,7 @@ from dataclasses import replace
 from math import ceil
 from pathlib import Path
 import re
+import xml.etree.ElementTree as ET
 
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -408,6 +409,25 @@ def _join_record(path: Path) -> Path:
     return path
 
 
+def _without_row_groups(svg: str) -> str:
+    """The SVG with a row group's children in its place, so the one row compares with the unwrapped drawing."""
+
+    ET.register_namespace("", "http://www.w3.org/2000/svg")
+    root = ET.fromstring(svg)
+
+    def hoist(parent: ET.Element) -> None:
+        for index, child in reversed(list(enumerate(parent))):
+            hoist(child)
+            if "data-gbdraw-wrap-row" in child.attrib:
+                assert "transform" not in child.attrib
+                parent.remove(child)
+                for offset, grandchild in enumerate(child):
+                    parent.insert(index + offset, grandchild)
+
+    hoist(root)
+    return ET.tostring(root, encoding="unicode")
+
+
 def _svg(
     *,
     source: Path = LAMBDA,
@@ -433,7 +453,7 @@ def _svg(
     if one_row:
         length = len(plan.records[0].seq)
         plan = replace(plan, transforms=(plan.transforms[0].with_wrap(length, length),))
-    return plan.build().drawing.tostring()
+    return _without_row_groups(plan.build().drawing.tostring())
 
 
 @pytest.mark.parametrize(

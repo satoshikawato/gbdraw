@@ -250,6 +250,10 @@ class RecordDisplayTransform:
     def row_count(self) -> int:
         return ceil(self.drawn_length / self.axis_length)
 
+    def row_length(self, row: int) -> int:
+        """The bases on one row: the axis length, or the remainder on the last row."""
+        return min(self.axis_length, self.drawn_length - row * self.axis_length)
+
     def display_index_row(self, index: int) -> tuple[int, int]:
         """The row of a whole-axis display base index, and its index in that row."""
         return (0, index) if self.wrap_length is None else divmod(index, self.wrap_length)

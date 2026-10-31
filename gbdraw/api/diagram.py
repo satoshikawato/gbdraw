@@ -116,7 +116,6 @@ from gbdraw.config.models import (
     GbdrawConfig,
     LinearRenderProfile,
 )
-from gbdraw.config.models.canvas import LinearWrapLength
 from gbdraw.config.models.labels import LabelsFilteringConfig
 from gbdraw.config.models.objects import (
     normalize_pairwise_match_style,
@@ -199,8 +198,10 @@ from gbdraw.layout.linear_multi_record import record_key_at, record_pairs_betwee
 from gbdraw.layout.linear_wrap import (
     reject_wrap_in_one_grid_row,
     reject_wrap_with_comparisons,
-    resolve_wrap_length,
+    resolve_wrap,
     wrap_blocking_inputs,
+    LinearWrapSummary,
+    drawn_axis_length,
 )
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
@@ -286,6 +287,8 @@ class LinearDiagramMetadata:
     # Each record's search-frame binding, set by the plan's build when the
     # values above hold source-bound results: a Session stores them in F (R5).
     search_frame_bindings: tuple[ComparisonRecordBinding, ...] = ()
+    # What a wrapped figure drew; ``None`` when no record is longer than one row.
+    wrap: LinearWrapSummary | None = None
 
 
 @dataclass(frozen=True)
@@ -2085,26 +2088,6 @@ def _shows_identity_labels(record_features: Sequence[ResolvedRecordFeatureInputs
     )
 
 
-def _reject_undrawable_wrap(
-    requested: LinearWrapLength,
-    records: Sequence[SeqRecord],
-    layout: LinearMultiRecordOptions | None,
-    blocking_inputs: Sequence[str],
-) -> None:
-    if requested == "none":
-        return
-    reject_wrap_with_comparisons(requested, blocking_inputs)
-    reject_wrap_in_one_grid_row(
-        requested,
-        resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
-    )
-    if resolve_wrap_length(requested, [len(record.seq) for record in records]) is not None:
-        raise ValidationError(
-            "--wrap_length is not drawn yet for a record longer than one row.",
-            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_NOT_DRAWN"},
-        )
-
-
 def assemble_linear_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
@@ -2212,20 +2195,26 @@ def assemble_linear_diagram_from_records(
             "render it with gbdraw.api.render_request().",
             diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
         )
-    _reject_undrawable_wrap(
-        cfg.canvas.linear.wrap_length,
-        records,
-        layout,
-        wrap_blocking_inputs(
-            blast_files=blast_files,
-            linear_comparisons=linear_comparisons,
-            protein_comparisons=protein_comparisons,
-            orthogroups=orthogroups,
-            collinearity_blocks=collinearity_blocks,
-            losat_search=losat_search,
-            similarity_alignment=similarity_alignment,
-        ),
-    )
+    wrap_length = cfg.canvas.linear.wrap_length
+    wrap_summary = None
+    if wrap_length != "none":
+        reject_wrap_with_comparisons(
+            wrap_length,
+            wrap_blocking_inputs(
+                blast_files=blast_files,
+                linear_comparisons=linear_comparisons,
+                protein_comparisons=protein_comparisons,
+                orthogroups=orthogroups,
+                collinearity_blocks=collinearity_blocks,
+                losat_search=losat_search,
+                similarity_alignment=similarity_alignment,
+            ),
+        )
+        reject_wrap_in_one_grid_row(
+            wrap_length,
+            resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
+        )
+        _record_transforms, wrap_summary = resolve_wrap(wrap_length, records, _record_transforms)
     normalized_protein_blastp_mode = losatp_analysis_mode(losat_search)
     runtime = losat_search.runtime if losat_search is not None else LosatRuntimeOptions()
     normalized_protein_pairs: tuple[tuple[int, int], ...] | None = None
@@ -2544,7 +2533,11 @@ def assemble_linear_diagram_from_records(
 
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=len(records),
-        longest_genome=longest_genome,
+        # The canvas sizes what it draws: one row of a wrapped record.
+        longest_genome=max(
+            drawn_axis_length(record, _record_transforms[index] if _record_transforms is not None else None)
+            for index, record in enumerate(records)
+        ),
         profile=profile,
         legend=legend,
         output_prefix=output_prefix,
@@ -2625,6 +2618,7 @@ def assemble_linear_diagram_from_records(
             orthogroups=resolved_orthogroups,
             collinearity_result=resolved_collinearity_result,
             comparison_warnings=getattr(canvas, "_gbdraw_comparison_record_id_warnings", ()),
+            wrap=wrap_summary,
         ),
     )
     return build_result if _return_build_result else canvas

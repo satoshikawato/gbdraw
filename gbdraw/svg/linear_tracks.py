@@ -9,15 +9,21 @@ from ..layout.linear_coords import normalize_position_to_linear_track
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from ..layout.scalar_axis import ProjectedScalarLine, project_scalar_line
+from ..layout.scalar_axis import ProjectedScalarLine, ScalarRow, project_scalar_line
 from .path_data import path_line_to, path_number
 from .track_paths import track_line_to
 
 def _samples(
-    positions: ArrayLike, values: ArrayLike, record_transform: RecordDisplayTransform | None
+    positions: ArrayLike,
+    values: ArrayLike,
+    record_transform: RecordDisplayTransform | None,
+    row: ScalarRow | None,
 ) -> ProjectedScalarLine:
-    """The samples a Linear track path draws, in display order (projected when the record is transformed)."""
+    """The samples a Linear track path draws, in display order (projected when the record is transformed;
+    of one row, local to it, on a wrapped record)."""
 
+    if row is not None:
+        return row.samples.line(positions, values, row.row)
     if record_transform is not None and record_transform.projects:
         return project_scalar_line(positions, values, record_transform)
     return ProjectedScalarLine(np.asarray(positions, dtype=float), np.asarray(values, dtype=float), ())
@@ -32,11 +38,14 @@ def _deviation_path_desc(
     alignment_width: float,
     track_height: float,
     record_transform: RecordDisplayTransform | None,
+    row: ScalarRow | None,
 ) -> str:
-    """A GC content (deviation) or skew path: the line of each sample's deviation from the mean, closed to
-    the baseline at ``start_y``."""
+    """A GC content (deviation) or skew path: the line of each sample's deviation from the whole series'
+    mean, closed to the baseline at ``start_y``."""
 
-    positions, values, segment_starts = _samples(series.index, series, record_transform)
+    positions, values, segment_starts = _samples(series.index, series, record_transform, row)
+    if row is not None and not len(positions):
+        return ""
     xs = normalize_position_to_linear_track(positions, record_len, alignment_width)
     # A completely flat series draws a flat line (no division by zero).
     ys = np.zeros_like(values) if max_diff == 0 else -(0.5 * track_height * ((values - float(series.mean())) / max_diff))
@@ -57,13 +66,14 @@ def calculate_gc_content_path_desc(
     track_height: float,
     dinucleotide: str,
     record_transform: RecordDisplayTransform | None = None,
+    row: ScalarRow | None = None,
 ) -> str:
     if gc_df.empty:
         return ""
     series = gc_df[f"{dinucleotide} content"]
     max_diff = float((series - float(series.mean())).abs().max())
     return _deviation_path_desc(
-        start_x, start_y, series, max_diff, record_len, alignment_width, track_height, record_transform
+        start_x, start_y, series, max_diff, record_len, alignment_width, track_height, record_transform, row
     )
 
 
@@ -75,6 +85,7 @@ def calculate_gc_skew_path_desc(
     alignment_width: float,
     track_height: float,
     record_transform: RecordDisplayTransform | None = None,
+    row: ScalarRow | None = None,
 ) -> str:
     if skew_df.empty:
         return ""
@@ -82,7 +93,7 @@ def calculate_gc_skew_path_desc(
     series = skew_df[column]
     max_diff = float((series - float(series.mean())).abs().max()) or 1.0
     return _deviation_path_desc(
-        start_x, start_y, series, max_diff, record_len, alignment_width, track_height, record_transform
+        start_x, start_y, series, max_diff, record_len, alignment_width, track_height, record_transform, row
     )
 
 
@@ -97,6 +108,7 @@ def calculate_linear_scalar_area_path_desc(
     value_column: str = "value_normalized",
     position_column: str = "position",
     record_transform: RecordDisplayTransform | None = None,
+    row: ScalarRow | None = None,
 ) -> str:
     """Return a filled linear area path for normalized scalar values."""
 
@@ -110,6 +122,7 @@ def calculate_linear_scalar_area_path_desc(
         else scalar_df[position_column].to_numpy().astype(np.int64),
         scalar_df[value_column],
         record_transform,
+        row,
     )
     if not len(positions):
         return ""
@@ -136,6 +149,7 @@ def calculate_depth_path_desc(
     alignment_width: float,
     track_height: float,
     record_transform: RecordDisplayTransform | None = None,
+    row: ScalarRow | None = None,
 ) -> str:
     """Return a filled linear area path for binned depth coverage."""
 
@@ -148,6 +162,7 @@ def calculate_depth_path_desc(
         track_height,
         value_column="depth_normalized",
         record_transform=record_transform,
+        row=row,
     )
 
 
