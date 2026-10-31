@@ -7,6 +7,8 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot } = require('./helpers/live-generate-parity.cjs');
 const { open, addColorRule, addVisibilityRule } = require('./helpers/live-generate-parity-steps.cjs');
 
@@ -145,7 +147,7 @@ test('tobacco: a live Legend font size keeps the Gallery Session overrides and a
 test('tobacco: a loaded Session applies a Legend font size with no Generate', async ({ browser }, testInfo) => {
   test.setTimeout(600_000);
   const session = JSON.parse(readFileSync(TOBACCO, 'utf8'));
-  delete session.renderRequest.diagramOptions.configOverrides;
+  delete shownSavedDrawing(session).renderRequest.diagramOptions.configOverrides;
   const file = testInfo.outputPath('no-overrides.gbdraw-session.json');
   writeFileSync(file, JSON.stringify(session));
   const page = await load(browser, file);
@@ -821,8 +823,9 @@ test('a Load after a canceled apply applies none of the loaded draft', async ({ 
     // The Gallery Session with a draft Legend font size its Result does not
     // draw (and the config overrides object a Generate writes).
     const session = JSON.parse(readFileSync(TOBACCO, 'utf8'));
-    session.modes.circular.config.adv.legend_font_size = size + 7;
-    session.renderRequest.diagramOptions.configOverrides = {};
+    const drawing = shownSavedDrawing(session);
+    drawing.config.adv.legend_font_size = size + 7;
+    drawing.renderRequest.diagramOptions.configOverrides = {};
     const file = testInfo.outputPath('pending-legend.gbdraw-session.json');
     writeFileSync(file, JSON.stringify(session));
     await page.locator('input[accept^=".json,"]').setInputFiles(file);
@@ -855,8 +858,7 @@ test('a live change in a mode without a Result applies nothing until that mode h
   try {
     await generateNow(page);
     const circular = await facts(page);
-    await page.locator('button[aria-label="Linear"][aria-pressed]').click();
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+    await showDrawing(page, { kind: 'linear' });
     await settleLive(page);
     const linear = await facts(page);
     expect(linear.resultCount).toBe(0);
@@ -866,8 +868,7 @@ test('a live change in a mode without a Result applies nothing until that mode h
     expect(after.reflowing).toBe(false);
     expect(after.resultCount).toBe(0);
     expect(after.generationKey).toBe(linear.generationKey);
-    await page.locator('button[aria-label="Circular"][aria-pressed]').click();
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('circular');
+    await showDrawing(page, { kind: 'circular' });
     await settleLive(page);
     const back = await facts(page);
     expect(back.content).toBe(circular.content);

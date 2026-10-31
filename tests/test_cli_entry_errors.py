@@ -254,19 +254,29 @@ def test_python_session_loaders_reject_text_that_is_not_plain_utf8_json(payload:
         load_session_document(target)
 
 
-def test_session_shape_errors_name_the_file_version(tmp_path: Path) -> None:
-    """OV-1252: a version-48 file was told "Session version 40 requires a results array"."""
+@pytest.mark.parametrize("layout", ["mode_scoped", "drawings"])
+def test_session_shape_errors_name_the_file_version(layout: str, tmp_path: Path) -> None:
+    """OV-1252: a version-48 file was told "Session version 40 requires a results array".
+
+    Both layouts: the last one-request Session (48) and a drawing of a Session 49.
+    """
 
     import json
 
-    from gbdraw.session_io import CURRENT_SESSION_VERSION
+    from gbdraw.session_io import CURRENT_SESSION_VERSION, MODE_SCOPED_SESSION_MAX_VERSION
+    from tests.utils.session_drawing_view import drawings_document_of_view, session_view
 
-    payload = json.loads(GALLERY_SESSION.read_text(encoding="utf-8"))
-    assert payload["version"] == CURRENT_SESSION_VERSION
-    payload["results"] = "x"
+    view = session_view(json.loads(GALLERY_SESSION.read_text(encoding="utf-8")))
+    view["version"] = MODE_SCOPED_SESSION_MAX_VERSION
+    if layout == "drawings":
+        payload, version = drawings_document_of_view(view), CURRENT_SESSION_VERSION
+        payload["drawings"][0]["results"] = "x"
+    else:
+        payload, version = view, MODE_SCOPED_SESSION_MAX_VERSION
+        payload["results"] = "x"
     target = tmp_path / "badresults.json"
     target.write_text(json.dumps(payload), encoding="utf-8")
     result = _gbdraw("render", "--session", str(target), "-o", "out", cwd=tmp_path)
     assert result.returncode == 1
-    assert f"Session version {CURRENT_SESSION_VERSION} requires a results array." in result.stderr
+    assert f"Session version {version} requires a results array." in result.stderr
     assert "version 40" not in result.stderr

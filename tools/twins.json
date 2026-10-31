@@ -3,20 +3,6 @@
   "description": "Logic that Python and the Web each implement (boundary audit M2). tests/web/twin-registry.test.mjs requires a row for every twin that twin.unregistered.v1 (tools/web-twin-detectors.mjs) detects and no vector: or function: row it does not detect; constant: and concern: rows record twins it does not see. Rows leave when a side is deleted; a new row is an authority change, made before its twin with \"pending\": true, which the change that adds the twin removes.",
   "twins": [
     {
-      "id": "vector:tests/fixtures/annotation-target-migration-vectors.json",
-      "concern": "Hash annotation targets to feature identity (Session 44 and older)",
-      "pythonOwner": [
-        "gbdraw/session_io.py:migrate_session_annotation_targets"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionAnnotationTargets"
-      ],
-      "vector": "tests/fixtures/annotation-target-migration-vectors.json",
-      "reason": "Web Load and CLI replay of a Session 44 or older must move the same hash annotation targets; 19 cases pin them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "inventory C section B (annotation targets; OV-134)"
-    },
-    {
       "id": "vector:tests/fixtures/auto_size_vectors.json",
       "concern": "Auto size values by record length (size class)",
       "pythonOwner": [
@@ -115,7 +101,7 @@
         "gbdraw/web/js/services/session-request.js:projectCanonicalSessionRequest"
       ],
       "vector": "tests/fixtures/feature-edit-migration-vectors.json",
-      "reason": "Partly shared: the Web reads the source-read cases through projectCanonicalSessionRequest; the edit cases run through migrateSessionFeatureEdits (function row).",
+      "reason": "Partly shared: the Web reads the source-read cases through projectCanonicalSessionRequest; the edit cases run only through Python's pytest (tests/test_session_compat.py).",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (placement drafts, rendered-ID edits, annotation targets; OV-102, OV-114, OV-133)"
     },
@@ -146,20 +132,6 @@
       "reason": "The editor answers before Generate; rule matches come from Python and the vector pins the drawn decision.",
       "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
       "source": "inventory C section B (rule evaluation; OV-249)"
-    },
-    {
-      "id": "vector:tests/fixtures/hash-rule-migration-vectors.json",
-      "concern": "Hash color rules to source hash (Session 44 and older, R-7)",
-      "pythonOwner": [
-        "gbdraw/session_io.py:migrate_session_hash_rules"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionHashRules"
-      ],
-      "vector": "tests/fixtures/hash-rule-migration-vectors.json",
-      "reason": "Both Load paths migrate the rule values; the vector pins them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
       "id": "vector:tests/fixtures/legacy-render-request-vectors.json",
@@ -512,20 +484,6 @@
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
-      "id": "function:migrateLegacyLinearComparisonDraft",
-      "concern": "Legacy Linear comparison draft rows to current comparisons",
-      "pythonOwner": [
-        "gbdraw/session_io.py:_migrate_legacy_linear_comparison_draft"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/gallery-session-migration.js:migrateLegacyLinearComparisonDraft"
-      ],
-      "vector": null,
-      "reason": "Both Load paths migrate; each side has its own test and no shared vector.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "twin.unregistered.v1 on origin/dev 927b658b"
-    },
-    {
       "id": "function:migratePersistedWebOptionValues",
       "concern": "Retired Session 27-39 option values",
       "pythonOwner": [
@@ -568,34 +526,6 @@
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
-      "id": "function:migrateSessionAnnotationTargets",
-      "concern": "Hash annotation targets to feature identity (Session 44 and older)",
-      "pythonOwner": [
-        "gbdraw/session_io.py:migrate_session_annotation_targets"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionAnnotationTargets"
-      ],
-      "vector": "tests/fixtures/annotation-target-migration-vectors.json",
-      "reason": "Both Load paths migrate; the 19 cases of the shared vector pin them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "inventory C section B (annotation targets; OV-134)"
-    },
-    {
-      "id": "function:migrateSessionFeatureEdits",
-      "concern": "Session 31-44 rendered-ID feature edits to feature identity",
-      "pythonOwner": [
-        "gbdraw/session_io.py:migrate_session_feature_edits"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionFeatureEdits"
-      ],
-      "vector": "tests/fixtures/feature-edit-migration-vectors.json",
-      "reason": "Both Load paths migrate; the 15 edit cases of the shared vector pin them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "inventory C section B (rendered-ID edits; OV-114)"
-    },
-    {
       "id": "function:migrateSessionFeaturePlacements",
       "concern": "Session 41-44 placement drafts scoped by mode",
       "pythonOwner": [
@@ -608,20 +538,6 @@
       "reason": "Both Load paths migrate; the shared vector pins them.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (placement drafts; OV-102)"
-    },
-    {
-      "id": "function:migrateSessionHashRules",
-      "concern": "Hash color rules to source hash (Session 44 and older)",
-      "pythonOwner": [
-        "gbdraw/session_io.py:migrate_session_hash_rules"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionHashRules"
-      ],
-      "vector": "tests/fixtures/hash-rule-migration-vectors.json",
-      "reason": "Both Load paths migrate; the shared vector pins them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
       "id": "function:normalizeCircularTrackPreset",
@@ -844,34 +760,6 @@
       "reason": "Partly the same: the same four layouts; the Web falls back to the default, Python refuses.",
       "retireWhen": "the Web draft keeps its lenient reader only for drafts and the typed value is checked by Python alone (R7)",
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
-    },
-    {
-      "id": "function:splitDraftIntoModes",
-      "concern": "Session 27-44 flat draft into Session 46 mode slices",
-      "pythonOwner": [
-        "gbdraw/session_io.py:split_draft_into_modes"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/mode-scoped-migration.js:splitDraftIntoModes"
-      ],
-      "vector": null,
-      "reason": "Both Load paths split; 41 cases in tests/fixtures/sessions/mode-split-vectors.json and the generated registry (--check) pin them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "inventory C section B (Session 27-44 to mode split; OV-157)"
-    },
-    {
-      "id": "function:splitSetting",
-      "concern": "One setting of a flat draft into mode slices",
-      "pythonOwner": [
-        "gbdraw/session_io.py:_split_setting"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/mode-scoped-migration.js:splitSetting"
-      ],
-      "vector": null,
-      "reason": "Run through splitDraftIntoModes and its 41 shared cases.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "inventory C section B (Session 27-44 to mode split; OV-157)"
     },
     {
       "id": "concern:circular-ring-subject-database",
@@ -1162,15 +1050,15 @@
     },
     {
       "id": "vector:tests/fixtures/sessions/mode-split-vectors.json",
-      "concern": "Session 27-44 flat draft into Session 46 mode slices (cases of function:splitDraftIntoModes)",
+      "concern": "Session 27-44 flat draft into Session 46 mode slices (cases of Python's split_draft_into_modes)",
       "pythonOwner": [
         "gbdraw/session_io.py:split_draft_into_modes"
       ],
       "jsOwner": [
-        "gbdraw/web/js/services/mode-scoped-migration.js:splitDraftIntoModes"
+        "gbdraw/web/js/services/config.js:importSessionDocument"
       ],
       "vector": "tests/fixtures/sessions/mode-split-vectors.json",
-      "reason": "Both Load paths split a legacy draft; the cases pin the slices. The function: row splitDraftIntoModes names the same pair of owners.",
+      "reason": "the Web Load installs Python's split",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "OV-1665 (tests/fixtures subfolders; twin.unregistered.v1 on origin/dev f0b23d4ac)"
     },
@@ -1230,8 +1118,7 @@
       "vector": "tests/fixtures/sessions/drawings-vectors.json",
       "reason": "The Web allocates a new drawing's ID and moves a Session 46-48 to drawings without Python (PD-OI-090); Python reads and re-saves the same files. The ids and upgrades vectors pin both sides.",
       "retireWhen": "Session 46-48 is no longer read and drawing IDs are allocated on one side only",
-      "source": "twin.unregistered.v1 on feat/web-drawings-b e83a60a06 (DRAWINGS-B; P0e)",
-      "pending": true
+      "source": "twin.unregistered.v1 on feat/web-drawings-b e83a60a06 (DRAWINGS-B; P0e)"
     },
     {
       "id": "function:migratedDrawingModes",
@@ -1245,8 +1132,7 @@
       "vector": "tests/fixtures/sessions/drawings-vectors.json",
       "reason": "The Web fast path and Python Load of a Session 46-48 must make the same drawings in the same order (R17-1, R17-2, R17-7); the upgrades vectors pin both.",
       "retireWhen": "Session 46-48 is no longer read",
-      "source": "twin.unregistered.v1 on feat/web-drawings-b e83a60a06 (DRAWINGS-B; P0e)",
-      "pending": true
+      "source": "twin.unregistered.v1 on feat/web-drawings-b e83a60a06 (DRAWINGS-B; P0e)"
     },
     {
       "id": "concern:feature-instance-record-key",

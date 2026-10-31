@@ -13,9 +13,11 @@ const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { reveal, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   SINGLE_FIXTURE, open, generate, history, DEPTH_TSV, colorLegendRow, openCanvas, renameRow
 } = require('./helpers/live-generate-parity-steps.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -254,7 +256,7 @@ const sessionKeyCount = (saved, key) => {
       }
     }
   };
-  walk(saved.modes);
+  walk(savedDrawing(saved, 'circular'));
   return count;
 };
 
@@ -268,10 +270,14 @@ test('A Depth row renamed to Coverage, hidden, shown, saves its key once', async
   await toggleDepth(page);
   expect(await depthRows(page), 'listed').toEqual(['Coverage']);
   const saved = await saveSessionJson(page, 'depth-key-once');
-  const entries = saved.modes.circular.editorState.legend.entries
+  const entries = savedDrawing(saved, 'circular').editorState.legend.entries
     .filter((entry) => /depth|coverage/i.test(`${entry.originalCaption} ${entry.caption}`));
   expect(entries.map((entry) => `${entry.originalCaption}=>${entry.caption}`), 'saved Legend entries').toEqual(['depth=>Coverage']);
-  const text = JSON.stringify(saved.modes.circular.editorState);
+  // A Session 49 drawing's editor state also holds its Result's Legend order (`legend.originalOrder`,
+  // a project field in 48), which names the row's key once; the edits name it at most once more.
+  const { editorState } = savedDrawing(saved, 'circular');
+  expect(editorState.legend.originalOrder.filter((key) => key === 'depth'), 'the Result\'s Legend order').toEqual(['depth']);
+  const text = JSON.stringify({ ...editorState, legend: { ...editorState.legend, originalOrder: [] } });
   expect((text.match(/"depth"/g) || []).length, 'the key "depth" in the saved editor state').toBeLessThanOrEqual(1);
   expect(sessionKeyCount(saved, 'Coverage'), 'a "Coverage" object key').toBeLessThanOrEqual(1);
 });
@@ -911,8 +917,7 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
 test.describe('OV-104 a decoration moved on one mode\'s Result', () => {
   const MODE_NAMES = { circular: 'Circular', linear: 'Linear' };
   const showMode = async (page, target) => {
-    await page.getByRole('button', { name: MODE_NAMES[target], exact: true }).click();
-    await page.waitForFunction((value) => window.__GBDRAW_APP__?.mode === value, target);
+    await showDrawing(page, { kind: target });
     await settleLive(page);
   };
   const moveDecoration = async (page, role) => {
@@ -948,7 +953,7 @@ test.describe('OV-104 a decoration moved on one mode\'s Result', () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
     return {
-      mode: state.generatedMode.value,
+      mode: state.drawingOf(state.generatedDrawingId.value).mode,
       identity: getCommittedSvgResultRuntimeIdentity(window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]),
       delta: compositionUserDeltas(svg)[targetRole]
     };
@@ -1048,7 +1053,7 @@ const displayedResult = (page) => page.evaluate(async () => {
 });
 
 const switchTo = async (page, mode) => {
-  await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: mode });
   await page.waitForFunction((wanted) => window.__GBDRAW_APP__?.mode === wanted, mode);
   await settleLive(page);
 };
@@ -1472,7 +1477,7 @@ for (const mode of ['circular', 'linear']) {
           expect(await overlayElements(page, reacher), 'Undo draws it again').toBe(drawnBefore);
           expect(await committedSlots(page, mode), 'Undo gives the committed request back').toEqual(slotsBefore);
           const saved = await savedUndoSession(page, testInfo.outputPath('after-undo.gbdraw-session.json'));
-          expect(slotIds(saved.renderRequest.diagramOptions.tracks[`${mode}TrackSlots`]), 'a Save after the Undo holds the row').toContain(reacher);
+          expect(slotIds(savedDrawing(saved, mode).renderRequest.diagramOptions.tracks[`${mode}TrackSlots`]), 'a Save after the Undo holds the row').toContain(reacher);
 
           await history(page, 'redo');
           expect(await overlayElements(page, reacher), 'Redo takes it out again').toBe(0);
@@ -1527,7 +1532,7 @@ test('Undo of Hide GC Content with the dialog\'s choice applies at once, with th
     expect(await overlayElements(page, 'plastome_tint')).toBe(0);
     await undoOnce(page);
     const saved = await savedUndoSession(page, testInfo.outputPath('after-undo.gbdraw-session.json'));
-    expect(slotIds(saved.renderRequest.diagramOptions.tracks.circularTrackSlots)).toEqual(expect.arrayContaining(['gc_content', 'plastome_tint']));
+    expect(slotIds(savedDrawing(saved, 'circular').renderRequest.diagramOptions.tracks.circularTrackSlots)).toEqual(expect.arrayContaining(['gc_content', 'plastome_tint']));
     await expectLiveEqualsGenerate(page, { label: 'Undo of Hide GC Content with its choice' });
     await page.context().close();
     page = await load(browser, testInfo.outputPath('after-undo.gbdraw-session.json'));

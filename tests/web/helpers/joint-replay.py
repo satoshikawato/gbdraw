@@ -36,7 +36,10 @@ for kind in ("sourceRecipe", "exactReplay"):
     report = {"kind": kind, "command": command, "exit_code": result.returncode}
     if result.returncode == 0:
         document = json.loads((work / "replayed.gbdraw-session.json").read_text())
-        request = document["renderRequest"]
+        # Session 49: the CLI writes one drawing; read the one the file shows.
+        drawing = next(entry for entry in document["drawings"]
+                       if entry["id"] == document["ui"]["activeDrawingId"])
+        request = drawing["renderRequest"]
         svg = next(work.glob("*.svg"))
         tree = ET.parse(svg)
         paths = [node for node in tree.iter() if node.tag.endswith("}path") and node.get("d")]
@@ -51,7 +54,7 @@ for kind in ("sourceRecipe", "exactReplay"):
         source_record = SeqIO.read(source, "genbank")
         with materialize_session(load_session_document(work / "replayed.gbdraw-session.json"),
                                  output_directory=work / "semantic-check") as materialized:
-            plan = plan_request(session_to_request(materialized))
+            plan = plan_request(session_to_request(materialized, drawing=drawing["id"]))
             assert len(plan.records) == 1
             assert str(plan.records[0].seq) == str(source_record.seq)
             assert [str(feature.location) for feature in plan.records[0].features] == [

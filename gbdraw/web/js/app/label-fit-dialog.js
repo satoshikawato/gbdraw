@@ -67,14 +67,14 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {Readonly<Record<ConfigPath, LabelFitValue>>} values The config overrides, by config path.
  * @property {Readonly<LabelFitTrackOptions>} trackOptions The request track options, by request name.
  */
-/** @typedef {'circular' | 'linear'} LabelFitMode */
+/** @import { DrawingState } from '../state.js' */
 /**
  * @typedef {object} LabelFitDialogPorts
  * @property {(value: LabelFitDialogState) => LabelFitDialogState} reactive Vue `reactive`.
  * @property {(rowToken: LabelFitRowToken, kind: LabelFitRowKind) => Promise<unknown>} computeRow
  *   The Worker's `computeLabelFitRow` reply for one row.
- * @property {(settings: LabelFitRowSettings, mode: LabelFitMode) => void} writeRowSettings
- *   Writes a row's settings into the drawing of `mode` (the request mapping's draft fields).
+ * @property {(settings: LabelFitRowSettings, drawing: DrawingState) => void} writeRowSettings
+ *   Writes a row's settings into `drawing` (the request mapping's draft fields).
  * @property {(label: () => string, handler: (choice: string) => unknown, cancel: () => unknown) =>
  *   (choice: string) => unknown} withHistory The modal choice's one History step (`createDialogChoice`).
  * @property {(close: () => unknown) => void} closeAfterChoice
@@ -112,8 +112,8 @@ export const createLabelFitDialog = ({
   // The rows' values stay with the report, out of the reactive display state.
   /** @type {Map<LabelFitRowKind, LabelFitRow>} */
   let rowsByKind = new Map();
-  /** @type {LabelFitMode} */
-  let dialogMode = 'circular';
+  /** @type {DrawingState | null} */
+  let dialogDrawing = null;
   /** @type {LabelFitRowToken | null} */
   let dialogRowToken = null;
   let openCount = 0;
@@ -174,12 +174,12 @@ export const createLabelFitDialog = ({
    * Opens the dialog on a report; with a row token, computes the rows the
    * report did not search, one after another.
    * @param {LabelFitReport} report
-   * @param {{ rowToken?: LabelFitRowToken | null, mode: LabelFitMode }} options
+   * @param {{ rowToken?: LabelFitRowToken | null, drawing: DrawingState }} options
    */
-  const openLabelFitDialog = (report, { rowToken = null, mode }) => {
+  const openLabelFitDialog = (report, { rowToken = null, drawing }) => {
     openCount += 1;
     const opened = openCount;
-    dialogMode = mode;
+    dialogDrawing = drawing;
     dialogRowToken = rowToken;
     rowsByKind = new Map(report.rows.map((row) => [row.kind, row]));
     dialog.drawn = report.drawn;
@@ -221,7 +221,8 @@ export const createLabelFitDialog = ({
     () => {
       const row = rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind));
       if (!row || !labelFitRowOffered(row.status) || !row.values) return false;
-      writeRowSettings({ values: row.values, trackOptions: row.trackOptions }, dialogMode);
+      if (!dialogDrawing) return false;
+      writeRowSettings({ values: row.values, trackOptions: row.trackOptions }, dialogDrawing);
       closeAfterChoice(close);
       return true;
     },

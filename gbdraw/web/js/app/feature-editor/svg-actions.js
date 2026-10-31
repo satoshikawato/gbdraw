@@ -658,7 +658,7 @@ export const createFeatureSvgActions = ({
     /** @type {typeof feat | undefined} */
     let target = feat;
     let renderedSvgId = renderedFeatureSvgId(feat);
-    const catalogFeatures = resultCatalogFeatures(state);
+    const catalogFeatures = resultCatalogFeatures(state, drawing.mode);
     const key = stableFeatureOverrideKey(feat);
     if (catalogFeatures && key) {
       target = catalogFeatures.renderedByIdentity.get(key)

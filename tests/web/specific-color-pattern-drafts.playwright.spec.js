@@ -4,12 +4,15 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp, reveal, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 const { inspectSafeDetails } = require('./helpers/operation-error.cjs');
+const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 const fixture = mode => join(process.cwd(), 'gbdraw/web/gallery/sessions', mode === 'linear'
   ? 'lambda_basic_linear.gbdraw-session.json' : 'HmmtDNA_basic_circular.gbdraw-session.json');
 const load = async (page, file) => {
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
+  // A phone Load shows the Preview pane; the color rules are in Settings.
+  await showPhonePane(page, 'settings');
 };
 const setup = async (page, mode = 'circular') => {
   page.on('dialog', dialog => dialog.accept());
@@ -85,6 +88,8 @@ for (const mode of ['circular', 'linear']) for (const width of [1600, 390]) {
     await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
     await expect(field).toHaveValue('😀[PRIVATE_PATTERN_SENTINEL');
     await page.evaluate(() => window.__GBDRAW_APP__.closeRightDrawer());
+    // Opening the Editor showed the Preview pane on a phone; the rule is in Settings.
+    await showPhonePane(page, 'settings');
     const revert = status(page).getByRole('button', { name: 'Revert', exact: true });
     await revert.scrollIntoViewIfNeeded(); await revert.focus(); await revert.press('Enter');
     await expect(field).toBeFocused();
@@ -251,12 +256,13 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   // Fail after reset/commit began: actual Session owner must restore source first.
   await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    // The first palette write of the reset throws once, then the ref behaves normally again.
-    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.activeDrawing().selectedPalette), 'value');
-    Object.defineProperty(state.activeDrawing().selectedPalette, 'value', {
+    // The commit's first applied-palette write throws once (a Load commits new
+    // drawing states, so the shown drawing's own refs are not written), then the ref behaves normally again.
+    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.appliedPaletteName), 'value');
+    Object.defineProperty(state.appliedPaletteName, 'value', {
       configurable: true,
       get() { return accessor.get.call(this); },
-      set() { delete state.activeDrawing().selectedPalette.value; throw new Error('PRIVATE_COMMIT_SENTINEL'); }
+      set() { delete state.appliedPaletteName.value; throw new Error('PRIVATE_COMMIT_SENTINEL'); }
     });
   });
   await load(page, fixture('circular'));
@@ -305,7 +311,8 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
       await generateAndWaitForResult(page);
       // Settle the existing mode-keyed mount's stroke binding before freezing
       // the accepted boundary. The held edit must preserve every SVG attribute.
-      await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.selectDrawing('linear'); a.selectDrawing('circular'); });
+      await showDrawing(page, { kind: 'linear' });
+      await showDrawing(page, { kind: 'circular' });
       await snapshot(page);
     }
     // Session: no Load takes over a held edit. A rule edit's only request is

@@ -35,6 +35,7 @@ from gbdraw.render.track_slot_metadata import (
     collect_track_slot_geometry_records,
 )
 from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
     SessionBuildContext,
     SessionFileBinding,
     _write_validated_session_json,
@@ -676,10 +677,12 @@ def _session_sidecar_path(
 def _rendered_drawing_build(
     plan: Any,
     rendered: RequestRenderResult | CircularBatchRenderResult,
-    *,
-    source_version: int,
 ) -> tuple[Any, dict[str, Any] | None]:
-    """The re-save of one rendered drawing: its request, Results and artifacts."""
+    """The re-save of one rendered drawing: its request, Results and artifacts.
+
+    ``plan`` is a drawing of the current Session the re-save was upgraded to,
+    so its artifacts are that drawing's own view (OV-1910).
+    """
 
     from gbdraw.api.request_render import CircularBatchRenderResult, stored_protein_result_request
     from gbdraw.session import _DrawingBuild, require_search_frame_protein_results
@@ -690,7 +693,7 @@ def _rendered_drawing_build(
     # built from the drawing copies its data once (SessionDocument).
     state, web_file_inventory = project_session_adjunct_for_current_write(
         plan.drawing.artifacts.fields,
-        source_version=source_version,
+        source_version=CURRENT_SESSION_VERSION,
     )
     state = with_current_artifacts(
         state,
@@ -773,8 +776,8 @@ def render_session_drawings_cli(
     ``drawings`` selects drawings by ID or name; ``None`` renders every drawing
     with a committed render. ``-o`` splits into the output directory and
     prefix; several drawings get ``<prefix>_<ID>``. With a re-save, the
-    document is brought to the current version and validated before any
-    render; every diagram path and the sidecar are checked together before the
+    document, validated when it was loaded, is brought to the current version
+    before any render; every diagram path and the sidecar are checked together before the
     first write; and the re-save replaces only the rendered drawings. Without
     a re-save, the resources' embedded data is dropped from ``document`` once
     its files are written: afterwards ``document`` and the drawing artifacts
@@ -793,16 +796,17 @@ def render_session_drawings_cli(
         _release_materialized_resource_data,
         _render_session_drawing_plans,
         _session_parse_cache,
+        _upgraded_session,
         _write_session_document,
         materialize_session,
-        upgrade_session_document,
     )
 
     save = bool(save_session or session_output)
-    # The document the re-save is built from is validated before any render.
+    # The document the re-save is built from was validated when it was loaded;
+    # its move to drawings is checked with the document written (OV-1815).
     # The upgrade logs a warning for each drawing whose Results it drops; the
     # render below writes new Results for the rendered drawings.
-    base = upgrade_session_document(document).document if save else document
+    base = _upgraded_session(document, None, checked=False).document if save else document
     output_path = Path(output_override) if output_override else None
     output_directory = (
         output_path.parent if output_path is not None and output_path.parent != Path("") else Path.cwd()
@@ -862,11 +866,7 @@ def render_session_drawings_cli(
         builds = []
         web_file_inventory: dict[str, Any] | None = None
         for plan in plans:
-            build, inventory = _rendered_drawing_build(
-                plan,
-                rendered[plan.drawing.id],
-                source_version=base.version,
-            )
+            build, inventory = _rendered_drawing_build(plan, rendered[plan.drawing.id])
             builds.append(build)
             # The drawings of a current Session share their Web file inventory.
             web_file_inventory = web_file_inventory or inventory

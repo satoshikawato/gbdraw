@@ -983,19 +983,6 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       return result;
     }
   },
-  [DIAGRAM_HELPER_OPERATIONS.CONVERT_MAIN_SESSION_COMPARISON_FRAME]: {
-    keys: ['tableText', 'queryFrame', 'subjectFrame'],
-    fileRoles: [],
-    run: (pyodide, payload) => callJsonHelper(
-      pyodide,
-      'main_session_table_text_to_search_frame_json',
-      [
-        String(payload.tableText || ''),
-        jsonArgument(payload.queryFrame, {}),
-        jsonArgument(payload.subjectFrame, {})
-      ]
-    )
-  },
   // A Session up to 47 stored the protein results of a reversed Linear record
   // in the drawn frame: Python returns their bytes in the search frame by
   // stored resource ID (OV-1145), from the drawing's request and its staged files.
@@ -1009,6 +996,17 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         `${workspace}/output`,
         jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
       ]
+    )
+  },
+  // Load of a Session 27-44: Python returns its Session 50, the stored Results
+  // a Session 50 cannot hold, and the Load repairs (DESIGN 4.3). The resources
+  // travel inside the document, so the call names no file.
+  [DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION]: {
+    keys: ['document', 'storedRequestSchema'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(
+      pyodide, 'legacy_session_to_drawings_json',
+      [jsonArgument(payload.document, null), jsonArgument(payload.storedRequestSchema, null)]
     )
   },
   // Generate's ring search output in the search frame of the records its

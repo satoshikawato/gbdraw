@@ -3,13 +3,13 @@
 // copy of it alone), so it declares the identity of utils/i18n.js `msg`.
 /** @param {string} text */
 const msg = (text) => text;
-const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
+const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords',
   'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readFeatureOverrideTable', 'registerFonts', 'resolveLegacyProteinReferences',
-  'resolveSimilarityAlignment', 'synthesizeColorRules', 'validateConfigOverrides', 'session-save', 'session-load']);
+  'resolveSimilarityAlignment', 'synthesizeColorRules', 'upgradeLegacySession', 'validateConfigOverrides', 'session-save', 'session-load']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
-  'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'write', 'parse']);
+  'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'write', 'parse', 'drawing-list']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
 recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick font_size font_family plot_title_font_size height large_tick_interval small_tick_interval tick_font_size
 inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_shaft_width_ratio keep_definition_left_aligned color action feature_type qualifier value record_id label_text
@@ -98,6 +98,9 @@ const REASONS = Object.freeze({
   OUTPUT: 'The search output was not BLAST outfmt 6 rows for the searched records.',
   JSON_FORMAT: 'Use valid JSON.', VISIBILITY_ACTION: 'Use show, off, or exclude_matching; accepted aliases are on, hide, false, and 0.',
   TARGET_RECORD: 'Choose an available target record.',
+  // A drawing's name (app/drawing-list.js; Python's _identity_problem).
+  BLANK_NAME: 'Enter a name for the drawing.',
+  REPEATED_NAME: 'Another drawing has this name. Names that differ only in letter case are the same name.',
   DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',
   DEPTH_SERIES_SOURCE: 'Attach a Depth TSV to this series, or remove the series.',
   BOTH_ENDPOINTS: 'Supply both region endpoints or leave both empty.', SPECIFIC_COLUMNS: 'Supply four or five tab-separated columns.',
@@ -390,6 +393,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {string} [featureCaption]
  * @property {string} [sessionTable]
  * @property {'circular' | 'linear'} [diagramMode]
+ * @property {string} [drawingId] the drawing whose Result the failure concerns, when it is not the one shown
  * @property {number} [featureStart]
  * @property {number} [featureEnd]
  * @property {number} [featureCount]
@@ -685,6 +689,7 @@ const contextFor = (value) => {
   if (inputs) context.largestInputs = inputs;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
+  if (typeof value.drawingId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value.drawingId)) context.drawingId = value.drawingId;
   // Python words the label fit counts (gbdraw/labels/fit.py): one line of printable text, shown as sent.
   if (typeof value.labelFitCounts === 'string' && value.labelFitCounts.length <= 80 && /^[\x20-\x7e]+$/.test(value.labelFitCounts)) {
     context.labelFitCounts = value.labelFitCounts;

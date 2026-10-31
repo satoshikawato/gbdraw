@@ -212,7 +212,7 @@ test('accepts a stack without one Features row whatever underlay types are confi
 
 test('Linear editor live validation does not read the configured underlay types (TK-13)', () => {
   const state = {
-    form: { linear_track_layout: 'middle', show_depth: false },
+    mode: 'linear', form: { linear_track_layout: 'middle', show_depth: false },
     adv: {
       linear_track_slots: [{
         id: 'space', renderer: 'spacer', enabled: true,
@@ -559,7 +559,7 @@ test('Linear editor shows the row issue after a File clear keeps the series', ()
   const slots = [feature(), depth('depth_1', 0, { custom: 'manual' }), depth('depth_2', 1)];
   const editor = createLinearTrackSlotEditor({
     state: withDrawings({
-      form: { linear_track_layout: 'middle', show_depth: true },
+      mode: 'linear', form: { linear_track_layout: 'middle', show_depth: true },
       adv: { linear_track_slots: slots, linear_track_slots_axis_index: 0, nt: 'GC', depth_tracks: [] },
       linearSeqs: [{ depth: [null, { name: 'b.depth.tsv' }] }],
       annotationSets: []
@@ -579,7 +579,7 @@ test('Linear editor shows row and global issues in the UI language (D-51)', asyn
   const spacer = (id) => ({ id, renderer: 'spacer', enabled: true, side: 'below', z: 0, params: {} });
   const slots = [feature(), spacer('gap'), spacer('gap')];
   const state = withDrawings({
-    form: { linear_track_layout: 'middle', show_depth: false },
+    mode: 'linear', form: { linear_track_layout: 'middle', show_depth: false },
     adv: { linear_track_slots: slots, linear_track_slots_axis_index: 9, nt: 'GC', depth_tracks: [] },
     linearSeqs: [],
     annotationSets: []
@@ -972,7 +972,7 @@ test('omitted pixel fields remain auto and disabled valid drafts retain geometry
 
 test('invalid depth height remains editable without overwriting its last valid config', () => {
   const slot = depth('depth', 0, { height: '10px' });
-  const state = { form: { linear_track_layout: 'middle' }, adv: { linear_track_slots: [slot], depth_tracks: [{ height: 10 }] }, files: { linearSeqs: [] }, annotationSets: [] };
+  const state = { mode: 'linear', form: { linear_track_layout: 'middle' }, adv: { linear_track_slots: [slot], depth_tracks: [{ height: 10 }] }, files: { linearSeqs: [] }, annotationSets: [] };
   const editor = createLinearTrackSlotEditor({ state: withDrawings(state) });
   editor.setLinearTrackSlotHeight(slot, 'px');
   assert.equal(slot.height, 'px');

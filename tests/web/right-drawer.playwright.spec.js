@@ -3,6 +3,8 @@ const { writeFileSync } = require('node:fs');
 const { CURRENT_SESSION_VERSION, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { semantics, switchMode, snapshot: readSnapshot } = require('./helpers/mode-transition.cjs');
 const { semantics: svgSemantics } = require('./helpers/visual-state.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const snapshot = async (page) => {
   // Opening an imported Editor hydrates transient DOM label bindings and its
@@ -245,12 +247,14 @@ for (const viewport of ISSUE_461_VIEWPORTS) {
     const drawer = page.locator('.right-drawer');
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await waitForSettledDrawer(page);
-    const initialSurface = await readSettledPreviewSurface(page);
 
     const closedGeometry = await readOverlayGeometry(page);
     logOverlayGeometry(viewport, 'closed', closedGeometry);
     assertOverlayGeometry(closedGeometry, `${viewport.id} drawer closed`, false);
     await exercisePreviewControls(page);
+    // The Load fitted the figure (R17-25); the controls left it at 100 % with
+    // the fitted pan, which opening and closing the Editor keeps.
+    const initialSurface = await readSettledPreviewSurface(page);
 
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -382,6 +386,7 @@ for (const viewport of MOBILE_VIEWPORTS) {
       await page.setViewportSize(viewport);
       await expect(page.locator('.drawer-toggle')).toHaveCount(0);
       expect((await loadGallerySession(page, filename)).status).toBe('ok');
+      await showPhonePane(page, 'preview');
       const toggle = page.locator('.drawer-toggle');
       const drawer = page.locator('.right-drawer');
       const initialAccessibility = await toggle.ariaSnapshot();
@@ -512,13 +517,13 @@ test('mobile overlays preserve mode, source replacement, and resize behavior', a
   // the established last-Result availability semantics.
   const replacement = await page.evaluate(async () => {
     const session = await (await fetch('/gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')).json();
-    const resource = session.resources[session.renderRequest.records[0].source.resourceId];
+    const resource = session.resources[session.drawings.find((entry) => entry.id === session.ui.activeDrawingId).renderRequest.records[0].source.resourceId];
     return atob(resource.data);
   });
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
     name: 'lambda-replacement.gb', mimeType: 'text/plain', buffer: Buffer.from(replacement)
   });
-  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.circularRecordDiscovery.status)).not.toBe('loading');
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status)).not.toBe('loading');
   await expect(toggle).toHaveCount(1);
   await expect(page.locator('.right-drawer')).toHaveCount(1);
   await centerPreview(page);
@@ -774,6 +779,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
   if (liveCase.viewport) await page.setViewportSize(liveCase.viewport);
   const imported = await loadGallerySession(page, liveCase.session);
   expect(imported.status).toBe('ok');
+  await showPhonePane(page, 'preview');
   await page.locator('.drawer-toggle').click();
   await expect(page.locator('.right-drawer').getByText(/^Features \(\d+\)$/)).toBeVisible();
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
@@ -984,12 +990,11 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   // The Python writer has no Web draft: Load takes the request's projection, and
-  // the mode's slice (Session 46) holds only the comparison plan this test sets.
+  // the shown drawing's config holds the comparison plan this test sets.
   const session = Buffer.from(await page.evaluate(async (source) => {
     const document = JSON.parse(source);
-    document.modes = { [document.renderRequest.mode]: {
-      config: { linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] } }
-    } };
+    const shown = document.drawings.find((drawing) => drawing.id === document.ui.activeDrawingId);
+    shown.config = { ...shown.config, linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] } };
     return JSON.stringify(document);
   }, typedSession));
   const importSession = async (bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
@@ -1072,12 +1077,12 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   const saved = readFileSync(await download.path());
   const document = JSON.parse(gunzipSync(saved).toString('utf8'));
   expect(document.version).toBe(CURRENT_SESSION_VERSION);
-  expect(document.editorState.featureCatalog.items[0].orthogroups.map((group) => group.id)).toEqual(['og_1', 'og_2']);
+  expect(shownSavedDrawing(document).editorState.featureCatalog.items[0].orthogroups.map((group) => group.id)).toEqual(['og_1', 'og_2']);
   expect(await importSession(saved, download.suggestedFilename())).toMatchObject({ status: 'ok' });
   expect(await verifyGroups()).toEqual(before);
   const rollback = await evaluateWithRetainedPromise(page, async (bytes) => {
     const { state } = await import('./js/state.js');
-    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
+    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const previous = state.collinearGroups.value;
     let beforePreviewMountCalled = false;
     const result = await importSession({ target: {
@@ -1162,7 +1167,9 @@ test('a collinear ribbon without a collinear group scope pairs its genes by simi
 const exposeControl = async (page, control) => {
   await control.evaluate((element) => {
     element.scrollIntoView({ block: 'center', inline: 'nearest' });
-    const header = document.querySelector('.app-header').getBoundingClientRect();
+    // The header covers the top only while fixed or sticky; at the narrowest widths it scrolls with the page.
+    const headerEl = document.querySelector('.app-header');
+    const header = /fixed|sticky/.test(getComputedStyle(headerEl).position) ? headerEl.getBoundingClientRect() : { bottom: 0 };
     const generate = document.querySelector('.generate-bar');
     const bottom = getComputedStyle(generate).position === 'fixed'
       ? generate.getBoundingClientRect().top : innerHeight;
@@ -1188,6 +1195,7 @@ for (const viewport of [
   test(`compact Editor scroll recovery at ${viewport.width}x${viewport.height}`, async ({ page }, info) => {
     await page.setViewportSize(viewport);
     expect((await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz')).status).toBe('ok');
+    await showPhonePane(page, 'preview');
     const initialPageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     const toggle = page.locator('.drawer-toggle');
     await exposeControl(page, toggle);
@@ -1212,8 +1220,15 @@ for (const viewport of [
     await expect(drawer.getByRole('button', { name: /Features$/ })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(drawer.getByRole('button', { name: /Similarity groups$/ })).toBeFocused();
-    // Nothing has moved yet, so Reset layout is disabled and takes no focus.
-    await expect(page.getByRole('button', { name: 'Reset layout', exact: true })).toBeDisabled();
+    // The Load fitted the figure (R17-25), as a Gallery example Load did: the
+    // fitted view is zoomed and panned, so Reset layout is enabled. It returns
+    // the view to 100 %; then nothing has moved, so it is disabled and takes no focus.
+    const resetLayout = page.getByRole('button', { name: 'Reset layout', exact: true });
+    await exposeControl(page, resetLayout);
+    await expect(resetLayout).toBeEnabled();
+    await resetLayout.click();
+    await expect(page.getByRole('button', { name: 'Reset zoom', exact: true })).toHaveText('100%');
+    await expect(resetLayout).toBeDisabled();
     for (const name of ['Toggle layout edit mode', 'Toggle canvas padding controls', 'Zoom in', 'Reset zoom', 'Zoom out']) {
       const control = page.getByRole('button', { name, exact: true });
       await exposeControl(page, control);
@@ -1224,7 +1239,6 @@ for (const viewport of [
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Reset zoom', exact: true })).toHaveText('110%');
     // The zoom change enables Reset layout.
-    const resetLayout = page.getByRole('button', { name: 'Reset layout', exact: true });
     await exposeControl(page, resetLayout);
     await resetLayout.focus();
     await expect(resetLayout).toBeFocused();
@@ -1265,6 +1279,7 @@ for (const [mode, session] of [
   test(`compact ${mode} pan zoom and responsive transitions preserve artifact and History`, async ({ page }, info) => {
     await page.setViewportSize({ width: 390, height: 740 });
     expect((await loadGallerySession(page, session)).status).toBe('ok');
+    await showPhonePane(page, 'preview');
     const before = await snapshot(page);
     const beforeHistory = await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]);
     await page.evaluate(() => {
@@ -1287,8 +1302,13 @@ for (const [mode, session] of [
     await page.mouse.up();
     await expect.poll(() => page.evaluate(() => ({ ...window.__GBDRAW_APP__.canvasPan }))).toEqual({ x: pan.x + 30, y: pan.y + 12 });
     await page.mouse.move(box.x + 4, box.y + 4);
+    // The Load fitted the figure (R17-25): the wheel steps up from the fitted
+    // zoom onto the 0.1 grid of the zoom steps.
+    const fittedZoom = await page.evaluate(() => window.__GBDRAW_APP__.zoom);
+    expect(fittedZoom).not.toBe(1);
     await page.mouse.wheel(0, -100);
-    await expect(page.getByRole('button', { name: 'Reset zoom', exact: true })).toHaveText('110%');
+    await expect(page.getByRole('button', { name: 'Reset zoom', exact: true }))
+      .toHaveText(`${Math.round((fittedZoom + 0.1) * 10) * 10}%`);
     for (const viewport of [{ width: 1600, height: 1000 }, { width: 390, height: 844 }, { width: 390, height: 740 }]) {
       await page.setViewportSize(viewport);
       await waitForSettledDrawer(page);
@@ -1359,7 +1379,7 @@ test('compact Editor reconciles availability and restores its tab after failed S
   const failure = await evaluateWithRetainedPromise(page, async () => {
     const name = 'HmmtDNA_basic_circular.gbdraw-session.json';
     const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
-    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
+    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {
       beforePreviewMount: () => { throw new Error('S05 Session rollback probe'); }
     });

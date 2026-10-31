@@ -30,6 +30,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createAuxiliaryFileImports, setupWatchers } = await import('../../gbdraw/web/js/app/watchers.js');
 const { memberWriteSites, sliceHandleCalls } = await import('./helpers/drawing-writes.mjs');
@@ -134,7 +135,9 @@ test('an auxiliary table imports through its file input, into the drawing shown 
   const imported = importAuxiliaryTable('blacklist', new File(['M3_12_WORD\n'], 'blacklist.txt', { type: 'text/plain' }));
   installShownDrawing('circular');
   assert.equal(await imported, true);
-  assert.equal(state.files.blacklist?.name, 'blacklist.txt');
+  // The card binds the file in the drawing it was chosen in (R16-4).
+  assert.equal(state.inputFiles.fileOf(modeDrawing(state, 'linear').files.blacklist)?.name, 'blacklist.txt');
+  assert.equal(modeDrawing(state, 'circular').files.blacklist, null);
   assert.match(modeDrawing(state, 'linear').manualBlacklist.value, /M3_12_WORD/);
   assert.equal(modeDrawing(state, 'circular').manualBlacklist.value, before);
 });
@@ -162,10 +165,10 @@ const functionBody = (name) => {
 };
 // A drawing write: an assignment or an array mutator through a drawing (a
 // `drawing` parameter, `state.drawings.<id>` or `[...]`, `state.drawingOf(...)`,
-// `state.drawingOfMode(...)`, `activeDrawing()`, or a local alias of one of
+// `activeDrawing()`, or a local alias of one of
 // these), or a whole-object writer.
-const DRAWING_RECEIVER = String.raw`\bdrawing|\bstate\.drawings(?:\.\w+|\[[^\]]+\])|\bdrawings\.\w+|\bstate\.drawingOf(?:Mode)?\([^()]*\)|\bactiveDrawing\(\)`;
-const DRAWING_ALIAS = /\b(?:const|let)\s+(\w+)\s*=\s*(?:state\.drawings(?:\.\w+|\[[^\]]+\])|state\.drawingOf(?:Mode)?\([^()]*\)|(?:state\.)?activeDrawing\(\))/g;
+const DRAWING_RECEIVER = String.raw`\bdrawing|\bstate\.drawings(?:\.\w+|\[[^\]]+\])|\bdrawings\.\w+|\bstate\.drawingOf\([^()]*\)|\bactiveDrawing\(\)`;
+const DRAWING_ALIAS = /\b(?:const|let)\s+(\w+)\s*=\s*(?:state\.drawings(?:\.\w+|\[[^\]]+\])|state\.drawingOf\([^()]*\)|(?:state\.)?activeDrawing\(\))/g;
 const WHOLE_OBJECT_WRITE = /\b(replaceReactiveObject|replaceReactiveArray|clearReactiveObject|apply(?:Captured)?ConfigData)\(/;
 /** @param {string} text */
 const writesDrawing = (text) => {

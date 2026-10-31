@@ -15,7 +15,7 @@ assert.equal(autoValues.autoValueText('rulerLabelFontSize'), 'Auto (by genome si
 
 const linked = { value: true };
 const adv = { scale_font_size: null, ruler_label_font_size: null };
-const typography = createLinearTypographyController({ adv, linked });
+const typography = createLinearTypographyController({ shownDrawing: () => ({ adv, linearTypographyLinked: linked }) });
 
 assert.equal(linked.value, true);
 typography.setScaleFontSize('18');
@@ -59,3 +59,7 @@ for (const [ui, expected] of [
   }), expected);
   assert.deepEqual(importedEqual, { scale_font_size: 14, ruler_label_font_size: 14 });
 }
+
+const hidden = createLinearTypographyController({ shownDrawing: () => null });
+assert.equal(hidden.setLinked(false), false);
+assert.equal(hidden.setRulerLabelFontSize('7'), false);

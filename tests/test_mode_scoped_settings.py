@@ -17,9 +17,11 @@ import gbdraw.cli_utils.session as cli_session_module
 from gbdraw.api.session_compat import _session_protein_mode
 from gbdraw.exceptions import ValidationError
 from gbdraw.linear import linear_main
-from gbdraw.session import load_session_document
+from gbdraw.session import load_session_document, upgrade_session_document
+from tests.utils.session_drawing_view import drawing_view, upgrade_to_mode_scoped
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
+    MODE_SCOPED_SESSION_MAX_VERSION,
     FLAT_DRAFT_TOP_LEVEL_FIELDS,
     SUPPORTED_SESSION_VERSIONS,
     expand_session_feature_catalog,
@@ -38,6 +40,8 @@ from gbdraw.web_support.mode_scoped_settings import (
     SLICE_CONTAINERS,
     unmanaged_config_override_modes,
 )
+
+MODE_SCOPED_VERSION = MODE_SCOPED_SESSION_MAX_VERSION  # the upgrade's layout before its move to drawings (upgrade_to_mode_scoped)
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -340,15 +344,18 @@ def test_split_needs_the_saved_results_mode_and_writes_no_slices_without_a_draft
 
 @pytest.fixture(scope="module")
 def written_session_46(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
-    """A Session 46 that the CLI wrote from a Web-saved two-mode Session 44."""
+    """The mode-scoped Session 48 the upgrade builds from a Web-saved two-mode Session 44.
 
-    work = tmp_path_factory.mktemp("session-46")
-    sidecar = work / "replay.gbdraw-session.json"
-    linear_main(
-        ["--session", str(FIXTURES / "feature-placements-linear.v44.gbdraw-session.json.gz"),
-         "--output", str(work / "replay"), "--format", "svg", "--session_output", str(sidecar)]
+    It is the layout before the upgrade's move to drawings; no writer writes it
+    since Session 49 (the CLI re-save upgrades its base first).
+    """
+
+    upgraded = upgrade_to_mode_scoped(
+        FIXTURES / "feature-placements-linear.v44.gbdraw-session.json.gz",
+        tmp_path_factory.mktemp("session-46"),
     )
-    return load_session_document(sidecar).to_dict()
+    assert upgraded["version"] == MODE_SCOPED_VERSION
+    return upgraded
 
 
 @pytest.fixture
@@ -357,7 +364,7 @@ def session_46(written_session_46: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_session_46_reads_two_mode_slices_and_rejects_session_45(session_46: dict[str, Any]) -> None:
-    assert CURRENT_SESSION_VERSION == 50 and 45 not in SUPPORTED_SESSION_VERSIONS
+    assert 45 not in SUPPORTED_SESSION_VERSIONS
     assert set(session_46["modes"]) == {"circular", "linear"}
     validate_session(session_46)
     with pytest.raises(ValidationError, match="Unsupported session version: 45"):
@@ -448,20 +455,39 @@ def test_session_protein_mode_reads_the_linear_slice() -> None:
 # --- the CLI re-save ----------------------------------------------------------
 
 
-def test_cli_resave_keeps_a_session_46_slices(tmp_path: Path) -> None:
-    fixture = FIXTURES / "feature-placements-linear.v44.gbdraw-session.json.gz"
+@pytest.mark.parametrize(
+    ("mode", "fixture"),
+    [
+        ("linear", "feature-placements-linear.v44"),
+        ("circular", "font-family-preserved.v46"),
+        ("linear", "BGC0000708-BGC0000713.v47"),
+        ("linear", "two-mode-linear-shown.v48"),
+    ],
+)
+def test_cli_resave_of_a_session_44_to_48_keeps_each_drawings_slice(
+    tmp_path: Path, mode: str, fixture: str
+) -> None:
+    # OV-1910: the re-save upgrades a 27-48 base to Session 49 first and
+    # writes the rendered drawing's own view; every drawing keeps the slice
+    # the upgrade gave it, and a second re-save writes the same drawings.
+    from gbdraw.circular import circular_main
+
+    main = linear_main if mode == "linear" else circular_main
+    source = FIXTURES / f"{fixture}.gbdraw-session.json.gz"
     first = tmp_path / "first.gbdraw-session.json"
     second = tmp_path / "second.gbdraw-session.json"
-    for source, sidecar in ((fixture, first), (first, second)):
-        linear_main(
-            ["--session", str(source), "--output", str(tmp_path / sidecar.stem), "--format", "svg",
-             "--session_output", str(sidecar)]
-        )
+    for step, (base, sidecar) in enumerate(((source, first), (first, second))):
+        main(["--session", str(base), "--output", str(tmp_path / str(step) / "replay"), "--format", "svg",
+              "--session_output", str(sidecar)])
 
     written = [load_session_document(path).to_dict() for path in (first, second)]
+    upgraded = upgrade_session_document(source, temporary_directory=tmp_path).document.to_dict()
     assert [payload["version"] for payload in written] == [CURRENT_SESSION_VERSION] * 2
-    assert written[1]["modes"] == written[0]["modes"]
-    assert "config" not in written[1] and "features" not in written[1]
+    assert written[1]["drawings"] == written[0]["drawings"]
+    slices = ("mode", "config", "ui", "features")
+    assert [{key: drawing.get(key) for key in ("id", *slices)} for drawing in written[0]["drawings"]] == [
+        {key: drawing.get(key) for key in ("id", *slices)} for drawing in upgraded["drawings"]
+    ]
 
 
 def test_session_48_keeps_what_the_file_cards_imported_through_a_cli_resave(
@@ -486,7 +512,7 @@ def test_session_48_keeps_what_the_file_cards_imported_through_a_cli_resave(
          "--session_output", str(sidecar)]
     )
 
-    config = load_session_document(sidecar).to_dict()["modes"]["linear"]["config"]
+    config = drawing_view(load_session_document(sidecar).to_dict(), mode="linear")["modes"]["linear"]["config"]
     assert {key: config[key] for key in marks} == marks
 
 
@@ -508,16 +534,23 @@ def test_cli_resave_of_a_config_less_session_44_moves_its_request_annotation_tar
          "--session_output", str(sidecar)]
     )
 
-    saved = load_session_document(sidecar).to_dict()
+    written = load_session_document(sidecar).to_dict()
+    saved = drawing_view(written, mode="linear")
     targets = [
         (annotation["id"], annotation["target"]["kind"])
         for annotation_set in saved["modes"]["linear"]["config"]["annotationSets"]
         for annotation in annotation_set["annotations"]
     ]
     assert [kind for _, kind in targets] == ["featureIdentity", "featureSpan", "featureSpan"]
-    assert set(saved["modes"]["linear"]["config"]) == {"annotationSets"}
+    # The group names its orthogroupState holds (none) go to the Linear
+    # drawing's webEdits, as every Session 27-44 conversion moves them.
+    assert saved["modes"]["linear"]["config"] == {
+        "annotationSets": saved["modes"]["linear"]["config"]["annotationSets"],
+        "webEdits": {"orthogroupNameOverrides": {}, "orthogroupDescriptionOverrides": {}},
+    }
     # Every target is bound to a Linear record.
-    assert all(not annotation_set["annotations"] for annotation_set in saved["modes"]["circular"]["config"]["annotationSets"])
+    circular = drawing_view(written, mode="circular")["modes"]["circular"]["config"]["annotationSets"]
+    assert all(not annotation_set["annotations"] for annotation_set in circular)
     assert saved["renderRequest"]["diagramOptions"]["annotations"] == source["renderRequest"]["diagramOptions"]["annotations"]
     assert "INFO: 1 annotation(s) from Session version 44 named a feature by hash=" in caplog.text
 

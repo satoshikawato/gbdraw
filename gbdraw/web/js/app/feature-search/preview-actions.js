@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../../state.js' */
+/** @import { DrawingId } from '../../services/drawing-view.js' */
 import {
   buildFeatureSearchIndex,
   formatSearchMatchLine,
@@ -412,16 +413,16 @@ export const createPreviewFeatureSearch = ({
     scheduleRefreshSearch({ preserveActive: false });
   };
 
-  // A search belongs to the mode it was typed in: the mode transition keeps
-  // the departing mode's search and installs the arriving one's, which the
-  // arriving Result's mount applies (`handleMountedResultReady`).
-  /** @type {Map<string, SearchDraft>} */
-  const searchByMode = new Map();
-  /** @param {string} departing @param {string} arriving */
-  const switchModeSearch = (departing, arriving) => {
-    searchByMode.set(departing, captureSearch());
-    installSearch(searchByMode.get(arriving) || EMPTY_SEARCH);
-    searchByMode.delete(arriving);
+  // A search belongs to the drawing it was typed in: the drawing transition
+  // keeps the departing drawing's search and installs the arriving one's,
+  // which the arriving Result's mount applies (`handleMountedResultReady`).
+  /** @type {Map<DrawingId, SearchDraft>} */
+  const searchByDrawing = new Map();
+  /** @param {DrawingId} departing @param {DrawingId} arriving */
+  const switchDrawingSearch = (departing, arriving) => {
+    searchByDrawing.set(departing, captureSearch());
+    installSearch(searchByDrawing.get(arriving) || EMPTY_SEARCH);
+    searchByDrawing.delete(arriving);
   };
   // Hiding the search bar changes its visibility only: the search, its
   // matches, and its highlights stay. While an active search dims the diagram
@@ -444,7 +445,7 @@ export const createPreviewFeatureSearch = ({
   // A loaded Session replaces the Results of both modes that a search named,
   // and shows the search bar again.
   const resetModeSearches = () => {
-    searchByMode.clear();
+    searchByDrawing.clear();
     clearSearch();
     previewFeatureSearchVisible.value = true;
   };
@@ -512,7 +513,7 @@ export const createPreviewFeatureSearch = ({
     goToNext,
     goToPrevious,
     clearSearch,
-    switchModeSearch,
+    switchDrawingSearch,
     resetModeSearches,
     handleMountedResultReady,
     openActiveMatch,

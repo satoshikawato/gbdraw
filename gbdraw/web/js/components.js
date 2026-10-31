@@ -1,4 +1,6 @@
 // @ts-check
+/** @import { InputFileRef } from './services/history-files.js' */
+/** @import { InputFileKind } from './services/drawing/inputs.js' */
 import { state } from './state.js';
 import {
   colorSwatchView,
@@ -15,6 +17,8 @@ import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resol
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsShortText, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
 import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
+import { isInputFileRef } from './services/history-files.js';
+import { sessionFilesOfKind } from './services/drawing/inputs.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { TranslationParams } from './utils/i18n.js' */
 /** @import { SettingApplicationId } from './services/setting-application.js' */
@@ -793,10 +797,13 @@ export const ColorValueControl = {
  * @property {{ name?: string } | { name?: string }[] | null} [modelValue] the selected file, or the files of a `multiple` slot
  * @property {boolean | string} [multiple]
  * @property {boolean | string} [requestClear]
- * @property {boolean} [projectHistory] a selection and a Remove are one project step: the card's
- *   file changes what every drawing loaded from it (OV-1280, D-15-51)
- * @property {(file: File | undefined) => unknown} [afterChange] runs after the selection is stored, and after
+ * @property {boolean} [importStep] a selection and a Remove are one step of the shown drawing with what
+ *   `afterChange` imports or takes back (OV-1280, R16-4); a result of `false` records no step
+ * @property {(file: File | InputFileRef | undefined) => unknown} [afterChange] runs after the selection is stored, and after
  *   a Remove with the removed file (OV-1280); a result of `false` is not committed
+ * @property {InputFileKind} [fileKind] the kind of file the uploader takes: it also offers the files of that kind
+ *   in this Session (`sessionFilesOfKind`, PD-OI-090 〔入力ファイル〕), and choosing one is the same selection as
+ *   an upload of it, by its ref
  */
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
@@ -804,11 +811,11 @@ export const ColorValueControl = {
 // selected file whose inspection failed is not shown as ready (UI-08).
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'projectHistory', 'inspectionFailed'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'importStep', 'inspectionFailed', 'fileKind'],
   emits: ['update:modelValue', 'clearRequest'],
   /**
    * @param {FileUploaderProps} props
-   * @param {{ emit: (event: 'update:modelValue' | 'clearRequest', value: File | File[] | never[] | EventTarget | null) => void }} context
+   * @param {{ emit: (event: 'update:modelValue' | 'clearRequest', value: File | InputFileRef | (File | InputFileRef)[] | EventTarget | null) => void }} context
    */
   setup(props, { emit }) {
     const input = ref(null);
@@ -826,10 +833,19 @@ export const FileUploader = {
       const suffix = items.length > 2 ? ` +${items.length - 2}` : '';
       return t('{count} files: {names}', { count: items.length, names: `${firstNames}${suffix}` });
     });
-    const handleFile = (/** @type {{ target: HTMLInputElement }} */ e) => {
-      const busy = state.sessionOperationAvailability();
-      if (busy) { e.target.value = ''; return busy; }
-      const nextFiles = Array.from(e.target.files || []);
+    // The files in this Session that this uploader offers, less the ones it shows.
+    const sessionFiles = computed(() => {
+      if (!props.fileKind) return [];
+      const shown = new Set(selectedFiles.value.map((/** @type {unknown} */ file) => (isInputFileRef(file) ? file.fileId : '')));
+      return sessionFilesOfKind(state, props.fileKind).filter((ref) => !shown.has(ref.fileId));
+    });
+    /**
+     * Store a selection: the files an upload chose, or a Session file's ref
+     * (a `multiple` uploader adds it to the ones it shows). One History step,
+     * as an upload.
+     * @param {(File | InputFileRef)[]} nextFiles
+     */
+    const select = (nextFiles) => {
       // A chosen input file makes a Generate likely: download the Worker's boot files now.
       if (nextFiles.length) prefetchPyodideBootAssets();
       const update = () => {
@@ -845,14 +861,28 @@ export const FileUploader = {
         await nextTick();
         return await props.afterChange?.(nextFiles[0]);
       };
-      if (props.projectHistory) {
-        void history.runProjectStep(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
+      if (props.importStep) {
+        void history.runUndoableCheckpoint(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
       } else if (history?.runUndoable) {
         void history.runUndoable(msg('Change uploaded file'), apply);
       } else {
         update();
       }
+    };
+    const handleFile = (/** @type {{ target: HTMLInputElement }} */ e) => {
+      const busy = state.sessionOperationAvailability();
+      if (busy) { e.target.value = ''; return busy; }
+      select(Array.from(e.target.files || []));
       e.target.value = '';
+    };
+    const chooseSessionFile = (/** @type {{ target: HTMLSelectElement }} */ e) => {
+      const chosen = sessionFiles.value.find((/** @type {InputFileRef} */ ref) => ref.fileId === e.target.value);
+      e.target.value = '';
+      const busy = state.sessionOperationAvailability();
+      if (busy) return busy;
+      if (!chosen) return undefined;
+      select(props.multiple ? [...selectedFiles.value, chosen] : [chosen]);
+      return undefined;
     };
     const clearFile = (/** @type {Event} */ event) => {
       const busy = state.sessionOperationAvailability();
@@ -869,15 +899,15 @@ export const FileUploader = {
         await nextTick();
         return await props.afterChange?.(removed);
       };
-      if (props.projectHistory) {
-        void history.runProjectStep(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
+      if (props.importStep) {
+        void history.runUndoableCheckpoint(msg('Change uploaded file'), apply, { shouldCommit: (/** @type {unknown} */ result) => result !== false });
       } else if (history?.runUndoable) {
         void history.runUndoable(msg('Change uploaded file'), apply);
       } else {
         emit('update:modelValue', props.multiple ? [] : null);
       }
     };
-    return { input, handleFile, clearFile, hasSelection, selectedLabel, uploadAvailable };
+    return { input, handleFile, chooseSessionFile, clearFile, hasSelection, selectedLabel, sessionFiles, uploadAvailable };
   }
 };
 

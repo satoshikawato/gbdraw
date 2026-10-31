@@ -6,6 +6,7 @@ const {
   openApp, expectNoLoadRepairDialog, expectSessionLoadedWithoutWarnings, generateAndWaitForResult, answerLoadRepairs
 } = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionInputSelector =
@@ -333,7 +334,7 @@ test('a Session load error does not follow a switch to the other diagram mode', 
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false
     && window.__GBDRAW_APP__?.errorLog !== null);
   await expect(page.locator('.result-pane [role="alert"]')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await expect(page.locator('.result-pane [role="alert"]')).toHaveCount(0);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
@@ -704,30 +705,25 @@ test('the header gives way by icons, never by narrowing the Session title', asyn
   await expect.poll(fitOf).toEqual([false, false, false]);
   await expect(words).toBeVisible();
   const roomyTitle = await titleWidth();
-  await page.setViewportSize({ width: 1366, height: 900 });
+  // Widths are measured on the one-row header with the Circular/Linear buttons
+  // in the drawing bar (PD-OI-090): the Gallery cap alone from about 944 px, the
+  // file icons from about 808 px, the title alone from about 788 px (English).
+  await page.setViewportSize({ width: 880, height: 900 });
   await expect.poll(fitOf).toEqual([false, true, false]);
   await expect(words).toBeHidden();
   await expect(page.getByRole('link', { name: 'Gallery & tutorials', exact: true })).toBeVisible();
   expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
 
-  // French at 1280 px: the cap alone left the Session block no width.
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.locator('[data-ui-language]').selectOption('fr');
-  await expect.poll(fitOf).toEqual([true, false, false]);
-  await expect(header.locator('.app-file-actions .app-config-button').first()).toHaveCSS('width', '32px');
-  expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
-
-  // Vietnamese at 1024 px: the cap and the icons still narrowed the title and
-  // wrapped the mode names until the toolbar's groups closed up.
-  await page.locator('[data-ui-language]').selectOption('vi');
-  await page.setViewportSize({ width: 1024, height: 768 });
+  // Where the cap alone still narrows the title, the file buttons show their icons.
+  await page.setViewportSize({ width: 799, height: 900 });
   await expect.poll(fitOf).toEqual([true, true, false]);
+  await expect(header.locator('.app-file-actions .app-config-button').first()).toHaveCSS('width', '32px');
   await expect(header.locator('.app-toolbar')).toHaveCSS('column-gap', '4px');
   expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
 
   // TL-D06: where the icons and the closed-up gaps still narrow the title, its
   // "Session" caption hides, so the title takes that width.
-  await page.setViewportSize({ width: 900, height: 768 });
+  await page.setViewportSize({ width: 778, height: 768 });
   await expect.poll(fitOf).toEqual([true, true, true]);
   await expect(header.locator('.app-session-label')).toBeHidden();
   await expect(header.locator('.app-toolbar')).toHaveCSS('column-gap', '2px');
@@ -862,15 +858,15 @@ test('the Load notice stays across Generate and clears on a mode switch and Rese
   await expect(page.locator('[data-app-notice-announcer]')).toHaveText(/^Session loaded/);
   await generateAndWaitForResult(page);
   await expect(notice).toContainText('Session loaded');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('linear'))).toEqual({ status: 'ok' });
+  await showDrawing(page, { kind: 'linear' });
   await expect(notice).toHaveCount(0);
   await expect(page.locator('[data-app-notice-announcer]')).toHaveCount(1);
 
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'))).toEqual({ status: 'ok' });
+  await showDrawing(page, { kind: 'circular' });
   await loadBaselineSession(page);
   await page.evaluate(() => { window.__GBDRAW_APP__.requestResetSettings(); });
-  const reset = page.getByRole('dialog', { name: 'Reset all settings?', exact: true });
-  await expect(reset).toContainText('Linear comparisons, which turn off; their uploaded tables stay');
-  await reset.getByRole('button', { name: 'Reset all settings', exact: true }).click();
+  const reset = page.getByRole('dialog', { name: 'Reset settings?', exact: true });
+  await expect(reset).toContainText('Comparisons, which turn off; their uploaded tables stay (Linear drawings)');
+  await reset.getByRole('button', { name: 'Reset all drawings', exact: true }).click();
   await expect(notice).toHaveCount(0);
 });

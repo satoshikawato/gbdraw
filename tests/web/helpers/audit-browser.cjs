@@ -1,5 +1,6 @@
 // Shared browser steps for the Web GUI audit 2026-09-30 regression specs.
 const { expect } = require('@playwright/test');
+const { showDrawing } = require('./drawing-bar.cjs');
 const { evaluateWithRetainedPromise, expectNoLoadRepairDialog, generateAndWaitForResult, openApp } = require('./app-lifecycle.cjs');
 
 const BATCH_FIXTURE = 'tests/fixtures/web_batch_two_records.gb';
@@ -28,6 +29,10 @@ const settle = async (page) => {
   await page.evaluate(() => new Promise((resolve) => (
     requestAnimationFrame(() => requestAnimationFrame(resolve))
   )));
+  // A view change after the work ends (the Fit of a Session Load, R17-25) moves the
+  // figure in a 0.2 s transform transition: the figure rests when it has ended.
+  await page.waitForFunction(() => [...document.querySelectorAll('.gbdraw-preview-surface')]
+    .every((surface) => surface.getAnimations().length === 0));
 };
 
 const openFresh = async (page) => {
@@ -80,8 +85,7 @@ const selectResult = async (page, index) => {
 };
 
 const switchMode = async (page, mode) => {
-  await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
+  await showDrawing(page, { kind: mode });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordDiscovery?.status))
     .not.toBe('loading');
   await settle(page);

@@ -3,6 +3,8 @@ const fs = require('node:fs/promises');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { openApp, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const singleSeed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const allPlacements = ['auto', 'main', 'outward', 'inward'];
@@ -10,19 +12,21 @@ const allPlacements = ['auto', 'main', 'outward', 'inward'];
 const compositeSeed = async (testInfo) => {
   const single = JSON.parse(await fs.readFile(singleSeed, 'utf8'));
   const lambda = JSON.parse(await fs.readFile('gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', 'utf8'));
-  const second = { ...lambda.renderRequest.records[0], recordKey: 'record-2',
+  const singleDrawing = shownSavedDrawing(single);
+  const lambdaRequest = shownSavedDrawing(lambda).renderRequest;
+  const second = { ...lambdaRequest.records[0], recordKey: 'record-2',
     source: { kind: 'genbank', resourceId: 'record-2-genbank' } };
   const input = testInfo.outputPath('two-source-input.json');
   const output = testInfo.outputPath('two-source.gbdraw-session.json.gz');
-  await fs.writeFile(input, JSON.stringify({ format: single.format, version: single.version,
-    results: [], editorState: { featureCatalog: null }, ui: { ...single.ui, generatedMultiRecordCanvas: true },
-    modes: { circular: { ...single.modes.circular, config: { ...single.modes.circular.config,
-      form: { ...single.modes.circular.config.form, multi_record_canvas: true } } } },
-    renderRequest: { ...single.renderRequest, grouping: 'grid',
-      records: [...single.renderRequest.records, second], layout: { multiRecordSizeMode: 'auto',
-        multiRecordMinRadiusRatio: 0.55, multiRecordColumnGapRatio: 0.1, multiRecordRowGapRatio: 0.05,
-        multiRecordPositions: null } },
-    resources: { ...single.resources, 'record-2-genbank': lambda.resources[lambda.renderRequest.records[0].source.resourceId] } }));
+  await fs.writeFile(input, JSON.stringify({ ...single,
+    drawings: [{ ...singleDrawing, results: [], editorState: { featureCatalog: null },
+      ui: { ...singleDrawing.ui, generatedMultiRecordCanvas: true },
+      config: { ...singleDrawing.config, form: { ...singleDrawing.config.form, multi_record_canvas: true } },
+      renderRequest: { ...singleDrawing.renderRequest, grouping: 'grid',
+        records: [...singleDrawing.renderRequest.records, second], layout: { multiRecordSizeMode: 'auto',
+          multiRecordMinRadiusRatio: 0.55, multiRecordColumnGapRatio: 0.1, multiRecordRowGapRatio: 0.05,
+          multiRecordPositions: null } } }],
+    resources: { ...single.resources, 'record-2-genbank': lambda.resources[lambdaRequest.records[0].source.resourceId] } }));
   // The normal writer creates matching SVG, feature metadata and current file bindings.
   const { stdout, stderr } = await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'circular',
     '--session', input, '-o', testInfo.outputPath('two-source'), '--session_output', output],
@@ -100,10 +104,10 @@ for (const composite of [false, true]) {
         const config = await import('./js/services/config.js');
         const { getSessionResourceSource } = await import('./js/services/file-content-cache.js');
         const session = config.getCommittedCanonicalSession();
-        const binding = getSessionResourceSource(state.files.c_gb);
-        return { records: state.circularRecordList.value, request: session.renderRequest,
+        const binding = getSessionResourceSource(state.inputFiles.fileOf(state.activeDrawing().files.c_gb));
+        return { records: state.activeDrawing().circularRecordList.value, request: session.renderRequest,
           resources: Object.fromEntries(Object.entries(session.resources).map(([id, descriptor]) => [id, { size: descriptor.size, name: descriptor.name }])),
-          source: { name: state.files.c_gb.name, size: state.files.c_gb.size,
+          source: { name: state.activeDrawing().files.c_gb.name, size: state.activeDrawing().files.c_gb.size,
             components: binding?.descriptors?.map((part) => part.resourceId) || [] },
           form: config.buildConfigData(state.activeDrawing()).form, geometry: state.trackSlotResolvedGeometry.value,
           catalog: state.featureCatalog.value, placements: state.activeDrawing().featurePlacementOverrides };
@@ -139,10 +143,7 @@ for (const composite of [false, true]) {
         expect((await check('P5-loaded')).placements).toEqual(edited.placements);
         await generate();
         expect((await check('P5-generated')).placements).toEqual(edited.placements);
-        for (const mode of ['Linear', 'Circular']) {
-          await page.getByRole('button', { name: mode, exact: true }).click();
-          await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode.toLowerCase());
-        }
+        for (const kind of ['linear', 'circular']) await showDrawing(page, { kind });
         expect((await check('P6-returned')).placements).toEqual(edited.placements);
         await generate();
         expect((await check('P6-generated')).placements).toEqual(edited.placements);
@@ -175,13 +176,13 @@ for (const composite of [false, true]) {
         const old = await features();
         const source = await page.evaluate(async () => {
           const { state } = await import('./js/state.js');
-          return { name: state.files.c_gb.name, mimeType: state.files.c_gb.type,
-            bytes: [...await (await import('./js/services/file-content-cache.js')).readFileBytes(state.files.c_gb)] };
+          return { name: state.activeDrawing().files.c_gb.name, mimeType: state.activeDrawing().files.c_gb.type,
+            bytes: [...await (await import('./js/services/file-content-cache.js')).readFileBytes(state.inputFiles.fileOf(state.activeDrawing().files.c_gb))] };
         });
         await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
           name: source.name, mimeType: source.mimeType, buffer: Buffer.from(source.bytes) });
         await expect.poll(() => page.evaluate(async () => (await import('./js/state.js'))
-          .state.circularRecordDiscovery.status)).toBe('ready');
+          .state.activeDrawing().circularRecordDiscovery.status)).toBe('ready');
         expect((await check('P7-replaced-before-Generate', [], old)).placements).toEqual({});
         await generate();
         await check('P7-replaced-after-Generate');

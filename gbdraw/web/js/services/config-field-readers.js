@@ -35,12 +35,13 @@ import {
 import {
   LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, clampLinearTrackAxisIndex, normalizeLinearTrackSlots, resolveLinearTrackAxisIndex
 } from './linear-track-slot-model.js';
-import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
-import { MODE_SLICE_CONTAINERS } from './mode-scoped-migration.js';
+import { LEGACY_COMPARISON_SOURCE_FIELDS, normalizeLinearComparisonPlan } from './linear-comparisons.js';
+import { MODE_SLICE_CONTAINERS, OTHER_MODE_OWN_FIELDS, unscopedDraftRows } from './mode-scoped-migration.js';
+import { migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { readRecordDisplayDrafts } from './record-display-model.js';
 import { isUnsafeObjectKey } from './safe-object-keys.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
-import { isFeatureOverrideDraftRow, isFeaturePlacementDraftRow } from './feature-placement.js';
+import { featureIdentityKeyOf, isFeatureOverrideDraftRow, isFeaturePlacementDraftRow } from './feature-placement.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
   DEFAULT_FEATURE_RENDERINGS, FEATURE_RENDERING_VALUES, readPersistedArrowHeadLengthRatio, readPersistedArrowShaftWidthRatio
@@ -866,8 +867,13 @@ const DRAWING_TABLES = Object.freeze({
   circular: [{ at: '', rows: [row('recordsOff', recordsOffReader('circular')), row('featurePlacementOverrides', featurePlacementsReader('circular'))] }],
   linear: [{ at: '', rows: [row('recordsOff', recordsOffReader('linear')), row('featurePlacementOverrides', featurePlacementsReader('linear'))] }]
 });
-/** The fields read from the configuration as stored. @type {readonly FieldTable[]} */
-const VALUE_TABLES = Object.freeze([
+/**
+ * The fields read from the configuration as stored; `scopedDrafts`: each
+ * record display draft row names its mode (a flat draft, below).
+ * @param {boolean} scopedDrafts
+ * @returns {readonly FieldTable[]}
+ */
+const valueTables = (scopedDrafts) => Object.freeze([
   { at: 'losat', rows: LOSAT_EXECUTION_ROWS },
   {
     at: 'linearRecordLayout',
@@ -907,11 +913,18 @@ const VALUE_TABLES = Object.freeze([
       row('palette', readPalette),
       row('colors', readPlainObject),
       row('unmanagedConfigOverrides', readPlainObject),
-      row('recordDisplayDrafts', (value) => readRecordDisplayDrafts(value)),
+      row('recordDisplayDrafts', (value) => readRecordDisplayDrafts(value, { scoped: scopedDrafts })),
       row('linearComparisonPlan', readLinearComparisonPlan)
     ]
   }
 ]);
+const VALUE_TABLES = valueTables(false);
+// The record display rows of a flat draft (Session 27-44) name their mode:
+// Python's split moves each row into the drawing of the mode it names (the
+// registry's `by-scope` token), so the draft is read with it (D-15-133).
+const FLAT_DRAFT_VALUE_TABLES = valueTables(MODE_SCOPED_SETTINGS.rows.some(({ domain, path, migrate }) => (
+  domain === 'config' && path === 'recordDisplayDrafts' && migrate === 'by-scope'
+)));
 
 /** @param {unknown} value */
 const storedText = (value) => typeof value === 'string' && value.trim() !== '';
@@ -1181,7 +1194,7 @@ const mergeStoredSettings = (target, source, at, defaults) => {
  *   losat: { blastp: Record<string, unknown> }, circularConservation: Record<string, unknown> }} SettingsContainers
  */
 /**
- * A drawing's settings as Load resets it (`resetSessionBaseline`).
+ * A drawing's settings as a new drawing state has them (`createDrawingState`).
  * @param {'circular' | 'linear'} mode
  * @returns {SettingsContainers}
  */
@@ -1272,23 +1285,213 @@ export const installStoredSettings = (targets, stored, mode, { captured = false 
 };
 
 /**
+ * `value` with the container at `at` (dotted; '' is the value itself)
+ * replaced by `container`; the containers above it are copied.
+ * @param {unknown} value @param {string} at @param {Record<string, unknown>} container
+ * @returns {unknown}
+ */
+const withContainerAt = (value, at, container) => {
+  if (!at) return container;
+  const [key, ...rest] = at.split('.');
+  const parent = isPlainObject(value) ? value : {};
+  return { ...parent, [key]: withContainerAt(parent[key], rest.join('.'), container) };
+};
+
+/**
+ * Reads `tables` of `value` as stored: what they could not restore, and
+ * `value` with each container read in place of the stored one.
+ * @param {readonly FieldTable[]} tables
+ * @param {unknown} value
+ * @returns {{ losses: SettingLoss[], value: unknown }}
+ */
+const readValueTablesOf = (tables, value) => {
+  let readValue = value;
+  const losses = tables.flatMap(({ at, rows }) => {
+    const source = containerAt(value, at);
+    if (!source) {
+      // A container that is no object is not read (its fields take their
+      // defaults); `installStoredSettings` lists the merged ones.
+      const stored = at && !MERGED_CONTAINERS.includes(at) ? valueAt(value, at) : undefined;
+      return isUnsetValue(stored) ? [] : [{ at, stored, used: {} }];
+    }
+    /** @type {Record<string, unknown>} */
+    const read = { ...(containerAt(readValue, at) ?? source) };
+    const containerLosses = readRows(read, rows.filter(({ field }) => Object.hasOwn(source, field)), at, source);
+    readValue = withContainerAt(readValue, at, read);
+    return containerLosses;
+  });
+  return { losses, value: readValue };
+};
+/**
  * Reads `tables` of `value` as stored; returns what they could not restore.
  * @param {readonly FieldTable[]} tables
  * @param {unknown} value
  * @returns {SettingLoss[]}
  */
-const readValueTables = (tables, value) => tables.flatMap(({ at, rows }) => {
-  const source = containerAt(value, at);
-  if (!source) {
-    // A container that is no object is not read (its fields take their
-    // defaults); `installStoredSettings` lists the merged ones.
-    const stored = at && !MERGED_CONTAINERS.includes(at) ? valueAt(value, at) : undefined;
-    return isUnsetValue(stored) ? [] : [{ at, stored, used: {} }];
-  }
-  /** @type {Record<string, unknown>} */
-  const read = { ...source };
-  return readRows(read, rows.filter(({ field }) => Object.hasOwn(source, field)), at, source);
+const readValueTables = (tables, value) => readValueTablesOf(tables, value).losses;
+
+/**
+ * The draft field a loss at `at` replaces: a field of a merged container
+ * (`losat.blastp` is one), a container that is no object, or a drawing field.
+ * @param {string} at
+ */
+const lostFieldOf = (at) => {
+  const parts = at.replace(/\[.*$/, '').split('.');
+  const depth = parts[0] === 'losat' && parts[1] === 'blastp' ? 3 : MERGED_CONTAINERS.includes(parts[0]) ? 2 : 1;
+  return parts.slice(0, depth).join('.');
+};
+/**
+ * The draft fields a drawing of `mode` read as another value than the draft
+ * holds (D-15-144): each field of the merged containers (`losat.blastp`'s
+ * own) and each of the drawing's own fields, at the depth `lostFieldOf`
+ * gives a loss. A field the draft does not hold, or the reading leaves out,
+ * is none (its replacement is a loss's).
+ * @param {unknown} draft
+ * @param {unknown} view The drawing's read values, at the draft's paths.
+ * @param {'circular' | 'linear'} mode
+ * @returns {string[]}
+ */
+const changedFieldsOf = (draft, view, mode) => [
+  ...MERGED_CONTAINERS.flatMap((at) => Object.keys(containerAt(draft, at) ?? {})
+    .filter((field) => !(at === 'losat' && field === 'blastp')).map((field) => `${at}.${field}`)),
+  ...Object.keys(containerAt(draft, 'losat.blastp') ?? {}).map((field) => `losat.blastp.${field}`),
+  ...DRAWING_TABLES[mode].flatMap(({ rows }) => rows.map(({ field }) => field))
+].filter((at) => {
+  const stored = valueAt(draft, at);
+  const read = valueAt(view, at);
+  return stored !== undefined && read !== undefined && JSON.stringify(read) !== JSON.stringify(stored);
 });
+/**
+ * `value` with the field at `at` (dotted) set to `leaf`, or left out when
+ * `leaf` is undefined; the containers above it are copied.
+ * @param {unknown} value @param {string} at @param {unknown} leaf
+ * @returns {unknown}
+ */
+const withFieldAt = (value, at, leaf) => {
+  const parentAt = at.split('.').slice(0, -1).join('.');
+  const field = /** @type {string} */ (at.split('.').at(-1));
+  /** @type {Record<string, unknown>} */
+  const parent = { ...(containerAt(value, parentAt) ?? {}) };
+  if (leaf === undefined) delete parent[field];
+  else parent[field] = leaf;
+  return withContainerAt(value, parentAt, parent);
+};
+/**
+ * `value` with the fields at `ats` (dotted) as `source` holds them, left out
+ * where `source` holds none; a field already equal is no copy.
+ * @param {unknown} value @param {unknown} source @param {readonly string[]} ats
+ * @returns {unknown}
+ */
+export const withFieldsFrom = (value, source, ats) => ats.reduce((draft, at) => (valueAt(draft, at) === valueAt(source, at)
+  ? draft : withFieldAt(draft, at, valueAt(source, at))), value);
+/**
+ * `value` without the fields at `ats` (dotted); a field it does not hold is no copy.
+ * @param {unknown} value @param {readonly string[]} ats
+ * @returns {unknown}
+ */
+export const withoutFieldsAt = (value, ats) => withFieldsFrom(value, undefined, ats);
+
+/**
+ * A Session 27-44's one draft (`config`, at `path`) as the draft field
+ * readers read it before Python splits it into drawings (D-15-129): the read
+ * value Python receives, and what the readers could not restore. A field
+ * any mode draws is read once. Each mode's drawing reads the settings
+ * containers of the whole draft without the other mode's `own` registry
+ * rows, as Python's split gives that drawing its slice (D-15-155; a
+ * Linear `depth_height` fills no Circular Depth series), and its own fields,
+ * as `configFieldRepairs`
+ * and `unreadFieldRepairs` read a drawing's (D-15-138): its rows are listed
+ * for the fields it draws (`advRows(mode)` gives a blank its mode's
+ * default), a row both drawings list once. A field a reader replaced, or
+ * read as another value than the draft holds (a schema 1 track stack as the
+ * current one, without a loss; D-15-144), takes the value the drawings that
+ * draw it read (the arrow ratios as
+ * `applyConfigData` writes them). When they read it differently, Python
+ * receives it as stored if every drawing read it without a loss (each
+ * drawing of the split reads it again as here: a stored `depth_tracks: []`
+ * gives the Linear drawing its `depth_height` series, the Circular one an
+ * auto series, OV-2059), else it is left out (each drawing then takes its
+ * own default), so Python receives no value a reader could not use. The
+ * comparison source fields of an older draft are Python's migration's to
+ * read (`LEGACY_COMPARISON_SOURCE_FIELDS`): no settings reader reads them,
+ * and Python receives them as stored. The drawing of `openedMode` reads
+ * first, so its rows come first, as the drawing the Load opens; the value
+ * tables' rows follow the drawings' (the old Load's order, D-15-143).
+ * A Session 41-44's Feature placement rows reached every mode: each drawing
+ * reads the rows `migrateSessionFeaturePlacements` gives its mode (Main rows
+ * both, a lane row its side's), as the old Load read them (D-15-148), and
+ * Python receives them as stored unless a drawing dropped one of its own
+ * rows: then the scoped rows the drawings kept.
+ * @param {Record<string, unknown>} config
+ * @param {string} path
+ * @param {{ resolveTrackPlacements: boolean, openedMode: 'circular' | 'linear' }} options
+ *   `resolveTrackPlacements`: whether the track stacks are resolved (`configFieldRepairs`); `openedMode`: the
+ *   mode of the drawing the Load opens (`drawnResultModes`).
+ * @returns {{ value: Record<string, unknown>, repairs: LoadRepair[] }}
+ */
+export const readSingleDraftValues = (config, path, { resolveTrackPlacements, openedMode }) => {
+  const read = readValueTablesOf(FLAT_DRAFT_VALUE_TABLES, config);
+  /** @type {LoadRepair[]} */
+  const repairs = [];
+  /** @type {Set<string>} */
+  const listed = new Set();
+  /** @param {LoadRepair} repair */
+  const list = (repair) => {
+    const key = JSON.stringify(repair);
+    if (!listed.has(key)) repairs.push(repair);
+    listed.add(key);
+  };
+  /** @type {Map<string, unknown[]>} The values the drawings that draw a replaced field read. */
+  const replaced = new Map();
+  /** @type {Set<string>} The replaced fields a drawing could not restore. */
+  const lost = new Set();
+  const settingsDraft = /** @type {Record<string, unknown>} */ (withoutFieldsAt(config, LEGACY_COMPARISON_SOURCE_FIELDS));
+  /** @type {readonly ('circular' | 'linear')[]} */
+  const modes = openedMode === 'linear' ? ['linear', 'circular'] : ['circular', 'linear'];
+  const scopedPlacements = migrateSessionFeaturePlacements(settingsDraft.featurePlacementOverrides);
+  /** @type {Map<'circular' | 'linear', unknown>} The placement rows each drawing read. */
+  const placementReads = new Map();
+  modes.forEach((mode) => {
+    const modeSettings = /** @type {Record<string, unknown>} */ (withoutFieldsAt(settingsDraft, OTHER_MODE_OWN_FIELDS[mode]));
+    const targets = defaultSettingsContainers(mode);
+    const { losses, arrowRatios } = installStoredSettings(targets, modeSettings, mode);
+    if (arrowRatios) Object.assign(targets.adv, arrowRatios);
+    if (resolveTrackPlacements) resolvedTrackStacks(targets.adv, targets.form, losses);
+    const modeDraft = holds(modeSettings, 'featurePlacementOverrides')
+      ? { ...modeSettings, featurePlacementOverrides: unscopedDraftRows(scopedPlacements, mode) } : modeSettings;
+    const drawing = readValueTablesOf(DRAWING_TABLES[mode], modeDraft);
+    losses.push(...drawing.losses);
+    [...lossRepairs(losses, path, config, { mode, root: 'config' }), ...unreadFieldRepairs(modeSettings, path, mode)]
+      .forEach(list);
+    const view = { ...(isPlainObject(drawing.value) ? drawing.value : {}), ...targets };
+    placementReads.set(mode, valueAt(view, 'featurePlacementOverrides'));
+    losses.forEach(({ at }) => lost.add(lostFieldOf(at)));
+    new Set([...losses.map(({ at }) => lostFieldOf(at)), ...changedFieldsOf(modeDraft, view, mode)])
+      .forEach((field) => {
+        if (drawnByMode(mode, 'config', field)) replaced.set(field, [...(replaced.get(field) ?? []), valueAt(view, field)]);
+      });
+  });
+  lossRepairs(read.losses, path, config, { root: 'config' }).forEach(list);
+  let value = read.value;
+  if (replaced.delete('featurePlacementOverrides') && isPlainObject(scopedPlacements)) {
+    /** @param {unknown} row */
+    const keptBy = (row) => (/** @type {('circular' | 'linear')[]} */ (isPlainObject(row) && Object.hasOwn(row, 'scope')
+      ? [row.scope] : modes)).every((mode) => {
+      const rows = placementReads.get(mode);
+      const key = isPlainObject(row) ? featureIdentityKeyOf(row) : '';
+      return isPlainObject(rows) && key !== '' && Object.hasOwn(rows, key);
+    });
+    value = withFieldAt(value, 'featurePlacementOverrides',
+      Object.fromEntries(Object.entries(scopedPlacements).filter(([, row]) => keptBy(row))));
+  }
+  replaced.forEach((values, field) => {
+    const [first] = values;
+    const agreed = values.every((entry) => JSON.stringify(entry) === JSON.stringify(first));
+    if (agreed) value = withFieldAt(value, field, copied(first));
+    else if (lost.has(field)) value = withFieldAt(value, field, undefined);
+  });
+  return { value: /** @type {Record<string, unknown>} */ (value), repairs };
+};
 
 /** Free text: Load names the place of such a value, not the value (12.3). */
 const FREE_TEXT_KEYS = new Set([

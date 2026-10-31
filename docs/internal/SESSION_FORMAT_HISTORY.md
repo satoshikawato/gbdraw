@@ -12,39 +12,70 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Session 50 stores the Linear wrap length and italic gene names
+## Unreleased: Session 50 stores a project and its list of drawings, the Linear wrap length, and italic gene names
 
-Session version 50 adds the config leaf `canvas.linear.wrap_length` (`"none"`,
-`"auto"`, or a positive length in bp) and the Linear slice's
-`form.linear_wrap_length`, an `own` row of the mode-scoped registry
+Session version 50 replaces the two diagram-mode slices of Sessions 46 to 49
+with a list of drawings, so a project can hold several drawings of one mode
+(PD-OI-090), it stores the Linear wrap length in each Linear drawing, and it
+stores italic gene names in each drawing. Session 49 reached `main` with 0.14.3
+as the mode-scoped Session below, so all three changes take 50 (CLAUDE.md, "Persisted-format compatibility").
+
+The project keeps `format`, `version`, `createdAt`, `title`, `resources`, `ui`
+(the project's view keys and `ui.activeDrawingId`), and `legacyArtifacts`. Each
+`drawings[]` entry holds one drawing: `id`, `name`, `mode`, `renderRequest` (or
+null, with no `results`), `results`, `editorState`, `features`, `config`, `ui`,
+`webFiles.bindings` (only the slots of its mode, and the five file cards),
+`orthogroupState`, `runMetadata`, `cliInvocation`, `cliOptions`, `losatCache`,
+`losatDerivedCache`, and `proteinIdentityManifest`. Array order is tab order. The
+top-level `modes`, `otherModeResult`, `renderRequest`, `results`, `config`,
+`features`, `files`, and `ui.mode` are retired. There is no settings-only form: a
+drawing without a request has no Results.
+
+The owner of the layout is `gbdraw/session_drawings.py`
+(`read_session_drawings`, `write_session_drawings`); the admission band is
+`SessionChecked49` in `gbdraw/session_contract.py`. Python and the Web app read
+Session 50, and Save writes it. Reading a Session 46 to 49 moves each mode's
+part into its own drawing (`circular`, `linear`), the rules of
+`services/session-drawings-upgrade.js` in the Web app and of the 46-49 step of
+`upgrade_session_document` in Python; Sessions 27 to 44 are converted by Python
+once at Load. A Session 49's Circular `adv.show_definition` becomes the
+Circular drawing's `config.adv.show_definition`. Fixtures:
+`tests/fixtures/sessions/`.
+
+The wrap length is the config leaf `canvas.linear.wrap_length` (`"none"`,
+`"auto"`, or a positive length in bp) and a Linear drawing's
+`config.form.linear_wrap_length`, an `own` row of the mode-scoped registry
 (`gbdraw/web_support/mode_scoped_settings.py`) whose replay flag is
 `--wrap_length`. Wrapped rows are drawn now: Python, the CLI and a loaded Session
 draw a record longer than the length over several rows, so a writer can produce
-a wrapped file. Session 49 reached `main` with 0.14.3, so the format needs a new
-version. Measured against `main`'s build: it refuses a Session with
+a wrapped file.
+
+Measured against `main`'s build (Session 49): it refuses any file of version 50
+with "Session version 50 is newer than this gbdraw supports (49)", so it reads
+neither the list nor a wrap length. The same build, given version 49, refuses
 `modes.linear.config.form.linear_wrap_length` (the slice's `form` is closed,
 `_validate_mode_slice_fields`) and a `configOverrides` entry
 `canvas.linear.wrap_length` (`UNKNOWN_CONFIG_PATH`), and it accepts a CLI Session
 with a stored `canvas.linear.wrap_length` leaf and silently draws the record on
-one row (`from_dict` ignores the unknown leaf). An unwrapped CLI Session holds
-the leaf as `"none"`, which an older build ignores and draws the same.
+one row (`from_dict` ignores the unknown leaf). That is why a stored length needs
+the version.
 
-A Session up to 49 has no key and loads with no wrap (`"none"`); no reader
+A Session up to 49 has no length and loads with no wrap (`"none"`); no reader
 converts it. A Web **Save Session** keeps a length loaded from a Session in the
 request's `configOverrides`; the Web has no control for it yet. The Gallery and
-test-input Sessions were refreshed to 50 (`tools/refresh_gallery_sessions.py`);
-they differ from Session 49 in the version and the `"none"` leaf. Positive
-fixtures of Session 49: `tests/fixtures/sessions/*.v49.*`.
+test-input Sessions were refreshed to 50 (`tools/refresh_gallery_sessions.py`).
+Positive fixtures of Session 49: `tests/fixtures/sessions/*.v49.*`.
 
 Session 50 also adds the config leaf `labels.<mode>.italic_gene_labels` (true or
-false, default false) in both modes and the slice key
-`adv.italic_gene_labels`, a `copy` row of the mode-scoped registry next to
+false, default false) in both modes and each drawing's key
+`config.adv.italic_gene_labels` (either mode), a `copy` row of the mode-scoped registry next to
 `label_protection`, whose replay flag is `--italic_gene_labels`. A Web writer
 puts `labels.<mode>.italic_gene_labels: true` in the request's
 `configOverrides` only when the setting is on, so a Session with it off has the
 same request as before. The key reached no `main` Session before 50 and shares
-its version with the wrap length; a Session up to 49 has no key and loads with
-it off, and no reader converts it.
+its version with the drawings and the wrap length; a Session up to 49 has no key,
+and reading it gives every drawing the packaged default (off); no reader converts
+it.
 
 ## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
 
@@ -215,8 +246,10 @@ the former name to it, through `current_palette_name` in Python and
 - Web: the palette slice (`services/drawing/palette.js`) stores the current
   name of the drawing's palette and of a queued palette, from Load, History,
   and every switch. `normalizePaletteDefinitions` adds the former name as a
-  non-enumerable lookup key, so the raw-name lookups of Load (the mode split)
-  find it and the palette list shows only `herbal_garden`. Load copies
+  non-enumerable lookup key, so a raw-name lookup (the mode split of a
+  Gallery publication, `services/gallery-session-publication.js`) finds it
+  and the palette list shows only `herbal_garden`; a Session 27 to 44 is
+  converted by Python once at Load (`drawings_document_from_legacy`). Load copies
   `ui.appliedPaletteName` and passes `renderRequest` through as saved
   (`services/config.js`), so a Web Save keeps the former name there until the
   next Generate; `app/results.js` compares the applied palette by its current

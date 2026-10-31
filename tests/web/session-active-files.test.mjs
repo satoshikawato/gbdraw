@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { boundState } from './helpers/input-files.mjs';
 
 globalThis.window = {
   Vue: {
@@ -11,11 +12,22 @@ globalThis.window = {
 };
 globalThis.document = {};
 
-const { serializeActiveRenderFiles: serializeDrawingFiles, heldDepthFiles } = await import(
+const { serializeActiveRenderFiles: serializeDrawingFiles, heldDepthFiles: heldDrawingDepthFiles } = await import(
   '../../gbdraw/web/js/services/config.js'
 );
-// A fixture state is its own drawing.
-const serializeActiveRenderFiles = (mode, fixture, ...rest) => serializeDrawingFiles(mode, fixture, fixture, ...rest);
+// A fixture state is its own drawing, of the mode a case names.
+// Its input files are registered in a store and named by ref, as the app binds them.
+const fixtureDrawing = (bound, mode) => Object.create(bound, { mode: { value: mode } });
+const serializeActiveRenderFiles = (mode, fixture, snapshot, ...rest) => {
+  const bound = boundState(fixture);
+  const edges = snapshot?.edges?.map((edge) => ({ ...edge, file: bound.inputFiles.registerFile(edge.file) }));
+  return serializeDrawingFiles(bound, fixtureDrawing(bound, mode), ...(snapshot ? [edges ? { ...snapshot, edges } : snapshot] : []), ...rest);
+};
+/** The Depth files the fixture drawing's draft holds, its inputs bound as the app binds them. */
+const heldDepthFiles = (mode, fixture) => {
+  const bound = boundState(fixture);
+  return heldDrawingDepthFiles(bound, fixtureDrawing(bound, mode));
+};
 const {
   adoptCurrentSessionResources,
   createSessionResourceFileView
@@ -323,11 +335,11 @@ assert.equal(inactiveCanonical.reads(), 0);
   const shownState = depthState(true, [heldDepth]);
   const shown = await serializeActiveRenderFiles('circular', shownState);
   assert.equal(heldDepth.reads(), 1);
-  assert.deepEqual(heldDepthFiles('circular', shownState, shownState), []);
+  assert.deepEqual(heldDepthFiles('circular', shownState), []);
   const hiddenState = depthState(false, [[heldDepth, null], [neverShown, heldDepth]]);
   const hidden = await serializeActiveRenderFiles('circular', hiddenState);
   assert.equal(hidden.c_depth, null);
-  assert.deepEqual(heldDepthFiles('circular', hiddenState, hiddenState), [shown.c_depth[0], shown.c_depth[0]]);
+  assert.deepEqual(heldDepthFiles('circular', hiddenState), [shown.c_depth[0], shown.c_depth[0]]);
   assert.equal(heldDepth.reads(), 1);
   assert.equal(neverShown.reads(), 0);
 
@@ -340,8 +352,8 @@ assert.equal(inactiveCanonical.reads(), 0);
     ]
   });
   const drawnOnly = linearState(['off']);
-  assert.deepEqual(heldDepthFiles('linear', drawnOnly, drawnOnly), [shown.c_depth[0]]);
+  assert.deepEqual(heldDepthFiles('linear', drawnOnly), [shown.c_depth[0]]);
   const none = linearState(['drawn', 'off']);
-  assert.deepEqual(heldDepthFiles('linear', none, none), []);
+  assert.deepEqual(heldDepthFiles('linear', none), []);
   assert.equal(neverShown.reads(), 0);
 }

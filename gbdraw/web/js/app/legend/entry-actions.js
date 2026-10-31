@@ -552,25 +552,25 @@ export const createLegendEntryActions = ({
   // Moves the drawing's Legend records, the generated inventory and colors,
   // and the open Stroke options of each re-keyed row to its new key
   // (`rekeyLegendRecords`, OV-660); returns `entries`, the list being
-  // written, moved. For a drawing that is not shown (`hidden`: the Specific
-  // rules file card's Remove, OV-1280), the records of the `removed` rows go
-  // too, with the Legend colors that copy them (`legendColorCopies`), the
-  // moved list is written here, and the inventory, colors, and Stroke
-  // options, which are the shown Result's, stay.
+  // written, moved. With `takenBack` (Delete settings takes back the rule
+  // rows that name a feature instance of a turned-off record, which no Result
+  // draws), the records of the `removed` rows go too, with the Legend colors
+  // that copy them (`legendColorCopies`), the moved list is written here, and
+  // the inventory, colors, and Stroke options, which are the Result's, stay.
   /**
    * @param {DrawingState} drawing
    * @param {readonly EntryRecord[]} entries
    * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} moves
-   * @param {{ removed: readonly RuleRowColor[] } | null} [hidden] The removed rule rows.
+   * @param {{ removed: readonly RuleRowColor[] } | null} [takenBack] The removed rule rows.
    * @returns {EntryRecord[]}
    */
-  const moveLegendRecords = (drawing, entries, moves, hidden = null) => {
+  const moveLegendRecords = (drawing, entries, moves, takenBack = null) => {
     /** @type {Set<string>} */
-    const removed = new Set(hidden ? hidden.removed.map(({ caption }) => caption) : []);
+    const removed = new Set(takenBack ? takenBack.removed.map(({ caption }) => caption) : []);
     /** @param {readonly EntryRecord[]} list @returns {EntryRecord[]} */
-    const kept = (list) => (hidden ? list.filter((entry) => !removed.has(legendEntryKey(entry))) : [...list]);
+    const kept = (list) => (takenBack ? list.filter((entry) => !removed.has(legendEntryKey(entry))) : [...list]);
     const colorOverrides = { ...drawing.legendColorOverrides };
-    if (hidden) legendColorCopies(colorOverrides, hidden.removed).forEach((key) => { delete colorOverrides[key]; });
+    if (takenBack) legendColorCopies(colorOverrides, takenBack.removed).forEach((key) => { delete colorOverrides[key]; });
     /** @type {Set<string>} */
     const strokeOptionsOpen = state.legendStrokeOptionsOpen || new Set();
     const moved = rekeyLegendRecords({
@@ -580,14 +580,14 @@ export const createLegendEntryActions = ({
       colorOverrides,
       strokeOverrides: { ...drawing.legendStrokeOverrides },
       addedCaptions: [...drawing.addedLegendCaptions.value].filter((caption) => !removed.has(caption)),
-      originalOrder: hidden ? [] : /** @type {string[]} */ (originalLegendOrder.value),
-      originalColors: hidden ? {} : /** @type {Record<string, string>} */ (originalLegendColors.value),
-      strokeOptionsOpen: hidden ? [] : [...strokeOptionsOpen]
+      originalOrder: takenBack ? [] : /** @type {string[]} */ (originalLegendOrder.value),
+      originalColors: takenBack ? {} : /** @type {Record<string, string>} */ (originalLegendColors.value),
+      strokeOptionsOpen: takenBack ? [] : [...strokeOptionsOpen]
     }, moves);
     rekeyLegendPaint(drawing.slices.paint, {
       ...moved, deletedEntries: keptRowsOf(moved.deletedEntries), dormantEntries: keptRowsOf(moved.dormantEntries)
     });
-    if (hidden) {
+    if (takenBack) {
       replaceLegendRows(drawing.slices.paint, listedRowsOf(moved.entries));
       return moved.entries;
     }

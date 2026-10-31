@@ -1517,7 +1517,7 @@ Generate gives the loaded diagram. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redo
 select has focus. In a text field these keys keep the browser's text undo. Undo and Redo, like a failed Session Load, restore each setting exactly as
 it was: a setting that was not set, such as a track slot side or the Circular
 multi-record legend position, stays unset. **Reset Settings** is broader than undo and asks
-first; its dialog lists what it resets and what stays, and **Reset all settings** applies it. Every Legend rename, of a feature row or a track row such as GC content, returns
+first; its dialog lists what it resets and what stays. **Reset this drawing** resets the shown drawing as one step of its History; **Reset all drawings** resets every drawing and also the LOSAT execution and threads, Rich Feature Popup, Auto Reflow, PNG DPI, and Instant Preview, as one step that one Undo from any drawing restores; **Cancel** changes nothing. Every Legend rename, of a feature row or a track row such as GC content, returns
 to the caption Python draws. The reset also removes the label table that a loaded
 Session saved and every Similarity group name, including the saved names of
 groups that the current results do not show. The **Default colors file**,
@@ -1573,15 +1573,17 @@ features, the shown tracks, the palette, or the color table change.
 
 ## Accessibility
 
-Primary controls have stable accessible names: **Circular**, **Linear**,
+Primary controls have stable accessible names: **Circular**, **Linear** (the drawing tabs),
 **GenBank/DDBJ File**, **GenBank / DDBJ File**, **Add sequence**, **Output Prefix**,
 **Species**, **Track Preset**, **Separate Strands**, **Hide GC Content**,
 **Hide GC Skew**, **Label Mode**, **Legend position**, **Generate Diagram**,
 **Result Preview**, and **SVG**. The visible **Show Coordinate Scale** control
 has the mode-qualified accessible name **Show Coordinate Scale (Circular)** or
 **Show Coordinate Scale (Linear)**. The visible annotation **Labels** toggle
-uses **Show annotation labels**. Mode buttons expose pressed state, file
-controls are labelled, and the preview is a named region.
+uses **Show annotation labels**. The drawing tabs form a tab list named **Drawings**; each tab has `role="tab"`
+and `aria-selected` (`true` for the shown drawing). A **Linear** tab drawn with a
+plus icon, shown while the Session has no Linear drawing, creates one when
+clicked. File controls are labelled, and the preview is a named region.
 
 Every visible form control has an author-provided accessible name. A control
 with a visible label uses that label as its name; a control without one, such

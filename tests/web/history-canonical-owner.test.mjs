@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { readFile } from 'node:fs/promises';
 
 globalThis.window = { Vue: {
@@ -11,24 +12,29 @@ const {
   getCommittedCanonicalRenderRequest, buildConfigData, applyCapturedConfigData
 } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
-const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 
 const empty = canonicalRenderArtifactOwner.capture();
-const canonical = JSON.parse(await readFile(
+const saved = JSON.parse(await readFile(
   'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', 'utf8'
 ));
-adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+const canonical = savedDrawingView(saved, saved.ui.activeDrawingId);
+// D-15-124: the conservation hash pairs a request names travel with it.
+const pairsA = new Set(['["a","b"]']);
+const pairsB = new Set(['["a","c"]']);
+adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, conservationPairs: pairsA });
 const a = canonicalRenderArtifactOwner.capture();
 assert(Object.isFrozen(a));
-// The owner keeps only the committed request and its resources (no display-only intent).
-assert.deepEqual(Object.keys(a).sort(), ['activeSessionResourceTable', 'committedCanonicalSession']);
+// The owner keeps only the committed request, its resources and its conservation pairs (no display-only intent).
+assert.deepEqual(Object.keys(a).sort(), ['activeSessionResourceTable', 'committedCanonicalSession', 'conservationPairs']);
+assert.strictEqual(a.conservationPairs, pairsA);
 assert.equal(a.committedCanonicalSession.renderRequest.diagramOptions.configOverrides['labels.circular.scope'], 'outer');
 assert.strictEqual(a.committedCanonicalSession.renderRequest, getCommittedCanonicalRenderRequest());
 state.activeDrawing().form.labels_mode = 'out';
 state.results.value = [{ name: 'a.svg', content: '<svg id="a"/>' }];
 const snapshots = createHistorySnapshotService({
-  state, fileStore: createHistoryFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
+  state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
 });
 snapshots.setGeneratedArtifactRuntimeOwner(canonicalRenderArtifactOwner);
 const history = createHistoryManager({
@@ -44,7 +50,7 @@ await history.runUndoable('Change labels', () => { state.activeDrawing().form.la
 const next = structuredClone(canonical);
 next.renderRequest.diagramOptions.configOverrides['labels.circular.scope'] = 'none';
 await history.runUndoableArtifactReplacement('Generate diagram', () => {
-  adoptCanonicalRenderArtifacts(next, { adoptOwnedRequest: true });
+  adoptCanonicalRenderArtifacts(next, { adoptOwnedRequest: true, conservationPairs: pairsB });
   state.results.value = [{ name: 'b.svg', content: '<svg id="b"/>' }];
 });
 const b = canonicalRenderArtifactOwner.capture();
@@ -52,11 +58,16 @@ assert.notStrictEqual(b.activeSessionResourceTable, a.activeSessionResourceTable
 await history.undo();
 assert.strictEqual(getCommittedCanonicalRenderRequest(), a.committedCanonicalSession.renderRequest);
 assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, a.activeSessionResourceTable);
+assert.strictEqual(canonicalRenderArtifactOwner.capture().conservationPairs, pairsA);
 assert.equal(state.results.value[0].name, 'a.svg');
 assert.equal(state.activeDrawing().form.labels_mode, 'none');
 await history.redo();
 assert.strictEqual(getCommittedCanonicalRenderRequest(), b.committedCanonicalSession.renderRequest);
 assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, b.activeSessionResourceTable);
+assert.strictEqual(canonicalRenderArtifactOwner.capture().conservationPairs, pairsB);
+// A candidate of the committed request (a record rotation) keeps the request's pairs.
+adoptCanonicalRenderArtifacts(next, { adoptOwnedRequest: true, conservationPairs: 'committed' });
+assert.strictEqual(canonicalRenderArtifactOwner.capture().conservationPairs, pairsB);
 assert.equal(state.results.value[0].name, 'b.svg');
 assert.equal(getCommittedCanonicalRenderRequest().diagramOptions.configOverrides['labels.circular.scope'], 'none');
 await history.undo();
@@ -80,6 +91,7 @@ for (const status of ['canceled','stale']) {
 }
 canonicalRenderArtifactOwner.restore(empty);
 assert.equal(getCommittedCanonicalRenderRequest(), null);
+assert.equal(canonicalRenderArtifactOwner.capture().conservationPairs.size, 0);
 assert.equal(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, null);
 state.results.value = [];
 await history.initializeIntentBaseline();

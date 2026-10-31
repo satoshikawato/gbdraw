@@ -37,6 +37,7 @@ from gbdraw.api import (
 )
 from gbdraw.session import save_session_document
 from gbdraw.session_io import SESSION_FORMAT, validate_session, write_session_json
+from tests.utils.session_drawing_view import drawing_view
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GALLERY_SESSIONS = REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions"
@@ -278,9 +279,9 @@ def test_cli_circular_session_checks_its_identity_manifest_once(
     # A Circular drawing extracts no proteins: the render and the writer carry
     # the loaded Session's own manifest.
     session = json.loads(CIRCULAR_SESSION.read_text(encoding="utf-8"))
-    manifest = json.loads(PROTEIN_SESSION.read_text(encoding="utf-8"))["proteinIdentityManifest"]
+    manifest = drawing_view(json.loads(PROTEIN_SESSION.read_text(encoding="utf-8")))["proteinIdentityManifest"]
     assert manifest["recordInstances"]
-    session["proteinIdentityManifest"] = manifest
+    session["drawings"][0]["proteinIdentityManifest"] = manifest
     path = tmp_path / "manifest.gbdraw-session.json"
     path.write_text(json.dumps(session), encoding="utf-8")
     checks = _count_manifest_checks(monkeypatch)
@@ -291,7 +292,7 @@ def test_cli_circular_session_checks_its_identity_manifest_once(
     assert len(checks) == 1
     if save:
         resaved = json.loads((tmp_path / "resaved.gbdraw-session.json").read_text(encoding="utf-8"))
-        assert resaved["proteinIdentityManifest"] == manifest
+        assert drawing_view(resaved)["proteinIdentityManifest"] == manifest
 
 
 def test_cli_fresh_linear_render_trusts_its_own_extraction(
@@ -314,4 +315,4 @@ def test_cli_fresh_linear_render_trusts_its_own_extraction(
     # the writer checks its own empty manifest, as before.)
     assert [args for args in checks if args[0]["recordInstances"]] == []
     assert len(checks) == 2
-    assert json.loads(sidecar.read_text(encoding="utf-8"))["proteinIdentityManifest"]["recordInstances"]
+    assert drawing_view(json.loads(sidecar.read_text(encoding="utf-8")))["proteinIdentityManifest"]["recordInstances"]

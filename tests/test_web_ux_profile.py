@@ -1,4 +1,5 @@
 from pathlib import Path
+from gbdraw.session_drawings import DRAWING_NAMES
 from tests.utils.web_markup import read_english_index
 
 
@@ -20,8 +21,21 @@ def test_circular_legend_selector_exposes_every_supported_corner() -> None:
 def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> None:
     index = read_english_index(WEB_INDEX)
 
-    assert 'aria-label="Circular" :aria-pressed="mode === \'circular\'"' in index
-    assert 'aria-label="Linear" :aria-pressed="mode === \'linear\'"' in index
+    # The drawing bar: tutorials select the first Circular drawing as the tab
+    # named by its default name (D-15-98), found by its drawing ID.
+    assert DRAWING_NAMES == {"circular": "Circular", "linear": "Linear"}
+    assert 'role="tablist" aria-label="Drawings"' in index
+    tab_start = index.index('<button v-for="tab in drawingBarTabs"')
+    tab = index[tab_start : index.index("</button>", tab_start)]
+    for attribute in (
+        'role="tab"',
+        ":data-drawing-id=\"tab.kind === 'offer' ? null : tab.id\"",
+        ':data-drawing-offer="tab.kind === \'offer\' ? tab.mode : null"',
+        ":aria-selected=\"tab.selected ? 'true' : 'false'\"",
+        "@click=\"tab.kind === 'offer' ? drawingBar.newDrawing(tab.mode) : selectDrawing(tab.id)\"",
+        "{{ tab.label }}",
+    ):
+        assert attribute in tab, attribute
     assert 'ref="input" :multiple="multiple"' in index
     assert (
         ':aria-label="$attrs[\'data-input-aria-label\'] || label" '
@@ -148,7 +162,7 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
     assert ':data-linear-comparison-pair-upload="pair.edgeKey"' in index
     assert '@change="setLinearComparisonGapAction(pair.edgeKey, ' in index
     assert (
-        '@update:model-value="setLinearComparisonCardFile(pair.edgeKey, '
+        '@update:model-value="uploadLinearComparisonCardFile(pair.edgeKey, '
         '$event)"' in index
     )
     assert (

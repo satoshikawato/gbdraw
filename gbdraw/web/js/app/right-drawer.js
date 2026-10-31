@@ -22,6 +22,7 @@ import {
  * @property {<T>(getter: () => T) => { readonly value: T }} computed
  * @property {() => string} [getOpenDisabledReason]
  * @property {() => void} [onClose]
+ * @property {() => void} [onOpen] Called after the drawer opened (the phone layout shows the Preview).
  * @property {RightDrawerFocusReturn | null} [focusReturn]
  */
 
@@ -32,6 +33,7 @@ export const createRightDrawerController = ({
   computed,
   getOpenDisabledReason = () => '',
   onClose = () => {},
+  onOpen = () => {},
   focusReturn = null
 }) => {
   // OV-921: one scan of the groups per change, read by every availability
@@ -49,7 +51,9 @@ export const createRightDrawerController = ({
   );
   const openRightDrawerTab = (tab = state.rightDrawerTab.value) => {
     if (getOpenDisabledReason()) return false;
-    return openRightDrawerState(state, tab, currentOrthogroupCount());
+    const opened = openRightDrawerState(state, tab, currentOrthogroupCount());
+    if (opened) onOpen();
+    return opened;
   };
   // Closing returns keyboard focus from inside the drawer to the Editor toggle
   // (PD-OI-038); focus elsewhere stays where it is.

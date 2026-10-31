@@ -23,6 +23,7 @@ from gbdraw.web_support.rule_matching import evaluate_rules_json, synthesize_col
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
 from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
+from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.ring_search_frame import circular_ring_tables_in_search_frame_json
@@ -1100,17 +1101,6 @@ def build_protein_losat_cache_keys_json(
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='buildProteinLosatCacheKeys', stage="helper")})
 
-def main_session_table_text_to_search_frame_json(table_text, query_frame_json, subject_frame_json):
-    """Rewrite one origin/main Session nucleotide table to the search frame."""
-    from gbdraw.linear_comparison import reverse_endpoint_table_text
-
-    endpoints = []
-    for frame_json in (query_frame_json, subject_frame_json):
-        frame = json.loads(str(frame_json))
-        endpoints.append((int(frame.get("length") or 0), frame.get("reverse") is True))
-    text = reverse_endpoint_table_text(str(table_text), endpoints[0], endpoints[1])
-    return json.dumps({"tsv": text})
-
 def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
     """Hydrate one internal schema-4 protein TSV for user download."""
     try:
@@ -1883,10 +1873,11 @@ _WEB_JSON_HELPERS = {
     "promote_legacy_losatp_cache_candidates": (promote_legacy_losatp_cache_candidates, "promoteLegacyLosatpCache"),
     "resolve_legacy_protein_reference_map_json": (resolve_legacy_protein_reference_map_json, "resolveLegacyProteinReferences"),
     "convert_losatp_blastp_pairs_to_genomic_payload": (convert_losatp_blastp_pairs_to_genomic_payload, "convertLosatpPairsToGenomicPayload"),
-    "main_session_table_text_to_search_frame_json": (main_session_table_text_to_search_frame_json, "convertMainSessionComparisonFrame"),
     "stored_protein_results_to_search_frame_json": (
         _with_prepared_input_lookup(stored_protein_results_to_search_frame_json, 1), "convertStoredProteinResultFrames"
     ),
+    # Load of a Session 27-44: Python moves it to a Session 50 once (DESIGN 4.3).
+    "legacy_session_to_drawings_json": (legacy_session_to_drawings_json, "upgradeLegacySession"),
     "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),

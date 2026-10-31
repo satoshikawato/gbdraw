@@ -7,6 +7,7 @@ const {
   generate,
   download
 } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -413,10 +414,10 @@ test('same label text in two Linear records changes only the selected exact iden
   page.on('dialog', (dialog) => dialog.dismiss());
   try {
     await openApp(page);
+    await showDrawing(page, { kind: 'linear' });
     await page.evaluate(async ({ first, second }) => {
       const app = window.__GBDRAW_APP__;
-      app.selectDrawing('linear');
-      app.lInputType = 'gb';
+      app.setLinearInputType('gb');
       app.addLinearSeq();
       [first, second].forEach((content, index) => app.setLinearSeqPrimaryFile(
         index,

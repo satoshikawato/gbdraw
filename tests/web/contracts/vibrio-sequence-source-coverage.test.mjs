@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
+import { savedDrawingView } from '../helpers/saved-drawing-view.mjs';
 
 const repoRoot = process.cwd();
 const sourceRoot = join(repoRoot, 'gbdraw', 'web', 'js');
@@ -18,7 +19,13 @@ const { analyzeCatalogSequenceSourceCoverage } = await import(
 const { projectCanonicalSessionRequest } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
-const { adoptCurrentSessionResources } = await import(
+const { createInputFileStore } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'history-files.js'))
+);
+const { bindLoadedInputs } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'drawing', 'inputs.js'))
+);
+const { adoptCurrentSessionResources, sessionResourceSource } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-resource-backing.js'))
 );
 const { groupLinearSourceRecords } = await import(
@@ -36,7 +43,8 @@ const fixturePath = join(
   'sessions',
   'vibrio-harveyi-group-collinear.gbdraw-session.json.gz'
 );
-const fixture = JSON.parse(gunzipSync(await readFile(fixturePath)).toString('utf8'));
+const saved = JSON.parse(gunzipSync(await readFile(fixturePath)).toString('utf8'));
+const fixture = savedDrawingView(saved, saved.ui.activeDrawingId);
 
 test('real Vibrio catalog covers every sequence consumer with a valid sparse catalog', () => {
   const coverage = analyzeCatalogSequenceSourceCoverage({
@@ -69,9 +77,15 @@ test('real Vibrio session still projects its embedded records and presentation s
 
   // Two multi-record GenBank Files, one per row: File order can move and the
   // Record Layout is not custom.
-  const { linearSeqs } = projectedSession.files;
+  // The candidate holds Files until Load installs them: bind it as Load does.
+  const inputFiles = createInputFileStore({
+    sourceOf: (file) => sessionResourceSource(file)?.descriptor
+  });
+  const { linearSeqs } = bindLoadedInputs(inputFiles, {
+    files: {}, linearSeqs: projectedSession.files.linearSeqs, linearComparisonPlan: { edges: [] }, circularRecordDiscovery: {}
+  });
   assert.deepEqual(
-    linearSeqs.map((sequence) => [sequence.gb.name, sequence.region_record_id]),
+    linearSeqs.map((sequence) => [inputFiles.fileOf(sequence.gb).name, sequence.region_record_id]),
     [
       ['GCF_000196095.1_ASM19609v1_genomic.gbff', 'NC_004603.1'],
       ['GCF_000196095.1_ASM19609v1_genomic.gbff', 'NC_004605.1'],

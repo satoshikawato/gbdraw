@@ -3,6 +3,8 @@ const fs = require('node:fs/promises');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const external = new WeakMap();
@@ -47,7 +49,8 @@ const snapshot = page => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   const feature = state.extractedFeatures.value.find(f => f.biological_feature_id === 'fb8ff22d9');
-  return { mode: state.mode.value, records: state.circularRecordList.value,
+  return { mode: state.mode.value, // null: a Linear-only Load makes no Circular drawing.
+    records: state.drawingList().find((drawing) => drawing.mode === 'circular')?.circularRecordList.value ?? null,
     placements: state.activeDrawing().featurePlacementOverrides,
     feature: feature && { recordKey: feature.record_key, biologicalFeatureId: feature.biological_feature_id },
     featureCount: state.extractedFeatures.value.length,
@@ -55,10 +58,9 @@ const snapshot = page => page.evaluate(async () => {
     results: window.__GBDRAW_APP__.currentResults().map(result => result.content) };
 });
 const switchMode = async (page, mode) => {
-  await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
+  await showDrawing(page, { kind: mode });
   if (mode === 'circular') await expect.poll(() => page.evaluate(async () =>
-    (await import('./js/state.js')).state.circularRecordDiscovery.status)).not.toBe('loading');
+    (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status)).not.toBe('loading');
 };
 const structure = (page, svg) => page.evaluate(svg => {
   const visit = node => node.nodeType === Node.ELEMENT_NODE
@@ -83,6 +85,10 @@ for (const committed of [false, true]) {
 
       const page = await load(browser);
       pages.push(page);
+      // The drawing switch below makes the Linear drawing; making it first keeps
+      // the project step that creates it out of the Circular drawing's Undo walk.
+      await switchMode(page, 'linear');
+      await switchMode(page, 'circular');
       await generate(page);
       await placement(page, 'outward');
       if (committed) await generate(page);
@@ -90,7 +96,7 @@ for (const committed of [false, true]) {
       expect(before.feature).toEqual({ recordKey: 'record-1', biologicalFeatureId: 'fb8ff22d9' });
       expect(Object.values(before.placements)).toEqual([{ ...before.feature,
         placement: { kind: 'lane', side: 'outward', level: 1 } }]);
-      await page.evaluate(async () => { window.__MODE_SOURCE__ = (await import('./js/state.js')).state.files.c_gb; });
+      await page.evaluate(async () => { window.__MODE_SOURCE__ = (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb; });
       const checkReturned = async () => {
         await expect.poll(async () => (await snapshot(page)).feature).toEqual(before.feature);
         const returned = await snapshot(page);
@@ -98,7 +104,7 @@ for (const committed of [false, true]) {
         expect(returned.placements).toEqual(before.placements);
         expect(returned.featureCount).toBe(before.featureCount);
         expect(returned.results).toEqual(before.results);
-        expect(await page.evaluate(async () => (await import('./js/state.js')).state.files.c_gb === window.__MODE_SOURCE__)).toBe(true);
+        expect(await page.evaluate(async () => (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb === window.__MODE_SOURCE__)).toBe(true);
         await placement(page);
       };
       await switchMode(page, 'linear');
@@ -131,7 +137,7 @@ for (const committed of [false, true]) {
       const saved = testInfo.outputPath(download.suggestedFilename());
       await download.saveAs(saved);
       const bytes = await fs.readFile(saved);
-      const savedSession = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString());
+      const savedSession = shownSavedDrawing(JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString()));
       expect(savedSession.renderRequest.diagramOptions.featurePlacements || []).toEqual(before.committedPlacements);
       await generate(page);
       const generated = await snapshot(page);
@@ -182,15 +188,15 @@ for (const operation of ['replacement', 'removal']) {
       expect(placed).toEqual([JSON.stringify([before.feature.recordKey, before.feature.biologicalFeatureId])]);
       const source = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
-        window.__MODE_SOURCE__ = state.files.c_gb;
+        window.__MODE_SOURCE__ = state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb;
         window.__MODE_FEATURE__ = state.extractedFeatures.value[0];
-        return (await import('./js/services/file-content-cache.js')).readFileText(state.files.c_gb);
+        return (await import('./js/services/file-content-cache.js')).readFileText(state.inputFiles.fileOf(state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb));
       });
       await switchMode(page, 'linear');
       await switchMode(page, 'circular');
       const upload = page.getByLabel('GenBank/DDBJ File', { exact: true });
       const discovered = () => expect.poll(() => page.evaluate(async () =>
-        (await import('./js/state.js')).state.circularRecordDiscovery.status)).toBe('ready');
+        (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status)).toBe('ready');
       if (operation === 'replacement') {
         // Keep the biological record ID: file/source identity must still invalidate its binding.
         await upload.setInputFiles({ name: 'replacement.gbk',
@@ -202,8 +208,8 @@ for (const operation of ['replacement', 'removal']) {
       }
       const invalidation = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
-        return { sameSource: state.files.c_gb === window.__MODE_SOURCE__,
-          identities: state.circularRecordDiscovery.canonicalRecordIdentities,
+        return { sameSource: state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb === window.__MODE_SOURCE__,
+          identities: state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.canonicalRecordIdentities,
           choices: window.__GBDRAW_APP__.featurePlacementActions.choices([window.__MODE_FEATURE__]) };
       });
       expect(invalidation.sameSource).toBe(false);

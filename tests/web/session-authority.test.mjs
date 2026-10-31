@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -11,6 +12,7 @@ const {
   isAuthorityBand,
   isCanonicalBand,
   isModeScopedBand,
+  isDrawingsBand,
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
@@ -453,7 +455,11 @@ assert.throws(() => validateSessionAuthorityInventory({
 // (Session 46; the Gallery Sessions are current-writer Sessions).
 {
   const { readFileSync } = await import('node:fs');
-  const read = (name) => JSON.parse(readFileSync(join(repoRoot, 'gbdraw/web/gallery/sessions', name), 'utf8'));
+  const read = (name) => {
+    const saved = JSON.parse(readFileSync(join(repoRoot, 'gbdraw/web/gallery/sessions', name), 'utf8'));
+    // The one-drawing view is the 46 layout this block checks (`modes`, `otherModeResult`).
+    return { ...savedDrawingView(saved, saved.ui.activeDrawingId), version: 46 };
+  };
   const circularSession = read('HmmtDNA_basic_circular.gbdraw-session.json');
   const linearSession = read('lambda_basic_linear.gbdraw-session.json');
   const otherModeResult = {
@@ -531,7 +537,7 @@ assert.throws(() => validateSessionAuthorityInventory({
   for (const formatValue of [undefined, null, 'other', 'GBDRAW-SESSION', ['gbdraw-session'], 46]) {
     assert.equal(refusal({ format: formatValue, version: 46 }), format, `format ${JSON.stringify(formatValue)}`);
   }
-  for (const version of [27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48]) {
+  for (const version of [27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49, 50]) {
     const document = { format: 'gbdraw-session', version, anything: { unvalidated: true } };
     assert.equal(readSessionInput(document), document, `version ${version}`);
   }
@@ -546,11 +552,17 @@ assert.throws(() => validateSessionAuthorityInventory({
     [isCanonicalBand, ['SessionChecked31', 'SessionChecked39', 'SessionChecked40', 'SessionChecked46']],
     [isArtifactBand, ['SessionChecked39', 'SessionChecked40', 'SessionChecked46']],
     [isAuthorityBand, ['SessionChecked40', 'SessionChecked46']],
-    [isModeScopedBand, ['SessionChecked46']]
+    [isModeScopedBand, ['SessionChecked46']],
+    // A Session 50 is in none of the four (DESIGN §6: no `>=` branch admits it).
+    [isDrawingsBand, ['SessionChecked50']]
   ];
   const { bands } = SESSION_ADMISSION_DESCRIPTION;
+  // D-15-95: the 46-49 band has one range predicate; a version test that
+  // also admits 50 is `versionKeepsModeSlices`, not a second band predicate.
+  const authority = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/session-authority.js')));
+  assert.equal(Object.hasOwn(authority, 'isModeScopedVersion'), false, 'isModeScopedVersion duplicates the band predicates');
   assert.deepEqual(bands.flatMap(({ versions }) => versions), [...SUPPORTED_SESSION_VERSIONS].sort((a, b) => a - b));
-  assert.deepEqual(bands.map(({ root }) => root), ['SessionChecked27', ...predicates[0][1]]);
+  assert.deepEqual(bands.map(({ root }) => root), ['SessionChecked27', ...predicates[0][1], ...predicates[4][1]]);
   for (const version of SUPPORTED_SESSION_VERSIONS) {
     const band = bands.find(({ versions }) => versions.includes(version));
     assert.equal(band.minVersion, Math.min(...band.versions));
@@ -558,4 +570,20 @@ assert.throws(() => validateSessionAuthorityInventory({
       assert.equal(predicate({ format: 'gbdraw-session', version }), roots.includes(band.root), `${predicate.name} ${version}`);
     }
   }
+}
+
+{
+  // DESIGN §6: the writer flip (SESSION_VERSION 50) leaves the settings-only
+  // form and the schema-2 bindings of Sessions 46-49 as they are, and gives a
+  // Session 50 no settings-only form: its drawing without a request is read
+  // by that drawing (`projectsWithoutRequest`).
+  const { spawnSync } = await import('node:child_process');
+  const run = spawnSync(process.execPath, ['--no-warnings',
+    join(repoRoot, 'tests/web/helpers/session-authority-at-flip.mjs')], { encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  const atFlip = JSON.parse(run.stdout.trim().split('\n').at(-1));
+  assert.equal(atFlip.sessionVersion, 50);
+  assert.deepEqual(atFlip.settingsOnly, { 46: true, 47: true, 48: true, 49: true, 50: false });
+  assert.deepEqual(atFlip.bindings, { 46: 'read', 47: 'read', 48: 'read', 49: 'read', 50: 'read' });
+  assert.deepEqual(atFlip.projectsWithoutRequest, { 30: false, 48: true, 49: true, 50: true });
 }

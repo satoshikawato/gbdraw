@@ -152,12 +152,12 @@
         :root:lang(zh-Hant) body { font-family: 'Inter', 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans CJK TC', 'Noto Sans TC', 'Source Han Sans TC', sans-serif; }
         /* Korean UI text: system Hangul fonts; a line breaks between words, never inside one (a word too long for its box still wraps). */
         :root:lang(ko) body { font-family: 'Inter', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans CJK KR', 'Noto Sans KR', 'Source Han Sans KR', sans-serif; word-break: keep-all; overflow-wrap: break-word; }
-        /* Japanese control names (buttons, tabs, labels, headings): a name that wraps breaks between phrases
+        /* Japanese control names (buttons, tabs, labels, headings) and the apply note: a name that wraps breaks between phrases
            (適用, not 適 / 用; TSVを / インポート, not TSVを / インポ / ート), as a Latin name breaks between words (OV-1518).
            A phrase wider than its box still breaks rather than overflow. Browsers without phrase breaking keep
            the normal Japanese breaks. The rail names keep their own breaks, never inside a word (css/tailwind.input.css), and an
            element that asks for break-all (a file name) keeps it. */
-        :root:lang(ja) :is(button, .btn, summary, label, legend, [role="tab"], h2, h3, h4, .input-label, .group-heading, .app-session-label):not(svg, svg *, .settings-index *, .break-all) { word-break: auto-phrase; overflow-wrap: break-word; }
+        :root:lang(ja) :is(button, .btn, summary, label, legend, [role="tab"], h2, h3, h4, .input-label, .group-heading, .app-session-label, .apply-note):not(svg, svg *, .settings-index *, .break-all) { word-break: auto-phrase; overflow-wrap: break-word; }
         /* Japanese and Chinese hints, paragraphs and field labels: a wrapped text does not end on a line of one
            or two characters (…してくださ / い。, 比 / 较。), where the browser can move a few onto it (OV-1524).
            Latin text keeps the browser's normal wrapping; the rail names keep theirs. The longhand leaves the
@@ -622,6 +622,23 @@
             border: 1px solid #e2e8f0;
             border-radius: 0.375rem;
             background: #f8fafc;
+        }
+        /* The phone layout's drawing picker and pane tabs; wider layouts never show them. */
+        .drawing-picker,
+        .phone-pane-tabs {
+            display: none;
+        }
+        /* The drawing bar's tab menu opens over the panes, not inside the bar. */
+        .drawing-bar-menu {
+            position: relative;
+        }
+        .drawing-bar-menu > .action-menu-items {
+            position: absolute;
+            z-index: 45;
+            left: 0;
+            min-width: 10rem;
+            background: #fff;
+            box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
         }
         .action-menu-item {
             display: flex;
@@ -1467,9 +1484,6 @@
            ends with an ellipsis or shows nothing; the title button clips its own pencil and title. */
         .app-session-label { flex: none; min-width: 0; max-width: calc(100% - 2rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .app-session-button { overflow: hidden; }
-        /* The mode buttons animate their colors only: a size that eases between the one-row and the two-row
-           header would give app/header-fit.js the widths of a frame in between. */
-        .app-header .app-mode-button { transition-property: color, background-color, box-shadow; }
         /* #1383 (PD-OI-108): the way to the Gallery's tutorials stands out: the header link, the link in the notice
            of a loaded example, and the card of the empty Preview share one accent-filled style. */
         .app-gallery-link {
@@ -1502,7 +1516,6 @@
             .app-header[data-session-title-alone] .app-session-label { display: none; }
             .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-toolbar { gap: 0.125rem; }
             .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-file-actions { margin-left: 0.125rem; padding-left: 0.125rem; }
-            .app-header:not([data-header-wrapped]) .app-mode-button { white-space: nowrap; }
             .app-header[data-language-narrow] .app-language-select { field-sizing: content; }
         }
         /* The two-row header (`data-header-wrapped`, app/header-fit.js): always at 768 px and below, where the
@@ -1564,11 +1577,6 @@
             height: 2rem !important;
         }
 
-        .app-header[data-header-wrapped] .mode-switch {
-            order: 1 !important;
-            margin-left: auto !important;
-        }
-
         .app-header[data-header-wrapped] .app-language {
             order: 1 !important;
             flex: 1 1 4.5rem;
@@ -1580,9 +1588,8 @@
             min-width: 0;
         }
 
-        .app-header[data-header-wrapped] .app-mode-button {
-            padding: 0.35rem 0.55rem !important;
-            font-size: 0.75rem !important;
+        @media (max-width: 768px) {
+            .input-label { flex-wrap: wrap; }
         }
         .app-notice-link { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.75rem; margin-top: 0.375rem; font-weight: 500; }
         .tutorial-card {
@@ -1630,6 +1637,127 @@
             /* The header takes its two-row layout (app/header-fit.js reads this marker). */
             .app-header {
                 --app-header-two-row: 1;
+            }
+
+            .drawing-bar {
+                padding: 0.25rem 0.5rem !important;
+            }
+
+            /* One picker row and Settings | Preview tabs (PD-OI-090: the bar works at 390 px). */
+            .drawing-bar-tabs {
+                display: none !important;
+            }
+            .drawing-picker {
+                display: block;
+                position: relative;
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            .drawing-picker > .action-menu-toggle {
+                display: flex;
+                align-items: center;
+                gap: 0.4rem;
+                padding: 0.3rem 0.6rem;
+                border: 1px solid #e2e8f0;
+                border-radius: 0.5rem;
+                background: #f1f5f9;
+                color: #2563eb;
+                font-size: 0.875rem;
+                font-weight: 700;
+                cursor: pointer;
+            }
+            .drawing-picker > .action-menu-toggle > span {
+                flex: 1 1 auto;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .drawing-picker > .action-menu-items {
+                position: absolute;
+                z-index: 46;
+                left: 0;
+                right: 0;
+                background: #fff;
+                box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
+            }
+            .drawing-picker .action-menu-item {
+                padding: 0.5rem 0.6rem;
+                font-size: 0.875rem;
+            }
+            /* The menu sits at the row's right end: it opens aligned to that edge. */
+            .drawing-bar-menu > .action-menu-items {
+                left: auto;
+                right: 0;
+            }
+            .phone-pane-tabs {
+                display: flex;
+                gap: 0.25rem;
+                padding: 0.25rem 0.5rem;
+                border-bottom: 1px solid #e2e8f0;
+                background: #fff;
+            }
+            .phone-pane-tabs > [role="tab"] {
+                flex: 1 1 0;
+                padding: 0.4rem 0;
+                border-radius: 0.375rem;
+                background: #f1f5f9;
+                color: #64748b;
+                font-size: 0.875rem;
+                font-weight: 700;
+            }
+            .phone-pane-tabs > [aria-selected="true"] {
+                background: #fff;
+                color: #2563eb;
+                box-shadow: 0 1px 3px rgb(15 23 42 / 0.15);
+                outline: 1px solid rgb(0 0 0 / 0.05);
+            }
+            .app-main[data-phone-pane="settings"] > .result-pane {
+                display: none !important;
+            }
+            /* The Preview pane takes the viewport below the tabs; the Generate bar stays, and the footer
+               lies below the viewport, reached by scrolling the page. In a window at most 240 px wide (a
+               390 px phone at 200 % zoom) the header, the drawing bar and the tabs leave too little of the
+               viewport for the figure: there the page scrolls as a whole, the header scrolls away with it,
+               and the Preview pane is at least 70 % of the window high (OV-1802, Owner 2026-10-25). */
+            @media (min-width: 241px) {
+                #app:has(> .app-main[data-phone-pane="preview"]) {
+                    height: 100dvh !important;
+                    min-height: 0 !important;
+                }
+                #app:has(> .app-main[data-phone-pane="preview"]) > footer[data-app-footer] {
+                    position: absolute;
+                    top: 100%;
+                    left: 0;
+                    right: 0;
+                }
+                .app-main[data-phone-pane="preview"] {
+                    flex: 1 1 0 !important;
+                    min-height: 0 !important;
+                }
+                .app-main[data-phone-pane="preview"] > .result-pane {
+                    flex: 1 1 0 !important;
+                    min-height: 0 !important;
+                    overflow-y: auto !important;
+                    container-type: size;
+                }
+            }
+            @media (max-width: 240px) {
+                header.app-header {
+                    position: static;
+                }
+                .app-main[data-phone-pane="preview"] > .result-pane {
+                    min-height: 70vh !important;
+                }
+            }
+            .app-main[data-phone-pane="preview"] {
+                gap: 0 !important;
+            }
+            .app-main[data-phone-pane="preview"] > .settings-pane > :not(.generate-bar) {
+                display: none !important;
+            }
+            .app-main[data-phone-pane="preview"] > .settings-pane {
+                height: 0 !important;
             }
 
             .app-main {
@@ -1931,6 +2059,41 @@
             .preview-workspace:has(> .right-drawer[aria-hidden="false"]) {
                 grid-template-rows: calc(13rem + var(--preview-search-space)) auto auto;
             }
+            /* The phone layout's Preview pane (Owner R17-10 A): the workspace takes the pane's height, the
+               canvas with the controls below it, or the canvas (13rem) and the open Editor with the controls
+               after them. The Result header and the search lie above it, reached by scrolling the pane up.
+               The pane is the size container; the workspace's own content never sets its row. */
+            @media (max-width: 768px) {
+                .app-main[data-phone-pane="preview"] .preview-editor-layout {
+                    grid-template-rows: auto minmax(0, 1fr) auto;
+                }
+                /* Its rows end where this box ends; the items share the one column with it. */
+                .app-main[data-phone-pane="preview"] .preview-editor-layout::after {
+                    content: '';
+                    grid-area: 2 / 1 / 4;
+                    height: 100cqh;
+                    pointer-events: none;
+                }
+                .app-main[data-phone-pane="preview"] .preview-editor-layout > * {
+                    grid-column: 1;
+                }
+                .app-main[data-phone-pane="preview"] .preview-editor-layout:has(> .preview-workspace > .right-drawer[aria-hidden="false"])::after {
+                    grid-row: 2;
+                }
+                .app-main[data-phone-pane="preview"] .preview-workspace {
+                    contain: size;
+                    grid-template-rows: minmax(calc(200px + var(--preview-search-space)), 1fr) auto auto;
+                }
+                .app-main[data-phone-pane="preview"] .preview-workspace:has(.alignment-review-panel) {
+                    grid-template-rows: minmax(calc(200px + var(--preview-search-space)), 1fr) clamp(15rem, 29dvh, 18rem) auto;
+                }
+                .app-main[data-phone-pane="preview"] .preview-workspace:has(> .right-drawer[aria-hidden="false"]) {
+                    grid-template-rows: calc(13rem + var(--preview-search-space)) auto minmax(11rem, 1fr);
+                }
+                .app-main[data-phone-pane="preview"] .preview-workspace .right-drawer {
+                    max-height: none;
+                }
+            }
             .preview-viewport {
                 position: relative;
                 grid-area: 1 / 1;
@@ -2085,6 +2248,11 @@
            (64 px over the pane's end, 8 px seam). */
         .settings-pane { --generate-room: 5.875rem; }
         .generate-bar-short { display: none; }
+        /* "Generate Diagram" wraps in a window at most 240 px wide: the bar shows "Generate" there (OV-1772). */
+        @media (max-width: 240px) {
+            .generate-bar .generate-bar-long { display: none; }
+            .generate-bar .generate-bar-short { display: inline; }
+        }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) { --generate-room: 4.5rem; }
         .settings-scroll, .settings-pane[data-settings-display="rail"] > .settings-index { margin-bottom: var(--generate-room); }
 
@@ -2166,6 +2334,16 @@
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn > span { flex-direction: column; gap: 2px; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar .generate-bar-long { display: none; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar .generate-bar-short { display: inline; }
+        /* In a window at most 800 px high, Generate beside a docked section is 48 px tall, 20 px lower than
+           the stacked button, and its room shrinks by as much: the rail then fits below the drawing bar at
+           1280x720 (OV-1785, Owner 2026-10-25; the rail's spacing is in css/tailwind.input.css). The square
+           beside the rail alone keeps its 60 px (PD-OI-093). Docking or closing a section changes the
+           button's height at once: the press effects keep their transition, the size has none. */
+        @media (max-height: 800px) {
+            .settings-pane[data-settings-display="rail"][data-settings-docked] { --generate-room: calc(5.875rem - 20px); }
+            .settings-pane[data-settings-display="rail"][data-settings-docked] > .generate-bar > .btn { height: 48px; padding-top: 0; padding-bottom: 0; }
+            .settings-pane[data-settings-display="rail"] > .generate-bar > .btn { transition-property: color, background-color, border-color, border-width, box-shadow, transform, translate; }
+        }
 
         /* While the Review alignment panel is docked, the pane scrolls it into reach. */
         .result-pane:has(.alignment-review-panel) {
@@ -2253,10 +2431,6 @@
                     </button>
                 </div>
 
-                <div class="mode-switch flex bg-slate-100 p-1 rounded-lg">
-                    <button type="button" data-history-ignore :aria-label="t('Circular')" :aria-pressed="mode === 'circular'" @click="selectDrawing('circular')" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!drawingSwitchAvailable"><i class="ph ph-circle" aria-hidden="true"></i> {{ t('Circular') }}</button>
-                    <button type="button" data-history-ignore :aria-label="t('Linear')" :aria-pressed="mode === 'linear'" @click="selectDrawing('linear')" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!drawingSwitchAvailable"><i class="ph ph-ruler" aria-hidden="true"></i> {{ t('Linear') }}</button>
-                </div>
                 <!-- PD-OI-106: the UI language. A globe and each language's own name keep it findable in any language; a choice is no History step. The link beside it opens the translation feedback form in a new tab. -->
                 <div class="app-language flex items-center gap-1 text-slate-500" :title="t('Language')">
                     <i class="ph ph-globe text-base" aria-hidden="true"></i>
@@ -2269,9 +2443,60 @@
         </div>
     </header>
 
-    <main class="app-main flex-1 min-h-0 px-4 py-3 flex overflow-hidden">
+    <!-- PD-OI-090: the drawing bar, under the header and above both panes. One tab per drawing in tab order, named by
+         the drawing (a default name in the UI language). Arrow keys, Home and End move the focus; Enter or Space shows
+         the focused drawing (manual activation). While the project has no Linear drawing, the Linear offer tab follows the
+         tabs; choosing it makes an empty Linear drawing (New Linear). The tab menu holds New Circular, New Linear, and
+         Duplicate (a copy of its tab's drawing, with its Result and an empty History), New Circular and New Linear drawing
+         with this style (a new drawing of that mode with its tab's settings that the mode has and the user's table rows,
+         no files; R17-27), then Rename, Move, and Delete of its tab's drawing; each item is one History step. -->
+    <div class="drawing-bar shrink-0 flex items-center gap-1 px-4 py-1 border-b border-slate-200 bg-white/90">
+        <!-- At <= 768 px the tabs give way to one picker: the shown drawing's name, opening a list of every drawing. -->
+        <template v-for="tab in drawingBarTabs" :key="'picker-' + tab.id">
+            <action-menu v-if="tab.selected" :icon="tab.mode === 'circular' ? 'ph-circle' : 'ph-ruler'" class="drawing-picker" close-on-run
+                         :label="tab.label" :aria-label="t('Shown drawing: {name}', { name: tab.label })" :title="drawingSwitchAvailable ? tab.label : drawingSwitchBusyReason"
+                         :items="drawingBarTabs.map((item) => (item.kind === 'offer'
+                             ? { label: item.label, icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing(item.mode) }
+                             : { label: item.label, icon: item.selected ? 'ph-check' : (item.mode === 'circular' ? 'ph-circle' : 'ph-ruler'), disabled: !drawingSwitchAvailable, run: () => selectDrawing(item.id) }))"></action-menu>
+        </template>
+        <div class="drawing-bar-tabs flex bg-slate-100 p-1 rounded-lg min-w-0 overflow-x-auto" role="tablist" :aria-label="t('Drawings')" @keydown="moveTabFocus">
+            <button v-for="tab in drawingBarTabs" :key="tab.kind === 'offer' ? 'offer-' + tab.mode : tab.id" type="button" role="tab" data-history-ignore
+                    :data-drawing-id="tab.kind === 'offer' ? null : tab.id" :data-drawing-offer="tab.kind === 'offer' ? tab.mode : null"
+                    :aria-selected="tab.selected ? 'true' : 'false'" :tabindex="tab.selected ? 0 : -1"
+                    @click="tab.kind === 'offer' ? drawingBar.newDrawing(tab.mode) : selectDrawing(tab.id)"
+                    :disabled="!drawingSwitchAvailable" :title="drawingSwitchAvailable ? (tab.kind === 'offer' ? t('New Linear drawing') : null) : drawingSwitchBusyReason"
+                    :class="tab.selected ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : (tab.kind === 'offer' ? 'text-slate-400 hover:text-slate-700' : 'text-slate-500 hover:text-slate-700')"
+                    class="drawing-tab shrink-0 px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5 max-w-[14rem]">
+                <i :class="['ph', tab.kind === 'offer' ? 'ph-plus' : (tab.mode === 'circular' ? 'ph-circle' : 'ph-ruler')]" aria-hidden="true"></i><span class="truncate">{{ tab.label }}</span>
+            </button>
+        </div>
+        <template v-for="tab in drawingBarTabs" :key="tab.id">
+            <action-menu v-if="tab.selected" icon="ph-dots-three-vertical" class="drawing-bar-menu shrink-0" close-on-run
+                         :label="t('Drawing')" :aria-label="t('Drawing menu for {name}', { name: tab.label })" :title="t('Drawing menu for {name}', { name: tab.label })"
+                         :items="[
+                             { label: t('New Circular drawing'), icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing('circular') },
+                             { label: t('New Linear drawing'), icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing('linear') },
+                             { label: t('Duplicate drawing'), icon: 'ph-copy', disabled: !drawingSwitchAvailable, run: () => drawingBar.duplicateDrawing(tab.id) },
+                             { label: t('New Circular drawing with this style'), icon: 'ph-paint-brush', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawingWithStyle(tab.id, 'circular') },
+                             { label: t('New Linear drawing with this style'), icon: 'ph-paint-brush', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawingWithStyle(tab.id, 'linear') },
+                             { label: t('Rename…'), icon: 'ph-pencil-simple', disabled: !drawingSwitchAvailable, run: () => drawingBar.renameDrawing(tab.id) },
+                             { label: t('Move left'), icon: 'ph-arrow-left', disabled: !drawingSwitchAvailable || !tab.canMoveLeft, run: () => drawingBar.moveDrawing(tab.id, -1) },
+                             { label: t('Move right'), icon: 'ph-arrow-right', disabled: !drawingSwitchAvailable || !tab.canMoveRight, run: () => drawingBar.moveDrawing(tab.id, 1) },
+                             { label: t('Delete drawing'), icon: 'ph-trash', disabled: !drawingSwitchAvailable || !tab.canDelete, run: () => drawingBar.deleteDrawing(tab.id) }
+                         ]"></action-menu>
+        </template>
+    </div>
 
-        <div class="settings-pane flex flex-col h-full overflow-hidden relative shrink-0"
+    <!-- At <= 768 px one pane shows at a time (Settings | Preview); wider layouts show both and hide these tabs. -->
+    <div class="phone-pane-tabs" role="tablist" :aria-label="t('Shown pane')" @keydown="moveTabFocus">
+        <button v-for="pane in ['settings', 'preview']" :key="pane" type="button" role="tab" data-history-ignore :data-phone-pane="pane"
+                :aria-controls="pane === 'settings' ? 'settings-pane' : 'result-pane'" :aria-selected="settingsPane.pane === pane ? 'true' : 'false'"
+                :tabindex="settingsPane.pane === pane ? 0 : -1" @click="showPhonePane(pane)">{{ pane === 'settings' ? t('Settings') : t('Preview') }}</button>
+    </div>
+
+    <main class="app-main flex-1 min-h-0 px-4 py-3 flex overflow-hidden" :data-phone-pane="settingsPane.pane">
+
+        <div class="settings-pane flex flex-col h-full overflow-hidden relative shrink-0" id="settings-pane"
              :data-settings-display="settingsPane.display" :data-settings-docked="settingsPane.docked"
              :style="{ '--settings-stacked-width': sidebarWidth + 'px' }">
 
@@ -2286,16 +2511,16 @@
 
                     <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">{{ t('Record rotation, feature placement, or tolerance has changes pending Generate. This notice covers record display only; the Result keeps its applied settings.') }}</p>
                     <div v-if="mode === 'circular'" class="space-y-4">
-                        <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex">
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="cInputType === 'gb'" @change="setCircularInputType('gb')" value="gb" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GenBank</label>
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="cInputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
+                        <div class="flex flex-wrap gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex">
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gb'" @change="setCircularInputType('gb')" value="gb" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GenBank</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
-                        <div v-if="cInputType === 'gb'">
-                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="setCircularSourceFile('c_gb', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*"></file-uploader>
+                        <div v-if="inputType === 'gb'">
+                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="uploadCircularSourceFile('c_gb', $event)" file-kind="genbank" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
-                            <file-uploader :label="t('GFF3 File')" :model-value="files.c_gff" @update:model-value="setCircularSourceFile('c_gff', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
-                            <file-uploader :label="t('FASTA File')" :model-value="files.c_fasta" @update:model-value="setCircularSourceFile('c_fasta', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader :label="t('GFF3 File')" :model-value="files.c_gff" @update:model-value="uploadCircularSourceFile('c_gff', $event)" file-kind="gff" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader :label="t('FASTA File')" :model-value="files.c_fasta" @update:model-value="uploadCircularSourceFile('c_fasta', $event)" file-kind="fasta" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <section :aria-label="t('Source records')" class="space-y-2">
                             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -2304,7 +2529,7 @@
                                 <span v-else-if="circularRecordDiscoveryState.status === 'loading'">{{ t('Inspecting source records…') }}</span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'ready'">{{ tn(circularRecordDiscoveryState.records.length, '{count} source record inspected', '{count} source records inspected') }}<template v-if="circularRecordDiscoveryState.records.length > 1"> · <span data-circular-records-drawn>{{ tn(circularRecordDiscoveryState.records.length, '{drawn} of {count} record drawn', '{drawn} of {count} records drawn', { drawn: circularDrawnRecordCount }) }}</span></template></span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'error'" class="text-red-600">{{ (circularRecordDiscoveryState.error && errorText(circularRecordDiscoveryState.error.summaryParts)) || t('Source inspection failed. Retry or replace the input.') }}</span>
-                                <span v-else>{{ cInputType === 'gff' ? t('Upload both GFF3 and FASTA files to inspect records.') : t('Upload a source file to inspect records.') }}</span>
+                                <span v-else>{{ inputType === 'gff' ? t('Upload both GFF3 and FASTA files to inspect records.') : t('Upload a source file to inspect records.') }}</span>
                             </p>
                             <button v-if="circularRecordDiscoveryState.hasInput" data-circular-inspect type="button" data-history-ignore @click="inspectCircularSourceRecords" :aria-disabled="!circularRecordInspectionEnabled" :aria-busy="circularRecordDiscoveryState.status === 'loading'" :class="circularRecordInspectionEnabled ? 'text-blue-600' : 'text-slate-400'" class="text-xs">{{ circularRecordDiscoveryState.status === 'error' ? t('Retry source inspection') : circularRecordDiscoveryState.status === 'ready' ? t('Inspect source records again') : t('Inspect source records') }}</button>
                             </div>
@@ -2417,7 +2642,7 @@
                                     small
                                     accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
                                     :model-value="getCircularDepthFile(0)"
-                                    @update:model-value="setCircularDepthFile(0, $event)"
+                                    @update:model-value="uploadCircularDepthFile(0, $event)" file-kind="depth"
                                 ></file-uploader>
                             </div>
                             <div v-else class="space-y-2 pt-1">
@@ -2546,7 +2771,7 @@
                                         small
                                         accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
                                         :model-value="getCircularDepthFile(track.index)"
-                                        @update:model-value="setCircularDepthFile(track.index, $event)"
+                                        @update:model-value="uploadCircularDepthFile(track.index, $event)" file-kind="depth"
                                     ></file-uploader>
                                 </div>
                                 <button type="button" @click="addCircularDepthTrack" class="btn btn-secondary text-xs w-full" :disabled="!semanticMutationAvailable">
@@ -2557,9 +2782,9 @@
                     </div>
 
                     <div v-if="mode === 'linear'" class="space-y-4">
-                        <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="lInputType === 'gb'" @change="setLinearInputType('gb')" value="gb" class="text-blue-600" :disabled="!semanticMutationAvailable"> GenBank</label>
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="lInputType === 'gff'" @change="setLinearInputType('gff')" value="gff" class="text-blue-600" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
+                        <div class="flex flex-wrap gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gb'" @change="setLinearInputType('gb')" value="gb" class="text-blue-600" :disabled="!semanticMutationAvailable"> GenBank</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setLinearInputType('gff')" value="gff" class="text-blue-600" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="linearReorderNotice" class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
                             <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
@@ -2635,7 +2860,7 @@
                                         </button>
                                     </div>
                                 </summary>
-                            <div v-if="lInputType === 'gb'" class="space-y-2">
+                            <div v-if="inputType === 'gb'" class="space-y-2">
                                 <file-uploader
                                     :label="t('GenBank / DDBJ File')"
                                     :test-id="`linear-genbank-${sourceIndex + 1}`"
@@ -2643,7 +2868,7 @@
                                     :model-value="source.sequence.gb"
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
-                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'gb', $event)"
+                                    @update:model-value="uploadLinearSeqPrimaryFile(source.index, 'gb', $event)" file-kind="genbank"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                             </div>
@@ -2654,7 +2879,7 @@
                                     :model-value="source.sequence.gff"
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
-                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'gff', $event)"
+                                    @update:model-value="uploadLinearSeqPrimaryFile(source.index, 'gff', $event)" file-kind="gff"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                                 <file-uploader
@@ -2663,7 +2888,7 @@
                                     :model-value="source.sequence.fasta"
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
-                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'fasta', $event)"
+                                    @update:model-value="uploadLinearSeqPrimaryFile(source.index, 'fasta', $event)" file-kind="fasta"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                             </div>
@@ -2734,7 +2959,7 @@
                                             small
                                             accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
                                             :model-value="track.status.file"
-                                            @update:model-value="setLinearSourceDepthFile(source, track.index, $event)"
+                                            @update:model-value="uploadLinearSourceDepthFile(source, track.index, $event)" file-kind="depth"
                                             :data-input-aria-label="sourceIndex === 0 && track.index === 0
                                                 ? 'Depth TSV'
                                                 : `Depth TSV for file ${sourceIndex + 1}, series ${track.index + 1}`"
@@ -2827,7 +3052,7 @@
                                 <div class="text-[10px] font-bold text-white bg-slate-500 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
                             </div>
 
-                                    <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600" :disabled="!semanticMutationAvailable">{{ t('Inspect records') }}</button>
+                                    <button v-if="(inputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600" :disabled="!semanticMutationAvailable">{{ t('Inspect records') }}</button>
                                     <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
 
                             <details v-if="source.records.length > 1" data-setting="depth-sources" class="rounded border border-slate-200 bg-white/70 p-2">
@@ -2845,7 +3070,7 @@
                                                 small
                                                 accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
                                                 :model-value="getLinearDepthFile(seq, track.index)"
-                                                @update:model-value="setLinearDepthFile(seq, track.index, $event)"
+                                                @update:model-value="uploadLinearDepthFile(seq, track.index, $event)" file-kind="depth"
                                                 :data-input-aria-label="`Depth TSV for sequence ${idx + 1}, series ${track.index + 1}`"
                                             ></file-uploader>
                                         </div>
@@ -3382,7 +3607,7 @@
                                                 small
                                                 accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*"
                                                 :model-value="pair.draft?.fileActive ? pair.draft.file : null"
-                                                @update:model-value="setLinearComparisonCardFile(pair.edgeKey, $event)"
+                                                @update:model-value="uploadLinearComparisonCardFile(pair.edgeKey, $event)" file-kind="comparison"
                                             ></file-uploader>
                                             <p v-if="linearComparisonGlobalAction === 'upload'" class="text-[9px] leading-snug text-slate-500">{{ t('Choosing a file here switches the plan to Selected pairs; pairs without a file are then not compared.') }}</p>
                                             <button
@@ -3690,7 +3915,7 @@
                                 <file-uploader
                                     :label="t('BLAST outfmt 6/7 files')"
                                     :model-value="files.c_conservation_blasts"
-                                    @update:model-value="setCircularConservationUploadFiles"
+                                    @update:model-value="setCircularConservationUploadFiles" file-kind="comparison"
                                     :multiple="true"
                                     accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*"
                                 ></file-uploader>
@@ -4682,7 +4907,7 @@
                                                 type="button"
                                                 class="btn btn-secondary text-[10px] py-1 px-2"
                                                 @click="refreshCircularRecordOrder"
-                                                :disabled="!semanticMutationAvailable || (cInputType === 'gb' ? !files.c_gb : (!files.c_gff || !files.c_fasta))"
+                                                :disabled="!semanticMutationAvailable || (inputType === 'gb' ? !files.c_gb : (!files.c_gff || !files.c_fasta))"
                                             >
                                                 {{ t('Reload Records') }}
                                             </button>
@@ -4996,7 +5221,7 @@
                                     </button>
                                 </div>
                                 <div class="mt-2">
-                                    <file-uploader :label="t('Default colors file')" :model-value="files.d_color" @update:model-value="importAuxiliaryTable('d_color', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Default colors file')" :model-value="files.d_color" @update:model-value="importAuxiliaryTable('d_color', $event)" file-kind="d_color" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
                                         <help-tip :text="t('Tab-separated value (TSV) file of feature type and color. Feature types not listed keep the selected palette colors.')"></help-tip>
                                         {{ t('Optional TSV of default colors.') }}
@@ -5042,7 +5267,7 @@
                                     @edit-pattern="editSpecificRulePattern" @retry-pattern="retrySpecificRulePattern" @revert-pattern="revertSpecificRulePattern"></specific-rule-rows>
 
                                 <div class="mt-2">
-                                    <file-uploader :label="t('Specific rules file')" :model-value="files.t_color" @update:model-value="importAuxiliaryTable('t_color', $event)" :after-change="waitForAuxiliaryFileImport" :project-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Specific rules file')" :model-value="files.t_color" @update:model-value="importAuxiliaryTable('t_color', $event)" file-kind="t_color" :after-change="waitForAuxiliaryFileImport" :import-step="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
                                         <help-tip :text="t('TSV file of rules: feature type, qualifier, regular expression, color, and optional legend name.')"></help-tip>
                                         {{ t('Optional TSV of specific rules.') }}
@@ -5302,7 +5527,7 @@
                                         <p class="ui-hint">{{ t('Exclude labels containing these keywords.') }}</p>
                                         <textarea :value="manualBlacklist" @input="setBlacklistText($event.target.value)" class="form-input h-20" :placeholder="t('hypothetical, unknown')" :disabled="!semanticMutationAvailable"></textarea>
                                         <div class="ui-hint text-center">{{ t('- OR -') }}</div>
-                                        <file-uploader :label="t('Blacklist File')" :model-value="files.blacklist" @update:model-value="importAuxiliaryTable('blacklist', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
+                                        <file-uploader :label="t('Blacklist File')" :model-value="files.blacklist" @update:model-value="importAuxiliaryTable('blacklist', $event)" file-kind="blacklist" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
                                     </div>
 
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
@@ -5315,7 +5540,7 @@
                                         </div>
                                         <button @click="addWhitelistRule" :disabled="!semanticMutationAvailable" class="text-xs text-blue-600 font-bold">{{ t('+ Add Rule') }}</button>
                                         <div class="ui-hint text-center mt-2">{{ t('- OR -') }}</div>
-                                        <file-uploader :label="t('Whitelist File')" :model-value="files.whitelist" @update:model-value="importAuxiliaryTable('whitelist', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                        <file-uploader :label="t('Whitelist File')" :model-value="files.whitelist" @update:model-value="importAuxiliaryTable('whitelist', $event)" file-kind="whitelist" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     </div>
                                 </div>
 
@@ -5342,7 +5567,7 @@
                                     </div>
 
                                     <div class="ui-hint text-center mb-1">{{ t('- OR UPLOAD FILE -') }}</div>
-                                    <file-uploader :label="t('Priority File (TSV)')" :model-value="files.qualifier_priority" @update:model-value="importAuxiliaryTable('qualifier_priority', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Priority File (TSV)')" :model-value="files.qualifier_priority" @update:model-value="importAuxiliaryTable('qualifier_priority', $event)" file-kind="qualifier_priority" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                 </div>
 
                                 <div class="pt-3 border-t border-slate-100">
@@ -5935,7 +6160,7 @@
              @mousedown.prevent="startResizing"
              :title="t('Drag to resize')"></div>
 
-        <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0 focus:outline-none" tabindex="-1">
+        <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0 focus:outline-none" tabindex="-1" id="result-pane">
             <!-- The outcome of Load Session, Save Session, or a table import or export; warnings as a list -->
             <div v-if="notice.text" data-app-notice
                  :class="['app-notice', notice.tone === 'warning' ? 'is-warning' : 'is-info']">
@@ -9176,6 +9401,18 @@
                 <span class="min-w-0 truncate" :title="selectedLabel">{{ selectedLabel }}</span>
             </div>
         </div>
+        <select
+            v-if="sessionFiles.length"
+            class="form-input form-input-compact mt-1 w-full"
+            :class="small ? 'text-[10px]' : 'text-xs'"
+            :disabled="!uploadAvailable"
+            :aria-label="t('Choose {name} from this Session', { name: $attrs['data-input-aria-label'] || label })"
+            data-session-file-picker
+            @change="chooseSessionFile"
+        >
+            <option value="" selected>{{ t('Files in this Session') }}</option>
+            <option v-for="file in sessionFiles" :key="file.fileId" :value="file.fileId">{{ file.name }}</option>
+        </select>
     </div>
 </script>
 

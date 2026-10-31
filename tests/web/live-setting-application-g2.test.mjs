@@ -17,6 +17,7 @@ globalThis.window = {
 };
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const config = await import('../../gbdraw/web/js/services/config.js');
 const request = await import('../../gbdraw/web/js/services/session-request.js');
 const owner = await import('../../gbdraw/web/js/services/setting-application.js');
@@ -41,21 +42,25 @@ const genbank = (ids) => {
   const text = ids.map(record).join('');
   return { name: 'live.gb', type: 'text/plain', size: new TextEncoder().encode(text).byteLength, lastModified: 0, data: btoa(text) };
 };
+// A drawing's Linear card holds the `InputFileRef` of its File (`state.inputFiles`);
+// Generate and the live projectors read its bytes through `fileOf` (OV-2205).
+const fileRef = (file) => state.inputFiles.registerFile(file);
+const fileOf = state.inputFiles.fileOf;
 const seq = (uid, id) => ({
-  uid, gb: genbank([id]), depth: null, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null,
+  uid, gb: fileRef(genbank([id])), depth: null, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null,
   region_reverse: false, definition: '', record_subtitle: '', file_definition: `File ${id}`, file_subtitle: ''
 });
-const inputs = { linearSeqs: [seq('record-1', 'LIVE1'), seq('record-2', 'LIVE2')] };
+const inputs = { linearSeqs: [seq('record-1', 'LIVE1'), seq('record-2', 'LIVE2')], fileOf };
 
 // The committed Session a Generate of `mode` builds from that mode's drawing now.
 const generate = (mode) => {
   const drawing = modeDrawing(state, mode);
   config.installShownDrawing(mode);
-  state.cInputType.value = 'gb';
-  state.lInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
   const filesData = mode === 'circular'
     ? { c_gb: genbank(['LIVE1']), linearSeqs: [] }
-    : { linearSeqs: inputs.linearSeqs, linearComparisons: [] };
+    : { linearSeqs: inputs.linearSeqs.map((card) => ({ ...card, gb: fileOf(card.gb) })), linearComparisons: [] };
   const comparisonPlanSnapshot = mode === 'linear'
     ? resolveLinearComparisonPlan({
         plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
@@ -403,7 +408,7 @@ test('Linear record names follow the draft records in order; a removed or moved 
   try {
     const committed = generate('linear');
     const applies = (seqs) => request.liveSettingApplies(committed.renderRequest, RECORDS, modeDrawing(state, 'linear'),
-      { linearSeqs: seqs }, committed.resources);
+      { linearSeqs: seqs, fileOf }, committed.resources);
     const [first, second] = inputs.linearSeqs;
     assert.equal(applies([first, second]), true);
     assert.equal(applies([first, second, seq('record-3', 'LIVE3')]), true, 'an added record leaves the drawn ones in order');
@@ -411,8 +416,12 @@ test('Linear record names follow the draft records in order; a removed or moved 
     assert.equal(applies([first]), false, 'removed');
     // A replaced File: the committed resource of the record does not hold it,
     // whatever its definition says (D-193 D).
-    assert.equal(applies([first, { ...second, gb: genbank(['LIVE2']) }]), false, 'replaced by a File of the same definition');
+    assert.equal(applies([first, { ...second, gb: fileRef(genbank(['LIVE2'])) }]), false, 'replaced by a File of the same definition');
     assert.equal(applies([first, { ...second, file_definition: 'Another file' }]), true, 'the same File');
+    // OV-2205: a card names its File by an `InputFileRef`; the File is the
+    // store's (`fileOf`), never the ref itself.
+    assert.equal(request.liveSettingApplies(committed.renderRequest, RECORDS, modeDrawing(state, 'linear'),
+      { linearSeqs: [first, second], fileOf: () => null }, committed.resources), false, 'a ref the store does not hold');
     assert.equal(request.liveSettingApplies(committed.renderRequest, RECORDS, modeDrawing(state, 'linear'), inputs), false,
       'no committed resources name the File');
     // F-18: Generate splits a card into `<uid>:<k>` members, each with its own
@@ -437,7 +446,7 @@ test('a Linear card\'s record selection applies on Generate: its record names wa
   try {
     // A two-record File whose card draws its first record by the definition
     // inferred from that record (no File or record Definition).
-    const card = { ...seq('record-2', 'LIVE2'), gb: genbank(['LIVE2', 'LIVE3']), file_definition: '',
+    const card = { ...seq('record-2', 'LIVE2'), gb: fileRef(genbank(['LIVE2', 'LIVE3'])), file_definition: '',
       region_record_id: '#1', inferred_definition: 'Live setting fixture LIVE2.' };
     set(inputs.linearSeqs, 1, card);
     const committed = generate('linear');

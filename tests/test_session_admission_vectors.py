@@ -87,6 +87,8 @@ def test_the_web_refuses_only_with_a_class_and_repairs_only_what_python_does_not
             assert set(vector["webRepairs"]) <= web_only, vector["id"]
 
 
+# The vectors are shared with the Web, so they cover every band of the generated
+# SESSION_ADMISSION_DESCRIPTION.
 ADMISSION = describe_session_admission()
 ADMISSION_TYPES: dict[str, Any] = ADMISSION["types"]
 BAND_ROOT = {version: band["root"] for band in ADMISSION["bands"] for version in band["versions"]}

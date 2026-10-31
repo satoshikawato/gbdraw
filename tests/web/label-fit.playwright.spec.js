@@ -9,6 +9,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const ROW_KINDS = ['outward_both', 'outward_vertical', 'outward_horizontal', 'smaller_font', 'tighter_rows', 'combination'];
 const SCREENSHOTS = process.env.GBDRAW_LABEL_FIT_SCREENSHOTS || '';
@@ -64,7 +65,11 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('heading')).toHaveText('Labels do not fit');
   await expect(dialog.locator('[data-label-fit-records]')).toContainText('3 embedded labels at 14 pt (1 label pair overlaps');
-  // Python searched every row before the dialog opened, in its order.
+  // Python searches the rows for at most SWITCH_SEARCH_SECONDS before the
+  // dialog opens; on a loaded machine the dialog computes the rows it did not
+  // reach (OD-F14), so the rows are read once none is still being computed.
+  await expect(dialog.locator('[data-label-fit-status="not_computed"], [data-label-fit-status="computing"]'))
+    .toHaveCount(0, { timeout: 120_000 });
   const statuses = await rowStatuses(dialog);
   expect(statuses.map(([kind]) => kind)).toEqual([...ROW_KINDS, 'radial', 'separate_features']);
   expect(statuses.filter(([, status]) => status !== 'not_found')).toEqual([['separate_features', 'found_with_notice']]);
@@ -308,7 +313,7 @@ const generateLinear = async (page, name, features, regions, { separateStrands =
   test.setTimeout(600000);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await page.evaluate(async ({ text, file, separate }) => {
     const app = window.__GBDRAW_APP__;

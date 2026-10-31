@@ -2,6 +2,7 @@
 // Generate already encoded is bound by that text with no read, hash or decode,
 // and the Worker check of a slice's unmanaged overrides runs once per distinct
 // request across Load and every Save.
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -10,8 +11,10 @@ import { webcrypto } from 'node:crypto';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { bindingDrawings, boundState } from './helpers/input-files.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 globalThis.window = {
@@ -39,7 +42,7 @@ const { takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession, serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator } = callerSession(sessionConfig, state);
+const { exportSession, importSession, serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 test('Save binds a File Generate already encoded with no read, hash or decode (OV-1559)', async () => {
   const text = `>x\n${'ACGT'.repeat(250_000)}\n`;
@@ -48,8 +51,8 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   const read = file.arrayBuffer.bind(file);
   file.arrayBuffer = async () => { reads += 1; return read(); };
   // Generate: the request encodes the File once and stages its bytes (the transfer releases the byte cache).
-  const sourceState = { files: { c_gb: file }, linearSeqs: [] };
-  const encoded = (await serializeActiveRenderFiles('circular', sourceState, modeDrawing(state, 'circular'))).c_gb;
+  const sourceState = boundState({ files: { c_gb: file }, linearSeqs: [] });
+  const encoded = (await serializeActiveRenderFiles(sourceState, { ...modeDrawing(state, 'circular'), files: sourceState.files })).c_gb;
   await takeFileBytesForTransfer(file);
   const committed = adoptRuntimeCanonicalSession({
     renderRequest: {
@@ -69,7 +72,7 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   assert.equal(reads, 1);
   for (const save of [1, 2]) {
     metrics.length = 0;
-    const saved = await buildSessionResources(sourceState, committed, modeDrawing(state, 'circular'));
+    const saved = await buildSessionResources(sourceState, committed, bindingDrawings(sourceState));
     assert.deepEqual({
       reads,
       hashes: count('resourceIdentityHashCount'),
@@ -84,9 +87,12 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   // A File the committed request does not name keeps the payload Generate encoded.
   metrics.length = 0;
   const other = new File(['other bytes'], 'other.tsv', { type: '' });
-  await serializeActiveRenderFiles('circular', { files: { c_gb: other }, linearSeqs: [] }, modeDrawing(state, 'circular'));
+  const otherState = boundState({ files: { c_gb: other }, linearSeqs: [] }, state.inputFiles);
+  await serializeActiveRenderFiles(otherState, { ...modeDrawing(state, 'circular'), files: otherState.files });
   metrics.length = 0;
-  const saved = await buildSessionResources({ files: { c_gb: file, d_color: other }, linearSeqs: [] }, committed, modeDrawing(state, 'circular'));
+  const saved = await buildSessionResources({ inputFiles: state.inputFiles }, committed, bindingDrawings({
+    files: { c_gb: state.inputFiles.registerFile(file), d_color: state.inputFiles.registerFile(other) }
+  }));
   const otherId = saved.webFiles.bindings.d_color.resourceId;
   assert.notEqual(otherId, 'src');
   assert.deepEqual(saved.resources[otherId], {
@@ -104,7 +110,7 @@ test('Load and two Saves check a slice\'s unmanaged overrides once (OV-1567)', a
     return { result: { overrides: payload.configOverrides } };
   });
   const session = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', import.meta.url), 'utf8'));
-  session.modes.linear.config.unmanagedConfigOverrides = { 'objects.gc_content.percent_background_opacity': 0.42 };
+  session.drawings.find((entry) => entry.id === session.ui.activeDrawingId).config.unmanagedConfigOverrides = { 'objects.gc_content.percent_background_opacity': 0.42 };
   const input = { target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' } };
   const loaded = await importSession(input, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
@@ -112,7 +118,7 @@ test('Load and two Saves check a slice\'s unmanaged overrides once (OV-1567)', a
   for (const save of [1, 2]) {
     const result = await exportSession(`OV-1567 ${save}`, { askChoice: async () => 'download' });
     assert.equal(result?.status, 'saved', JSON.stringify(result?.error ?? result));
-    const document = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    const document = savedDrawingView(JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer()))), 'linear');
     assert.deepEqual(document.modes.linear.config.unmanagedConfigOverrides,
       { 'objects.gc_content.percent_background_opacity': 0.42 });
   }

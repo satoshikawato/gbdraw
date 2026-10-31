@@ -9,13 +9,17 @@
  *   services/config.js module the test loaded.
  * @param {{ activeDrawing: () => unknown }} state The state.js `state` of
  *   that module.
+ * @param {{ capture: () => unknown, replaceHistoryMembers: (drawingIds: readonly string[]) => void,
+ *   restoreHistoryMembers: (snapshot: never) => void, restore: (snapshot: never) => unknown }} rollbackState The Load rollback port:
+ *   `helpers/session-rollback-port.mjs` in node, the app's own
+ *   (`window.__GBDRAW_APP__.sessionImportRollbackState`) in the page.
  */
-export const callerSession = (config, state) => ({
+export const callerSession = (config, state, rollbackState) => ({
   ...config,
   exportSession: (title = null, options = {}) => config.exportSession(title, {
     shownDrawing: state.activeDrawing, ...options
   }),
   importSession: (event, options) => config.importSession(event, {
-    shownDrawing: state.activeDrawing, ...options
+    shownDrawing: state.activeDrawing, rollbackState, ...options
   })
 });

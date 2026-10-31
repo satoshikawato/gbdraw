@@ -1,22 +1,20 @@
 // @ts-check
-/** @import { ArtifactSlot } from './artifact-slot.js' */
-/** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
+/** @import { InputFileRef, InputFileStore } from './history-files.js' */
+/** @import { ArtifactSlot, FeatureEditorStatus } from './artifact-slot.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
+import { INPUTS_SLICE, boundInputFileIds, installBoundInputs } from './drawing/inputs.js';
+import { isInputFileRef } from './history-files.js';
+/** @import { BoundFileValue, DrawingInputFiles, InputBindings, InputsData, InputType } from './drawing/inputs.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
-import { inputTypeKeyOf } from './drawing-view.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { logicalResultsOf } from './result-normalization.js';
 import { cloneJsonData } from './json-clone.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLayoutPreferences } from './layout-preferences.js';
-import {
-  isResourceBackedCanonicalComparison,
-  mapResourceBackedCanonicalComparison
-} from './canonical-comparisons.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import {
-  ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot, createArtifactSlotStore
+  ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, FEATURE_EDITOR_STATUS_IDLE, createArtifactSlot, createArtifactSlotStore
 } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
@@ -135,7 +133,7 @@ const editedIntentPartOf = (path, value) => (
  * The presentation values a generated artifact handle keeps with its intent.
  * @typedef {{
  *   resultGenerationKey?: unknown, resultPanelTab?: unknown, errorLog?: unknown, labelTextScopeDialog?: unknown,
- *   featureEditorStatus?: unknown, featureExtractionPending?: unknown, featureExtractionError?: unknown
+ *   featureEditorStatus?: FeatureEditorStatus, featureExtractionPending?: unknown
  * }} PresentationData
  */
 /**
@@ -147,27 +145,15 @@ const editedIntentPartOf = (path, value) => (
  * @property {OrthogroupIntentData & GroupNameIntentData} orthogroupState
  * @property {unknown} alignmentState
  * @property {PresentationData} presentation
+ * @property {InputType} [inputType] The drawing's input type (its inputs slice).
  */
 /**
- * One Linear record row of an intent's files: the File descriptors and the metadata the row keeps.
- * @typedef {{
- *   uid?: unknown, gb?: unknown, gff?: unknown, fasta?: unknown, depth?: unknown,
- *   losat_gencode?: unknown, definition?: unknown, record_subtitle?: unknown, file_definition?: unknown,
- *   file_subtitle?: unknown, inferred_definition?: unknown, region_record_id?: unknown,
- *   region_start?: unknown, region_end?: unknown, region_reverse?: unknown
- * }} FilesDataSequence
- */
-/**
- * The files of an intent or checkpoint: File descriptors (`fileStore.describeValue`) by input.
- * @typedef {{
- *   c_gb?: unknown, c_gff?: unknown, c_fasta?: unknown, c_depth?: unknown,
- *   c_conservation_blasts?: unknown, c_conservation_blasts_source?: unknown,
- *   c_conservation_fastas?: unknown, c_conservation_sequence_sources?: unknown,
- *   d_color?: unknown, t_color?: unknown, blacklist?: unknown, whitelist?: unknown, qualifier_priority?: unknown,
- *   linearSeqs?: FilesDataSequence[],
- *   linearComparisons?: { id?: unknown, file?: unknown }[],
- *   linearCanonicalComparisons?: ResourceBackedComparison[]
- * }} FilesData
+ * The files of an intent or checkpoint: the drawing's inputs slice capture
+ * (`INPUTS_SLICE.capture`), its `files` flattened beside its rows and input
+ * type, without the comparisons a Generate wrote (a Linear checkpoint adds
+ * them), and the comparison plan's files by edge ID.
+ * @typedef {Omit<DrawingInputFiles, 'linearCanonicalComparisons'> & Partial<Pick<DrawingInputFiles, 'linearCanonicalComparisons'>>
+ *   & Pick<InputsData, 'linearSeqs' | 'inputType'> & { linearComparisons: { id: string, file: BoundFileValue }[] }} FilesData
  */
 /**
  * The `ui` values that belong to a drawing (Session 46 `modes.<m>.ui`, and its LOSAT program).
@@ -188,7 +174,6 @@ const editedIntentPartOf = (path, value) => (
  *   lInputType?: unknown,
  *   downloadDpi?: unknown,
  *   generatedLegendPosition?: unknown,
- *   generatedMode?: unknown,
  *   generatedMultiRecordCanvas?: unknown,
  *   generatedCircularPlotTitlePosition?: unknown,
  *   autoLabelReflow?: unknown,
@@ -295,17 +280,15 @@ const withoutSessionUi = (ui) => {
 // an edit, so neither is intent; composition offsets are recorded per Result
 // in `compositionUserDeltas` (B17).
 // A drawing switch is no step (PD-OI-090), so the intent holds no `mode`; a
-// drawing's intent holds the input type of its own slots.
+// drawing's input type is in its `files` (its inputs slice), not in `ui`.
 /**
  * @param {Record<string, unknown>} ui
- * @param {DrawingIdentity} drawing
  */
-const buildUiIntentData = (ui, drawing) => {
+const buildUiIntentData = (ui) => {
   const intent = withoutSessionUi(clonePlainObject(ui));
   delete intent.mode;
-  delete intent[drawing.mode === 'linear' ? 'cInputType' : 'lInputType'];
   delete intent.generatedLegendPosition;
-  delete intent.generatedMode;
+  delete intent.generatedDrawingId;
   delete intent.generatedMultiRecordCanvas;
   delete intent.generatedCircularPlotTitlePosition;
   delete intent.selectedResultIndex;
@@ -559,14 +542,11 @@ const closeTransientState = (state) => {
 const buildFallbackUiStateData = (state, drawing) => ({
   title: getRef(state.sessionTitle, ''),
   mode: getRef(state.mode, 'circular'),
-  cInputType: getRef(state.cInputType, 'gb'),
-  lInputType: getRef(state.lInputType, 'gb'),
   ...SETTINGS_SLICE.capture(drawing.slices.settings, ['losatProgram', 'layoutPreferences']),
   selectedResultIndex: getRef(state.selectedResultIndex, 0),
   downloadDpi: getRef(state.downloadDpi, 300),
   canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
   generatedLegendPosition: getRef(state.generatedLegendPosition, 'left'),
-  generatedMode: getRef(state.generatedMode, 'circular'),
   generatedMultiRecordCanvas: Boolean(getRef(state.generatedMultiRecordCanvas, false)),
   generatedCircularPlotTitlePosition: getRef(state.generatedCircularPlotTitlePosition, 'none'),
   autoLabelReflow: Boolean(getRef(state.autoLabelReflowEnabled, false)),
@@ -602,13 +582,10 @@ const applyFallbackSessionUiData = (state, ui) => {
  */
 const applyFallbackUiStateData = (state, drawing, ui = {}) => {
   applyFallbackSessionUiData(state, ui);
-  const inputType = inputTypeKeyOf(drawing);
-  if (ui[inputType]) setRef(state[inputType], ui[inputType]);
   SETTINGS_SLICE.install(drawing.slices.settings, {
     losatProgram: ui.losatProgram || undefined, layoutPreferences: normalizeLayoutPreferences(ui.layoutPreferences)
   });
   if (ui.generatedLegendPosition) setRef(state.generatedLegendPosition, ui.generatedLegendPosition);
-  if (ui.generatedMode) setRef(state.generatedMode, ui.generatedMode);
   if (Object.prototype.hasOwnProperty.call(ui, 'generatedMultiRecordCanvas')) {
     setRef(state.generatedMultiRecordCanvas, Boolean(ui.generatedMultiRecordCanvas));
   }
@@ -712,210 +689,74 @@ const applyFallbackResultsData = (state, results = []) => {
 };
 
 // A drawing's intent holds the file bindings of its slots by reference
-// (PD-OI-090): Circular's `c_*` inputs, including the BLAST rows and comparison
-// sequences of a LOSAT-cache replay (its ring rows and managed track slots name
-// those rows, so Undo restores them together, B23), or Linear's records and
-// comparison files. The five table files stay shared until each drawing binds
-// its own; every drawing's intent holds them.
-const SHARED_TABLE_FILE_KEYS = Object.freeze(['d_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority']);
+// (PD-OI-090): its inputs slice capture (S-1, DESIGN §2) — Circular's `c_*`
+// inputs, including the BLAST rows and comparison sequences of a LOSAT-cache
+// replay (its ring rows and managed track slots name those rows, so Undo
+// restores them together, B23), Linear's record rows, its input type, and its
+// five card files (R16-4) — and the files of its Linear comparison plan, which
+// the plan (settings slice) binds. It leaves out what is not an edit: the
+// comparisons a Generate writes (the artifact checkpoint keeps them) and the
+// Circular record list and discovery, derived status that History must not see
+// as an edit.
 /**
- * @param {Record<string, any>} state
- * @param {DrawingView} drawing
- * @param {HistorySnapshotFileStore} fileStore
- * @returns {FilesData}
+ * A binding's refs as a step holds them: each list copied, each ref as is.
+ * @param {unknown} value
+ * @returns {BoundFileValue}
  */
-const buildIntentFilesData = (state, drawing, fileStore) => {
-  const shared = Object.fromEntries(SHARED_TABLE_FILE_KEYS.map((key) => [key, fileStore.describeValue(state.files?.[key])]));
-  if (drawing.mode !== 'linear') {
-    return {
-      c_gb: fileStore.describeValue(state.files?.c_gb),
-      c_gff: fileStore.describeValue(state.files?.c_gff),
-      c_fasta: fileStore.describeValue(state.files?.c_fasta),
-      c_depth: fileStore.describeValue(state.files?.c_depth),
-      c_conservation_blasts: fileStore.describeValue(state.files?.c_conservation_blasts || []),
-      c_conservation_blasts_source: state.files?.c_conservation_blasts_source === 'losat-cache'
-        ? 'losat-cache'
-        : null,
-      c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
-      c_conservation_sequence_sources: fileStore.describeValue(state.files?.c_conservation_sequence_sources || []),
-      ...shared
-    };
-  }
-  return {
-    ...shared,
-    linearSeqs: Array.from(state.linearSeqs || []).map((seq) => ({
-      uid: seq.uid,
-      gb: fileStore.describeValue(seq.gb),
-      gff: fileStore.describeValue(seq.gff),
-      fasta: fileStore.describeValue(seq.fasta),
-      depth: fileStore.describeValue(seq.depth),
-      losat_gencode: seq.losat_gencode ?? 1,
-      definition: seq.definition ?? '',
-      record_subtitle: seq.record_subtitle ?? '',
-      file_definition: seq.file_definition ?? '',
-      file_subtitle: seq.file_subtitle ?? '',
-      inferred_definition: seq.inferred_definition ?? '',
-      region_record_id: seq.region_record_id ?? '',
-      region_start: seq.region_start ?? null,
-      region_end: seq.region_end ?? null,
-      region_reverse: Boolean(seq.region_reverse)
-    })),
-    linearComparisons: Array.from(drawing.linearComparisonPlan?.edges || []).map((edge) => ({
-      id: String(edge?.id || ''),
-      file: fileStore.describeValue(edge?.file)
-    }))
-  };
-};
-
-// A Linear drawing's artifact checkpoint adds its generated comparisons.
-/**
- * @param {Record<string, any>} state
- * @param {DrawingView} drawing
- * @param {HistorySnapshotFileStore} fileStore
- * @returns {FilesData}
- */
-const buildFilesData = (state, drawing, fileStore) => {
-  const files = buildIntentFilesData(state, drawing, fileStore);
-  if (drawing.mode !== 'linear') return files;
-  return {
-    ...files,
-    linearCanonicalComparisons: (
-      Array.isArray(state.files?.linearCanonicalComparisons)
-        ? state.files.linearCanonicalComparisons
-        : []
-    ).map((/** @type {ResourceBackedComparison} */ comparison) => (
-      isResourceBackedCanonicalComparison(comparison)
-        ? {
-            ...mapResourceBackedCanonicalComparison(comparison),
-            file: fileStore.describeValue(comparison.file)
-          }
-        : cloneJsonData(comparison)
-    ))
-  };
-};
+const refsOf = (value) => (
+  Array.isArray(value) ? value.map(refsOf) : (isInputFileRef(value) ? value : null)
+);
 
 /**
+ * A drawing's files as a step holds them: its inputs slice capture, the
+ * comparisons a Generate wrote only when `generated` (a Linear artifact
+ * checkpoint's; an intent leaves them out), and the plan edges' files.
+ * @param {DrawingView} drawing
+ * @param {boolean} generated
+ * @returns {FilesData}
+ */
+const filesDataOf = (drawing, generated) => {
+  const { files: { linearCanonicalComparisons, ...bound }, linearSeqs, inputType } = INPUTS_SLICE.capture(drawing.slices.inputs);
+  return {
+    ...bound,
+    ...(generated ? { linearCanonicalComparisons } : {}),
+    inputType,
+    linearSeqs,
+    linearComparisons: drawing.linearComparisonPlan.edges.map((edge) => ({ id: edge.id, file: refsOf(edge.file) }))
+  };
+};
+/** @param {DrawingView} drawing */
+const buildIntentFilesData = (drawing) => filesDataOf(drawing, false);
+/** @param {DrawingView} drawing */
+const buildFilesData = (drawing) => filesDataOf(drawing, drawing.mode === 'linear');
+
+/**
+ * The input bindings of the app state.
  * @param {HistorySnapshotState} state
- * @param {HistorySnapshotFileStore} fileStore
+ * @returns {InputBindings}
  */
-const collectCurrentFileIds = (state, fileStore) => {
-  /** @type {Set<string>} */
-  const fileIds = new Set();
-  /** @param {unknown} value */
-  const register = (value) => {
-    if (Array.isArray(value)) {
-      value.forEach(register);
-      return;
-    }
-    const fileId = fileStore.registerFile(value);
-    if (fileId) fileIds.add(fileId);
-  };
-  const files = state.files || {};
-  [
-    files.c_gb,
-    files.c_gff,
-    files.c_fasta,
-    files.c_depth,
-    files.c_conservation_blasts,
-    files.c_conservation_fastas,
-    files.c_conservation_sequence_sources,
-    files.d_color,
-    files.t_color,
-    files.blacklist,
-    files.whitelist,
-    files.qualifier_priority
-  ].forEach(register);
-  (Array.isArray(files.linearCanonicalComparisons)
-    ? files.linearCanonicalComparisons
-    : []
-  ).forEach((/** @type {ResourceBackedComparison | null | undefined} */ comparison) => register(comparison?.file));
-  Array.from(state.linearSeqs || []).forEach((sequence) => {
-    register(sequence?.gb);
-    register(sequence?.gff);
-    register(sequence?.fasta);
-    register(sequence?.depth);
-  });
-  // Every drawing's comparison plan holds its uploaded comparison files.
-  /** @type {readonly DrawingView[]} */ (state.drawingList()).forEach((drawing) => {
-    Array.from(drawing.linearComparisonPlan?.edges || []).forEach((comparison) => {
-      register(comparison?.file);
-    });
-  });
-  return fileIds;
-};
+const inputBindingsOf = (state) => ({ drawingList: state.drawingList });
 
 /**
  * @param {Record<string, any>} state
  * @param {DrawingView} drawing
- * @param {FilesData} filesData
+ * @param {Partial<FilesData>} filesData a step's (a field it leaves out binds nothing)
  * @param {HistorySnapshotFileStore} fileStore
- * @param {HistorySnapshotServiceOptions['normalizeLinearSeqList']} [normalizeLinearSeqList]
  */
-const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeqList = null) => {
-  if (!state.files) return;
+const applyFilesData = (state, drawing, filesData, fileStore) => {
   state.matchSequenceRegistry?.reset?.();
-  /** @param {unknown} value */
-  const restore = (value) => fileStore.restoreValue(value);
-  SHARED_TABLE_FILE_KEYS.forEach((key) => {
-    state.files[key] = restore(filesData?.[/** @type {keyof FilesData} */ (key)]);
+  // The drawing's inputs slice installs the step's capture: a binding holds
+  // the step's refs, which History keeps stored (a ref whose file was released
+  // binds nothing). An intent leaves out the comparisons a Generate wrote; a
+  // Linear checkpoint holds them.
+  const { linearSeqs = [], inputType, linearComparisons: _planFiles, ...files } = filesData;
+  installBoundInputs(fileStore, drawing.slices.inputs, { files, linearSeqs, inputType }, {
+    keep: Object.hasOwn(filesData, 'linearCanonicalComparisons') ? [] : ['linearCanonicalComparisons']
   });
-  if (drawing.mode !== 'linear') {
-    state.files.c_gb = restore(filesData?.c_gb);
-    state.files.c_gff = restore(filesData?.c_gff);
-    state.files.c_fasta = restore(filesData?.c_fasta);
-    state.files.c_depth = restore(filesData?.c_depth);
-    state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
-      ? restore(filesData.c_conservation_blasts).filter(Boolean)
-      : [];
-    state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
-      ? 'losat-cache'
-      : null;
-    state.files.c_conservation_fastas = Array.isArray(filesData?.c_conservation_fastas)
-      ? restore(filesData.c_conservation_fastas)
-      : [];
-    state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
-      ? restore(filesData.c_conservation_sequence_sources)
-      : [];
-    return;
-  }
-  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'linearCanonicalComparisons')) {
-    state.files.linearCanonicalComparisons = Array.isArray(filesData?.linearCanonicalComparisons)
-      ? filesData.linearCanonicalComparisons.map((comparison) => (
-          isResourceBackedCanonicalComparison(comparison)
-            ? mapResourceBackedCanonicalComparison(comparison, restore)
-            : cloneJsonData(comparison)
-        ))
-      : [];
-  }
-
-  if (!state.linearSeqs || typeof state.linearSeqs.splice !== 'function') return;
-  const rows = Array.isArray(filesData?.linearSeqs)
-    ? filesData.linearSeqs.map((seq) => ({
-        uid: seq.uid,
-        gb: restore(seq.gb),
-        gff: restore(seq.gff),
-        fasta: restore(seq.fasta),
-        depth: restore(seq.depth),
-        losat_gencode: seq.losat_gencode ?? 1,
-        definition: seq.definition ?? '',
-        record_subtitle: seq.record_subtitle ?? '',
-        file_definition: seq.file_definition ?? '',
-        file_subtitle: seq.file_subtitle ?? '',
-        inferred_definition: seq.inferred_definition ?? '',
-        region_record_id: seq.region_record_id ?? '',
-        region_start: seq.region_start ?? null,
-        region_end: seq.region_end ?? null,
-        region_reverse: Boolean(seq.region_reverse)
-      }))
-    : [];
-  const normalized = typeof normalizeLinearSeqList === 'function'
-    ? normalizeLinearSeqList(rows)
-    : rows;
-  state.linearSeqs.splice(0, state.linearSeqs.length, ...normalized);
   if (drawing.linearComparisonPlan && Array.isArray(drawing.linearComparisonPlan.edges)) {
     const comparisonFiles = new Map(
-      (Array.isArray(filesData?.linearComparisons) ? filesData.linearComparisons : [])
-        .map((comparison) => [String(comparison?.id || ''), restore(comparison?.file)])
+      (filesData.linearComparisons ?? [])
+        .map((comparison) => [comparison.id, fileStore.registerFile(isInputFileRef(comparison.file) ? comparison.file : null)])
     );
     drawing.linearComparisonPlan.edges.forEach((edge) => {
       edge.file = comparisonFiles.get(String(edge?.id || '')) || null;
@@ -925,15 +766,10 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
 
 /**
  * @typedef {object} HistorySnapshotFileStore
- *   The three functions of the History file store that the snapshot service
- *   calls (F-05). `services/history.js` calls two other functions of the same
- *   store, so the receivers share the object and no function.
- * @property {(value: any) => any} describeValue
- *   A file, or an array of files, as the descriptors an intent holds (`null` for a non-file).
- * @property {(file: any) => string | null} registerFile
- *   Stores a file by reference and returns its id; `null` for a non-file.
- * @property {(value: any) => any} restoreValue
- *   The stored file, or an array of them, that the descriptors name (`null` when none).
+ *   The functions of the project's input file store (`state.inputFiles`)
+ *   that the snapshot service calls (F-05).
+ * @property {InputFileStore['registerFile']} registerFile
+ *   A step's ref, while its file is stored; `null` once released.
  *
  * @typedef {object} HistorySnapshotRuntimeOwner
  *   The generated-artifact runtime owner that the composition root registers (`app/app-setup.js`).
@@ -961,8 +797,6 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  * @property {HistorySnapshotFileStore} fileStore
  *   The file store that holds the files an intent and a checkpoint name.
  * @property {() => Promise<unknown>} [nextTick] Vue `nextTick`, awaited between restore steps.
- * @property {((rows: HistorySnapshotData[]) => HistorySnapshotData[]) | null} [normalizeLinearSeqList]
- *   The Linear record rows' normalization after a files restore.
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildConfigData] The Settings capture.
  * @property {((drawing: D, config: HistorySnapshotData, options: { resolveTrackPlacements: boolean, applyAlignment?: boolean }) => unknown) | null} [applyConfigData]
  *   The Settings restore.
@@ -987,6 +821,9 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  * @property {(() => HistorySnapshotData) | null} [buildRunStateData] The last-run capture.
  * @property {((runState: HistorySnapshotData) => unknown) | null} [applyRunStateData] The last-run restore.
  * @property {(() => void) | null} [clearSimilarityGroupCopyFeedback]
+ * @property {((drawing: D) => unknown) | null} [discoverDrawingRecords] The record discovery of a drawing whose
+ *   inputs a restore installed (R10, R11): the restore installs the files and input type as they were, and the
+ *   discovery derived from them reads them again, or keeps a read that still matches them.
  *   Clears the Similarity groups "Copied!" feedback when a Generate's artifact replaces the shown
  *   Results (D-37): a reused feature catalog keeps the groups array, so its watcher would not fire.
  */
@@ -1005,7 +842,6 @@ export const createHistorySnapshotService = ({
   state,
   fileStore,
   nextTick = async () => {},
-  normalizeLinearSeqList = null,
   buildConfigData = null,
   applyConfigData = null,
   buildUiStateData = null,
@@ -1021,24 +857,19 @@ export const createHistorySnapshotService = ({
   applyResultsData = null,
   buildRunStateData = null,
   applyRunStateData = null,
-  clearSimilarityGroupCopyFeedback = null
+  clearSimilarityGroupCopyFeedback = null,
+  discoverDrawingRecords = null
 }) => {
   if (!state || !fileStore || typeof currentResults !== 'function') {
     throw new Error('createHistorySnapshotService requires state, fileStore, and currentResults.');
   }
 
-  // A generated artifact holds the settings and edits of the drawing of its
-  // mode (`generatedMode`, Circular when unset): the one reading of that mode.
-  /**
-   * @param {unknown} generatedMode
-   * @returns {D}
-   */
-  const drawingOfGeneratedMode = (generatedMode) => state.drawingOfMode(generatedMode === 'linear' ? 'linear' : 'circular');
-  // The drawing the displayed artifact belongs to: the drawing of its mode
-  // (`generatedMode`). It differs from the shown drawing after a Load of a
-  // Session with no Result whose request mode is not its `ui.mode`. Every
-  // capture of the displayed artifact names its drawing so.
-  const displayedArtifactDrawing = () => drawingOfGeneratedMode(getGeneratedArtifactRef(state.generatedMode, null));
+  // The drawing the displayed artifact belongs to, by ID (S6,
+  // `state.generatedDrawingId`): each install of an artifact writes it (a slot,
+  // a History handle, a Generate commit, Load). Every capture of the
+  // displayed artifact names its drawing so.
+  /** @returns {D} */
+  const displayedArtifactDrawing = () => state.drawingOf(state.generatedDrawingId.value);
 
   /** @type {((intent: HistorySnapshotData, context: Record<string, any>) => unknown) | null} */
   let afterApplyHistoryIntent = null;
@@ -1079,30 +910,36 @@ export const createHistorySnapshotService = ({
     ) ? owner : null;
   };
 
-  const captureLinearRecordOrientations = () => (
-    (Array.isArray(state.linearSeqs) ? state.linearSeqs : []).map((sequence) => ({
+  // The orientations of the cards of `drawing`, the drawing a step captures.
+  /** @param {D} drawing */
+  const captureLinearRecordOrientations = (drawing) => (
+    drawing.linearSeqs.map((sequence) => ({
       recordKey: String(sequence?.uid || ''),
       reverseComplement: Boolean(sequence?.region_reverse)
     })).filter(({ recordKey }) => recordKey)
   );
 
-  /** @param {unknown} orientations */
-  const installLinearRecordOrientations = (orientations) => {
+  /** @param {D} drawing @param {unknown} orientations */
+  const installLinearRecordOrientations = (drawing, orientations) => {
     const byRecord = new Map(
       (Array.isArray(orientations) ? orientations : []).map((entry) => [
         String(entry?.recordKey || ''),
         Boolean(entry?.reverseComplement)
       ])
     );
-    (Array.isArray(state.linearSeqs) ? state.linearSeqs : []).forEach((sequence) => {
-      const recordKey = String(sequence?.uid || '');
-      if (byRecord.has(recordKey)) sequence.region_reverse = byRecord.get(recordKey);
+    drawing.linearSeqs.forEach((sequence) => {
+      const reverse = byRecord.get(String(sequence?.uid || ''));
+      if (reverse !== undefined) sequence.region_reverse = reverse;
     });
   };
 
   /** @typedef {ReturnType<typeof captureGeneratedArtifactOwnerSet>} GeneratedArtifactOwnerSet The owners' values, by reference, key by key. */
-  const captureGeneratedArtifactOwnerSet = () => {
-    const drawing = displayedArtifactDrawing();
+  /**
+   * With the color rules and queued palette of `drawing`: the drawing whose
+   * Generate or History step captures them, given by the caller.
+   * @param {D} drawing
+   */
+  const captureGeneratedArtifactOwnerSet = (drawing) => {
     const results = toRaw(currentResults());
     const colorRules = COLOR_RULES_SLICE.capture(drawing.slices.colorRules);
     return Object.freeze({
@@ -1125,7 +962,7 @@ export const createHistorySnapshotService = ({
       linearRecordTranslations: toRaw(
         getGeneratedArtifactRef(state.linearRecordTranslations, null)
       ),
-      linearRecordOrientations: toRaw(captureLinearRecordOrientations()),
+      linearRecordOrientations: toRaw(captureLinearRecordOrientations(drawing)),
       annotationWarnings: toRaw(getGeneratedArtifactRef(state.annotationWarnings, null)),
       featureIdentityNotices: toRaw(
         getGeneratedArtifactRef(state.featureIdentityNotices, null)
@@ -1157,7 +994,6 @@ export const createHistorySnapshotService = ({
       ),
       editableLabels: toRaw(getGeneratedArtifactRef(state.editableLabels, null)),
       generatedLegendPosition: getGeneratedArtifactRef(state.generatedLegendPosition, null),
-      generatedMode: getGeneratedArtifactRef(state.generatedMode, null),
       generatedMultiRecordCanvas: getGeneratedArtifactRef(
         state.generatedMultiRecordCanvas,
         false
@@ -1179,13 +1015,16 @@ export const createHistorySnapshotService = ({
   const installGeneratedArtifactOwnerSet = (
     /** @type {Partial<GeneratedArtifactOwnerSet> | null | undefined} */
     ownerSet,
-    /** @type {{ selectedResultIndex?: number, installResults?: ((results: any[]) => unknown) | null }} */
-    { selectedResultIndex = 0, installResults = null } = {}
+    /**
+     * `drawing` receives the owner set's color rules and queued palette: the
+     * drawing whose Generate commits it or whose History handle restores it.
+     * @type {{ drawing: D, selectedResultIndex?: number, installResults?: ((results: any[]) => unknown) | null }}
+     */
+    { drawing, selectedResultIndex = 0, installResults = null }
   ) => {
     if (!ownerSet || typeof ownerSet !== 'object') {
       throw new Error('A generated artifact owner set is required.');
     }
-    const drawing = drawingOfGeneratedMode(ownerSet.generatedMode);
     const results = Array.isArray(ownerSet.results) ? ownerSet.results : [];
     const replacesShownResults = toRaw(results)
       !== toRaw(getGeneratedArtifactRef(state.results, []));
@@ -1219,7 +1058,7 @@ export const createHistorySnapshotService = ({
       state.linearRecordTranslations,
       ownerSet.linearRecordTranslations || []
     );
-    installLinearRecordOrientations(ownerSet.linearRecordOrientations);
+    installLinearRecordOrientations(drawing, ownerSet.linearRecordOrientations);
     setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
     setGeneratedArtifactRef(state.featureIdentityNotices, ownerSet.featureIdentityNotices || []);
     setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
@@ -1248,7 +1087,7 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.pairwiseMatchFactors, ownerSet.pairwiseMatchFactors || {});
     setGeneratedArtifactRef(state.editableLabels, ownerSet.editableLabels || []);
     setGeneratedArtifactRef(state.generatedLegendPosition, ownerSet.generatedLegendPosition);
-    setGeneratedArtifactRef(state.generatedMode, ownerSet.generatedMode);
+    setGeneratedArtifactRef(state.generatedDrawingId, drawing.id);
     setGeneratedArtifactRef(
       state.generatedMultiRecordCanvas,
       Boolean(ownerSet.generatedMultiRecordCanvas)
@@ -1319,6 +1158,7 @@ export const createHistorySnapshotService = ({
       setGeneratedArtifactRef(state[key], slot?.values[key]
         ?? ARTIFACT_SLOT_EMPTY[key](drawing.mode, getGeneratedArtifactRef(state[key], null)));
     });
+    setGeneratedArtifactRef(state.generatedDrawingId, drawing.id);
     if (slot?.matchSequenceOwner) state.matchSequenceRegistry?.replaceTrustedOwner?.(slot.matchSequenceOwner);
     else state.matchSequenceRegistry?.reset?.();
     generatedArtifactRuntimeOwner?.restore?.(slot?.runtimeState ?? null, { ui });
@@ -1327,6 +1167,46 @@ export const createHistorySnapshotService = ({
     );
     currentGeneratedArtifactRetainedBytes = slot?.retainedBytes ?? 0;
   };
+
+  // OV-2212: the shown artifact is still the one the fingerprint names while
+  // the drawing's own artifact values are the ones its Generate committed: these
+  // artifact slot values and the match-sequence owner, by reference. The project
+  // LOSAT and protein values and the alignment draft are not the drawing's (each
+  // Generate installs its own, so a Generate in another drawing replaces them):
+  // the fingerprint covers what of them the Result drew, and the compact
+  // signature covers the alignment plan and record translations, by value.
+  /** @type {readonly (typeof ARTIFACT_SLOT_KEYS)[number][]} */
+  const TRANSPORT_IDENTITY_SLOT_KEYS = Object.freeze([
+    'results',
+    'featureCatalog',
+    'extractedFeatures',
+    'biologicalFeatures',
+    'featureRecordIds',
+    'orthogroups',
+    'featureOrthogroupIndex',
+    'collinearGroups',
+    'similarityAlignmentResetReceipt',
+    'trackSlotResolvedGeometry',
+    'annotationWarnings',
+    'featureIdentityNotices',
+    'comparisonWarnings',
+    'labelFitReports',
+    'lastRunInfo',
+    'pairwiseMatchFactors',
+    'editableLabels',
+    'generatedLegendPosition',
+    'generatedMultiRecordCanvas',
+    'generatedCircularPlotTitlePosition'
+  ]);
+  /**
+   * The references the transport identity holds and compares: only these, so it
+   * keeps no project cache alive.
+   * @param {Readonly<Record<string, unknown>>} ownerSet
+   */
+  const transportIdentityReferences = (ownerSet) => Object.freeze(Object.fromEntries([
+    ...TRANSPORT_IDENTITY_SLOT_KEYS.map((key) => [key, ownerSet[key]]),
+    ['matchSequenceOwner', ownerSet.matchSequenceOwner]
+  ]));
 
   /**
    * @param {any} identity
@@ -1343,13 +1223,13 @@ export const createHistorySnapshotService = ({
       currentGeneratedArtifactRetainedBytes = 0;
       return false;
     }
-    const ownerReferences = captureGeneratedArtifactOwnerSet();
+    const ownerReferences = captureGeneratedArtifactOwnerSet(displayedArtifactDrawing());
     const committedResults = Array.isArray(results) ? results : ownerReferences.results;
     currentGeneratedArtifactIdentity = Object.freeze({
       schema: 1,
       algorithm: 'SHA-256',
       fingerprint,
-      ownerReferences: Object.freeze({
+      ownerReferences: transportIdentityReferences({
         ...ownerReferences,
         results: toRaw(committedResults)
       })
@@ -1372,38 +1252,9 @@ export const createHistorySnapshotService = ({
    */
   const currentArtifactMatchesIdentity = (ownerSet, identity) => {
     const expected = identity?.ownerReferences;
-    if (!expected || expected.results !== ownerSet.results) return false;
-    return [
-      'featureCatalog',
-      'extractedFeatures',
-      'biologicalFeatures',
-      'featureRecordIds',
-      'orthogroups',
-      'featureOrthogroupIndex',
-      'collinearGroups',
-      'similarityAlignmentResetReceipt',
-      'similarityAlignmentPlan',
-      'linearRecordTranslations',
-      'trackSlotResolvedGeometry',
-      'annotationWarnings',
-      'featureIdentityNotices',
-      'comparisonWarnings',
-      'labelFitReports',
-      'proteinIdentityManifest',
-      'legacyProteinRawCandidates',
-      'legacyProteinDerivedEvidence',
-      'losatCache',
-      'losatDerivedCache',
-      'losatCacheInfo',
-      'matchSequenceOwner',
-      'lastRunInfo',
-      'pairwiseMatchFactors',
-      'editableLabels',
-      'generatedLegendPosition',
-      'generatedMode',
-      'generatedMultiRecordCanvas',
-      'generatedCircularPlotTitlePosition'
-    ].every((key) => expected[key] === ownerSet[key]);
+    if (!expected) return false;
+    const current = transportIdentityReferences(ownerSet);
+    return Object.keys(current).every((key) => expected[key] === current[key]);
   };
 
   /** @param {GeneratedArtifactIntent} mutableIntent */
@@ -1412,7 +1263,7 @@ export const createHistorySnapshotService = ({
       zoom: _zoom,
       canvasPan: _canvasPan,
       generatedLegendPosition: _generatedLegendPosition,
-      generatedMode: _generatedMode,
+      generatedDrawingId: _generatedDrawingId,
       generatedMultiRecordCanvas: _generatedMultiRecordCanvas,
       generatedCircularPlotTitlePosition: _generatedCircularPlotTitlePosition,
       ...ui
@@ -1455,7 +1306,7 @@ export const createHistorySnapshotService = ({
     recordStructuralMetric('generatedArtifactFullSignatureCount', 0);
     recordStructuralMetric('generatedArtifactHeavyTraversalCount', 0);
     recordStructuralMetric('generatedArtifactMutableIntentSnapshotCount', 1);
-    const ownerSet = captureGeneratedArtifactOwnerSet();
+    const ownerSet = captureGeneratedArtifactOwnerSet(drawing);
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: true })
       : buildFallbackUiStateData(state, drawing);
@@ -1503,6 +1354,7 @@ export const createHistorySnapshotService = ({
     };
     const mutableIntent = Object.freeze({
       ui,
+      inputType: drawing.inputType.value,
       features,
       editorState,
       orthogroupState,
@@ -1512,18 +1364,17 @@ export const createHistorySnapshotService = ({
         recordTranslations: cloneJsonData(
           getGeneratedArtifactRef(state.linearRecordTranslations, [])
         ) || [],
-        recordOrientations: captureLinearRecordOrientations()
+        recordOrientations: captureLinearRecordOrientations(drawing)
       }),
       presentation: Object.freeze({
         resultGenerationKey: getGeneratedArtifactRef(state.resultGenerationKey, 0),
         resultPanelTab: getGeneratedArtifactRef(state.resultPanelTab, 'preview'),
         errorLog: cloneJsonData(getGeneratedArtifactRef(state.errorLog, null)),
         labelTextScopeDialog: cloneJsonData(state.labelTextScopeDialog || {}) || {},
-        featureEditorStatus: cloneJsonData(state.featureEditorStatus || {}) || {},
+        featureEditorStatus: getGeneratedArtifactRef(state.featureEditorStatus, FEATURE_EDITOR_STATUS_IDLE),
         featureExtractionPending: Boolean(
           getGeneratedArtifactRef(state.featureExtractionPending, false)
-        ),
-        featureExtractionError: getGeneratedArtifactRef(state.featureExtractionError, null)
+        )
       })
     });
     const runtimeState = generatedArtifactRuntimeOwner?.capture?.() || null;
@@ -1540,7 +1391,7 @@ export const createHistorySnapshotService = ({
       runtimeState,
       transportIdentity,
       baseRetainedBytes: currentGeneratedArtifactRetainedBytes,
-      fileIds: Object.freeze([...collectCurrentFileIds(state, fileStore)]),
+      fileIds: Object.freeze([...boundInputFileIds(inputBindingsOf(state))]),
       identity: Object.freeze({
         fingerprint: transportIdentity?.fingerprint || '',
         compactSignature
@@ -1594,12 +1445,12 @@ export const createHistorySnapshotService = ({
       const mutableIntent = handle.mutableIntent || {};
       const ui = mutableIntent.ui || {};
       const drawing = state.drawingOf(drawingId);
-      const inputType = inputTypeKeyOf(drawing);
-      if (ui[inputType]) setGeneratedArtifactRef(state[inputType], ui[inputType]);
+      if (mutableIntent.inputType) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: mutableIntent.inputType });
       await nextTick();
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
       installGeneratedArtifactOwnerSet(handle.ownerSet, {
+        drawing,
         selectedResultIndex: ui.selectedResultIndex
       });
       applyFeatureIntentData(state, drawing, mutableIntent.features || {});
@@ -1638,26 +1489,17 @@ export const createHistorySnapshotService = ({
           cloneJsonData(presentation.labelTextScopeDialog) || {}
         );
       }
-      if (state.featureEditorStatus) {
-        Object.assign(
-          state.featureEditorStatus,
-          cloneJsonData(presentation.featureEditorStatus) || {}
-        );
-      }
+      setGeneratedArtifactRef(state.featureEditorStatus, presentation.featureEditorStatus ?? FEATURE_EDITOR_STATUS_IDLE);
       setGeneratedArtifactRef(
         state.featureExtractionPending,
         Boolean(presentation.featureExtractionPending)
-      );
-      setGeneratedArtifactRef(
-        state.featureExtractionError,
-        presentation.featureExtractionError ?? null
       );
 
       // A Generate step restores no Session-level value (R15-23).
       const boundedUi = withoutSessionUi(ui);
       [
         'generatedLegendPosition',
-        'generatedMode',
+        'generatedDrawingId',
         'generatedMultiRecordCanvas',
         'generatedCircularPlotTitlePosition',
         'appliedPaletteName',
@@ -1847,7 +1689,7 @@ export const createHistorySnapshotService = ({
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: false })
       : buildFallbackUiStateData(state, drawing);
-    const uiIntent = buildUiIntentData({ ...ui, ...readSlotValues(drawingId, UI_SLOT_KEYS) }, drawing);
+    const uiIntent = buildUiIntentData({ ...ui, ...readSlotValues(drawingId, UI_SLOT_KEYS) });
     uiIntent.selectedFeatureRecordIdx = getRef(state.selectedFeatureRecordIdx, 0);
     // B17, D-15-50: the composition offsets of this drawing's Results.
     const compositionDeltas = captures.composition ? cloneJsonData(captures.composition(drawingId)) : null;
@@ -1864,7 +1706,7 @@ export const createHistorySnapshotService = ({
       }),
       editorState: editorIntentOf(captureLegendPaint(drawing.slices.paint)),
       groupNames: buildGroupNameIntentData(drawing),
-      files: buildIntentFilesData(state, drawing, fileStore),
+      files: buildIntentFilesData(drawing),
       ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState(drawingId) } : {}),
       orthogroupState: buildOrthogroupIntentData({
         selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
@@ -1918,7 +1760,7 @@ export const createHistorySnapshotService = ({
             ? drawing.linearComparisonPlan.edges
             : []
           )
-            .map((edge) => /** @type {[string, unknown]} */ ([String(edge?.id || ''), edge?.file ?? null]))
+            .map((edge) => /** @type {[string, InputFileRef | null]} */ ([String(edge?.id || ''), edge?.file ?? null]))
             .filter(([edgeId]) => edgeId)
         )
       : null;
@@ -1930,12 +1772,6 @@ export const createHistorySnapshotService = ({
       const { appliedPaletteName, appliedPaletteColors, ...drawingUi } = intent.ui || {};
       const shown = isShown(drawingId);
       const ui = shown ? intent.ui || {} : drawingUi;
-      if (domains.has('ui')) {
-        const inputType = inputTypeKeyOf(drawing);
-        if (ui[inputType]) setRef(state[inputType], ui[inputType]);
-        await nextTick();
-      }
-
       if (domains.has('config')) {
         const config = intent.config;
         if (typeof applyConfigData === 'function' && config) {
@@ -1949,7 +1785,7 @@ export const createHistorySnapshotService = ({
         (drawing.linearComparisonPlan?.edges || []).forEach((edge) => {
           const edgeId = String(edge?.id || '');
           if (edgeId && retainedComparisonFiles.has(edgeId)) {
-            edge.file = retainedComparisonFiles.get(edgeId);
+            edge.file = retainedComparisonFiles.get(edgeId) ?? null;
           }
         });
       }
@@ -1973,7 +1809,7 @@ export const createHistorySnapshotService = ({
       }
 
       if (domains.has('files')) {
-        applyFilesData(state, drawing, intent.files || {}, fileStore, normalizeLinearSeqList);
+        applyFilesData(state, drawing, intent.files || {}, fileStore);
       }
       if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState, drawingId);
       if (domains.has('features')) applyFeatureIntentData(state, drawing, intent.features || {});
@@ -1989,6 +1825,7 @@ export const createHistorySnapshotService = ({
     } finally {
       if (domains.has('files')) setGeneratedArtifactRef(suppressRef, previousSuppressed);
     }
+    if (domains.has('files') || domains.has('ui')) discoverDrawingRecords?.(drawing);
   };
 
   // A checkpoint holds the shown drawing's artifact with the drawing.
@@ -1999,7 +1836,7 @@ export const createHistorySnapshotService = ({
     const { featureCatalog = null, ...editorState } = generated.editorState || {};
     const checkpoint = cloneJsonData({
       config: buildDrawingConfig(drawing),
-      files: buildFilesData(state, drawing, fileStore),
+      files: buildFilesData(drawing),
       ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState(drawingId) } : {}),
       ...generated,
       ...(generated.ui ? { ui: withoutSessionUi(generated.ui) } : {}),
@@ -2022,13 +1859,9 @@ export const createHistorySnapshotService = ({
     try {
       closeTransientState(state);
 
-      // A3 review M1: the checkpoint restores what its drawing owns and its
-      // own input type (it holds no Session-level value, R15-23).
+      // A3 review M1: the checkpoint restores what its drawing owns (it holds
+      // no Session-level value, R15-23); its input type is in its files.
       const ui = { ...(snapshot.ui || {}) };
-      delete ui[inputTypeKeyOf(drawing) === 'lInputType' ? 'cInputType' : 'lInputType'];
-      const inputType = inputTypeKeyOf(drawing);
-      if (ui[inputType]) setRef(state[inputType], ui[inputType]);
-      await nextTick();
 
       if (typeof applyConfigData === 'function' && snapshot.config) {
         applyConfigData(drawing, snapshot.config, { resolveTrackPlacements: false });
@@ -2043,7 +1876,7 @@ export const createHistorySnapshotService = ({
       }
       await nextTick();
 
-      applyFilesData(state, drawing, snapshot.files || {}, fileStore, normalizeLinearSeqList);
+      applyFilesData(state, drawing, snapshot.files || {}, fileStore);
       if (Object.hasOwn(snapshot, 'alignmentState')) installAlignmentState(snapshot.alignmentState, drawingId);
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
@@ -2061,6 +1894,7 @@ export const createHistorySnapshotService = ({
     } finally {
       setGeneratedArtifactRef(suppressRef, previousSuppressed);
     }
+    discoverDrawingRecords?.(drawing);
   };
 
   // The History ports of one drawing (`createHistoryRouter`'s managers).
@@ -2108,7 +1942,7 @@ export const createHistorySnapshotService = ({
     captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet,
     clearGeneratedArtifactIdentity,
-    collectCurrentFileIds: () => collectCurrentFileIds(state, fileStore),
+    collectCurrentFileIds: () => boundInputFileIds(inputBindingsOf(state)),
     compareGeneratedArtifactHandles,
     drawingHistory,
     sessionHistory,

@@ -13,6 +13,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -108,7 +109,7 @@ const MODES = [
         return file;
       });
       await openFresh(page);
-      await page.getByRole('button', { name: 'Linear', exact: true }).click();
+      await showDrawing(page, { kind: 'linear' });
       await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
       await page.getByTestId('linear-genbank-1').setInputFiles(inputs[0]);
       await page.evaluate(() => window.__GBDRAW_APP__.addLinearSeq());

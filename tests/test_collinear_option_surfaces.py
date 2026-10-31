@@ -308,28 +308,41 @@ def test_the_fixture_draft_with_the_removed_anchor_mode_replays_as_rbh(tmp_path:
     assert spec.args[spec.args.index("--collinear_anchor_mode") + 1] == "rbh"
 
 
+def _protein_settings_and_draft(session: dict[str, object]) -> tuple[dict[str, object], dict[str, object]]:
+    """The protein comparison's settings and the draft ``losat.blastp`` of the one
+    Linear drawing of a Session 50, or of a Session 46-49's Linear slice."""
+
+    if session["version"] >= session_io.DRAWINGS_SESSION_MIN_VERSION:
+        (drawing,) = [drawing for drawing in session["drawings"] if drawing["mode"] == "linear"]
+        request, config = drawing["renderRequest"], drawing["config"]
+    else:
+        request, config = session["renderRequest"], session["modes"]["linear"]["config"]
+    (settings,) = [item["settings"] for item in request["comparisons"] if "settings" in item]
+    return settings, config["losat"]["blastp"]
+
+
 def _stored_anchor_modes(session: dict[str, object]) -> list[object]:
     """The request's and the Linear draft's anchor mode of a Session with one protein comparison."""
 
-    (settings,) = [item["settings"] for item in session["renderRequest"]["comparisons"] if "settings" in item]
-    return [
-        settings["collinearityAnchorMode"],
-        session["modes"]["linear"]["config"]["losat"]["blastp"]["collinearAnchorMode"],
-    ]
+    settings, blastp = _protein_settings_and_draft(session)
+    return [settings["collinearityAnchorMode"], blastp["collinearAnchorMode"]]
 
 
 def test_an_upgrade_replaces_the_removed_anchor_mode_in_both_copies(caplog: pytest.LogCaptureFixture) -> None:
     """A Session 49 from 0.14.3 upgrades to a file its own description accepts (OV-2307)."""
 
     from gbdraw.session import upgrade_session_document
-    from tests.test_session_contract import _problems
+    from gbdraw.session_drawings import checked_drawing_views
+    from tests.test_session_contract import _admission_problems, _problems
 
     with caplog.at_level("WARNING"):
         upgraded = upgrade_session_document(ONE_TO_ONE_FIXTURE).document.to_dict()
 
     assert upgraded["version"] == session_io.CURRENT_SESSION_VERSION
     assert _stored_anchor_modes(upgraded) == ["rbh", "rbh"]
-    assert _problems(upgraded) == []
+    # The description describes each drawing's one-drawing view; the band, the project.
+    assert _admission_problems(upgraded) == []
+    assert [_problems(view) for view in checked_drawing_views(upgraded)] == [[]]
     warnings = [record.getMessage() for record in caplog.records if "was removed" in record.getMessage()]
     assert [warning.split(":")[0] for warning in warnings] == [
         "renderRequest.comparisons[0].settings.collinearityAnchorMode",
@@ -418,9 +431,9 @@ def test_a_current_session_with_the_removed_anchor_mode_stays_unchanged_and_read
     from gbdraw.session import load_session_document, materialize_session, session_to_request, upgrade_session_document
 
     stored = upgrade_session_document(ONE_TO_ONE_FIXTURE).document.to_dict()
-    (settings,) = [item["settings"] for item in stored["renderRequest"]["comparisons"] if "settings" in item]
+    settings, blastp = _protein_settings_and_draft(stored)
     settings["collinearityAnchorMode"] = "one_to_one"
-    stored["modes"]["linear"]["config"]["losat"]["blastp"]["collinearAnchorMode"] = "one_to_one"
+    blastp["collinearAnchorMode"] = "one_to_one"
 
     document = load_session_document(stored)
     assert upgrade_session_document(document).document is document

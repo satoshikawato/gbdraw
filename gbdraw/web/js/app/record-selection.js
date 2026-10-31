@@ -21,7 +21,9 @@ import { msg } from '../utils/i18n.js';
  * @property {string} name The file name(s) the dialogs show.
  * @property {RecordListEntry[]} records
  * @typedef {(mode: RecordSelectionMode) => RecordDrawKey[]} RecordsOffPort
- *   The reactive OFF list of the mode's drawing, which this owner rewrites.
+ *   The reactive OFF list of the shown drawing when it is of `mode`, which this owner rewrites; an
+ *   empty list when another mode's drawing is shown (the lists and checkboxes are in the shown
+ *   drawing's panel, and every other port acts on the shown drawing).
  * @typedef {(mode: RecordSelectionMode, sourceKey: string) => RecordSource | null} RecordSourcePort
  *   One source of the mode with its records, or null when it is gone.
  * @typedef {(label: string, change: () => unknown) => Promise<unknown>} RunUndoablePort History's one step.
@@ -49,9 +51,9 @@ import { msg } from '../utils/i18n.js';
  * @property {RemoveSourcePort} removeSource
  * @property {DeleteRecordSettingsPort} deleteRecordSettings
  * @property {PrepareRecordsPort} prepareRecords
- * @property {RecordListRequest[]} autoOpenRequests The files whose upload opens their list (D-04), in
- *   upload order; the composition root adds one when a discovery of an upload finds more records than
- *   `WEB_UX_PROFILE.recordList.autoOpenAbove`.
+ * @property {() => RecordListRequest[]} autoOpenRequests The shown drawing's files whose upload opens their
+ *   list (D-04), in upload order; the composition root adds one to a drawing's list when a discovery of an
+ *   upload into that drawing finds more records than `WEB_UX_PROFILE.recordList.autoOpenAbove`.
  */
 
 /**
@@ -90,7 +92,7 @@ export const createRecordSelection = ({
   // upload that asks for its list (D-04: one list at a time, in upload order).
   const shownList = computed(() => {
     if (recordList.open) return { mode: recordList.mode, sourceKey: recordList.sourceKey, requested: false };
-    const request = autoOpenRequests.find((entry) => source(entry.mode, entry.sourceKey));
+    const request = autoOpenRequests().find((entry) => source(entry.mode, entry.sourceKey));
     return request ? { ...request, requested: true } : null;
   });
   const listSource = computed(() => (shownList.value ? source(shownList.value.mode, shownList.value.sourceKey) : null));
@@ -194,8 +196,9 @@ export const createRecordSelection = ({
     Object.assign(recordList, { open: false, sourceKey: '', query: '', sort: 'file', returnFocus: null });
     if (shown?.requested) {
       // The requests before it named files that are gone.
-      const index = autoOpenRequests.findIndex((entry) => entry.mode === shown.mode && entry.sourceKey === shown.sourceKey);
-      autoOpenRequests.splice(0, index + 1);
+      const requests = autoOpenRequests();
+      const index = requests.findIndex((entry) => entry.mode === shown.mode && entry.sourceKey === shown.sourceKey);
+      requests.splice(0, index + 1);
     }
     if (target?.isConnected) target.focus({ preventScroll: true });
   };

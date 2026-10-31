@@ -44,9 +44,10 @@ export const RULE_WRITERS = Object.freeze({
   'js/app/feature-editor/visibility-actions.js': ['editFeatureVisibilityRules'],
   // Undo and Redo install a captured copy (R11); the History apply projects it.
   'js/services/history-snapshot.js': ['replaceFeatureEditState'],
-  // A Session replacement installs the saved rules with the saved Result.
-  'js/services/config.js': ['resetSessionBaseline', 'applyDrawingFeatureData'],
-  // Reset Settings, which keeps the current Results, and the Session baseline.
+  // A Session replacement installs the saved rules with the saved Result
+  // into each loaded drawing (a new drawing state, DESIGN §4.1).
+  'js/services/config.js': ['applyDrawingFeatureData'],
+  // Reset Settings, which keeps the current Results, and a Load's shown drawing.
   'js/services/reset.js': ['resetEditorDraftState']
 });
 
@@ -130,13 +131,13 @@ export const PAINT_INTENT_WRITERS = {
   'js/app/legend/track-data-styles.js': { buildLegendStyleRetirement: 'retire' },
   'js/app/run-analysis.js': { runAnalysisInternal: 'generate' },
   // Also History's checkpoint restore (`applyEditorStateData`, `applyFeatureStateData`).
-  'js/services/config.js': { applyDrawingEditorData: 'session', applyDrawingFeatureData: 'session', resetSessionBaseline: 'session' },
+  'js/services/config.js': { applyDrawingEditorData: 'session', applyDrawingFeatureData: 'session' },
   'js/services/feature-visibility.js': { pruneUnmatchedFeatureOverrides: 'generate' },
   'js/services/history-snapshot.js': {
     applyEditorIntentData: 'history', applyFallbackFeatureStateData: 'history', applyFeatureIntentData: 'history'
   },
   'js/services/record-draw-selection.js': { forEachRecordEdit: 'retire' },
-  // Also the Session baseline (`resetSessionBaseline`).
+  // Also the shown drawing of a Session Load (`resetDrawingSettings`).
   'js/services/reset.js': { resetEditorDraftState: 'reset' },
   'js/services/session-feature-recovery.js': { migrateFeatureOverrideState: 'session' }
 };

@@ -12,7 +12,21 @@ import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/service
 import { adoptCurrentSessionResources, createCombinedSessionResourceFileView, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
+import { createInputFileStore } from '../../gbdraw/web/js/services/history-files.js';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
+
+// The drawing store with each drawing's ID and mode, as state.js gives them: the record sources are a drawing's
+// (`sourcesOf(drawing)`). The fixtures' drawings name neither (a fixture that is also the state has the `mode` ref),
+// so each store read returns a view that names them and reads every other member from the fixture's drawing.
+const withSourceDrawings = (state) => {
+  const views = new Map(['circular', 'linear'].map((mode) => [mode,
+    Object.create(state.drawingOf(mode), { id: { value: mode }, mode: { value: mode } })]));
+  return Object.defineProperties(state, {
+    drawingList: { value: () => [...views.values()], configurable: true },
+    drawingOf: { value: (id) => views.get(id), configurable: true },
+    activeDrawing: { value: () => views.get(state.mode.value), configurable: true }
+  });
+};
 
 const source = {};
 const records = [
@@ -153,13 +167,14 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
     descriptor(`${id}.gb`, `LOCUS       ${id} 100 bp DNA circular\n//\n`)]));
   const table = adoptCurrentSessionResources(resources);
   const components = Object.keys(resources).map((resourceId) => ({ resourceId }));
-  const makeFile = () => createCombinedSessionResourceFileView(table, components);
+  // The bindings hold the store's refs, as the app's writers bind them.
+  const inputFiles = createInputFileStore();
+  const makeFile = () => inputFiles.registerFile(createCombinedSessionResourceFileView(table, components));
   const file = makeFile();
   let committed = { resources, renderRequest: { mode: linear ? 'linear' : 'circular', records: components.map(({ resourceId }, i) => ({
     recordKey: `record-${i + 1}`, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
     selector: null })) } };
-  const state = { mode: { value: linear ? 'linear' : 'circular' }, cInputType: { value: 'gb' },
-    lInputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [],
+  const state = { mode: { value: linear ? 'linear' : 'circular' }, inputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [], inputFiles,
     form: createDefaultForm(), adv: createDefaultAdv('circular'),
     recordDisplayDrafts: [], featurePlacementOverrides: {},
     circularRecordList: { value: discovered ? components.map(({ resourceId }, i) => ({
@@ -171,17 +186,18 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
     featureCatalog: { value: { items: [{ recordKeys: ['record-1', 'record-2'] }] } } };
   state.form.track_type = 'middle';
   if (linear) state.linearSeqs = components.map(({resourceId}, index) => ({
-    uid:`record-${index+1}`,gb:createSessionResourceFileView(table,resourceId),region_record_id:'',region_reverse:false
+    uid:`record-${index+1}`,gb:inputFiles.registerFile(createSessionResourceFileView(table,resourceId)),region_record_id:'',region_reverse:false
   }));
   const getCommittedRequest = () => committed.renderRequest;
   const history = createHistory ? createHistory(state) : { runUndoable: (_label, fn) => fn() };
   const linearDiscovery = { status: discovered ? 'ready' : 'loading', error: '' };
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
-    watch: () => {}, linearRecordsFor: seq => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [],
+    watch: () => {}, linearRecordsFor: (_drawing, seq) => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [],
     linearRecordStatusFor: () => linearDiscovery.status, linearRecordErrorFor: () => linearDiscovery.error,
     runUndoable: history.runUndoable, getCommittedRequest, getCommittedSession: () => committed });
   // The composition root's port: the pure check over the record display's binding.
-  const actions = createFeaturePlacementActions({ state: withDrawings(state), runUndoable: history.runUndoable, getCommittedRequest,
+  withSourceDrawings(withDrawings(state));
+  const actions = createFeaturePlacementActions({ state, runUndoable: history.runUndoable, getCommittedRequest,
     isCurrentFeature: (feature) => isCurrentFeature(feature, controls.sourceBinding()) });
   const feature = { scope: state.mode.value, record_key: 'record-2', biological_feature_id: 'logical-feature' };
   return { state, actions, controls, feature, file, makeFile, linearDiscovery, history,
@@ -192,7 +208,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
         records: committed.renderRequest.records.map((record) => ({ ...record, source: { kind: 'genbank', resourceId } })) } };
     },
     commitCombined: async () => {
-      const bytes = await readFileBytes(file);
+      const bytes = await readFileBytes(inputFiles.fileOf(file));
       const combined = { ...descriptor(file.name, ''), size: bytes.byteLength,
         data: Buffer.from(bytes).toString('base64') };
       committed = { resources: { combined }, renderRequest: { ...committed.renderRequest,
@@ -469,8 +485,8 @@ test('alignment intent changes only its target direction and preserves pending d
   model.controls.setStart(rows[0],25);model.controls.setStart(rows[1],40);
   const pending=structuredClone(model.state.recordDisplayDrafts);
   const directions=[{recordKey:'record-1',reverseComplement:true}];
-  const checkpoint=model.controls.captureAlignmentOrientationIntent(directions);
-  model.controls.commitAlignmentOrientations(directions);
+  const checkpoint=model.controls.captureAlignmentOrientationIntent(model.state, directions);
+  model.controls.commitAlignmentOrientations(model.state, directions);
   assert.equal(model.state.linearSeqs[0].region_reverse,true);
   assert.equal(model.state.linearSeqs[1].region_reverse,false);
   assert.equal(model.state.recordDisplayDrafts.length,pending.length);
@@ -480,7 +496,7 @@ test('alignment intent changes only its target direction and preserves pending d
   // A later normal Reverse checkbox remains effective, with no forced override.
   model.state.linearSeqs[0].region_reverse=false;
   assert.equal(effectiveRecordReverseComplement({...rows[0],reverse:false},model.state.recordDisplayDrafts[0]),false);
-  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  model.controls.restoreAlignmentOrientationIntent(model.state, checkpoint);
   assert.deepEqual(model.state.recordDisplayDrafts,pending);
 });
 
@@ -488,11 +504,14 @@ test('alignment intent changes only its target direction and preserves pending d
 // alignment checkpoint is of the Linear drawing's drafts.
 test('an alignment checkpoint restores the Linear drafts and leaves the Circular drawing as it is', () => {
   const model = compositeControls({ linear: true });
+  const inputFiles = createInputFileStore();
   const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), featurePlacementOverrides: {},
     // Not yet on its record's row (OV-278): only an edit of the Circular drawing moves it.
     recordDisplayDrafts: [{ sourceUid: 'circular', selector: '#1', recordId: 'second', topologyOverride: null,
       startCoordinate: 7, reverseComplementOverride: null, anchorIntent: null }] };
+  Object.defineProperty(model.state, 'id', { value: 'linear', configurable: true });
   withModeDrawings(model.state, { circular, linear: model.state });
+  withSourceDrawings(model.state);
   const circularBefore = structuredClone(circular.recordDisplayDrafts);
   const rows = model.controls.allRows.value.filter((row) => row.scope === 'linear');
   model.controls.setStart(rows[0], 25);
@@ -500,11 +519,11 @@ test('an alignment checkpoint restores the Linear drafts and leaves the Circular
   model.state.recordDisplayDrafts[0].reverseComplementOverride = true;
   const pending = structuredClone(model.state.recordDisplayDrafts);
   const directions = [{ recordKey: 'record-1', reverseComplement: true }];
-  const checkpoint = model.controls.captureAlignmentOrientationIntent(directions);
-  model.controls.commitAlignmentOrientations(directions);
+  const checkpoint = model.controls.captureAlignmentOrientationIntent(model.state, directions);
+  model.controls.commitAlignmentOrientations(model.state, directions);
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
   assert.equal(model.state.recordDisplayDrafts[0].reverseComplementOverride, null);
-  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  model.controls.restoreAlignmentOrientationIntent(model.state, checkpoint);
   assert.equal(model.state.linearSeqs[0].region_reverse, false);
   assert.deepEqual({ linear: model.state.recordDisplayDrafts, circular: circular.recordDisplayDrafts },
     { linear: pending, circular: circularBefore });
@@ -516,39 +535,39 @@ test('fresh loaded alignment binds canonical sources before discovery and restor
   model.state.linearSeqs[0].region_reverse = true;
   const target = {recordKey:'record-1', reverseComplement:true};
   assert.equal(model.controls.allRows.value.filter(row => row.scope === 'linear').length, 0);
-  const checkpoint = model.controls.captureAlignmentOrientationIntent([target]);
-  model.controls.commitAlignmentOrientations([target]);
+  const checkpoint = model.controls.captureAlignmentOrientationIntent(model.state, [target]);
+  model.controls.commitAlignmentOrientations(model.state, [target]);
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
   assert.equal(model.state.linearSeqs[1].region_reverse, false);
   // Artifact rollback restores its canonical direction first; the same owner
   // then restores the pre-operation pending input, without needing discovery.
   model.state.linearSeqs[0].region_reverse = false;
-  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  model.controls.restoreAlignmentOrientationIntent(model.state, checkpoint);
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
-  model.state.linearSeqs[0].gb = new Blob(['replacement']);
-  assert.throws(() => model.controls.captureAlignmentOrientationIntent([target]), /source binding changed/);
+  model.state.linearSeqs[0].gb = model.state.inputFiles.registerFile(new File(['replacement'], 'replacement.gb'));
+  assert.throws(() => model.controls.captureAlignmentOrientationIntent(model.state, [target]), /source binding changed/);
 });
 
 test('Circular discovery metadata belongs only to the current source and complete input pair', () => {
   const source = {};
-  const state = { cInputType: { value: 'gb' }, files: { c_gb: source },
+  const drawing = { inputType: { value: 'gb' }, files: { c_gb: source },
     circularRecordList: { value: [{ selector: '#1', record_id: 'committed' }] },
     circularRecordDiscovery: { status: 'ready', inputType: 'gb', primaryFile: source, pairedFile: null, error: '' } };
-  assert.equal(circularDiscoveryForInput(state).status, 'ready');
-  assert.equal(circularDiscoveryForInput(state).records.length, 1);
-  state.files.c_gb = {};
-  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
-  assert.deepEqual(circularDiscoveryForInput(state).records, []);
-  state.files.c_gb = source;
-  state.circularRecordDiscovery.status = 'deferred';
-  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
-  assert.deepEqual(circularDiscoveryForInput(state).records, []);
-  state.cInputType.value = 'gff';
-  state.files.c_gff = {};
-  assert.equal(circularDiscoveryForInput(state).status, 'idle');
-  state.files.c_fasta = {};
-  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
-  assert.deepEqual(circularDiscoveryForInput(state).records, []);
+  const discovery = (inputType) => { drawing.inputType.value = inputType; return circularDiscoveryForInput(drawing); };
+  assert.equal(discovery('gb').status, 'ready');
+  assert.equal(discovery('gb').records.length, 1);
+  drawing.files.c_gb = {};
+  assert.equal(discovery('gb').status, 'deferred');
+  assert.deepEqual(discovery('gb').records, []);
+  drawing.files.c_gb = source;
+  drawing.circularRecordDiscovery.status = 'deferred';
+  assert.equal(discovery('gb').status, 'deferred');
+  assert.deepEqual(discovery('gb').records, []);
+  drawing.files.c_gff = {};
+  assert.equal(discovery('gff').status, 'idle');
+  drawing.files.c_fasta = {};
+  assert.equal(discovery('gff').status, 'deferred');
+  assert.deepEqual(discovery('gff').records, []);
 });
 
 // OV-278: Load of a Session without a Web draft writes a draft selected by
@@ -574,26 +593,27 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
   const table = adoptCurrentSessionResources(resources);
   const committed = { resources, renderRequest: { mode: 'linear', records: [{ recordKey: 'record-1', cardinality: 'exactly_one',
     source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' } }] } };
-  const state = { mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' }, files: { c_gb: null },
-    linearSeqs: [{ uid: 'record-1', gb: createSessionResourceFileView(table, 'both'), region_record_id: 'second', region_reverse: false }],
+  const inputFiles = createInputFileStore();
+  const state = { mode: { value: 'linear' }, inputType: { value: 'gb' }, files: { c_gb: null }, inputFiles,
+    linearSeqs: [{ uid: 'record-1', gb: inputFiles.registerFile(createSessionResourceFileView(table, 'both')), region_record_id: 'second', region_reverse: false }],
     form: createDefaultForm(), adv: createDefaultAdv('linear'),
     recordDisplayDrafts: [{ sourceUid: 'record-1', selector: '#1', recordId: 'second', topologyOverride: null,
       startCoordinate: 25, reverseComplementOverride: true, anchorIntent: null }],
     featurePlacementOverrides: {}, circularRecordList: { value: [] },
     circularRecordDiscovery: { status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null },
     featureCatalog: { value: { items: [] } } };
-  const controls = createRecordDisplayControls({ state: withDrawings(state), computed: (fn) => ({ get value() { return fn(); } }),
+  const controls = createRecordDisplayControls({ state: withSourceDrawings(withDrawings(state)), computed: (fn) => ({ get value() { return fn(); } }),
     watch: () => {}, linearRecordsFor: () => [
       { selector: '#1', recordId: 'first', recordLength: 100, detectedTopology: 'circular' },
       { selector: '#2', recordId: 'second', recordLength: 100, detectedTopology: 'circular' }],
     linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '',
     runUndoable: (_label, fn) => fn(), getCommittedRequest: () => committed.renderRequest, getCommittedSession: () => committed });
   const directions = [{ recordKey: 'record-1', reverseComplement: true }];
-  const checkpoint = controls.captureAlignmentOrientationIntent(directions);
+  const checkpoint = controls.captureAlignmentOrientationIntent(state, directions);
   assert.equal(state.recordDisplayDrafts[0].selector, '#2', 'the capture settled the draft onto its row');
-  controls.commitAlignmentOrientations(directions);
+  controls.commitAlignmentOrientations(state, directions);
   assert.equal(state.recordDisplayDrafts[0].reverseComplementOverride, null);
-  controls.restoreAlignmentOrientationIntent(checkpoint);
+  controls.restoreAlignmentOrientationIntent(state, checkpoint);
   assert.equal(state.recordDisplayDrafts[0].reverseComplementOverride, true, 'the row override comes back');
   assert.equal(state.linearSeqs[0].region_reverse, false);
 });
@@ -642,12 +662,15 @@ const sourceControls = () => {
   const callbacks = [];
   const draft = (sourceUid) => ({ sourceUid, selector: '#1', recordId: sourceUid, topologyOverride: 'linear',
     startCoordinate: null, reverseComplementOverride: null, anchorIntent: null });
-  const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), recordDisplayDrafts: [draft('circular')] };
-  const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')] };
-  const state = withModeDrawings({ mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' },
-    files: { c_gb: new Blob(['c']) }, circularRecordList: { value: [] }, featureCatalog: { value: null },
-    linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: new Blob([uid]), region_record_id: '', region_reverse: false })) },
+  const inputFiles = createInputFileStore();
+  const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), recordDisplayDrafts: [draft('circular')],
+    files: { c_gb: inputFiles.registerFile(new File(['c'], 'c.gb')) }, circularRecordList: { value: [] } };
+  const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')],
+    linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: inputFiles.registerFile(new File([uid], `${uid}.gb`)), region_record_id: '', region_reverse: false })) };
+  const state = withModeDrawings({ mode: { value: 'linear' }, inputType: { value: 'gb' },
+    featureCatalog: { value: null }, inputFiles },
   { circular, linear });
+  withSourceDrawings(state);
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
     watch: (_source, callback) => { callbacks.push(callback); }, linearRecordsFor: () => [],
     linearRecordStatusFor: () => 'ready', linearRecordErrorFor: () => '', runUndoable: (_label, fn) => fn(),
@@ -659,7 +682,7 @@ const sourceControls = () => {
 test('no watcher of the record sources drops drafts (A2 W5)', () => {
   const { state, callbacks, circular, linear, uids } = sourceControls();
   const tuple = (uid, source) => ({ scope: 'linear', sourceUid: uid, source, paired: null });
-  const previous = [tuple('record-1', state.linearSeqs[0].gb), tuple('record-2', state.linearSeqs[1].gb)];
+  const previous = [tuple('record-1', linear.linearSeqs[0].gb), tuple('record-2', linear.linearSeqs[1].gb)];
   const current = [tuple('record-1', new Blob(['x'])), previous[1]];
   callbacks.forEach((callback) => callback(current, previous));
   assert.deepEqual(uids(linear), ['record-1', 'record-2']);
@@ -668,10 +691,24 @@ test('no watcher of the record sources drops drafts (A2 W5)', () => {
 
 test('a replaced Linear source drops its own drafts only, in its transition (A2 W5)', () => {
   const { state, controls, circular, linear, uids } = sourceControls();
-  controls.changeRecordSources(() => { state.linearSeqs[0].gb = new Blob(['x']); });
+  controls.changeRecordSources(state.drawingOf('linear'), () => { linear.linearSeqs[0].gb = new Blob(['x']); });
   assert.deepEqual(uids(linear), ['record-2']);
   assert.deepEqual(uids(circular), ['circular']);
-  controls.changeRecordSources(() => { state.cInputType.value = 'gff'; });
+  controls.changeRecordSources(state.drawingOf('circular'), () => { state.drawingOf('circular').inputType.value = 'gff'; });
   assert.deepEqual(uids(circular), [], 'the input type switch replaced the Circular source');
   assert.deepEqual(uids(linear), ['record-2']);
+});
+
+// D-15-91 (survey commit 4): the Circular file card is the Circular drawing's
+// source, so its rows carry that drawing's crop and orientation, also while
+// the Linear drawing is shown (the shown drawing's form answered before).
+test('the Circular rows carry the Circular drawing crop and orientation while Linear is shown', () => {
+  const { state, controls, circular } = sourceControls();
+  circular.circularRecordList.value = [{ record_id: 'c1', record_length: 100, selector: '#1', detectedTopology: 'circular' }];
+  Object.assign(circular.form, { circular_reverse: true, multi_record_canvas: false, circular_region_start: 1, circular_region_end: 50 });
+  const [row] = controls.allRows.value.filter((entry) => entry.scope === 'circular');
+  assert.equal(row.drawingId, 'circular');
+  assert.equal(row.reverse, true, 'the Circular drawing orientation');
+  assert.equal(row.cropped, true, 'the Circular drawing region');
+  assert.deepEqual(controls.rows.value.filter((entry) => entry.scope === 'circular'), [], 'the rows are the shown drawing');
 });

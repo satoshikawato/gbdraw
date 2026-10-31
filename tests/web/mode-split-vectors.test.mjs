@@ -1,16 +1,18 @@
-// The JavaScript split of a Session 27-44 draft into Session 46 mode slices,
-// against the vectors it shares with the Python twin
+// Python's split of a Session 27-44 draft into Session 46 mode slices,
+// against the vectors it shares with the Web Load
 // (tests/fixtures/sessions/mode-split-vectors.json, tests/test_mode_split_vectors.py).
 //
-// A flat-draft case runs `splitDraftIntoModes` on its input. A fixture case
-// loads the Session as the app does (`importSession`) and reads the split Load
-// made (`session-draft-split`). Each case checks its `expect` and `expectAbsent`
-// pointers and, where present, `expectedModes` (the slices the Python split
-// must equal). The split writes only migrated values; `loadDefaults` lists the
-// values Session 46 Load fills for the pointers the split leaves absent, and
-// this test checks them on the drawings Load installs.
+// A flat-draft case runs Python's `split_draft_into_modes` on its input and checks its
+// `expect` and `expectAbsent` pointers and, where present, `expectedModes` (the
+// slices the Python split must equal). A whole-Session case loads the Session
+// as the app does (`importSession`): Python converts it once (D-15-129), and
+// the case checks its `/modes/` `expect` pointers on Python's drawings, that no
+// flat draft outlives the conversion, and that Load installs Python's drawings
+// as a Load of that Session 49 does; tests/test_mode_split_vectors.py checks
+// Python's split against the whole case. `loadDefaults` lists the values Load
+// fills for the pointers the split leaves absent, checked on Load's drawings.
 import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { pythonDraftSplit, pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -18,6 +20,7 @@ import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -33,24 +36,28 @@ installFakeSvgDom();
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-/** @type {Record<string, any>[]} */
-const splits = [];
-globalThis.__GBDRAW_TEST_HOOKS__ = {
-  onSessionLifecycleEvent: (event) => {
-    if (event.name === 'session-draft-split') splits.push(event.split);
-  }
-};
-
-const { sessionLegendEditsByRowKey, splitDraftIntoModes } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
+const { sessionLegendEditsByRowKey } = await import('../../gbdraw/web/js/services/session-drawings-upgrade.js');
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
   buildModeSliceData,
   setUnmanagedConfigOverrideValidator
 } = sessionConfig;
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { importSession } = callerSession(sessionConfig, state);
+const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+// Each conversion Python returned to Load: a fixture case's oracle.
+/** @type {Record<string, any>[]} */
+const conversions = [];
+const pythonUpgrade = pythonLegacySessionUpgrader();
+setLegacySessionUpgrader(async (request) => {
+  const reply = await pythonUpgrade(request);
+  conversions.push(reply.result.document);
+  return reply;
+});
 const { normalizePaletteDefinitions } = await import('../../gbdraw/web/js/utils/color-utils.js');
 
 const REPO = new URL('../../', import.meta.url);
@@ -96,11 +103,17 @@ const load = async (session) => {
   assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
 };
 // The drawings as Save writes them (complete slices).
-const savedModes = () => Object.fromEntries(MODES.map((mode) => [mode, JSON.parse(JSON.stringify(
-  buildModeSliceData(modeDrawing(state, mode), mode, {
-    selectedFeatureRecordIdx: mode === state.mode.value ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
-  })
-))]));
+// A one-mode Load made no drawing of the other mode (D-15-120); the offer tab makes it at its defaults,
+// which Load used to fill.
+const addPairDrawings = await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder();
+const savedModes = () => {
+  addPairDrawings();
+  return Object.fromEntries(MODES.map((mode) => [mode, JSON.parse(JSON.stringify(
+    buildModeSliceData(modeDrawing(state, mode), mode, {
+      selectedFeatureRecordIdx: mode === state.mode.value ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
+    })
+  ))]));
+};
 
 // A Session 46 that carries a flat-draft case's split and nothing else: Load
 // fills each slice from the mode's defaults.
@@ -130,39 +143,115 @@ const settingsOnlySession = (split) => {
   };
 };
 
-/** The split of one case, seen as a (partial) Session 46. */
-const splitOf = async (vector) => {
-  if (!vector.fixture && vector.input?.format !== 'gbdraw-session') {
-    return splitDraftIntoModes(structuredClone(vector.input), {
-      committedMode: vector.context.committedMode,
-      modeProfiles: vector.context.modeProfiles,
-      depthSources: vector.context.depthSources ?? null,
-      paletteColors: vector.context.paletteColors ?? null
-    });
-  }
+/** Python's split of a flat-draft case, seen as a (partial) Session 46. */
+const splitOf = (vector) => pythonDraftSplit(vector.input, vector.context);
+
+/** A drawing as Save writes it (a complete slice). */
+const savedSlice = (drawing) => JSON.parse(JSON.stringify(buildModeSliceData(drawing, drawing.mode, {
+  selectedFeatureRecordIdx: drawing.id === state.activeDrawing().id ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
+})));
+
+/**
+ * A whole-Session case loaded as the app loads it: Python converts the
+ * Session 27-44 once (D-15-129; tests/test_mode_split_vectors.py pins that
+ * split against this case), and Load installs Python's drawings. Returns
+ * Python's conversion and Load's drawings by Python's drawing IDs, as Save
+ * writes them (complete slices), keyed by mode.
+ */
+const loadedOf = async (vector) => {
   const session = vector.fixture ? readFixture(vector.fixture) : structuredClone(vector.input);
   for (const pointer of vector.omit || []) remove(session, pointer);
-  splits.length = 0;
+  conversions.length = 0;
   await load(session);
-  assert.equal(splits.length, 1, 'Load splits a Session 27-44 draft once');
-  return { ...splits[0], version: 46 };
+  assert.equal(conversions.length, 1, 'Load converts a Session 27-44 once, in Python');
+  const [converted] = conversions;
+  const modes = Object.fromEntries(converted.drawings.map(({ id, mode }) => {
+    const drawing = state.drawingOf(id);
+    assert.equal(drawing.mode, mode, id);
+    return [mode, savedSlice(drawing)];
+  }));
+  // Python's drawings as the slices of a Session 46 (`modes`).
+  const convertedModes = Object.fromEntries(converted.drawings.map(({ mode, config, features, editorState, ui }) => (
+    [mode, { config, features, editorState, ui }])));
+  return { converted, convertedModes, modes };
 };
 
+/**
+ * The mismatches of `expect` pointers read on `view` (all, or those `keep`
+ * keeps). `expected` defaults to the case's `expect`; a whole-Session case
+ * passes `loadExpectOf(vector)`.
+ */
+const expectMismatches = (vector, view, keep = () => true, expected = vector.expect || {}) => Object.entries(expected)
+  .filter(([pointer]) => keep(pointer)).flatMap(([pointer, expected]) => {
+    const actual = resolve(view, pointer);
+    return actual !== ABSENT && canonical(actual) === canonical(expected) ? [] : [`${pointer}: expected ${
+      canonical(expected).slice(0, 200)}, got ${actual === ABSENT ? '<absent>' : canonical(actual).slice(0, 200)}`];
+  });
+/** The `expectAbsent` pointers that `view` holds (all, or those `keep` keeps). */
+const absentMismatches = (vector, view, keep = () => true) => (vector.expectAbsent || []).filter(keep)
+  .filter((pointer) => resolve(view, pointer) !== ABSENT)
+  .map((pointer) => `${pointer}: expected absent, got ${canonical(resolve(view, pointer)).slice(0, 200)}`);
+/** The `loadDefaults` that Load's drawings (`loaded`, as Save writes them) do not hold. */
+const defaultMismatches = (vector, loaded) => (vector.loadDefaults || []).flatMap(({ pointer, value, projected }) => {
+  const actual = resolve(loaded, pointer);
+  if (actual === ABSENT) return [`${pointer}: Load left it absent`];
+  // The committed mode's request projection fills it first.
+  if (projected) return [];
+  return canonical(actual) === canonical(value) ? [] : [`${pointer}: expected ${canonical(value)}, got ${canonical(actual)}`];
+});
+const isModePointer = (pointer) => pointer.startsWith('/modes/');
+/**
+ * The `expect` values of a whole-Session case as Web Load sends them to
+ * Python: Load's first pass carries a field each drawing reads differently
+ * from the stored draft as the read value (D-15-148 (A)), so `loadExpect`
+ * holds the read value for such a carried field (e.g. "20" read as 20). The
+ * pytest vector converts the stored draft and keeps `expect`.
+ */
+const loadExpectOf = (vector) => ({ ...(vector.expect || {}), ...(vector.loadExpect || {}) });
+
+// `loadExpect` of F1: Load reads the retired spelling "either" as "strand" (OV-2301). Only that
+// spelling moves: a stored value is never replaced by today's default.
+test('Load keeps a stored Collinear setting that differs from today\'s default', async () => {
+  const session = readFixture('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
+  session.config.losat.blastp.collinearMergeOrientation = 'order';
+  const { convertedModes, modes } = await loadedOf({ input: session });
+  for (const { config } of [convertedModes.linear, modes.linear]) {
+    assert.equal(config.losat.blastp.collinearMergeOrientation, 'order');
+    assert.deepEqual(config.losat.blastp.hitLimitsByMode.collinear, { candidateLimit: 5, orthogroupMemberMaxHits: 5 });
+  }
+});
+
 for (const vector of VECTORS.cases) {
+  const wholeSession = Boolean(vector.fixture) || vector.input?.format === 'gbdraw-session';
   test(vector.name, async () => {
-    const result = await splitOf(vector);
-    const mismatches = [];
-    for (const [pointer, expected] of Object.entries(vector.expect || {})) {
-      const actual = resolve(result, pointer);
-      if (actual === ABSENT || canonical(actual) !== canonical(expected)) {
-        mismatches.push(`${pointer}: expected ${canonical(expected).slice(0, 200)}, got ${
-          actual === ABSENT ? '<absent>' : canonical(actual).slice(0, 200)}`);
+    if (wholeSession) {
+      // Load's drawings against Python's conversion of the same Session.
+      const { converted, convertedModes, modes } = await loadedOf(vector);
+      const mismatches = [
+        // The values the split moves into each mode, in Python's drawing of
+        // that mode. A one-mode Session composes to one drawing (DESIGN 3.2):
+        // the split's slice of the other mode is pinned in Python only.
+        ...expectMismatches(vector, { modes: convertedModes },
+          (pointer) => isModePointer(pointer) && Object.hasOwn(convertedModes, pointer.split('/')[2]),
+          loadExpectOf(vector)),
+        // The flat draft does not outlive the conversion.
+        ...absentMismatches(vector, converted, (pointer) => !isModePointer(pointer)),
+        // Load fills what the split left absent.
+        ...defaultMismatches(vector, { modes })
+      ];
+      // Load installs Python's drawings as it installs them from a Session 49 file.
+      conversions.length = 0;
+      await load(converted);
+      assert.equal(conversions.length, 0, 'a Session 49 is not converted');
+      const direct = Object.fromEntries(converted.drawings.map(({ id, mode }) => [mode, savedSlice(state.drawingOf(id))]));
+      for (const mode of Object.keys(modes)) {
+        if (canonical(modes[mode]) !== canonical(direct[mode])) mismatches.push(`/modes/${mode}: differs from a Load of Python's Session 49`);
       }
+      assert.deepEqual(mismatches, []);
+      return;
     }
-    for (const pointer of vector.expectAbsent || []) {
-      const actual = resolve(result, pointer);
-      if (actual !== ABSENT) mismatches.push(`${pointer}: expected absent, got ${canonical(actual).slice(0, 200)}`);
-    }
+    const result = await splitOf(vector);
+    const mismatches = [...expectMismatches(vector, result), ...absentMismatches(vector, result)];
     if (vector.expectedModes) {
       for (const mode of MODES) {
         if (canonical(result.modes?.[mode]) !== canonical(vector.expectedModes[mode])) {
@@ -173,18 +262,9 @@ for (const vector of VECTORS.cases) {
     assert.deepEqual(mismatches, []);
 
     // Session 46 Load fills what the split left absent.
-    const defaults = vector.loadDefaults || [];
-    if (!defaults.length) return;
-    if (!vector.fixture) await load(settingsOnlySession(result));
-    const loaded = { modes: savedModes() };
-    const missing = defaults.flatMap(({ pointer, value, projected }) => {
-      const actual = resolve(loaded, pointer);
-      if (actual === ABSENT) return [`${pointer}: Load left it absent`];
-      // The committed mode's request projection fills it first.
-      if (projected) return [];
-      return canonical(actual) === canonical(value) ? [] : [`${pointer}: expected ${canonical(value)}, got ${canonical(actual)}`];
-    });
-    assert.deepEqual(missing, []);
+    if (!(vector.loadDefaults || []).length) return;
+    await load(settingsOnlySession(result));
+    assert.deepEqual(defaultMismatches(vector, { modes: savedModes() }), []);
   });
 }
 

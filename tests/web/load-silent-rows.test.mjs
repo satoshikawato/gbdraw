@@ -7,10 +7,12 @@ import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 
 globalThis.window = {
   Vue: {
@@ -25,6 +27,10 @@ installFakeSvgDom();
 globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConfig;
@@ -32,7 +38,11 @@ setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validate
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+// A one-mode Load makes no drawing of the other mode (D-15-120); a case that needs the pair adds it as the offer tab does.
+const addPairDrawings = await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder();
+const drawnModes = () => state.drawingList().map((drawing) => drawing.mode);
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const { orderedConservationSources } = await import('../../gbdraw/web/js/services/conservation-series.js');
 
 const fixture = (name) => {
@@ -49,6 +59,7 @@ const BASES = {
   v44: () => fixture('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'),
   v44L: () => fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'),
   so46: () => structuredClone(VECTORS.bases['settings-only-46'].document),
+  // The bundled Gallery Session is a 49: a leaf is edited in its drawing (`drawings[0]`), and a row names it there.
   g47L: () => gallery('lambda_basic_linear.gbdraw-session.json'),
   // tests/utils/two_mode_session.py: a Circular Session 46 with a Linear `otherModeResult`.
   twoMode: () => evaluatePython('from tests.utils.two_mode_session import two_mode_session\nresult = two_mode_session()')
@@ -69,43 +80,45 @@ const saved = async () => {
   assert.equal(result?.status, 'saved', JSON.stringify(result?.error ?? result));
   return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
 };
+// A 49 Load names a place in `drawings` by its index: `drawings.0.x` is the row `drawings[0].x`.
+const rowOf = (path) => path.replace(/\.(\d+)(?=\.|$)/g, '[$1]');
 const LINEAR_SEQ = 'webFiles.bindings.linearSeqs.0';
 
 // [base, the edited path, the stored value, the rows, a check of the loaded state]
 const CASES = [
   // OV-568: a Linear card's crop and genetic code, read once by the Files reader.
   ['so46', `${LINEAR_SEQ}.region_start`, 'abc', ['setting-replaced webFiles.bindings.linearSeqs[0].region_start'],
-    () => assert.equal(state.linearSeqs[0].region_start, null)],
+    () => assert.deepEqual(drawnModes(), ['circular'], 'a Circular Load makes no Linear drawing to hold the card')],
   ['so46', `${LINEAR_SEQ}.region_end`, [1], ['setting-replaced webFiles.bindings.linearSeqs[0].region_end'],
-    () => assert.equal(state.linearSeqs[0].region_end, null)],
+    () => assert.deepEqual(drawnModes(), ['circular'], 'a Circular Load makes no Linear drawing to hold the card')],
   ['so46', `${LINEAR_SEQ}.losat_gencode`, 'x', ['setting-replaced webFiles.bindings.linearSeqs[0].losat_gencode'],
-    () => assert.equal(state.linearSeqs[0].losat_gencode, 1)],
+    () => assert.deepEqual(drawnModes(), ['circular'], 'a Circular Load makes no Linear drawing to hold the card')],
   // An orientation that is no boolean is not used (D1b: changed, U false), its text included.
   ['so46', `${LINEAR_SEQ}.region_reverse`, 'true', ['setting-replaced webFiles.bindings.linearSeqs[0].region_reverse'],
-    () => assert.equal(state.linearSeqs[0].region_reverse, false)],
+    () => assert.deepEqual(drawnModes(), ['circular'], 'a Circular Load makes no Linear drawing to hold the card')],
   ['so46', `${LINEAR_SEQ}.definition`, 5, ['setting-replaced webFiles.bindings.linearSeqs[0].definition'],
-    () => assert.equal(state.linearSeqs[0].definition, '')],
+    () => assert.deepEqual(drawnModes(), ['circular'], 'a Circular Load makes no Linear drawing to hold the card')],
   ['v30', 'files.linearSeqs.0.losat_gencode', 0, ['setting-replaced files.linearSeqs[0].losat_gencode']],
   // OV-595: the PNG DPI is one of the choices the DPI menu lists.
   ['g47L', 'ui.downloadDpi', 'abc', ['setting-replaced ui.downloadDpi'], () => assert.equal(Number(state.downloadDpi.value), 300)],
   ['g47L', 'ui.downloadDpi', '600', [], () => assert.equal(Number(state.downloadDpi.value), 600)],
   // OV-594: an input type of no kind; the request's own type wins without a row.
-  ['g47L', 'ui.cInputType', 5, ['setting-replaced ui.cInputType'], () => assert.equal(state.cInputType.value, 'gb')],
-  ['g47L', 'ui.lInputType', 5, [], () => assert.equal(state.lInputType.value, 'gb')],
-  ['v44', 'ui.cInputType', 'fasta', [], () => assert.equal(state.cInputType.value, 'gb')],
+  ['g47L', 'ui.cInputType', 5, ['setting-replaced ui.cInputType'], () => assert.deepEqual(drawnModes(), ['linear'], 'a Linear Load makes no Circular drawing to hold the type')],
+  ['g47L', 'ui.lInputType', 5, [], () => assert.equal(modeDrawing(state, 'linear').inputType.value, 'gb')],
+  ['v44', 'ui.cInputType', 'fasta', [], () => assert.equal(modeDrawing(state, 'circular').inputType.value, 'gb')],
   // K19: a settings-only Session's mode of no mode (the request's mode wins in a full one).
   ['so46', 'ui.mode', 'zigzag', ['setting-replaced ui.mode'], () => assert.equal(state.mode.value, 'circular')],
   ['g47L', 'ui.mode', 'zigzag', [], () => assert.equal(state.mode.value, 'linear')],
   // RL-D: a drawing's feature color edits and label rows read per entry.
-  ['g47L', 'modes.linear.features.featureColorOverrides', { a: 5, b: 'notacolor', c: { color: '#ff0000', caption: 'x' } },
-    ['setting-entries-dropped modes.linear.features.featureColorOverrides'],
+  ['g47L', 'drawings.0.features.featureColorOverrides', { a: 5, b: 'notacolor', c: { color: '#ff0000', caption: 'x' } },
+    ['setting-entries-dropped drawings[0].features.featureColorOverrides'],
     () => assert.deepEqual(modeDrawing(state, 'linear').featureColorOverrides, { c: { color: '#ff0000', caption: 'x' } })],
   // OV-866: an edit map of another kind (a list) is dropped as its row says, not read by index.
-  ['g47L', 'modes.linear.features.featureColorOverrides', ['#ff0000'],
-    ['setting-replaced modes.linear.features.featureColorOverrides'],
+  ['g47L', 'drawings.0.features.featureColorOverrides', ['#ff0000'],
+    ['setting-replaced drawings[0].features.featureColorOverrides'],
     () => assert.deepEqual(modeDrawing(state, 'linear').featureColorOverrides, {})],
-  ['g47L', 'modes.linear.features.labelOverrideRows', [5, 'x', { recordId: '*', featureType: 'CDS', qualifier: 'product', valueRegex: 'x', labelText: 'y' }],
-    ['setting-entries-dropped modes.linear.features.labelOverrideRows'],
+  ['g47L', 'drawings.0.features.labelOverrideRows', [5, 'x', { recordId: '*', featureType: 'CDS', qualifier: 'product', valueRegex: 'x', labelText: 'y' }],
+    ['setting-entries-dropped drawings[0].features.labelOverrideRows'],
     () => assert.equal(modeDrawing(state, 'linear').canonicalLabelOverrideRows.value.length, 1)],
   // OV-578: the alignment plan and record translations of a settings-only file.
   ['so46', 'modes.linear.config.linearRecordLayout.similarityAlignment', 'junk',
@@ -113,7 +126,7 @@ const CASES = [
   ['so46', 'modes.linear.config.linearRecordLayout.recordTranslations', 'nope',
     ['setting-replaced modes.linear.config.linearRecordLayout.recordTranslations'], () => assert.deepEqual(state.linearRecordTranslations.value, [])],
   // E1a residuals: LOSAT execution settings are no slice field of a Session 46 (E-OD03).
-  ['g47L', 'modes.linear.config.losat.executionMode', 'serial', ['setting-replaced modes.linear.config.losat.executionMode'],
+  ['g47L', 'drawings.0.config.losat.executionMode', 'serial', ['setting-replaced drawings[0].config.losat.executionMode'],
     () => assert.equal(state.losatExecution.executionMode, 'auto')],
   // An older Linear visibility that is no boolean is dropped with a row on every path.
   ['v30', 'config.adv.linear_show_accession', 'yes', ['setting-replaced config.adv.linear_show_accession'],
@@ -123,15 +136,15 @@ const CASES = [
   ['v44', 'config.qualifierPriorityRules', [{ feat: 'CDS', order: 'product', zzz: 1 }], ['setting-replaced config.qualifierPriorityRules[0].zzz']],
   ['v44', 'config.annotationSets', [{ id: 'a', annotations: [], zzz: 1 }], ['setting-replaced config.annotationSets[0].zzz']],
   // The two Linear font sizes are read as settings (a positive number or unset).
-  ['g47L', 'modes.linear.config.adv.scale_font_size', 'big', ['setting-replaced modes.linear.config.adv.scale_font_size'],
+  ['g47L', 'drawings.0.config.adv.scale_font_size', 'big', ['setting-replaced drawings[0].config.adv.scale_font_size'],
     () => assert.equal(modeDrawing(state, 'linear').adv.scale_font_size, null)],
-  ['g47L', 'modes.linear.config.adv.ruler_label_font_size', '14', [], () => assert.equal(Number(modeDrawing(state, 'linear').adv.ruler_label_font_size), 14)],
+  ['g47L', 'drawings.0.config.adv.ruler_label_font_size', '14', [], () => assert.equal(Number(modeDrawing(state, 'linear').adv.ruler_label_font_size), 14)],
   // A7i at a Session 46: recordsOff of another kind, an entry of no key, an unbound uid.
-  ['g47L', 'modes.linear.config.recordsOff', 'x', ['setting-replaced modes.linear.config.recordsOff']],
+  ['g47L', 'drawings.0.config.recordsOff', 'x', ['setting-replaced drawings[0].config.recordsOff']],
   ['so46', 'modes.linear.config.recordsOff', [5], ['setting-entries-dropped modes.linear.config.recordsOff']],
   ['so46', 'modes.linear.config.recordsOff', ['unbound'], [], () => assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], [])],
   // OV-822: a null over a settings group merges nothing (E-OD06), and the group keeps its defaults.
-  ['g47L', 'modes.linear.config.losat.blastp', null, [], () => assert.equal(typeof modeDrawing(state, 'linear').losat.blastp, 'object')],
+  ['g47L', 'drawings.0.config.losat.blastp', null, [], () => assert.equal(typeof modeDrawing(state, 'linear').losat.blastp, 'object')],
   ['so46', 'modes.circular.config.losat.blastp', null, []]
 ];
 
@@ -148,18 +161,19 @@ for (const [base, path, value, rows, check] of CASES) {
 // nothing acts after the commit point. The dialog's wording is the owner's.
 test('K14: record display drafts of no list are listed before the dialog and applied as listed', async () => {
   const configFile = () => {
-    const config = structuredClone(BASES.g47L().modes.linear.config);
+    const config = structuredClone(BASES.g47L().drawings[0].config);
     installShownDrawing('linear');
     return config;
   };
   const cases = [
-    ['g47L', () => BASES.g47L(), 'modes.linear.config.recordDisplayDrafts', 'linear'],
+    ['g47L', () => BASES.g47L(), 'drawings.0.config.recordDisplayDrafts', 'linear'],
     ['v44', () => BASES.v44(), 'config.recordDisplayDrafts', 'circular'],
     ['configuration file', configFile, 'recordDisplayDrafts', 'linear']
   ];
   await load(BASES.g47L());
   for (const [name, base, path, mode] of cases) {
     for (const value of [{}, 'x', 5, true]) {
+      addPairDrawings();
       const drawing = modeDrawing(state, mode);
       drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, {
         sourceUid: 'held', selector: '#1', recordId: 'held', topologyOverride: null, startCoordinate: null,
@@ -171,12 +185,16 @@ test('K14: record display drafts of no list are listed before the dialog and app
       });
       const label = `${name} ${JSON.stringify(value)}`;
       assert.ok(['ok', 'legacy'].includes(loaded.status), `${label}: ${JSON.stringify(loaded.error)}`);
-      assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), [`setting-replaced ${path}`], label);
+      assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), [`setting-replaced ${rowOf(path)}`], label);
       assert.deepEqual(dialogs, [describeLoadRepairs(loaded.repairs)?.items], label);
-      assert.ok(dialogs[0].some((line) => line.includes(`(${path})`)), `${label}: ${dialogs[0]}`);
-      assert.deepEqual([...drawing.recordDisplayDrafts], [], label);
+      assert.ok(dialogs[0].some((line) => line.includes(`(${rowOf(path)})`)), `${label}: ${dialogs[0]}`);
+      // A Session Load makes new drawing states; a configuration file keeps the drawing.
+      assert.deepEqual([...modeDrawing(state, mode).recordDisplayDrafts], [], label);
     }
   }
+  // OV-1814: a Save right after the bare-configuration Loads is refused (`c_gb` required) with the earlier
+  // Session's Circular drawing still held; the Save checks the state of a Session Load.
+  await load(BASES.g47L());
   await saved();
 });
 
@@ -186,12 +204,12 @@ test('K14: record display drafts of no list are listed before the dialog and app
 // Session slice, a Session 44 draft and a configuration file.
 test('OV-892: a Label blacklist that is no text is listed and keeps its text', async () => {
   const configFile = () => {
-    const config = structuredClone(BASES.g47L().modes.linear.config);
+    const config = structuredClone(BASES.g47L().drawings[0].config);
     installShownDrawing('linear');
     return config;
   };
   const cases = [
-    ['g47L', () => BASES.g47L(), 'modes.linear.config.blacklistText', 'linear'],
+    ['g47L', () => BASES.g47L(), 'drawings.0.config.blacklistText', 'linear'],
     ['v44', () => BASES.v44(), 'config.blacklistText', 'circular'],
     ['configuration file', configFile, 'blacklistText', 'linear']
   ];
@@ -207,7 +225,7 @@ test('OV-892: a Label blacklist that is no text is listed and keeps its text', a
       });
       const label = `${name} ${JSON.stringify(value)}`;
       assert.ok(['ok', 'legacy'].includes(loaded.status), `${label}: ${JSON.stringify(loaded.error)}`);
-      assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), listed ? [`setting-replaced ${path}`] : [], label);
+      assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), listed ? [`setting-replaced ${rowOf(path)}`] : [], label);
       assert.deepEqual(dialogs, listed ? [describeLoadRepairs(loaded.repairs)?.items] : [], label);
       assert.equal(modeDrawing(state, mode).manualBlacklist.value, text, label);
     }
@@ -216,11 +234,11 @@ test('OV-892: a Label blacklist that is no text is listed and keeps its text', a
 
 test('E1b: an unknown field of a stored comparison edge is dropped with a row (E-OD12)', async () => {
   const session = BASES.g47L();
-  session.modes.linear.config.linearComparisonPlan.edges = [{
+  session.drawings[0].config.linearComparisonPlan.edges = [{
     id: 'e1', queryUid: 'a', subjectUid: 'b', included: false, fileActive: false, losatFilenameActive: false,
     source: 'losat', losatFilename: '', zzz: 1
   }];
-  assert.deepEqual(await load(session), ['setting-replaced modes.linear.config.linearComparisonPlan.edges[0].zzz']);
+  assert.deepEqual(await load(session), ['setting-replaced drawings[0].config.linearComparisonPlan.edges[0].zzz']);
   assert.equal(Object.hasOwn(modeDrawing(state, 'linear').linearComparisonPlan.edges[0], 'zzz'), false);
   await saved();
 });
@@ -230,7 +248,7 @@ test('OV-655, TB23: a single file slot keeps the first file it reads and lists t
   const first = session.files.linearSeqs[0].gb;
   session.files.linearSeqs[0].gb = [first, { ...first, name: 'second.gbk' }];
   assert.deepEqual(await load(session), ['file-entry-dropped files.linearSeqs[0].gb']);
-  assert.equal(state.linearSeqs[0].gb?.name, first.name);
+  assert.equal(modeDrawing(state, 'linear').linearSeqs[0].gb?.name, first.name);
   session = BASES.v30();
   session.files.linearSeqs[1].gb = { bogus: 1 };
   assert.deepEqual(await load(session), ['file-entry-dropped files.linearSeqs[1].gb']);
@@ -275,7 +293,7 @@ test('OV-789: a Session 27-39 Result Load cannot admit drops the Results with th
 
 test('OV-822: a configuration file\'s null LOSAT group loads with no row, and saves', async () => {
   assert.deepEqual(await load(BASES.g47L()), []);
-  const config = structuredClone(BASES.g47L().modes.linear.config);
+  const config = structuredClone(BASES.g47L().drawings[0].config);
   config.losat = { blastp: null };
   installShownDrawing('linear');
   assert.deepEqual(await load(config), []);
@@ -286,7 +304,7 @@ test('OV-822: a configuration file\'s null LOSAT group loads with no row, and sa
 test('A configuration file: a Legend position outside its mode is listed (receipt residual)', async () => {
   const session = BASES.g47L();
   await load(session);
-  const config = structuredClone(session.modes.linear.config);
+  const config = structuredClone(session.drawings[0].config);
   config.form.legend = 'upper_right';
   assert.deepEqual(await load(config), ['legend-position-defaulted form.legend']);
   await saved();
@@ -304,8 +322,8 @@ test('R1-B1: a dropped comparison sequence binding keeps its place, so no later 
     'file-entry-dropped webFiles.bindings.c_conservation_sequence_sources[1]'
   ]);
   const names = (files) => files.map((file) => file?.name ?? null);
-  assert.deepEqual(names(state.files.c_conservation_fastas), ['comparison-b.fasta', null, 'comparison-d.fasta']);
-  assert.deepEqual(names(state.files.c_conservation_sequence_sources), ['comparison-b.fasta', null, 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_fastas), ['comparison-b.fasta', null, 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), ['comparison-b.fasta', null, 'comparison-d.fasta']);
 });
 
 // OV-893 (E-OD30): a comparison series reads its BLAST table by place too, and
@@ -324,14 +342,14 @@ test('OV-893: a dropped comparison table binding drops its series with its files
   ]);
   assert.ok(dialogs.some((line) => line.includes('"comparison-c"')), JSON.stringify(dialogs));
   const names = (files) => files.map((file) => file?.name ?? null);
-  assert.deepEqual(names(state.files.c_conservation_blasts),
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_blasts),
     ['comparison-b.circular_conservation.losatn.tsv', 'comparison-d.circular_conservation.losatn.tsv']);
-  assert.deepEqual(names(state.files.c_conservation_fastas), ['comparison-b.fasta', 'comparison-d.fasta']);
-  assert.deepEqual(names(state.files.c_conservation_sequence_sources), ['comparison-b.fasta', 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_fastas), ['comparison-b.fasta', 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), ['comparison-b.fasta', 'comparison-d.fasta']);
   const conservation = modeDrawing(state, 'circular').circularConservation;
   assert.deepEqual(conservation.series.map(({ label, sourceIndex }) => [label, sourceIndex]), [['comparison-b', 0], ['comparison-d', 1]]);
-  assert.deepEqual(orderedConservationSources(state.files.c_conservation_blasts, conservation)
-    .map(({ label, file, sourceIndex }) => [label, file.name, state.files.c_conservation_sequence_sources[sourceIndex]?.name]), [
+  assert.deepEqual(orderedConservationSources(modeDrawing(state, 'circular').files.c_conservation_blasts, conservation)
+    .map(({ label, file, sourceIndex }) => [label, file.name, modeDrawing(state, 'circular').files.c_conservation_sequence_sources[sourceIndex]?.name]), [
     ['comparison-b', 'comparison-b.circular_conservation.losatn.tsv', 'comparison-b.fasta'],
     ['comparison-d', 'comparison-d.circular_conservation.losatn.tsv', 'comparison-d.fasta']
   ]);
@@ -348,7 +366,7 @@ test('a comparison file entry of an older Session that cannot be read is listed'
     'file-entry-dropped files.c_conservation_fastas[0]',
     'file-entry-dropped files.c_conservation_sequence_sources[0]'
   ]);
-  assert.deepEqual(state.files.c_conservation_fastas, [null, null]);
+  assert.deepEqual(modeDrawing(state, 'circular').files.c_conservation_fastas, [null, null]);
 });
 
 // OV-898 (E-OD35): a 27-30 draft without series names its rings by `labels`,
@@ -363,7 +381,7 @@ test('OV-898: a dropped table of a draft without series leaves out its label; la
     session.config.circularConservation.labels = 'a,b';
     return session;
   };
-  const drawn = () => orderedConservationSources(state.files.c_conservation_blasts, modeDrawing(state, 'circular').circularConservation)
+  const drawn = () => orderedConservationSources(modeDrawing(state, 'circular').files.c_conservation_blasts, modeDrawing(state, 'circular').circularConservation)
     .map(({ label, file }) => [label, file.name]);
   for (const entry of [5, null, {}]) {
     const result = await importSession(input(rings(entry)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
@@ -398,7 +416,7 @@ test('OV-896: a Load that leaves out every comparison series turns the compariso
   assert.deepEqual(result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path }) => path),
     [2, 1, 0].map((index) => `config.circularConservation.series[${index}]`));
   const conservation = modeDrawing(state, 'circular').circularConservation;
-  assert.deepEqual([conservation.series.length, state.files.c_conservation_blasts.length], [0, 0]);
+  assert.deepEqual([conservation.series.length, modeDrawing(state, 'circular').files.c_conservation_blasts.length], [0, 0]);
   assert.equal(conservation.enabled, false);
 });
 
@@ -407,50 +425,47 @@ test('OV-896: a Load that leaves out every comparison series turns the compariso
 // the committed request names no resource the file lacks, so Save writes the
 // loaded state and the saved file loads with no dialog.
 test('OV-899: a dropped comparison file binding loads as a removed file; Save and reload succeed', async () => {
-  const { setMainSessionComparisonFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
-  // A Session 42's stored tables go through the Worker frame conversion; the table here is in the search frame.
-  setMainSessionComparisonFrameConverter(async ({ tableText }) => ({ result: { tsv: tableText } }));
-  try {
-    const q42 = () => fixture('q-frame-main-web-upload.v42.gbdraw-session.json.gz');
-    const unknownId = q42();
-    unknownId.webFiles.bindings.linearComparisons[0].file.resourceId = 'zz';
-    const removed = q42();
-    delete removed.resources['comparison-nucleotide-1'];
-    for (const [name, session, rows, comparisons] of [
-      ['unknown resource id', unknownId, ['file-entry-dropped webFiles.bindings.linearComparisons[0].file'],
-        ['comparison-nucleotide-1']],
-      ['resource removed', removed, [
-        'file-entry-dropped webFiles.bindings.linearComparisons[0].file',
-        'request-reference-dropped renderRequest.comparisons[0]'
-      ], []]
-    ]) {
-      assert.deepEqual(await load(session), rows, name);
-      assert.deepEqual(modeDrawing(state, 'linear').linearComparisonPlan.edges.map(({ file, fileActive, included, source }) => (
-        { file, fileActive, included, source })), [{ file: null, fileActive: false, included: true, source: 'upload' }], name);
-      const document = await saved();
-      assert.deepEqual(document.webFiles.bindings.linearComparisons ?? [], [], name);
-      assert.deepEqual(document.renderRequest.comparisons.map(({ resourceId }) => resourceId), comparisons, name);
-      comparisons.forEach((id) => assert.ok(document.resources[id], `${name}: ${id}`));
-      assert.deepEqual(await load(document), [], name);
-    }
-  } finally {
-    setMainSessionComparisonFrameConverter(null);
+  const q42 = () => fixture('q-frame-main-web-upload.v42.gbdraw-session.json.gz');
+  const unknownId = q42();
+  unknownId.webFiles.bindings.linearComparisons[0].file.resourceId = 'zz';
+  const removed = q42();
+  delete removed.resources['comparison-nucleotide-1'];
+  for (const [name, session, rows, comparisons] of [
+    // Python's conversion writes the request's table in the search frame under its stored ID (OV-2080).
+    ['unknown resource id', unknownId, ['file-entry-dropped webFiles.bindings.linearComparisons[0].file'],
+      ['comparison-nucleotide-1']],
+    ['resource removed', removed, [
+      'file-entry-dropped webFiles.bindings.linearComparisons[0].file',
+      'request-reference-dropped renderRequest.comparisons[0]'
+    ], []]
+  ]) {
+    assert.deepEqual(await load(session), rows, name);
+    assert.deepEqual(modeDrawing(state, 'linear').linearComparisonPlan.edges.map(({ file, fileActive, included, source }) => (
+      { file, fileActive, included, source })), [{ file: null, fileActive: false, included: true, source: 'upload' }], name);
+    const saved49 = await saved();
+    const document = savedDrawingView(saved49, 'linear');
+    assert.deepEqual(document.webFiles.bindings.linearComparisons ?? [], [], name);
+    assert.deepEqual(document.renderRequest.comparisons.map(({ resourceId }) => resourceId), comparisons, name);
+    comparisons.forEach((id) => assert.ok(document.resources[id], `${name}: ${id}`));
+    assert.deepEqual(await load(saved49), [], name);
   }
 });
 
 // R2-B1: a null request of a full Session reads as an absent one (E-OD29):
 // the settings-only row names everything that is left out.
 test('R2-B1: a full Session 44 or 47 whose request is null loads as settings only with the request row', async () => {
-  for (const base of ['v44', 'g47L']) {
+  // The 46-48 top level of a Session 44, and the request of the one drawing of a bundled 49.
+  for (const [base, request] of [['v44', 'renderRequest'], ['g47L', 'drawings.0.renderRequest']]) {
     const absent = BASES[base]();
-    delete absent.renderRequest;
+    const owner = request.split('.').slice(0, -1).reduce((current, part) => current[part], absent);
+    delete owner.renderRequest;
     const expected = await load(absent);
-    assert.deepEqual(expected, ['request-dropped renderRequest'], base);
-    assert.deepEqual(await load(set(BASES[base](), 'renderRequest', null)), expected, base);
+    assert.deepEqual(expected, [`request-dropped ${rowOf(request)}`], base);
+    assert.deepEqual(await load(set(BASES[base](), request, null)), expected, base);
     assert.equal(state.results.value.length, 0);
   }
   // A settings-only file that holds Results is read the same way.
-  const results = BASES.g47L().results;
+  const results = BASES.g47L().drawings[0].results;
   assert.deepEqual(await load({ ...BASES.so46(), results }), ['request-dropped renderRequest']);
   assert.deepEqual(await load(BASES.so46()), []);
 });
@@ -510,7 +525,7 @@ test('U8: Save writes the Results that currentResults returns', async () => {
   try {
     const document = await saved();
     assert.ok(reads > 0);
-    assert.match(document.results[0].content, /data-u8-edit="1"/);
+    assert.match(savedDrawingView(document, state.activeDrawingId.value).results[0].content, /data-u8-edit="1"/);
   } finally {
     sessionConfig.setPreviewRuntime({ clearActiveRuntime: () => {}, currentResults: () => state.results.value });
   }

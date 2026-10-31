@@ -20,7 +20,7 @@ test('group lookup reuses valid identities and invalidates on ID edits, new alia
     }
   });
   const state = {
-    orthogroups: ref([source]),
+    mode: 'linear', orthogroups: ref([source]),
     orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
     selectedOrthogroupId: ref('one'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
     clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
@@ -72,7 +72,7 @@ test('group lookup reuses valid identities and invalidates on ID edits, new alia
 // a Vue dependency, so the first rename of a group must still reach the list.
 test('the group list, a rendered name and the search follow the first rename of a group', () => {
   const state = {
-    orthogroups: ref([{ id: 'og_1', name: 'LivB', description: 'Python text', members: [] }]),
+    mode: 'linear', orthogroups: ref([{ id: 'og_1', name: 'LivB', description: 'Python text', members: [] }]),
     orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
     selectedOrthogroupId: ref('og_1'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
     clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
@@ -80,8 +80,8 @@ test('the group list, a rendered name and the search follow the first rename of 
   };
   const editor = createOrthogroupEditor({ state: withDrawings(state) });
   const rendered = Vue.computed(() => [
-    editor.resolveOrthogroupName(editor.selectedOrthogroup.value),
-    editor.resolveOrthogroupDescription(editor.selectedOrthogroup.value)
+    editor.resolveOrthogroupName(editor.selectedOrthogroup.value, state),
+    editor.resolveOrthogroupDescription(editor.selectedOrthogroup.value, state)
   ]);
   assert.deepEqual([editor.orthogroupRows.value[0].name, ...rendered.value], ['LivB', 'LivB', 'Python text']);
   // One write at a time: each of the two reads keeps its own dependency.
@@ -101,7 +101,7 @@ test('the group list, a rendered name and the search follow the first rename of 
 // The marker must follow a first rename by itself, not through another read of its reader.
 test('the Edited marker of a group follows its first name and its first description', () => {
   const state = {
-    orthogroups: ref([{ id: 'og_1', name: 'LivB', members: [] }, { id: 'constructor', name: 'Own name', members: [] }]),
+    mode: 'linear', orthogroups: ref([{ id: 'og_1', name: 'LivB', members: [] }, { id: 'constructor', name: 'Own name', members: [] }]),
     orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
     selectedOrthogroupId: ref('og_1'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
     clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
@@ -136,7 +136,7 @@ test('the Edited marker of a group follows its first name and its first descript
 // key, through the editor. The field is the markup of index.html, compiled by Vue.
 test('the Description field shows only the group\'s own edit and follows its first write (OV-559)', () => {
   const state = {
-    orthogroups: ref([{ id: 'constructor', name: 'Own name', description: 'Python text', members: [] }]),
+    mode: 'linear', orthogroups: ref([{ id: 'constructor', name: 'Own name', description: 'Python text', members: [] }]),
     orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
     selectedOrthogroupId: ref('constructor'), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
     clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
@@ -196,7 +196,7 @@ test('group names follow exact member sets and unmatched names stay dormant (CO-
 
 test('member tables name each record in plain text, as the diagram heading reads (OV-369)', () => {
   const state = {
-    orthogroups: ref([]),
+    mode: 'linear', orthogroups: ref([]),
     orthogroupNameOverrides: reactive({}), orthogroupDescriptionOverrides: reactive({}),
     selectedOrthogroupId: ref(''), orthogroupSearch: ref(''), orthogroupSortMode: ref('id'),
     clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
@@ -230,7 +230,7 @@ test('the selected group detail is built once per change of its inputs (OV-920)'
     }
   });
   const state = {
-    orthogroups: ref([{ id: 'og_1', members: [
+    mode: 'linear', orthogroups: ref([{ id: 'og_1', members: [
       counted({ recordIndex: 0, stableFeatureSvgId: 'stable-a', start: 0, end: 30, strand: '+' }),
       counted({ recordIndex: 1, stableFeatureSvgId: 'stable-b', start: 3, end: 60, strand: '-' })
     ] }, { id: 'og_2', members: [] }]),

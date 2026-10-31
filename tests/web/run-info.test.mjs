@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { File } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
 import { cp, readFile, stat, writeFile, mkdtemp } from 'node:fs/promises';
@@ -194,10 +195,11 @@ for (const { fixture, mode } of [
   { fixture: 'HmmtDNA_ATskew.gbdraw-session.json', mode: 'circular' },
   { fixture: 'lambda_basic_linear.gbdraw-session.json', mode: 'linear' }
 ]) {
-  const session = JSON.parse(await readFile(
+  const saved = JSON.parse(await readFile(
     join(repoRoot, 'gbdraw', 'web', 'gallery', 'sessions', fixture),
     'utf8'
   ));
+  const session = savedDrawingView(saved, saved.ui.activeDrawingId);
   if (mode === 'circular') circularGallerySession = session;
   else linearGallerySession = session;
   const sourceRecipe = await buildSourceRecipe(session);

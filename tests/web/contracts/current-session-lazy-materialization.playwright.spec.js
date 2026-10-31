@@ -3,8 +3,11 @@ const { spawnSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { shownSavedDrawing } = require('../helpers/saved-session.cjs');
 const {
   CURRENT_SESSION_VERSION,
+  NEWEST_READ_SESSION_VERSION,
+  assertLegacyLoadConvertedOnce,
   evaluateWithRetainedPromise,
   expectNoLoadRepairDialog,
   getDiagramWorkerActivity,
@@ -210,7 +213,7 @@ const probeSnapshot = (page) => page.evaluate(() => ({
 }));
 
 const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedPromise(page,
-  async ({ filename, requestedVariant }) => {
+  async ({ filename, requestedVariant, tooNewVersion }) => {
     const response = await fetch(`/gbdraw/web/gallery/sessions/${filename}`);
     if (!response.ok) throw new Error(`Could not load ${filename}: ${response.status}`);
     const session = await response.json();
@@ -224,11 +227,12 @@ const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedP
       encoding: 'base64',
       data: btoa('unused\n')
     };
-    const recordResourceId = session.renderRequest.records[0].source.resourceId;
+    const shown = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
+    const recordResourceId = shown.renderRequest.records[0].source.resourceId;
     if (requestedVariant === 'newer-version') {
-      // A Session version no writer has written yet is refused (receipt 〔拒否〕);
+      // A Session version newer than any the app reads is refused (receipt 〔拒否〕);
       // a resource that nothing names is dropped, so its size no longer refuses a Load.
-      session.version += 1;
+      session.version = tooNewVersion;
     } else if (requestedVariant === 'invalid-base64') {
       session.resources[recordResourceId].data = '%%%';
     }
@@ -249,7 +253,7 @@ const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedP
       message: String(result?.error?.summary || '')
     };
   },
-  { filename: syntheticSourceName, requestedVariant: variant }
+  { filename: syntheticSourceName, requestedVariant: variant, tooNewVersion: NEWEST_READ_SESSION_VERSION + 1 }
 );
 
 const openInstrumentedApp = async (page) => {
@@ -374,17 +378,17 @@ test('neutral cached conservation session regenerates three ordered rings offlin
       ];
       const lazyFields = ['text', 'arrayBuffer', 'data', 'resourceId'];
       const resources = [
-        state.files.c_gb,
-        ...state.files.c_conservation_fastas,
-        ...state.files.c_conservation_blasts
-      ];
+        state.activeDrawing().files.c_gb,
+        ...state.activeDrawing().files.c_conservation_fastas,
+        ...state.activeDrawing().files.c_conservation_blasts
+      ].map((ref) => state.inputFiles.fileOf(ref));
       return {
         status: result?.status,
         content: String(selected?.content || ''),
-        referenceName: state.files.c_gb?.name,
-        comparisonNames: state.files.c_conservation_fastas.map((fileValue) => fileValue.name),
-        cachedResultNames: state.files.c_conservation_blasts.map((fileValue) => fileValue.name),
-        cachedResultSource: state.files.c_conservation_blasts_source,
+        referenceName: state.activeDrawing().files.c_gb?.name,
+        comparisonNames: state.activeDrawing().files.c_conservation_fastas.map(({ name }) => name),
+        cachedResultNames: state.activeDrawing().files.c_conservation_blasts.map(({ name }) => name),
+        cachedResultSource: state.activeDrawing().files.c_conservation_blasts_source,
         cacheEntries: state.losatCache.value.size,
         metadataOnly: resources.map((fileValue) => ({
           frozen: Object.isFrozen(fileValue),
@@ -411,13 +415,11 @@ test('neutral cached conservation session regenerates three ordered rings offlin
     expect(imported.metadataOnly).toEqual(
       Array.from({ length: 7 }, () => ({ frozen: true, ownFields: [] }))
     );
-    expect(imported.metrics.structural).toEqual(ZERO_PREVIEW_METRICS);
-    expect(await getDiagramWorkerActivity(page)).toMatchObject({
-      constructions: 0,
-      initializations: 0,
-      helpers: 0,
-      runs: 0
+    // A Session 27-44 Load converts through Python: one Worker, one helper.
+    expect(imported.metrics.structural).toEqual({
+      ...ZERO_PREVIEW_METRICS, workerConstructionCount: 1, workerInitializationCount: 1
     });
+    await assertLegacyLoadConvertedOnce(page);
 
     const generated = await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
@@ -525,7 +527,7 @@ test('two rings of one sequence save and restore with one cached LOSAT table', a
         return {
           errorLog: app.errorLog ? JSON.parse(JSON.stringify(app.errorLog)) : null,
           content,
-          comparisonNames: state.files.c_conservation_fastas.map(({ name }) => name),
+          comparisonNames: state.activeDrawing().files.c_conservation_fastas.map(({ name }) => name),
           labels: state.activeDrawing().circularConservation.series.map(({ label }) => label),
           cacheKeys: Array.from(state.losatCache.value.keys()),
           cacheInfo: state.losatCacheInfo.value.map(({ key, filename }) => ({ key, filename })),
@@ -552,7 +554,7 @@ test('two rings of one sequence save and restore with one cached LOSAT table', a
       const { state } = await import('/gbdraw/web/js/state.js');
       const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
       const copy = new File(
-        [await readFileText(state.files.c_conservation_fastas[1])],
+        [await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1]))],
         'comparison-c-copy.fasta',
         { type: 'text/plain', lastModified: 0 }
       );
@@ -594,7 +596,7 @@ test('two rings of one sequence save and restore with one cached LOSAT table', a
     const savedPath = testInfo.outputPath('shared-ring-cache.gbdraw-session.json');
     writeFileSync(savedPath, savedText, 'utf8');
     const savedRows = generated.cacheInfo.slice(0, 3);
-    expect(JSON.parse(savedText).losatCache.entries.map(({ key, filename }) => ({ key, filename })))
+    expect(shownSavedDrawing(JSON.parse(savedText)).losatCache.entries.map(({ key, filename }) => ({ key, filename })))
       .toEqual(savedRows);
 
     const restored = await evaluateWithRetainedPromise(page, async (sessionText) => {
@@ -698,7 +700,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
       const { state } = await import('/gbdraw/web/js/state.js');
       const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
       const app = window.__GBDRAW_APP__;
-      const fasta = await readFileText(state.files.c_conservation_fastas[1]);
+      const fasta = await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1]));
       const [header, ...body] = fasta.trim().split(/\r?\n/);
       const recordId = header.slice(1).split(/\s+/)[0];
       const sequence = body.join('').toLowerCase();
@@ -718,9 +720,9 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
         '//',
         ''
       ].join('\n');
-      const files = [...state.files.c_conservation_fastas];
-      files[1] = new File([flatFile], 'comparison-c.gbk', { type: 'text/plain', lastModified: 0 });
-      state.files.c_conservation_fastas = files;
+      const files = [...state.activeDrawing().files.c_conservation_fastas];
+      files[1] = state.inputFiles.registerFile(new File([flatFile], 'comparison-c.gbk', { type: 'text/plain', lastModified: 0 }));
+      state.activeDrawing().files.c_conservation_fastas = files;
       const result = await app.runAnalysis();
       const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
       const entries = Array.from(state.losatCache.value.entries());
@@ -785,10 +787,10 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
         runtimes: Array.from(state.losatCache.value.values()).map(({ runtime }) => runtime),
         runInfo: JSON.parse(JSON.stringify(app.lastRunInfo)),
         files: {
-          'reference-a.gb': await readFileText(state.files.c_gb),
-          'comparison-b.fasta': await readFileText(state.files.c_conservation_fastas[0]),
-          'comparison-c.gbk': await readFileText(state.files.c_conservation_fastas[1]),
-          'comparison-d.fasta': await readFileText(state.files.c_conservation_fastas[2])
+          'reference-a.gb': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_gb)),
+          'comparison-b.fasta': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[0])),
+          'comparison-c.gbk': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1])),
+          'comparison-d.fasta': await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[2]))
         },
         tables: Object.fromEntries(state.losatCacheInfo.value.map(({ key, filename }) => (
           [filename, state.losatCache.value.get(key)?.text || '']
@@ -864,7 +866,7 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
       const result = await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
       const { state } = await import('/gbdraw/web/js/state.js');
       const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
-      return { status: result?.status, fasta: await readFileText(state.files.c_conservation_fastas[1]) };
+      return { status: result?.status, fasta: await readFileText(state.inputFiles.fileOf(state.activeDrawing().files.c_conservation_fastas[1])) };
     }, neutralConservationSessionText);
     expect(loaded.status).toBe('ok');
 
@@ -1002,6 +1004,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
 
   const generated = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
+    const { state } = await import('/gbdraw/web/js/state.js');
     const history = window.__GBDRAW_HISTORY__;
     const svgIdentity = (content) => {
       const documentElement = new DOMParser()
@@ -1017,7 +1020,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     };
     const snapshotResultState = () => ({
       mode: app.mode,
-      generatedMode: app.generatedMode,
+      generatedDrawingId: state.generatedDrawingId.value,
       names: app.results.map((result) => String(result?.name || '')),
       svgIdentities: app.currentResults().map((result) => svgIdentity(result?.content)),
       selectedResultIndex: app.selectedResultIndex,
@@ -1586,15 +1589,16 @@ test('preflight and lazy-access failures preserve the committed preview', async 
     const app = window.__GBDRAW_APP__;
     const content = app.currentResults()[app.selectedResultIndex].content;
     const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
+    const { state } = await import('/gbdraw/web/js/state.js');
     let first = '';
     let second = '';
     try {
-      await readFileText(app.files.c_gb);
+      await readFileText(state.inputFiles.fileOf(app.files.c_gb));
     } catch (error) {
       first = String(error?.message || error);
     }
     try {
-      await readFileText(app.files.c_gb);
+      await readFileText(state.inputFiles.fileOf(app.files.c_gb));
     } catch (error) {
       second = String(error?.message || error);
     }
@@ -1677,8 +1681,8 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   const roundTripPath = await (await downloadPromise).path();
   const roundTrip = JSON.parse(gunzipSync(readFileSync(roundTripPath)).toString('utf8'));
   expect(roundTrip.version).toBe(CURRENT_SESSION_VERSION);
-  expect(roundTrip.results).toHaveLength(1);
-  expect(roundTrip.editorState.featureCatalog).toBeTruthy();
+  expect(shownSavedDrawing(roundTrip).results).toHaveLength(1);
+  expect(shownSavedDrawing(roundTrip).editorState.featureCatalog).toBeTruthy();
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => Boolean(window.__GBDRAW_APP__), null, {

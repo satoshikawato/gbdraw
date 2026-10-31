@@ -57,44 +57,44 @@
       "sha256": "2562a680691f20c202efac01bc129b9982a5e63ab93c1d6675eae829e225ce19"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 3017615,
-      "sha256": "f7632b509a607f3f6e444d9a6d01dd4e09515e96b458f03d23e0547b770e7a26"
+      "bytes": 3017633,
+      "sha256": "24430e615f9ed85c7b37b927a0cb7b20f40ae3b73b4b672b6c667a7aea25b393"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
-      "bytes": 278062,
-      "sha256": "cd900bc3559151d4da3536a9f1167a169095fd5cb2352bc9b6c7fe1450612f6b"
+      "bytes": 278084,
+      "sha256": "1775f6fbf1a5d517f522118a5f6b541af6ae58c9e4a6286e0c69eca9e447234d"
     },
     "gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": {
-      "bytes": 252874,
-      "sha256": "7752cb27525c2f420ade639145133ba0e557e05cccd4a33b1a5f89c06d661abf"
+      "bytes": 252941,
+      "sha256": "6c192d554e671139fd40b6c5cc1f073b927467a438d7346e95c92e0b2e3b771f"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
-      "bytes": 11119357,
-      "sha256": "41d5a6b5e6235c6997e25984fc7cda9336e3659d99605ee99919362f3c993d95"
+      "bytes": 11121801,
+      "sha256": "7eb0e62a42a194193b3c12c691914ad56ff972e9f4204ff19c862aac3f7c5f90"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
-      "bytes": 10732045,
-      "sha256": "56f8838435196fdcb0f9c0784e7c43b1ed75c0308ea825977cc7fbb579a4c645"
+      "bytes": 10733586,
+      "sha256": "bcba4a4e29d643c742d31cbd9cc7441312cc247a65e54cc7ae8008140929481b"
     },
     "gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 14013192,
-      "sha256": "5942aef600531e90c1ec2d0dd03b64b0ca7acd5cb2a0200914fd1e8bd0fa539d"
+      "bytes": 14011255,
+      "sha256": "a1e722e2806671c87501d11ebbe0bfafc910f162dcc9d052f4b9c8ac1e945587"
     },
     "gallery/sessions/lambda_basic_linear.gbdraw-session.json": {
-      "bytes": 851723,
-      "sha256": "1a3908a57112cac6daea39c7366fda0888f50bee51b319530453630684c74a38"
+      "bytes": 851786,
+      "sha256": "20b4e925bbb90199ad90a4bd3dda72954f3dff557f8171926ff06686ae89bd05"
     },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 6223089,
-      "sha256": "37aee68aff7395ea46118fa7c7cba4633b73c110120b869d5501bd1acb95f06d"
+      "bytes": 6222722,
+      "sha256": "4c2cf680b210a0bd0bccfdc5447953ef1a6622fa802c8a3ef53a7cc93cd881c2"
     },
     "gallery/sessions/tobacco-chloroplast.gbdraw-session.json": {
-      "bytes": 1588124,
-      "sha256": "344ad1a4d13892fda14aef0433673c320325ee41db081811361fe86ff9843eaa"
+      "bytes": 1588192,
+      "sha256": "432623c81ce7db9f42056ec84663cf6ea5c45b43cce33fff5c9e15f2f664251f"
     },
     "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": {
-      "bytes": 28185936,
-      "sha256": "82ce5dcf2016f30da353e90e6480d4a9cc56bbdaf74cb05a88641e6a618a28d8"
+      "bytes": 28185663,
+      "sha256": "58e38a48559b4f0b943c4c3c67eda69e3c2d1da5d244f6eb8404e51f2d0f906c"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
       "bytes": 234947,

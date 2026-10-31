@@ -40,6 +40,7 @@ from gbdraw.mode_profiles import (
 )
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.web_support.mode_scoped_settings import SLICE_CONTAINERS
+from tests.utils.session_drawing_view import drawing_view
 
 
 WRAP = "canvas.linear.wrap_length"
@@ -607,10 +608,14 @@ def _session(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _shown_request(path: Path) -> dict:
+    return drawing_view(_session(path), mode="linear")["renderRequest"]
+
+
 def test_a_cut_figure_stores_what_it_drew_and_replays_byte_identical(tmp_path: Path) -> None:
     saved = _cli("--wrap_length", "10kb", "--gc", "--save_session", "-o", "out", cwd=tmp_path)
     assert saved.returncode == 0, saved.stderr
-    linear = _session(tmp_path / "out.gbdraw-session.json")["renderRequest"]["diagramOptions"]
+    linear = _shown_request(tmp_path / "out.gbdraw-session.json")["diagramOptions"]
     assert "wrapDefaults" not in linear
     assert linear["config"]["canvas"]["linear"]["track_layout"] == "above"
     assert linear["config"]["canvas"]["linear"]["wrap_length"] == 10_000
@@ -627,7 +632,7 @@ def test_a_cut_figure_stores_what_it_drew_and_replays_byte_identical(tmp_path: P
 def test_a_figure_with_nothing_to_cut_stores_the_plain_leaves_and_replays_byte_identical(tmp_path: Path) -> None:
     saved = _cli("--wrap_length", "100kb", "--save_session", "-o", "out", cwd=tmp_path)
     assert saved.returncode == 0, saved.stderr
-    linear = _session(tmp_path / "out.gbdraw-session.json")["renderRequest"]["diagramOptions"]
+    linear = _shown_request(tmp_path / "out.gbdraw-session.json")["diagramOptions"]
     assert linear["config"]["canvas"]["linear"]["track_layout"] == "middle"
     assert linear["config"]["canvas"]["linear"]["wrap_length"] == 100_000
     assert "data-gbdraw-wrap-row" not in (tmp_path / "out.svg").read_text(encoding="utf-8")

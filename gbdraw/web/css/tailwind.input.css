@@ -47,11 +47,15 @@
     [data-settings-display="rail"] > .settings-index > nav > .starts-group { margin-top: 9px; }
     [data-settings-display="rail"] > .settings-index > nav > .starts-group::after { content: ''; position: absolute; left: 8px; right: 8px; top: -6px; height: 1px; background-color: var(--ui-line); }
     [data-settings-display="rail"] > .settings-index > nav > .at-end { margin-top: auto; }
+    /* A low window also packs the entries closer (1 px apart, 3 px before a line), so that the Linear rail
+       fits below the drawing bar at 1280x720 (OV-1785, Owner 2026-10-25), with the lower Generate of
+       index.html. */
     @media (max-height: 800px) {
+        [data-settings-display="rail"] > .settings-index > nav { gap: 1px; }
         [data-settings-display="rail"] > .settings-index > nav > button { --rail-entry-floor: 30px; --rail-icon: 17px; }
         [data-settings-display="rail"] > .settings-index > nav > button > span { font-size: 9px; }
-        [data-settings-display="rail"] > .settings-index > nav > .starts-group { margin-top: 5px; }
-        [data-settings-display="rail"] > .settings-index > nav > .starts-group::after { top: -4px; }
+        [data-settings-display="rail"] > .settings-index > nav > .starts-group { margin-top: 3px; }
+        [data-settings-display="rail"] > .settings-index > nav > .starts-group::after { top: -3px; }
     }
 
     /* Type scale: card title, nested disclosure (details below), group heading, field label, hint. */
@@ -77,8 +81,10 @@
     .linear-file-fold[open] > summary > .linear-file-fold-line > * { display: none; }
     .linear-file-fold-names { @apply flex min-w-0 items-center; flex: 1 1 6rem; }
     .linear-file-chip { @apply inline-flex min-w-0 items-center gap-1 rounded-md border px-1.5 font-bold text-green-700; line-height: 18px; }
-    /* One marker for settings that the next Generate applies. */
-    .apply-note { @apply inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-1.5 py-px font-medium leading-4 text-slate-500; font-size: 11px; }
+    /* One marker for settings that the next Generate applies. It keeps one line where its box allows and wraps
+       in a narrower box (the Strain column at 195 px, OV-2206), never past the box. Balanced lines keep a short
+       Chinese note whole per word (生成时 / 应用, not 生成时应 / 用); Japanese breaks it between phrases (index.html). */
+    .apply-note { @apply inline-flex max-w-full shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-1.5 py-px font-medium leading-4 text-slate-500; font-size: 11px; text-wrap: balance; }
 
     .form-input { @apply block w-full rounded-lg border bg-slate-50 p-2 text-sm transition-all focus:border-blue-500 focus:ring-blue-500; border-color: var(--ui-line); color: var(--ui-text-2); }
     /* After .form-input: its padding would clip the compact fields, and its background would hide

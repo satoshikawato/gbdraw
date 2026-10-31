@@ -125,7 +125,8 @@
       "tests/web/record-identity-moves.playwright.spec.js",
       "tests/web/settings-only-session.playwright.spec.js",
       "tests/web/settings-pane-rail.playwright.spec.js",
-      "tests/web/track-layout-transition.playwright.spec.js"
+      "tests/web/track-layout-transition.playwright.spec.js",
+      "tests/web/drawing-bar.playwright.spec.js"
     ],
     [
       "tests/web/accessibility.playwright.spec.js",

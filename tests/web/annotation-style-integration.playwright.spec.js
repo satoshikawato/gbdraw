@@ -3,7 +3,9 @@ const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const { load, generate, download } = require('./helpers/mode-transition.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { reveal, getDiagramWorkerActivity, settleLive } = require('./helpers/app-lifecycle.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 
 const inspect = (page, mode) => page.evaluate(async mode => {
   const { state: s } = await import('./js/state.js');
@@ -54,9 +56,11 @@ const history = async (page, name) => {
   await rerendered(page);
 };
 const colorFile = page => page.evaluate(async () => {
+  // The card holds the file's ref; its bytes are the input file store's.
   const file = window.__GBDRAW_APP__.files.t_color;
   const { readFileText } = await import('./js/services/file-content-cache.js');
-  return { name: file?.name || null, text: file ? await readFileText(file) : null };
+  const { state } = await import('./js/state.js');
+  return { name: file?.name || null, text: file ? await readFileText(state.inputFiles.fileOf(file)) : null };
 });
 const openStack = async (page, mode) => {
   const button = page.getByTitle('Open Custom Track Slots', { exact: true });
@@ -103,6 +107,7 @@ for (const width of [1440, 390]) {
           const colors = originalRules + '\n' + ids.map((id, index) => ['CDS', 'hash', id, ['#112233', '#445566'][index], 'Integration group'].join('\t')).join('\n') + '\n';
           return { ids, auxiliary, known, colors, setId: sets[0].id };
         });
+        await showPhonePane(page, 'settings');
         const annotationPanel = page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
         if (await annotationPanel.getAttribute('open') === null) await annotationPanel.locator(':scope > summary').press('Enter');
         const picker = page.waitForEvent('filechooser');
@@ -117,6 +122,7 @@ for (const width of [1440, 390]) {
         expect(await notice.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
         await page.screenshot({ path: testInfo.outputPath('auxiliary-notice.png') });
         expect((await inspect(page, mode)).runs).toBe(source.runs);
+        await showPhonePane(page, 'settings');
         const colorInput = page.getByLabel('Specific rules file', { exact: true });
         await reveal(colorInput);
         const beforeImport = await inspect(page, mode);
@@ -139,6 +145,7 @@ for (const width of [1440, 390]) {
         expect(await drawingSignature(page, importRedone.svg)).toBe(await drawingSignature(page, imported.svg));
         expect(importRedone.rules).toEqual(imported.rules);
         expect(await colorFile(page)).toEqual({ name: 'integration-colors.tsv', text: input.colors });
+        await showPhonePane(page, 'settings');
         // The BGC Session draws no GC track; show it so Reset gives the stack a GC row.
         if (mode === 'linear') await (await reveal(page.getByLabel('Show GC Content', { exact: true }))).check();
         const panel = await openStack(page, mode);
@@ -209,6 +216,7 @@ for (const width of [1440, 390]) {
         expect(redone.request).toEqual(live.request);
         expect(redone.geometry).toEqual(live.geometry);
         // Invalid pixels do not coerce a combined Result or its warning to a new artifact.
+        await showPhonePane(page, 'settings');
         const field = row.getByTitle(titles[0], { exact: true });
         await field.fill('10em'); await field.press('Tab');
         await expect(row.getByRole('alert')).toContainText('pixels (px optional)');
@@ -219,6 +227,7 @@ for (const width of [1440, 390]) {
         const failed = await inspect(page, mode);
         expect(artifact(failed)).toEqual(artifact(redone)); expect(failed.runs).toBe(beforeFailure.runs);
         expect(failed.slots.find(slot => slot.id === 'gc_content')[mode === 'linear' ? 'height' : 'inner_gap_px']).toBe('10em');
+        await showPhonePane(page, 'settings');
         await row.getByRole('alert').evaluate(element => element.scrollIntoView({ block: 'center' }));
         await page.screenshot({ path: testInfo.outputPath('combined-pixel-error.png') });
         await field.fill('1e1px');
@@ -229,6 +238,7 @@ for (const width of [1440, 390]) {
         // `to_slot=gc_content`) is turned off and on with it.
         const linked = final.slots.filter(slot => slot.enabled !== false
           && [slot.params?.to_slot, slot.params?.anchor_slot].includes('gc_content')).map(slot => slot.id);
+        await showPhonePane(page, 'settings');
         for (const id of [...linked, 'gc_content']) {
           await page.locator(`[data-capture="${mode}-track-slot-${id}"]`).getByTitle('Enabled', { exact: true }).uncheck();
         }
@@ -241,10 +251,11 @@ for (const width of [1440, 390]) {
           final.request.diagramOptions.tracks[`${mode}TrackSlots`].map(slot => slot.id).filter(id => id !== 'gc_content' && !linked.includes(id)));
         const sessionPath = testInfo.outputPath('combined-disabled.gbdraw-session.json.gz');
         const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', sessionPath)));
-        expect(saved.runMetadata.annotationWarnings).toEqual(final.warnings);
-        expect(saved.renderRequest).toEqual(hidden.request);
-        expect(saved.modes[mode].config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content').enabled).toBe(false);
-        expect(JSON.stringify(saved.modes[mode].config.annotationSets)).not.toContain('PRIVATE-AUX-CELL');
+        const drawing = savedDrawing(saved, mode);
+        expect(drawing.runMetadata.annotationWarnings).toEqual(final.warnings);
+        expect(drawing.renderRequest).toEqual(hidden.request);
+        expect(drawing.config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content').enabled).toBe(false);
+        expect(JSON.stringify(drawing.config.annotationSets)).not.toContain('PRIVATE-AUX-CELL');
         restored = await load(browser, sessionPath, { width, height: 1000 });
         const loaded = await inspect(restored, mode);
         expect(artifact(loaded)).toEqual(artifact(hidden)); expect(loaded.rules).toEqual(final.rules);
@@ -256,7 +267,7 @@ for (const width of [1440, 390]) {
         await generate(restored);
         const regenerated = await inspect(restored, mode);
         expect(artifact(regenerated)).toEqual(artifact(final));
-        expect(await restored.evaluate(async () => { const { readFileText } = await import('./js/services/file-content-cache.js'); return readFileText(window.__GBDRAW_APP__.files.t_color); })).toBe(input.colors);
+        expect(await restored.evaluate(async () => { const { readFileText } = await import('./js/services/file-content-cache.js'); const { state } = await import('./js/state.js'); return readFileText(state.inputFiles.fileOf(window.__GBDRAW_APP__.files.t_color)); })).toBe(input.colors);
         const activePath = testInfo.outputPath('combined.gbdraw-session.json.gz');
         const active = JSON.parse(gunzipSync(await download(restored, 'Save Session', activePath)));
         expect(active.resources).toEqual(saved.resources);
@@ -269,6 +280,7 @@ for (const width of [1440, 390]) {
         await restored.evaluate(() => window.__GBDRAW_APP__.downloadSpecificRulesTsv());
         await (await pendingRules).saveAs(testInfo.outputPath('combined-rules.tsv'));
         expect(await fs.readFile(testInfo.outputPath('combined-rules.tsv'), 'utf8')).toContain('\tIntegration primary\n');
+        await showPhonePane(page, 'settings');
         const pendingAnnotations = page.waitForEvent('download');
         await annotationPanel.getByRole('button', { name: 'Download TSV', exact: true }).click();
         const annotationPath = testInfo.outputPath('combined-annotations.tsv');

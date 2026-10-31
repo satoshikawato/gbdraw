@@ -59,6 +59,7 @@ from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     DEPTH_FILE_ENCODING,
     LOSAT_DERIVED_CACHE_SCHEMA,
+    MODE_SCOPED_SESSION_MAX_VERSION,
     MODE_SCOPED_SESSION_MIN_VERSION,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -82,6 +83,7 @@ from gbdraw.session_io import (
     validate_session,
     write_session_json,
 )
+from tests.utils.session_drawing_view import build_mode_scoped_session_json, drawing_view
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.session import (
@@ -499,10 +501,10 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
     )
 
     assert saved == sidecar
-    payload = load_session(sidecar)
-    # A CLI-written Session has no Web draft: no flat draft and no mode slices.
+    payload = drawing_view(load_session(sidecar))
+    # A CLI-written Session has no Web draft: no flat draft and no mode settings.
     assert "features" not in payload
-    assert "modes" not in payload
+    assert payload["modes"] == {"linear": {}}
     assert payload["orthogroupState"] == {}
     catalog = payload["editorState"]["featureCatalog"]
     assert catalog["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
@@ -609,20 +611,21 @@ def test_session_46_upgrade_and_cli_resave_key_the_legend_edits_by_row(tmp_path:
         for store, shown, key in LEGEND_RENAMED_ROWS_V46_MOVES
     ]
 
-    upgraded = upgrade_session_document(LEGEND_RENAMED_ROWS_V46).document.to_dict()
-    assert upgraded["version"] == CURRENT_SESSION_VERSION
+    written = upgrade_session_document(LEGEND_RENAMED_ROWS_V46).document.to_dict()
+    assert written["version"] == CURRENT_SESSION_VERSION
+    upgraded = drawing_view(written)
     assert _legend_edits(upgraded) == ROW_KEYED_LEGEND_EDITS
     expected_legend = source["modes"]["circular"]["editorState"]["legend"] | ROW_KEYED_LEGEND_EDITS
     assert upgraded["modes"]["circular"]["editorState"]["legend"] == expected_legend
     # A current Session is read as it is.
-    assert _legend_edits(upgrade_session_document(upgraded).document.to_dict()) == ROW_KEYED_LEGEND_EDITS
+    assert _legend_edits(drawing_view(upgrade_session_document(written).document.to_dict())) == ROW_KEYED_LEGEND_EDITS
 
     sidecar = tmp_path / "replay.gbdraw-session.json"
     circular_main(["--session", str(LEGEND_RENAMED_ROWS_V46), "--output", str(tmp_path / "replay"),
                    "--format", "svg", "--session_output", str(sidecar)])
     resaved = load_session(sidecar)
     assert resaved["version"] == CURRENT_SESSION_VERSION
-    assert _legend_edits(resaved) == ROW_KEYED_LEGEND_EDITS
+    assert _legend_edits(drawing_view(resaved)) == ROW_KEYED_LEGEND_EDITS
 
 
 def test_current_session_feature_catalog_is_single_and_lossless(
@@ -674,7 +677,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
             }
         ],
     }
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -800,7 +803,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
             ValidationError,
             match="derived feature payloads",
         ):
-            session_io_module._validate_current_feature_catalog_authority(duplicated_legacy, 44)
+            session_io_module._validate_current_feature_payloads(duplicated_legacy, 44)
 
 
 def test_feature_catalog_compaction_falls_back_for_partial_metadata() -> None:
@@ -836,7 +839,7 @@ def test_feature_catalog_equality_preserves_json_scalar_types() -> None:
 
 
 def test_current_session_validates_mixed_protein_and_nucleotide_raw_cache() -> None:
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -917,7 +920,7 @@ def test_current_session_rejects_obsolete_web_state_field_names(
     config: dict,
     message: str,
 ) -> None:
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -1020,7 +1023,7 @@ def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> 
     # Design Q4: per-feature edits are identity rows. Session 46 keeps each
     # mode's rows in its own slice (PD-OI-086), so both modes keep their own
     # row for `record-1` and a row names no mode.
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="circular",
             output_prefix="out",
@@ -1056,7 +1059,7 @@ def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> 
         "linear": {"features": {"featureOverrides": {key("feature-1"): other_mode}}},
     }
 
-    assert payload["version"] == CURRENT_SESSION_VERSION == 50
+    assert payload["version"] == MODE_SCOPED_SESSION_MAX_VERSION
     validate_session(payload)
 
     triple_key = json.dumps(["circular", "record-1", "feature-1"], separators=(",", ":"))
@@ -1080,7 +1083,7 @@ def test_session_version_46_keeps_feature_placement_drafts_of_each_mode() -> Non
     # A Linear Session keeps the Circular lane rows in the Circular slice;
     # each slice's lanes must be sides of its own mode. Session 44 rows (a
     # JSON pair) belonged to the Session's mode.
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(mode="linear", output_prefix="out", render_formats=("svg",)),
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={},
@@ -1130,7 +1133,7 @@ def test_session_version_46_keeps_feature_placement_drafts_of_each_mode() -> Non
 
 
 def test_session_version_44_validates_record_rotation_draft_and_version_42_shape() -> None:
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="circular",
             output_prefix="out",
@@ -1185,7 +1188,7 @@ def test_session_version_44_validates_record_rotation_draft_and_version_42_shape
 
 
 def test_session_version_44_rejects_invalid_record_rotation_anchor_intent() -> None:
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="circular",
             output_prefix="out",
@@ -1328,7 +1331,7 @@ def test_current_derived_cache_accepts_compound_collinear_runtime_references() -
         for binding in manifest["recordInstances"].values()
         for runtime_handle in binding["runtimeIds"].values()
     ]
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -1519,7 +1522,7 @@ def test_current_derived_cache_rejects_embedded_legacy_references(
 
 
 def test_current_session_rejects_legacy_protein_entry_in_current_cache() -> None:
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -1537,7 +1540,7 @@ def test_current_session_rejects_legacy_protein_entry_in_current_cache() -> None
 
 
 def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> None:
-    source = build_session_json(
+    source = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="old",
@@ -1577,15 +1580,15 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
         ValidationError,
         match="canonical typed request is required",
     ):
-        build_session_json(context, **kwargs)
+        build_mode_scoped_session_json(context, **kwargs)
 
-    promoted = build_session_json(
+    promoted = build_mode_scoped_session_json(
         context,
         canonical_request=_canonical_request("linear"),
         **kwargs,
     )
 
-    assert promoted["version"] == CURRENT_SESSION_VERSION
+    assert promoted["version"] == MODE_SCOPED_SESSION_MAX_VERSION
     assert promoted["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert "selectedOrthogroupAlignmentFeature" not in promoted["orthogroupState"]
     assert "config" not in promoted
@@ -1617,7 +1620,7 @@ def test_current_writer_resolves_noncanonical_request_before_encoding() -> None:
         ),
     )
 
-    payload = build_session_json(
+    payload = drawing_view(build_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -1627,7 +1630,7 @@ def test_current_writer_resolves_noncanonical_request_before_encoding() -> None:
         embedded_files={"linearSeqs": []},
         generated_at=datetime(2026, 7, 21),
         canonical_request=request,
-    )
+    ))
 
     assert [record["recordKey"] for record in payload["renderRequest"]["records"]] == [
         "record-1"
@@ -1676,7 +1679,7 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
         },
     }
 
-    promoted = build_session_json(
+    promoted = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="new",
@@ -1688,7 +1691,7 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
         generated_at=datetime(2026, 7, 31),
         canonical_request=_canonical_request("linear"),
     )
-    rewritten = build_session_json(
+    rewritten = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="again",
@@ -1702,8 +1705,9 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
     )
 
     assert source["version"] == 39
-    assert promoted["version"] == CURRENT_SESSION_VERSION
-    assert rewritten["version"] == CURRENT_SESSION_VERSION
+    # The writer builds the mode-scoped Session 48 and moves it to drawings last.
+    assert promoted["version"] == MODE_SCOPED_SESSION_MAX_VERSION
+    assert rewritten["version"] == MODE_SCOPED_SESSION_MAX_VERSION
     # The second write copies the first one's mode slices.
     assert rewritten["modes"] == promoted["modes"]
     for payload in (promoted, rewritten):
@@ -1802,7 +1806,7 @@ def test_genuine_version_39_shape_retains_disabled_layout_upload_draft() -> None
 
 
 def test_pre40_web_comparison_draft_migrates_directly_to_final_plan() -> None:
-    source = build_session_json(
+    source = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="old",
@@ -1832,7 +1836,7 @@ def test_pre40_web_comparison_draft_migrates_directly_to_final_plan() -> None:
     }
     comparison_file = _file_entry("selected.tsv", b"query\tsubject\t99\n")
 
-    promoted = build_session_json(
+    promoted = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="new",
@@ -1954,7 +1958,7 @@ def test_pre40_adjacent_upload_migration_consumes_mirrored_binding() -> None:
 
 
 def test_current_comparison_authority_rejects_retired_version40_shape() -> None:
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -1987,7 +1991,7 @@ def test_current_comparison_authority_rejects_retired_version40_shape() -> None:
 def test_current_session_rejects_retired_circular_track_draft_paths(
     field: str,
 ) -> None:
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="circular",
             output_prefix="out",
@@ -2010,7 +2014,7 @@ def test_current_session_rejects_retired_circular_track_draft_paths(
 
 
 def test_current_comparison_authority_validates_file_bindings() -> None:
-    payload = build_session_json(
+    payload = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -2087,7 +2091,7 @@ def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
         "mode": "orthogroup",
         "payload": {"groups": []},
     }
-    source = build_session_json(
+    source = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="old",
@@ -2104,7 +2108,7 @@ def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
     source["losatDerivedCache"] = {"entries": [legacy_derived]}
     source.pop("proteinIdentityManifest")
 
-    promoted = build_session_json(
+    promoted = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="new",
@@ -2117,7 +2121,7 @@ def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
         canonical_request=_canonical_request("linear"),
     )
 
-    assert promoted["version"] == CURRENT_SESSION_VERSION
+    assert promoted["version"] == MODE_SCOPED_SESSION_MAX_VERSION
     assert promoted["losatCache"]["entries"] == []
     assert promoted["losatDerivedCache"]["entries"] == []
     assert promoted["legacyArtifacts"]["proteinRawCandidates"]["entries"] == [
@@ -2144,7 +2148,7 @@ def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
 
 def test_future_session_version_fails() -> None:
     session = _minimal_session({})
-    session["version"] = CURRENT_SESSION_VERSION + 1
+    session["version"] = max(SUPPORTED_SESSION_VERSIONS) + 1
 
     with pytest.raises(ValidationError, match="newer"):
         validate_session(session)
@@ -2171,7 +2175,7 @@ def test_session_without_integer_version_fails_validation(
 
 
 def test_current_session_rejects_legacy_files_but_version_39_accepts_them() -> None:
-    session = build_session_json(
+    session = build_mode_scoped_session_json(
         SessionBuildContext(
             mode="circular",
             output_prefix="out",
@@ -2225,7 +2229,8 @@ def test_branch_internal_request_schemas_are_rejected_at_session_boundaries(
     schema: int,
     session_version: int,
 ) -> None:
-    session = build_session_json(
+    build = build_mode_scoped_session_json if session_version == 33 else build_session_json
+    session = build(
         SessionBuildContext(
             mode="circular",
             output_prefix="out",
@@ -2236,8 +2241,12 @@ def test_branch_internal_request_schemas_are_rejected_at_session_boundaries(
         generated_at=datetime(2026, 7, 30),
         canonical_request=_canonical_request("circular"),
     )
-    session["version"] = session_version
-    session["renderRequest"]["schema"] = schema
+    if session_version == 33:
+        # An older Session carries its request at the top level.
+        session["version"] = 33
+        session["renderRequest"]["schema"] = schema
+    else:
+        session["drawings"][0]["renderRequest"]["schema"] = schema
     message = f"Unsupported canonical renderRequest schema: {schema}"
 
     with pytest.raises(ValidationError, match=message):
@@ -2350,7 +2359,7 @@ def test_cli_session_keeps_arrow_options_as_cli_provenance_only(
     head_ratio: str,
     shaft_ratio: str,
 ) -> None:
-    payload = build_session_json(
+    payload = drawing_view(build_session_json(
         SessionBuildContext(
             mode=mode,
             output_prefix="out",
@@ -2370,7 +2379,7 @@ def test_cli_session_keeps_arrow_options_as_cli_provenance_only(
         embedded_files={},
         generated_at=datetime(2026, 8, 1),
         canonical_request=_canonical_request(mode),
-    )
+    ))
 
     assert "config" not in payload
     assert payload["cliInvocation"]["args"][-6:] == [
@@ -2392,7 +2401,7 @@ def test_cli_session_keeps_arrow_options_as_cli_provenance_only(
         (39, CANONICAL_REQUEST_SCHEMA),
         (40, CANONICAL_REQUEST_SCHEMA),
         (41, CANONICAL_REQUEST_SCHEMA),
-        (CURRENT_SESSION_VERSION, CANONICAL_REQUEST_SCHEMA),
+        (MODE_SCOPED_SESSION_MAX_VERSION, CANONICAL_REQUEST_SCHEMA),
     ),
 )
 def test_main_backed_and_current_canonical_session_schemas_remain_supported(
@@ -2411,6 +2420,20 @@ def test_main_backed_and_current_canonical_session_schemas_remain_supported(
 
     validate_session(session)
     assert version in SUPPORTED_SESSION_VERSIONS
+
+
+def test_current_canonical_session_schema_is_supported() -> None:
+    session = build_session_json(
+        SessionBuildContext(mode="circular", output_prefix="out", render_formats=("svg",)),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 7, 30),
+        canonical_request=_canonical_request("circular"),
+    )
+
+    validate_session(session)
+    assert session["version"] == CURRENT_SESSION_VERSION in SUPPORTED_SESSION_VERSIONS
+    assert drawing_view(session)["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
 
 
 def test_session_json_gzip_round_trip(tmp_path: Path) -> None:
@@ -3159,7 +3182,7 @@ def test_cli_session_keeps_hidden_scale_in_canonical_request(
                 "--ruler_on_axis",
             ]
         )
-    payload = build_session_json(
+    payload = drawing_view(build_session_json(
         SessionBuildContext(
             mode=mode,
             output_prefix="out",
@@ -3173,7 +3196,7 @@ def test_cli_session_keeps_hidden_scale_in_canonical_request(
             mode,
             show=False,
         ),
-    )
+    ))
 
     assert "config" not in payload
     assert payload["cliInvocation"]["args"] == args
@@ -3223,7 +3246,7 @@ def test_cli_session_keeps_lossless_cli_provenance_out_of_web_config() -> None:
         "orthogroup_top",
     )
 
-    payload = build_session_json(
+    payload = drawing_view(build_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -3234,7 +3257,7 @@ def test_cli_session_keeps_lossless_cli_provenance_out_of_web_config() -> None:
         embedded_files={"linearSeqs": []},
         generated_at=datetime(2026, 6, 23),
         canonical_request=_canonical_request("linear"),
-    )
+    ))
 
     assert payload["cliInvocation"]["renderFormats"] == ["interactive_svg"]
     assert payload["cliInvocation"]["args"] == list(args)
@@ -3271,7 +3294,7 @@ def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
         "--similarity_alignment_feature",
         "target_feature",
     )
-    payload = build_session_json(
+    payload = drawing_view(build_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -3287,7 +3310,7 @@ def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
         },
         generated_at=datetime(2026, 6, 23),
         canonical_request=_canonical_request("linear"),
-    )
+    ))
 
     assert payload["version"] == CURRENT_SESSION_VERSION
     assert "files" not in payload
@@ -3311,7 +3334,7 @@ def test_current_cli_session_writer_omits_legacy_ambiguous_linear_files() -> Non
         "--region",
         "#2:30-40",
     )
-    payload = build_session_json(
+    payload = drawing_view(build_session_json(
         SessionBuildContext(
             mode="linear",
             output_prefix="out",
@@ -3326,7 +3349,7 @@ def test_current_cli_session_writer_omits_legacy_ambiguous_linear_files() -> Non
         },
         generated_at=datetime(2026, 6, 23),
         canonical_request=_canonical_request("linear"),
-    )
+    ))
 
     assert payload["version"] == CURRENT_SESSION_VERSION
     assert "files" not in payload
@@ -3441,9 +3464,10 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert svg_path.exists()
     assert session_path.exists()
 
-    payload = load_session(session_path)
-    assert payload["format"] == SESSION_FORMAT
-    assert payload["version"] == CURRENT_SESSION_VERSION
+    document = load_session(session_path)
+    assert document["format"] == SESSION_FORMAT
+    assert document["version"] == CURRENT_SESSION_VERSION
+    payload = drawing_view(document)
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert (
         "outputPrefix"
@@ -3457,7 +3481,7 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert len(catalog["items"]) == len(payload["results"]) == 1
     assert catalog["items"][0]["features"]
     assert catalog["items"][0]["biologicalFeatures"]
-    assert "features" not in payload and "modes" not in payload
+    assert "features" not in payload and payload["modes"] == {"circular": {}}
     assert "groups" not in payload["orthogroupState"]
     assert payload["cliInvocation"]["mode"] == "circular"
     assert payload["cliInvocation"]["fileBindings"][0]["slot"] == "files.c_gb"
@@ -3539,7 +3563,7 @@ def test_cli_session_binds_each_unmodified_input_file_to_its_records(
     main(["--gbk", *inputs, "-o", str(prefix), "-f", "svg",
           "--session_output", str(session_path)])
 
-    session = load_session(session_path)
+    session = drawing_view(load_session(session_path))
     bindings = session["webFiles"]["bindings"]
     records = session["renderRequest"]["records"]
     if mode == "circular":
@@ -3575,7 +3599,7 @@ def test_cli_session_binds_unmodified_gff_and_fasta_inputs_to_their_record(
                    str(inputs / "NC_013668.fasta"), "-o", str(tmp_path / "gff"),
                    "-f", "svg", "--session_output", str(session_path)])
 
-    session = load_session(session_path)
+    session = drawing_view(load_session(session_path))
     bindings = session["webFiles"]["bindings"]
     assert [record["source"] for record in session["renderRequest"]["records"]] == [{
         "kind": "gffFasta",
@@ -3628,7 +3652,7 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
         single_region = {"selector": None, "start": 21, "end": 300, "reverseComplement": True}
     linear_main([*args, "-o", str(prefix), "-f", "svg", "--session_output", str(session_path)])
 
-    session = load_session(session_path)
+    session = drawing_view(load_session(session_path))
     records = session["renderRequest"]["records"]
     first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
     assert [
@@ -3689,7 +3713,7 @@ def test_linear_cli_session_selects_the_drawn_records_of_a_partly_drawn_input_fi
         selected = [{"kind": "recordIndex", "index": 2}, {"kind": "recordId", "value": "cli_unique"}]
     linear_main([*args, "-o", str(prefix), "-f", "svg", "--session_output", str(session_path)])
 
-    session = load_session(session_path)
+    session = drawing_view(load_session(session_path))
     records = session["renderRequest"]["records"]
     first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
     assert [(record["source"]["resourceId"], record["selector"], record["region"])
@@ -3728,7 +3752,7 @@ def test_circular_cli_session_keeps_cropped_and_reversed_records_as_drawn(
     circular_main([*args, *(["--multi_record_canvas"] if canvas else []), "-o", str(prefix),
                    "-f", "svg", "--session_output", str(session_path)])
 
-    session = load_session(session_path)
+    session = drawing_view(load_session(session_path))
     records = session["renderRequest"]["records"]
     assert session["renderRequest"]["grouping"] == ("grid" if canvas else "batch")
     assert [(record["region"], record["presentation"]["reverseComplement"])
@@ -3763,6 +3787,7 @@ def test_single_circular_session_records_crop_on_the_unchanged_input_file(
         output=RenderOutputRequest(output_prefix="single", output_directory=tmp_path),
         grouping="single",
     )).to_dict()
+    document = drawing_view(document)
 
     [record] = document["renderRequest"]["records"]
     assert (record["selector"], record["region"], record["presentation"]["reverseComplement"]) == (
@@ -3842,7 +3867,7 @@ def test_cli_composite_inventory_preserves_equal_byte_occurrences_and_metadata(
         svg_results=[], embedded_files=files, generated_at=datetime(2026, 9, 11),
         canonical_request=_canonical_request("circular"),
     )
-    actual = payload["webFiles"]["bindings"]["c_gb"]
+    actual = drawing_view(payload)["webFiles"]["bindings"]["c_gb"]
     assert {key: actual[key] for key in ("name", "type", "lastModified")} == {
         "name": "", "type": "", "lastModified": modified,
     }
@@ -3900,11 +3925,11 @@ def test_composite_sidecar_rebuild_preserves_draft_and_scopes_collisions():
         part['resourceId'] = 'record-1-genbank'
     source['renderRequest']['records'][0]['source']['resourceId'] = 'record-1-genbank'
     before = copy.deepcopy(source)
-    result = build_session_json(
+    result = drawing_view(build_session_json(
         SessionBuildContext(mode='circular', output_prefix='composite', render_formats=('svg',), source_session=source),
         svg_results=[], embedded_files={}, generated_at=datetime(2026, 9, 9),
         canonical_request=_canonical_request('circular'),
-    )
+    ))
     composite = result['webFiles']['bindings']['c_gb']
     assert composite['components'][0]['resourceId'] != 'record-1-genbank'
     assert composite['components'][0]['resourceId'] == composite['components'][1]['resourceId']
@@ -3968,7 +3993,7 @@ def _cli_composite_source():
             **_file_entry(f'part-{index}.gb', buffer.getvalue().encode()),
             'encoding': 'base64', 'lastModified': index + 0.5,
         })
-    return build_session_json(
+    return build_mode_scoped_session_json(
         SessionBuildContext(mode='circular', output_prefix='source', render_formats=('svg',)),
         svg_results=[], generated_at=datetime(2026, 9, 9),
         embedded_files={'c_gb': {
@@ -4003,8 +4028,9 @@ def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
         '--session_output', str(sidecar),
     ])
     assert source_path.read_bytes() == original
-    result = load_session_document(sidecar).to_dict()
-    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (CURRENT_SESSION_VERSION, 2, CANONICAL_REQUEST_SCHEMA)
+    written = load_session_document(sidecar).to_dict()
+    result = drawing_view(written)
+    assert (written['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (CURRENT_SESSION_VERSION, 2, CANONICAL_REQUEST_SCHEMA)
     assert result['renderRequest']['output']['prefix'] == 'replayed'
     assert len(result['renderRequest']['records']) == 1  # Replay consumes committed input.
     assert result['results'][0]['content'] == prefix.with_suffix('.svg').read_text()
@@ -4201,7 +4227,7 @@ def test_internal_composite_transport_rejects_unsupported_shapes(invalid):
 
 def _linear_session_with_cards(source_session: dict | None = None, **card_fields: str) -> dict:
     cards = [{"uid": uid, "gb": None, "gff": None, "fasta": None, **card_fields} for uid in ("seq-1", "seq-2")]
-    return build_session_json(
+    return build_mode_scoped_session_json(
         SessionBuildContext(
             mode="linear", output_prefix="out", render_formats=("svg",), source_session=source_session,
         ),
@@ -4246,8 +4272,9 @@ def test_session_mode_slices_keep_records_off_and_reject_unknown_keys() -> None:
         generated_at=datetime(2026, 10, 11),
         canonical_request=_canonical_request("linear"),
     )
-    assert resaved["modes"]["linear"]["config"]["recordsOff"] == ["seq-2"]
-    assert resaved["modes"]["circular"]["config"]["recordsOff"] == ["#2", "#10"]
+    # The OFF Circular records make the move list an (undrawn) Circular drawing.
+    assert drawing_view(resaved, mode="linear")["modes"]["linear"]["config"]["recordsOff"] == ["seq-2"]
+    assert drawing_view(resaved, mode="circular")["modes"]["circular"]["config"]["recordsOff"] == ["#2", "#10"]
 
 
 def test_cli_resave_keeps_file_defaults_of_linear_cards() -> None:
@@ -4300,7 +4327,7 @@ def test_a_cli_resave_names_a_losat_entry_without_a_text_name_as_the_web_does(
     sidecar = tmp_path / "replay.gbdraw-session.json"
     circular_main(["--session", str(edited), "--output", str(tmp_path / "replay"),
                    "--format", "svg", "--session_output", str(sidecar)])
-    assert [entry["filename"] for entry in load_session(sidecar)["losatCache"]["entries"]] == [
+    assert [entry["filename"] for entry in drawing_view(load_session(sidecar), mode="circular")["losatCache"]["entries"]] == [
         "losat_pair_1.tsv", "losat_pair_2.tsv", third["filename"]
     ]
 
@@ -4352,18 +4379,19 @@ def test_session_document_to_dict_returns_a_plain_mutable_manifest() -> None:
 
     data = document.to_dict()
 
-    manifest = data["proteinIdentityManifest"]
+    manifest = drawing_view(data)["proteinIdentityManifest"]
     assert _container_types(manifest) == {dict, list}
     binding = next(iter(manifest["recordInstances"].values()))
     binding["runtimeIds"].clear()
     manifest["extra"] = 1
-    assert document.to_dict()["proteinIdentityManifest"] != manifest
+    assert drawing_view(document.to_dict())["proteinIdentityManifest"] != manifest
 
 
 def test_a_python_manifest_with_tuples_takes_the_copy_path_through_render_and_writer() -> None:
     from gbdraw.api.request_render import CurrentRequestArtifacts
 
-    payload = json.loads(_PROTEIN_GALLERY_SESSION.read_text(encoding="utf-8"))
+    # The drawing's view is the 48 layout this case exercises (a 49 holds no top-level manifest).
+    payload = {**drawing_view(json.loads(_PROTEIN_GALLERY_SESSION.read_text(encoding="utf-8"))), "version": 48}
     raw = copy.deepcopy(payload["proteinIdentityManifest"])
     protein = next(iter(raw["proteinSets"].values()))["proteins"][0]
     protein["locationParts"] = tuple(tuple(part) for part in protein["locationParts"])
@@ -4389,3 +4417,33 @@ def test_a_python_manifest_with_tuples_takes_the_copy_path_through_render_and_wr
     # A Session payload that still holds the tuples is checked as raw data.
     payload["proteinIdentityManifest"] = raw
     assert type(SessionDocument(payload)._data["proteinIdentityManifest"]) is dict
+
+
+@pytest.mark.parametrize(
+    ("raw_args", "plan"),
+    [
+        (
+            ["--gbk", "P1.gb", "P2.gb", "--protein_blastp_mode", "orthogroup"],
+            {"mode": "adjacent", "defaultSource": "losat", "edges": []},
+        ),
+        (["--gbk", "P1.gb", "P2.gb", "--protein-blastp-mode=collinear"], {"mode": "adjacent", "defaultSource": "losat", "edges": []}),
+        (["--gbk", "P1.gb", "P2.gb", "--protein_blastp_mode", "orthogroup", "--protein_blastp_mode", "none"], None),
+        (["--gbk", "P1.gb", "P2.gb"], None),
+    ],
+)
+def test_cli_only_legacy_draft_states_its_protein_comparison_as_the_adjacent_plan(
+    raw_args: list[str], plan: dict[str, object] | None
+) -> None:
+    """A legacy CLI writer selected LOSATP exactly when the last --protein_blastp_mode
+    was not ``none``; that run compared adjacent records (OV-1929 f1, the Web Load's rule)."""
+
+    migrated_config, migrated_files = (
+        session_io_module.migrate_legacy_linear_comparison_draft_for_current_writer(
+            {"cliOptions": {"schema": 1, "mode": "argv", "rawArgs": raw_args}, "linearComparisonPlan": None},
+            {"linearSeqs": [{"uid": "a"}, {"uid": "b"}]},
+            force_web_draft=False,
+        )
+    )
+
+    assert migrated_config.get("linearComparisonPlan") == plan
+    assert migrated_files["linearComparisons"] == []

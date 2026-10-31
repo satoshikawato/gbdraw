@@ -200,7 +200,10 @@ split context, and the JSON pointers the split writes (`expect`) or leaves to
 Load (`expectAbsent`). `expectedModes` are the slices of the JavaScript split as
 Web Load makes it (`tests/web/mode-split-vectors.test.mjs`); the Python split
 (`tests/test_mode_split_vectors.py`) must equal them. `loadDefaults` are the
-values Session 46 Load gives the pointers the split leaves absent. A Session
+values Session 46 Load gives the pointers the split leaves absent. `loadExpect`
+(node only) replaces an `expect` value where Web Load sends Python the value a
+drawing read rather than the stored one (a carried field, such as `"20"` read
+as `20`); the Python split of the stored draft keeps `expect`. A Session
 27–39 case has no `expectedModes`: Web Load reads such a Session's settings from
 its request, which the Python split does not.
 
@@ -362,6 +365,30 @@ fixture of the Generate that moves a record's rows to the key of its new view
 (OV-1949): `record-identity-moves.playwright.spec.js` loads it, turns the canvas
 on, and expects the four edits on record 2. The steps, edited features
 and hashes are in `record-identity-circular-single.provenance.json`.
+
+`two-mode-linear-shown.v48.gbdraw-session.json.gz` is a Web **Save Session**
+download of the released v0.14.0 app (Session 48, tag `v0.14.0`) with both
+modes used and Linear shown: Circular holds a genome, a Default colors file
+and a changed setting, and has a Result that Session 48 does not keep;
+Linear holds two genomes, a LOSAT comparison (one `losatCache` entry), a
+Blacklist file and its Result. It is the positive fixture of the move of a
+Session 48 to drawings (`tests/test_session_compat.py`,
+`drawings-vectors.json` `upgrades`). The route, inputs and checks are in
+`two-mode-linear-shown.v48.provenance.json`.
+
+The four `drawings-*.v50.gbdraw-session.json.gz` files are Session 49
+(`drawings`, DESIGN §1).
+`gbdraw.session_drawings.write_session_drawings(version=49)` wrote each from a
+fixture above, upgraded to Session 48 first, leaving out the resources no
+drawing names: `circular-only` (one Circular drawing,
+`font-family-preserved.v46`), `circular-linear` (both Gallery drawings of
+`tests/utils/two_mode_session.py`, Linear active), `linear-pair-losat`
+(`q-frame-main-web-losatn.v42` drawn twice: `linear` keeps its LOSATN entry,
+`linear-2` has none) and `per-drawing-cards` (`file-card-imports-circular.v48`
+drawn twice: `circular` keeps the five file cards, `circular-2` has none).
+Each `.provenance.json` names the source, the edits, the script and the
+decompressed SHA-256; `tests/test_session_admission_50.py` admits them and
+writes each again unchanged.
 
 `hidden-definition-circular.v49.gbdraw-session.json.gz` is a Web **Save
 Session** download of the current writer (Session 49, PD-OI-109), written by

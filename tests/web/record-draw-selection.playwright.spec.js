@@ -8,6 +8,7 @@ const {
   openLinearFileCards,
   expectSessionLoadedWithoutWarnings,
 } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -58,10 +59,10 @@ const drawnRecordIds = (page) => page.evaluate(() => window.__GBDRAW_APP__.curre
 const openLinear = async (page) => {
   await observeRequests(page);
   await openApp(page);
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     Object.assign(app.form, { show_gc: false, show_skew: false, show_labels_linear: 'none' });
   });
 };
@@ -292,7 +293,6 @@ test('Circular draws the ON records in the canvas and as separate diagrams', asy
   await openApp(page);
   await page.evaluate((text) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('circular');
     app.setCircularSourceFile('c_gb', new File([text], 'four.gb', { type: 'text/plain', lastModified: 1 }));
     Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'none', legend: 'none' });
   }, genbank(['C1', 'C2', 'C3', 'C4']));
@@ -329,9 +329,9 @@ test('a replaced Linear File and another Circular input draw every record', asyn
   await uploadLinear(page, 'new.gb', genbank(['N1', 'N2']));
   await expect.poll(() => linearState(page)).toEqual([{ id: 'N1', drawn: true }, { id: 'N2', drawn: true }]);
 
+  await showDrawing(page, { kind: 'circular' });
   await page.evaluate((text) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('circular');
     app.setCircularSourceFile('c_gb', new File([text], 'three.gb', { type: 'text/plain', lastModified: 1 }));
   }, genbank(['G1', 'G2', 'G3']));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(3);
@@ -392,7 +392,6 @@ test('the Circular Auto notes and slot estimates show the sizes Generate draws f
   await openApp(page);
   await page.evaluate((text) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('circular');
     app.setCircularSourceFile('c_gb', new File([text], 'short-long.gb', { type: 'text/plain', lastModified: 1 }));
     Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'out', legend: 'none' });
   }, genbank([{ id: 'S30', repeats: 10_000 }, { id: 'L90', repeats: 30_000 }]));
@@ -441,7 +440,6 @@ test('a Circular record cropped to a region shows the sizes Generate draws for t
   await openApp(page);
   await page.evaluate((text) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('circular');
     app.setCircularSourceFile('c_gb', new File([text], 'long.gb', { type: 'text/plain', lastModified: 1 }));
     Object.assign(app.form, { multi_record_canvas: false, suppress_gc: true, suppress_skew: true, labels_mode: 'out', legend: 'none',
       circular_region_start: 1, circular_region_end: 30_000 });

@@ -26,11 +26,11 @@
   "manualSteps": [
     {
       "title": "Switch to Linear mode",
-      "body": "Open gbdraw.app and select Linear before adding the assemblies.",
+      "body": "Open gbdraw.app and click + Linear before adding the assemblies.",
       "replay": [
         {
           "type": "click",
-          "selector": "role=button[name='Linear's]"
+          "selector": ".drawing-bar [role=\"tab\"][data-drawing-id=\"linear\"]"
         }
       ],
       "operations": [
@@ -38,8 +38,8 @@
           "genericMedia": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-01-01-linear-mode.webp",
-            "alt": "Mode selector with Linear selected.",
-            "caption": "Select Linear before adding the multi-record inputs."
+            "alt": "Drawing bar with the Circular and Linear tabs; the Linear drawing tab is selected.",
+            "caption": "After clicking + Linear, the Linear drawing tab is selected."
           }
         }
       ]

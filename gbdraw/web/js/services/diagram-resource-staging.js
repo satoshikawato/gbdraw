@@ -5,8 +5,8 @@ import { decodeDepthText, isEncodedDepthFileEntry } from './depth-file-codec.js'
 import {
   readFileContentToken, releaseFileContentCache, resourceContentToken, takeFileBytesForTransfer
 } from './file-content-cache.js';
-import { getResourcePayloadOwner } from './resource-payload-owner.js';
-export { resourceIdOwnedBy } from './resource-payload-owner.js';
+import { getResourcePayloadIdentity, getResourcePayloadOwner } from './resource-payload-owner.js';
+export { recordSourceOwnedBy, recordSourceResourceIds } from './resource-payload-owner.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -115,14 +115,15 @@ const descriptorTransferBuffer = async (resourceId, descriptor, owner) => {
  */
 
 /**
- * What names a payload's bytes until they change: the base64 text, or the
- * object that owns them (the File the user chose, a Session resource view, or
- * the descriptor itself).
+ * What names a payload's bytes until they change: its inline base64 text, else
+ * the payload identity its owner gives (`getResourcePayloadIdentity`: the File
+ * the user chose, or the source descriptor of every view of one Session
+ * resource).
  * @param {ResourceDescriptor} descriptor
- * @returns {string | ResourcePayloadOwner}
+ * @returns {string | object}
  */
-const payloadIdentityOf = (descriptor) => (
-  typeof descriptor.data === 'string' ? descriptor.data : getResourcePayloadOwner(descriptor) ?? descriptor
+const stagingKeyOf = (descriptor) => (
+  typeof descriptor.data === 'string' ? descriptor.data : getResourcePayloadIdentity(descriptor)
 );
 
 /** @param {{ readCommittedResourceSets?: ReadCommittedResourceSets, readDraftHeldFiles?: ReadDraftHeldFiles }} [ports] */
@@ -131,7 +132,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
   /** @type {ReadonlySet<ResourceContentToken>} */
   let heldTokens = new Set();
   // The token of each payload identity seen whose bytes the Worker holds.
-  /** @type {Map<string | ResourcePayloadOwner, ResourceContentToken>} */
+  /** @type {Map<string | object, ResourceContentToken>} */
   let knownTokens = new Map();
   // A new Worker holds nothing: a helper staging prepared before the reset records nothing.
   let workerEpoch = 0;
@@ -147,7 +148,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
   /** @param {unknown} descriptor @param {Set<ResourceContentToken>} into */
   const addHeldToken = (descriptor, into) => {
     if (!descriptor || typeof descriptor !== 'object') return;
-    const token = knownTokens.get(payloadIdentityOf(/** @type {ResourceDescriptor} */ (descriptor)));
+    const token = knownTokens.get(stagingKeyOf(/** @type {ResourceDescriptor} */ (descriptor)));
     if (token && heldTokens.has(token)) into.add(token);
   };
 
@@ -203,7 +204,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
     for (const resourceId of referencedIds) {
       const descriptor = validateResourceDescriptor(resourceId, resources?.[resourceId]);
       const owner = getResourcePayloadOwner(descriptor);
-      const identity = payloadIdentityOf(descriptor);
+      const identity = stagingKeyOf(descriptor);
       /** @type {ArrayBufferLike | null} */
       let bytes = null;
       let cacheToken = knownTokens.get(identity);

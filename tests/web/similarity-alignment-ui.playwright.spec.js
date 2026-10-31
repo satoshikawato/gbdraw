@@ -4,6 +4,8 @@ const { mkdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerLoadRepairs, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
+const { showPhonePane, paneTop, newDrawingFromMenu, showDrawing } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const importSession = async (page, bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
   const file = new File([new Uint8Array(bytes)], name);
@@ -93,23 +95,22 @@ const loadAmbiguousSession = async (page, testInfo) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  const session = Buffer.from(await page.evaluate(async (raw) => {
-    const document = JSON.parse(raw);
-    document.renderRequest.comparisons = [];
-    document.editorState.featureCatalog.items.forEach((item) => {
-      item.orthogroups.forEach((group) => {
-        if (group.id === 'og_1') group.orthologEdges = [];
-      });
+  const document = JSON.parse(source);
+  const drawing = savedDrawing(document, 'linear');
+  drawing.renderRequest.comparisons = [];
+  drawing.editorState.featureCatalog.items.forEach((item) => {
+    item.orthogroups.forEach((group) => {
+      if (group.id === 'og_1') group.orthologEdges = [];
     });
-    // The Python writer has no Web draft: Load takes the request's projection,
-    // and the Linear slice (Session 46) holds the comparison draft of this test.
-    document.modes = { linear: { config: {
-      linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
-      losatProgram: 'blastp',
-      losat: { blastp: { mode: 'orthogroup' } }
-    } } };
-    return JSON.stringify(document);
-  }, source));
+  });
+  // The Python writer has no Web draft: Load takes the request's projection,
+  // and the drawing's config (Session 49) holds the comparison draft of this test.
+  drawing.config = {
+    linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+    losatProgram: 'blastp',
+    losat: { blastp: { mode: 'orthogroup' } }
+  };
+  const session = Buffer.from(JSON.stringify(document));
   await importSession(page, session, 'similarity-alignment-inparalog.gbdraw-session.json');
 };
 
@@ -687,7 +688,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     return {
       plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
       translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
-      orientations: state.linearSeqs.map(({ uid, region_reverse: reverse }) => ({
+      orientations: state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.map(({ uid, region_reverse: reverse }) => ({
         recordKey: uid, reverse: Boolean(reverse)
       })),
       results: window.__GBDRAW_APP__.currentResults().map(({ name, content }) => ({ name, content }))
@@ -721,7 +722,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     return {
       plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
       translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
-      orientations: state.linearSeqs.map(({ uid, region_reverse: reverse }) => ({
+      orientations: state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.map(({ uid, region_reverse: reverse }) => ({
         recordKey: uid, reverse: Boolean(reverse)
       })),
       results: window.__GBDRAW_APP__.currentResults().map(({ name, content }) => ({ name, content })),
@@ -959,29 +960,28 @@ test('one usable member applies directly through one Worker resolve and one Hist
   page.on('pageerror', (error) => errors.push(String(error?.message || error)));
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  const session = Buffer.from(await page.evaluate(async (raw) => {
-    const document = JSON.parse(raw);
-    document.renderRequest.comparisons = [];
-    document.editorState.featureCatalog.items.forEach((item) => {
-      const secondCopy = item.biologicalFeatures.find((feature) => (
-        feature.qualifiers?.protein_id?.[0] === 'a1'
-      ))?.biologicalFeatureId;
-      const group = item.orthogroups.find(({ id }) => id === 'og_1');
-      if (!secondCopy || !group) throw new Error('The one-candidate fixture is incomplete.');
-      group.members = group.members.filter(({ biologicalFeatureId }) => (
-        biologicalFeatureId !== secondCopy
-      ));
-      group.orthologEdges = [];
-    });
-    // The Python writer has no Web draft: Load takes the request's projection,
-    // and the Linear slice (Session 46) holds the comparison draft of this test.
-    document.modes = { linear: { config: {
-      linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
-      losatProgram: 'blastp',
-      losat: { blastp: { mode: 'orthogroup' } }
-    } } };
-    return JSON.stringify(document);
-  }, source));
+  const document = JSON.parse(source);
+  const drawing = savedDrawing(document, 'linear');
+  drawing.renderRequest.comparisons = [];
+  drawing.editorState.featureCatalog.items.forEach((item) => {
+    const secondCopy = item.biologicalFeatures.find((feature) => (
+      feature.qualifiers?.protein_id?.[0] === 'a1'
+    ))?.biologicalFeatureId;
+    const group = item.orthogroups.find(({ id }) => id === 'og_1');
+    if (!secondCopy || !group) throw new Error('The one-candidate fixture is incomplete.');
+    group.members = group.members.filter(({ biologicalFeatureId }) => (
+      biologicalFeatureId !== secondCopy
+    ));
+    group.orthologEdges = [];
+  });
+  // The Python writer has no Web draft: Load takes the request's projection,
+  // and the drawing's config (Session 49) holds the comparison draft of this test.
+  drawing.config = {
+    linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+    losatProgram: 'blastp',
+    losat: { blastp: { mode: 'orthogroup' } }
+  };
+  const session = Buffer.from(JSON.stringify(document));
   await importSession(page, session, 'one-candidate.gbdraw-session.json');
 
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
@@ -1223,10 +1223,11 @@ test('released Session 44 schema 7 and catalog 4 load and save through the curre
   await download.saveAs(savedPath);
   const saved = JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
-  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
-  expect(saved.editorState.featureCatalog.schema).toBe(CURRENT_FEATURE_CATALOG_SCHEMA);
-  const previous = JSON.parse(source.toString('utf8'));
-  expect(saved.results.map(({ name }) => name)).toEqual(previous.results.map(({ name }) => name));
+  const shown = shownSavedDrawing(saved);
+  expect(shown.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
+  expect(shown.editorState.featureCatalog.schema).toBe(CURRENT_FEATURE_CATALOG_SCHEMA);
+  const previous = shownSavedDrawing(JSON.parse(source.toString('utf8')));
+  expect(shown.results.map(({ name }) => name)).toEqual(previous.results.map(({ name }) => name));
   const previewEquivalent = await page.evaluate(({ before, after }) => {
     const parser = new DOMParser();
     const normalized = (element) => ({
@@ -1242,7 +1243,7 @@ test('released Session 44 schema 7 and catalog 4 load and save through the curre
     const original = parser.parseFromString(before, 'image/svg+xml').documentElement;
     const retained = parser.parseFromString(after, 'image/svg+xml').documentElement;
     return JSON.stringify(normalized(original)) === JSON.stringify(normalized(retained));
-  }, { before: previous.results[0].content, after: saved.results[0].content });
+  }, { before: previous.results[0].content, after: shown.results[0].content });
   expect(previewEquivalent).toBe(true);
   await expectNoUnhandledRejections(page);
 });
@@ -1335,7 +1336,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
       receipt: JSON.parse(JSON.stringify(state.similarityAlignmentResetReceipt.value)),
       plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
       translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
-      orientations: state.linearSeqs.map(({ uid, region_reverse }) => ({
+      orientations: state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.map(({ uid, region_reverse }) => ({
         recordKey: uid, reverseComplement: Boolean(region_reverse)
       })),
       results: window.__GBDRAW_APP__.currentResults().map(({ name, content }) => ({ name, content })),
@@ -1443,6 +1444,8 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await expect(dialog.locator('#alignment-direction-record-2')).toHaveText(/Current right-facing; after Align left-facing\./);
   await dialog.screenshot({ path: testInfo.outputPath('direction-review-desktop.png') });
   await page.setViewportSize({ width: 390, height: 740 });
+  // The review is docked in the Result: a phone shows it in the Preview pane.
+  await showPhonePane(page, 'preview');
   await direction.scrollIntoViewIfNeeded();
   await expect(direction).toBeVisible();
   const bounds = await dialog.boundingBox();
@@ -1665,11 +1668,11 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
   }
   const corrupt=JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
-  corrupt.editorState.alignmentResetReceipt.binding='0'.repeat(64);
+  shownSavedDrawing(corrupt).editorState.alignmentResetReceipt.binding='0'.repeat(64);
   // A receipt that no longer binds the request is dropped with a row before
   // anything changes (receipt 〔確認〕, BA-D25); Cancel keeps the restored receipt.
   const pendingCorrupt=evaluateWithRetainedPromise(freshPage,async raw=>window.__GBDRAW_APP__.importSession({target:{files:[new File([raw],'corrupted.json')],value:'selected'}}),JSON.stringify(corrupt));
-  await answerLoadRepairs(freshPage,['Session file: the field editorState.alignmentResetReceipt could not be read and was left out.'],'cancel');
+  await answerLoadRepairs(freshPage,[`Session file: the field drawings[${corrupt.drawings.indexOf(shownSavedDrawing(corrupt))}].editorState.alignmentResetReceipt could not be read and was left out.`],'cancel');
   expect((await pendingCorrupt).status).toBe('canceled');expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
   // Re-render the restored Session and compare the complete SVG tree.
   const regenerated = await evaluateWithRetainedPromise(freshPage, () => window.__GBDRAW_APP__.runAnalysis());
@@ -1853,6 +1856,8 @@ test('exclusive directions include the minority reference and keep Custom Select
   await target.getByRole('checkbox', { name: /^Skip / }).uncheck();
   expect(await changed()).toEqual(['record-1', 'record-2']);
   await page.setViewportSize({ width: 390, height: 740 });
+  // At <= 768 px one pane shows; the review is in the Result (Preview pane).
+  await showPhonePane(page, 'preview');
   await expect(custom).toBeChecked();
   await expect(directionSelect(dialog, 'record-1')).toHaveValue('right');
   await expect(directionSelect(dialog, 'record-2')).toHaveValue('left');
@@ -2014,7 +2019,7 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await reset.getByRole('button', { name: 'Cancel', exact: true }).press('Enter');
   // A Session with an Align plan but no Reset receipt (PD-OI-028); the Gallery Session ships an empty one.
   const historical = JSON.parse(readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'));
-  historical.editorState.alignmentResetReceipt = null;
+  shownSavedDrawing(historical).editorState.alignmentResetReceipt = null;
   await importSession(page, Buffer.from(JSON.stringify(historical)), 'historical-receipt.json');
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
   await page.locator('.right-drawer').getByRole('button', { name: 'Similarity groups' }).click();
@@ -2150,7 +2155,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
     }
     const seed=JSON.parse(readFileSync(seedPath,'utf8'));
     if(entry==='multiple target ambiguity') {
-      const catalog=seed.editorState.featureCatalog.items[0];
+      const catalog=shownSavedDrawing(seed).editorState.featureCatalog.items[0];
       const group=catalog.orthogroups.find(group=>group.id==='og_1');
       for(const recordKey of ['record-2','record-3']) {
         const existing=new Set(group.members.filter(member=>member.recordKey===recordKey).map(member=>member.biologicalFeatureId));
@@ -2222,7 +2227,13 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
       if(await select.count())await exposeReviewControl(page,select);
       await exposeReviewControl(page,skip);await exposeReviewControl(page,custom);
       for(const control of [dialog.getByRole('button',{name:'Apply',exact:true}),dialog.getByRole('button',{name:'Cancel',exact:true})])await exposeReviewControl(page,control);
-      await page.locator('.preview-canvas').evaluate(el=>el.scrollIntoView({block:'start'}));
+      await page.locator('.preview-canvas').evaluate(el=>{
+        el.scrollIntoView({block:'start'});
+        // scrollIntoView keeps the canvas's 9rem scroll margin, which in a short phone Preview pane
+        // (390x422: 111 px) puts the canvas below the pane's visible end; a user swipes the pane instead.
+        const pane=el.closest('.result-pane').getBoundingClientRect();
+        if(el.getBoundingClientRect().top>=pane.bottom)el.closest('.result-pane').scrollTop+=el.getBoundingClientRect().top-Math.max(pane.top,document.querySelector('.drawing-bar').getBoundingClientRect().bottom);
+      });
       const measured=await compactReviewGeometry(page);geometry.push(measured);
       await info.attach(`review-${viewport.width}x${viewport.height}`,{body:JSON.stringify(measured,null,2),contentType:'application/json'});
       expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
@@ -2236,7 +2247,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
       // Native pointer input, not a DOM dispatch or a fit-camera assignment.
       const canvas=await page.locator('.preview-canvas').boundingBox();
       const pan=await page.evaluate(()=>({...window.__GBDRAW_APP__.canvasPan}));
-      const point={x:canvas.x+5,y:Math.max(canvas.y+5,await page.locator('.app-header').evaluate(el=>el.getBoundingClientRect().bottom+5))};
+      const point={x:canvas.x+5,y:Math.max(canvas.y+5,await page.locator('.app-header').evaluate(el=>el.getBoundingClientRect().bottom+5),await paneTop(page)+5)};
       await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x+24,point.y+10,{steps:4});await page.mouse.up();
       await expect.poll(()=>page.evaluate(()=>({...window.__GBDRAW_APP__.canvasPan}))).toEqual({x:pan.x+24,y:pan.y+10});
       const zoom=page.getByRole('button',{name:'Zoom in',exact:true});await exposeReviewControl(page,zoom);const zoomBefore=await page.evaluate(()=>window.__GBDRAW_APP__.zoom);await zoom.click();
@@ -2370,7 +2381,7 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
   const seeded = JSON.parse(readFileSync(
     'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'
   ));
-  seeded.orthogroupState.selectedOrthogroupId = 'og_18';
+  shownSavedDrawing(seeded).orthogroupState.selectedOrthogroupId = 'og_18';
   await importSession(page, Buffer.from(JSON.stringify(seeded)), 'BGC0000708-BGC0000713.gbdraw-session.json');
   const plan = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -2386,7 +2397,7 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
     const { state } = await import('./js/state.js');
     return state.orthogroups.value.map(({ id }) => id);
   });
-  const savedSelection = seeded.orthogroupState.selectedOrthogroupId;
+  const savedSelection = shownSavedDrawing(seeded).orthogroupState.selectedOrthogroupId;
   expect(groups[0]).not.toBe(loaded.groupId);
   expect(savedSelection).not.toBe(loaded.groupId);
 
@@ -2500,6 +2511,7 @@ test('the Review alignment panel is docked beside or below the figure with Cance
   }
   // Narrow: the panel is below the figure, which keeps a usable height.
   await page.setViewportSize({ width: 390, height: 844 });
+  await showPhonePane(page, 'preview');
   await expect.poll(async () => {
     const { panel, figure } = await edges();
     return panel.top >= figure.bottom - 1 && figure.height >= 200
@@ -2591,10 +2603,11 @@ test('the docked review takes the popup, the Editor and the view, and gives them
 
   // A Session saved during the review holds the view from before it.
   const savedView = await evaluateWithRetainedPromise(page, async () => {
-    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
+    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const result = await exportSession('saved during review');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-    const { zoom, canvasPan } = JSON.parse(text).ui;
+    const saved = JSON.parse(text);
+    const { zoom, canvasPan } = saved.drawings.find(({ id }) => id === saved.ui.activeDrawingId).ui;
     return { status: result.status, zoom, pan: canvasPan };
   });
   expect(savedView).toEqual({ status: 'saved', ...before });
@@ -2660,6 +2673,8 @@ for (const [width, height] of [[1280, 800], [390, 844]]) {
     await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__GBDRAW_APP__);
     await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+    // A phone user taps Preview to reach the figure (a Load keeps the shown pane).
+    await showPhonePane(page, 'preview');
     const featureId = await page.evaluate(featureByProteinId, 'CAG38712.1');
     await page.locator(`[data-gbdraw-feature-id="${featureId}"]`).first()
       .dispatchEvent('click', { clientX: -100, clientY: -100 });
@@ -2770,20 +2785,22 @@ test('a Session loaded under an open review keeps its own view and Editor when t
   const before = await previewView(page);
   const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
   await expect.poll(async () => (await previewView(page)).zoom).toBeLessThan(before.zoom);
-  // Another Session arrives with its own view.
-  session.ui = { ...session.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
+  // Another Session arrives. A file Session Load with a Result fits its figure (R17-25), so the
+  // view is the loaded figure's fit, not the view the review holds.
   await importSession(page, Buffer.from(JSON.stringify(session)), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
+  await expect.poll(async () => (await figureFit(page)).fitted).toBe(true);
   const loaded = await previewView(page);
-  expect(loaded).toEqual({ zoom: 0.37, pan: { x: -21, y: 13 } });
+  expect(loaded).not.toEqual(before);
   // The review stays open on its draft, without rings: they belonged to the replaced Result.
   await expect(dialog).toBeVisible();
   await expect(page.locator('[data-similarity-alignment-canvas]')).toHaveCount(0);
   // A Session saved now holds the loaded view, not the view from before the review.
   const savedView = await evaluateWithRetainedPromise(page, async () => {
-    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
+    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const result = await exportSession('saved after load');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-    const { zoom, canvasPan } = JSON.parse(text).ui;
+    const saved = JSON.parse(text);
+    const { zoom, canvasPan } = saved.drawings.find(({ id }) => id === saved.ui.activeDrawingId).ui;
     return { zoom, pan: canvasPan };
   });
   expect(savedView).toEqual(loaded);
@@ -2892,10 +2909,11 @@ test('the figure is fitted again whenever the room of the Result changes while R
   // No fit is a History step, and a Session saved now holds the view from before the review.
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoAtOpen);
   const savedView = await evaluateWithRetainedPromise(page, async () => {
-    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
+    const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const result = await exportSession('saved after a fit to the room');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-    const { zoom, canvasPan } = JSON.parse(text).ui;
+    const saved = JSON.parse(text);
+    const { zoom, canvasPan } = saved.drawings.find(({ id }) => id === saved.ui.activeDrawingId).ui;
     return { zoom, pan: canvasPan };
   });
   expect(savedView).toEqual(before);
@@ -2941,11 +2959,18 @@ test('outside Review alignment a change of the room of the Result keeps the zoom
 });
 
 // The user's own view and Editor tab, then the review opened from a feature popup.
-const openReviewOverOwnView = async (page) => {
+// `withCircular`: the Linear-only Session gets a Circular drawing first, made the way a user
+// makes it (the drawing menu), for the cases that switch drawings under the review.
+const openReviewOverOwnView = async (page, { withCircular = false } = {}) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  const ids = {};
+  if (withCircular) {
+    ids.circular = await newDrawingFromMenu(page, 'circular');
+    ids.linear = await showDrawing(page, { kind: 'linear' });
+  }
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -2956,7 +2981,7 @@ const openReviewOverOwnView = async (page) => {
   const before = await previewView(page);
   const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
   await expect.poll(async () => (await figureFit(page)).fitted).toBe(true);
-  return { before, dialog };
+  return { before, dialog, ids };
 };
 
 // One live setting change: the CDS color in Colors, drawn on the shown Result.
@@ -2972,7 +2997,7 @@ const recolorCds = async (page, color) => {
   await roomSettled(page);
 };
 // Whether each Linear record is drawn reversed.
-const recordOrientations = (page) => page.evaluate(async () => (await import('./js/state.js')).state.linearSeqs
+const recordOrientations = (page) => page.evaluate(async () => (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs
   .map(({ uid, region_reverse: reverse }) => [uid, Boolean(reverse)]));
 // The Result and the figure draw the color the setting shows (PD-OI-102).
 const expectCdsColorDrawn = async (page, color) => {
@@ -3127,14 +3152,13 @@ test('Apply of a review draws a live color changed before the review', async ({ 
 // review's mode again, so it does not tell which mode the replacement test reads.
 test('a Session loaded while the other mode is shown under a review keeps its own view', async ({ page }) => {
   test.setTimeout(600000);
-  const { dialog } = await openReviewOverOwnView(page);
-  await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'));
+  const { dialog, ids } = await openReviewOverOwnView(page, { withCircular: true });
+  await page.evaluate((drawingId) => window.__GBDRAW_APP__.selectDrawing(drawingId), ids.circular);
   await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.mode.value)).toBe('circular');
-  const session = JSON.parse(readFileSync(galleryAlignmentSession, 'utf8'));
-  session.ui = { ...session.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
-  await importSession(page, Buffer.from(JSON.stringify(session)), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
+  // A file Session Load with a Result fits its figure (R17-25): the view is the loaded figure's.
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
+  await expect.poll(async () => (await figureFit(page)).fitted).toBe(true);
   const loaded = await previewView(page);
-  expect(loaded).toEqual({ zoom: 0.37, pan: { x: -21, y: 13 } });
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   expect(await previewView(page)).toEqual(loaded);
@@ -3148,10 +3172,10 @@ test('a mode switch and back under an open review leaves the view the review giv
   test.setTimeout(600000);
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
-  const { before, dialog } = await openReviewOverOwnView(page);
+  const { before, dialog, ids } = await openReviewOverOwnView(page, { withCircular: true });
   const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
   for (const target of ['circular', 'linear']) {
-    await page.evaluate((next) => window.__GBDRAW_APP__.selectDrawing(next), target);
+    await page.evaluate((next) => window.__GBDRAW_APP__.selectDrawing(next), ids[target]);
     await expect.poll(shownMode).toBe(target);
   }
   await expect(dialog).toBeVisible();
@@ -3177,9 +3201,9 @@ test('a Linear review ended in Circular gives the Linear view back to no other f
   test.setTimeout(600000);
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
-  const { before, dialog } = await openReviewOverOwnView(page);
+  const { before, dialog, ids } = await openReviewOverOwnView(page, { withCircular: true });
   const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
-  await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'));
+  await page.evaluate((drawingId) => window.__GBDRAW_APP__.selectDrawing(drawingId), ids.circular);
   await expect.poll(shownMode).toBe('circular');
   // PD-OI-039 rev 4: the review stays open across the switch (Circular has no Result here, so
   // its panel has no Result area to dock in), and Escape ends it there.

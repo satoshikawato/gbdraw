@@ -8,6 +8,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./app
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./audit-browser.cjs');
 const { settleLive } = require('./live-generate-parity.cjs');
 const { loadEditorLegendRows } = require('./mode-transition.cjs');
+const { showDrawing } = require('./drawing-bar.cjs');
 
 const SINGLE_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
 
@@ -19,7 +20,7 @@ const SINGLE_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
 const open = async (page, { mode, results, reflow, genbank = readFileSync(SINGLE_FIXTURE, 'utf8') }) => {
   if (mode === 'linear') {
     await openFresh(page);
-    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(page, { kind: 'linear' });
     await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
     await page.evaluate(async (text) => {
       const app = window.__GBDRAW_APP__;
@@ -234,7 +235,7 @@ const resetSettings = (page) => evaluateWithRetainedPromise(page, async () => { 
 // The Save is held (its own `beforeExport`) until the Result it raced is mounted.
 const displayWhileSaveHeld = async (page, resultIndex) => {
   await page.evaluate(async (index) => {
-    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     let release;
     const gate = new Promise((resolve) => { release = resolve; });
     window.releaseSave = release;

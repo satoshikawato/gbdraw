@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const source = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
 // Applied authority is the committed canonical request; drafts never replace it.
@@ -95,8 +96,9 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   test.setTimeout(180_000);
   const external = await prepare(page, baseURL);
   const setInput = text => page.evaluate(async content => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.files.c_gb = new File([content], 'HmmtDNA.gbk', { type: 'text/plain' });
+    app.files.c_gb = bound(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
     await window.Vue.nextTick();
   }, text);
   await setInput(source);
@@ -293,8 +295,9 @@ const cancelByQueuedClick = async (page, testInfo, target) => {
 const warmReady = async (page, baseURL) => {
   const external = await prepare(page, baseURL);
   await page.evaluate(async content => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.files.c_gb = new File([content], 'HmmtDNA.gbk', { type: 'text/plain' });
+    app.files.c_gb = bound(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
     await window.Vue.nextTick();
   }, source);
   await generate(page).click();
@@ -345,9 +348,9 @@ test('A Cancel clicked during SVG admission ends the Generate before the candida
 test('Linear comparison preparation, real search counts, cache reuse, and no-comparison generation use the same status', async ({ page, baseURL }, testInfo) => {
   test.setTimeout(180_000);
   const external = await prepare(page, baseURL);
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async content => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     await window.Vue.nextTick();
     while (app.linearSeqs.length < 2) app.addLinearSeq();
     for (let i = 0; i < 2; i += 1) {
@@ -389,9 +392,9 @@ test('Linear comparison preparation, real search counts, cache reuse, and no-com
 test('S03 Linear LOSAT draft edits never replace the committed request before Generate', async ({ page, baseURL }) => {
   test.setTimeout(180000);
   await prepare(page,baseURL);
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async content => {
     const app=window.__GBDRAW_APP__;
-    app.selectDrawing('linear');await window.Vue.nextTick();
     while(app.linearSeqs.length<2) app.addLinearSeq();
     for(let i=0;i<2;i++) app.setLinearSeqPrimaryFile(i,'gb',new File([content],`record-${i}.gbk`,{type:'text/plain'}));
     await app.setLinearComparisonGlobalAction('losat');await window.Vue.nextTick();

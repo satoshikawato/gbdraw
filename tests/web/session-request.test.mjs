@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 
 const repoRoot = process.cwd();
 const sourceRoot = join(repoRoot, 'gbdraw', 'web', 'js');
@@ -390,8 +391,7 @@ assert.throws(
 const ref = (value) => ({ value });
 const state = {
   mode: ref('circular'),
-  cInputType: ref('gb'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   circularRecordList: ref([]),
   form: {
     prefix: 'web-session', species: '', strain: '', plot_title: '', legend: 'right',
@@ -453,8 +453,7 @@ const stateForCanonicalProjection = (projection) => {
   return {
     ...state,
     mode: ref(projection.mode),
-    cInputType: ref(projection.inputType),
-    lInputType: ref(projection.inputType),
+    inputType: ref(projection.inputType),
     form: { ...state.form, ...structuredClone(config.form || {}) },
     adv: { ...state.adv, ...structuredClone(config.adv || {}) },
     losat: structuredClone(config.losat || { threadsPerJob: 'auto', blastp: {} }),
@@ -777,6 +776,18 @@ const italicLabelRequest = buildCanonicalRenderRequestRaw({ state, filesData });
 assert.equal(italicLabelRequest.renderRequest.diagramOptions.configOverrides['labels.circular.italic_gene_labels'], true);
 assert.equal(projectCanonicalSessionRequest(italicLabelRequest).config.adv.italic_gene_labels, true);
 state.adv.italic_gene_labels = false;
+// The setting is the generated drawing's own: of two Circular drawings, the one that holds it on
+// puts it in its request while the shown one, off, does not.
+const italicSecondDrawing = { ...state, adv: { ...state.adv, italic_gene_labels: true } };
+assert.equal(
+  buildDrawingRenderRequest({ state, drawing: italicSecondDrawing, filesData })
+    .renderRequest.diagramOptions.configOverrides['labels.circular.italic_gene_labels'],
+  true
+);
+assert.equal(
+  Object.hasOwn(buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.diagramOptions.configOverrides, 'labels.circular.italic_gene_labels'),
+  false
+);
 // PD-OI-109: Show Definition (Circular only). A shown definition is left out of the
 // request, as an earlier writer left it; a hidden one is `false`, and both project back.
 assert.ok(managedConfigOverridePathsForMode('circular').includes('objects.definition.circular.show'));
@@ -2202,7 +2213,7 @@ assert.match(combinedCircularGenbank, /WEBTEST/);
 assert.match(combinedCircularGenbank, /WEBTWO/);
 
 state.mode.value = 'linear';
-state.lInputType.value = 'gb';
+state.inputType.value = 'gb';
 state.linearComparisonPlan = {
   mode: 'adjacent',
   defaultSource: 'losat',
@@ -2273,6 +2284,21 @@ assert.deepEqual(
 assertLabelStyleRoundTrip(() => buildCanonicalRenderRequestRaw({
   state, filesData: materializedFilesData, comparisonPlanSnapshot: materializedSnapshot
 }));
+// A Session 49 Linear drawing binds only its own mode's inputs (no `c_gb`);
+// a committed request projected again (label reflow, orientation, alignment)
+// checks the bindings by its own mode's input slot (OV-1814).
+{
+  const resourceId = materializedCanonical.renderRequest.records[0].source.resourceId;
+  const gb = { resourceId, name: 'multi.gb', type: 'text/plain', lastModified: 0 };
+  const linearDrawingBindings = {
+    schema: 2, d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null,
+    linearSeqs: [{ uid: 'multi-source', gb, gff: null, fasta: null, depth: null }], linearComparisons: []
+  };
+  assert.equal(Object.hasOwn(linearDrawingBindings, 'c_gb'), false);
+  assert.doesNotThrow(() => projectCanonicalSessionRequest({
+    ...materializedCanonical, webFiles: { ...materializedCanonical.webFiles, bindings: linearDrawingBindings }
+  }));
+}
 
 // OV-2291: the request carries the translations of the records it draws. After
 // a File was removed, its translation is left out and the others keep theirs;
@@ -4417,7 +4443,7 @@ const circularRequestState = ({
 } = {}) => ({
   ...state,
   mode: ref('circular'),
-  cInputType: ref('gb'),
+  inputType: ref('gb'),
   form: {
     ...state.form,
     show_depth: false,
@@ -4812,7 +4838,7 @@ assert.deepEqual(
 const linearP3State = {
   ...state,
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   form: {
     ...state.form,
     show_depth: false,
@@ -5100,7 +5126,7 @@ assert.equal(
 const comparisonContractState = {
   ...state,
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   form: { ...state.form, prefix: 'comparison-contract', show_depth: false },
   adv: {
     ...state.adv,
@@ -5629,6 +5655,10 @@ assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).
   '226ee05fe6c482311ca894941631c6f1e22590b494cbc79970024f1ad9e156dd',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
+// The Python tests hand this bridge a Session of any version; a 49 is read as the one-drawing view of its shown drawing.
+const bridgeSessionView = (session) => Array.isArray(session.drawings)
+  ? savedDrawingView(session, session.ui.activeDrawingId) : session;
+
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {
   const sessionPath = process.argv[projectSessionIndex + 1];
@@ -5637,7 +5667,7 @@ if (projectSessionIndex >= 0) {
   const sessionText = sessionBytes[0] === 0x1f && sessionBytes[1] === 0x8b
     ? gunzipSync(sessionBytes).toString('utf8')
     : sessionBytes.toString('utf8');
-  const session = JSON.parse(sessionText);
+  const session = bridgeSessionView(JSON.parse(sessionText));
   const projectedSession = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
     resources: session.resources,
@@ -5731,7 +5761,7 @@ const roundTripSessionIndex = process.argv.indexOf('--round-trip-session');
 if (roundTripSessionIndex >= 0) {
   const sessionPath = process.argv[roundTripSessionIndex + 1];
   if (!sessionPath) throw new Error('--round-trip-session requires a JSON path.');
-  const session = JSON.parse(await readFile(sessionPath, 'utf8'));
+  const session = bridgeSessionView(JSON.parse(await readFile(sessionPath, 'utf8')));
   const sessionProjection = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
     resources: session.resources,
@@ -5795,10 +5825,13 @@ if (roundTripSessionIndex >= 0) {
       assert.deepEqual(backing.sessionResourceSource(file).descriptors.map(({ descriptor, readBytes, ...part }) => part), components);
     }
   }
-  const linear = JSON.parse(await readFile(join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')));
+  const linearSession = JSON.parse(await readFile(join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')));
+  const linear = savedDrawingView(linearSession, linearSession.ui.activeDrawingId);
   const inactive = projectCanonicalSessionRequest({ ...linear,
     resources: { ...linear.resources, first: resources.first, second: resources.second },
-    webFiles: { ...linear.webFiles, bindings: { schema: 2, c_gb: composite } } });
+    webFiles: { ...linear.webFiles, bindings: { schema: 2, c_gb: composite } },
+    // The Load of a Session 41-48 checks its bindings by `c_gb` whatever the mode.
+    bindingInputSlot: 'c_gb' });
   assert.equal(linear.renderRequest.mode, 'linear');
   assert.equal(await backing.readSessionResourceText(inactive.files.c_gb), 'second\r\nfirst\nsecond\r\n');
   const leaf = frozen.webFiles.bindings.c_gb;
@@ -6030,9 +6063,10 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
 // translations of a Linear Result set kept in `otherModeResult` with the rules
 // the request projection applies to the top-level set.
 {
-  const gallery = JSON.parse(await readFile(
+  const saved = JSON.parse(await readFile(
     join(process.cwd(), 'gbdraw', 'web', 'gallery', 'sessions', 'BGC0000708-BGC0000713.gbdraw-session.json'), 'utf8'
   ));
+  const gallery = savedDrawingView(saved, saved.ui.activeDrawingId);
   const request = gallery.renderRequest;
   assert.equal(request.mode, 'linear');
   const admitted = canonicalLinearRecordLayout(request);

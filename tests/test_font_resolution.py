@@ -37,6 +37,7 @@ from gbdraw.core.text import (
 )
 from gbdraw.render.font_embedding import remove_embedded_font_css
 from gbdraw.session_io import session_to_cli_args
+from tests.utils.session_drawing_view import session_view
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "gbdraw" / "data"
 
@@ -496,7 +497,7 @@ def test_cli_font_family_draws_and_measures_with_the_font(
     assert _without_font_names(tmp_path / "font.svg") == _without_font_names(tmp_path / "same-metrics.svg")
     assert _without_font_names(tmp_path / "font.svg") != _without_font_names(tmp_path / "default.svg")
     # D-02: the Session keeps the name only, and says so.
-    assert "'Gbdraw System Mono', monospace" in json.dumps(json.loads(session_path.read_text())["renderRequest"])
+    assert "'Gbdraw System Mono', monospace" in json.dumps(session_view(json.loads(session_path.read_text()))["renderRequest"])
     assert "The Session stores the font name 'Gbdraw System Mono' but not the font file" in caplog.text
     circular_main(["--session", str(session_path), "-o", str(tmp_path / "replay"), "-f", "svg"])
     assert (tmp_path / "replay.svg").read_text() == (tmp_path / "font.svg").read_text()

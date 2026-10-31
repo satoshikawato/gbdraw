@@ -6,10 +6,20 @@
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 
 /**
+ * A drawing's feature-editor status, a runtime field of its artifact slot (never saved in a Session).
+ * `state.setFeatureEditorStatus` writes it; the Editor header reads it (`featureEditorStatusText`).
+ * @typedef {object} FeatureEditorStatus
+ * @property {'idle' | 'summary-ready' | 'failed'} status `failed`: Load could not recover the feature metadata.
+ * @property {string | null} error The failure, or the warning of a recovered Load (the Editor header's title).
+ */
+/** @type {Readonly<FeatureEditorStatus>} */
+export const FEATURE_EDITOR_STATUS_IDLE = Object.freeze({ status: 'idle', error: null });
+
+/**
  * E1: the generated artifact of one drawing, which each drawing keeps while
  * another is shown. The state ref of every key and the value an empty slot
  * installs, given the mode of the slot's drawing and the current value: the displayed-Result
- * part of the owner set, the selected Result, the generated Legend colors and
+ * part of the owner set, the selected Result, the feature-editor status, the generated Legend colors and
  * stroke defaults, and the alignment Reset receipt (it binds the
  * committed Linear Session). Draft and project state stays shared: the specific
  * color rules, the file Legend captions, the Linear record orientations, the
@@ -22,6 +32,7 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   selectedResultIndex: () => 0,
   featureCatalog: () => null,
   extractedFeatures: () => [],
+  featureEditorStatus: () => FEATURE_EDITOR_STATUS_IDLE,
   biologicalFeatures: () => [],
   featureRecordIds: () => [],
   orthogroups: () => [],
@@ -36,7 +47,6 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   pairwiseMatchFactors: () => ({}),
   editableLabels: () => [],
   generatedLegendPosition: () => 'left',
-  generatedMode: (mode) => mode,
   generatedMultiRecordCanvas: () => false,
   generatedCircularPlotTitlePosition: () => 'none',
   // An empty slot has no Result to project a palette onto: it keeps the applied one,
@@ -67,9 +77,9 @@ export const ARTIFACT_SLOT_KEYS = Object.freeze(/** @type {(keyof typeof ARTIFAC
 
 /**
  * The artifact slots a Session Load installs before its preview mounts:
- * `opening`, the artifact the Session opens on when it is not the top-level
- * set's, and `stashed`, the one kept for a drawing not shown.
- * @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots
+ * `opening`, the artifact the Session opens on when it is not the committed
+ * set's, and `stashed`, the ones kept for the drawings not shown.
+ * @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: readonly Readonly<ArtifactSlot>[] }} LoadedArtifactSlots
  */
 
 /**
@@ -119,6 +129,16 @@ const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
 });
 
 /**
+ * `slot`'s artifact as `drawing`'s (Duplicate: the copy shows its source's
+ * Result without a Generate). The artifact's values are shared, as a slot
+ * keeps them by reference; only the drawing it belongs to differs.
+ * @param {Readonly<ArtifactSlot>} slot
+ * @param {DrawingIdentity} drawing
+ * @returns {Readonly<ArtifactSlot>}
+ */
+export const artifactSlotAs = (slot, drawing) => withArtifactSlotValues(slot, drawing, {});
+
+/**
  * What `ArtifactSlotStore.snapshot` returns for `restore`.
  * @typedef {readonly Readonly<ArtifactSlot>[]} ArtifactSlotSnapshot
  */
@@ -139,13 +159,18 @@ const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
  * @property {(departing: Readonly<ArtifactSlot>, arrivingId: DrawingId) => Readonly<ArtifactSlot> | null} swap
  *   The mode transition: keeps the departing drawing's artifact and takes out the arriving one's
  *   (null: it has none yet).
- * @property {(stashed: Readonly<ArtifactSlot> | null) => void} replaceLoaded
- *   Session Load: the loaded Session's kept artifact replaces every slot.
+ * @property {(stashed: readonly Readonly<ArtifactSlot>[]) => void} replaceLoaded
+ *   Session Load: the loaded Session's kept artifacts replace every slot.
  * @property {() => ArtifactSlotSnapshot} snapshot
  * @property {(snapshot: ArtifactSlotSnapshot) => void} restore The Load rollback.
  * @property {(drawing: DrawingIdentity, values: Readonly<Record<string, unknown>>) => void} writeValues
  *   Writes slot values of a drawing that is not shown (History and the Instant Preview toggle;
  *   OV-1168, OV-1195); with no slot, into the drawing's empty slot.
+ * @property {(drawingId: DrawingId) => Readonly<ArtifactSlot> | null} takeSlot
+ *   A removed drawing's slot goes with it (`removeDrawing` in state.js); the
+ *   step that removed the drawing holds it (null: it has none) for its Undo.
+ * @property {(slot: Readonly<ArtifactSlot>) => void} putSlot
+ *   A held slot back, with its drawing (the Undo of a Delete, the Redo of a New).
  */
 
 /** @returns {ArtifactSlotStore} */
@@ -170,13 +195,19 @@ export const createArtifactSlotStore = () => {
     },
     replaceLoaded: (stashed) => {
       slots.clear();
-      if (stashed) keep(stashed);
+      stashed.forEach(keep);
     },
     snapshot: kept,
     restore: (snapshot) => {
       slots.clear();
       snapshot.forEach(keep);
     },
+    takeSlot: (drawingId) => {
+      const taken = slots.get(drawingId) ?? null;
+      slots.delete(drawingId);
+      return taken;
+    },
+    putSlot: keep,
     writeValues: (drawing, values) => keep(withArtifactSlotValues(slots.get(drawing.id) ?? null, drawing, values))
   };
 };

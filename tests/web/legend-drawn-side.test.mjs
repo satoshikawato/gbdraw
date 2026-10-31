@@ -4,7 +4,7 @@
 // (BA-D25, PLAN 12.7 (4)); case and outer spaces read as the position. A Result saved without composition metadata (Session
 // 27 to 30) whose Session stored no side keeps `none`.
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -12,6 +12,7 @@ import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -26,6 +27,10 @@ globalThis.document = {};
 installFakeSvgDom();
 globalThis.alert = () => {};
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { setUnmanagedConfigOverrideValidator } = sessionConfig;
@@ -37,7 +42,7 @@ const {
   COMPOSITION_METADATA_ATTRIBUTE
 } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { importSession } = callerSession(sessionConfig, state);
+const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const REPO = new URL('../../', import.meta.url);
 const fixture = (name) => {
@@ -200,7 +205,7 @@ for (const [name, resultMode, shownMode, drawnSide, shownLegend] of MODE_SWITCH)
     assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
     assert.deepEqual(dialogs, []);
     assert.deepEqual(transformed.map(({ side, data }) => [data.mode, side]), [[resultMode, drawnSide]]);
-    assert.deepEqual([state.mode.value, state.generatedMode.value, state.generatedLegendPosition.value], [resultMode, resultMode, drawnSide]);
+    assert.deepEqual([state.mode.value, state.drawingOf(state.generatedDrawingId.value).mode, state.generatedLegendPosition.value], [resultMode, resultMode, drawnSide]);
     assert.equal(state.results.value.length, 1);
     // The flat draft's legend position is the shown mode's.
     assert.equal(modeDrawing(state, shownMode).form.legend, shownLegend);

@@ -17,6 +17,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { serializeActiveRenderFiles, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
@@ -25,13 +26,15 @@ const genbank = (name) => {
   const bytes = new TextEncoder().encode(`LOCUS ${name}\n//\n`);
   return { name, type: 'text/plain', size: bytes.byteLength, lastModified: 1, arrayBuffer: async () => bytes.slice().buffer };
 };
-const blast = genbank('a-to-c.tsv');
+// The cards name their files by ref of the state's input file store.
+const bind = (file) => state.inputFiles.registerFile(genbank(file));
+const blast = bind('a-to-c.tsv');
 
 installShownDrawing('linear');
-state.lInputType.value = 'gb';
+modeDrawing(state, 'linear').inputType.value = 'gb';
 const drawing = modeDrawing(state, 'linear');
-state.linearSeqs.splice(0, Infinity, ...['a', 'b', 'c'].map((uid) => ({
-  uid, gb: genbank(`${uid}.gb`), gff: null, fasta: null, depth: null, losat_gencode: 1, definition: '',
+modeDrawing(state, 'linear').linearSeqs.splice(0, Infinity, ...['a', 'b', 'c'].map((uid) => ({
+  uid, gb: bind(`${uid}.gb`), gff: null, fasta: null, depth: null, losat_gencode: 1, definition: '',
   record_subtitle: '', file_definition: '', file_subtitle: '', inferred_definition: '', region_record_id: '',
   region_start: null, region_end: null, region_reverse: false
 })));
@@ -59,11 +62,11 @@ drawing.annotationSets.splice(0, Infinity, {
 
 const comparisonPlanSnapshot = resolveLinearComparisonPlan({
   plan: drawing.linearComparisonPlan,
-  sequences: state.linearSeqs,
+  sequences: modeDrawing(state, 'linear').linearSeqs,
   recordsOff: drawing.recordsOff,
   layout: drawing.linearRecordRows
 });
-const filesData = await serializeActiveRenderFiles('linear', state, drawing, comparisonPlanSnapshot);
+const filesData = await serializeActiveRenderFiles(state, drawing, comparisonPlanSnapshot);
 assert.deepEqual(filesData.linearSeqs.map((seq) => seq.uid), ['a', 'c']);
 const recordDisplayRows = ['a', 'b', 'c'].map((uid) => ({
   key: JSON.stringify([uid, '#1']), scope: 'linear', sourceUid: uid, selector: '#1', recordId: uid,
@@ -93,10 +96,10 @@ assert.deepEqual(drawing.annotationSets[0].annotations.map((item) => item.id), [
 // Review F7: an error of a drawn card names its card number, OFF cards counted.
 // Card 1 (a) is OFF; card 3 (c) reads two records and has a crop without a record.
 drawing.recordsOff.splice(0, Infinity, 'a');
-const cropped = state.linearSeqs.find((seq) => seq.uid === 'c');
+const cropped = modeDrawing(state, 'linear').linearSeqs.find((seq) => seq.uid === 'c');
 Object.assign(cropped, { region_start: 1, region_end: 10 });
 await assert.rejects(
-  serializeActiveRenderFiles('linear', state, drawing, {
+  serializeActiveRenderFiles(state, drawing, {
     comparisonPlan: { mode: 'none', edges: [] },
     linearRecordCatalog: {
       mode: 'linear', status: 'ready', issues: [],
@@ -107,7 +110,7 @@ await assert.rejects(
 );
 Object.assign(cropped, { region_start: null, region_end: null });
 await assert.rejects(
-  serializeActiveRenderFiles('linear', state, drawing, {
+  serializeActiveRenderFiles(state, drawing, {
     comparisonPlan: { mode: 'none', edges: [] },
     linearRecordCatalog: { mode: 'linear', status: 'ready', issues: [], records: [{ sourceIndex: 0, localIndex: 0 }] }
   }),

@@ -4,6 +4,8 @@ const { execFileSync } = require('node:child_process');
 const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
 const { openApp, assertDiagramWorkerIdle, getDiagramWorkerActivity, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const panel = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
 // The card's own summary; each annotation row has a Style disclosure with a summary too.
@@ -61,6 +63,8 @@ for (const width of [1440, 390]) {
     await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
       .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
+    // A phone Load shows the Preview pane; the annotation panel is in Settings.
+    await showPhonePane(page, 'settings');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
     await page.evaluate(async () => {
       const { normalizeAnnotationSets } = await import('./js/services/annotation-state.js');
@@ -178,6 +182,8 @@ for (const width of [1440, 390]) {
     await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
       .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
+    // A phone Load shows the Preview pane; the annotation panel is in Settings.
+    await showPhonePane(page, 'settings');
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
     const summary = panelSummary(page);
     await summary.focus();
@@ -211,6 +217,8 @@ for (const width of [1440, 390]) {
     expect(await getDiagramWorkerActivity(page)).toEqual(workerBeforeControl);
     const rows = await effectiveRows(page);
     await generateAndWaitForResult(page);
+    // Generate shows the Preview pane on a phone; the annotation panel is in Settings.
+    await showPhonePane(page, 'settings');
     const controlSvg = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     const workerBefore = await getDiagramWorkerActivity(page);
     await upload(good.table);
@@ -240,6 +248,7 @@ for (const width of [1440, 390]) {
     const native = execFileSync('python', ['tests/web/helpers/annotation-roundtrip.py', tsvPath, expectedPath], { encoding: 'utf8' });
     await writeFile(testInfo.outputPath('python-reader.txt'), native);
     await generateAndWaitForResult(page);
+    await showPhonePane(page, 'settings');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(controlSvg);
     // All malformed inputs must leave the complete prior artifact and draft
     // intact; the panel notice names the error, without a browser alert (FL-14).
@@ -293,9 +302,9 @@ for (const width of [1440, 390]) {
     const sessionPath = testInfo.outputPath('annotations.gbdraw-session.json.gz');
     await sessionDownload.saveAs(sessionPath);
     const session = JSON.parse(gunzipSync(await readFile(sessionPath)));
-    expect(session.modes[session.ui.mode].config.annotationSets).toEqual(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.annotationSets))));
+    expect(shownSavedDrawing(session).config.annotationSets).toEqual(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.annotationSets))));
     expect(JSON.stringify(session)).not.toContain('PRIVATE-CELL');
-    for (const name of good.ignored) expect(JSON.stringify(session.modes[session.ui.mode].config.annotationSets)).not.toContain(name);
+    for (const name of good.ignored) expect(JSON.stringify(shownSavedDrawing(session).config.annotationSets)).not.toContain(name);
     expect(JSON.stringify(session)).not.toContain('Ignored annotation table columns:');
     const context = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width, height: 960 } });
     try {

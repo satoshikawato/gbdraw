@@ -12,6 +12,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = requi
 const { openWithGenBank, openFresh } = require('./helpers/audit-browser.cjs');
 const { settleLive } = require('./helpers/live-generate-parity.cjs');
 const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -92,7 +93,8 @@ test('the Legend layout owner equals Python on every Gallery Legend and its edit
     for (const vector of layoutCases) {
       const [base, index] = vector.name.split('#');
       if (!sessions.has(base)) sessions.set(base, JSON.parse(await sessionText(base)));
-      const content = sessions.get(base).results[Number(index)].content;
+      const session = sessions.get(base);
+      const content = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId).results[Number(index)].content;
       const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
       const legend = svg.getElementById('legend');
       const keys = vector.rows.filter((row) => row.type === 'solid').map((row) => row.key);
@@ -198,7 +200,7 @@ const legendTextOverflow = (page) => page.evaluate(() => {
 
 const openLinear = async (page, fixture = FIXTURE, form = {}) => {
   await openFresh(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await page.evaluate(async ({ text, name, values }) => {
     const app = window.__GBDRAW_APP__;

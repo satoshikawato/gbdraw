@@ -1,0 +1,471 @@
+"""Web Load of a Session 27-44: one Worker call returns its Session 49."""
+
+from __future__ import annotations
+
+import base64
+import gzip
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from gbdraw.exceptions import GbdrawError
+
+from gbdraw.session import load_session_document, materialize_session, render_session, session_to_request
+from gbdraw import session_drawings
+from gbdraw.session_io import (
+    CLI_SESSION_ADMISSION,
+    DRAWINGS_SESSION_MIN_VERSION,
+    WEB_READ_SESSION_ADMISSION,
+    SessionAdmission,
+    SessionDraftMigration,
+)
+from gbdraw.session_migration import session_draft_migration_repairs
+from gbdraw.web_support.feature_catalog import promote_legacy_feature_catalog
+from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
+
+SESSIONS = Path(__file__).parent / "fixtures" / "sessions"
+REPLY_FIELDS = {"document", "storedResults", "resultSetSources", "warnings", "movedAnnotationTargets"}
+
+
+def _text(name: str) -> str:
+    return gzip.decompress((SESSIONS / name).read_bytes()).decode("utf-8")
+
+
+@pytest.mark.parametrize(
+    ("name", "mode"),
+    [
+        ("scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz", "circular"),
+        # Session 42: the stored comparison table of a reversed record moves to the search frame.
+        ("q-frame-main-linear-reverse.v42.gbdraw-session.json.gz", "linear"),
+    ],
+)
+def test_a_legacy_session_becomes_session_49_with_its_results_and_replays_as_before(
+    name: str, mode: str, tmp_path: Path
+) -> None:
+    source = json.loads(_text(name))
+    payload = json.loads(legacy_session_to_drawings_json(_text(name)))
+    assert set(payload) == REPLY_FIELDS
+    assert payload["warnings"] == []
+    assert payload["movedAnnotationTargets"] == 0
+    # A Session 40-44 keeps its Results with their catalog in the document.
+    assert payload["storedResults"] == {}
+    document = payload["document"]
+    assert document["version"] == DRAWINGS_SESSION_MIN_VERSION
+    first = document["drawings"][0]
+    assert first["mode"] == mode
+    assert document["ui"]["activeDrawingId"] == first["id"]
+    # The file's one Result set (top level) is the drawing's that holds its request.
+    assert payload["resultSetSources"] == {first["id"]: ""}
+    assert first["results"] == source["results"]
+    # The catalog is promoted to the current schema, one item per kept Result.
+    assert len(first["editorState"]["featureCatalog"]["items"]) == len(source["results"])
+    with materialize_session(load_session_document(source), output_directory=tmp_path / "old") as materialized:
+        old = render_session(materialized)
+    with materialize_session(load_session_document(document), output_directory=tmp_path / "new") as materialized:
+        new = render_session(materialized, drawing=first["id"])
+    assert len(old.output_paths) == len(new.output_paths) == 1
+    replayed = new.output_paths[0].read_text(encoding="utf-8")
+    assert "<svg" in replayed
+    assert replayed == old.output_paths[0].read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("name", ["q-frame-main-web-upload.v42", "q-frame-main-web-losatn.v42"])
+def test_a_main_web_session_s_converted_comparison_table_is_one_resource_for_request_and_card(name: str) -> None:
+    # OV-2080: the rows stored in the display frame of reversed R3c move to the search frame once, under
+    # their stored resource ID, so the Linear comparison card and the request read the same rows.
+    source = json.loads(_text(f"{name}.gbdraw-session.json.gz"))
+    [stored] = source["renderRequest"]["comparisons"]
+    document = json.loads(legacy_session_to_drawings_json(_text(f"{name}.gbdraw-session.json.gz")))["document"]
+    [drawing] = [drawing for drawing in document["drawings"] if drawing.get("renderRequest") is not None]
+    [item] = drawing["renderRequest"]["comparisons"]
+    assert (item["kind"], item["resourceId"]) == ("nucleotideBlast", stored["resourceId"])
+    cards = [card["file"]["resourceId"] for card in drawing["webFiles"]["bindings"]["linearComparisons"]]
+    assert cards == [stored["resourceId"]] * len(source["webFiles"]["bindings"]["linearComparisons"])
+    assert base64.b64decode(document["resources"][item["resourceId"]]["data"]).decode("utf-8") == (
+        "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"
+    )
+    assert set(document["resources"]) == {*source["resources"]}
+
+
+def test_converted_comparison_tables_keep_the_resource_of_their_own_record_pair(tmp_path: Path) -> None:
+    # OV-2094: the stored items and the encoded ones meet by record pair, not by their order in the list.
+    from dataclasses import replace
+
+    from gbdraw.api.session_compat import search_frame_nucleotide_resources
+
+    row = "R2c\tR3c\t100.0\t1000\t0\t0\t{}\t{}\t1\t1000\t0.0\t1847\n"
+    document = load_session_document(SESSIONS / "q-frame-main-web-upload.v42.gbdraw-session.json.gz")
+    stored = {"comparisons": [
+        {"kind": "nucleotideBlast", "resourceId": "backward", "queryRecordIndex": 1, "subjectRecordIndex": 0},
+        {"kind": "nucleotideBlast", "resourceId": "forward", "queryRecordIndex": 0, "subjectRecordIndex": 1},
+    ]}
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        [forward] = request.options.linear_comparisons
+        backward = replace(forward, query_record_index=1, subject_record_index=0)
+
+        def with_rows(forward_rows: str, backward_rows: str) -> Any:
+            comparisons = (replace(forward, search_frame_text=forward_rows), replace(backward, search_frame_text=backward_rows))
+            return replace(request, options=replace(request.options, linear_comparisons=comparisons))
+
+        resources = {
+            resource_id: {"kind": "nucleotide-blast", "name": f"{resource_id}.tsv", "encoding": "base64",
+                          "data": base64.b64encode(rows.encode()).decode("ascii"), "size": len(rows)}
+            for resource_id, rows in (("forward", row.format(1, 1000)), ("backward", row.format(1001, 2000)))
+        }
+        converted = search_frame_nucleotide_resources(
+            stored, with_rows(row.format(1, 1000), row.format(1001, 2000)), with_rows(row.format(3001, 4000), row.format(4001, 4300)),
+            resources,
+        )
+    assert {key: base64.b64decode(value["data"]).decode() for key, value in converted.resources.items()} == {
+        "forward": row.format(3001, 4000), "backward": row.format(4001, 4300),
+    }
+    assert converted.pair_resources == {}
+
+
+def _one_table_for_two_pairs(reversed_records: set[int]) -> dict[str, Any]:
+    """A main Web Session 42 of records R2c, R3c, R3d whose one uploaded table is bound to pairs
+    (0, 1) and (1, 2), as the Session 42 writer saves it again after a Load (OV-2097)."""
+
+    import copy
+
+    source = json.loads(_text("q-frame-main-web-upload.v42.gbdraw-session.json.gz"))
+    request = source["renderRequest"]
+    third = copy.deepcopy(request["records"][1])
+    third["recordKey"] = "linear-seq-third"
+    third["source"]["resourceId"] = "record-3-genbank"
+    request["records"].append(third)
+    for index, record in enumerate(request["records"]):
+        record["presentation"].update(reverseComplement=index in reversed_records, gridRow=index + 1)
+    source["resources"]["record-3-genbank"] = {**source["resources"]["record-2-genbank"], "name": "record-3-genbank-R3d.gb"}
+    request["comparisons"] = [
+        {"kind": "nucleotideBlast", "resourceId": "comparison-nucleotide-1", "queryRecordIndex": query, "subjectRecordIndex": query + 1}
+        for query in (0, 1)
+    ]
+    web_files = source["webFiles"]
+    rows = web_files["bindings"]["linearSeqs"]
+    rows.append({**copy.deepcopy(rows[1]), "uid": "linear-seq-third"})
+    rows[2]["gb"]["resourceId"] = "record-3-genbank"
+    for index, row in enumerate(rows):
+        row["region_reverse"] = index in reversed_records
+    web_files["linearRecordMetadata"].append({"recordKey": "linear-seq-third", "losatGencode": 1})
+    web_files["resourceOriginalNames"]["record-3-genbank"] = "R3d.gb"
+    [card] = web_files["bindings"]["linearComparisons"]
+    web_files["bindings"]["linearComparisons"].append({**copy.deepcopy(card), "id": "linear-comparison-second"})
+    plan = source["config"]["linearComparisonPlan"]
+    plan["edges"].append(
+        {**plan["edges"][0], "id": "linear-comparison-second", "queryUid": rows[1]["uid"], "subjectUid": "linear-seq-third"}
+    )
+    source["config"]["linearRecordLayout"]["rows"].append({"uid": "linear-seq-third", "row": 3})
+    return source
+
+
+@pytest.mark.parametrize(
+    ("reversed_records", "rows"),
+    [
+        # The stored row (subject on the minus strand) is 2001-3000 against 3000-2001.
+        # Only pair (1, 2) has a reversed endpoint: pair (0, 1) keeps the stored rows (OV-2097).
+        ({2}, {(0, 1): (2001, 3000, 3000, 2001), (1, 2): (2001, 3000, 1, 1000)}),
+        # Both pairs have a reversed endpoint, converted differently (OV-2094).
+        ({1}, {(0, 1): (2001, 3000, 1, 1000), (1, 2): (1000, 1, 3000, 2001)}),
+    ],
+)
+def test_one_table_shared_by_two_pairs_becomes_each_pair_s_rows_for_its_request_and_card(
+    reversed_records: set[int], rows: dict[tuple[int, int], tuple[int, int, int, int]]
+) -> None:
+    source = _one_table_for_two_pairs(reversed_records)
+    reply = json.loads(legacy_session_to_drawings_json(json.dumps(source)))
+    assert "error" not in reply
+    document = reply["document"]
+    [drawing] = [drawing for drawing in document["drawings"] if drawing.get("renderRequest") is not None]
+    keys = [record["recordKey"] for record in drawing["renderRequest"]["records"]]
+    edges = {edge["id"]: edge for edge in drawing["config"]["linearComparisonPlan"]["edges"]}
+    cards = {
+        (keys.index(edges[card["id"]]["queryUid"]), keys.index(edges[card["id"]]["subjectUid"])): card["file"]["resourceId"]
+        for card in drawing["webFiles"]["bindings"]["linearComparisons"]
+    }
+    items = {
+        (item["queryRecordIndex"], item["subjectRecordIndex"]): item["resourceId"]
+        for item in drawing["renderRequest"]["comparisons"]
+    }
+
+    def text(resource_id: str) -> str:
+        return base64.b64decode(document["resources"][resource_id]["data"]).decode("utf-8")
+
+    row = "R2c\tR3c\t100.0\t1000\t0\t0\t{}\t{}\t{}\t{}\t0.0\t1847\n"
+    assert {pair: text(resource_id) for pair, resource_id in cards.items()} == {
+        pair: row.format(*coordinates) for pair, coordinates in rows.items()
+    }
+    assert {pair: text(resource_id) for pair, resource_id in items.items()} == {
+        pair: row.format(*coordinates) for pair, coordinates in rows.items()
+    }
+
+
+@pytest.mark.parametrize(
+    ("name", "mode"),
+    [
+        # Results without a request (27-30) or a feature catalog (31-39): a Session 49 cannot hold
+        # them, so they travel beside the document, keyed by their drawing (OV-1659).
+        ("scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz", "circular"),
+        ("mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz", "circular"),
+        ("conservation-fasta.v39.gbdraw-session.json.gz", "circular"),
+    ],
+)
+def test_stored_results_session_49_cannot_hold_travel_beside_the_document(name: str, mode: str) -> None:
+    source = json.loads(_text(name))
+    payload = json.loads(legacy_session_to_drawings_json(_text(name)))
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
+    document = payload["document"]
+    assert load_session_document(document).version == DRAWINGS_SESSION_MIN_VERSION
+    (drawing_id, stored), = payload["storedResults"].items()
+    assert payload["resultSetSources"] == {drawing_id: ""}
+    (drawing,) = (drawing for drawing in document["drawings"] if drawing["id"] == drawing_id)
+    assert drawing["mode"] == mode
+    assert drawing["results"] == []
+    assert drawing["editorState"]["featureCatalog"] is None
+    if source["version"] < 31:
+        # A Session 27-30 has no request: an undrawn drawing that keeps its bindings.
+        assert drawing["renderRequest"] is None
+        assert drawing["webFiles"]["bindings"]["c_gb"]["resourceId"] in document["resources"]
+    # Every stored Result, byte for byte.
+    assert json.dumps(stored, sort_keys=True) == json.dumps(source["results"], sort_keys=True)
+
+
+@pytest.mark.parametrize(
+    ("name", "result_mode", "shown_mode"),
+    [
+        ("mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz", "circular", "linear"),
+        ("mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz", "linear", "circular"),
+    ],
+)
+@pytest.mark.parametrize("settings_used", [True, False], ids=["settings-used", "settings-at-default"])
+def test_a_legacy_session_keeps_its_shown_mode_and_opens_its_stored_result(
+    name: str, result_mode: str, shown_mode: str, settings_used: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The mode shown at Save gets a drawing; with no Result of its own, the
+    # drawing with the stored Result opens and comes first.
+    # Being shown is a use on its own: rule d (other-mode settings) need not
+    # hold for it (OV-1666).
+    if not settings_used:
+        monkeypatch.setattr(session_drawings, "_used_by_settings", lambda *_args: False)
+    payload = json.loads(legacy_session_to_drawings_json(_text(name)))
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
+    document = payload["document"]
+    # The shown mode's drawing took no Result set of the file.
+    assert payload["resultSetSources"] == {result_mode: ""}
+    assert [(drawing["id"], drawing["mode"]) for drawing in document["drawings"]] == [
+        (result_mode, result_mode),
+        (shown_mode, shown_mode),
+    ]
+    assert document["ui"]["activeDrawingId"] == result_mode
+    assert set(payload["storedResults"]) == {result_mode}
+    shown = document["drawings"][1]
+    assert shown["renderRequest"] is None
+    assert shown["results"] == []
+
+
+def _web_read_44_without_catalog() -> dict[str, Any]:
+    # Web Load's readers dropped the catalog of a Session 44's Result (vector a7b).
+    document = json.loads(_text("HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz"))
+    document["editorState"] = {"featureCatalog": None}
+    return document
+
+
+def _web_read_39_with_unresolved_protein_cache() -> dict[str, Any]:
+    # Web Load's LOSAT reader kept the first of two entries with one key (vector a13);
+    # Python's manifest does not resolve it under that key.
+    document = json.loads(_text("BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"))
+    entries = document["losatCache"]["entries"]
+    entries[0]["key"] = "DUP"
+    del entries[1]
+    return document
+
+
+def test_the_web_entry_does_not_check_again_what_the_web_readers_read() -> None:
+    # D-15-131: the CLI refuses these Sessions; the Web entry converts what the
+    # Web's readers kept, here and in the check of the Session 49.
+    for document, refusal in (
+        (_web_read_44_without_catalog(), "Results require editorState.featureCatalog"),
+        (_web_read_39_with_unresolved_protein_cache(), "does not resolve through the manifest"),
+    ):
+        with pytest.raises(GbdrawError, match=refusal):
+            load_session_document(document)
+        payload = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+        assert set(payload) == REPLY_FIELDS, payload.get("error")
+        assert payload["document"]["version"] == DRAWINGS_SESSION_MIN_VERSION
+        (drawing_id, stored), = payload["storedResults"].items()
+        assert payload["resultSetSources"] == {drawing_id: ""}
+        assert json.dumps(stored, sort_keys=True) == json.dumps(document["results"], sort_keys=True)
+
+
+def test_the_web_admission_skips_only_the_catalog_and_manifest_checks() -> None:
+    assert WEB_READ_SESSION_ADMISSION == SessionAdmission(feature_catalog=False, losat_manifest=False)
+    assert CLI_SESSION_ADMISSION == SessionAdmission(feature_catalog=True, losat_manifest=True)
+    # Another refusal of the CLI's admission stays a refusal of the Web entry.
+    document = _web_read_44_without_catalog()
+    document["results"] = {"not": "a list"}
+    payload = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    assert set(payload) == {"error"}
+
+
+def test_a_document_that_is_not_json_is_refused_in_the_error_shape() -> None:
+    payload = json.loads(legacy_session_to_drawings_json("{not json"))
+    assert payload["error"]["code"] == "HELPER_PROTOCOL"
+
+
+def test_a_session_49_is_not_moved_again() -> None:
+    document = json.loads(legacy_session_to_drawings_json(_text("scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz")))
+    payload = json.loads(legacy_session_to_drawings_json(json.dumps(document["document"])))
+    assert set(payload) == {"error"}
+
+
+def test_draft_migration_repairs_are_the_web_load_repairs() -> None:
+    migration = SessionDraftMigration(
+        session={}, dropped_feature_edit_count=2, narrowed_visibility_count=1, unmapped_hash_selector_count=3,
+    )
+    assert session_draft_migration_repairs(migration) == (
+        {"code": "feature-edit-unmatched", "path": "features", "effect": "dropped", "count": 2},
+        {"code": "feature-visibility-narrowed", "path": "features.featureVisibilityOverrides",
+         "effect": "changed", "count": 1},
+        {"code": "hash-selector-unmapped", "path": "config.rules", "effect": "changed", "count": 3},
+    )
+    assert session_draft_migration_repairs(SessionDraftMigration(session={})) == ()
+
+
+def test_a_session_27_30_inline_file_takes_its_decoded_size() -> None:
+    # OV-1993 (D-15-144 A): the Web reader of a Session 27-30 ignored an inline
+    # file's stored `size`; Python's projection of that `files` takes the
+    # decoded bytes' size, so the file converts (OV-712's shape: bytes
+    # replaced, `size` unchanged). The bytes become the drawing's resource.
+    document = json.loads(_text("scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz"))
+    replaced = b"LOCUS broken\nORIGIN\n 1 zzzz\n"
+    entry = document["files"]["linearSeqs"][0]["gb"]
+    assert entry["size"] != len(replaced)
+    entry["data"] = base64.b64encode(replaced).decode("ascii")
+    payload = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
+    (drawing,) = payload["document"]["drawings"]
+    (binding,) = drawing["webFiles"]["bindings"]["linearSeqs"]
+    resource = payload["document"]["resources"][binding["gb"]["resourceId"]]
+    assert (resource["size"], base64.b64decode(resource["data"])) == (len(replaced), replaced)
+
+
+def test_a_session_30_hash_rule_is_named_through_its_cards_read_again() -> None:
+    # OV-2043 (D-15-152 A): release 0.13.0 wrote the "This feature only" rule
+    # of the reverse-complemented TESTB_0006 with its rendered ID
+    # f2869b912_record_2 (hash-color-rule-linear-rc.provenance.json). The old
+    # Web Load read the cards' sources again, so the rule took the source hash
+    # fbc76b20f and no repair was listed; the conversion now reads them too.
+    payload = json.loads(legacy_session_to_drawings_json(_text("hash-color-rule-linear-rc.v30.gbdraw-session.json.gz")))
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
+    assert [warning["code"] for warning in payload["warnings"]] == []
+    for drawing in payload["document"]["drawings"]:
+        assert [rule["val"] for rule in drawing["config"]["rules"]] == ["fbc76b20f"], drawing["mode"]
+
+
+def test_a_session_30_reads_its_sources_again_only_when_a_hash_rule_needs_drawn_hashes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The extra parse is for a hash rule on a cropped or reverse-complemented
+    # card only: with every card drawn untransformed, the drawn hash is the
+    # source hash and no source is read again.
+    from gbdraw.web_support import feature_metadata
+
+    def refuse(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise AssertionError("the sources were read again")
+
+    monkeypatch.setattr(feature_metadata, "extract_features_from_genbank_payload", refuse)
+    document = json.loads(_text("hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"))
+    for card in document["files"]["linearSeqs"]:
+        card["region_reverse"] = False
+    payload = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
+
+
+def test_a_session_40_legacy_alignment_reads_the_catalog_the_web_reader_promoted() -> None:
+    # OV-1995: the Web reader sends Python a Session 40's feature catalog
+    # promoted to the current schema; the legacy alignment target (a similarity
+    # group of that catalog) is found as in the stored schema-3 catalog.
+    document = json.loads(
+        (SESSIONS / "BGC0000708-BGC0000713.v40-schema5.json").read_text(encoding="utf-8")
+    )
+    stored = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    editor_state = document["editorState"]
+    editor_state["featureCatalog"] = promote_legacy_feature_catalog(editor_state["featureCatalog"])
+    promoted = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    assert set(promoted) == REPLY_FIELDS, promoted.get("error")
+    (drawing, _) = promoted["document"]["drawings"]
+    alignment = drawing["renderRequest"]["layout"]["similarityAlignment"]
+    assert alignment["groupId"] == "og_1"
+    assert promoted["document"]["drawings"] == stored["document"]["drawings"]
+    # Each anchor carries the stable feature ID the Web's legacy promotion
+    # writes (the catalog's stableFeatureId, else the biological ID), so the
+    # promoted request the Web sends agrees with Python's plan.
+    (item,) = editor_state["featureCatalog"]["items"]
+    stable = {
+        (feature["recordKey"], feature["biologicalFeatureId"]): feature.get("stableFeatureId")
+        or feature["biologicalFeatureId"]
+        for feature in item["biologicalFeatures"]
+    }
+    anchors = [alignment["reference"], *(r["anchor"] for r in alignment["records"] if r["anchor"])]
+    assert [a["stableFeatureSvgId"] for a in anchors] == [
+        stable[(a["recordKey"], a["biologicalFeatureId"])] for a in anchors
+    ]
+
+
+BGC_RECORD_PRESENTATIONS = [
+    ("<i>Streptomyces lividus</i> CBS 844.73", "Lividomycin biosynthetic gene cluster"),
+    ("<i>Streptomyces fradiae</i> ATCC 10745", "Neomycin biosynthetic gene cluster"),
+    ("<i>Streptomyces fradiae</i> MCIMB 8233", "Neomycin biosynthetic gene cluster"),
+    ("<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455", "Paromomycin biosynthetic gene cluster"),
+    ("<i>Streptomyces ribosidificus</i> ATCC 21294", "Ribostamycin biosynthetic gene"),
+]
+
+
+def _linear_record_presentations(document: dict[str, Any]) -> list[tuple[Any, Any]]:
+    (linear,) = [drawing for drawing in document["drawings"] if drawing["mode"] == "linear"]
+    return [
+        (record["presentation"]["label"], record["presentation"]["subtitle"])
+        for record in linear["renderRequest"]["records"]
+    ]
+
+
+def test_a_cli_written_schema_2_session_keeps_its_cli_record_labels_and_subtitles(tmp_path: Path) -> None:
+    """OV-2052: a Session 31-44 that stored a schema-2 request takes the record
+    labels and subtitles of its ``cliInvocation.args``, as the old Web Load's
+    Gallery promotion gave them; Web Load, the CLI upgrade and the CLI replay
+    share the decoder that gives them (OV-2044)."""
+
+    from gbdraw.session import session_to_request, upgrade_session_document
+
+    text = _text("BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz")
+    web = json.loads(legacy_session_to_drawings_json(text))
+    assert _linear_record_presentations(web["document"]) == BGC_RECORD_PRESENTATIONS
+    cli = upgrade_session_document(json.loads(text)).document.to_dict()
+    assert _linear_record_presentations(cast_document(cli)) == BGC_RECORD_PRESENTATIONS
+    with materialize_session(load_session_document(json.loads(text)), output_directory=tmp_path) as materialized:
+        replayed = session_to_request(materialized)
+    assert [
+        (record.presentation.label, record.presentation.subtitle) for record in replayed.records
+    ] == BGC_RECORD_PRESENTATIONS
+    # The Web reader read the request it sends (schema 9 here) and names the
+    # schema the file stored; a schema-1 request is not rebuilt.
+    unhydrated = json.loads(legacy_session_to_drawings_json(text, json.dumps(1)))
+    assert _linear_record_presentations(unhydrated["document"]) == [(None, None)] * 5
+
+
+def cast_document(value: Any) -> dict[str, Any]:
+    assert isinstance(value, dict)
+    return value
+
+
+def test_the_reply_counts_the_hash_annotation_targets_the_conversion_moved() -> None:
+    """OV-2072: of the three hash= targets of the Session 44 main saved, the
+    conversion moves the one certain target (feature_1) to its source feature,
+    and the reply counts it for Load's notice."""
+
+    payload = json.loads(legacy_session_to_drawings_json(_text("selected-feature-annotations.v44.gbdraw-session.json.gz")))
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
+    assert payload["movedAnnotationTargets"] == 1

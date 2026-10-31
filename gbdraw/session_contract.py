@@ -19,6 +19,7 @@ them is importable at run time.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal, NewType, TypedDict, get_type_hints
 
 from .features.overrides import FeatureVisibilityMode, LabelVisibilityMode
@@ -239,6 +240,83 @@ class LegacySessionFields(FlatDraftFields, total=False):
     files: object
 
 
+# The ID of a resource (``resources``) and of a drawing (``drawings[].id``):
+# lowercase words joined by hyphens.
+SESSION_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+DRAWING_ID_MAX_LENGTH = 40
+# A Gallery Session shows one diagram: this many of its drawings have a
+# committed render (``renderRequest`` not null). tools/refresh_gallery_sessions.py
+# checks the Sessions it reads and writes; the Web publication reads it generated.
+GALLERY_SESSION_DRAWN_DRAWINGS = 1
+
+
+class SessionProjectUi(TypedDict, total=False):
+    """A Session 50 project's ``ui``: the Web's app-level view state, and the
+    drawing the Web opens. A drawing's ``ui`` holds the rest."""
+
+    activeDrawingId: str
+    losatExecution: LosatExecutionJson
+    downloadDpi: object
+    autoLabelReflow: object
+    paletteInstantPreviewEnabled: object
+    richFeaturePopup: object
+    featurePanelTab: object
+
+
+class SessionProjectWebFiles(TypedDict, total=False):
+    """A Session 50 project's ``webFiles``: what the resources were named."""
+
+    resourceOriginalNames: dict[str, object]
+
+
+class _SessionDrawingRequired(TypedDict):
+    id: str
+    name: str
+    mode: DiagramMode
+    # null for a drawing not generated yet.
+    renderRequest: CanonicalRequestJson | None
+    results: list[SessionResult]
+
+
+class SessionDrawing(_SessionDrawingRequired, total=False):
+    """One drawing of a Session 50. :mod:`gbdraw.session_drawings` maps it to
+    the one-drawing Session that Sessions 46-49 give, which ``validate_session``
+    checks; the parts are checked there."""
+
+    runMetadata: SessionRunMetadata
+    cliInvocation: SessionCliInvocation
+    cliOptions: dict[str, object]
+    orthogroupState: SessionOrthogroupState
+    losatCache: SessionArtifactCache
+    losatDerivedCache: SessionArtifactCache
+    proteinIdentityManifest: dict[str, object]
+    # The drawing's mode slice (``modes[mode]`` of Sessions 46-49).
+    config: dict[str, object]
+    features: dict[str, object]
+    # The Result set's and the slice's editor state, and the drawing's ``ui``.
+    editorState: dict[str, object]
+    ui: dict[str, object]
+    # Its own mode's bindings and request metadata (D-15-79, D-15-83).
+    webFiles: dict[str, object]
+
+
+class _GbdrawSession50Required(TypedDict):
+    format: Literal["gbdraw-session"]
+    version: int
+    createdAt: str
+    resources: dict[str, object]
+    ui: SessionProjectUi
+    drawings: list[SessionDrawing]
+
+
+class GbdrawSession50(_GbdrawSession50Required, total=False):
+    """A Session 50: the project and its drawings, in tab order (DESIGN §1)."""
+
+    title: str
+    legacyArtifacts: SessionLegacyArtifacts
+    webFiles: SessionProjectWebFiles
+
+
 # The objects that hold keys their class does not name.
 _OPEN_OBJECTS: tuple[type, ...] = (SessionEditorState, SessionUi, SessionOrthogroupState, SessionWebFiles)
 
@@ -433,13 +511,31 @@ def describe_session_admission() -> dict[str, Any]:
         sio.CURRENT_ARTIFACT_SESSION_MIN_VERSION,
         sio.CURRENT_AUTHORITY_SESSION_MIN_VERSION,
         sio.MODE_SCOPED_SESSION_MIN_VERSION,
+        sio.DRAWINGS_SESSION_MIN_VERSION,
     ]
     top_level = list(writer["SessionInput"]["fields"])
     bands: list[dict[str, Any]] = []
     for index, minimum in enumerate(minimums):
-        below = minimums[index + 1] if index + 1 < len(minimums) else sio.CURRENT_SESSION_VERSION + 1
+        below = minimums[index + 1] if index + 1 < len(minimums) else supported[-1] + 1
         versions = [version for version in supported if minimum <= version < below]
         fields: dict[str, Shape] = {"format": literal(sio.SESSION_FORMAT), "version": literal(*versions)}
+        root = f"SessionChecked{minimum}"
+        if minimum >= sio.DRAWINGS_SESSION_MIN_VERSION:
+            # The closed project and its drawings (_validate_session_drawings);
+            # each drawing's parts are checked on its one-drawing view.
+            drawing = obj(
+                # Sorted: a set's order changes between runs, and the generated Web modules list fields in order.
+                {key: UNKNOWN for key in sorted(keys_of(SessionDrawing))}
+                | {"id": STRING, "name": STRING, "mode": literal(*DIAGRAM_MODES)},
+                optional=sorted(keys_of(SessionDrawing) - {"id", "name", "mode"}),
+            )
+            project = {key: UNKNOWN for key in sorted(keys_of(GbdrawSession50))} | fields | {
+                "resources": record(UNKNOWN),
+                "drawings": array(named("SessionCheckedDrawing", drawing)),
+            }
+            named(root, obj(project, optional=sorted(set(project) - {"format", "version", "resources", "drawings"})))
+            bands.append({"minVersion": minimum, "versions": versions, "root": root})
+            continue
         required = ["format", "version"]
         defaults: dict[str, object] = {}
         if minimum < sio.MODE_SCOPED_SESSION_MIN_VERSION:
@@ -457,7 +553,6 @@ def describe_session_admission() -> dict[str, Any]:
             fields["losatDerivedCache"] = derived_cache
             fields["proteinIdentityManifest"] = nullable(record(UNKNOWN))
             # `legacyArtifacts` stays unknown: the Web loads one that is not an object.
-        root = f"SessionChecked{minimum}"
         if minimum < sio.CURRENT_AUTHORITY_SESSION_MIN_VERSION:
             # Below 40 no top-level key is checked.
             named(root, obj(fields, optional=[key for key in fields if key not in required], open=True, defaults=defaults))
@@ -490,8 +585,14 @@ def describe_session_admission() -> dict[str, Any]:
 
 __all__ = [
     "FeatureOverrideDraftRow",
+    "DRAWING_ID_MAX_LENGTH",
     "FlatDraftFields",
     "GbdrawSession",
+    "GbdrawSession50",
+    "SESSION_ID_RE",
+    "SessionDrawing",
+    "SessionProjectUi",
+    "SessionProjectWebFiles",
     "LegacySessionFields",
     "SessionOtherModeEditorState",
     "SessionOtherModeLegend",

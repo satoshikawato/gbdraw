@@ -9,6 +9,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { generateAndWaitForResult, reveal, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
 const { expectLiveEqualsGenerate } = require('./helpers/live-generate-parity.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const SESSIONS = 'gbdraw/web/gallery/sessions';
 const TOBACCO = `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`;
@@ -256,8 +257,9 @@ run('record-names linear: a record name edited after Session Load is live and eq
 const tobaccoWithLegendItem = (testInfo) => {
   const session = JSON.parse(readFileSync(TOBACCO, 'utf8'));
   const irb = (sets) => sets.find((set) => set.id === 'plastome_tint').annotations.find((item) => item.id === 'irb_tint');
-  irb(session.renderRequest.diagramOptions.annotations.sets).legendLabel = 'Inverted repeat';
-  irb(session.modes.circular.config.annotationSets).legendLabel = 'Inverted repeat';
+  const drawing = shownSavedDrawing(session);
+  irb(drawing.renderRequest.diagramOptions.annotations.sets).legendLabel = 'Inverted repeat';
+  irb(drawing.config.annotationSets).legendLabel = 'Inverted repeat';
   const file = testInfo.outputPath('legend-item.gbdraw-session.json');
   writeFileSync(file, JSON.stringify(session));
   return file;

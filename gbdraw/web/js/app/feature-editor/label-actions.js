@@ -693,14 +693,17 @@ export const createFeatureLabelActions = ({
   };
 
   // A mounted label names its feature by rendered ID; the displayed Result's
-  // catalog binds that ID to the feature's source identity (R3).
-  const displayedFeatures = () => resultRenderedFeatures(state);
+  // catalog binds that ID to the feature's source identity (R3). `drawing`
+  // owns the displayed Result; its mode names the catalog's records.
+  /** @param {DrawingState} drawing */
+  const displayedFeatures = (drawing) => resultRenderedFeatures(state, drawing.mode);
   /**
+   * @param {DrawingState} drawing
    * @param {unknown} featureIdRaw
    * @param {Map<string, LabelFeature> | null} [displayed]
    * @returns {LabelFeature | null}
    */
-  const labelFeature = (featureIdRaw, displayed = displayedFeatures()) => {
+  const labelFeature = (drawing, featureIdRaw, displayed = displayedFeatures(drawing)) => {
     const featureId = String(featureIdRaw || '').trim();
     if (!featureId) return null;
     if (displayed) return displayed.get(featureId) || null;
@@ -713,7 +716,7 @@ export const createFeatureLabelActions = ({
     return key ? drawing.featureOverrides[key] || null : null;
   };
   /** @param {DrawingState} drawing @param {unknown} featureId @param {Map<string, LabelFeature> | null} [displayed] */
-  const labelRow = (drawing, featureId, displayed) => rowOf(drawing, labelFeature(featureId, displayed));
+  const labelRow = (drawing, featureId, displayed) => rowOf(drawing, labelFeature(drawing, featureId, displayed));
 
   // Whether the label rerender after this edit draws the feature: the last
   // Generate's request with the current edits and rules (F-3, Owner Q2). The
@@ -726,7 +729,7 @@ export const createFeatureLabelActions = ({
    * @param {ReturnType<typeof drawnContext>} [context]
    */
   const featureHidden = (drawing, feature, context = drawnContext(drawing)) => (
-    featureDrawnInResult(feature, context, resultCatalogFeatures(state)) === false
+    featureDrawnInResult(feature, context, resultCatalogFeatures(state, drawing.mode)) === false
   );
   // Owner decisions Q1 and Q2 (2026-10-04): Label visibility On takes effect
   // only when the diagram can draw the label. Returns 'hidden', 'underlay', or
@@ -783,7 +786,7 @@ export const createFeatureLabelActions = ({
   /** @param {DrawingState} drawing @param {Element} svg */
   const resetLabelsToSourceText = (drawing, svg) => {
     let changed = false;
-    const displayed = displayedFeatures();
+    const displayed = displayedFeatures(drawing);
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
       const sourceText = labelRow(drawing, textEl.getAttribute('data-label-feature-id'), displayed)?.labelSourceText
         ?? textEl.getAttribute('data-label-source-text');
@@ -803,7 +806,7 @@ export const createFeatureLabelActions = ({
   /** @param {DrawingState} drawing @param {Element} svg */
   const projectLabelTextIntent = (drawing, svg) => {
     let changed = false;
-    const displayed = displayedFeatures();
+    const displayed = displayedFeatures(drawing);
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
       const row = labelRow(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);
       const sourceText = row?.labelSourceText
@@ -896,13 +899,13 @@ export const createFeatureLabelActions = ({
   const applyStoredVisibilityOverridesToSvg = (drawing, svg) => {
     let changed = false;
     let unavailableOverride = labelVisibilityReturnsToDefault(drawing, svg);
-    const displayed = displayedFeatures();
+    const displayed = displayedFeatures(drawing);
     const context = drawnContext(drawing);
     svg.querySelectorAll(VISIBILITY_LABEL_SELECTOR).forEach((textEl) => {
       const featureId = String(
         textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || ''
       ).trim();
-      const feature = featureId ? labelFeature(featureId, displayed) : null;
+      const feature = featureId ? labelFeature(drawing, featureId, displayed) : null;
       // A hidden feature hides its label through this projection too (F-3).
       const visibilityMode = !featureId
         ? 'default'
@@ -941,10 +944,10 @@ export const createFeatureLabelActions = ({
   };
 
   const clickedFeatureId = () => String(clickedFeature.value?.svg_id || clickedFeature.value?.id || '').trim();
-  /** @param {string} featureId @returns {LabelFeature | null} */
-  const featureById = (featureId) => (
+  /** @param {DrawingState} drawing @param {string} featureId @returns {LabelFeature | null} */
+  const featureById = (drawing, featureId) => (
     (clickedFeatureId() === featureId ? clickedFeature.value?.feat : null)
-    || labelFeature(featureId)
+    || labelFeature(drawing, featureId)
   );
 
   /** @param {unknown} featureId @returns {EditableLabelEntry | null} */
@@ -1410,7 +1413,7 @@ export const createFeatureLabelActions = ({
     // The blocker reads Python's rule matches; prepared ones answer at once.
     const prepared = /** @type {any} */ (prepareDrawnFeatureMatches());
     if (typeof prepared?.then === 'function') await prepared;
-    const feature = featureById(featureId);
+    const feature = featureById(drawing, featureId);
     const diagramOptions = getCommittedRequest()?.diagramOptions;
     const blocker = labelOnBlocker(drawing, feature, diagramOptions);
     if (!blocker) return apply();
@@ -1525,7 +1528,7 @@ export const createFeatureLabelActions = ({
     void results.value; // The committed request changes with the displayed Results.
     void rulePreparation?.pending?.value; // Python's rule matches arrive when an evaluation ends.
     const featureId = clickedFeatureId();
-    const feature = featureById(featureId);
+    const feature = featureById(drawing, featureId);
     const diagramOptions = getCommittedRequest()?.diagramOptions;
     const blocker = labelOnBlocker(drawing, feature, diagramOptions);
     // A hidden feature's label is hidden with it (F-3).
@@ -1587,12 +1590,12 @@ export const createFeatureLabelActions = ({
     if (choice === 'all') {
       let matchedCount = 0;
       let hasUntrackableMatch = false;
-      const displayed = displayedFeatures();
+      const displayed = displayedFeatures(drawing);
       svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((/** @type {Element} */ textEl) => {
         const candidateSource = textEl.getAttribute('data-label-source-text') || '';
         if (candidateSource !== sourceText) return;
         matchedCount += 1;
-        const candidate = labelFeature(textEl.getAttribute('data-label-feature-id'), displayed);
+        const candidate = labelFeature(drawing, textEl.getAttribute('data-label-feature-id'), displayed);
         if (featureIdentityKeyOf(candidate)) {
           applyLabelTextEdit(drawing, candidate, newText, candidateSource);
         } else {
@@ -1610,7 +1613,7 @@ export const createFeatureLabelActions = ({
       if (targetEl) {
         setLabelText(targetEl, newText);
       }
-      const feature = labelFeature(featureId);
+      const feature = labelFeature(drawing, featureId);
       if (featureIdentityKeyOf(feature)) applyLabelTextEdit(drawing, feature, newText, sourceText);
     } else {
       closeLabelTextScopeDialog();
@@ -1665,16 +1668,16 @@ export const createFeatureLabelActions = ({
   const labelImportTargets = (drawing, svg) => {
     const elements = collectEditableLabelElements(svg, mode.value);
     const assignments = assignFeatureIdsToLabels(svg, elements, collectFeatureGeometry(svg), mode.value);
-    const displayed = displayedFeatures();
+    const displayed = displayedFeatures(drawing);
     const targets = elements.map((element) => {
       const featureId = assignments.get(element) || '';
-      const feature = featureId ? labelFeature(featureId, displayed) : null;
+      const feature = featureId ? labelFeature(drawing, featureId, displayed) : null;
       return { featureId, feature, sourceText: labelSourceText(drawing, element, feature) };
     });
     const seen = new Set(targets.map(({ feature }) => featureIdentityKeyOf(feature)).filter(Boolean));
     results.value.forEach((/** @type {{ content?: unknown } | null | undefined} */ result, /** @type {number} */ index) => {
       if (index === selectedResultIndex.value || typeof result?.content !== 'string') return;
-      const features = resultRenderedFeatures(state, index);
+      const features = resultRenderedFeatures(state, drawing.mode, index);
       const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
       root.querySelectorAll(`text[${LABEL_FEATURE_ID_ATTRIBUTE}]`).forEach((element) => {
         const featureId = String(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();

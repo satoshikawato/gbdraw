@@ -15,6 +15,8 @@ from typing import Any, Mapping
 
 from playwright.sync_api import BrowserType, Page, expect
 
+from gbdraw.session_io import CURRENT_SESSION_VERSION
+
 from assertions.svg_semantics import (
     assert_finished_circular_svg,
     assert_first_circular_svg,
@@ -69,7 +71,6 @@ SESSION_TITLE = "reproducible_work"
 SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"
 RELOADED_OUTPUT_PREFIX = "reloaded_diagram"
 RELOADED_SVG_NAME = f"{RELOADED_OUTPUT_PREFIX}.svg"
-CURRENT_SESSION_VERSION = 50
 CURRENT_RENDER_REQUEST_SCHEMA = 9
 STATIC_CAPTURE_HEADER_STYLE = """
 .app-header {
@@ -1106,9 +1107,15 @@ def _validate_current_session(
             f"Expected session version {CURRENT_SESSION_VERSION}, "
             f"found {payload.get('version')}"
         )
-    render_request = payload.get("renderRequest", {})
+    active_id = payload.get("ui", {}).get("activeDrawingId")
+    drawings = [d for d in payload.get("drawings", []) if d.get("id") == active_id]
+    if len(drawings) != 1:
+        raise AssertionError("Saved session does not name its opened drawing")
+    drawing = drawings[0]
+    render_request = drawing.get("renderRequest", {})
     if (
-        render_request.get("schema") != CURRENT_RENDER_REQUEST_SCHEMA
+        drawing.get("mode") != "circular"
+        or render_request.get("schema") != CURRENT_RENDER_REQUEST_SCHEMA
         or render_request.get("mode") != "circular"
         or render_request.get("output", {}).get("prefix")
         != (expected_output_prefix or expected_title)
@@ -1116,7 +1123,7 @@ def _validate_current_session(
         raise AssertionError("Saved session does not contain the current Circular request")
     if payload.get("title") != expected_title:
         raise AssertionError("Saved session title does not match its handoff filename")
-    if not payload.get("results") or not payload.get("editorState"):
+    if not drawing.get("results") or not drawing.get("editorState"):
         raise AssertionError("Saved session is missing the committed result or editor state")
 
     matching_resources = []
@@ -1236,9 +1243,9 @@ def capture_gui_session_reproduction(
         )
 
         page.get_by_role("button", name="Reset Settings", exact=True).click()
-        reset_prompt = page.get_by_role("dialog", name="Reset all settings?", exact=True)
+        reset_prompt = page.get_by_role("dialog", name="Reset settings?", exact=True)
         expect(reset_prompt).to_be_visible()
-        reset_prompt.get_by_role("button", name="Reset all settings", exact=True).click()
+        reset_prompt.get_by_role("button", name="Reset all drawings", exact=True).click()
         expect(reset_prompt).to_have_count(0)
         expect(page.get_by_label("Output Prefix", exact=True)).to_have_value("")
         expect(page.get_by_label("Species", exact=True)).to_have_value("")

@@ -105,7 +105,10 @@ const text = bytes[0] === 0x1f && bytes[1] === 0x8b
   : bytes.toString('utf8');
 const document = JSON.parse(text);
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const catalog = document.editorState?.featureCatalog;
+// The Gallery source is a 48 (the document is the drawing); a Save writes a 49.
+const drawing = document.drawings
+  ? document.drawings.find((entry) => entry.id === document.ui.activeDrawingId) : document;
+const catalog = drawing.editorState?.featureCatalog;
 const catalogFeatures = (catalog?.items || []).flatMap((item) => item.biologicalFeatures || []);
 const compatibilityCatalog = catalog ? {
   ...catalog,
@@ -121,8 +124,8 @@ const compatibilityCatalog = catalog ? {
     })
   }))
 } : catalog;
-const losatEntries = document.losatCache?.entries || [];
-const request = document.renderRequest;
+const losatEntries = drawing.losatCache?.entries || [];
+const request = drawing.renderRequest;
 // Schema 9 adds only diagramOptions.featureOverrides (empty for this Session).
 const legacyRequest = request?.schema >= 8
   ? {
@@ -152,11 +155,11 @@ const schema8LayoutDefaults = request?.schema >= 8 &&
 process.stdout.write(JSON.stringify({
   format: document.format,
   version: document.version,
-  requestSchema: document.renderRequest?.schema,
+  requestSchema: drawing.renderRequest?.schema,
   schema8LayoutDefaults,
   topLevelKeys: Object.keys(document).sort(),
   resourceCount: Object.keys(document.resources || {}).length,
-  resultCount: (document.results || []).length,
+  resultCount: (drawing.results || []).length,
   catalogSchema: catalog?.schema,
   catalogItems: (catalog?.items || []).length,
   catalogBiologicalFeatures: catalogFeatures.length,
@@ -166,17 +169,17 @@ process.stdout.write(JSON.stringify({
   )).length,
   losatEntries: losatEntries.length,
   hashes: {
-    renderRequest: digest(document.renderRequest),
+    renderRequest: digest(drawing.renderRequest),
     legacyRenderRequest: digest(legacyRequest),
     resources: digest(document.resources),
-    webFiles: digest(document.webFiles),
-    results: digest(document.results),
+    webFiles: digest(drawing.webFiles),
+    results: digest(drawing.results),
     featureCatalog: digest(catalog),
     featureCatalogCompatibility: digest(compatibilityCatalog),
     losatRawTextAuthority: digest(losatEntries
       .map((entry) => [String(entry.key || ''), String(entry.text || '')])
       .sort(([left], [right]) => left.localeCompare(right))),
-    proteinIdentityManifest: digest(document.proteinIdentityManifest)
+    proteinIdentityManifest: digest(drawing.proteinIdentityManifest)
   }
 }));
 `;
@@ -190,7 +193,9 @@ const text = bytes[0] === 0x1f && bytes[1] === 0x8b
   ? gunzipSync(bytes).toString('utf8')
   : bytes.toString('utf8');
 const document = JSON.parse(text);
-const content = document.results?.[0]?.content;
+const drawing = document.drawings
+  ? document.drawings.find((entry) => entry.id === document.ui.activeDrawingId) : document;
+const content = drawing.results?.[0]?.content;
 if (typeof content !== 'string' || !/<svg[\s>]/.test(content)) {
   throw new Error('Session does not contain an SVG result.');
 }
@@ -303,7 +308,7 @@ const snapshotLiveState = (page) => page.evaluate(async () => {
   window.__GBDRAW_SAVE_LIVE_STATE__ = {
     results: [...app.results],
     selectedResultIndex: app.selectedResultIndex,
-    linearFiles: state.linearSeqs.map((sequence) => sequence.gb),
+    linearFiles: state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.map((sequence) => sequence.gb),
     losatCache: state.losatCache.value,
     losatEntries: [...state.losatCache.value],
     manifest: state.proteinIdentityManifest.value,
@@ -321,8 +326,8 @@ const liveStateIntact = (page) => page.evaluate(async () => {
     results: before.results.length === app.results.length
       && before.results.every((result, index) => result === app.results[index]),
     selectedResultIndex: before.selectedResultIndex === app.selectedResultIndex,
-    linearFiles: before.linearFiles.length === state.linearSeqs.length
-      && before.linearFiles.every((file, index) => file === state.linearSeqs[index].gb),
+    linearFiles: before.linearFiles.length === state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.length
+      && before.linearFiles.every((file, index) => file === state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs[index].gb),
     losatCache: before.losatCache === state.losatCache.value,
     losatEntries: before.losatEntries.length === state.losatCache.value.size
       && before.losatEntries.every(([key, value]) => state.losatCache.value.get(key) === value),
