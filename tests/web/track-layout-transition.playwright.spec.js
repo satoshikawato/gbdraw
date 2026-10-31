@@ -671,7 +671,7 @@ test('rev 7: Circular Hide GC Content with Use custom stack off asks, and the st
     const start = await stackState(page, 'circular');
     await exerciseAsk(page, 'circular', {
       trigger: () => box.click(),
-      title: `Hide GC content and turn off Track row ${rowNumber(start, 'plastome_tint')}?`,
+      title: 'Hide GC content?',
       cancel: 'Keep GC content',
       focused: () => box,
       expectAfter: (after) => {
@@ -716,7 +716,7 @@ test('rev 7: a Session whose request holds string slot specs asks on Remove and 
     expect((await stackState(page, 'circular')).rows).toEqual(start.rows);
     const box = await reveal(page.getByRole('checkbox', { name: 'Hide GC Content', exact: true }));
     await box.click();
-    await expect(prompt.getByRole('heading', { name: `Hide GC content and turn off Track row ${rowNumber(start, 'plastome_tint')}?`, exact: true })).toBeVisible();
+    await expect(prompt.getByRole('heading', { name: 'Hide GC content?', exact: true })).toBeVisible();
     await prompt.locator('[data-choice-prompt-action="hide"]').click();
     await settleLive(page);
     expect((await stackState(page, 'circular')).rows).toContain('plastome_tint:false');
@@ -935,7 +935,7 @@ test('rev 7: Circular Hide GC Skew with Use custom stack off asks when it turns 
     const start = await stackState(page, 'circular');
     await exerciseAsk(page, 'circular', {
       trigger: () => box.click(),
-      title: `Hide GC skew and turn off Track row ${rowNumber(start, 'mark')}?`,
+      title: 'Hide GC skew?',
       cancel: 'Keep GC skew',
       focused: () => box,
       expectAfter: (after) => {
@@ -1188,6 +1188,33 @@ for (const mode of ['circular', 'linear']) {
     } finally { await page.context().close(); }
   });
 }
+
+// Generate asks for a file only while it draws Depth: with the stack off, Show Depth.
+test('rev 7: Linear with the stack and Show Depth off, the last file of one of two series asks without the empty-series sentence, and Generate draws', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await openReachFixture(browser, 'linear');
+  try {
+    await addDepthSeries(page, rev7Depth('linear', 2));
+    const seriesRow = await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      return state.activeDrawing().adv.linear_track_slots.find((row) => row.renderer === 'depth' && row.params.track_index === 0).id;
+    });
+    await addReachRow(page, { id: 'mark', anchor: seriesRow, setId: setIdOf('linear'), mode: 'linear' });
+    await page.evaluate(async () => {
+      window.__GBDRAW_APP__.setLinearTrackSlotsEnabled(false);
+      (await import('./js/state.js')).state.activeDrawing().form.show_depth = false;
+    });
+    await settleLive(page);
+    await expectGenerates(page);
+    const start = await stackState(page, 'linear');
+    await removeDepthFile(page, 'linear');
+    await expect(page.locator('[data-choice-prompt]').getByRole('heading', { name: `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`, exact: true })).toBeVisible();
+    expect(await promptText(page)).not.toContain('stays empty');
+    await chooseAsked(page);
+    expect((await stackState(page, 'linear')).depth).toContain('s2.tsv');
+    await expectGenerates(page);
+  } finally { await page.context().close(); }
+});
 
 test('rev 7: Linear a moved Depth row leaves with its last file, and a re-added file puts it at the default place', async ({ browser }) => {
   test.setTimeout(420000);

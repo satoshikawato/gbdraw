@@ -18,6 +18,7 @@ import {
   overlayFollowsNote
 } from '../services/track-slot-display.js';
 import { featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
+import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import { OVERLAY_ANNOTATION_PARAMS, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
@@ -810,7 +811,8 @@ export const createLinearTrackSlotEditor = ({
   const linearDepthSourceLoss = (drawing, nextDepth) => depthSourceLoss(
     Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : [],
     linearSourcedDepthTrackIndexesForState(state),
-    activeDepthTrackIndices(/** @type {DepthFileSlots[]} */ (nextDepth))
+    activeDepthTrackIndices(/** @type {DepthFileSlots[]} */ (nextDepth)),
+    (rows) => draftDrawsDepth('linear', { form: drawing.form, adv: { ...drawing.adv, linear_track_slots: rows } })
   );
   /** @param {DrawingState} drawing @param {number[]} previousSourced */
   const reconcileLinearDepthSlots = (drawing, previousSourced) => {

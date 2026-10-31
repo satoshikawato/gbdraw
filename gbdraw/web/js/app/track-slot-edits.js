@@ -82,7 +82,8 @@ export const featureSlotEdits = (changeTrackLayout, actions) => /** @type {Actio
  * @property {'circular' | 'linear'} mode The stack's mode.
  * @property {ReadonlySet<string>} hiding The slot ids of the rows the change removes or turns off.
  * @property {ReadonlySet<string>} [alsoOff] The slot ids of rows that turn off with the rows that reach them.
- * @property {(rows: readonly string[]) => TrackHideQuestionText} question The texts, from the names of the rows the choice turns off.
+ * @property {(rows: readonly string[], turnedOff: ReadonlySet<string>) => TrackHideQuestionText} question The texts,
+ *   from the names and the slot ids of the rows the choice turns off.
  * @property {boolean} [asksAlone] Whether it asks also when no row reaches them (default: it does not).
  * @property {string} label The History step of the chosen change.
  * @property {() => boolean} unchanged Whether the draft is still as asked when the answer comes, beyond the stack's rows.
@@ -116,7 +117,7 @@ export const askTrackHide = ({ askChoice, runUndoable }, { rows, mode, hiding, a
     return now.length === stack.length && now.every((row, index) => row === stack[index])
       && reachingNow.length === reachingIds.size && reachingNow.every((index) => reachingIds.has(String(now[index].id)));
   };
-  const own = question(stack.flatMap((row, index) => (ids.has(String(row.id)) ? [trackRowName(index)] : [])));
+  const own = question(stack.flatMap((row, index) => (ids.has(String(row.id)) ? [trackRowName(index)] : [])), ids);
   const reach = reaching.length === 0 ? '' : tn(reaching.length,
     'This row starts at or extends to a track that this change removes or turns off. It is turned off too, as it cannot be drawn without that track.',
     'These rows start at or extend to a track that this change removes or turns off. They are turned off too, as they cannot be drawn without that track.');
@@ -155,8 +156,8 @@ export const askingTrackRowSwitch = ({ askChoice, runUndoable, busy, rows, mode 
     mode,
     hiding: new Set([String(slot?.id)]),
     question: (names) => {
-      const all = listText([trackRowName(rows().indexOf(/** @type {Row} */ (slot))), ...names]);
-      return { title: t('Turn off {rows}?', { rows: all }), action: t('Turn off {rows}', { rows: all }), keep: t('Cancel') };
+      const row = trackRowName(rows().indexOf(/** @type {Row} */ (slot)));
+      return { title: t('Turn off {row}?', { row }), action: t('Turn off {rows}', { rows: listText([row, ...names]) }), keep: t('Cancel') };
     },
     label: msg('Turn off track rows'),
     unchanged: drawn,
@@ -241,9 +242,9 @@ export const askTrackSourceRemoval = ({ askChoice, runUndoable, busy, rows, mode
     mode,
     hiding: new Set([...loss.leaving, ...alsoOff]),
     alsoOff,
-    question: (names) => {
+    question: (names, turnedOff) => {
       const staying = stack.flatMap((row, index) => (alsoOff.has(String(row.id)) ? [trackRowItem(index, row.id)] : []));
-      const { emptySeries } = loss;
+      const emptySeries = loss.emptySeries(turnedOff);
       return {
         ...trackSourceRemovalTexts(kind, { rows: listText(names), series: series + 1 }),
         description: joinSentences(...[

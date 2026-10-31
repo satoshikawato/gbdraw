@@ -51,8 +51,9 @@ write-up of a release.
   **Use custom stack** off when it turns off such a row (Circular), ask with the same dialog: it
   offers to make the change and turn those rows off as one Undo step, or Cancel, which changes
   nothing. A Depth row with a width, spacing, or ID you set, which stays with no file, turns off
-  with them. With two or more series, the dialog also says the series stays empty and Generate
-  will ask for a file or its removal.
+  with them. With two or more series, when Generate will ask for that series' file (**Show Depth**
+  on, or a Depth row still on in the custom stack), the dialog also says the series stays empty
+  and Generate will ask for a file or its removal.
 - Fixed: a Linear Depth row now leaves with its last Depth file after **Generate Diagram** too,
   and in a Session saved earlier, as it does before the first Generate; before, it stayed and the
   next Generate refused the stack. A moved row leaves too, and a file added again puts it at the
