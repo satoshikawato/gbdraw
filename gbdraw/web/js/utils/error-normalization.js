@@ -60,7 +60,7 @@ const REASONS = Object.freeze({
 
   UNKNOWN_CONFIG_PATH: 'Remove unknown configuration overrides or use a supported setting.',
   CIRCULAR_SETTING: 'It applies only to Circular diagrams. Reset it under Preserved session settings, or switch to Circular.',
-  WRAP: 'A wrapped figure draws no comparisons. Remove the comparison inputs or set the wrap length to none.',
+  WRAP: 'A wrapped figure draws no comparisons. Remove the comparison inputs, or reset the wrap length under Preserved session settings.',
   LINEAR_SETTING: 'It applies only to Linear diagrams. Reset it under Preserved session settings, or switch to Linear.',
   TRACK_SCHEMA: 'Recreate Custom Track Slots with the current schema.',
   SESSION_FIELDS: 'Remove unsupported top-level Session fields.',
