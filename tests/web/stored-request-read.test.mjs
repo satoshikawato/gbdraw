@@ -121,18 +121,31 @@ test('a request that needs no repair comes back as the stored object (RK-3); sch
   }
 });
 
-test('a saved Collinear anchor mode that was removed reads as rbh with a row; "either" reads without one (OV-2303, OV-2301)', () => {
-  // The released writer stored "either"; the bundled Sessions now store "strand",
-  // so the case stores it (as in the Python twin).
-  const session = galleryView(read('tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json'));
+test('a saved Collinear anchor mode that was removed reads as rbh with a row; "either" reads without one (OV-2303, OV-2301)', async () => {
+  // A released 0.14.3 Session with both copies set to one_to_one (tests/retired_sessions/ is
+  // outside the scans of stored Sessions; see tests/fixtures/sessions/README.md). The Gallery
+  // Session now stores "strand", so "either" is read from the released file as well.
+  const session = read('tests/retired_sessions/BGC0000708-BGC0000713.v49-one-to-one.gbdraw-session.json.gz');
   const index = session.renderRequest.comparisons.findIndex((item) => item.settings);
-  session.renderRequest.comparisons[index].settings.collinearityParams.parameters.mergeOrientation = 'either';
-  assert.deepEqual(rows(readRequest(session)), []);
-  const result = readRequest(session, (request) => { request.comparisons[index].settings.collinearityAnchorMode = 'one_to_one'; });
+  assert.equal(session.renderRequest.comparisons[index].settings.collinearityParams.parameters.mergeOrientation, 'either');
+  assert.equal(session.renderRequest.comparisons[index].settings.collinearityAnchorMode, 'one_to_one');
+  assert.deepEqual(rows(readRequest(session, (request) => { request.comparisons[index].settings.collinearityAnchorMode = 'rbh'; })), []);
+  const result = readRequest(session);
   assert.deepEqual(rows(result), [{
     code: 'setting-replaced', path: `renderRequest.comparisons[${index}].settings.collinearityAnchorMode`, used: 'rbh'
   }]);
   assert.equal(result.value.comparisons[index].settings.collinearityAnchorMode, 'rbh');
+  // Load also reads the draft key the select binds (modes.linear.config.losat.blastp), so both copies are listed.
+  assert.equal(session.modes.linear.config.losat.blastp.collinearAnchorMode, 'one_to_one');
+  const loaded = await load(session);
+  assert.equal(loaded.result.status, 'ok', JSON.stringify(loaded.result.error));
+  assert.deepEqual(
+    loaded.result.repairs.filter((repair) => repair.code === 'setting-replaced').map(({ code, path, used }) => ({ code, path, used })),
+    [
+      { code: 'setting-replaced', path: 'renderRequest.comparisons[0].settings.collinearityAnchorMode', used: 'rbh' },
+      { code: 'setting-replaced', path: 'modes.linear.config.losat.blastp.collinearAnchorMode', used: 'rbh' }
+    ]
+  );
 });
 
 test('a request of schema 5 to 8 is promoted once, with the Load context, without a row (OV-770)', () => {

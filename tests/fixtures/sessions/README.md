@@ -398,3 +398,18 @@ Session** download of the current writer (Session 49, PD-OI-109), written by
 `adv.show_definition: false` and its request
 `objects.definition.circular.show: false`. Its decompressed SHA-256 is
 `5d25d11dea37f278ff2aee041d9d7c92c63c7756bc1e4291ef9a118c91e33a94`.
+
+`tests/retired_sessions/BGC0000708-BGC0000713.v49-one-to-one.gbdraw-session.json.gz` is the
+Session 49 (request schema 9) file of release tag `v0.14.3`, with both copies of
+the Collinear anchor mode set to `one_to_one`, a value the 0.14.3 select offered and
+the current description refuses: `renderRequest.comparisons[0].settings.collinearityAnchorMode`
+and the draft key `modes.linear.config.losat.blastp.collinearAnchorMode` that the
+select binds and the request derives from. It is the released Session with that
+setting written in, not a capture of a 0.14.3 run; the command, source hash and decompressed
+hash are in `tests/retired_sessions/BGC0000708-BGC0000713.v49-one-to-one.provenance.json`. It lives
+outside this folder because the scans of stored Sessions (`tests/utils/contract_shape_check.py`,
+which walks `tests/fixtures`, and `contract-shape.test.mjs`, `stored-request-read.test.mjs`,
+`load-repair-dialog.test.mjs`, which read this folder) refuse a stored value outside the
+description. Only
+`tests/test_collinear_option_surfaces.py` and `tests/web/stored-request-read.test.mjs`
+read it, by name.

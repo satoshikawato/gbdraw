@@ -1,0 +1,9 @@
+{
+  "sourceCommit": "1392772bfc58670922ffd557fe6ddfbdc3dda910",
+  "history": "release tag v0.14.3 (an ancestor of main)",
+  "writer": "the released Session file tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json at v0.14.3 (Session 49, request schema 9) with the two copies of the Collinear anchor mode set to the value the 0.14.3 select offered; this is the released file with that setting written in, not a capture of a 0.14.3 run",
+  "edit": "the two keys named collinearityAnchorMode or collinearAnchorMode in the released file, each \"rbh\" -> \"one_to_one\": renderRequest.comparisons[0].settings.collinearityAnchorMode (the request) and modes.linear.config.losat.blastp.collinearAnchorMode (the Linear draft the select binds and the request derives from); no other path holds either key; every other byte is the released file",
+  "command": "git show v0.14.3:tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json | sed -e 's/\"collinearityAnchorMode\":\"rbh\"/\"collinearityAnchorMode\":\"one_to_one\"/' -e 's/\"collinearAnchorMode\":\"rbh\"/\"collinearAnchorMode\":\"one_to_one\"/' | gzip -n -9 > BGC0000708-BGC0000713.v49-one-to-one.gbdraw-session.json.gz",
+  "sourceSha256": "e3840df20664dc20f374ebeefb791dc0083be1664a60cb04846936b565fe114f",
+  "decompressedSha256": "122bd33cf6cf6606279733d10663efe95f1524696d3652a9fefa3924b8e73ce4"
+}

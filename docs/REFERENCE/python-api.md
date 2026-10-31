@@ -39,7 +39,7 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 | Type and field | Type | Default |
 |---|---|---|
 | `FeatureOptions.types` | sequence of feature names or `None` | `CDS`, `rRNA`, `tRNA`, `tmRNA`, `ncRNA`, `misc_RNA`, `repeat_region` |
-| `FeatureOptions.color_table` | path or `DataFrame` | `None` |
+| `FeatureOptions.color_table` | path, `builtin:<name>` (a [built-in table](palettes-feature-rules-labels-shapes-and-tracks.md#built-in-color-tables)), or `DataFrame` | `None` |
 | `FeatureOptions.default_colors` | path or `DataFrame` | `None` |
 | `FeatureOptions.palette` | string | `default` |
 | `FeatureOptions.visibility` | path or `DataFrame` | `None` |

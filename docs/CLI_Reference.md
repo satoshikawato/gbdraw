@@ -237,7 +237,9 @@ options:
                         overwrite).
   -p, --palette PALETTE
                         Palette name (default: default)
-  -t, --table TABLE     color table (optional)
+  -t, --table TABLE     color table: a TSV file, or a built-in table
+                        (builtin:cog, builtin:phrog, builtin:plastid,
+                        builtin:mitochondrion) (optional)
   -d, --default_colors DEFAULT_COLORS
                         TSV file that overrides the color palette (optional)
   -n, --nt NT           dinucleotide: two letters from A, C, G, T, and U;
@@ -1299,7 +1301,9 @@ options:
                         Collinear ribbon color mode: average_identity,
                         orientation, or orientation_identity (default:
                         orientation).
-  -t, --table TABLE     color table (optional)
+  -t, --table TABLE     color table: a TSV file, or a built-in table
+                        (builtin:cog, builtin:phrog, builtin:plastid,
+                        builtin:mitochondrion) (optional)
   -p, --palette PALETTE
                         Palette name (default: default)
   -d, --default_colors DEFAULT_COLORS

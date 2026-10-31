@@ -1,0 +1,22 @@
+# Plastid (chloroplast) gene classes by /gene name, after OGDRAW's classes
+# (Greiner, Lehwark & Bock 2019, Nucleic Acids Res 47:W59-W64; https://chlorobox.mpimp-golm.mpg.de/OGDraw.html).
+# Columns: feature_type, qualifier_key, value (case-insensitive regular expression), color, caption.
+CDS	gene	^psa[A-Z]$	#2c6d3e	photosystem I
+CDS	gene	^(psb[A-Z]|pbf1)$	#53924d	photosystem II
+CDS	gene	^pet[A-Z]$	#869542	cytochrome b/f complex
+CDS	gene	^atp[A-Z]$	#9bc06a	ATP synthase
+CDS	gene	^ndh[A-Z]$	#eada78	NADH dehydrogenase
+CDS	gene	^rbcL$	#59b47d	RubisCO large subunit
+CDS	gene	^rpo[A-Z][0-9]?$	#b4514c	RNA polymerase
+CDS	gene	^rps[0-9]+	#dab78c	ribosomal proteins (SSU)
+CDS	gene	^rpl[0-9]+	#a97b53	ribosomal proteins (LSU)
+CDS	gene	^(clpP|matK)$	#de844f	clpP, matK
+CDS	gene	^(accD|ccsA|cemA|infA)$	#9480bb	other genes
+CDS	gene	^ycf[0-9]+	#c1ccd7	hypothetical chloroplast reading frames (ycf)
+CDS	gene	^orf[0-9]+	#95a0ab	ORFs
+CDS	product	^hypothetical protein$	#95a0ab	ORFs
+tRNA	gene	.	#43629c	transfer RNAs
+tRNA	product	.	#43629c	transfer RNAs
+rRNA	gene	.	#b86797	ribosomal RNAs
+rRNA	product	.	#b86797	ribosomal RNAs
+rep_origin	note	.	#414f5d	origin of replication

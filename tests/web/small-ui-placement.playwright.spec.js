@@ -20,7 +20,7 @@ test('FL-11 the preset panel says what Bakta changes and that the palette is unc
     await expect(effects).toContainText('the palette is unchanged');
     // The Bakta side effects show when Bakta is the chosen preset.
     await expect(effects).not.toContainText('Bakta');
-    await page.getByLabel('Preset scheme', { exact: true }).selectOption('bakta');
+    await page.getByLabel('Preset scheme', { exact: true }).selectOption('cog');
     await expect(effects).toContainText('Bakta also sets the CDS default color to #cccccc');
     await expect(effects).toContainText('Legend box size and font size to 12');
     await expect(effects).not.toContainText('update the palette');

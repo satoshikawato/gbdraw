@@ -303,17 +303,20 @@
     },
     {
       "id": "vector:tests/fixtures/losat_job_plan_cases.json",
-      "concern": "LOSAT and LOSATP job plan, batches and nucleotide cache keys (D15)",
+      "concern": "LOSAT and LOSATP job plan, the effective Search between scope (Collinear without inference searches the edges), batches and nucleotide cache keys (D15)",
       "pythonOwner": [
         "gbdraw/comparisons/losat_jobs.py:plan_losat_jobs",
+        "gbdraw/comparisons/losat_jobs.py:losatp_job_specs",
+        "gbdraw/comparisons/losat_jobs.py:effective_collinear_search_scope",
         "gbdraw/comparisons/losat_jobs.py:nucleotide_losat_cache_key"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/linear-sources.js:planLosatSourceJobs",
-        "gbdraw/web/js/services/linear-comparisons.js:buildLosatJobSpecs"
+        "gbdraw/web/js/services/linear-comparisons.js:buildLosatJobSpecs",
+        "gbdraw/web/js/services/linear-comparisons.js:effectiveCollinearSearchScope"
       ],
       "vector": "tests/fixtures/losat_job_plan_cases.json",
-      "reason": "The Web plans and caches searches before Python runs; the cases pin plans and keys.",
+      "reason": "The Web plans and caches searches before Python runs; the cases pin plans, the scope rule (one proteinCases row holds scope all with inference off) and keys.",
       "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },

@@ -1,0 +1,21 @@
+# PHROG functional categories of Pharokka annotations (/function), with Pharokka's
+# virulence factor and AMR hits (VFDB, CARD, anti-CRISPR, DefenseFinder) as one class.
+# Categories: PHROG database, https://phrogs.lmge.uca.fr/ ; values as Pharokka writes them
+# (https://github.com/gbouras13/pharokka, src/pharokka/plot.py; read 2026-10-31).
+# Columns: feature_type, qualifier_key, value (case-insensitive regular expression), color, caption.
+CDS	function	^unknown function$	#b7b7b7	Unknown function
+CDS	function	^other$	#7dcece	Other function
+CDS	function	^tail$	#81bd74	Tail
+CDS	function	^transcription regulation$	#e7d57e	Transcription regulation
+CDS	function	^DNA	#b86db1	DNA, RNA and nucleotide metabolism
+CDS	function	^lysis$	#4c73ba	Lysis
+CDS	function	^moron	#8062b0	Moron, auxiliary metabolic gene and host takeover
+CDS	function	^integration and excision$	#ccb2e0	Integration and excision
+CDS	function	^head and packaging$	#d16e8f	Head and packaging
+CDS	function	^connector$	#636363	Connector
+CDS	phrog	vfdb	#c35141	Virulence factor/AMR
+CDS	phrog	card	#c35141	Virulence factor/AMR
+CDS	phrog	acr	#c35141	Virulence factor/AMR
+CDS	phrog	defensefinder	#c35141	Virulence factor/AMR
+CDS	vfdb_short_name	.	#c35141	Virulence factor/AMR
+CDS	AMR_Gene_Family	.	#c35141	Virulence factor/AMR
