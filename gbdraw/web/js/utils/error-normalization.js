@@ -418,7 +418,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [sessionVersion] The version of a Session file this app does not read.
  * @property {number} [latestSessionVersion] The newest Session version this app reads.
  * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
- * @property {number} [sessionBytes] The expanded size in bytes of a Session that Save refused.
+ * @property {number} [sessionBytes] The size in bytes of a Session that Save refused: its expanded size, or its gzip file's with `sessionSizeKind`.
  * @property {number} [sessionByteLimit] The size in bytes that Load opens at most.
  * @property {'file'} [sessionSizeKind] Set when the two sizes are those of the gzip file, not of its expanded JSON.
  * @property {string} [largestInputs] The file names of the largest inputs of a Session that Save refused.
