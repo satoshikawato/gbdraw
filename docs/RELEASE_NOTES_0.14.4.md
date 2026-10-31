@@ -242,9 +242,9 @@ and 0.14.4 saves Sessions as version 49, as 0.14.3 does. See
   **Applies on Generate**. The Result then equals the next Generate.
 - When two Legend rows share a name, a color rule edit or removal can number them
   in the opposite order until the next **Generate Diagram**. 0.14.3 does the same.
-- After you delete a Legend row, giving another color rule that row's name can
-  place the returning row last in the Legend until the next **Generate Diagram**.
-  0.14.3 does the same.
+- After you delete a Legend row, giving another color rule that row's name, or a
+  new color to a rule of that name, can place the returning row last in the Legend
+  until the next **Generate Diagram**. 0.14.3 does the same.
 
 Carried from 0.14.1:
 
