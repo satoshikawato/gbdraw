@@ -710,8 +710,10 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when the duplicate match attribute stopped being written
     # (perf-audit D-41): only that attribute and the segment byte counts and
     # revision hashes derived from the segment text moved.
-    "similarity_groups": "36b644c3ec0d30d2d52492cf44b364460c7f91e4e4e1d4dc8bd2b39f54506859",
-    "collinear": "b6565b0e35e87726aa0753638eaaa0aeac7673bc19202e30e45d7dd0eb5e074e",
+    # Updated again when the reply took the `linearWrap` key (Linear wrap
+    # length): an empty list for a figure with nothing cut, no other change.
+    "similarity_groups": "e2e60f244a2e97c01c74b73fc1b3874a4fbff5d31772a202e416b027f629d7a8",
+    "collinear": "396f6a373d377aa5a5f2001fc4b53ac8433e6a00f2af620ee0ed833cb69b18c1",
 }
 
 
