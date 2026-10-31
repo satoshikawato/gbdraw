@@ -425,7 +425,6 @@ class LinearComparisonOptions:
     gencodes: int | Sequence[int | None] | None = None
     pairs: Sequence[tuple[int, int]] | None = None
     match_style: Literal["ribbon", "curve"] = "ribbon"
-    auto_orient: bool = _LINEAR_DIAGRAM_DEFAULTS.auto_orient
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None
     collinearity_params: LosslessCollinearityParameters | None = None
     collinearity_unit: CollinearityUnitMode | str = (
@@ -459,6 +458,7 @@ class LinearComparisonOptions:
         SimilarityAlignmentPlan | SimilarityAlignmentReference | None
     ) = None
     identity_scale: IdentityScale | None = None
+    auto_orient: bool = _LINEAR_DIAGRAM_DEFAULTS.auto_orient
 
     def __post_init__(self) -> None:
         object.__setattr__(

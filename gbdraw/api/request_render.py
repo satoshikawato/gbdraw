@@ -2068,7 +2068,8 @@ def plan_linear_request(
             resolved_options, collection, resolved_layout
         )
         oriented = _auto_oriented_collection(resolved_options, collection, resolved_layout)
-        if oriented is not collection:
+        reoriented = oriented is not collection
+        if reoriented:
             # The search-frame rows, the layout and the resolved options hold
             # for either orientation; the records and their features do not.
             collection = oriented
@@ -2078,7 +2079,7 @@ def plan_linear_request(
             )
         materialized_request = (
             unresolved_request
-            if oriented is collection
+            if not reoriented
             and _is_materialized_exact_one_request(unresolved_request)
             and resolved_layout == unresolved_request.layout
             and resolved_options is unresolved_request.options

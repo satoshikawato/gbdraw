@@ -10,15 +10,21 @@ from __future__ import annotations
 
 import csv
 import logging
+import os
+import subprocess
+import sys
+from dataclasses import fields
 from pathlib import Path
 
 import pandas as pd
 import pytest
 from Bio import SeqIO
 
+from gbdraw import LinearComparisonOptions
 from gbdraw import linear as linear_cli
 from gbdraw.api import (
     GenBankInputSource,
+    InMemoryRecordSource,
     LinearDiagramOptions,
     LinearDiagramRequest,
     RecordInput,
@@ -169,7 +175,67 @@ def test_a_session_does_not_store_auto_orient_yet(tmp_path: Path) -> None:
     )
     with pytest.raises(ValidationError, match="auto_orient"):
         encode_canonical_request(request)
-    with pytest.raises((ValidationError, SystemExit)):
-        _render(tmp_path, "saved", _SUBJECT, _TABLE, "--auto_orient", "--save_session")
+    out = tmp_path / "out"
+    out.mkdir()
+    completed = subprocess.run(
+        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear",
+         "--gbk", str(_QUERY), str(_SUBJECT), "-b", str(_TABLE), "-f", "svg",
+         "-o", str(out / "saved"), "--auto_orient", "--save_session"],
+        capture_output=True, text=True, check=False,
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
+    )
+    assert completed.returncode == 1
+    assert "A Session does not store auto_orient yet; save the Session without it." in completed.stderr
     # Refused before anything is drawn.
-    assert list(tmp_path.iterdir()) == []
+    assert list(out.iterdir()) == []
+
+
+@pytest.mark.linear
+def test_the_plan_request_of_in_memory_records_carries_the_reversal() -> None:
+    # Exact-one in-memory records normally keep the request as given; after a
+    # reversal the plan's request must name the reversed record it draws.
+    records = (SeqIO.read(_QUERY, "genbank"), SeqIO.read(_SUBJECT, "genbank"))
+    request = LinearDiagramRequest(
+        records=tuple(RecordInput(InMemoryRecordSource(record)) for record in records),
+        options=LinearDiagramOptions(
+            auto_orient=True,
+            linear_comparisons=(LinearComparison(0, 1, _rows((1, 600, 6000, 5401, 600))),),
+        ),
+    )
+    plan = plan_linear_request(request)
+    assert record_is_reverse_complemented(plan.records[1])
+    planned = plan.request.records[1].source
+    assert isinstance(planned, InMemoryRecordSource)
+    assert record_is_reverse_complemented(planned.record)
+
+
+@pytest.mark.linear
+def test_auto_orient_reads_a_comparisons_table_on_a_multi_record_row(tmp_path: Path) -> None:
+    # Row 1: MjeNMV; row 2: the reversed MelaMJNV and PeseMJNV, which has no hits.
+    subject, table = _reversed_subject_inputs(tmp_path)
+    manifest = tmp_path / "comparisons.tsv"
+    manifest.write_text(f"blast\tquery\tsubject\n{table}\t#1\t#2\n", encoding="utf-8")
+
+    def render(prefix: str, *extra: str) -> str:
+        linear_cli.linear_main([
+            "--gbk", str(_QUERY), str(subject), str(_EXAMPLES / "PeseMJNV.gb"),
+            "--comparisons_table", str(manifest),
+            "--multi_record_position", "#1@1", "--multi_record_position", "#2@2",
+            "--multi_record_position", "#3@2", "-f", "svg", "-o", str(tmp_path / prefix), *extra,
+        ])
+        return (tmp_path / f"{prefix}.svg").read_text(encoding="utf-8")
+
+    explicit = render(
+        "explicit", "--reverse_complement", "0", "--reverse_complement", "1", "--reverse_complement", "0"
+    )
+    auto = render("auto", "--auto_orient")
+    assert auto == explicit
+    assert auto != render("plain")
+
+
+def test_auto_orient_is_the_last_positional_comparison_field() -> None:
+    # LinearComparisonOptions is public; released positional fields keep their places.
+    assert [item.name for item in fields(LinearComparisonOptions)][-3:] == [
+        "similarity_alignment", "identity_scale", "auto_orient",
+    ]
+

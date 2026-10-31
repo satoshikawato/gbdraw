@@ -187,6 +187,11 @@ by the CLI, shown beside the Result in the web app). See
 A start greater than its end marks reverse orientation; it does not by itself
 mean that a hit crosses a Circular origin.
 
+For a Circular ring, the selected reference side is `query`, `subject`, or
+`auto`. The renderer paints retained spans from that side on the displayed
+record. It does not infer binned coverage or a wraparound hit from one BLAST
+row.
+
 ### Automatic Linear orientation
 
 `--auto_orient` (`auto_orient=True` in `LinearComparisonOptions` and in typed
@@ -210,11 +215,6 @@ drawn. The figure equals the one the same explicit reverses draw; the CLI logs
 each record it reversed. A Session cannot store the option yet: with `--save_session` or
 `--session_output` the command stops with an error before it draws. The Web app does not
 offer it yet.
-
-For a Circular ring, the selected reference side is `query`, `subject`, or
-`auto`. The renderer paints retained spans from that side on the displayed
-record. It does not infer binned coverage or a wraparound hit from one BLAST
-row.
 
 ## Selected Linear edges
 
