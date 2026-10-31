@@ -29,6 +29,7 @@ import {
   tickAnchorRadiusFactor
 } from '../services/track-slot-display.js';
 import { askTrackHide, featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
+import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { ownEntry } from '../utils/own-entry.js';
 import {
   GLOBAL_SUPPRESS_PARAM,
@@ -128,7 +129,6 @@ const STACK_ENTRY_SLOT = 'slot';
  * written around another word (OV-1477).
  * @typedef {object} SuppressTexts
  * @property {() => string} title the title of the dialog that asks before hiding
- * @property {(rows: string) => string} titleWith the title when the hide also turns off `rows`, the stack rows that reach the track
  * @property {(count: number) => string} description the dialog text: the custom stack rows the hide turns off
  * @property {() => string} hide the dialog's hide button
  * @property {(rows: string) => string} hideWith the dialog's hide button when it also turns off `rows`, the stack rows that reach the track
@@ -139,7 +139,6 @@ const STACK_ENTRY_SLOT = 'slot';
 const SUPPRESS_TEXT_BY_RENDERER = {
   dinucleotide_content: {
     title: () => t('Hide GC content?'),
-    titleWith: (rows) => t('Hide GC content and turn off {rows}?', { rows }),
     description: (count) => tn(count,
       'Your custom track stack has {count} GC content track. Hiding GC content turns that track off.',
       'Your custom track stack has {count} GC content tracks. Hiding GC content turns those tracks off.'),
@@ -150,7 +149,6 @@ const SUPPRESS_TEXT_BY_RENDERER = {
   },
   dinucleotide_skew: {
     title: () => t('Hide GC skew?'),
-    titleWith: (rows) => t('Hide GC skew and turn off {rows}?', { rows }),
     description: (count) => tn(count,
       'Your custom track stack has {count} GC skew track. Hiding GC skew turns that track off.',
       'Your custom track stack has {count} GC skew tracks. Hiding GC skew turns those tracks off.'),
@@ -901,7 +899,8 @@ export const createCircularTrackSlotEditor = ({
   const circularDepthSourceLoss = (drawing, nextDepth) => depthSourceLoss(
     Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [],
     circularSourcedDepthTrackIndexesForState(state),
-    circularSourcedDepthTrackIndexesForState({ files: { c_depth: nextDepth } })
+    circularSourcedDepthTrackIndexesForState({ files: { c_depth: nextDepth } }),
+    (rows) => draftDrawsDepth('circular', { form: drawing.form, adv: { ...drawing.adv, circular_track_slots: rows } })
   );
   /** @param {DrawingState} drawing @param {number[]} previousSourced */
   const reconcileCircularDepthSlots = (drawing, previousSourced) => {
@@ -1376,7 +1375,7 @@ export const createCircularTrackSlotEditor = ({
       hiding: new Set(hidden.map((/** @type {CircularTrackSlot} */ slot) => String(slot.id))),
       asksAlone: stackInUse,
       question: (names) => ({
-        title: names.length ? texts.titleWith(listText(names)) : texts.title(),
+        title: texts.title(),
         // "Your custom track stack has..." is not the drawing's state when the stack is off.
         ...(stackInUse ? { description: texts.description(hidden.length) } : {}),
         action: names.length ? texts.hideWith(listText(names)) : texts.hide(),

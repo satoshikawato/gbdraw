@@ -24,7 +24,7 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'), join(tempRoot, 'mode-profiles.generated.js'));
 // The services the slot editors import.
 for (const leaf of ['conservation-series.js', 'current-option-values.js', 'depth-track-state.js', 'linear-label-visibility.js', 'losat-normalization.js',
-  'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js', 'linear-track-slot-model.js']) {
+  'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js', 'linear-track-slot-model.js', 'track-legend-rows.js']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf), join(tempRoot, 'services', leaf));
 }
 
@@ -552,7 +552,7 @@ for (const mode of ['circular', 'linear']) {
       await asked;
       const rowNumber = editor.slots().indexOf(row) + 1;
       assert.equal(questions.length, 1);
-      assert.equal(questions[0].title, `Turn off Track row ${rowNumber} and Track row ${number}?`);
+      assert.equal(questions[0].title, `Turn off Track row ${rowNumber}?`);
       assert.deepEqual(questions[0].items, [`Track row ${number} (${reachId})`]);
       assert.equal(questions[0].description, REACH_SENTENCE);
       assert.deepEqual(questions[0].actions.map((action) => action.label), [`Turn off Track row ${rowNumber} and Track row ${number}`]);
@@ -601,7 +601,7 @@ test('circular: Hide GC Content names the rows that reach the GC content track a
   const questions = [];
   const editor = MODES.circular(REACH_ROWS.circular(), { showDepth: true, depthFiles: [depthFile] }, async (request) => { questions.push(request); return 'hide'; });
   await editor.editor.setCircularGcSuppressed(true);
-  assert.equal(questions[0].title, 'Hide GC content and turn off Track row 4?');
+  assert.equal(questions[0].title, 'Hide GC content?');
   assert.ok(questions[0].description.endsWith(`has 1 GC content track. Hiding GC content turns that track off. ${REACH_SENTENCE}`), questions[0].description);
   assert.deepEqual(questions[0].items, ['Track row 4 (tint)']);
   assert.deepEqual(questions[0].actions.map((action) => action.label), ['Hide GC content and turn off Track row 4']);
@@ -756,7 +756,7 @@ test('circular: Hide GC Content with Use custom stack off asks when it turns off
   assert.ok(asked instanceof Promise);
   assert.equal(box.checked, false, 'the checkbox shows the kept value until the answer');
   await asked;
-  assert.equal(questions[0].title, 'Hide GC content and turn off Track row 4?');
+  assert.equal(questions[0].title, 'Hide GC content?');
   assert.deepEqual(questions[0].items, ['Track row 4 (tint)']);
   assert.doesNotMatch(questions[0].description, /Generate/, 'with the stack off, Generate draws no stack row');
   assert.doesNotMatch(questions[0].description, /custom track stack/, 'the stack is not in use, so the dialog does not describe it');
@@ -804,7 +804,7 @@ test('the rows a Depth series removal takes out of the stack: its managed row an
 const depthRemovalPorts = (editor, mode, askChoice, steps = []) => ({
   askChoice, runUndoable: (label, fn) => { steps.push(label); return fn(); }, busy: () => null, rows: editor.slots, mode
 });
-const lossOf = (leaving, { stayingOn = [], emptySeries = [] } = {}) => ({ leaving: new Set(leaving), stayingOn: new Set(stayingOn), emptySeries });
+const lossOf = (leaving, { stayingOn = [], emptySeries = [] } = {}) => ({ leaving: new Set(leaving), stayingOn: new Set(stayingOn), emptySeries: () => emptySeries });
 const twoSeries = { showDepth: true, depthFiles: [depthFile, { ...depthFile, name: 'b.depth.tsv' }] };
 
 for (const mode of ['circular', 'linear']) {
@@ -868,24 +868,28 @@ test('the rows a Depth file removal takes out: the series managed row while no f
   assert.deepEqual([...linear.editor.linearDepthSourceLoss(drawing, [[null], [null]]).leaving], ['depth']);
 });
 
-test('what a Depth source change does to a stack: off rows stay off, manual rows stay on, and a series stays empty only beside a sourced one', () => {
+test('what a Depth source change does to a stack: off rows stay off, manual rows stay on, and a series stays empty only beside a sourced one while Depth is asked for', () => {
   const managed = (id, track_index, extra = {}) => ({ id, renderer: 'depth', enabled: true, params: { track_index }, ...extra });
   const off = managed('depth', 0, { enabled: false });
   const cov = managed('cov', 0);
   const other = managed('depth_2', 1);
   const on = managed('depth_1', 0);
-  const lose0 = depthSourceLoss([on, cov, other], [0, 1], [1]);
+  // Generate asks for Depth while a Depth row is on, as with the stack on.
+  const anyDepthOn = (rows) => rows.some((row) => row.renderer === 'depth' && row.enabled !== false);
+  const lose0 = depthSourceLoss([on, cov, other], [0, 1], [1], anyDepthOn);
   assert.deepEqual([...lose0.leaving], ['depth_1']);
   assert.deepEqual([...lose0.stayingOn], ['cov']);
-  assert.deepEqual(lose0.emptySeries, [0]);
-  const loseAll = depthSourceLoss([on, other], [0, 1], []);
+  assert.deepEqual(lose0.emptySeries(new Set()), [0]);
+  assert.deepEqual(lose0.emptySeries(new Set(['cov', 'depth_2'])), [], 'the choice turns off every Depth row, so Generate draws no Depth');
+  assert.deepEqual(depthSourceLoss([on, cov, other], [0, 1], [1], () => false).emptySeries(new Set()), [], 'no Depth asked for: nothing refuses');
+  const loseAll = depthSourceLoss([on, other], [0, 1], [], anyDepthOn);
   assert.deepEqual([...loseAll.leaving].sort(), ['depth_1', 'depth_2']);
-  assert.deepEqual(loseAll.emptySeries, [], 'with no source left the drawing draws no Depth, so nothing refuses');
-  const offLoss = depthSourceLoss([off, other], [0, 1], [1]);
+  assert.deepEqual(loseAll.emptySeries(new Set()), [], 'with no source left the drawing draws no Depth, so nothing refuses');
+  const offLoss = depthSourceLoss([off, other], [0, 1], [1], anyDepthOn);
   assert.deepEqual([...offLoss.leaving], [], 'a row turned off stays');
   assert.deepEqual([...offLoss.stayingOn], []);
   // A manual row of a series that already had no file is not this removal's.
-  assert.deepEqual([...depthSourceLoss([managed('cov', 2), other], [1], []).stayingOn], []);
+  assert.deepEqual([...depthSourceLoss([managed('cov', 2), other], [1], [], anyDepthOn).stayingOn], []);
   const { slots, additions } = reconcileManagedDepthSlots({ slots: [off], previousSourced: [0], sourced: [] });
   assert.deepEqual(slots, [off]);
   assert.deepEqual(additions, []);
@@ -923,6 +927,44 @@ for (const mode of ['circular', 'linear']) {
       kind: 'depth-file', loss: lossOf([], { stayingOn: ['cov'], emptySeries: [0] }), sources: () => [], label: 'Label', apply: () => assert.fail('no write')
     }), null);
     assert.equal(enabledOf(editor).cov, true);
+  });
+}
+
+// Generate refuses a series without a file only while it asks for Depth
+// (`draftDrawsDepth`): Show Depth with the stack off, an enabled Depth row with
+// it on, read for the stack the removal and its choice leave.
+const secondDepthFile = { ...depthFile, name: 'b.depth.tsv' };
+const firstFileRemovalQuestion = async (mode, { stackOn, showDepth, rows = REACH_ROWS[mode]() }) => {
+  const harness = MODES[mode](rows, { showDepth, depthFiles: [depthFile, secondDepthFile] });
+  const drawing = harness.state.drawingOfMode(mode);
+  drawing.adv[`${mode}_track_slots_enabled`] = stackOn;
+  const loss = mode === 'circular'
+    ? harness.editor.circularDepthSourceLoss(drawing, [null, secondDepthFile])
+    : harness.editor.linearDepthSourceLoss(drawing, [[null, secondDepthFile]]);
+  const questions = [];
+  assert.equal(await askTrackSourceRemoval(depthRemovalPorts(harness, mode, async (request) => { questions.push(request); return 'cancel'; }), {
+    kind: 'depth-file', loss, sources: () => [], label: 'Label', apply: () => assert.fail('no write')
+  }), false);
+  return questions[0].description;
+};
+const EMPTY_SERIES_SENTENCE = 'Depth series #1 stays empty, and Generate will ask for a file or its removal.';
+const offSecondRow = (mode) => [...REACH_ROWS[mode](), { ...(mode === 'circular' ? circularRow : linearRow)('depth_2', 'depth', { track_index: 1 }), enabled: false }];
+const onSecondRow = (mode) => [...REACH_ROWS[mode](), (mode === 'circular' ? circularRow : linearRow)('depth_2', 'depth', { track_index: 1 })];
+
+for (const mode of ['circular', 'linear']) {
+  test(`${mode}: the question says a series stays empty only when Generate will ask for Depth after the change`, async () => {
+    assert.ok(!(await firstFileRemovalQuestion(mode, { stackOn: false, showDepth: false })).includes('stays empty'), 'stack off, Show Depth off: Generate draws');
+    assert.ok((await firstFileRemovalQuestion(mode, { stackOn: false, showDepth: true })).startsWith(EMPTY_SERIES_SENTENCE), 'stack off, Show Depth on');
+    assert.ok(!(await firstFileRemovalQuestion(mode, { stackOn: true, showDepth: true, rows: offSecondRow(mode) })).includes('stays empty'),
+      'stack on, the other series row off: no Depth row is left on');
+    assert.ok((await firstFileRemovalQuestion(mode, { stackOn: true, showDepth: true, rows: onSecondRow(mode) })).startsWith(EMPTY_SERIES_SENTENCE), 'stack on, the other series row on');
+    // A manual row of the series stays, and the choice turns it off with the row that reaches it.
+    const manual = offSecondRow(mode);
+    manual.find((row) => row.id === 'depth').id = 'cov';
+    manual.find((row) => row.id === 'mark').params.anchor_slot = 'cov';
+    const description = await firstFileRemovalQuestion(mode, { stackOn: true, showDepth: true, rows: manual });
+    assert.ok(description.includes('has no Depth file left. It stays in the stack, turned off.'));
+    assert.ok(!description.includes('stays empty'), 'the choice turns off the last Depth row that is on');
   });
 }
 

@@ -91,7 +91,8 @@ import { normalizeOptionalText } from './track-slot-display.js';
  * @typedef {object} DepthSourceLoss
  * @property {ReadonlySet<string>} leaving The slot ids it takes out of what the stack can draw.
  * @property {ReadonlySet<string>} stayingOn The slot ids of the rows it leaves on, in the stack, with no source.
- * @property {readonly number[]} emptySeries The series that stay without a file and that Generate then refuses.
+ * @property {(turnedOff: ReadonlySet<string>) => readonly number[]} emptySeries The series that stay without a
+ *   file and that Generate then refuses, once the question's choice also turns off the rows `turnedOff`.
  */
 
 /**
@@ -737,20 +738,23 @@ export const depthRowsLeaving = (before, after) => {
 export const depthSeriesRemovalLoss = (slots, removedIndex, activeCount) => ({
   leaving: depthRowsLeaving(slots, reindexDepthSlots({ slots: [...slots], removedIndex, activeCount })),
   stayingOn: new Set(),
-  emptySeries: []
+  emptySeries: () => []
 });
 
 /**
  * A change of the series with a source, from the reconcile it runs. A series
- * that loses its last source stays (PD-OI-025), and Generate refuses it while
- * another series has a source; with no source left the drawing draws no Depth
- * (`buildDepthResources` in session-request.js).
+ * that loses its last source stays (PD-OI-025), and Generate refuses it when
+ * it asks for Depth (`drawsDepth`, read for the stack the change and the
+ * question's choice leave) while another series has a source; with no source
+ * left the drawing draws no Depth (`buildDepthResources` in session-request.js).
  * @param {DepthSlotRow[]} slots
  * @param {number[]} previousSourced
  * @param {number[]} sourced
+ * @param {(rows: readonly DepthSlotRow[]) => boolean} drawsDepth Whether Generate asks for Depth with the stack's
+ *   rows `rows` (`draftDrawsDepth` of the drawing).
  * @returns {DepthSourceLoss}
  */
-export const depthSourceLoss = (slots, previousSourced, sourced) => {
+export const depthSourceLoss = (slots, previousSourced, sourced, drawsDepth) => {
   const lost = previousSourced.filter((trackIndex) => !sourced.includes(trackIndex));
   const { slots: after } = reconcileManagedDepthSlots({ slots, previousSourced, sourced });
   return {
@@ -758,7 +762,8 @@ export const depthSourceLoss = (slots, previousSourced, sourced) => {
     stayingOn: new Set(after
       .filter((slot) => isDepthSlot(slot) && slot.enabled !== false && lost.includes(/** @type {number} */ (depthSlotTrackIndex(slot))))
       .map((slot) => String(slot.id))),
-    emptySeries: sourced.length > 0 ? lost : []
+    emptySeries: (turnedOff) => (sourced.length > 0
+      && drawsDepth(after.map((slot) => (turnedOff.has(String(slot.id)) ? { ...slot, enabled: false } : slot))) ? lost : [])
   };
 };
 

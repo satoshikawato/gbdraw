@@ -3105,7 +3105,7 @@ export const createAppSetup = () => {
         drawing, orderedConservationSources(sourceFiles, { ...drawing.circularConservation, series })
       ),
       stayingOn: new Set(),
-      emptySeries: []
+      emptySeries: () => []
     },
     sources: () => [files.c_conservation_blasts, files.c_conservation_fastas, ...drawing.circularConservation.series],
     label,
