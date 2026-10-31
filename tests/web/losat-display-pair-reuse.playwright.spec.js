@@ -271,7 +271,7 @@ const ORIGIN_SOURCES = [
 const openOriginCds = async (page, mode) => {
   await installProteinExecutor(page);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   for (const [index, source] of ORIGIN_SOURCES.entries()) {
     if (index > 0) await page.getByRole('button', { name: 'Add sequence' }).first().click();
     const chooser = page.waitForEvent('filechooser');
