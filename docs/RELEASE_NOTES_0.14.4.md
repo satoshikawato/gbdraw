@@ -227,8 +227,9 @@ and 0.14.4 saves Sessions as version 49, as 0.14.3 does. See
 ## Known issues
 
 - After **Reset Settings** on one diagram mode, the other mode's Result keeps its
-  hidden labels and edited label text until the next **Generate Diagram**. Since
-  0.14.3 at least.
+  hidden labels and edited label text, and after a Session load the Legend rows of
+  its removed color rules, until the next **Generate Diagram**. Since 0.14.3 at
+  least.
 - A Similarity group member popup and the Similarity alignment panel still show
   the coordinates of a CDS across the origin as `1..` the record length. The
   drawing is correct; only this text is wrong.
@@ -239,8 +240,11 @@ and 0.14.4 saves Sessions as version 49, as 0.14.3 does. See
   asks first, an Overlay row you turn back on by hand, while its track is back,
   returns in the Result at once, while the note beside the track stack still says
   **Applies on Generate**. The Result then equals the next Generate.
-- When two Legend rows share a name, a color rule edit can number them in the
-  opposite order until the next **Generate Diagram**. 0.14.3 does the same.
+- When two Legend rows share a name, a color rule edit or removal can number them
+  in the opposite order until the next **Generate Diagram**. 0.14.3 does the same.
+- After you delete a Legend row, giving another color rule that row's name can
+  place the returning row last in the Legend until the next **Generate Diagram**.
+  0.14.3 does the same.
 
 Carried from 0.14.1:
 
