@@ -1,0 +1,4 @@
+##gff-version 3
+##sequence-region ctg1 1 3000
+ctg1	test	gene	101	700	.	+	.	ID=gene1;Name=geneA
+ctg1	test	CDS	101	700	.	+	0	ID=cds1;Parent=gene1;product=protein A

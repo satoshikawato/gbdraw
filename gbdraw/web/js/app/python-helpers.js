@@ -294,6 +294,14 @@ def run_canonical_request_wrapper(
             )
         return failure
 
+def _parse_sequence_file(path, fmt):
+    """The records of a GenBank/DDBJ/EMBL file as the CLI parses them (read_flat_file_records), or of a FASTA file."""
+    if fmt == "genbank":
+        from gbdraw.io.genome import read_flat_file_records
+        return read_flat_file_records(path)
+    from Bio import SeqIO
+    return list(SeqIO.parse(path, fmt))
+
 def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
     """Extract the first record as FASTA for LOSAT input."""
     from Bio import SeqIO
@@ -304,7 +312,7 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
         fmt_map = {"genbank": "genbank", "fasta": "fasta"}
         if fmt not in fmt_map:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {fmt}'), operation='extractFirstFasta', stage="helper")})
-        records = list(SeqIO.parse(path, fmt_map[fmt]))
+        records = _parse_sequence_file(path, fmt_map[fmt])
         if not records:
             return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='extractFirstFasta', stage="helper")})
         selector_raw = None
@@ -531,7 +539,6 @@ def _web_feature_view_hash_parts(record, source_feature_position):
     )
 
 def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, source_feature_catalogs=None):
-    from Bio import SeqIO
     from gbdraw.features.source import capture_source_features
     from gbdraw.io.record_select import parse_record_selector, select_record
     from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
@@ -542,7 +549,7 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         # The records a Generate parses from this staged file (OV-1555, OV-1595),
         # shared and read only; for a file sent as is, this reader's own parse.
         prepared = prepared_parsed_source(GenBankInputSource(path), load_render_source_records)
-        source_records = list(SeqIO.parse(path, "genbank")) if prepared is None else list(prepared.records)
+        source_records = _parse_sequence_file(path, "genbank") if prepared is None else list(prepared.records)
         if not source_records:
             raise ValueError("No records found")
         records = select_record(source_records, selector) if selector is not None else [source_records[0]]
@@ -1662,12 +1669,11 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
 
 def get_record_length(path, fmt, record_id=None, record_index=None):
     """Return record length for a GenBank/FASTA file."""
-    from Bio import SeqIO
     try:
         fmt_map = {"genbank": "genbank", "fasta": "fasta"}
         if fmt not in fmt_map:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {fmt}'), operation='unknown', stage="helper")})
-        records = list(SeqIO.parse(path, fmt_map[fmt]))
+        records = _parse_sequence_file(path, fmt_map[fmt])
         if not records:
             return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='unknown', stage="helper")})
         if record_id:
@@ -1688,7 +1694,6 @@ def get_record_length(path, fmt, record_id=None, record_index=None):
 
 def list_sequence_records(path, format):
     """List record selectors, IDs, and lengths from a sequence file."""
-    from Bio import SeqIO
     from gbdraw.api.record_planning import _detected_topology
     from gbdraw.core.record_metadata import (
         format_inferred_definition,
@@ -1698,25 +1703,15 @@ def list_sequence_records(path, format):
         format_map = {"genbank": "genbank", "fasta": "fasta"}
         if format not in format_map:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {format}'), operation='listSequenceRecords', stage="helper")})
-        try:
-            records = list(SeqIO.parse(path, format_map[format]))
-        except ValueError as parse_error:
-            if format != "genbank":
-                raise
-            from gbdraw.exceptions import ParseError
-            from gbdraw.io.genome import genbank_read_diagnostic
-            raise ParseError('GenBank file could not be read', diagnostic=genbank_read_diagnostic(path)) from parse_error
+        # A GenBank/DDBJ/EMBL file the parser refuses, or one without a record, raises its diagnostic here.
+        records = _parse_sequence_file(path, format_map[format])
         # OV-1258: a record without sequence cannot be drawn; the inspection says so.
-        if format == "genbank" and not all(getattr(record.seq, "defined", True) for record in records):
-            from gbdraw.exceptions import ValidationError
-            raise ValidationError('Sequence content is undefined', diagnostic={"code": "INPUT_UNREADABLE", "reason": "SEQUENCE_UNDEFINED"})
+        if format == "genbank":
+            from gbdraw.io.genome import require_record_sequence
+            for record in records:
+                require_record_sequence(record, path)
         if not records:
-            missing = ValueError('No records found')
-            if format == "genbank":
-                from gbdraw.exceptions import ValidationError
-                from gbdraw.io.genome import genbank_absence_diagnostic
-                missing = ValidationError('No records found', diagnostic=genbank_absence_diagnostic(path))
-            return json.dumps({'error': serialize_web_error(missing, operation='listSequenceRecords', stage="helper")})
+            return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='listSequenceRecords', stage="helper")})
         payload = []
         for idx, record in enumerate(records):
             organism = ""

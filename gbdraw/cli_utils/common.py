@@ -93,7 +93,7 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--gbk",
         metavar="GBK_FILE",
-        help='GenBank/DDBJ flat file',
+        help='GenBank, DDBJ, or EMBL flat file',
         type=str,
         nargs='*')
     parser.add_argument(

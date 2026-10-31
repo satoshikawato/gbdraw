@@ -1,0 +1,10 @@
+LOCUS       NZ_PGAP01000002         3000 bp    DNA     linear   BCT 01-JAN-2020
+DEFINITION  synthetic input variant.
+ACCESSION   NZ_PGAP01000002
+VERSION     NZ_PGAP01000002.1
+KEYWORDS    .
+SOURCE      Testus variantus
+  ORGANISM  Testus variantus
+            Bacteria.
+CONTIG      join(NZ_PGAP01000001.1:1..3000)
+//

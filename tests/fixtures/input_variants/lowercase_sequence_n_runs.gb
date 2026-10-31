@@ -1,0 +1,70 @@
+LOCUS       LOWER1                  3000 bp    DNA     circular BCT 01-JAN-2020
+DEFINITION  synthetic input variant.
+ACCESSION   LOWER001
+VERSION     LOWER001.1
+KEYWORDS    .
+SOURCE      Testus variantus
+  ORGANISM  Testus variantus
+            Bacteria.
+FEATURES             Location/Qualifiers
+     source          1..3000
+                     /organism="Testus variantus"
+                     /mol_type="genomic DNA"
+     CDS             101..700
+                     /locus_tag="LC_0001"
+                     /product="before N run"
+     CDS             1401..1700
+                     /locus_tag="LC_0002"
+                     /product="between N runs"
+ORIGIN
+        1 gctaaagaca attacataac atacacgtca gcacgaaact tgttggccca gtgtgaatcg
+       61 cttaagggtt aagtaagtgt gatgcatacg cctttacttg ctgtgtccac cccatcggac
+      121 tggcattttt attacactca gaaacagaac tcgggtaatt ttgacaggtc acgcagaggc
+      181 gcgccctcct gaagtgcgtg gacactcgct atgaatctct gatttaccca ctctgccaaa
+      241 ctccagcgcg gtcagttcca tcaccctaag taaccgaata atgcgttcgc tctattgact
+      301 acgacgcgct cattcccttg tcggagagtt atggaacaag gacgctgtct gagactagaa
+      361 gacagatagt gcacacgacc ggcgtcggag aaactctatt tgccgcctga caagtcaatg
+      421 cgatccgtag gggcagcgca gtatgccaag actataggca ctgtcgcatc acaaacgatt
+      481 aactgataaa tgagcccttt atgacacggg catatgactg gtttacgata gtatgtccaa
+      541 cggcgagctt tacatttgct gtgagaggta cagggattag tgagaagccg tgcgtatcaa
+      601 ttcgtacctt gggggtcgtt accactctgt tcccacgagc ggcatttctg gatggccagc
+      661 ttttgacatt taatttcacc cataaaccag cgtaaagctg caagtggctc catgaactta
+      721 gctgctagtg tcagactcgc ctcggatcct tactacacta acttgaacgc ctagtggtca
+      781 aagagtactg gtaatcgtcg gtatctatat aagcagggga ggggaaacat ttgttctcag
+      841 ccggtgactc ctaatgctaa gacatttccc ttcagggggg gctcccccgc gatgccataa
+      901 atctgagcaa ccagctgaag caggcacgac agtgcgacat tatatcactg tggtaggtta
+      961 gcttcatcta atgtccaact agccggccaa ttcgcatgat NNNNNNNNNN NNNNNNNNNN
+     1021 NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN
+     1081 NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN
+     1141 NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN
+     1201 NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN
+     1261 NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN NNNNNNNNNN ctggcgcctc aataggatta
+     1321 tagcggtctc tcaggctgct tgccgtccgg cccggccgcg acactccggt gcaagcttaa
+     1381 ttcgtacgta cttcccattg gatctcgttt atcgattaag cccgatctag gttcctagag
+     1441 gttaaattgg acgtcttccc actccgttgc tgcgtgtcta ggcggtttag cgtaagcgaa
+     1501 caggaccctg cctcagctca taagtcctta ttctctcacg ttgtgttacg aaagattcac
+     1561 tcgaggtcgt gtgagggttg ggctagcggc aattatgaaa ctatcacatc acataagcgg
+     1621 gctagatata atttaatctt aatccataaa acactagctc agcagttgaa aaaatggcta
+     1681 ggttccagct tttggggaga cgtctttctg agggtcagcc gtgattccga ttcgattaga
+     1741 ctggtcccca cgggtccatg agtacgagga aactcggtat cgagcctaaa agttataagg
+     1801 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1861 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1921 nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn nnnnnnnnnn
+     1981 nnnnnnnnnn nnnnnnnnnn tgaaatcccc ttcattatag gtcgtgtagc gctagacagt
+     2041 cacctttaaa ggaagaatca gaggcaagat ctacgtggca gtctcgtgtt gacgccttag
+     2101 ccggtggcga acagtattga cctggccgat gctaatattc tgatttgggg ttgatttgcg
+     2161 cttcaggcgc taaagtggtt ttgagtaaca tgtccttttg acgggagcag gtcgcctcaa
+     2221 gataagagta aacctgccta ccaaaacttt aagccggcag aagcttaact atacccaccg
+     2281 atgtgtactc tgttacaccg tcagtgagtg taatgctctg gctagagccc acgcttccgg
+     2341 cttcgtcctc gtgctccaag tacgataccg caaggcagac gctggttcgc aggtatctga
+     2401 cgagcatact cgctagcctg tgaagaacaa gcgattcgag ttgtactctc agcccgcacg
+     2461 gtacgccttc catcggcccg atccttcaga gtcaaggcag tacgttggca aattaggatt
+     2521 tcgagaggca caatcggcca ggtcggcgcg gcaaatactt tcgacccctt aattccgaat
+     2581 cgaatgatac ctgatgctag ttctaaggtg tcggacctac gtgcttgacc cacgacgtct
+     2641 caatatcaat tcctacgatc agaactgact acagcggaga cggtagagga acggctataa
+     2701 taagccgtcg gtaagcttaa acttcttcag gcgcaccgtg ttggagtgca ctaccgtgag
+     2761 gcaactaggc cagggcgtga ggtgccgccc attttgcacg gggacacggt gtatgcggac
+     2821 gcacattcga ccacaaagca cgagacggat tgcataagtt gtaaggatgc aacccaggtg
+     2881 cgcgtagtgg gcgatagcct aacaaccggc ccagcttcgt tcgaaaatga ctttcagagt
+     2941 ccgcgtggtc ctgcggagat ccgtcacgat ctcgaacacg cgacttatgt gaccaaccta
+//

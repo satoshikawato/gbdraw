@@ -4,6 +4,7 @@ import inspect
 import logging
 from pathlib import Path
 
+import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -11,6 +12,7 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.api.io import load_gbks as api_load_gbks
 from gbdraw.api.io import load_gff_fasta as api_load_gff_fasta
 from gbdraw.cli_utils.common import load_records_table_records
+from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import RecordsTable
 from gbdraw.io.cli_tables import RecordsTableRow
 from gbdraw.io.genome import load_gbks
@@ -123,3 +125,42 @@ def test_records_table_loader_forwards_only_neutral_record_controls() -> None:
             "reverse_flags": [True],
         },
     }
+
+
+def _flat_file(path: Path, *, locus: str, feature_lines: str) -> Path:
+    path.write_text(
+        f"LOCUS       {locus}                 60 bp    DNA     linear   UNK 01-JAN-2020\n"
+        "FEATURES             Location/Qualifiers\n"
+        f"{feature_lines}"
+        "ORIGIN\n"
+        "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt\n"
+        "//\n"
+    )
+    return path
+
+
+def test_load_gbks_lays_out_a_feature_key_line_written_with_tabs(tmp_path: Path) -> None:
+    path = _flat_file(tmp_path / "tabs.gb", locus="TABKEY", feature_lines=(
+        "     CDS\t\t1..30\n"
+        "\t\t\t/locus_tag=\"T1\"\n"
+        "\tgene\tcomplement(31..60)\n"
+    ))
+
+    features = load_gbks([str(path)])[0].features
+
+    assert [(f.type, int(f.location.start), f.location.strand) for f in features] == [
+        ("CDS", 0, 1), ("gene", 30, -1)
+    ]
+    assert features[0].qualifiers["locus_tag"] == ["T1"]
+
+
+def test_load_gbks_names_a_file_without_a_record_among_several(tmp_path: Path) -> None:
+    good = _flat_file(tmp_path / "good.gb", locus="GOOD", feature_lines="")
+    text = tmp_path / "notes.txt"
+    text.write_text("plain notes, not a flat file\n")
+
+    with pytest.raises(ValidationError) as caught:
+        load_gbks([str(good), str(text)])
+
+    assert caught.value.diagnostic == {"code": "NO_RECORDS", "reason": "NOT_GENBANK"}
+    assert "notes.txt is not a GenBank, DDBJ or EMBL flat file" in str(caught.value)
