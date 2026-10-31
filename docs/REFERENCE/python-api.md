@@ -342,7 +342,7 @@ representation. See [Session and request compatibility](session-and-request-comp
 
 ## Combined rotation and placement example
 
-Use a new directory containing the four inputs obtained in the
+Use a new directory containing the three inputs obtained in the
 [CLI example](command-line.md#rotate-a-plastome-and-place-a-multipart-feature).
 This program constructs the placement table in memory; it does not need
 `tables/placements.tsv`. Save it as `rotated_placed_chloroplast.py` and run
@@ -417,7 +417,7 @@ options = CircularOptions(
             "misc_RNA",
             "rep_origin",
         ),
-        color_table=Path("chloroplast_specific_table.tsv"),
+        color_table="builtin:plastid",
         placements=DataFrame([{
             "record": "NC_001879.2",
             "feature_selector": "protein_id=NP_054479.1",

@@ -12,7 +12,7 @@ LSC/IRb/SSC/IRa names curved along it, GC content, and the upper-left legend.
 
 ## Before you start
 
-Download the inputs and save them with the exact filenames shown. [Get the
+Download the inputs and save them with the exact filenames shown. The chloroplast gene-family colors come from gbdraw's built-in `plastid` color table, so there is no color file to download. [Get the
 tutorial inputs](../GETTING_TUTORIAL_DATA.md) explains browser, `curl`, and
 PowerShell downloads and the meaning of each file type.
 
@@ -20,12 +20,10 @@ PowerShell downloads and the meaning of each file type.
 | --- | --- | --- | --- |
 | `NC_001879.gbk` | NCBI `NC_001879.2`, *Nicotiana tabacum* plastid, complete genome | 155,943 bp | [Record page](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2); [full GenBank file](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001879.2&rettype=gbwithparts&retmode=text) |
 | `nicotiana-tabacum-regions-span.tsv` | LSC, IRb, SSC, and IRa annotations: named lines and tints | — | [`nicotiana-tabacum-regions-span.tsv`](../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions-span.tsv) (select **Download raw file**) |
-| `chloroplast_specific_table.tsv` | Chloroplast gene-family color rules | — | [`chloroplast_specific_table.tsv`](../../gbdraw/web/tutorial-data/tobacco-plastome-regions/chloroplast_specific_table.tsv) (select **Download raw file**) |
 | `qualifier_priority.tsv` | CDS label-priority rules | — | [`qualifier_priority.tsv`](../../gbdraw/web/tutorial-data/tobacco-plastome-regions/qualifier_priority.tsv) (select **Download raw file**) |
 
 The GenBank file is the complete 155,943 bp `NC_001879.2` record. The other
-files define structural regions, chloroplast gene-family colors, and CDS label
-priority; none edits the sequence or feature coordinates.
+files define structural regions and CDS label priority; none edits the sequence or feature coordinates.
 
 Each interface creates these files:
 
@@ -81,8 +79,8 @@ Set the main controls as follows:
 
 Set the four label offsets while **Circular Label Placement** is Horizontal,
 then change it to Radial. Under **Features**, keep `CDS`, `rRNA`, and `tRNA`; add `tmRNA`, `ncRNA`,
-`misc_RNA`, and `rep_origin`; remove `repeat_region`. Under **Colors**, upload
-`chloroplast_specific_table.tsv` as **Specific rules file**. Under **Labels**,
+`misc_RNA`, and `rep_origin`; remove `repeat_region`. Under **Colors**, choose
+Plastid gene classes in **Preset scheme** and select **Apply**. Under **Labels**,
 upload `qualifier_priority.tsv` as **Priority File (TSV)**. These settings
 produce one legend entry per functional group and readable radial gene labels.
 
@@ -157,7 +155,7 @@ mkdir gbdraw-cli-chloroplast
 cd gbdraw-cli-chloroplast
 ```
 
-Download all four files from the table in [Before you start](#before-you-start).
+Download all three files from the table in [Before you start](#before-you-start).
 The sequence link downloads accession `NC_001879.2` directly from NCBI in full
 GenBank format. The other links are repository-hosted support tables; select
 **Download raw file** for those. Save every file with the exact name in the
@@ -170,7 +168,6 @@ ncbi_efetch="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 gbdraw_data_base="https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data"
 curl -L "${ncbi_efetch}?db=nuccore&id=NC_001879.2&rettype=gbwithparts&retmode=text" -o NC_001879.gbk
 curl -L "$gbdraw_data_base/tobacco-plastome-regions/nicotiana-tabacum-regions-span.tsv" -o nicotiana-tabacum-regions-span.tsv
-curl -L "$gbdraw_data_base/tobacco-plastome-regions/chloroplast_specific_table.tsv" -o chloroplast_specific_table.tsv
 curl -L "$gbdraw_data_base/tobacco-plastome-regions/qualifier_priority.tsv" -o qualifier_priority.tsv
 ```
 
@@ -186,7 +183,6 @@ The working directory should now contain:
 gbdraw-cli-chloroplast/
 ├── NC_001879.gbk
 ├── nicotiana-tabacum-regions-span.tsv
-├── chloroplast_specific_table.tsv
 └── qualifier_priority.tsv
 ```
 
@@ -196,7 +192,7 @@ gbdraw-cli-chloroplast/
 ```bash
 gbdraw circular \
   --gbk NC_001879.gbk \
-  -t chloroplast_specific_table.tsv \
+  -t builtin:plastid \
   -k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin \
   --species '<i>Nicotiana tabacum</i>' \
   --track_type tuckin \
@@ -255,12 +251,12 @@ mkdir gbdraw-python-chloroplast
 cd gbdraw-python-chloroplast
 ```
 
-Download all four files from the table in [Before you start](#before-you-start)
+Download all three files from the table in [Before you start](#before-you-start)
 and save every file with the exact filename shown.
 
 ### Step 2: Save and run the Python program
 
-Save the following program as `annotated_chloroplast.py` beside the four input
+Save the following program as `annotated_chloroplast.py` beside the three input
 files:
 
 <!-- executable:T-PY-02:start -->
@@ -344,7 +340,7 @@ options = CircularOptions(
             "misc_RNA",
             "rep_origin",
         ),
-        color_table=Path("chloroplast_specific_table.tsv"),
+        color_table="builtin:plastid",
     ),
     labels=LabelOptions(
         qualifier_priority=Path("qualifier_priority.tsv"),
@@ -400,7 +396,6 @@ Before running it, your working directory should contain:
 gbdraw-python-chloroplast/
 ├── NC_001879.gbk
 ├── nicotiana-tabacum-regions-span.tsv
-├── chloroplast_specific_table.tsv
 ├── qualifier_priority.tsv
 └── annotated_chloroplast.py
 ```
@@ -442,9 +437,10 @@ legend.
 - `NC_001879.gbk` is NCBI accession `NC_001879.2`, the complete tobacco
   plastome. Check the accession version (`.2`) in the `VERSION` line; it
   identifies the exact nucleotide sequence.
-- The three TSV files are gbdraw support files hosted in this repository. They
-  hold the structural-region annotations, the functional feature colors, and
-  the CDS label priority.
+- The two TSV files are gbdraw support files hosted in this repository. They
+  hold the structural-region annotations and the CDS label priority. The
+  functional feature colors come from the `plastid` table packaged with gbdraw
+  ([Built-in color tables](../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#built-in-color-tables)).
 - The command and the Python program on this page run in gbdraw's automated
   documentation checks in a clean directory. The checks confirm the complete
   record, the feature count, the annotation identities, the four-slot order,
