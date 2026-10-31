@@ -12,6 +12,11 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
+
+- Patch release of 0.14.4. Sessions are saved as Session version 50 (0.14.4 writes 49); a Session
+  saved by 0.14.5 opens in 0.14.5 or later only. See the [full release notes](./docs/RELEASE_NOTES_0.14.5.md).
+<!-- PENDING: LOSAT Wasm swap, OV-2369, OV-2370/OV-2380, OV-2371 (#1532) entries -->
 - Added: `--wrap_length AUTO|LENGTH` and the config key
   `canvas.linear.wrap_length` draw one Linear record over several rows at one
   scale, each row with its own height. The record stays one record, and a figure
@@ -32,6 +37,18 @@ write-up of a release.
   `--session_output`, writes `rbh` for a retired Collinear anchor mode such as
   `one_to_one`, in its requests and drafts. A hand-edited spelling of a retired
   mode, such as `ONE-TO-ONE`, now reads and upgrades instead of being refused.
+- Added: built-in specific-color tables. `-t/--table` and
+  `FeatureOptions.color_table` accept `builtin:cog`, `builtin:phrog`,
+  `builtin:plastid`, and `builtin:mitochondrion`; the Web app **Colors > Preset
+  scheme** lists them in place of the Pharokka and Bakta presets. The `cog`
+  table reads `db_xref`, GFF3 `Dbxref`, and `note`, so it colors Bakta's default
+  GenBank output, which the old Bakta preset did not (OV-2358).
+- Fixed: more real-world input reads, or fails with a named error. Read now: a
+  Geneious LOCUS line with spaces in the name, EMBL flat files (`.embl`, `.emb`
+  in the Web file pickers), qualifier lines indented with tabs, lowercase GFF3
+  feature types such as `cds`, and GFF3 attributes with a space after `;`. A
+  `CONTIG` record without sequence and a `--gbk` file without a record now stop
+  with an error that names the file and the reason.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 
