@@ -8,8 +8,8 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-losat-cache-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
-// losat-cache.js reads the generated schema constants.
-for (const module of ['services/losat-cache.js', 'contracts/schema.generated.js']) {
+// losat-cache.js reads the generated schema constants and the shipped LOSAT build.
+for (const module of ['services/losat-cache.js', 'contracts/schema.generated.js', 'services/losat-build.generated.js']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', module), join(tempRoot, module));
 }
 
@@ -68,7 +68,9 @@ const proteinEntry = {
   queryRuntimeBindingHash: 'sha256:runtime-binding-a',
   subjectRuntimeBindingHash: 'sha256:runtime-binding-b',
   queryRecordInstanceKey: 'record-1',
-  subjectRecordInstanceKey: 'record-2'
+  subjectRecordInstanceKey: 'record-2',
+  // Searched by this Web build, so a lookup may reuse it.
+  runtime: cache.webLosatRuntimeRecord('blastp')
 };
 const nucleotideEntry = {
   schema: 2,
@@ -80,7 +82,8 @@ const nucleotideEntry = {
   outfmt: '6',
   args: [],
   queryCanonicalHash: 'q',
-  subjectCanonicalHash: 's'
+  subjectCanonicalHash: 's',
+  runtime: cache.webLosatRuntimeRecord('blastn')
 };
 const legacyProteinEntry = {
   schema: 2,
@@ -116,6 +119,47 @@ assert.ok(cache.getCurrentRawLosatCacheEntry(
   'nucleotide-key',
   { program: 'blastn', outfmt: '6', args: [], queryCanonicalHash: 'q', subjectCanonicalHash: 's' }
 ));
+// Reuse by the runtime that searched the rows. A CLI search and this LOSAT Wasm build are reused. The Wasm of
+// gbdraw 0.14.4 and earlier (`version: null`) and rows with no runtime record (Sessions before version 44,
+// promoted legacy protein caches) are reused only for LOSATP and LOSATN task megablast, whose rows that Wasm gives
+// as this build does; its task blastn, dc-megablast (it ran blastn, OV-2377) and TLOSATX rows are searched again.
+// Rows of any other Wasm build are searched again.
+const { LOSAT_WASM_BUILD } = await import(pathToFileURL(join(tempRoot, 'services', 'losat-build.generated.js')));
+const wasmRuntime = (version, program) => ({ kind: 'losat', source: 'wasm', version, program });
+/** @type {[string, string[], ((program: string) => object | undefined), boolean][]} */
+const reuseCases = [];
+for (const [program, args, equalRows] of [
+  ['blastp', [], true],
+  ['blastn', ['--task', 'megablast'], true],
+  ['blastn', [], false],
+  ['blastn', ['--task', 'blastn'], false],
+  ['blastn', ['--task', 'dc-megablast'], false],
+  ['tblastx', ['--query-gencode', '11', '--db-gencode', '11'], false]
+]) {
+  reuseCases.push(
+    [program, args, (name) => wasmRuntime(LOSAT_WASM_BUILD.version, name), true],
+    [program, args, () => runtimeRecord, true],
+    [program, args, (name) => wasmRuntime(null, name), equalRows],
+    [program, args, () => undefined, equalRows],
+    [program, args, (name) => wasmRuntime('0.1.0', name), false]
+  );
+}
+for (const [program, args, runtimeOf, reused] of reuseCases) {
+  const runtime = runtimeOf(program);
+  const { runtime: _runtime, ...base } = program === 'blastp' ? proteinEntry : nucleotideEntry;
+  const entry = { ...base, program, args, ...(runtime ? { runtime } : {}) };
+  assert.equal(cache.isReusableLosatEntry(entry), reused, `${program} ${JSON.stringify(args)} ${JSON.stringify(runtime)}`);
+}
+// The lookups apply it: a nucleotide entry of the earlier Wasm with task blastn is not returned; with megablast it is.
+const nucleotideMetadata = { program: 'blastn', outfmt: '6', queryCanonicalHash: 'q', subjectCanonicalHash: 's' };
+for (const [task, reused] of [['megablast', true], ['blastn', false]]) {
+  const entry = { ...nucleotideEntry, args: ['--task', task], runtime: wasmRuntime(null, 'blastn') };
+  assert.equal(
+    Boolean(cache.getCurrentRawLosatCacheEntry(new Map([['nucleotide-key', entry]]), 'nucleotide-key', { ...nucleotideMetadata, args: ['--task', task] })),
+    reused,
+    `lookup of task ${task}`
+  );
+}
 assert.equal(
   cache.classifyRawLosatCacheEntry({ ...proteinEntry, schema: 3 }),
   'invalid',

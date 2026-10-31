@@ -84,6 +84,7 @@ _WEB_APP_PACKAGE_DATA = [
     "web/vendor/*/*/*/*.whl",
     "web/vendor/*/*/*/*.zip",
     "web/vendor/*/*/*/*.wasm",
+    "web/wasm/*/*.json",
     "web/wasm/*/*.md",
     "web/wasm/*/*.wasm",
 ]
