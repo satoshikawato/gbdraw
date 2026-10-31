@@ -23,6 +23,7 @@ class LabelDrawer:
             font=label_entry["font_family"],
             dominant_baseline="central",
             text_anchor=label_entry["text_anchor"],
+            font_style=label_entry.get("font_style", "normal"),
         )
         if not is_horizontal_label(label_entry):
             label_path.rotate(rotation_deg, center=(middle_x, middle_y))

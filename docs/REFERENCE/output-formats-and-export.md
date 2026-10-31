@@ -87,6 +87,14 @@ the canvas pixel dimensions and **300 (Print)** produces a larger raster.
 Check the downloaded dimensions and file signature instead of trusting the
 extension.
 
+gbdraw draws no background. SVG and Interactive SVG have no background shape,
+and command-line and Python PNG keep the background transparent. PDF, EPS,
+and PS paint no page background, so a viewer shows its own page color, usually
+white. The web app PNG export fills the background white unless
+**Transparent background** is on next to the DPI choice; it is off by default,
+is a page setting that is not saved in Sessions, and is not an Undo step. The
+web app PDF has no background either way.
+
 SVG lengths are CSS pixels (96 px per inch). A web PDF page is the SVG canvas
 at 0.75 pt per px, the same physical size as the CLI (CairoSVG) PDF; a
 1491 × 984 px canvas becomes a 1118 × 738 pt page. The PDF text layer keeps

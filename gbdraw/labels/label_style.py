@@ -13,6 +13,11 @@ has a ``FeatureLabelStyle``, read from ``labels.linear`` / ``labels.circular``
   letters (``HALO_WIDTH_EM`` wide), so a leader passing behind them is cut
   away; ``box`` draws a white rounded box (``BOX_OPACITY``) behind them;
   ``none`` draws neither.
+- ``italic_gene_labels``: a label the qualifier priority names from the
+  ``gene`` qualifier is drawn in italics (``FeatureLabelStyle.font_style``),
+  also when an edit replaced its text; every other label stays upright. Every
+  measurement of the label reads the same style, so the italic face is
+  measured where the font registry has one (``core.fonts.resolve_font_face``).
 
 The halo width, the box opacity, the gaps and the width rule are constants,
 not settings (Owner, LP-D100 Q-B). Leaders and underlines are drawn
@@ -30,6 +35,10 @@ from ..exceptions import ValidationError
 LabelStyleMode: TypeAlias = Literal["circular", "linear"]
 LabelLine: TypeAlias = Literal["none", "under"]
 LabelProtection: TypeAlias = Literal["none", "halo", "box"]
+# The ``font-style`` a feature label is drawn and measured with.
+LabelFontStyle: TypeAlias = Literal["normal", "italic"]
+# The qualifier whose labels ``italic_gene_labels`` draws in italics.
+ITALIC_LABEL_QUALIFIER: Final = "gene"
 LABEL_LINES: tuple[LabelLine, ...] = get_args(LabelLine)
 LABEL_PROTECTIONS: tuple[LabelProtection, ...] = get_args(LabelProtection)
 
@@ -70,6 +79,12 @@ class FeatureLabelStyle:
 
     line: LabelLine
     protection: LabelProtection
+    italic_gene_labels: bool = False
+
+    def font_style(self, source_qualifier: str | None) -> LabelFontStyle:
+        """The style of a label named from ``source_qualifier`` (``labels.filtering.FeatureLabel``)."""
+
+        return "italic" if self.italic_gene_labels and source_qualifier == ITALIC_LABEL_QUALIFIER else "normal"
 
     def draws_underline(self, turned: bool) -> bool:
         """Whether a feature label gets this style's underline: a turned one (a Linear label given a rotation,
@@ -136,11 +151,13 @@ __all__ = [
     "GAP_STOP_EM",
     "HALO_COLOR",
     "HALO_WIDTH_EM",
+    "ITALIC_LABEL_QUALIFIER",
     "LABEL_LINES",
     "LABEL_PROTECTIONS",
     "LINEAR_LABEL_HEIGHT_MARGIN_EM",
     "LEADER_EM",
     "LEADER_MIN_PX",
+    "LabelFontStyle",
     "LabelLine",
     "LabelProtection",
     "LabelStyleMode",

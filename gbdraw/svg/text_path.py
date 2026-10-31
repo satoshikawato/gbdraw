@@ -46,12 +46,16 @@ def generate_text_path(
     font: str,
     dominant_baseline: str = "middle",
     text_anchor: str = "middle",
+    font_style: str = "normal",
 ) -> Text:
     """
     Creates a simple Text element at a position.
 
+    ``font_style`` is written only when it is not the initial value ``normal``.
+
     NOTE: Despite the name, this is currently a plain Text factory; kept for compatibility.
     """
+    style = {} if font_style == "normal" else {"font_style": font_style}
     return Text(
         text,
         insert=(title_x, title_y + interval),
@@ -60,6 +64,7 @@ def generate_text_path(
         font_family=font,
         text_anchor=text_anchor,
         dominant_baseline=dominant_baseline,
+        **style,
     )
 
 

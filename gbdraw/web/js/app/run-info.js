@@ -1304,6 +1304,7 @@ const appendConfigOverrides = (args, request) => {
     appendOption(args, option, shortValue);
   });
 
+  appendBooleanOption(args, take(`labels.${request.mode}.italic_gene_labels`), '--italic_gene_labels');
   if (request.mode === 'circular') {
     appendBooleanOption(args, take('canvas.circular.track_narrowing'), '', '--no_track_narrowing');
     appendBooleanOption(args, take('objects.definition.circular.show'), '', '--hide_definition');

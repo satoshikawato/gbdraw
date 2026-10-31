@@ -1038,6 +1038,7 @@ def test_circular_label_fit_uses_drawer_head_span(
         text="head span",
         font_family=cfg.objects.text.font_family,
         font_size=10.0,
+        font_style="normal",
         width_px=100.0,
         height_px=10.0,
         feature_type="CDS",

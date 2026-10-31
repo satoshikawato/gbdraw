@@ -25,6 +25,16 @@ from .common import ShortLongFloatConfig
 CircularLabelScope = Literal["none", "outer", "both"]
 LinearLabelScope = Literal["none", "all", "first", "orthogroup_top"]
 LinearLabelScopeRecords = Literal["none", "all", "first"]
+def _config_bool(value: object, *, path: str) -> bool:
+    """``value`` as a switch; anything but ``true`` or ``false`` is refused, naming ``path``."""
+
+    if not isinstance(value, bool):
+        raise ValidationError(
+            f"{path} must be true or false", diagnostic={"code": "INPUT_INVALID", "configPath": path}
+        )
+    return value
+
+
 # The records whose labels each Linear label display scope selects.
 LINEAR_LABEL_SCOPE_RECORDS: Mapping[LinearLabelScope, LinearLabelScopeRecords] = {
     "none": "none",
@@ -123,6 +133,7 @@ class LabelsLinearConfig:
     # The feature label style (gbdraw.labels.label_style); a stored config without them takes the defaults.
     line: LabelLine
     protection: LabelProtection
+    italic_gene_labels: bool
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsLinearConfig":
@@ -159,6 +170,9 @@ class LabelsLinearConfig:
             protection=normalize_label_protection(
                 raw.get("protection", DEFAULT_LABEL_PROTECTION["linear"]), path="labels.linear.protection"
             ),
+            italic_gene_labels=_config_bool(
+                raw.get("italic_gene_labels", False), path="labels.linear.italic_gene_labels"
+            ),
         )
 
 
@@ -169,6 +183,7 @@ class LabelsCircularConfig:
     # The feature label style (gbdraw.labels.label_style); a stored config without them takes the defaults.
     line: LabelLine
     protection: LabelProtection
+    italic_gene_labels: bool
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsCircularConfig":
@@ -189,6 +204,9 @@ class LabelsCircularConfig:
             line=normalize_label_line(raw.get("line", DEFAULT_LABEL_LINE["circular"]), path="labels.circular.line"),
             protection=normalize_label_protection(
                 raw.get("protection", DEFAULT_LABEL_PROTECTION["circular"]), path="labels.circular.protection"
+            ),
+            italic_gene_labels=_config_bool(
+                raw.get("italic_gene_labels", False), path="labels.circular.italic_gene_labels"
             ),
         )
 

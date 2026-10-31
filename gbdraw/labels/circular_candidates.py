@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from ..features.coordinates import get_strand
 from .circular_types import CircularLabelCandidate
-from .filtering import get_label_text
+from .filtering import feature_label
 from .coordinates import display_label_segment
+from .label_style import FeatureLabelStyle, LabelFontStyle
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -49,7 +50,8 @@ def build_circular_label_candidates(
     *,
     font_family: str,
     font_size: float,
-    measure_text,
+    measure_text: Callable[[str, str, float, LabelFontStyle], tuple[float, float]],
+    label_style: FeatureLabelStyle,
     record_transform: RecordDisplayTransform | None = None,
     overrides_only: bool = False,
 ) -> tuple[CircularLabelCandidate, ...]:
@@ -59,13 +61,15 @@ def build_circular_label_candidates(
     """
     candidates: list[CircularLabelCandidate] = []
     for input_order, (stable_id, feature) in enumerate(feature_dict.items()):
-        text = get_label_text(
+        label = feature_label(
             feature, label_filtering, overrides_only=overrides_only,
             feature_override=getattr(feature, "feature_override", None),
         )
+        text = label.text
         if not text:
             continue
-        width_px, height_px = measure_text(text, font_family, font_size)
+        font_style = label_style.font_style(label.source_qualifier)
+        width_px, height_px = measure_text(text, font_family, font_size, font_style)
         projected = getattr(feature, "display_parts", None)
         segment = display_label_segment(feature, total_length, circular=True, record_transform=record_transform) if projected is not None else None
         if projected is not None and segment is None:
@@ -88,6 +92,7 @@ def build_circular_label_candidates(
                 text=str(text),
                 font_family=str(font_family),
                 font_size=float(font_size),
+                font_style=font_style,
                 width_px=float(width_px),
                 height_px=float(height_px),
                 feature_type=str(getattr(feature, "feature_type", getattr(feature, "type", ""))),

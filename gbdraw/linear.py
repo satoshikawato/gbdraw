@@ -1582,6 +1582,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "labels.rendering": label_rendering,
         "labels.linear.line": args.label_line,
         "labels.linear.protection": args.label_protection,
+        # Only the italic style is an override, so a default run's request is unchanged.
+        "labels.linear.italic_gene_labels": True if args.italic_gene_labels else None,
         "labels.linear.placement": label_placement,
         "labels.linear.rotation": label_rotation,
         "objects.features.line_stroke_color": line_stroke_color,

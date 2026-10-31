@@ -203,6 +203,7 @@
       "tests/web/mode-record-identity.playwright.spec.js",
       "tests/web/mode-transition-editor-state.playwright.spec.js",
       "tests/web/multi-result-edit-matrix.playwright.spec.js",
+      "tests/web/presentation-options.playwright.spec.js",
       "tests/web/session-save-lifecycle.playwright.spec.js",
       "tests/web/similarity-alignment-ui.playwright.spec.js",
       "tests/web/small-ui-placement.playwright.spec.js",

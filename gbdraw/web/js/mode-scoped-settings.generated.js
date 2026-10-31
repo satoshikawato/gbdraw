@@ -118,6 +118,7 @@ export const MODE_SCOPED_SETTINGS = deepFreeze({
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "label_rendering"},
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "label_line"},
     {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "label_protection"},
+    {"domain": "config.adv", "key": null, "migrate": "copy", "modes": "both", "path": "italic_gene_labels"},
     {"domain": "config.adv", "key": null, "migrate": "own", "modes": "circular", "path": "circular_label_placement"},
     {"domain": "config.adv", "key": null, "migrate": "own", "modes": "linear", "path": "label_placement"},
     {"domain": "config.adv", "key": null, "migrate": "own", "modes": "linear", "path": "label_rotation"},

@@ -11,7 +11,7 @@ from functools import lru_cache
 from typing import Any, NamedTuple, cast
 from .coordinates import display_label_segment
 
-from .filtering import get_label_text, label_filter_maps
+from .filtering import feature_label, label_filter_maps
 from .label_style import LINEAR_LABEL_HEIGHT_MARGIN_EM, ROW_LABEL_GAP_EM
 from .linear_types import LinearLabel, is_above_feature_label, is_horizontal_label, is_level_rotation
 from ..config.models import LinearRenderProfile
@@ -704,17 +704,19 @@ def linear_record_labels(
         )
         if overrides_only and not profile.forced_labels:
             continue
-        feature_label_text = get_label_text(
+        feature_label_choice = feature_label(
             feature_object, label_filtering, overrides_only=overrides_only,
             feature_override=getattr(feature_object, "feature_override", None),
         )
+        feature_label_text = feature_label_choice.text
         if not feature_label_text:
             continue
         if feature_id not in feature_track_positions:
             continue
+        font_style = profile.label_style.font_style(feature_label_choice.source_qualifier)
 
         # Calculate label dimensions and positions
-        bbox_width_px, bbox_height_px = drawn_text_box(feature_label_text, font_family, font_size)
+        bbox_width_px, bbox_height_px = drawn_text_box(feature_label_text, font_family, font_size, "normal", font_style)
         bbox_height_px += LINEAR_LABEL_HEIGHT_MARGIN_EM * float(font_size)
         if bbox_height_px > max_bbox_height:
             max_bbox_height = bbox_height_px
@@ -851,6 +853,7 @@ def linear_record_labels(
             "feature_anchor_x": feature_anchor_x,
             "font_size": font_size,
             "font_family": font_family,
+            "font_style": font_style,
             "rotation_deg": label_rotation_deg,
             "text_anchor": label_text_anchor,
             "middle_y": label_y,

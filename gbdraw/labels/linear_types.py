@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TypedDict
 
+from .label_style import LabelFontStyle
+
 
 class _LinearLabelRequired(TypedDict):
     """Keys every Linear feature label has from ``linear_record_labels`` on."""
@@ -50,8 +52,12 @@ class LinearLabel(_LinearLabelRequired, total=False):
       (``above_feature`` labels; an external label's leader comes from its row);
     - an external label's rows: ``row_origin_y`` and ``row_pitch`` (``linear_label_side``);
     - ``feature_id``: the rendered feature the drawn label binds to, added by the record renderer;
-    - ``wrap_row``: the row of a wrapped record the label stands on (``display_label_segment``).
+    - ``wrap_row``: the row of a wrapped record the label stands on (``display_label_segment``);
+    - ``font_style``: the text's style (``FeatureLabelStyle.font_style``; absent for a list made before the
+      style existed, which draws upright, ``normal``).
     """
+
+    font_style: LabelFontStyle
 
     track_id: str
     above_feature_place_above: bool
