@@ -256,7 +256,7 @@ def test_a_released_session_with_the_removed_anchor_mode_loads_as_rbh(
 
     from gbdraw.session import load_session_document, materialize_session, session_to_request
 
-    path = REPO_ROOT / "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json"
+    path = REPO_ROOT / "tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json"
     session = json.loads(path.read_text(encoding="utf-8"))
     (settings,) = [item["settings"] for item in session["renderRequest"]["comparisons"] if "settings" in item]
     assert settings["collinearityParams"]["parameters"]["mergeOrientation"] == "either"
