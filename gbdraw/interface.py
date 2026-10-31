@@ -605,11 +605,18 @@ setattr(CircularOptions, "__init__", _circular_options_init)
 
 @dataclass(frozen=True)
 class LinearOptions(_CommonOptions):
-    """Options accepted only by :func:`draw_linear`."""
+    """Options accepted only by :func:`draw_linear`.
+
+    ``anchor_feature`` (``key=value``, for example ``"gene=dnaA"``) aligns the
+    records at the first drawn base of the feature it names in each
+    record; the first record that has it keeps its place, and a record
+    without it keeps its place (off by default).
+    """
 
     tracks: LinearTrackOptions = field(default_factory=LinearTrackOptions)
     comparisons: LinearComparisonOptions = field(default_factory=LinearComparisonOptions)
     thresholds: Thresholds = field(default_factory=Thresholds)
+    anchor_feature: str | None = None
 
     def __post_init__(self) -> None:
         _validate_common_options(self)
@@ -1141,6 +1148,7 @@ def _linear_options(
         collinear_infer_orthogroups=comparisons.collinearity_infer_orthogroups,
         orthogroup_membership_mode=comparisons.orthogroup_membership,
         collinear_max_paralog_links_per_orthogroup=comparisons.max_paralog_links,
+        anchor_feature=options.anchor_feature,
     )
     return _LinearDiagramOptions(**values)
 

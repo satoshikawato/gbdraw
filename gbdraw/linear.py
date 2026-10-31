@@ -648,6 +648,19 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='Align genomes to the center (default: False). ',
         action='store_true')
     parser.add_argument(
+        '--anchor_feature',
+        metavar='KEY=VALUE',
+        default=None,
+        help=(
+            'Align the records at the first drawn base of the feature this exact '
+            'selector names in each record, for example gene=dnaA or locus_tag=b0001 '
+            '(the feature_selector form of the placement and override tables). The first '
+            'record that has the feature keeps its place; a record without it keeps its '
+            'place and is reported. Wins over --align_center for the records it moves '
+            '(default: off).'
+        ),
+    )
+    parser.add_argument(
         '--keep_definition_left_aligned',
         dest='keep_definition_left_aligned',
         help=(
@@ -1027,6 +1040,8 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         args.losatp_mode = "similarity_groups"
     if args.losat_output_dir and not args.losat:
         parser.error("--losat_output_dir requires --losat")
+    if args.similarity_alignment_feature and args.anchor_feature:
+        parser.error("--anchor_feature cannot be combined with --similarity_alignment_feature")
     if args.similarity_alignment_feature and (
         args.losat != "losatp" or args.losatp_mode != "similarity_groups"
     ):
@@ -1836,6 +1851,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 if wrap_default_overrides is None
                 else LinearWrapDefaults(wrap_default_overrides, args.wrap_track_order)
             ),
+            anchor_feature=args.anchor_feature,
         ),
         layout=linear_layout,
         similarity_alignment=(

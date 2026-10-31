@@ -186,9 +186,17 @@ def wrap_blocking_inputs(
 
 
 def refuse_undrawable_wrap(
-    config: GbdrawConfig, rows_by_record: Sequence[int], blocking: Sequence[str]
+    config: GbdrawConfig,
+    rows_by_record: Sequence[int],
+    blocking: Sequence[str],
+    *,
+    anchor_feature: bool = False,
 ) -> None:
-    """Refuse what rows cannot draw. Called only when a record is cut: with nothing to cut, the option has no effect."""
+    """Refuse what rows cannot draw. Called only when a record is cut: with nothing to cut, the option has no effect.
+
+    ``anchor_feature`` says the records are aligned at a feature, which one x per record cannot do once a record
+    spans several rows.
+    """
 
     if blocking:
         raise ValidationError(
@@ -218,6 +226,11 @@ def refuse_undrawable_wrap(
         raise _wrap_conflict(
             "WRAP_GRID_ROW",
             "wrap_length cannot cut a record in one grid row with others; give each record its own row, or do not wrap.",
+        )
+    if anchor_feature:
+        raise _wrap_conflict(
+            "WRAP_ANCHOR_FEATURE",
+            "anchor_feature cannot align a record cut by wrap_length: the record's rows share one place.",
         )
 
 

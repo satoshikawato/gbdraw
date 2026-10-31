@@ -2014,48 +2014,64 @@ def _final_record_translations(
     similarity_alignment: SimilarityAlignmentPlan | None,
     anchor_centers: Sequence[float | None] | None,
 ) -> tuple[tuple[float, float], ...]:
-    """Resolve base translations and absolute anchor alignment exactly once."""
+    """Resolve base translations and absolute anchor alignment exactly once.
+
+    ``anchor_centers`` are the display positions the records align at: the
+    Similarity alignment anchor centres with ``similarity_alignment``, else the
+    ``anchor_feature`` starts, whose reference is the first record that has one.
+    An aligned record moves so that its position meets the reference's; any
+    other record keeps its base translation.
+    """
 
     base_by_key = {
         str(item.record_key): (float(item.x), float(item.y))
         for item in (layout.record_translations if layout is not None else ())
     }
     base = tuple(base_by_key.get(str(key), (0.0, 0.0)) for key in record_keys)
-    if similarity_alignment is None:
-        return base
-    similarity_alignment.validate_record_coverage(record_keys)
     centers = tuple(anchor_centers or ())
-    if len(centers) != len(record_keys):
-        raise ValidationError(
-            "Similarity alignment requires one projected anchor center per record."
+    if similarity_alignment is None:
+        reference_index = next(
+            (index for index, center in enumerate(centers) if center is not None), None
         )
-    index_by_key = {str(key): index for index, key in enumerate(record_keys)}
-    reference_index = index_by_key[similarity_alignment.reference.record_key]
-    reference_center = centers[reference_index]
-    if reference_center is None:
-        raise ValidationError("Similarity alignment reference center is missing.")
+        if reference_index is None:
+            return base
+        aligned = {
+            index for index, center in enumerate(centers)
+            if center is not None and index != reference_index
+        }
+    else:
+        similarity_alignment.validate_record_coverage(record_keys)
+        if len(centers) != len(record_keys):
+            raise ValidationError(
+                "Similarity alignment requires one projected anchor center per record."
+            )
+        index_by_key = {str(key): index for index, key in enumerate(record_keys)}
+        reference_index = index_by_key[similarity_alignment.reference.record_key]
+        if centers[reference_index] is None:
+            raise ValidationError("Similarity alignment reference center is missing.")
+        decisions = {decision.record_key: decision for decision in similarity_alignment.records}
+        aligned = {
+            index for index, record_key in enumerate(record_keys)
+            if decisions[str(record_key)].status is AlignmentDecisionStatus.ALIGNED
+        }
+        for index in aligned:
+            if centers[index] is None:
+                raise ValidationError(
+                    f"Similarity alignment center is missing for record {record_keys[index]!r}."
+                )
     reference_world_x = (
-        placements[reference_index].x_for_position(reference_center)
+        placements[reference_index].x_for_position(cast(float, centers[reference_index]))
         + base[reference_index][0]
     )
-    decisions = {decision.record_key: decision for decision in similarity_alignment.records}
-    resolved: list[tuple[float, float]] = []
-    for index, record_key in enumerate(record_keys):
-        decision = decisions[str(record_key)]
-        base_x, base_y = base[index]
-        if decision.status is AlignmentDecisionStatus.ALIGNED:
-            center = centers[index]
-            if center is None:
-                raise ValidationError(
-                    f"Similarity alignment center is missing for record {record_key!r}."
-                )
-            translation_x = (
-                reference_world_x - placements[index].x_for_position(center)
-            )
-        else:
-            translation_x = base_x
-        resolved.append((translation_x, base_y))
-    return tuple(resolved)
+    return tuple(
+        (
+            reference_world_x - placements[index].x_for_position(cast(float, centers[index]))
+            if index in aligned
+            else base_x,
+            base_y,
+        )
+        for index, (base_x, base_y) in enumerate(base)
+    )
 
 
 def build_linear_legend_table(

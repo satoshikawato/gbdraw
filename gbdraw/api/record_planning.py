@@ -69,6 +69,7 @@ from .options import (
     LinearMultiRecordOptions,
 )
 from gbdraw.features.source import SourceFeatureCatalog, SourceFeatureIdentity, capture_source_features
+from gbdraw.annotations.models import FeatureSelector
 from gbdraw.features.ids import compute_feature_hash_from_location_parts
 
 from .prepared import (
@@ -792,6 +793,121 @@ def _alignment_source_feature(
             f"for record {provenance.record_key!r}."
         )
     return matches[0]
+
+
+def _selector_text(selector: FeatureSelector) -> str:
+    return selector.value if selector.key is None else f"{selector.key}={selector.value}"
+
+
+def feature_drawn_start(
+    feature: SourceFeatureIdentity, transform: RecordDisplayTransform, drawn_length: int,
+) -> float:
+    """The display offset where a source feature starts as drawn: its first drawn base.
+
+    It is the boundary from which walking rightward in drawn order covers the
+    whole feature as one stretch. On a complete circular record that walk may
+    pass the seam of the drawn axis, so a feature across the origin or across
+    a rotated display start begins on its piece before the seam; otherwise it
+    is the feature's left end as drawn.
+    """
+
+    # Each part as (leading display offset, covered bases) in drawn order.
+    arcs = sorted(
+        (
+            float(transform.source_boundary_to_display_offset(start if transform.source_step == 1 else end)),
+            end - start,
+        )
+        for start, end, _strand in feature.location_parts
+    )
+    length = transform.length
+    if not transform.is_circular or drawn_length != length:
+        return arcs[0][0]
+    arcs = sorted((offset % length, size) for offset, size in arcs)
+    # The feature starts after the widest uncovered stretch of the circle.
+    gaps = [
+        ((arcs[(index + 1) % len(arcs)][0] - (offset + size)) % length, (index + 1) % len(arcs))
+        for index, (offset, size) in enumerate(arcs)
+    ]
+    _gap, first = max(gaps, key=lambda item: (item[0], -item[1]))
+    return arcs[first][0]
+
+
+def project_anchor_feature_starts(
+    collection: ResolvedRecordCollection,
+    selector: FeatureSelector,
+    rows_by_record: Sequence[int],
+) -> tuple[float | None, ...]:
+    """Where ``selector``'s feature starts in each record as drawn, in display bp.
+
+    The one owner of the ``anchor_feature`` positions and of what they cannot
+    align. The selector matches a record's source features exactly
+    (:class:`FeatureSelector`); the start is :func:`feature_drawn_start` in the
+    record's drawn transform, so it is read after any crop, reverse complement
+    or display start. Only matches that start inside the drawn region count:
+    those that start at the same drawn base (a gene and its CDS) are one
+    match, and those that start at different bases are refused with the
+    candidates. A record without such a match has ``None`` and keeps its
+    place; a selector that no record matches is refused, and so are records
+    that share a row (``rows_by_record``), which one x per record cannot align.
+    """
+
+    text = _selector_text(selector)
+    if len(set(rows_by_record)) != len(rows_by_record):
+        raise ValidationError(
+            f"anchor_feature {text} cannot align records that share a row; give each record its own row.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    starts: list[float | None] = []
+    for index, (record, provenance, transform) in enumerate(zip(
+        collection.records, collection.provenance, collection.transforms, strict=True,
+    )):
+        drawn_length = len(record)
+        by_start: dict[float, list[SourceFeatureIdentity]] = {}
+        outside = 0
+        for feature in provenance.source_feature_catalog:
+            if not feature.matches(key=selector.key, value=selector.value, record_id=provenance.source_record_id):
+                continue
+            start = feature_drawn_start(feature, transform, drawn_length)
+            if 0.0 <= start < float(drawn_length):
+                by_start.setdefault(start, []).append(feature)
+            else:
+                outside += 1
+        name = f"record #{index + 1} {str(record.id)!r}"
+        if len(by_start) > 1:
+            candidates = "; ".join(
+                f"{feature.feature_type} {_feature_location_text(feature)}"
+                for matches in by_start.values()
+                for feature in matches
+            )
+            raise ValidationError(
+                f"anchor_feature {text} matches {sum(map(len, by_start.values()))} features at "
+                f"different starts in {name}: {candidates}. Use a selector that names one "
+                "feature, such as locus_tag=<tag>.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
+        if not by_start:
+            logger.warning(
+                "WARNING: anchor_feature %s %s; the record keeps its place.",
+                text,
+                f"matched no feature in {name}"
+                if not outside
+                else f"matched {outside} feature(s) in {name} whose start lies outside its drawn region",
+            )
+        starts.append(next(iter(by_start), None))
+    if all(start is None for start in starts):
+        raise ValidationError(
+            f"anchor_feature {text} matched no feature in any record.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    return tuple(starts)
+
+
+def _feature_location_text(feature: SourceFeatureIdentity) -> str:
+    """The feature's span in 1-based source coordinates, with ``complement`` for the minus strand."""
+
+    parts = ",".join(f"{start + 1}..{end}" for start, end, _strand in feature.location_parts)
+    text = parts if len(feature.location_parts) == 1 else f"join({parts})"
+    return f"complement({text})" if feature.location_parts[0][2] == -1 else text
 
 
 @dataclass(frozen=True)
@@ -1828,6 +1944,7 @@ def decide_linear_wrap(
             losat_search=decided.losat_search,
             similarity_alignment=similarity_alignment,
         ),
+        anchor_feature=decided.anchor_feature is not None,
     )
     return decided
 
@@ -2010,6 +2127,8 @@ __all__ = [
     "depth_track_inputs_from_cli",
     "parse_cli_bool",
     "prepared_parsed_source",
+    "feature_drawn_start",
+    "project_anchor_feature_starts",
     "record_input_manifest_from_paths",
     "record_input_manifest_from_table",
     "resolve_circular_batch_outputs",

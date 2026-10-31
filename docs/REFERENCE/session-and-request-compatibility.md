@@ -763,6 +763,10 @@ A typed Linear request with `auto_orient=True` is not encoded
 rejected as an unknown field: no Session stores [automatic Linear
 orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation)
 yet.
+A typed Linear request with `anchor_feature` set is not encoded
+(`CanonicalRequestEncodingError`), and a canonical request with
+`anchorFeature` is rejected as an unknown field: no Session stores the
+[feature anchor](command-line.md#record-selection-and-layout) yet.
 
 ## Similarity alignment in requests and Sessions
 

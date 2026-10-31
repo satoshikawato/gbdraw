@@ -69,6 +69,7 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.annotations import (
     FeatureIdentitySpan,
+    FeatureSelector,
     ResolutionWarning,
     ResolvedAnnotationBundle,
     read_annotation_options,
@@ -180,6 +181,7 @@ from .record_planning import (
     _similarity_candidate_from_orthogroup_member,
     _source_key,
     effective_record_presentation,
+    project_anchor_feature_starts,
     project_similarity_alignment_centers,
     comparison_record_bindings,
     record_is_reverse_complemented,
@@ -2089,9 +2091,23 @@ def plan_linear_request(
             )
         )
         # The reference was resolved to a plan at the top of this function.
-        alignment_anchor_centers = project_similarity_alignment_centers(
-            collection,
-            cast("SimilarityAlignmentPlan | None", materialized_request.similarity_alignment),
+        # One record-position alignment at most: the request refuses an
+        # anchor_feature beside a similarity alignment.
+        anchor_feature = materialized_request.options.anchor_feature
+        alignment_anchor_centers = (
+            project_anchor_feature_starts(
+                collection,
+                anchor_feature,
+                resolve_record_row_positions(
+                    collection.records,
+                    resolved_layout.multi_record_positions if resolved_layout is not None else None,
+                )[1],
+            )
+            if isinstance(anchor_feature, FeatureSelector)
+            else project_similarity_alignment_centers(
+                collection,
+                cast("SimilarityAlignmentPlan | None", materialized_request.similarity_alignment),
+            )
         )
         # The plan checks the source bindings of the comparison rows when it is
         # built, so a Session writer rejects them; the request keeps the rows as

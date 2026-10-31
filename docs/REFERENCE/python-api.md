@@ -96,6 +96,17 @@ Each `DepthTrackOptions` represents one logical series. `source` is one path or 
 
 `LinearOptions.tracks` defaults to an empty `LinearTrackOptions`; `comparisons` defaults to `LinearComparisonOptions()`. Linear title position accepts `None`, `center`, `top`, or `bottom`.
 
+`LinearOptions.anchor_feature` (default `None`) takes a `"key=value"` feature
+selector, such as `"gene=COX1"`, and aligns the records at that feature's first
+drawn base, like the CLI `--anchor_feature` (see [Record selection and
+layout](command-line.md#record-selection-and-layout) for the rules). The typed
+`LinearDiagramOptions.anchor_feature` accepts the same string or a
+`FeatureSelector`. It cannot be combined with `similarity_alignment`, and
+`encode_canonical_request()` refuses a request that sets it. For each record
+it moves, its x replaces the record's own x, including an explicit
+`LinearMultiRecordOptions.record_translations` entry, as Similarity alignment
+does; the y is kept.
+
 Important `LinearComparisonOptions` defaults are:
 
 | Field | Default |
