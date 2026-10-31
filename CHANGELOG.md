@@ -37,6 +37,17 @@ write-up of a release.
   and Collinear blocks do, instead of failing with "Ordered BLAST/protein comparison
   inputs are ambiguous". `-b/--blast` on such a layout is still refused; the
   message now says to list the tables in `--comparisons_table` (OV-2371).
+- Changed: in the Web app, removing a Depth series, the last Depth file of a Depth row with no
+  width, spacing, or ID you set, or a custom stack row, that another row starts at or extends to
+  (Circular and Linear), and **Hide GC Content** or **Hide GC Skew** with **Use custom stack** off
+  when it turns off such a row (Circular), ask with the same dialog: it offers to make the change
+  and turn those rows off as one Undo step, or Cancel, which changes nothing (the file, series, or
+  row stays). Removing or clearing a Linear File, the last file of a Depth row with a width,
+  spacing, or ID you set, and a comparison source with its ring row do not ask yet.
+- Fixed: a Linear Depth row now leaves with its last Depth file after **Generate Diagram** too,
+  and in a Session saved earlier, as it does before the first Generate; before, it stayed and the
+  next Generate refused the stack. A height typed on the row does not keep it either: its series
+  keeps the height, and a file added again draws at it. With no row reaching it, nothing asks.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

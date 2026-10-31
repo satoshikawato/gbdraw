@@ -11,6 +11,7 @@ import {
 } from '../services/conservation-series.js';
 import {
   isDefaultManagedDepthSlot,
+  depthRowsLeaving,
   reconcileManagedDepthSlots,
   representativeDepthFiles
 } from '../services/depth-track-state.js';
@@ -127,6 +128,7 @@ const STACK_ENTRY_SLOT = 'slot';
  * written around another word (OV-1477).
  * @typedef {object} SuppressTexts
  * @property {() => string} title the title of the dialog that asks before hiding
+ * @property {(rows: string) => string} titleWith the title when the hide also turns off `rows`, the stack rows that reach the track
  * @property {(count: number) => string} description the dialog text: the custom stack rows the hide turns off
  * @property {() => string} hide the dialog's hide button
  * @property {(rows: string) => string} hideWith the dialog's hide button when it also turns off `rows`, the stack rows that reach the track
@@ -137,6 +139,7 @@ const STACK_ENTRY_SLOT = 'slot';
 const SUPPRESS_TEXT_BY_RENDERER = {
   dinucleotide_content: {
     title: () => t('Hide GC content?'),
+    titleWith: (rows) => t('Hide GC content and turn off {rows}?', { rows }),
     description: (count) => tn(count,
       'Your custom track stack has {count} GC content track. Hiding GC content turns that track off.',
       'Your custom track stack has {count} GC content tracks. Hiding GC content turns those tracks off.'),
@@ -147,6 +150,7 @@ const SUPPRESS_TEXT_BY_RENDERER = {
   },
   dinucleotide_skew: {
     title: () => t('Hide GC skew?'),
+    titleWith: (rows) => t('Hide GC skew and turn off {rows}?', { rows }),
     description: (count) => tn(count,
       'Your custom track stack has {count} GC skew track. Hiding GC skew turns that track off.',
       'Your custom track stack has {count} GC skew tracks. Hiding GC skew turns those tracks off.'),
@@ -869,19 +873,30 @@ export const createCircularTrackSlotEditor = ({
   // Managed Depth rows follow Depth sources (PD-OI-058). The saved stack is
   // reconciled too, so a later Use custom stack shows the row; an empty saved
   // stack is built by Reset when the stack is enabled.
+  /** @param {CircularTrackSlot[]} slots @param {number[]} previousSourced @param {number[]} sourced */
+  const reconciledCircularDepthSlots = (slots, previousSourced, sourced) => (
+    // The reconciled rows are the drawing's own rows (R13: the service types them as DepthSlotRow).
+    /** @type {{ slots: CircularTrackSlot[], additions: number[] }} */ (
+      reconcileManagedDepthSlots(/** @type {any} */ ({ slots, previousSourced, sourced, managedPredicate: isDefaultManagedDepthSlot }))
+    )
+  );
+  /**
+   * The rows a Depth file removal takes out of the stack, from the Depth file
+   * rows it would leave. It writes nothing.
+   * @param {DrawingState} drawing @param {DepthFileSlots[]} nextDepth
+   * @returns {Set<string>}
+   */
+  const circularDepthRowsLeaving = (drawing, nextDepth) => {
+    const slots = Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [];
+    return depthRowsLeaving(slots, reconciledCircularDepthSlots(
+      slots, circularSourcedDepthTrackIndexesForState(state), circularSourcedDepthTrackIndexesForState({ files: { c_depth: nextDepth } })
+    ).slots);
+  };
   /** @param {DrawingState} drawing @param {number[]} previousSourced */
   const reconcileCircularDepthSlots = (drawing, previousSourced) => {
     const slots = Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [];
     if (slots.length === 0 && !drawing.adv.circular_track_slots_enabled) return;
-    // The reconciled rows are the drawing's own rows (R13: the service types them as DepthSlotRow).
-    const { slots: nextSlots, additions } = /** @type {{ slots: CircularTrackSlot[], additions: number[] }} */ (
-      reconcileManagedDepthSlots(/** @type {any} */ ({
-        slots,
-        previousSourced,
-        sourced: circularSourcedDepthTrackIndexesForState(state),
-        managedPredicate: isDefaultManagedDepthSlot
-      }))
-    );
+    const { slots: nextSlots, additions } = reconciledCircularDepthSlots(slots, previousSourced, circularSourcedDepthTrackIndexesForState(state));
     if (additions.length === 0 && nextSlots.length === slots.length) return;
     const seriesCount = circularAvailableDepthTrackCountForState(state);
     /** @type {{ id?: unknown }[]} */
@@ -1071,8 +1086,12 @@ export const createCircularTrackSlotEditor = ({
     normalizeSlotsInPlace();
   };
 
-  /** @param {unknown} index */
-  const removeCircularTrackSlot = (index) => {
+  /**
+   * @param {unknown} index
+   * @param {(() => void) | Event} [turnOffReaching] Turns off the rows that start at or extend to it
+   *   (`askTrackHide`); a template's trailing event never arrives (`featureSlotEdits` takes it).
+   */
+  const removeCircularTrackSlot = (index, turnOffReaching) => {
     const drawing = state.drawingOfMode('circular');
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1081,6 +1100,7 @@ export const createCircularTrackSlotEditor = ({
     const axis = axisIndexForCurrentSlots(drawing, drawing.adv.circular_track_slots);
     drawing.adv.circular_track_slots.splice(idx, 1);
     drawing.adv.circular_track_slots_axis_index = idx < axis ? Math.max(0, axis - 1) : Math.min(axis, drawing.adv.circular_track_slots.length);
+    if (typeof turnOffReaching === 'function') turnOffReaching();
     normalizeSlotsInPlace();
   };
 
@@ -1306,9 +1326,10 @@ export const createCircularTrackSlotEditor = ({
   };
 
   /**
-   * Hiding a GC track turns off the enabled custom stack rows that draw it, so
-   * it asks first, naming the rows that start at or extend to them
-   * (`askTrackHide`); null when no row would change.
+   * Hiding a GC track turns off the enabled stack rows that draw it, also with
+   * the custom stack off. It asks first, naming the rows that start at or extend
+   * to them (`askTrackHide`), with the stack on also when no row does; null when
+   * nothing asks.
    * @param {DrawingState} drawing
    * @param {string} renderer
    * @param {(turnOffReaching: () => void) => unknown} apply
@@ -1316,18 +1337,23 @@ export const createCircularTrackSlotEditor = ({
    * @returns {Promise<unknown> | null}
    */
   const askCircularSuppressOverride = (drawing, renderer, apply, unchanged) => {
-    if (!drawing.adv.circular_track_slots_enabled) return null;
     const hidden = activeCircularTrackSlotsForRenderer(drawing, renderer);
     // The Hide control of GC content or GC skew.
     const texts = ownEntry(SUPPRESS_TEXT_BY_RENDERER, renderer);
     if (hidden.length === 0 || !texts) return null;
+    const stackInUse = Boolean(drawing.adv.circular_track_slots_enabled);
     return askTrackHide({ askChoice, runUndoable }, {
       rows: () => drawing.adv.circular_track_slots,
       mode: 'circular',
       hiding: new Set(hidden.map((/** @type {CircularTrackSlot} */ slot) => String(slot.id))),
-      question: {
-        title: texts.title(), description: texts.description(hidden.length), hide: texts.hide(), hideWith: texts.hideWith, keep: texts.keep()
-      },
+      asksAlone: stackInUse,
+      question: (names) => ({
+        title: names.length ? texts.titleWith(listText(names)) : texts.title(),
+        // "Your custom track stack has..." is not the drawing's state when the stack is off.
+        ...(stackInUse ? { description: texts.description(hidden.length) } : {}),
+        action: names.length ? texts.hideWith(listText(names)) : texts.hide(),
+        keep: texts.keep()
+      }),
       label: ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || msg('Hide track'),
       unchanged,
       apply
@@ -1364,7 +1390,7 @@ export const createCircularTrackSlotEditor = ({
       normalizeSlotsInPlace();
     });
     const asked = nextChecked ? askCircularSuppressOverride(drawing, renderer, apply,
-      () => !state.sessionOperationAvailability?.() && Boolean(drawing.form[formKey]) === previousChecked) : null;
+      () => state.activeDrawing() === drawing && !state.sessionOperationAvailability?.() && Boolean(drawing.form[formKey]) === previousChecked) : null;
     if (asked) {
       // The checkbox shows the kept value until the choice; the chosen hide is one History step.
       if (event?.target) event.target.checked = previousChecked;
@@ -1754,6 +1780,7 @@ export const createCircularTrackSlotEditor = ({
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,
     changeCircularDepthSources,
+    circularDepthRowsLeaving,
     ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetCircularTrackSlotsFromSimpleControls,
       resetCircularTrackSlotsToPreset,

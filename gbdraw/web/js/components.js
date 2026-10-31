@@ -645,6 +645,9 @@ export const ActionMenu = {
       item.run(event);
       if (!props.closeOnRun || !menu) return;
       menu.open = false;
+      // A dialog the item opened mounts after this: its Cancel returns focus to
+      // the toggle, as the item it would read is hidden now.
+      focusMenuToggle(menu);
       void nextTick(() => {
         // A dialog the item opened keeps its focus.
         const active = document.activeElement;
