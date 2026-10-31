@@ -235,11 +235,12 @@ and 0.14.4 saves Sessions as version 49, as 0.14.3 does. See
 - Edits made on a Linear File card that draws every record of its file, in a
   Session saved by gbdraw 0.13.0, do not follow its records after the first
   **Generate Diagram** splits the card into one card per record.
-
 - After you choose to turn off a track that other rows reach in the dialog that
   asks first, an Overlay row you turn back on by hand, while its track is back,
   returns in the Result at once, while the note beside the track stack still says
   **Applies on Generate**. The Result then equals the next Generate.
+- When two Legend rows share a name, a color rule edit can number them in the
+  opposite order until the next **Generate Diagram**. 0.14.3 does the same.
 
 Carried from 0.14.1:
 
