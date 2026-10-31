@@ -100,20 +100,28 @@ def test_the_setting_off_draws_the_default_figure(tmp_path: Path) -> None:
     assert _linear(tmp_path) == _linear(tmp_path, False)
 
 
-def test_an_italic_label_is_laid_out_in_its_italic_box(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("module_name", "draw"),
+    [("gbdraw.labels.circular", _circular), ("gbdraw.labels.linear", _linear)],
+    ids=["circular", "linear"],
+)
+def test_an_italic_label_is_laid_out_in_its_italic_box(
+    module_name: str, draw, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The label box is the italic face's drawn box, so the layout reserves what is painted."""
 
-    import gbdraw.labels.linear as linear_labels
+    import importlib
 
+    placer = importlib.import_module(module_name)
     measured: list[tuple[str, str]] = []
-    original = linear_labels.drawn_text_box
+    original = placer.drawn_text_box
 
     def spy(text, family, size, weight="normal", style="normal"):
         measured.append((str(text), str(style)))
         return original(text, family, size, weight, style)
 
-    monkeypatch.setattr(linear_labels, "drawn_text_box", spy)
-    _linear(tmp_path, True)
+    monkeypatch.setattr(placer, "drawn_text_box", spy)
+    draw(tmp_path, True)
 
     assert ("ND1", "italic") in measured
     assert ("ND1", "normal") not in measured

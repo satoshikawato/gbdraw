@@ -2652,7 +2652,8 @@ const buildConfigOverrides = (
       adv.label_line === labelStyleForMode(state.mode.value).label_line ? null : adv.label_line,
     [MODE_LABEL_STYLE_PATHS[state.mode.value].label_protection]:
       adv.label_protection === labelStyleForMode(state.mode.value).label_protection ? null : adv.label_protection,
-    [MODE_LABEL_STYLE_PATHS[state.mode.value].italic_gene_labels]: adv.italic_gene_labels === true ? true : null,
+    [MODE_LABEL_STYLE_PATHS[state.mode.value].italic_gene_labels]:
+      Boolean(adv.italic_gene_labels) === labelStyleForMode(state.mode.value).italic_gene_labels ? null : Boolean(adv.italic_gene_labels),
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
     [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: leaf(CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp, adv.feature_overlap_tolerance_bp),
@@ -6729,7 +6730,7 @@ export const projectCanonicalSessionRequest = ({
     // A request without a label style drew its mode's default, which Load gives a missing field.
     ...(Object.hasOwn(overrides, 'label_line') ? { label_line: overrides.label_line } : {}),
     ...(Object.hasOwn(overrides, 'label_protection') ? { label_protection: overrides.label_protection } : {}),
-    italic_gene_labels: overrides.italic_gene_labels === true,
+    ...(Object.hasOwn(overrides, 'italic_gene_labels') ? { italic_gene_labels: overrides.italic_gene_labels === true } : {}),
     circular_label_placement: renderRequest.mode === 'circular'
       ? (overrides.circular_label_placement || 'horizontal')
       : 'horizontal',

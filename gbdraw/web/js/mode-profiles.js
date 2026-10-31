@@ -12,7 +12,7 @@ import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
  * @typedef {'none' | 'halo' | 'box'} LabelProtection
  * @typedef {{
  *   comparison: { alignmentLength: number, bitscore: number, evalue: number, identity: number },
- *   labelStyle: { line: LabelLine, protection: LabelProtection },
+ *   labelStyle: { line: LabelLine, protection: LabelProtection, italicGeneLabels: boolean },
  *   linearAxisColor: string | null,
  *   linearRulerAxisColor: string | null,
  *   tracks: { gc: boolean, skew: boolean }
@@ -86,14 +86,15 @@ export const modeProfile = (mode) => /** @type {ModeProfileData} */ (MODE_PROFIL
 /** The values of `labels.<mode>.line` and `.protection`. */
 export const LABEL_STYLE_CHOICES = /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).labelStyleChoices;
 
-// The packaged feature label style of a mode (`labels.<mode>.line` and `.protection`), as `adv` fields.
+// The packaged feature label style of a mode (`labels.<mode>.line`, `.protection` and
+// `.italic_gene_labels`), as `adv` fields.
 /**
  * @param {unknown} mode
- * @returns {{ label_line: LabelLine, label_protection: LabelProtection }}
+ * @returns {{ label_line: LabelLine, label_protection: LabelProtection, italic_gene_labels: boolean }}
  */
 export const labelStyleForMode = (mode) => {
-  const { line, protection } = modeProfile(mode).labelStyle;
-  return { label_line: line, label_protection: protection };
+  const { line, protection, italicGeneLabels } = modeProfile(mode).labelStyle;
+  return { label_line: line, label_protection: protection, italic_gene_labels: italicGeneLabels };
 };
 
 /** @param {unknown} mode */

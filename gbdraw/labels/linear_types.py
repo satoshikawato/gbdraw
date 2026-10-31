@@ -32,6 +32,8 @@ class _LinearLabelRequired(TypedDict):
     feature_anchor_x: float
     font_size: float
     font_family: str
+    # The text's style (``FeatureLabelStyle.font_style``).
+    font_style: LabelFontStyle
     rotation_deg: float
     text_anchor: str
     is_embedded: bool
@@ -52,12 +54,8 @@ class LinearLabel(_LinearLabelRequired, total=False):
       (``above_feature`` labels; an external label's leader comes from its row);
     - an external label's rows: ``row_origin_y`` and ``row_pitch`` (``linear_label_side``);
     - ``feature_id``: the rendered feature the drawn label binds to, added by the record renderer;
-    - ``wrap_row``: the row of a wrapped record the label stands on (``display_label_segment``);
-    - ``font_style``: the text's style (``FeatureLabelStyle.font_style``; absent for a list made before the
-      style existed, which draws upright, ``normal``).
+    - ``wrap_row``: the row of a wrapped record the label stands on (``display_label_segment``).
     """
-
-    font_style: LabelFontStyle
 
     track_id: str
     above_feature_place_above: bool

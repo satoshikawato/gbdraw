@@ -46,6 +46,8 @@ LABEL_PROTECTIONS: tuple[LabelProtection, ...] = get_args(LabelProtection)
 # box, Circular neither a line nor a protection; a halo can be chosen (LP-D110).
 DEFAULT_LABEL_LINE: Mapping[LabelStyleMode, LabelLine] = {"linear": "under", "circular": "none"}
 DEFAULT_LABEL_PROTECTION: Mapping[LabelStyleMode, LabelProtection] = {"linear": "box", "circular": "none"}
+# Gene-named labels are upright unless asked for (labels.<mode>.italic_gene_labels).
+DEFAULT_ITALIC_GENE_LABELS: Mapping[LabelStyleMode, bool] = {"linear": False, "circular": False}
 
 # The halo: a white stroke of the letters this many font sizes wide (half of it beyond the glyphs).
 HALO_WIDTH_EM = 0.08
@@ -79,7 +81,7 @@ class FeatureLabelStyle:
 
     line: LabelLine
     protection: LabelProtection
-    italic_gene_labels: bool = False
+    italic_gene_labels: bool
 
     def font_style(self, source_qualifier: str | None) -> LabelFontStyle:
         """The style of a label named from ``source_qualifier`` (``labels.filtering.FeatureLabel``)."""
@@ -145,6 +147,7 @@ def normalize_label_protection(value: object, *, path: str) -> LabelProtection:
 __all__ = [
     "BOX_OPACITY",
     "CIRCULAR_LABEL_GAP_EM",
+    "DEFAULT_ITALIC_GENE_LABELS",
     "DEFAULT_LABEL_LINE",
     "DEFAULT_LABEL_PROTECTION",
     "FeatureLabelStyle",

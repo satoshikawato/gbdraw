@@ -91,6 +91,8 @@ class _CircularLabelRequired(TypedDict):
     is_embedded: bool
     font_size: float
     font_family: str
+    # The text's style (``FeatureLabelStyle.font_style``).
+    font_style: LabelFontStyle
 
 
 class CircularLabel(_CircularLabelRequired, total=False):
@@ -115,12 +117,8 @@ class CircularLabel(_CircularLabelRequired, total=False):
       ``text_y``, ``rotation_deg``, ``text_anchor``, ``dominant_baseline``,
       ``oriented_corners``, ``aabb_local``;
     - radial layout summary: ``required_radius_growth_px``,
-      ``layout_collision_counts``;
-    - the text's style: ``font_style`` (``FeatureLabelStyle.font_style``; absent for a list made before the
-      style existed, which draws upright, ``normal``).
+      ``layout_collision_counts``.
     """
-
-    font_style: LabelFontStyle
 
     is_inner: bool
     min_outer_start_radius_px: float

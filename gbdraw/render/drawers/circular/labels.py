@@ -108,7 +108,7 @@ class LabelDrawer:
                 method="align",
                 text_anchor="middle",
                 font_size=self.font_size,
-                font_style=label.get("font_style", "normal"),
+                font_style=label["font_style"],
                 font_weight="normal",
                 font_family=self.font_family,
                 dominant_baseline="auto",
@@ -130,7 +130,7 @@ class LabelDrawer:
             font=self.font_family,
             dominant_baseline=baseline_value,
             text_anchor=anchor_value,
-            font_style=label.get("font_style", "normal"),
+            font_style=label["font_style"],
         )
         if label.get("placement") == "radial":
             label_path.rotate(rotation_deg, center=(x, y))

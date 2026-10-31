@@ -100,6 +100,7 @@ def test_circular_label_drawer_uses_label_entry_font_size() -> None:
         "is_inner": False,
         "font_size": 31.0,
         "font_family": "Courier New",
+        "font_style": "normal",
     }
 
     group = CircularLabelDrawer(profile=CircularRenderProfile(cfg)).draw(
@@ -3344,7 +3345,7 @@ def test_hmmtdna_resolve_overlaps_middle_draws_no_leader_through_another_label()
     )
     assert external_labels
 
-    inks = [circular_label_ink(label, total_length, FeatureLabelStyle("none", "none")) for label in external_labels]
+    inks = [circular_label_ink(label, total_length, FeatureLabelStyle("none", "none", False)) for label in external_labels]
     through = [
         (label["label_text"], other["label_text"])
         for label, own_ink in zip(external_labels, inks)
@@ -3866,7 +3867,7 @@ def test_label_legend_collision_keeps_feature_order_by_moving_neighbor_block() -
 
 @pytest.mark.parametrize(
     "style",
-    [FeatureLabelStyle(line="none", protection="none"), FeatureLabelStyle(line="under", protection="box")],
+    [FeatureLabelStyle(line="none", protection="none", italic_gene_labels=False), FeatureLabelStyle(line="under", protection="box", italic_gene_labels=False)],
     ids=["plain", "underline_box"],
 )
 def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas(style: FeatureLabelStyle) -> None:
@@ -3875,6 +3876,7 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas(sty
         {
             "label_text": "hypothetical protein",
             "font_family": "Liberation Sans",
+            "font_style": "normal",
             "middle": 1000,
             "start_x": 470.0,
             "start_y": 0.0,

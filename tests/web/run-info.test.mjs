@@ -1203,8 +1203,7 @@ test('the Circular track narrowing settings have their CLI flags in the Source r
   }
 });
 
-// PD-OI-109: a request that hides the Circular definition writes `--hide_definition`;
-// one that shows it (no override) writes nothing.
+// A request with italic gene names writes `--italic_gene_labels`; one without the override writes nothing.
 test('Italic gene names has its CLI flag in the Source recipe of either mode', async () => {
   for (const [session, mode] of [[circularGallerySession, 'circular'], [linearGallerySession, 'linear']]) {
     for (const italic of [true, undefined]) {
@@ -1220,6 +1219,8 @@ test('Italic gene names has its CLI flag in the Source recipe of either mode', a
   }
 });
 
+// PD-OI-109: a request that hides the Circular definition writes `--hide_definition`;
+// one that shows it (no override) writes nothing.
 test('a hidden Circular definition has its CLI flag in the Source recipe', async () => {
   for (const show of [false, undefined]) {
     const session = structuredClone(circularGallerySession);

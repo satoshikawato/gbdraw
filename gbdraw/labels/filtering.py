@@ -17,6 +17,7 @@ from ..io.table_text import (
     table_text_stream,
 )
 from ..render_stages import render_stage
+from ..features.overrides import ResolvedFeatureOverride
 from ..features.selector_values import (
     _matches_constraint,
     get_feature_hash as _get_feature_hash,
@@ -453,12 +454,12 @@ class FeatureLabel(NamedTuple):
 
 
 def get_label_text(
-    feature: Any,
-    label_filtering: Mapping,
+    feature: object,
+    label_filtering: Mapping[str, Any],
     record_id: Optional[str] = None,
     *,
     overrides_only: bool = False,
-    feature_override: Any = None,
+    feature_override: ResolvedFeatureOverride | None = None,
 ) -> str:
     """Return the label text for one feature, or an empty string for no label (``feature_label``'s text)."""
 
@@ -468,12 +469,12 @@ def get_label_text(
 
 
 def feature_label(
-    feature: Any,
-    label_filtering: Mapping,
+    feature: object,
+    label_filtering: Mapping[str, Any],
     record_id: Optional[str] = None,
     *,
     overrides_only: bool = False,
-    feature_override: Any = None,
+    feature_override: ResolvedFeatureOverride | None = None,
 ) -> FeatureLabel:
     """Return the label of one feature: its text, empty for no label, and the qualifier it is named from.
 

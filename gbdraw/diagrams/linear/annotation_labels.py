@@ -94,7 +94,7 @@ def _feature_label_box(label: LinearLabel) -> Aabb:
             float(label["font_size"]),
             dominant_baseline="central",
             text_anchor=label["text_anchor"],
-            font_style=label.get("font_style", "normal"),
+            font_style=label["font_style"],
         )
         if is_horizontal_label(label)
         else None

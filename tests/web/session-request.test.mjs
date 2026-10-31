@@ -761,7 +761,9 @@ assert.equal(
 );
 state.adv.circular_definition_interval = null;
 // Italic gene names: the mode's `labels.<mode>.italic_gene_labels` is in the request
-// only when on, as a request that predates the setting leaves it, and projects back.
+// only when it differs from the mode's packaged default (off), as a request that predates
+// the setting leaves it; Load gives a missing leaf a missing field (the default), as for
+// Label Line and Label Protection, and a stored one projects back.
 assert.ok(managedConfigOverridePathsForMode('circular').includes('labels.circular.italic_gene_labels'));
 assert.ok(!managedConfigOverridePathsForMode('circular').includes('labels.linear.italic_gene_labels'));
 const uprightLabelRequest = buildCanonicalRenderRequestRaw({ state, filesData });
@@ -769,7 +771,7 @@ assert.equal(
   Object.hasOwn(uprightLabelRequest.renderRequest.diagramOptions.configOverrides, 'labels.circular.italic_gene_labels'),
   false
 );
-assert.equal(projectCanonicalSessionRequest(uprightLabelRequest).config.adv.italic_gene_labels, false);
+assert.equal(Object.hasOwn(projectCanonicalSessionRequest(uprightLabelRequest).config.adv, 'italic_gene_labels'), false);
 state.adv.italic_gene_labels = true;
 const italicLabelRequest = buildCanonicalRenderRequestRaw({ state, filesData });
 assert.equal(italicLabelRequest.renderRequest.diagramOptions.configOverrides['labels.circular.italic_gene_labels'], true);

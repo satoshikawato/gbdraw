@@ -7,6 +7,7 @@ from gbdraw.core.numeric import ascii_float, ascii_int
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.labels.label_style import (
+    DEFAULT_ITALIC_GENE_LABELS,
     DEFAULT_LABEL_LINE,
     DEFAULT_LABEL_PROTECTION,
     LabelLine,
@@ -26,11 +27,13 @@ CircularLabelScope = Literal["none", "outer", "both"]
 LinearLabelScope = Literal["none", "all", "first", "orthogroup_top"]
 LinearLabelScopeRecords = Literal["none", "all", "first"]
 def _config_bool(value: object, *, path: str) -> bool:
-    """``value`` as a switch; anything but ``true`` or ``false`` is refused, naming ``path``."""
+    """``value`` as a switch; anything but ``true`` or ``false`` is refused, naming ``path`` (as
+    ``canvas.circular.track_narrowing`` is)."""
 
     if not isinstance(value, bool):
         raise ValidationError(
-            f"{path} must be true or false", diagnostic={"code": "INPUT_INVALID", "configPath": path}
+            f"{path} must be true or false",
+            diagnostic={"code": "INPUT_INVALID", "reason": "BOOLEAN", "configPath": path},
         )
     return value
 
@@ -171,7 +174,7 @@ class LabelsLinearConfig:
                 raw.get("protection", DEFAULT_LABEL_PROTECTION["linear"]), path="labels.linear.protection"
             ),
             italic_gene_labels=_config_bool(
-                raw.get("italic_gene_labels", False), path="labels.linear.italic_gene_labels"
+                raw.get("italic_gene_labels", DEFAULT_ITALIC_GENE_LABELS["linear"]), path="labels.linear.italic_gene_labels"
             ),
         )
 
@@ -206,7 +209,7 @@ class LabelsCircularConfig:
                 raw.get("protection", DEFAULT_LABEL_PROTECTION["circular"]), path="labels.circular.protection"
             ),
             italic_gene_labels=_config_bool(
-                raw.get("italic_gene_labels", False), path="labels.circular.italic_gene_labels"
+                raw.get("italic_gene_labels", DEFAULT_ITALIC_GENE_LABELS["circular"]), path="labels.circular.italic_gene_labels"
             ),
         )
 
