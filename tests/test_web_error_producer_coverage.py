@@ -33,7 +33,7 @@ FILLS = ("", "0", "1", "PRIVATE", "#1")
 
 # Sizes of the adapter's message-classification tables (R6, kind
 # `py-count-map`). A producer migrated to diagnostic= removes its row.
-NATIVE_TABLE_BASELINE = {"_EXACT": 25, "_TEMPLATES": 20, "_CONSTRAINTS": 22}
+NATIVE_TABLE_BASELINE = {"_EXACT": 24, "_TEMPLATES": 20, "_CONSTRAINTS": 22}
 
 # The ValidationError sites of the whole package that neither carry
 # diagnostic= nor classify (R6, kind `py-count`): typed API and request
