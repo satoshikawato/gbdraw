@@ -13,6 +13,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
 from gbdraw.api.config import apply_config_overrides
@@ -531,6 +532,7 @@ def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
             linear_metadata=None,
         )
 

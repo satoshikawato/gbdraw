@@ -16,6 +16,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.api.diagram as api_diagram_module
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.api.request_render as request_render_module
 import gbdraw.linear as linear_cli_module
 from gbdraw.legend.sources import ComparisonLegendSource
@@ -186,6 +187,7 @@ def test_linear_cli_alignment_length_is_forwarded(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
             linear_metadata=None,
         )
 

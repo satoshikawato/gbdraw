@@ -712,8 +712,10 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # revision hashes derived from the segment text moved.
     # Updated again when the reply took the `linearWrap` key (Linear wrap
     # length): an empty list for a figure with nothing cut, no other change.
-    "similarity_groups": "e2e60f244a2e97c01c74b73fc1b3874a4fbff5d31772a202e416b027f629d7a8",
-    "collinear": "396f6a373d377aa5a5f2001fc4b53ac8433e6a00f2af620ee0ed833cb69b18c1",
+    # Updated again when the reply took the `inputSummaries` key (the input
+    # summary of each Result): no other key moved.
+    "similarity_groups": "92e56e905e51af81ebba4244725305028eafcffb8207591537b42a334bac9beb",
+    "collinear": "d6869137582f0d55b77980a03ef8c8f0a0f937a82ad806971217d97f691bb755",
 }
 
 

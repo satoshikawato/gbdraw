@@ -1132,6 +1132,7 @@ export const createHistorySnapshotService = ({
       ),
       comparisonWarnings: toRaw(getGeneratedArtifactRef(state.comparisonWarnings, null)),
       labelFitReports: toRaw(getGeneratedArtifactRef(state.labelFitReports, null)),
+      inputSummaries: toRaw(getGeneratedArtifactRef(state.inputSummaries, null)),
       specificRules: colorRules.manualSpecificRules,
       trackSlotResolvedGeometry: toRaw(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
@@ -1224,6 +1225,7 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.featureIdentityNotices, ownerSet.featureIdentityNotices || []);
     setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
     setGeneratedArtifactRef(state.labelFitReports, ownerSet.labelFitReports || []);
+    setGeneratedArtifactRef(state.inputSummaries, ownerSet.inputSummaries || []);
     COLOR_RULES_SLICE.install(drawing.slices.colorRules, { manualSpecificRules: ownerSet.specificRules });
     setGeneratedArtifactRef(
       state.trackSlotResolvedGeometry,
@@ -1389,6 +1391,7 @@ export const createHistorySnapshotService = ({
       'featureIdentityNotices',
       'comparisonWarnings',
       'labelFitReports',
+      'inputSummaries',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',
       'legacyProteinDerivedEvidence',

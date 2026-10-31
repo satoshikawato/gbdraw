@@ -17,9 +17,9 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.analysis.collinearity as collinearity_module
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
-import gbdraw.diagrams.linear.assemble as linear_assemble_module
 import gbdraw.io.comparisons as comparisons_io_module
 from gbdraw.legend.sources import ComparisonLegendSource
 from tests.utils.comparison_tables import converted_pair_rows, ribbon_group
@@ -2355,6 +2355,7 @@ def test_linear_cli_forwards_collinearity_options(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
             linear_metadata=None,
         )
 

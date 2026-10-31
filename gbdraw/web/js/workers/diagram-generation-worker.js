@@ -1207,6 +1207,10 @@ const runGeneration = async ({
     const preparedInputRetentionJson = JSON.stringify(
       buildPreparedInputRetention(drawingId, retainedResourceTokens, heldResourceTokens)
     );
+    // The file names the input summary gives the staged resources (gbdraw/api/input_summary.py).
+    const resourceNamesJson = JSON.stringify(Object.fromEntries(
+      resourceManifest.map(({ resourceId, name }) => [resourceId, name])
+    ));
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-manifest-json-end', {
       characters: resourcePathsJson.length,
       preparedIdentityCharacters: preparedResourceIdentitiesJson.length
@@ -1229,6 +1233,7 @@ const runGeneration = async ({
       held?.revision ?? null,
       JSON.stringify(heldSegments.map(({ revision }) => revision)),
       preparedInputRetentionJson,
+      resourceNamesJson,
       // CAPACITY-WARN: Python calls this with the JSON text of labels that may not fit, before it places them;
       // the page words it while the render goes on. Pyodide passes the function as a JsProxy for the call.
       (/** @type {unknown} */ notice) => {

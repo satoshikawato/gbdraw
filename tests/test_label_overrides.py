@@ -15,6 +15,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
@@ -723,6 +724,7 @@ def test_linear_cli_label_table_injects_override_df(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
             linear_metadata=None,
         )
 

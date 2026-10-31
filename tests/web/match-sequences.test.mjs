@@ -16,13 +16,12 @@ import { EXPECTED_WEB_RUNTIME_CAPABILITIES } from '../../gbdraw/web/js/services/
 // The restore reads Linear record files, the Circular reference and comparison genomes through the shared browser
 // sequence reader (`readParsedSequenceRecords`, once per File object) or, when it declines, the Worker's reader:
 // the loader's for record files, the ring search's comparison reader for comparison genomes. This Worker stands
-// for the two Python readers: `read_comparison_sequence_file` opens the file as utf-8-sig (a byte order mark is
-// dropped), writes `>ID` and the sequence, and names each record's ID; the loader reads the mark as content, so
-// Biopython skips the first record. Biopython names a FASTA entry without an ID '' (the browser reader record_N).
+// for the two Python readers: `read_comparison_sequence_file` opens the file as utf-8-sig, writes `>ID` and the
+// sequence, and names each record's ID; the loader drops the byte order mark too (`text_lines`), so both keep the
+// first record. Biopython names a FASTA entry without an ID '' (the browser reader record_N).
 // A file whose text contains 'malformed reply' gets a reply without its record IDs.
 const helperCalls = [];
 const bytesOf = (payload) => new Uint8Array(payload.files[0].bytes);
-const hasByteOrderMark = (bytes) => bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
 const formatOf = (text) => (text.trimStart().startsWith('LOCUS') ? 'genbank' : 'fasta');
 const pythonId = ({ id, aliases }) => (aliases.length === 1 && /^record_\d+$/.test(id) ? '' : id);
 const pythonReplies = {
@@ -35,10 +34,7 @@ const pythonReplies = {
     return { fasta, format: formatOf(text), recordLabel: null, recordIds: records.map(pythonId) };
   },
   readAllSequenceRecords: (payload) => {
-    const bytes = bytesOf(payload);
-    const records = parseSequenceRecordsFast(
-      new TextDecoder().decode(hasByteOrderMark(bytes) ? bytes.slice(3) : bytes), payload.format
-    ).slice(hasByteOrderMark(bytes) ? 1 : 0);
+    const records = parseSequenceRecordsFast(new TextDecoder().decode(bytesOf(payload)), payload.format);
     if (!records.length) return { error: { code: 'INPUT_UNREADABLE', stage: 'helper' } };
     return { records: records.map((record) => ({
       id: pythonId(record), aliases: [...record.aliases], sequence: record.sequence
@@ -693,9 +689,8 @@ test('a restored GFF3 automatic record is the first record the GFF3 names (OV-16
   ]);
 });
 
-// OV-1599: a file that starts with a UTF-8 byte order mark is read by the Worker's all-records reader (Biopython
-// skips its first record), so a restored `#1` names the record the drawing reads, not the one the browser's text
-// decoder would read.
+// OV-1599: a file that starts with a UTF-8 byte order mark is read by the Worker's all-records reader, so a
+// restored `#1` names the record the drawing reads. The loader keeps the first record (OV-2354).
 test('a restored byte-order-mark file names the records the Python loader reads (OV-1599)', async () => {
   helperCalls.splice(0);
   const gb = byteOrderMarkFile('bom.gb', ['BOM1', 'BOM2'].map((id, index) => [
@@ -706,7 +701,7 @@ test('a restored byte-order-mark file names the records the Python loader reads 
   });
   assert.deepEqual(helperCalls, ['readAllSequenceRecords']);
   assert.deepEqual(sources.map(({ recordId, sequence }) => ({ recordId, sequence })), [
-    { recordId: 'BOM2', sequence: 'CCCCCCCC' }
+    { recordId: 'BOM1', sequence: 'AAAAAAAA' }
   ]);
 });
 

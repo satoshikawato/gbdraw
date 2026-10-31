@@ -68,7 +68,8 @@ export const keepResultNames = (response, names) => {
     metadata.trackSlotGeometry?.records,
     metadata.annotationWarnings,
     metadata.comparisonWarnings,
-    metadata.labelFitReports
+    metadata.labelFitReports,
+    metadata.inputSummaries
   ].forEach((rows) => {
     if (!Array.isArray(rows)) return;
     rows.forEach((row) => {

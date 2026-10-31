@@ -398,6 +398,32 @@ impossible layouts, incompatible track stacks, and unsafe output paths fail
 before a successful result is reported. A warning identifies an ignored or
 adjusted combination; it does not make the requested combination valid.
 
+### Input summary
+
+After the figure is written, each run prints what it read and drew, one `INFO:`
+line per drawn record and per comparison table:
+
+```text
+INFO: Record PROKKA01.1 (genome.gb), record 1 of 1, 1,001..2,000 of 3,000 bp: drew 3 features (1 CDS, 1 rRNA, 1 tRNA); left out 1 source (type not drawn).
+INFO: Comparison table pair.tsv (record #1 PROKKA01.1 and record #2 RAST0001.1): kept 1 of 5 rows; 4 rows below bitscore 100 (best 90); 3 rows below identity 60% (best 58.4%).
+```
+
+A record line counts the features drawn per type, the features left out because
+their type is not drawn (`-k/--features`, and for GFF3 the types read), and the
+features a visibility rule or feature edit hides; a cropped record also names its
+region. A comparison line counts the rows each threshold (`--evalue`,
+`--bitscore`, `--identity`, `--alignment_length`) leaves out, with the best value
+among those rows. A row can fail more than one threshold.
+
+A `WARNING:` line follows when a record has no feature to draw, naming its
+feature types when it has some, and when the thresholds leave out every row of a
+comparison table or the table has no rows. These runs still write the figure and
+exit with status 0. A file with no record stops the run with an `ERROR:` line and
+status 1, and nothing is written.
+
+A UTF-8 byte order mark at the start of a GenBank, EMBL, GFF3, or FASTA file is
+ignored, so the first record is read.
+
 The command line, the Python API, and Web or Session requests share one set of
 value checks. `--window`, `--step`, `--depth_window`, and `--depth_step` take
 positive integers. `-n/--nt` and a track slot's `nt` take two letters from `A`,
