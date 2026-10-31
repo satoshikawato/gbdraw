@@ -104,7 +104,9 @@ test('a request that needs no repair comes back as the stored object (RK-3); sch
 });
 
 test('a saved Collinear anchor mode that was removed reads as rbh with a row; "either" reads without one (OV-2303, OV-2301)', () => {
-  const session = gallery('BGC0000708-BGC0000713');
+  // The released writer stored "either"; the Gallery Session now stores "strand",
+  // so the stored value comes from the released fixture (as in the Python twin).
+  const session = read('tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
   const index = session.renderRequest.comparisons.findIndex((item) => item.settings);
   assert.equal(session.renderRequest.comparisons[index].settings.collinearityParams.parameters.mergeOrientation, 'either');
   assert.deepEqual(rows(readRequest(session)), []);
