@@ -134,7 +134,7 @@ for (const name of sessionNames) {
     assert.equal(Object.hasOwn(publishedForm, 'multi_record_canvas'), false, name);
   }
   if (name === 'tobacco-chloroplast.gbdraw-session.json') {
-    assert.equal(slice.config.rules.length, 71, name);
+    assert.equal(slice.config.rules.length, 19, name);
     assert.deepEqual(slice.config.qualifierPriorityRules, [
       { feat: 'CDS', order: 'gene,old_locus_tag' }
     ], name);

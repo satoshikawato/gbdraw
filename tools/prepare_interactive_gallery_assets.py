@@ -146,7 +146,7 @@ TOBACCO_CHLOROPLAST_COMMAND = (
     "gbdraw circular --gbk NC_001879.gbk "
     "--annotation_table nicotiana-tabacum-regions-span.tsv --separate_strands "
     "-k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin "
-    "-t chloroplast_specific_table.tsv --qualifier_priority qualifier_priority.tsv "
+    "-t builtin:plastid --qualifier_priority qualifier_priority.tsv "
     "--block_stroke_width 1 --block_stroke_color black --axis_stroke_width 3 "
     "--line_stroke_width 2 --no-skew -p default --track_type tuckin "
     "--labels both --label_placement radial --outer_label_x_radius_offset 0.90 "
@@ -313,16 +313,16 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
             "The 155,943-bp tobacco chloroplast genome with its large single-copy region (LSC), "
             "small single-copy region (SSC), and two inverted repeats (IRa and IRb) tinted from "
             "the gene track through the GC content track and named on curved labels along an "
-            "inner ring. An annotation table supplies the four region boundaries, and a color "
-            "table groups genes by function, such as photosystem I, RNA polymerase, and NADH "
+            "inner ring. An annotation table supplies the four region boundaries, and the "
+            "built-in plastid color table groups genes by function, such as photosystem I, RNA polymerase, and NADH "
             "dehydrogenase. Genes in the inverted repeats, such as <i>ycf2</i>, <i>ndhB</i>, and "
             "the rRNA genes, appear twice: once in IRa and once in IRb."
         ),
         workflow="Mark genome regions",
-        input_summary="1 GenBank + 3 TSV files",
+        input_summary="1 GenBank + 2 TSV files",
         display_order=40,
         command_kind="runnable",
-        command_note="Download NC_001879.gbk and the three Gallery TSV files, then run the command in the same directory.",
+        command_note="Download NC_001879.gbk and the two Gallery TSV files, then run the command in the same directory.",
         command=TOBACCO_CHLOROPLAST_COMMAND,
         session_from_command=True,
         command_dir="gbdraw/web/tutorial-data/tobacco-plastome-regions",

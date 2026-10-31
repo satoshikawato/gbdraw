@@ -577,9 +577,7 @@ def _validate_annotated_chloroplast_tutorial(
         "ncRNA",
         "misc_RNA",
         "rep_origin",
-    ) or Path(str(options.features.color_table)).name != (
-        "chloroplast_specific_table.tsv"
-    ):
+    ) or options.features.color_table != "builtin:plastid":
         raise RecipeContractError(
             "T-PY-02 lost the Gallery feature selection or functional colors."
         )
@@ -674,7 +672,7 @@ def _validate_annotated_chloroplast_tutorial(
             "photosystem I",
             "photosystem II",
             "RNA polymerase",
-            "rep_origin",
+            "origin of replication",
         ),
     )
     evidence = inspect_standard_svg(chapter, output_path=output_path)
@@ -717,7 +715,7 @@ def _validate_annotated_chloroplast_tutorial(
             f"T-PY-02 plastome annotation identities changed: {sorted(annotations, key=str)!r}."
         )
     fills = {element.attrib.get("fill") for element in root.iter()}
-    if not {"#00662c", "#328925", "#bd1220", "#e95d0f", "#ffec00"} <= fills:
+    if not {"#2c6d3e", "#53924d", "#b4514c", "#de844f", "#eada78"} <= fills:
         raise RecipeContractError("T-PY-02 SVG lost functional chloroplast colors.")
     gallery_source = (
         Path(__file__).resolve().parents[2]

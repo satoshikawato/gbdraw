@@ -281,11 +281,16 @@ def test_unset_settings_take_the_defaults() -> None:
 
 
 @pytest.mark.parametrize("settings", [{}, {"infer_orthogroups": None}])
-def test_collinear_settings_refuse_an_unset_inference(settings: dict[str, object]) -> None:
-    # The derived identity names the inference, so an unset value is no default:
-    # every caller passes the value of its request.
-    with pytest.raises(ValueError, match="collinear_infer_orthogroups must be a boolean"):
-        normalize_derived_losatp_settings(mode="collinear", **settings)  # type: ignore[arg-type]
+def test_unset_collinear_inference_reads_the_python_option_default(
+    settings: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gbdraw.api.options import LinearDiagramOptions
+
+    for default in (False, True):
+        monkeypatch.setattr(LinearDiagramOptions, "collinear_infer_orthogroups", default)
+        unset = normalize_derived_losatp_settings(mode="collinear", **settings)  # type: ignore[arg-type]
+        assert unset.infer_orthogroups is default
+        assert unset == normalize_derived_losatp_settings(mode="collinear", infer_orthogroups=default)
 
 
 def test_unset_collinear_settings_read_the_python_option_defaults(monkeypatch: pytest.MonkeyPatch) -> None:

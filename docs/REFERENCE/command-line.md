@@ -259,8 +259,10 @@ missing, unreadable, or malformed file stops the run instead of being skipped.
 The table rules are in [Comparison and numeric
 tables](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
 
-LOSATP Pairwise mode searches each adjacent input pair. With three or
-more records, it does not add an implicit first-to-last comparison.
+LOSATP Pairwise mode searches each record against each record of the next row,
+the pairs Similarity groups and Collinear blocks draw. With one record per row
+these are the consecutive records; it does not add an implicit first-to-last
+comparison.
 
 `--losat_output_dir DIR` (with `--losat`) writes the raw search rows of the run.
 LOSATN and TLOSATX write one TSV per compared record pair and `comparisons.tsv`
@@ -373,8 +375,8 @@ This example keeps the colors, radial labels and GC track of the
 and marks the structural regions with brackets.
 Start in an empty directory. Download the complete GenBank record from
 [NCBI NC_001879.2](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2), saving it as
-`NC_001879.gbk` (155,943 bp, circular). Obtain three support tables:
-`chloroplast_specific_table.tsv` and `qualifier_priority.tsv` from that tutorial,
+`NC_001879.gbk` (155,943 bp, circular). Obtain two support tables:
+`qualifier_priority.tsv` from that tutorial,
 and the bracket table
 [`nicotiana-tabacum-regions.tsv`](../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv).
 
@@ -394,7 +396,7 @@ start; the source sequence and feature locations are unchanged.
 ```bash
 gbdraw circular \
   --gbk NC_001879.gbk \
-  -t chloroplast_specific_table.tsv \
+  -t builtin:plastid \
   -k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin \
   --species '<i>Nicotiana tabacum</i>' \
   --track_type tuckin \

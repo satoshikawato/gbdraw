@@ -5670,7 +5670,7 @@ if (projectSessionIndex >= 0) {
     assert.equal(projectedSession.config.adv.legend_font_size, 18);
   }
   if (sessionPath.includes('tobacco-chloroplast')) {
-    assert.equal(projectedSession.files.t_color.name, 'chloroplast_specific_table.tsv');
+    assert.equal(projectedSession.files.t_color.name, 'colors-color-table.tsv');
     assert.equal(projectedSession.files.qualifier_priority.name, 'qualifier_priority.tsv');
     assert.equal(projectedSession.config.adv.def_font_size, 28);
     assert.equal(projectedSession.config.adv.circular_definition_interval, 30);

@@ -508,12 +508,12 @@ const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUnd
 // Step. The Plot Title and the GC window, which these cases used before, are
 // live edits since PD-OI-103 (G1, G2).
 const setStep = (page, size) => undoable(page, 'Set the GC step', { fields: { 'adv.step_size': size } });
-// A live palette edit rewrites the mounted Result (hazard 6); the draft keeps the color.
+// A live palette edit rewrites the mounted Result (hazard 6); the draft keeps the color. The GC content color is the one the Gallery tobacco Session's rules do not cover.
 const livePalette = (page) => evaluateWithRetainedPromise(page, async () => {
   const { state } = await import('./js/state.js');
   state.paletteInstantPreviewEnabled.value = true;
   await window.__GBDRAW_HISTORY__.runUndoable('Live palette', async () => {
-    window.__GBDRAW_APP__.editDefaultColor('CDS', '#123456');
+    window.__GBDRAW_APP__.editDefaultColor('gc_content', '#123456');
     await window.Vue.nextTick();
   });
 });

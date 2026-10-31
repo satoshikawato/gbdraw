@@ -1845,7 +1845,7 @@ def _assert_gallery_chloroplast(
 
     expected_values = {
         "--gbk": "NC_001879.gbk",
-        "-t": "chloroplast_specific_table.tsv",
+        "-t": "builtin:plastid",
         "-k": "CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin",
         "--species": "<i>Nicotiana tabacum</i>",
         "--track_type": "tuckin",
@@ -1906,7 +1906,7 @@ def _assert_gallery_chloroplast(
         "photosystem I",
         "photosystem II",
         "RNA polymerase",
-        "rep_origin",
+        "origin of replication",
     }
     if not required_text <= evidence.text_nodes:
         raise RecipeContractError("T-CLI-06 SVG is missing Gallery labels.")
@@ -1956,7 +1956,7 @@ def _assert_gallery_chloroplast(
     }:
         raise RecipeContractError("T-CLI-06 annotation identities changed.")
     fills = {element.attrib.get("fill") for element in root.iter()}
-    if not {"#00662c", "#328925", "#bd1220", "#e95d0f", "#ffec00"} <= fills:
+    if not {"#2c6d3e", "#53924d", "#b4514c", "#de844f", "#eada78"} <= fills:
         raise RecipeContractError("T-CLI-06 lost functional chloroplast colors.")
 
     python_output = (

@@ -714,6 +714,9 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
         chooser.value.set_files(str(path))
     else:
         raise RuntimeError(f"Unsupported capture action: {action_type}")
+    # The next action measures what this one moved: a zoom or pan moves the preview in a
+    # 0.2 s transition, and a box read before it ends is the old one (OV-2280).
+    wait_for_css_transitions(page)
 
 
 def generate_and_wait(page, timeout_ms: int) -> None:
@@ -1020,6 +1023,12 @@ def padded_clip_from_boxes(
     min_y = min(float(box["y"]) for box in boxes)
     max_x = max(float(box["x"]) + float(box["width"]) for box in boxes)
     max_y = max(float(box["y"]) + float(box["height"]) for box in boxes)
+    # A crop trims its padding at the page edge, never the element it shows (OV-2280).
+    if min_x < -1 or min_y < -1 or max_x > dimensions["width"] + 1 or max_y > dimensions["height"] + 1:
+        raise RuntimeError(
+            f"The crop would cut its element: it spans x {min_x:.0f}..{max_x:.0f}, "
+            f"y {min_y:.0f}..{max_y:.0f} on a {dimensions['width']:.0f} x {dimensions['height']:.0f} page."
+        )
 
     x = max(0.0, min_x - padding["left"])
     y = max(0.0, min_y - padding["top"])

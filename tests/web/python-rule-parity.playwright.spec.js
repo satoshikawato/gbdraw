@@ -240,9 +240,15 @@ test('the plastid preset replaces the tobacco Gallery rules through the Preset s
   const preset = await page.evaluate(() => window.__GBDRAW_APP__.specificRulePresets.find((entry) => entry.id === 'plastid'));
   const select = page.getByLabel('Preset scheme', { exact: true });
   await select.evaluate((element) => { for (let node = element.closest('details'); node; node = node.parentElement?.closest('details')) node.open = true; });
-  await select.selectOption('plastid');
-  await select.locator('xpath=..').getByRole('button', { name: 'Apply' }).click();
-  await page.waitForFunction((count) => window.__GBDRAW_APP__.manualSpecificRules.length === count, preset.rules.length);
+  // The Session already holds the plastid rows, so apply another preset first: applying the same rows again changes nothing to draw.
+  for (const id of ['mitochondrion', 'plastid']) {
+    const rows = await page.evaluate((presetId) => window.__GBDRAW_APP__.specificRulePresets.find((entry) => entry.id === presetId).rules, id);
+    await select.selectOption(id);
+    await select.locator('xpath=..').getByRole('button', { name: 'Apply' }).click();
+    await page.waitForFunction((first) => window.__GBDRAW_APP__.manualSpecificRules[0]?.cap === first, rows[0].cap);
+    await rerendered(page);
+  }
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.length)).toBe(preset.rules.length);
   await rerendered(page);
   const psi = preset.rules.find((rule) => rule.cap === 'photosystem I');
   const live = await presetFills(page, psi.color);

@@ -4997,11 +4997,14 @@ def test_similarity_groups_with_two_records_on_one_row_link_adjacent_rows(
 
 
 @pytest.mark.linear
-def test_cli_similarity_groups_with_multi_record_rows_draws_adjacent_row_links(
+@pytest.mark.parametrize("mode", ("similarity_groups", "pairwise"))
+def test_cli_protein_modes_with_multi_record_rows_draw_adjacent_row_links(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    mode: str,
 ) -> None:
-    """OV-2297: the CLI row layout with --losatp_mode similarity_groups renders."""
+    """OV-2297, OV-2371: the CLI row layout renders with --losatp_mode
+    similarity_groups and pairwise, and both join the same record pairs."""
 
     import re
 
@@ -5023,7 +5026,7 @@ def test_cli_similarity_groups_with_multi_record_rows_draws_adjacent_row_links(
             "--gbk", "a.gb", "b.gb", "c.gb",
             *(argument for position in _TWO_RECORDS_ON_ROW_ONE for argument in ("--multi_record_position", position)),
             "--losat", "losatp",
-            "--losatp_mode", "similarity_groups",
+            "--losatp_mode", mode,
             "-f", "svg",
             "-o", str(output_prefix),
         ]

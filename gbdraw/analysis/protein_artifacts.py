@@ -525,8 +525,7 @@ def normalize_derived_losatp_settings(
 
     Numbers normalize to numbers, so ``0``, ``0.0`` and ``"0"`` give one
     identity; spellings normalize through their mode owners. ``None`` is an
-    unset setting, which takes its default from the Python options, except
-    that Collinear refuses an unset ``infer_orthogroups``.
+    unset setting, which takes its default from the Python options.
     """
 
     from gbdraw.api.options import LinearDiagramOptions
@@ -571,9 +570,10 @@ def normalize_derived_losatp_settings(
     infer = LinearDiagramOptions.collinear_infer_orthogroups
     explicit = False
     if normalized_mode == "collinear":
-        if not isinstance(infer_orthogroups, bool):
-            raise ValueError("collinear_infer_orthogroups must be a boolean")
-        infer = infer_orthogroups
+        if infer_orthogroups is not None:
+            if not isinstance(infer_orthogroups, bool):
+                raise ValueError("collinear_infer_orthogroups must be a boolean")
+            infer = infer_orthogroups
         explicit = explicit_display_pairs is True
         unit = normalize_collinearity_unit_mode(_setting_text(unit_mode, str(unit)))
         color = normalize_collinearity_color_mode(_setting_text(color_mode, str(color)))

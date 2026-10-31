@@ -958,7 +958,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const summary = popup?.querySelector('[data-collinear-summary]'); const pairs = popup?.querySelector('[data-collinear-gene-pairs]'); if (!popup || !summary || !pairs) throw new Error('Compact collinear summary not found.'); popup.children[0]?.setAttribute('data-capture', 'collinear-popup-header'); summary.setAttribute('data-capture', 'collinear-summary'); pairs.setAttribute('data-capture', 'collinear-gene-pairs'); document.activeElement?.blur();"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const summary = popup?.querySelector('[data-collinear-summary]'); const pairs = popup?.querySelector('[data-collinear-gene-pairs]'); if (!popup || !summary || !pairs) throw new Error('Compact collinear summary not found.'); popup.querySelector('[data-popup-header]').setAttribute('data-capture', 'collinear-popup-header'); summary.setAttribute('data-capture', 'collinear-summary'); pairs.setAttribute('data-capture', 'collinear-gene-pairs'); document.activeElement?.blur();"
               }
             ],
             "highlightSelector": "[data-gbdraw-match-id='comparison1_match1']",
@@ -1026,7 +1026,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1,513 (+)', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const details = popup?.querySelector('[data-feature-popup-details]'); if (!details) throw new Error('DnaA detail list not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); details.setAttribute('data-capture', 'dnaa-popup-details'); document.activeElement?.blur();"
+                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1,513 (+)', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const details = popup?.querySelector('[data-feature-popup-details]'); if (!details) throw new Error('DnaA detail list not found.'); popup.querySelector('[data-popup-header]').setAttribute('data-capture', 'dnaa-popup-header'); popup.querySelector('[data-feature-popup-tabs]').setAttribute('data-capture', 'dnaa-popup-tabs'); details.setAttribute('data-capture', 'dnaa-popup-details'); document.activeElement?.blur();"
               }
             ],
             "highlightSelector": "[data-gbdraw-stable-feature-id='fe826bac7']",

@@ -14,13 +14,6 @@
       "note": "Download the complete Nicotiana tabacum plastid record as a GenBank flat file."
     },
     {
-      "label": "Chloroplast feature colors",
-      "source": "Gallery file",
-      "targetName": "chloroplast_specific_table.tsv",
-      "href": "./files/chloroplast_specific_table.tsv",
-      "note": "Maps chloroplast gene groups to the colors used by the figure."
-    },
-    {
       "label": "Qualifier priority",
       "source": "Gallery file",
       "targetName": "qualifier_priority.tsv",
@@ -414,7 +407,7 @@
     },
     {
       "title": "Color the gene groups",
-      "body": "The preview colors features by type: every CDS is the same blue, with tRNA, rRNA, and repeat_region in their own default colors. Open Colors, click Choose Specific rules file, and choose chloroplast_specific_table.tsv, which gives each chloroplast gene group, such as photosystem I and II, ribosomal proteins, and NADH dehydrogenase, its own color and legend entry. Click Generate Diagram.",
+      "body": "The preview colors features by type: every CDS is the same blue, with tRNA, rRNA, and repeat_region in their own default colors. Open Colors, choose Plastid gene classes in Preset scheme, and click Apply. The built-in plastid table replaces the specific rules and gives each chloroplast gene group, such as photosystem I and II, ribosomal proteins, and NADH dehydrogenase, its own color and legend entry. Click Generate Diagram.",
       "table": {
         "columns": [
           "Setting",
@@ -422,8 +415,8 @@
         ],
         "rows": [
           [
-            "Specific rules file",
-            "chloroplast_specific_table.tsv"
+            "Preset scheme",
+            "Plastid gene classes"
           ]
         ]
       },
@@ -433,17 +426,17 @@
           "script": "const labels = [\"Colors\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
         },
         {
-          "type": "upload",
-          "selector": "role=button[name='Choose Specific rules file']",
-          "path": "gallery/files/chloroplast_specific_table.tsv"
+          "type": "select",
+          "selector": "select[aria-label='Preset scheme']",
+          "value": "plastid"
+        },
+        {
+          "type": "click",
+          "selector": "div:has(> select[aria-label='Preset scheme']) > button"
         },
         {
           "type": "waitForFunction",
-          "script": "() => window.__GBDRAW_APP__?.files?.t_color?.name === 'chloroplast_specific_table.tsv'"
-        },
-        {
-          "type": "evaluate",
-          "script": "async () => { const app = window.__GBDRAW_APP__; await app.waitForAuxiliaryFileImport(app.files.t_color); }"
+          "script": "() => window.__GBDRAW_APP__?.manualSpecificRules?.length === 19"
         },
         {
           "type": "generate"
@@ -452,36 +445,34 @@
       "operations": [
         {
           "media": {
-            "src": "./media/tobacco-chloroplast/manual-05-01-specific-color-table.webp",
-            "alt": "Specific rules file uploader in the Colors card with chloroplast_specific_table.tsv selected.",
-            "caption": "Click Choose Specific rules file and choose chloroplast_specific_table.tsv."
+            "src": "./media/tobacco-chloroplast/manual-05-01-preset-scheme.webp",
+            "alt": "Colors card with the Preset scheme menu open and Plastid gene classes highlighted.",
+            "caption": "Open Preset scheme, choose the highlighted Plastid gene classes option, and click Apply."
           },
           "capture": {
             "source": "webapp",
-            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
-            "replayThrough": 5,
-            "actions": [
-              {
-                "type": "evaluate",
-                "script": "const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'Specific rules file'); const root = label?.parentElement?.parentElement; if (!root) throw new Error('Specific rules file uploader not found.'); root.dataset.capture = 'chloroplast-specific-table'; root.scrollIntoView({ block: 'center' });"
-              }
-            ],
-            "selector": "[data-capture='chloroplast-specific-table']",
+            "crop": "openSelect",
             "cropPadding": {
-              "top": 4,
-              "right": 14,
-              "bottom": 4,
-              "left": 14
+              "top": 54,
+              "right": 110,
+              "bottom": 24,
+              "left": 16
             },
-            "assertAppState": {
-              "mode": "circular",
-              "files.t_color.name": "chloroplast_specific_table.tsv"
+            "openSelect": {
+              "selectedLabel": "Plastid gene classes",
+              "options": [
+                "COG categories (Bakta)",
+                "PHROG categories (Pharokka)",
+                "Plastid gene classes",
+                "Mitochondrial gene classes"
+              ],
+              "label": "Preset scheme",
+              "selector": "select[aria-label='Preset scheme']"
             },
-            "visibleText": [
-              "chloroplast_specific_table.tsv"
+            "openDetails": [
+              "Colors"
             ]
-          },
-          "dataDependent": true
+          }
         },
         {
           "dataDependent": true,
@@ -512,7 +503,7 @@
             "cropPadding": 12,
             "assertAppState": {
               "mode": "circular",
-              "files.t_color.name": "chloroplast_specific_table.tsv"
+              "manualSpecificRules.length": 19
             },
             "visibleText": [
               "Nicotiana tabacum",
