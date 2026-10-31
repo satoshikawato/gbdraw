@@ -423,6 +423,15 @@ def test_index_loads_the_vue_production_build_its_notice_names() -> None:
     ]
 
 
+def test_index_loads_only_ui_fonts_the_offline_check_requires() -> None:
+    from gbdraw._web_assets import REQUIRED_UI_FONT_FILES
+
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    loaded = set(re.findall(r"url\('\./(vendor/fonts/[^']+\.woff2)'\)", index_html))
+    required = {path.as_posix() for path in REQUIRED_UI_FONT_FILES}
+    assert loaded and loaded == required, sorted(loaded ^ required)
+
+
 def test_web_asset_notices_name_only_files_the_package_ships() -> None:
     from gbdraw._web_assets import WEB_ASSET_NOTICES
 
