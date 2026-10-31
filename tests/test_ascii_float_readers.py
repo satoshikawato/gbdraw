@@ -354,7 +354,11 @@ def test_every_cli_float_option_refuses_non_finite_values(mode: str, capsys: pyt
                 get_args(["--gbk", "dummy.gb", *_with_value(option, count, text)])
             assert raised.value.code == 2, (option, text)
             err = capsys.readouterr().err
-            assert f"argument {option}: invalid float value: {text!r}" in err, (option, text, err)
+            refusals = [f"argument {option}: invalid float value: {text!r}"]
+            if count > 1 and text.startswith("-"):
+                # Before Python 3.13 argparse reads a separate "-inf" word as an option, so one value is missing.
+                refusals.append(f"argument {option}: expected {count} arguments")
+            assert any(refusal in err for refusal in refusals), (option, text, err)
 
 
 @pytest.mark.parametrize(

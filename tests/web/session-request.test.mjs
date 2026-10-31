@@ -790,6 +790,19 @@ state.adv.identity_scale = [40, 90];
 const scaledRequest = buildCanonicalRenderRequestRaw({ state, filesData });
 assert.deepEqual(scaledRequest.renderRequest.diagramOptions.configOverrides['objects.conservation.identity_scale'], [40, 90]);
 assert.deepEqual(projectCanonicalSessionRequest(scaledRequest).config.adv.identity_scale, [40, 90]);
+// R7: the pair is sent as typed (Python judges range and order, tests/fixtures/option_domain_vectors.json),
+// and anything that is not two finite numbers is refused with the leaf path.
+state.adv.identity_scale = [90, 40];
+assert.deepEqual(
+  buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.diagramOptions.configOverrides['objects.conservation.identity_scale'],
+  [90, 40]
+);
+for (const value of [Number.NaN, 7, '1e-50x', [5], [Number.NaN, 100], ['x', 100], [null, 100], [40, 90, 100]]) {
+  state.adv.identity_scale = value;
+  assert.throws(() => buildCanonicalRenderRequestRaw({ state, filesData }),
+    { code: 'INPUT_INVALID', context: { configPath: 'objects.conservation.identity_scale', reason: 'FINITE' } },
+    `identity_scale=${JSON.stringify(value)}`);
+}
 state.adv.identity_scale = null;
 // PD-OI-109: Show Definition (Circular only). A shown definition is left out of the
 // request, as an earlier writer left it; a hidden one is `false`, and both project back.
