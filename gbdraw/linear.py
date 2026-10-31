@@ -361,7 +361,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help=(
             'LOSATP display with --losat losatp: similarity_groups (Similarity groups '
             'across all records), collinear (Collinear blocks), or pairwise '
-            '(adjacent-record ribbons) (default: similarity_groups).'
+            '(links between records in adjacent rows) (default: similarity_groups).'
         ),
     )
     parser.add_argument(

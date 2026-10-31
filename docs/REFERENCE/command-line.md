@@ -259,8 +259,10 @@ missing, unreadable, or malformed file stops the run instead of being skipped.
 The table rules are in [Comparison and numeric
 tables](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
 
-LOSATP Pairwise mode searches each adjacent input pair. With three or
-more records, it does not add an implicit first-to-last comparison.
+LOSATP Pairwise mode searches each record against each record of the next row,
+the pairs Similarity groups and Collinear blocks draw. With one record per row
+these are the consecutive records; it does not add an implicit first-to-last
+comparison.
 
 `--losat_output_dir DIR` (with `--losat`) writes the raw search rows of the run.
 LOSATN and TLOSATX write one TSV per compared record pair and `comparisons.tsv`

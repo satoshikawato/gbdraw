@@ -32,6 +32,11 @@ write-up of a release.
   `--session_output`, writes `rbh` for a retired Collinear anchor mode such as
   `one_to_one`, in its requests and drafts. A hand-edited spelling of a retired
   mode, such as `ONE-TO-ONE`, now reads and upgrades instead of being refused.
+- Fixed: `--losatp_mode pairwise` on a Linear layout with two or more records in
+  one row searches every record pair between adjacent rows, as Similarity groups
+  and Collinear blocks do, instead of failing with "Ordered BLAST/protein comparison
+  inputs are ambiguous". `-b/--blast` on such a layout is still refused; the
+  message now says to list the tables in `--comparisons_table` (OV-2371).
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

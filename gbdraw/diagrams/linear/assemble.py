@@ -751,8 +751,10 @@ def linear_comparison_rows(
     if ordered_frames:
         if multi_record_enabled:
             raise ValidationError(
-                "Ordered BLAST/protein comparison inputs are ambiguous when a Linear row "
-                "contains multiple records; provide explicit LinearComparison endpoints."
+                "Ordered comparison tables pair record i with record i + 1, which is "
+                "ambiguous when a Linear row holds more than one record. On the command "
+                "line, list each table with its query and subject in --comparisons_table "
+                "instead of -b/--blast; in Python, pass LinearComparison values."
             )
         # A table past the last record fails the topology check below.
         normalized.extend(
