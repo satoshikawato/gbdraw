@@ -34,7 +34,7 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   block where it used to split into several blocks or single links: where a
   query gene has a second anchor, where a single link continues the run, and
   where a compatible cluster sits within **Max unit gap** but not next to it.
-  The anchors, the parameters, and their defaults do not change, and every
+  Chaining keeps the same anchors, and every
   anchor is still drawn; an anchor that no chain takes is a single-link block.
   Collinear figures change, in the command line, the Python API, and the Web app.
   **Redraw** the figures you keep. Saved derived LOSATP results are rebuilt once
@@ -51,7 +51,7 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   contains multiple records". The links join every record pair in adjacent rows,
   as Collinear blocks already do, and a Session saved on such a layout stores the
   drawn pairs and replays them. **Max hits per protein for groups**
-  (`--losatp_member_max_hits`) no longer spends one of its slots on a protein's
+  (`--losatp_member_max_hits`) no longer counts a protein's
   hit to itself. The bitscore normalization of a within-record search no longer
   takes its scale from those self hits; a within-record table with fewer than 12
   other hits uses the square-root-of-lengths fallback that a small cross-record
@@ -65,17 +65,6 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   drawing; since 0.14.3 at least. It now draws, each kept record at the place the
   Session gave it, and an added record at its default place. The Similarity
   alignment plan is still cleared by such a change; **Align** again to recompute.
-- In the Web app, on a Result loaded from a saved Session, hiding its only Depth
-  track with **Show Depth** or the row's switch failed with **Live edit failed**,
-  and the track stayed until **Generate Diagram**. It now leaves at once, and
-  showing it again, Undo, and Redo apply at once.
-- In the Web app, Undo of a track row's switch that also turned off an Overlay row
-  starting at or extending to that row brought the Overlay row back in the
-  settings but not in the Result, and a Save then wrote a Session without it.
-  Undo and Redo now return it to the Result, and a Save after the Undo holds it.
-  An Overlay row turned back on by hand while its track is back returns at once
-  with the values of the last Generate, and a row that left when **Use custom
-  stack** changed returns when it changes back.
 - **Similarity alignment center.** A Similarity alignment anchored on such a CDS
   placed the record's middle at the shared center. It now places the CDS
   itself, in the command line, the Python API, and the Web app alike.
@@ -141,7 +130,10 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   switch that also turned off an Overlay row, and of **Hide GC Content** or
   **Hide GC Skew** in a Circular custom stack or with Circular track widths or
   radii, applies at once and returns the rows it turned off; Redo hides them
-  again. These wait for Generate: a track the Result did not draw when its
+  again, and a Save after the Undo holds them. An Overlay row turned back on by
+  hand while its track is back returns at once with the values of the last
+  Generate, and a row that left when **Use custom stack** changed returns when
+  it changes back. These wait for Generate: a track the Result did not draw when its
   Session was loaded, a Depth file change, a row added since the last
   Generate, **Hide GC Content** or **Hide GC Skew** turned off by hand in a
   Circular custom stack or with Circular track widths or radii, and **Use

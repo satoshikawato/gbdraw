@@ -31,6 +31,12 @@ write-up of a release.
   `outer` to `inner` above one `identity` band, with a swatch per ring when the
   ring colors differ. It replaces the `Conservation identity` row and the
   per-ring gradient rows.
+- Changed: in the Web app, Undo and Redo of a track row's switch that also turned off an Overlay row
+  starting at or extending to that row, and of **Hide GC Content** or **Hide GC Skew** with a Circular
+  custom stack or Circular track widths or radii, apply at once, and a Save after the Undo holds the
+  rows. Turning those hides off by hand applies on Generate. An Overlay row turned back on by hand
+  while its track is back returns at once with the values of the last Generate, and a row that left
+  when **Use custom stack** changed returns when it changes back.
 - Fixed: a CDS whose location crosses a circular record's origin, such as
   `complement(join(3717939..3718359,1..656))`, no longer makes LOSATP
   Pairwise links and Collinear blocks that use it span the whole record. The
@@ -136,20 +142,14 @@ write-up of a release.
   (OV-2294, OV-2295, OV-2296). Saved derived LOSATP results are rebuilt once on their next use.
 - Fixed: Collinear block calling no longer slows down as **Max unit gap** grows; 2000 anchors
   took seconds at a gap of 1000 and now take tens of milliseconds at any gap.
-- Fixed: in the Web app, on a Result loaded from a saved Session, hiding its only Depth track with
-  **Show Depth** or the row's switch failed with **Live edit failed**, and the track stayed until
-  **Generate Diagram**. It now leaves at once, and showing it again, Undo, and Redo apply at once.
-- Fixed: in the Web app, Undo of a track row's switch that also turned off an Overlay row starting
-  at or extending to that row brought the Overlay row back in the settings but not in the Result,
-  and a Save then wrote a Session without it. Undo and Redo now return it to the Result, and a Save
-  after the Undo holds it. Two related cases follow the same rule and now match the next Generate:
-  such an Overlay row turned back on by hand, while its track is back, returns at once with the
-  values of the last Generate; and a row that left when **Use custom stack** changed returns when
-  it changes back.
-- Fixed: in the Web app, with a Circular custom stack or Circular track widths or radii, Undo of
-  **Hide GC Content** or **Hide GC Skew** waited for **Generate Diagram**. It now returns the track
-  and the rows it turned off at once, and Redo hides them again. Turning the hide off by hand still
-  applies on Generate.
+- Fixed: Similarity groups draws every record pair between adjacent Linear rows instead of failing
+  when a row holds two or more records, and a Session saved on such a layout stores the drawn
+  pairs (OV-2297).
+- Fixed: **Max hits per protein for groups** (`--losatp_member_max_hits`) no longer counts a
+  protein's hit to itself (OV-2298).
+- Fixed: the bitscore normalization of a within-record search no longer takes its scale from self
+  hits; a within-record table with fewer than 12 other hits uses the square-root-of-lengths
+  fallback. Group memberships can change (OV-2299).
 - Fixed: the help text of the Collinear options and the Collinear tutorial
   describe what each setting changes, and the tutorial commands state
   `--collinear_infer_orthogroups on` (OV-2302).
