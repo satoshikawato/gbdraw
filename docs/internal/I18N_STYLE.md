@@ -2515,8 +2515,9 @@ entry is **Русский**; the menu label is Язык; the page `lang` is `ru`
   Область (необязательно)), Рекомендуется. Above 0 is положительное (больше 0);
   possibly 0 is неотрицательное.
 - A control named in a sentence takes a class noun and its label: нажмите кнопку
-  Построить; на вкладке Легенда. A name the English quotes is quoted in «…»; one
-  it leaves bare stays bare.
+  Построить. A name the English quotes is quoted in «…»; one it leaves bare
+  stays bare, except a tab name, which is always quoted after вкладка: на
+  вкладке «Легенда», вкладки «Подробности» и «Квалификаторы».
 
 ### 16.3 Punctuation and spacing
 
@@ -2527,10 +2528,14 @@ entry is **Русский**; the menu label is Язык; the page `lang` is `ru`
   “ ”. Do not nest quotes: rephrase.
 - Hyphen only inside words (GC-состав). The em dash — has a space on each side;
   the en dash – marks a range (Строки 3–4). One … (U+2026), no space before it.
-  e.g. is например, i.e. is то есть; abbreviations: мин., макс.
+  e.g. is например, i.e. is то есть; abbreviations: мин., макс. (minimum,
+  maximum).
 - Digits are ASCII with the source's point and grouping (0.65, 1,000), never
   0,65 or 1 000, because the app formats numbers with en-US. Units and % keep
   the source spacing (100 bp, 50%, 20px). Sentences are joined by one space.
+- Time abbreviations are Russian words, as in the ja, zh, ko, th, id and vi
+  catalogs: {value} мс, {value} с, {minutes} мин {seconds} с (no period). The
+  measurement units bp, kb, Mb, px, pt, ×R and DPI stay Latin (STYLE 1.2).
 - No non-breaking or soft hyphen characters: a word is never split. The letter
   ё is never written, only е (все, учет, отсчет), as Microsoft Russian does.
   Separate Latin and Cyrillic words by a space or a hyphen (файл LOSAT).

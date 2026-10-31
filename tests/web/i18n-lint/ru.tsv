@@ -1,8 +1,8 @@
 id	regex	flags	message	severity
 ru-ukrainian-letters	[\u0406\u0407\u0404\u0490\u0456\u0457\u0454\u0491]	u	Ukrainian-only letter (і ї є ґ) in a Russian string: write the Russian letter (STYLE 16.4); the Russian text is never copied from the Ukrainian draft.	error
 ru-yo	[\u0401\u0451]	u	The letter ё is not used (STYLE 16.4): write е (Microsoft Russian practice), also in всё -> все.	error
-ru-quotes-not-guillemets	["\u201C\u201D\u201E\u201F\u2018\u2019]	u	Quote marks are guillemets «…» (STYLE 16.3); a straight or English quote, or a low-high quote, is not used. Rephrase instead of nesting.	error
-ru-space-before-punct	\s[:;?!,]|\s\.(?![0-9A-Za-z{_])	u	No space before a colon, semicolon, question mark, exclamation mark, comma or period (STYLE 16.3); write Метка: not Метка :.	error
+ru-quotes-not-guillemets	(?<!=["']?[^"\s]*)"(?! < )|[\u201C\u201D\u201E\u201F\u2018\u2019]	u	Quote marks are guillemets «…» (STYLE 16.3); a straight or English quote, or a low-high quote, is not used. Rephrase instead of nesting. Exempt: a straight quote inside code (="value" or =' as in /key="value") and the literal list of forbidden file-name characters (? " < >).	error
+ru-space-before-punct	(?<![\\*])\s[:;?!,]|\s\.(?![0-9A-Za-z{_])	u	No space before a colon, semicolon, question mark, exclamation mark, comma or period (STYLE 16.3); write Метка: not Метка :. Exempt: a colon or question mark that is a literal character in the forbidden file-name list (\ : * ?), recognised by the backslash or asterisk before the space.	error
 ru-hyphen-as-dash	\s-{1,2}\s	u	A hyphen between spaces is not a dash: write the em dash — (U+2014) with a space on each side, or the en dash – (U+2013) in a range (STYLE 16.3).	error
 ru-three-dots	\.{3}|\u2026{2}	u	Write one ellipsis character … (U+2026), never three periods or two ellipses (STYLE 1.2).	error
 ru-non-ascii-digits	[\u0660-\u0669\u06F0-\u06F9\u0966-\u096F\uFF10-\uFF19]	u	Digits are ASCII 0-9 only (STYLE 1.2).	error
@@ -23,4 +23,4 @@ ru-mode-record	(?:линейн|кругов)[\u0430-\u044F]+ (?:запис|по�
 ru-combining-marks	[\u0300-\u036F]	u	A combining mark (stress accent U+0301 or a decomposed й): write NFC text without stress marks (STYLE 16.3).	error
 ru-plural-parens	[\u0430-\u044F]\((?:ы|и|а|я|ов|ей)\)	iu	No "(s)" style plural: a counted sentence is a tn pair with one / few / many forms (STYLE 16.5).	error
 ru-mixed-script	[A-Za-z][\u0400-\u04FF]|[\u0400-\u04FF][A-Za-z]	u	A Latin and a Cyrillic letter side by side: either a look-alike letter in a Latin word (С, а, о, е, р) or a glued word; separate with a space or a hyphen.	warn
-ru-english-loanwords	(?<![A-Za-z_./-])(?:track|feature|slot|preset|lane|popup|default|reset|record|legend|label)s?(?![A-Za-z_])	iu	English word that STYLE 16.1 never keeps in running text: трек, элемент, слот, предустановка, дорожка, всплывающее окно, по умолчанию, сбросить, запись, легенда, подпись.	warn
+ru-english-loanwords	(?<![<A-Za-z_./-])(?:track|feature|slot|preset|lane|popup|default|reset|record|legend|label)s?(?![A-Za-z_=])	iu	English word that STYLE 16.1 never keeps in running text: трек, элемент, слот, предустановка, дорожка, всплывающее окно, по умолчанию, сбросить, запись, легенда, подпись. Identifiers (record=#<position>, <feature hash>) are exempt.	warn
