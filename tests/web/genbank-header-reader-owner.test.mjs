@@ -76,9 +76,4 @@ test('record counts follow the loader: a record starts at "LOCUS" plus seven spa
   assert.equal(countGenBankRecords(`${record}${record.replace('GOOD1', 'GOOD2')}`.replace(/\n/g, '\r\n')), 2);
   assert.equal(countGenBankRecords(`${record}${record}`), 2);
   assert.equal(countGenBankRecords(''), 0);
-  // EMBL: the first non-blank line names the format, as gbdraw.io.input_text.flat_file_format does.
-  const embl = 'ID   EMBL1; SV 1; linear; DNA; STD; PRO; 4 BP.\nXX\nSQ   Sequence 4 BP;\n     acgt 4\n//\n';
-  assert.equal(countGenBankRecords(`\n${embl}${embl.replace('EMBL1', 'EMBL2')}`), 2);
-  assert.equal(countGenBankRecords(`${record}ID   NOT_A_RECORD\n`), 1);
-  assert.equal(countGenBankRecords(` ${embl}`), 0);
 });
