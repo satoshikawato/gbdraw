@@ -1,6 +1,6 @@
 # Web UI translation style: ja, zh-Hans, zh-Hant, ko, es, fr, pt, id, vi, th, de, it, pl, tr, ru, uk
 
-Revision 11, 2026-10-31 (German, Italian, Polish, Turkish, Russian and Ukrainian: §12–§17; plural objects for few/many locales and the de, it, pl, tr plural and separator lists: §1.3; the cited Auto option in de: §12.2; tr dialog titles and singular `one` forms: §15.2, §15.5). Revision 10 was the 2026-10-22 revision (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
+Revision 11, 2026-10-31 (German, Italian, Polish, Turkish, Russian and Ukrainian: §12–§17; plural objects for few/many locales and the de, it, pl, tr plural and separator lists: §1.3; the cited Auto option in de: §12.2; tr dialog titles and singular `one` forms: §15.2, §15.5; ru and uk time abbreviations: §1.2, §16.3, §17.3; ru tab names: §16.2; uk Load / Download / Upload sources and plural worked pair 5: §17.1, §17.5; ru and uk in the separator and plural lists: §1.3). Revision 10 was the 2026-10-22 revision (cross-locale fixes: the drawing mode versus topology and dimension words with their track in every
 locale, rail names wrap only between words in every locale, ja/zh comparative-genomics terms with no established use stay English,
 ja Attach, zh Either and axis line, es/fr/pt counts and exact matches, fr stroke and Linear scale, id/vi/th record selector
 and feature wording: §1.5, §2, §3, §4, §5.1, §6, §7, §8, §9, §10, §11. Revision 9: counted sentences are `tn` pairs, and
@@ -57,12 +57,12 @@ nothing states that they are reviewed.
   SharedArrayBuffer, Web Workers, IGV, Bakta, Pharokka, Liberation Sans /
   Serif / Mono, and the Circular presets Tuckin, Middle, Spreadout.
 - **The Language menu entries** (English, Bahasa Indonesia, Deutsch, Español,
-  Français, Italiano, Polski, Português, Tiếng Việt, Türkçe, ไทย, 日本語,
-  简体中文, 繁體中文, 한국어; the menu order) are endonyms and are not
-  translated; the menu's own label is (言語 / 语言 / 語言 / 언어 / Idioma /
-  Langue / Idioma / Bahasa / Ngôn ngữ / ภาษา / Sprache / Lingua / Język / Dil
-  for ja / zh-Hans / zh-Hant / ko / es / fr / pt / id / vi / th / de / it /
-  pl / tr). Gallery
+  Français, Italiano, Polski, Português, Tiếng Việt, Türkçe, Русский,
+  Українська, ไทย, 日本語, 简体中文, 繁體中文, 한국어; the menu order) are
+  endonyms and are not translated; the menu's own label is (言語 / 语言 / 語言 /
+  언어 / Idioma / Langue / Idioma / Bahasa / Ngôn ngữ / ภาษา / Sprache /
+  Lingua / Język / Dil / Язык / Мова for ja / zh-Hans / zh-Hant / ko / es /
+  fr / pt / id / vi / th / de / it / pl / tr / ru / uk). Gallery
   example titles from `tutorial-data/manifest.json` stay English too.
 - **Names fixed in English by PD-OI-093 and PD-OI-105** stay English in the
   English UI only. Other locales translate them with the glossary (D-11).
@@ -75,7 +75,8 @@ nothing states that they are reviewed.
 - Units stay Latin and keep the source's spacing between number and unit:
   `100 bp`, `1kb`, `20px`, `0.65 ×R`, `8 pt`, `10x`. Never convert a unit (bp, kb and Mb
   stay in every locale; `fr` writes byte units in French, §7.3).
-  Time words are words, not units: 30 seconds is 30秒 in `ja`, `zh-Hans` and `zh-Hant`.
+  Time words are words, not units: 30 seconds is 30秒 in `ja`, `zh-Hans` and `zh-Hant`,
+  and `ru` and `uk` write мс, с and мин / хв (§16.3, §17.3).
 - Keep `→ ← · × + − %` and the en dash of ranges (`Rows 3–4`) as written.
 - Ellipsis is one `…` (U+2026) whether the source writes `...` or `…`, both
   for "more input follows" (Choose records…) and for progress (Saving
@@ -101,7 +102,8 @@ nothing states that they are reviewed.
   natural singular; §9.5, §10.5, §11.5).
 - A `tn` key's translation is one string, except that in a language whose
   plural rule has `few` or `many` categories (Polish, Russian, Ukrainian)
-  the `other` key holds an object of the CLDR categories the language uses,
+  the `other` key holds an object of the CLDR categories the language uses
+  (`pl`: few, many, other; `ru` and `uk`: one, few, many, other),
   with `other` required, for example
   `{"one": "…", "few": "…", "many": "…", "other": "…"}`. The `one` key is
   then the text for exactly 1 and stays a string; the object's `one` is the
@@ -119,7 +121,7 @@ nothing states that they are reviewed.
   `<i18n-text>` component places the element at its `{name}` slot (D-04).
 - Two sentences shown together are two keys. The code joins them with a
   language-dependent separator: a space in English and in `ko`, `es`,
-  `fr`, `pt`, `id`, `vi`, `th`, `de`, `it`, `pl` and `tr`, none after 。 in
+  `fr`, `pt`, `id`, `vi`, `th`, `de`, `it`, `pl`, `tr`, `ru` and `uk`, none after 。 in
   `ja` and `zh-*` (D-18). Do
   not add a trailing space to a value.
 - `Undo {action}` and `Redo {action}` insert the label of a History step. Many
