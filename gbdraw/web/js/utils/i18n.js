@@ -2,9 +2,10 @@
 // The Web UI translation runtime. English is the source and the key: the first
 // argument of `t()` is the English text the UI shows, so the English wording
 // has one owner, the place that writes it. There is no English catalog. A
-// catalog (`./i18n-catalogs/<locale>.js`, a frozen `Record<string, string>`)
+// catalog (`./i18n-catalogs/<locale>.js`, a frozen `TranslationCatalog`)
 // maps that English text to the shown text of one locale; a missing entry
-// shows the English. Templates reach `t`, `tn`, `tx` and `tm` through
+// shows the English. The `other` form of a `tn()` pair may instead map to its
+// text per plural category (`PluralForms`). Templates reach `t`, `tn`, `tx` and `tm` through
 // `app.config.globalProperties` (app.js). A text kept until it is shown (a
 // table evaluated at import, a value in state, a value code compares) stays
 // English, marked with `msg('…')`, and is translated where it is shown with
@@ -32,9 +33,21 @@
  * @property {string} sentenceSeparator What separates two sentences shown one after the other.
  */
 /**
+ * The translation of the `other` form of a `tn` pair in a language whose
+ * plural rule has more categories than English (`few` and `many` in Polish,
+ * Russian and Ukrainian): the text per CLDR plural category
+ * (Intl.PluralRules) for every count except exactly 1; a category without a
+ * text takes `other`. The `one` form's value is then the text for exactly 1
+ * only, and `one` here is the text of the other counts the rule calls `one`
+ * (21, 31, … in Russian and Ukrainian). Only the value of a key that is only
+ * ever the `other` form of `tn` calls may be an object; every other value is
+ * one string.
+ * @typedef {Readonly<{ other: string, zero?: string, one?: string, two?: string, few?: string, many?: string }>} PluralForms
+ */
+/**
  * A locale's translations, keyed by the English text (`t`, and each form
  * of `tn`) or by `context + '\u0004' + text` (`tx`).
- * @typedef {Readonly<Record<string, string>>} TranslationCatalog
+ * @typedef {Readonly<Record<string, string | PluralForms>>} TranslationCatalog
  */
 /**
  * Values of the `{name}` placeholders of a text.
@@ -73,6 +86,12 @@ export const UI_LOCALES = Object.freeze([
 ]);
 // Separates the context of `tx` from its text in a catalog key.
 export const CONTEXT_SEPARATOR = '\u0004';
+/**
+ * The CLDR plural categories, the keys a `PluralForms` may have, in CLDR
+ * order; tools/i18n checks and prints catalogs by it.
+ * @type {readonly Intl.LDMLPluralRule[]}
+ */
+export const PLURAL_CATEGORIES = Object.freeze(/** @type {Intl.LDMLPluralRule[]} */ (['zero', 'one', 'two', 'few', 'many', 'other']));
 const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
 // The vendored Vue is a global of the page; a unit test without a page gets
@@ -114,14 +133,23 @@ const substitute = (text, params) => (params
   : text);
 
 /**
+ * The text of a catalog value that is read as one string. Plural forms are a
+ * catalog error on any key but the `other` form of a `tn` pair (the catalog
+ * test refuses them); they read as their `other` text.
+ * @param {string | PluralForms} value
+ * @returns {string}
+ */
+const textOf = (value) => (typeof value === 'string' ? value : value.other);
+
+/**
  * The shown text of a catalog key, or `fallback` when the shown locale has none.
  * @param {string} key
  * @param {string} fallback
  */
 const lookup = (key, fallback) => {
   // Read the locale first: a render that calls `t()` depends on it.
-  if (locale.value === SOURCE_LOCALE) return fallback;
-  return Object.hasOwn(catalog, key) ? catalog[key] : fallback;
+  if (locale.value === SOURCE_LOCALE || !Object.hasOwn(catalog, key)) return fallback;
+  return textOf(catalog[key]);
 };
 
 /**
@@ -143,21 +171,48 @@ export const t = (text, params) => substitute(lookup(text, text), params);
 const pluralForm = (rules, count, one, other) => (rules.select(count) === 'one' ? one : other);
 
 /**
+ * The translation of `count` in `entries` under `rules`, or null when
+ * `entries` lack the key it needs. The keys are the English texts of the two
+ * forms. When the `other` form's value is `PluralForms`, the `one` form's
+ * value is the text for exactly 1 (ICU `=1`), and every other count takes the
+ * object's text of the category the rules select, else its `other`: Russian
+ * selects `one` for 21 too, where a `one` text without `{count}` would be
+ * wrong. When it is a string, the category picks the key (`one` for the
+ * category `one`, else `other`).
+ * @param {Intl.PluralRules} rules
+ * @param {TranslationCatalog} entries
+ * @param {number} count
+ * @param {string} one
+ * @param {string} other
+ * @returns {string | null}
+ */
+export const pluralTranslation = (rules, entries, count, one, other) => {
+  const forms = Object.hasOwn(entries, other) ? entries[other] : undefined;
+  if (typeof forms === 'object' && count !== 1) return forms[rules.select(count)] ?? forms.other;
+  const key = typeof forms === 'object' ? one : pluralForm(rules, count, one, other);
+  return Object.hasOwn(entries, key) ? textOf(entries[key]) : null;
+};
+
+/**
  * The shown text of a count. The shown locale's plural rules
  * (Intl.PluralRules) choose the form, and that form's English text is the
  * catalog key: `fr` and `pt` take `one` for 0 and 1, `en` and `es` for 1
- * only, `ja`, `zh-Hans`, `zh-Hant` and `ko` never. A missing translation
- * shows the form English chooses. `{count}` is the count unless `params`
- * gives it.
+ * only, `ja`, `zh-Hans`, `zh-Hant` and `ko` never. A value with plural
+ * forms gives the text of the category (`pluralTranslation`). A missing
+ * translation shows the form English chooses. `{count}` is the count unless
+ * `params` gives it.
  * @param {number} count
  * @param {string} one
  * @param {string} other
  * @param {TranslationParams} [params]
  * @returns {string}
  */
-export const tn = (count, one, other, params) => (
-  substitute(lookup(pluralForm(shownPlurals, count, one, other), pluralForm(ENGLISH_PLURALS, count, one, other)), { count, ...params })
-);
+export const tn = (count, one, other, params) => {
+  const english = pluralForm(ENGLISH_PLURALS, count, one, other);
+  // Read the locale first: a render that calls `tn()` depends on it.
+  const shown = locale.value === SOURCE_LOCALE ? english : pluralTranslation(shownPlurals, catalog, count, one, other) ?? english;
+  return substitute(shown, { count, ...params });
+};
 
 /**
  * The shown text of an English text that needs a different translation in
