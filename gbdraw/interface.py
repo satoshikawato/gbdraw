@@ -393,6 +393,9 @@ class LinearComparisonOptions:
     ``collinearity_infer_orthogroups`` adds within-record searches to
     ``losatp_mode="collinear"`` and groups proteins into similarity groups
     before blocks are built (off by default).
+    ``auto_orient`` reverse-complements a record whose reverse-strand
+    nucleotide hits against the row above weigh more than half of its hits
+    (off by default; protein comparisons are not read).
     """
 
     blast_files: Sequence[str] | None = None
@@ -437,6 +440,7 @@ class LinearComparisonOptions:
     similarity_alignment: (
         SimilarityAlignmentPlan | SimilarityAlignmentReference | None
     ) = None
+    auto_orient: bool = _LINEAR_DIAGRAM_DEFAULTS.auto_orient
 
 
 @dataclass(frozen=True)
@@ -1093,6 +1097,7 @@ def _linear_options(
         protein_comparisons=comparisons.protein_comparisons,
         orthogroups=comparisons.orthogroups,
         losat_search=_linear_losat_search(comparisons),
+        auto_orient=comparisons.auto_orient,
         pairwise_match_style=comparisons.match_style,
         collinearity_blocks=comparisons.collinearity_blocks,
         collinearity_params=comparisons.collinearity_params,

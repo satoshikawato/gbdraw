@@ -106,6 +106,7 @@ Important `LinearComparisonOptions` defaults are:
 | `gencodes` | `None` (runtime default, 1; used when `losat="tlosatx"`) |
 | `pairs` | `None` (records in adjacent rows are compared) |
 | `match_style` | `ribbon` |
+| `auto_orient` | `False` (see [Automatic Linear orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation)) |
 | `collinearity_unit` | `auto` |
 | `collinearity_anchor` | `rbh` |
 | `collinearity_scope` | `adjacent` |
