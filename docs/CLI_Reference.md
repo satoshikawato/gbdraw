@@ -1199,8 +1199,8 @@ options:
   --losatp_mode {similarity_groups,collinear,pairwise}
                         LOSATP display with --losat losatp: similarity_groups
                         (Similarity groups across all records), collinear
-                        (Collinear blocks), or pairwise (adjacent-record
-                        ribbons) (default: similarity_groups).
+                        (Collinear blocks), or pairwise (links between records
+                        in adjacent rows) (default: similarity_groups).
   --losatn_task {megablast,blastn,dc-megablast}
                         LOSATN search task with --losat losatn. A native
                         runtime that does not support the task stops before

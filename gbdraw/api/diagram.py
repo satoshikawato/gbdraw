@@ -2251,11 +2251,11 @@ def assemble_linear_diagram_from_records(
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     normalized_orthogroup_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
     # The displayed pairs of a computed protein analysis when a row holds
-    # several records: every pair across adjacent rows (OV-2297).
+    # several records: every pair across adjacent rows (OV-2297, OV-2371).
     row_comparison_pairs: tuple[tuple[int, int], ...] | None = None
     if (
         (
-            normalized_protein_blastp_mode in {"orthogroup", "collinear"}
+            normalized_protein_blastp_mode in {"orthogroup", "collinear", "pairwise"}
             or collinearity_blocks is not None
         )
         and layout is not None
@@ -2455,18 +2455,20 @@ def assemble_linear_diagram_from_records(
             search_scope=normalized_collinearity_search_scope,
             comparison_pairs=row_comparison_pairs,
         )
-    elif normalized_protein_blastp_mode == "pairwise" and normalized_protein_pairs is not None:
-        # One plan for every pair, so records of one file share a database.
+    elif normalized_protein_blastp_mode == "pairwise":
+        # The listed pairs, else a row layout's pairs, else consecutive records;
+        # one plan for every pair, so records of one file share a database.
+        pairwise_pairs = (
+            normalized_protein_pairs if normalized_protein_pairs is not None else row_comparison_pairs
+        )
         resolved_protein_frames = invoke_protein_analysis(
             "pairwise",
             records,
             analysis_cache_filenames=_linear_losat_cache_filenames(
-                records, _record_presentations, normalized_protein_pairs
+                records, _record_presentations, pairwise_pairs
             ),
-            pairwise_pairs=normalized_protein_pairs,
+            pairwise_pairs=pairwise_pairs,
         ).comparisons
-    elif normalized_protein_blastp_mode == "pairwise":
-        resolved_protein_frames = invoke_protein_analysis("pairwise", records).comparisons
     elif normalized_protein_blastp_mode == "orthogroup":
         analysis = invoke_protein_analysis(
             "orthogroup",

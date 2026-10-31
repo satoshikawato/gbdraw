@@ -23,7 +23,9 @@ from gbdraw.api import (
 )
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
+from gbdraw.diagrams.linear.assemble import linear_comparison_rows
 from gbdraw.exceptions import ValidationError
+from gbdraw.mode_profiles import ComparisonThresholds
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear_comparison import merge_linear_comparisons, validate_linear_comparison_topology
 from gbdraw.session_request_codec import (
@@ -363,6 +365,40 @@ def test_selected_generated_protein_pairs_keep_explicit_endpoints(monkeypatch) -
     svg = canvas.tostring()
     assert 'data-query-record-index="0"' in svg
     assert 'data-subject-record-index="2"' in svg
+
+
+def test_pairwise_without_pairs_searches_every_pair_across_adjacent_rows(monkeypatch) -> None:
+    """OV-2371: Pairwise on a row of two records searches the pairs Collinear and
+    Similarity groups draw there (``record_pairs_between_adjacent_rows``)."""
+
+    calls: list[tuple[tuple[int, int], ...]] = []
+
+    def fake_pairwise(_records, **kwargs):
+        calls.append(tuple(kwargs["pairs"]))
+        return SimpleNamespace(comparisons=[_comparison(*pair).matches for pair in kwargs["pairs"]])
+
+    monkeypatch.setattr("gbdraw.api.diagram.build_pairwise_protein_blastp_comparisons", fake_pairwise)
+    canvas = assemble_linear_diagram_from_records(
+        _records(),
+        cfg=apply_config_overrides(
+            None, {"labels.linear.scope": "none", "canvas.show_gc": False, "canvas.show_skew": False}
+        ),
+        losat_search=LosatSearchOptions(program="losatp", losatp_mode="pairwise"),
+        layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2")),
+        legend="none",
+    )
+    assert calls == [((0, 2), (0, 3), (1, 2), (1, 3))]
+    assert 'data-subject-record-index=' in canvas.tostring()
+
+
+def test_ordered_tables_on_a_multi_record_row_name_what_to_use_instead() -> None:
+    """OV-2371: the refusal names the option a command-line user has."""
+
+    table = _comparison(0, 2).matches
+    records = tuple(_records()[:3])
+    thresholds = ComparisonThresholds(evalue=1e-2, bitscore=0, identity=0, alignment_length=0)
+    with pytest.raises(ValidationError, match="--comparisons_table"):
+        linear_comparison_rows((table,), None, (), thresholds, records, (0, 0, 1), True)
 
 
 def test_collinear_all_scope_renders_every_cross_row_pair(monkeypatch) -> None:
