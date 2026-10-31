@@ -758,6 +758,11 @@ need to be run again. Request schema 9 keeps schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
 inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.
+A typed Linear request with `auto_orient=True` is not encoded
+(`CanonicalRequestEncodingError`), and a canonical request with `autoOrient` is
+rejected as an unknown field: no Session stores [automatic Linear
+orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation)
+yet.
 
 ## Similarity alignment in requests and Sessions
 

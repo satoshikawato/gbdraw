@@ -107,6 +107,7 @@ Important `LinearComparisonOptions` defaults are:
 | `pairs` | `None` (records in adjacent rows are compared) |
 | `match_style` | `ribbon` |
 | `identity_scale` | `None` (colours from the identity threshold to 100%) |
+| `auto_orient` | `False` (see [Automatic Linear orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation)) |
 | `collinearity_unit` | `auto` |
 | `collinearity_anchor` | `rbh` |
 | `collinearity_scope` | `adjacent` |

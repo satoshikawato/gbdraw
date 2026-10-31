@@ -1055,7 +1055,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [--records_table TSV]
               [--multi_record_position SELECTOR@ROW] [--linear_record_gap PX]
-              [--comparisons_table TSV] [-b [BLAST ...]]
+              [--comparisons_table TSV] [-b [BLAST ...]] [--auto_orient]
               [--losat {losatn,tlosatx,losatp}]
               [--losatp_mode {similarity_groups,collinear,pairwise}]
               [--losatn_task {megablast,blastn,dc-megablast}]
@@ -1197,6 +1197,13 @@ options:
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
+  --auto_orient         Reverse-complement a record when its reverse-strand
+                        nucleotide hits against the row above, as that row is
+                        drawn, weigh more than half of its hits (sum of
+                        alignment lengths, after the match thresholds). Reads
+                        -b/--blast, --comparisons_table, and losatn/tlosatx
+                        results, not protein comparisons; --reverse_complement
+                        1 keeps its record reversed (default: off).
   --losat {losatn,tlosatx,losatp}
                         Run a LOSAT comparison between the records: losatn
                         compares the nucleotide sequences (LOSAT blastn),

@@ -142,6 +142,7 @@ from .session import (
 )
 from .session_drawings import SessionDrawingArtifacts
 from .session_io import session_to_cli_args
+from .session_request_codec import require_storable_diagram_options
 from .cli_utils.losat_output import (
     parse_positive_int as _parse_positive_int,
     write_losat_output_files,
@@ -343,6 +344,17 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help="input BLAST result file in tab-separated format (-outfmt 6 or 7) (optional)",
         type=str,
         nargs='*')
+    parser.add_argument(
+        '--auto_orient',
+        action='store_true',
+        help=(
+            'Reverse-complement a record when its reverse-strand nucleotide hits against '
+            'the row above, as that row is drawn, weigh more than half of its hits '
+            '(sum of alignment lengths, after the match thresholds). Reads -b/--blast, '
+            '--comparisons_table, and losatn/tlosatx results, not protein comparisons; '
+            '--reverse_complement 1 keeps its record reversed (default: off).'
+        ),
+    )
     parser.add_argument(
         '--losat',
         choices=_CLI_LOSAT_PROGRAMS,
@@ -1804,6 +1816,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             plot_title_font_size=plot_title_font_size,
             blast_files=tuple(blast_files) if blast_files else None,
             comparison_table_file=args.comparisons_table,
+            auto_orient=args.auto_orient,
             losat_search=losat_search,
             pairwise_match_style=pairwise_match_style,
             collinearity_params=collinearity_params,
@@ -1842,6 +1855,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         ),
     )
     diagram_output_paths = diagram_request_output_paths(canonical_request)
+    if args.save_session or args.session_output:
+        require_storable_diagram_options(canonical_request.options)
     session_output_path = preflight_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
         session_output=args.session_output,

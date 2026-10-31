@@ -106,7 +106,11 @@ boolean tokens listed by `--help`. A region is cropped first, on the record as
 stored in the file, and then reverse-complemented: `--region '#2:5001-40000'`
 with `--reverse_complement 1` for that file draws the same window as
 `--region '#2:5001-40000:rc'`. Selection, cropping, and reverse-complement
-display do not rewrite a source file.
+display do not rewrite a source file. `gbdraw linear --auto_orient` also
+reverse-complements each record whose reverse nucleotide hits against the row
+above weigh more than half of its hits; an explicit reverse wins, and protein
+comparisons are not read. The rule is in [Automatic Linear
+orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation).
 
 Circular mode writes separate results for multiple records by default.
 `--multi_record_canvas` places them on one canvas.
