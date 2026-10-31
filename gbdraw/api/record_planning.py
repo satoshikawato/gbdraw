@@ -44,6 +44,7 @@ from gbdraw.io.genome import filter_features_by_type, load_gbks, parse_gff_fasta
 from gbdraw.io.record_select import (
     RecordSelector,
     parse_record_selector,
+    reverse_records,
 )
 from gbdraw.io.regions import RegionSpec, crop_record_to_region, crop_then_reverse_records, parse_region_spec
 from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
@@ -1375,6 +1376,23 @@ def _apply_collection_options(
     return records, cropped
 
 
+def reverse_resolved_records(
+    collection: ResolvedRecordCollection,
+    indexes: frozenset[int],
+) -> ResolvedRecordCollection:
+    """Reverse-complement the resolved records at ``indexes`` after their crop.
+
+    The order :func:`crop_then_reverse_records` applies to a record's own
+    reverse flag, so each record draws as an explicit reverse of it draws.
+    """
+
+    records = list(collection.records)
+    for index in sorted(indexes):
+        (records[index],) = reverse_records((records[index],), True, log=logger)
+        _apply_provenance_annotations(records[index], collection.provenance[index])
+    return ResolvedRecordCollection(tuple(records), collection.provenance)
+
+
 def _detached_record(record: SeqRecord) -> SeqRecord:
     """Return a record whose own fields can be written without changing ``record``.
 
@@ -1999,4 +2017,5 @@ __all__ = [
     "resolve_implicit_record_output_prefix",
     "resolve_linear_options",
     "resolve_record_inputs",
+    "reverse_resolved_records",
 ]

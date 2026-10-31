@@ -1402,7 +1402,11 @@ class LinearWrapDefaults:
 
 @dataclass(frozen=True)
 class LinearDiagramOptions(_ModeDiagramOptions):
-    """Options accepted by a Linear typed request."""
+    """Options accepted by a Linear typed request.
+
+    ``auto_orient`` reverse-complements records from their nucleotide hits
+    (:func:`gbdraw.linear_comparison.auto_orient_reversed_records`).
+    """
 
     tracks: LinearRequestTrackOptions | None = None
     output: LinearOutputOptions | None = None
@@ -1428,9 +1432,14 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     collinear_max_paralog_links_per_orthogroup: int = 2
     comparison_table_file: str | None = None
     wrap_defaults: LinearWrapDefaults | None = None
+    auto_orient: bool = False
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        if not isinstance(self.auto_orient, bool):
+            raise ValidationError(
+                "auto_orient must be a boolean.", diagnostic={"code": "INPUT_INVALID"}
+            )
         for placement in self.feature_placements:
             placement.target.validate_mode("linear")
         _validate_mode_config_overrides(
