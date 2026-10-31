@@ -501,8 +501,8 @@ def normalize_derived_losatp_settings(
 
     Numbers normalize to numbers, so ``0``, ``0.0`` and ``"0"`` give one
     identity; spellings normalize through their mode owners. ``None`` is an
-    unset setting, which takes its default from the Python options; only
-    ``infer_orthogroups`` has none, so Collinear refuses it unset.
+    unset setting, which takes its default from the Python options, except
+    that Collinear refuses an unset ``infer_orthogroups``.
     """
 
     from gbdraw.api.options import LinearDiagramOptions

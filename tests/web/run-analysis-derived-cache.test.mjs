@@ -245,4 +245,22 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   });
   assert.equal(reuseParalogs(3, 3), true, 'the same paralog links reuse');
   assert.equal(reuseParalogs(3, 2), false, 'changed paralog links decline Similarity groups reuse');
+
+  // A stored Collinear comparison without the inference flag ran with inference on,
+  // whatever a new comparison starts with.
+  const reuseWithoutStoredInference = (inferOrthogroups) => {
+    const collinear = [marker, { kind: 'collinearityResult' }];
+    return canReuseResolvedProteinArtifacts({
+      canonicalComparisons: collinear,
+      committedSession: { ...sessionWith(null), renderRequest: { ...sessionWith(null).renderRequest, comparisons: collinear } },
+      sequences: [{ uid: 'a', region_record_id: '' }],
+      active: {
+        ...active(''), mode: 'collinear', inferOrthogroups, minAnchors: 1, maxUnitGap: 0, maxDiagonalDrift: 0,
+        maxConflicts: 1, mergeOrientation: 'strand', unitMode: 'auto', anchorMode: 'rbh', searchScope: 'adjacent',
+        colorMode: 'orientation'
+      }
+    });
+  };
+  assert.equal(reuseWithoutStoredInference(true), true, 'an absent stored flag reads as on');
+  assert.equal(reuseWithoutStoredInference(false), false, 'turning inference off declines reuse');
 }
