@@ -250,17 +250,23 @@ def test_every_recorded_collinear_command_states_the_inference_flag() -> None:
 def test_a_released_session_with_the_removed_anchor_mode_loads_as_rbh(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A released schema 9 request may hold one_to_one (OV-2303) and holds "either"."""
+    """The released Session 49 with the choosable anchor mode written in loads as rbh and "strand" (OV-2303).
 
+    No released file holds this value: the fixture is the Session 49 file of v0.14.3 with the
+    setting a user could choose written in.
+    """
+
+    import gzip
     import json
 
     from gbdraw.session import load_session_document, materialize_session, session_to_request
 
-    path = REPO_ROOT / "tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json"
-    session = json.loads(path.read_text(encoding="utf-8"))
+    path = REPO_ROOT / "tests/retired_sessions/BGC0000708-BGC0000713.v49-one-to-one.gbdraw-session.json.gz"
+    session = json.loads(gzip.decompress(path.read_bytes()))
+    assert session["version"] == 49 and session["renderRequest"]["schema"] == 9
     (settings,) = [item["settings"] for item in session["renderRequest"]["comparisons"] if "settings" in item]
     assert settings["collinearityParams"]["parameters"]["mergeOrientation"] == "either"
-    settings["collinearityAnchorMode"] = "one_to_one"
+    assert settings["collinearityAnchorMode"] == "one_to_one"
 
     with caplog.at_level("WARNING"), materialize_session(
         load_session_document(session), output_directory=tmp_path
@@ -269,3 +275,34 @@ def test_a_released_session_with_the_removed_anchor_mode_loads_as_rbh(
     assert options.collinearity_anchor_mode == "rbh"
     assert options.collinearity_params.merge_orientation == "strand"
     assert "one_to_one" in caplog.text
+
+
+def test_the_fixture_draft_with_the_removed_anchor_mode_replays_as_rbh(tmp_path: Path) -> None:
+    """The draft key the 0.14.3 select binds (``modes.linear.config.losat.blastp``) reads as rbh.
+
+    Python reads that key only on the settings-only replay (``session_io._append_linear_gui_blastp_args``);
+    ``session_to_cli_args`` refuses a canonical request, so the draft of the fixture is fed to it as a
+    settings-only Session (with the LOSAT source the replay needs).
+    """
+
+    import base64
+    import gzip
+    import json
+
+    from gbdraw.session_io import session_to_cli_args
+
+    path = REPO_ROOT / "tests/retired_sessions/BGC0000708-BGC0000713.v49-one-to-one.gbdraw-session.json.gz"
+    draft = json.loads(gzip.decompress(path.read_bytes()))["modes"]["linear"]["config"]
+    assert draft["losat"]["blastp"]["collinearAnchorMode"] == "one_to_one"
+    # The replay reads the anchor mode only for a Collinear search; the file's draft holds the stored mode "orthogroup".
+    draft["losat"]["blastp"]["mode"] = "collinear"
+    content = b"LOCUS       A\n"
+    entry = {"name": "a.gb", "type": "application/octet-stream", "size": len(content), "lastModified": 0,
+             "data": base64.b64encode(content).decode("ascii")}
+    session = {
+        "format": "gbdraw-session", "version": 30, "createdAt": "2026-06-22T00:00:00Z",
+        "config": {**draft, "blastSource": "losat"}, "ui": {"mode": "linear", "lInputType": "gb"},
+        "files": {"linearSeqs": [{"gb": entry}, {"gb": entry}]},
+    }
+    spec = session_to_cli_args(session, mode="linear", temp_dir=tmp_path, output_override=None, format_override=None)
+    assert spec.args[spec.args.index("--collinear_anchor_mode") + 1] == "rbh"

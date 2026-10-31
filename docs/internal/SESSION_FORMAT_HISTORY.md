@@ -106,13 +106,24 @@ No Session or request version changes; the generated request description and
   derived entry written with `either` in its identity is recomputed once from
   the raw cache (token v4, not yet on `main`).
 
-Positive fixtures: the Gallery Sessions that store `either`
-(`gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json` and
-others); `tests/test_collinear_option_surfaces.py` and
-`tests/web/stored-request-read.test.mjs` set `one_to_one` in that Session.
+Positive fixtures: the Gallery Session requests now store `strand`, so the
+request-level `either` comes from the `v0.14.3` file
+(`tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json` at that tag) and from
+the fixture below (the Gallery drafts still hold `either` in
+`collinearMergeOrientation`); `tests/test_collinear_option_surfaces.py` and
+`tests/web/stored-request-read.test.mjs` read the stored fixture
+`tests/retired_sessions/BGC0000708-BGC0000713.v49-one-to-one.gbdraw-session.json.gz`.
 Release tag `v0.14.3` offered `one_to_one` (`gbdraw/web/index.html`,
 `<option value="one_to_one">`; the request literal listed it), so a released
-writer could store it; no stored file holds it.
+writer could store it. No file in this repository was written by a 0.14.3 run
+with it selected (users' saved files may hold it): the fixture is the Session 49 file of
+that tag (`tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json`, request schema 9)
+with both copies of the setting a user could choose written in, as the select stores
+them: `renderRequest.comparisons[0].settings.collinearityAnchorMode` and the draft key
+`modes.linear.config.losat.blastp.collinearAnchorMode` (the request derives from the
+draft) (provenance in `BGC0000708-BGC0000713.v49-one-to-one.provenance.json`). It sits in
+`tests/retired_sessions/`, outside the folders the scans of stored Sessions read, because
+they refuse a value outside the description.
 
 ## Unreleased: derived LOSATP token v4 for chained Collinear blocks
 
