@@ -19,11 +19,11 @@
 // - in th: the shown catalog in the header and the icon rail, the Thai font
 //   stack, and the 12 px floor of the session label and the rail names (a rail
 //   name may take two lines and stays inside its entry);
-// - at 1024x768, 1280x800 and 1440x900, in all 15 languages: every rail name
+// - at 1024x768, 1280x800 and 1440x900, in all 17 languages: every rail name
 //   stays inside the rail column (inside its border and padding) and no word of
 //   it is split over two lines (ja フィーチャー, fr Disposition), and the footer holds its text without a page
 //   scroll, with nothing drawn over it and the settings pane, its Generate
-//   bar and the Result pane ending above it (stacked: en, ja; rail: all 15)
+//   bar and the Result pane ending above it (stacked: en, ja; rail: all 17)
 //   (OV-1506, OV-1427, OV-1509); the page does not scroll sideways,
 //   the header's mode and Session names keep one line (OV-1515), and each
 //   footer separator stays on the line of the link before it (OV-1517);
@@ -158,11 +158,11 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   await expect(menu(page)).toHaveValue('en');
   await expect(menu(page)).toHaveAccessibleName('Language');
   await expect(menu(page).locator('option')).toHaveText([
-    'English', 'Bahasa Indonesia', 'Deutsch', 'Español', 'Français', 'Italiano', 'Polski', 'Português', 'Tiếng Việt', 'Türkçe', 'ไทย',
-    '日本語', '简体中文', '繁體中文', '한국어'
+    'English', 'Bahasa Indonesia', 'Deutsch', 'Español', 'Français', 'Italiano', 'Polski', 'Português', 'Tiếng Việt', 'Türkçe', 'Русский',
+    'Українська', 'ไทย', '日本語', '简体中文', '繁體中文', '한국어'
   ]);
   expect(await menu(page).locator('option').evaluateAll((options) => options.map((option) => option.lang)))
-    .toEqual(['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']);
+    .toEqual(['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'ru', 'uk', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']);
   await expect(loadButton(page)).toHaveAccessibleName('Load Session');
   expect(await stored(page)).toEqual([]);
 
@@ -530,7 +530,7 @@ test('rail names stay inside the rail and keep each word on one line, nothing co
   const fit = { outside: [], splitWords: [], wrappedHeaderNames: [], separatorsAlone: [], pageScrollsX: false, footerHoldsText: true, coveredLines: [], below: [], pageScrolls: false };
   for (const display of ['stacked', 'rail']) {
     if (display === 'rail') await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
-    for (const tag of display === 'rail' ? ['en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'es', 'fr', 'pt', 'id', 'vi', 'th', 'de', 'it', 'pl', 'tr'] : ['en', 'ja']) {
+    for (const tag of display === 'rail' ? ['en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'es', 'fr', 'pt', 'id', 'vi', 'th', 'de', 'it', 'pl', 'tr', 'ru', 'uk'] : ['en', 'ja']) {
       await menu(page).selectOption(tag);
       await expect.poll(() => pageLanguage(page)).toBe(tag);
       for (const viewport of viewports) {
@@ -555,7 +555,7 @@ test('in every language, the link beside the menu opens the feedback form with o
   // Beside the menu: the next element after it.
   expect(await menu(page).evaluate((select) => select.nextElementSibling?.matches('a[data-translation-feedback]'))).toBe(true);
   const tags = await menu(page).locator('option').evaluateAll((options) => options.map((option) => option.value));
-  expect(tags).toHaveLength(15);
+  expect(tags).toHaveLength(17);
   const minTitle = await page.evaluate(async () => (await import('./js/app/header-fit.js')).SESSION_TITLE_MIN_PX);
   expect(minTitle).toBeGreaterThan(0);
   for (const tag of tags) {
