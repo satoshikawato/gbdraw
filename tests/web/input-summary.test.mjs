@@ -53,4 +53,6 @@ test('each summary keeps the Feature visibility its render drew', () => {
   assert.equal(inputSummaryOf(drawn, 1, 'b.svg'), drawn[0]);
   const hidden = { ...drawing, featureOverrides: { k: { recordKey: 'r', biologicalFeatureId: 'f1', featureVisibility: 'off' } } };
   assert.notEqual(drawn[0].drawnVisibility, visibilityPaintState(hidden), 'a hide changes the drawn visibility');
+  const labelOnly = { ...drawing, featureOverrides: { k: { recordKey: 'r', biologicalFeatureId: 'f1', featureVisibility: null, labelVisibility: 'off' } } };
+  assert.equal(visibilityPaintState(labelOnly), drawn[0].drawnVisibility, 'a label-only row sets no visibility');
 });
