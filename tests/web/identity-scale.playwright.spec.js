@@ -52,20 +52,30 @@ const comparisonView = (page) => page.evaluate(() => {
   return { fills, labels: [...new Set(labels)] };
 });
 
-const setThreshold = async (page, value) => {
-  const input = page.getByLabel('Linear comparison minimum identity');
+// The comparison inputs sit in closed <details> sections; open them, then type and commit as a user does.
+const setInput = async (page, label, value) => {
+  const input = page.getByLabel(label, { exact: true });
+  await input.evaluate((element) => {
+    for (let details = element.closest('details'); details; details = details.parentElement?.closest('details')) {
+      details.open = true;
+    }
+  });
   await input.fill(String(value));
-  await input.blur();
+  await input.dispatchEvent('change');
 };
+
+const setThreshold = (page, value) => setInput(page, 'Linear comparison minimum identity', value);
+const setScaleMinimum = (page, value) => setInput(page, 'Linear comparison identity scale minimum', value);
+
+// Each channel of a #rrggbb colour, for a comparison that allows the 1-unit rounding difference
+// between the live recolour (rounds) and Python (truncates), OV-2393.
+const channels = (color) => [1, 3, 5].map((start) => Number.parseInt(color.slice(start, start + 2), 16));
 
 test('a fixed identity scale keeps match colours and Legend labels when the threshold changes', async ({ page }) => {
   test.setTimeout(420_000);
   await openLinearComparison(page);
 
-  const minimum = page.getByLabel('Linear comparison identity scale minimum');
-  await minimum.scrollIntoViewIfNeeded();
-  await minimum.fill('30');
-  await minimum.blur();
+  await setScaleMinimum(page, 30);
   // The blank maximum takes the top of the identity domain.
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.identity_scale)).toEqual([30, 100]);
 
@@ -90,8 +100,7 @@ test('a fixed identity scale keeps match colours and Legend labels when the thre
   for (const identity of kept) expect(high.fills[identity], `identity ${identity}`).toBe(low.fills[identity]);
 
   // Without the scale the Legend starts at the threshold again.
-  await minimum.fill('');
-  await minimum.blur();
+  await setScaleMinimum(page, '');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.identity_scale)).toBeNull();
   await generateAndWaitForResult(page);
   await settleLive(page);
@@ -109,6 +118,13 @@ test('a live palette recolour of a fixed-scale comparison equals Generate', asyn
   const live = await comparisonView(page);
   await expectLiveEqualsGenerate(page, { label: 'palette recolour with a fixed identity scale' });
   const generated = await comparisonView(page);
-  expect(live).toEqual(generated);
   expect(generated.labels).toEqual(['20%', '90%']);
+  expect(live.labels).toEqual(generated.labels);
+  expect(Object.keys(live.fills).sort()).toEqual(Object.keys(generated.fills).sort());
+  // The live recolour reads the factor Python wrote for the fixed scale; only channel rounding may differ.
+  for (const [identity, fill] of Object.entries(generated.fills)) {
+    const differences = channels(live.fills[identity]).map((value, index) => Math.abs(value - channels(fill)[index]));
+    expect(Math.max(...differences), `identity ${identity}: live ${live.fills[identity]}, Generate ${fill}`)
+      .toBeLessThanOrEqual(1);
+  }
 });
