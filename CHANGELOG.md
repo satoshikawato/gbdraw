@@ -12,6 +12,17 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Added: `--wrap_length AUTO|LENGTH` and the config key
+  `canvas.linear.wrap_length` draw one Linear record over several rows at one
+  scale, each row with its own height. The record stays one record. The command
+  line and Python draw it now; the Web app has no control for it yet. See
+  [Wrap one record over several rows](./docs/REFERENCE/command-line.md#wrap-one-record-over-several-rows).
+- Added: `--scale_interval` takes a unit, for example `5kb`.
+- Changed: a PNG over 32,767 px per side fails with an error that names the
+  limit. A wrapped figure's PNG or PDF over its limit
+  ([limits](./docs/REFERENCE/output-formats-and-export.md#png-and-pdf-size-limits))
+  stops before writing, and the error names a longer row length that should fit.
+
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 
 - Patch release of 0.14.3. Sessions are still saved as Session version 49; Sessions saved by

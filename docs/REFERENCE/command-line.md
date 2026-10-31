@@ -127,6 +127,44 @@ reverse-complemented records. When every row contains only one record, rulers
 keep source-coordinate mapping, so a reverse-complemented region descends
 from left to right.
 
+### Wrap one record over several rows
+
+`--wrap_length` draws each record longer than the given length over several
+rows of that length, all at one scale. It takes a length in bp with an optional
+unit (`10000`, `10kb`, `0.5Mb`) or `auto`, which picks 10, 20, or 50 kb so the
+longest record takes at most five rows, and 50 kb when none does. A record of
+10 kb or less stays one row under `auto`, and a record no longer than the row
+draws one row at any length.
+
+The record stays one record. Each row has its own height from its own labels, a
+cut feature keeps one identity and one label, on the row with its longest part,
+and GC content, GC skew, and depth are computed over the whole record. With
+`--wrap_length`, `--track_layout` defaults to `above` and `--scale_style` to
+`ruler`. `--track_layout middle`, `--scale_style bar`, comparison inputs, and
+several records in one `--multi_record_position` row are refused. A wrapped
+figure can pass the [PNG and PDF size limits](output-formats-and-export.md#png-and-pdf-size-limits).
+
+<!-- executable:H-CLI-15:start -->
+```bash
+gbdraw linear \
+  --gbk NC_001416.gb \
+  --qualifier_priority cds_gene_qualifier_priority.tsv \
+  --show_labels all \
+  --resolve_overlaps \
+  --gc \
+  --skew \
+  --wrap_length 10kb \
+  --legend right \
+  -o lambda_wrapped \
+  -f svg
+```
+<!-- executable:H-CLI-15:end -->
+
+The command writes `lambda_wrapped.svg` and logs `Wrapping at 10 kb per row: 5
+rows`.
+
+![Lambda phage genome wrapped at 10 kb per row with labels, GC content, GC skew, and a legend](../images/h-cli-15/lambda_wrapped.svg)
+
 `--track_layout above|below` with `--scale_style ruler` allows
 `--ruler_on_axis`; other layout combinations ignore the on-axis ruler with a
 warning. `--hide_scale` hides genome-coordinate ticks and labels but keeps

@@ -542,6 +542,19 @@ bindings; the Web app drops each one and lists it in the **Load this file?** dia
 before the import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
 
+## Linear wrap length
+
+A [wrap length](command-line.md#wrap-one-record-over-several-rows) is stored as
+`canvas.linear.wrap_length` in the request's config. `--session` and
+`session_to_request()` draw the same rows. A row has no identity in a Session:
+the file holds the one record and the length.
+
+The Web app has no control for it yet. When it loads such a Session it draws the
+rows and lists the length under the settings that are not editable in the Web
+UI. Generate and **Save Session** keep it, and that row's **Reset** removes it.
+Generate stops with an error when the form asks for a Track layout of Middle or
+a bar scale, which cannot draw rows; the last Result stays.
+
 ## Fonts
 
 A Session and a render request store the font by name (the CSS font-family
