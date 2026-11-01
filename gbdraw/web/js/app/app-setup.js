@@ -158,7 +158,7 @@ import { createPaletteLoader } from './palettes.js';
 import { afterPaint, buildDefaultMultiRecordPositions, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { createRecordAutoOrientation } from './record-auto-orientation.js';
-import { createFeatureAnchorAction } from './feature-anchor.js';
+import { createFeatureAnchorAction } from './align-at-feature.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';

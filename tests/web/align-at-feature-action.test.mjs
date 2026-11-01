@@ -1,10 +1,10 @@
-// The Align at feature owner (gbdraw/web/js/app/feature-anchor.js) with fake ports:
+// The Align at feature owner (gbdraw/web/js/app/align-at-feature.js) with fake ports:
 // the reply check, the preview, Apply over an active Similarity alignment, the
 // stale refusal, a Python refusal through the error model, and the notice Undo retires.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { createFeatureAnchorAction, validateFeatureAnchorReply } = await import('../../gbdraw/web/js/app/feature-anchor.js');
+const { createFeatureAnchorAction, validateFeatureAnchorReply } = await import('../../gbdraw/web/js/app/align-at-feature.js');
 
 const KEYS = ['record-1', 'record-2'];
 const committedSession = (layout = null) => ({
