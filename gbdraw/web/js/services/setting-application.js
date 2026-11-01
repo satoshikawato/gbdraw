@@ -60,7 +60,7 @@ export const SETTING_APPLICATION = Object.freeze([
   // D-201, PD-OI-103 rev 2: the stack's structure edits apply on Generate; a
   // switch that hides or shows a GC, skew or Depth row is the track-visibility row's.
   { id: 'track-slots', application: /** @type {const} */ ('generate'),
-    note: msg('Applies on Generate, except turning a GC content, GC skew or Depth row on or off, removing one, and Use custom stack, which apply at once; turning on a row added since the last Generate, a row that was off when the Session was loaded, or a Depth row after a Depth file change apply on Generate, and so does Use custom stack after a Session load (except turned off on a Linear Result drawn with it) or while the Region Annotation sets differ from those of the Result, with every track it would hide or show.') },
+    note: msg('Applies on Generate, except turning a GC content, GC skew or Depth row on or off, removing one, and Use custom stack, which apply at once. These still apply on Generate: turning on a row added since the last Generate, a row that was off when the Session was loaded, or a Depth row after a Depth file change; and Use custom stack after a Session load (except when turned off on a Linear Result drawn with it) or while the Region Annotation sets differ from those of the Result, with every track it would hide or show.') },
   // G1 (PD-OI-103): a committed value redraws the shown Result through the
   // automatic rerender (PD-OI-102). Legend position and Plot Title position
   // are the drawing's layout preferences (`ui.layoutPreferences`, per mode and
@@ -134,7 +134,7 @@ export const SETTING_APPLICATION = Object.freeze([
   // returns the parts the last Generate built (the kept track parts); it waits
   // for Generate where they cannot give it (`partialNote`).
   { id: 'track-visibility', application: /** @type {const} */ ('live'),
-    partialNote: msg('Live edit. Showing a track applies on Generate if the Result did not draw it when its Session was loaded; after a Depth file or series change, or a change of the records the Depth files map to; for a custom stack row added since the last Generate or a stack the last Generate could not build; and, with a Circular custom track stack or Circular track widths or radii, for Hide GC Content and Hide GC Skew turned off.'),
+    partialNote: msg('Live edit. Showing a track applies on Generate if the Result did not draw it when its Session was loaded; after a Depth file or series change, or a change of the records the Depth files map to; for a custom stack row added since the last Generate or a stack the last Generate could not build; and, with a Circular custom track stack or Circular track widths or radii, when Hide GC Content or Hide GC Skew is turned off.'),
     requestPaths: trackVisibilityPaths([
       'config.form.show_gc', 'config.form.show_skew', 'config.form.suppress_gc', 'config.form.suppress_skew',
       'config.form.show_depth', 'files.c_depth', 'files.linearSeqs.*.depth', 'config.adv.depth_tracks',
@@ -148,7 +148,7 @@ export const SETTING_APPLICATION = Object.freeze([
   // change retires the old caption, which clears a Legend tab rename of it at
   // once (`buildLegendStyleRetirement`, OV-1043).
   { id: 'depth-sources', application: /** @type {const} */ ('generate'),
-    note: msg('Adding a Depth file, or a series while one is loaded, turns Show Depth on, and removing the last Depth file or the File that holds it turns it off; turning it off hides the drawn Depth track at once. A changed Legend title clears a Legend tab rename of the old title at once. The rest, and a Depth track from changed files, applies on Generate.') },
+    note: msg('Adding a Depth file, or a series while a Depth file is loaded, turns Show Depth on, and removing the last Depth file or its genome file turns Show Depth off; turning Show Depth off hides the drawn Depth track at once. A changed Legend title clears a Legend tab rename of the old title at once. The rest, and a Depth track from changed files, apply on Generate.') },
   ...rows('live', ['colors']),
   // Editor intent the Result shows at once (the Legend and Features tabs of
   // the editor, the feature popup's Appearance).

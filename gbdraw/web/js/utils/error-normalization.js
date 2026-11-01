@@ -300,13 +300,13 @@ const SWITCHED_TRACKS = Object.freeze({
 // by their `SWITCHED_TRACKS` keys in that table's order (a sentence is never built from track names).
 /** @type {Readonly<Record<string, string>>} */
 const KEPT_INSIDE_AMONG = Object.freeze({
-  gc_content: 'Room kept below it for the tracks inside it, among them GC content: {px} px.',
-  gc_skew: 'Room kept below it for the tracks inside it, among them GC skew: {px} px.',
-  ticks: 'Room kept below it for the tracks inside it, among them the scale: {px} px.',
-  'gc_content,gc_skew': 'Room kept below it for the tracks inside it, among them GC content and GC skew: {px} px.',
-  'gc_content,ticks': 'Room kept below it for the tracks inside it, among them GC content and the scale: {px} px.',
-  'gc_skew,ticks': 'Room kept below it for the tracks inside it, among them GC skew and the scale: {px} px.',
-  'gc_content,gc_skew,ticks': 'Room kept below it for the tracks inside it, among them GC content, GC skew, and the scale: {px} px.'
+  gc_content: 'Room kept toward the center for the inner tracks, among them GC content: {px} px.',
+  gc_skew: 'Room kept toward the center for the inner tracks, among them GC skew: {px} px.',
+  ticks: 'Room kept toward the center for the inner tracks, among them the scale: {px} px.',
+  'gc_content,gc_skew': 'Room kept toward the center for the inner tracks, among them GC content and GC skew: {px} px.',
+  'gc_content,ticks': 'Room kept toward the center for the inner tracks, among them GC content and the scale: {px} px.',
+  'gc_skew,ticks': 'Room kept toward the center for the inner tracks, among them GC skew and the scale: {px} px.',
+  'gc_content,gc_skew,ticks': 'Room kept toward the center for the inner tracks, among them GC content, GC skew, and the scale: {px} px.'
 });
 // The sentences of a summary other than the table rows above: each is one part
 // (`ErrorTextPart`) and a catalog key; `{name}` takes the part's value.
@@ -318,7 +318,7 @@ const PHRASES = Object.freeze({
   field: 'Field: {field}.', band: 'Available band: {inner}–{outer} px.',
   sessionTooNew: 'Session version {version} is newer than this gbdraw supports ({latest}).',
   sessionUnsupported: 'Unsupported session version: {version}. This gbdraw reads Session versions {versions}.',
-  keptBelow: 'Room kept below it for the tracks inside it: {px} px.',
+  keptBelow: 'Room kept toward the center for the inner tracks: {px} px.',
   // OV-1389 review item 6: each remedy is a whole sentence of `SWITCHED_TRACKS`, after one of these.
   makeRoom: 'To make room, do the following.', makeRoomAny: 'To make room, do one of the following.',
   // OV-2179: the room the labels not placed need (CAPACITY-STOP), the largest of each side, as Python sends it.

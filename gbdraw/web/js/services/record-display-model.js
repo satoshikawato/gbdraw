@@ -12,7 +12,7 @@ import { msg, t, tm } from '../utils/i18n.js';
 /** @typedef {'circular' | 'linear'} RecordDisplayScope */
 // The topology a file declares, one whole key each (`detectedTopology` of services/record-discovery.js).
 const DETECTED_TOPOLOGY_NOTES = Object.freeze({
-  circular: msg('(file: circular)'), linear: msg('(file: linear)'), unknown: msg('(file: unknown)')
+  circular: msg('(file: circular)'), linear: msg('(file: linear)'), unknown: msg('(file: topology unknown)')
 });
 /** @param {unknown} topology a record row's `detectedTopology` */
 export const detectedTopologyNote = (topology) => tm(topology === 'circular' || topology === 'linear'

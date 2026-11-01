@@ -317,7 +317,7 @@ test('adding a Depth file or series shows and removing the last Depth file or it
   for (const control of depthSourceControls) assert.equal(scopeOf(control).attributes.get('data-setting'), 'depth-sources', describe(control));
   const note = settingApplicationNote('depth-sources');
   assert.equal(note.application, 'generate');
-  assert.match(note.text, /Adding a Depth file, or a series.*turns Show Depth on.*removing the last Depth file or the File that holds it.*at once\..*Legend title.*at once\..*Generate/);
+  assert.match(note.text, /Adding a Depth file, or a series.*turns Show Depth on.*removing the last Depth file or its genome file.*at once\..*Legend title.*at once\..*Generate/);
   const dialog = allElements.find((element) => element.attributes.has('data-linear-source-removal-dialog'));
   const removal = [...descendants(dialog)].filter((element) => element.tag === 'setting-note'
     && element.attributes.get('setting') === 'depth-sources');

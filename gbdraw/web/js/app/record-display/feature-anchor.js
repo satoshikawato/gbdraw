@@ -329,7 +329,7 @@ export const resolveFeatureAnchor = ({
         : available();
   const featureEnd = !positional.enabled ? positional
     : located.strand === 'unstranded' && located.partOrder !== 'source-forward'
-      ? unavailable('feature-end-direction-unavailable', t('Feature-end placement requires a known strand or parts in source order.'))
+      ? unavailable('feature-end-direction-unavailable', t('Feature-end placement requires a known strand or parts listed in forward order in the file.'))
       : available();
   // The feature's first base in display order is its 5-prime or 3-prime base,
   // so placing it at the start needs a known strand.

@@ -908,7 +908,7 @@ test('no mustache or shown attribute of index.html has a bare English literal as
 
 test('the record row names the topology its file declares through one key per value', () => {
   assert.deepEqual(['circular', 'linear', 'unknown', undefined].map(detectedTopologyNote),
-    ['(file: circular)', '(file: linear)', '(file: unknown)', '(file: unknown)']);
+    ['(file: circular)', '(file: linear)', '(file: topology unknown)', '(file: topology unknown)']);
 });
 
 // A "Choose" sentence names the options as their controls show them: a label of
@@ -943,7 +943,7 @@ test('the copied Collinear block summary holds no English of its own', () => {
 test('the record topology a file declares and the option values of an error are whole keys', async () => {
   const keys = [...(await sourceKeys()).keys.keys()];
   for (const key of [
-    '(file: circular)', '(file: linear)', '(file: unknown)',
+    '(file: circular)', '(file: linear)', '(file: topology unknown)',
     'Choose Error on overflow, Compress, or Clip.', 'Choose Foreground or Underlay.', 'Choose Auto (Default), Linear, or Equal.',
     'Choose Above, Features on axis, or Below.', 'Choose Auto or Above Feature.',
     'Choose Pairwise matches, Similarity groups, or Collinear blocks.', 'Choose Adjacent pairs or All records.',
@@ -971,7 +971,7 @@ test('sentences with a count or a qualifier are whole keys, and none is built fr
     ['The "{name}" feature', 'All {count} "{name}" features'],
     ['one more', '{count} more'],
     ['and one more', 'and {count} more'],
-    ['Running LOSAT: {completed}/{total} source job complete', 'Running LOSAT: {completed}/{total} source jobs complete'],
+    ['Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete'],
     ['Running {program} comparisons for the circular diagram: {completed}/{total} job complete', 'Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete'],
     ['Importing it removes the annotation set.', 'Importing it removes the {count} annotation sets.'],
     ['The chosen feature already points left.', 'The {count} chosen features already point left.'],
@@ -987,8 +987,8 @@ test('sentences with a count or a qualifier are whole keys, and none is built fr
     'This tool runs entirely in your browser.', 'It uses WebAssembly (Pyodide).',
     '{feature} where a qualifier matches “{pattern}”', 'Any feature where a qualifier matches “{pattern}”',
     'All features that share:',
-    'Room kept below it for the tracks inside it: {px} px.',
-    'Room kept below it for the tracks inside it, among them GC content, GC skew, and the scale: {px} px.',
+    'Room kept toward the center for the inner tracks: {px} px.',
+    'Room kept toward the center for the inner tracks, among them GC content, GC skew, and the scale: {px} px.',
     'number of groups in a block\u0004Similarity groups'
   ]) assert.ok(keys.has(key), key);
   for (const key of [

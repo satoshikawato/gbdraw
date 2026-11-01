@@ -4472,7 +4472,7 @@ export const createRunAnalysis = ({
             await waitForCancelablePromise(losatRuntimeWarmup, generationAbortSignal);
             throwIfGenerationCanceled();
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
-            setProcessingStatus(tn(sourceJobs.length, 'Running LOSAT: {completed}/{total} source job complete', 'Running LOSAT: {completed}/{total} source jobs complete', { completed: 0, total: sourceJobs.length }));
+            setProcessingStatus(tn(sourceJobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed: 0, total: sourceJobs.length }));
             const executionStartedAt = getNow();
             const sourceResults = await executeLosatJobs(sourceJobs.map(({ members, batch, ...job }) => job), {
               concurrency: getLosatParallelWorkers(),
@@ -4486,7 +4486,7 @@ export const createRunAnalysis = ({
               },
               onProgress: ({ completed, total }) => {
                 if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
-                setProcessingStatus(tn(total, 'Running LOSAT: {completed}/{total} source job complete', 'Running LOSAT: {completed}/{total} source jobs complete', { completed, total }));
+                setProcessingStatus(tn(total, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed, total }));
               }
             });
             throwIfGenerationCanceled();
