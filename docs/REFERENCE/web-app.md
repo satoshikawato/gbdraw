@@ -1120,6 +1120,21 @@ See [Session compatibility](session-and-request-compatibility.md#similarity-alig
 for what a Session saves. Collinear alignment controls, anchor TSV, scored
 inference, support-count ranking and multi-hop automatic selection are unsupported.
 
+### Align at feature
+
+**Record Layout** under **Advanced comparison and layout** also lines the
+drawn records up at one named feature, as `gbdraw linear --anchor_feature`
+does, with no comparison needed. Type a `KEY=VALUE` selector such as
+`gene=COX1` in **Align at feature** and choose **Align at feature…**. Python
+resolves it on the Result as drawn and lists, per record, whether it keeps its
+place or moves, and by how many px. **Apply** writes the record positions once,
+as one History step, and draws them; later changes do not align the records
+again. Applying clears an active Similarity alignment, as a record drag does.
+A selector that no record matches, matches at different starts in one record,
+or records that share a row or that `canvas.linear.wrap_length` splits over
+several rows, are refused with the reason. See [Record selection and
+layout](command-line.md#record-selection-and-layout) for the matching rules.
+
 ## Preview, search, and editor
 
 **Result Preview** exposes records, feature and quantitative tracks,

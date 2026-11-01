@@ -194,24 +194,75 @@ def test_python_anchor_feature_draws_the_typed_figure() -> None:
     assert _record_shifts(plain.to_svg()) == [0.0, 0.0]
 
 
-@pytest.mark.linear
-def test_a_session_does_not_store_anchor_feature_yet(tmp_path: Path) -> None:
-    from gbdraw.session_request_codec import encode_canonical_request
-
-    with pytest.raises(ValidationError, match="anchor_feature"):
-        encode_canonical_request(_request(anchor_feature=_COX1))
-    out = tmp_path / "out"
-    out.mkdir()
-    completed = subprocess.run(
-        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear",
-         "--gbk", str(_HUMAN), str(_ZEBRAFISH), "-f", "svg",
-         "-o", str(out / "saved"), "--anchor_feature", "gene=COX1", "--save_session"],
-        capture_output=True, text=True, check=False,
+def _cli(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", *args],
+        cwd=cwd, capture_output=True, text=True, check=False,
         env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
     )
-    assert completed.returncode == 1
-    assert "A Session does not store anchor_feature yet; save the Session without it." in completed.stderr
-    assert list(out.iterdir()) == []
+
+
+def _stored_layout(session_path: Path) -> dict[str, object]:
+    import json
+
+    request = json.loads(session_path.read_text(encoding="utf-8"))["renderRequest"]
+    assert "anchorFeature" not in request["diagramOptions"]
+    return request["layout"]
+
+
+@pytest.mark.linear
+def test_a_session_stores_the_translations_the_anchor_resolves_to(tmp_path: Path) -> None:
+    saved = _cli(
+        "--gbk", str(_HUMAN), str(_ZEBRAFISH), "-f", "svg", "-o", "saved",
+        "--anchor_feature", "gene=COX1", "--save_session", cwd=tmp_path,
+    )
+    assert saved.returncode == 0, saved.stderr
+    layout = _stored_layout(tmp_path / "saved.gbdraw-session.json")
+    drawn = (tmp_path / "saved.svg").read_text(encoding="utf-8")
+    assert [entry["x"] for entry in layout["recordTranslations"]] == _record_shifts(drawn)
+    assert _record_shifts(drawn)[1] < 0.0
+    replayed = _cli("--session", "saved.gbdraw-session.json", "-o", "again", cwd=tmp_path)
+    assert replayed.returncode == 0, replayed.stderr
+    assert (tmp_path / "again.svg").read_bytes() == (tmp_path / "saved.svg").read_bytes()
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("config_overrides", [None, {"canvas.linear.align_center": True}])
+def test_the_resolved_request_draws_the_anchored_figure(config_overrides: dict[str, object] | None) -> None:
+    from gbdraw.api import resolve_request
+    from gbdraw.session_request_codec import encode_canonical_request
+
+    request = _request(anchor_feature=_COX1, config_overrides=config_overrides)
+    # The request itself is not encoded: the anchor is resolved when the figure is laid out.
+    with pytest.raises(ValidationError, match="anchor_feature record placement"):
+        encode_canonical_request(request)
+    resolved = resolve_request(request)
+    assert isinstance(resolved, LinearDiagramRequest)
+    assert resolved.options.anchor_feature is None
+    layout = encode_canonical_request(resolved).payload["layout"]
+    assert [entry["x"] for entry in layout["recordTranslations"]] == _record_shifts(_svg(request))
+    assert _svg(resolved) == _svg(request)
+
+
+@pytest.mark.linear
+def test_the_anchor_replaces_the_stored_x_of_the_records_it_moves() -> None:
+    from gbdraw.api import resolve_request
+
+    planned = plan_linear_request(_request(anchor_feature=_COX1)).request
+    keys = tuple(str(record.record_key) for record in planned.records)
+    held = LinearMultiRecordOptions(record_translations=(
+        LinearRecordTranslation(record_key=keys[0], x=40.0, y=5.0),
+        LinearRecordTranslation(record_key=keys[1], x=-300.0, y=7.0),
+    ))
+    request = replace(planned, layout=held)
+    resolved = resolve_request(request)
+    assert isinstance(resolved, LinearDiagramRequest) and resolved.layout is not None
+    first, second = resolved.layout.record_translations
+    shift = -(_ZEBRAFISH_COX1_START - _HUMAN_COX1_START) * 2000 / 16596
+    # The first record keeps its own translation; the moved record's x follows it, its y stays.
+    assert (first.x, first.y) == (40.0, 5.0)
+    assert second.x == pytest.approx(40.0 + shift) and second.y == 7.0
+    assert _svg(resolved) == _svg(request)
 
 
 @pytest.mark.linear
@@ -307,8 +358,7 @@ def test_records_that_share_a_row_are_refused() -> None:
     )
     with pytest.raises(ValidationError, match="cannot align records that share a row") as caught:
         plan_linear_request(shared)
-    # The published vocabulary has no anchor_feature field or reason yet; the Web cannot send the option.
-    assert caught.value.diagnostic == {"code": "INPUT_INVALID"}
+    assert caught.value.diagnostic == {"code": "INPUT_INVALID", "field": "anchor_feature", "reason": "ANCHOR_SHARED_ROW"}
 
 
 @pytest.mark.linear

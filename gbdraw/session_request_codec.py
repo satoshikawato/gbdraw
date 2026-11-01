@@ -713,6 +713,8 @@ def _encode_canonical_request(
     if isinstance(request, LinearDiagramRequest):
         if request.output.resolve_prefix_from_first_record:
             unresolved_reasons.append("record-derived output prefix")
+        if request.options.anchor_feature is not None:
+            unresolved_reasons.append("anchor_feature record placement")
         if request.options.comparison_table_file is not None:
             unresolved_reasons.append("Linear comparison table")
         if isinstance(request.similarity_alignment, SimilarityAlignmentReference):
@@ -1593,6 +1595,25 @@ def _decode_similarity_alignment_plan(
     )
 
 
+class EncodedRecordTranslation(TypedDict):
+    """One ``renderRequest.layout.recordTranslations`` entry as a request stores it."""
+
+    recordKey: str
+    x: float
+    y: float
+
+
+def encode_record_translations(
+    translations: SequenceABC[LinearRecordTranslation],
+) -> list[EncodedRecordTranslation]:
+    """The stored form of Linear record translations (the request layout, and the Web's Align at feature reply)."""
+
+    return [
+        {"recordKey": translation.record_key, "x": translation.x, "y": translation.y}
+        for translation in translations
+    ]
+
+
 def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
     if isinstance(request, CircularBatchRequest):
         return {}
@@ -1606,14 +1627,7 @@ def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
                 if request.layout.multi_record_positions is not None
                 else None
             ),
-            "recordTranslations": [
-                {
-                    "recordKey": translation.record_key,
-                    "x": translation.x,
-                    "y": translation.y,
-                }
-                for translation in request.layout.record_translations
-            ],
+            "recordTranslations": encode_record_translations(request.layout.record_translations),
             # encode_canonical_request rejects an unresolved reference first.
             "similarityAlignment": _encode_similarity_alignment_plan(
                 cast("SimilarityAlignmentPlan | None", request.similarity_alignment)
@@ -1772,10 +1786,11 @@ def _decode_linear_layout(
 
 # The planner consumes it: a Session stores what the figure drew with
 # (origin_feature: the record display starts it resolves to; auto_orient: the
-# reverse flags of the records it reverses).
-_PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults", "origin_feature", "auto_orient"})
+# reverse flags of the records it reverses; anchor_feature: the record
+# translations it resolves to, with_anchor_feature_translations).
+_PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults", "origin_feature", "auto_orient", "anchor_feature"})
 # Options a Session does not store yet: a request that sets one is refused.
-_UNSTORED_FIELDS = frozenset({"anchor_feature"})
+_UNSTORED_FIELDS: frozenset[str] = frozenset()
 
 
 def require_storable_diagram_options(
@@ -5888,6 +5903,7 @@ __all__ = [
     "CanonicalRequestEncodingError",
     "CanonicalRequestResource",
     "EncodedCanonicalRequest",
+    "EncodedRecordTranslation",
     "decode_canonical_typed_resource",
     "decode_canonical_request",
     "describe_canonical_request",
@@ -5896,6 +5912,7 @@ __all__ = [
     "encode_canonical_table",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
+    "encode_record_translations",
     "migrate_flat_config_overrides",
     "migrate_legacy_full_config",
     "require_storable_diagram_options",

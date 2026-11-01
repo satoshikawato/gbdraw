@@ -161,7 +161,8 @@
       "tests/web/record-draw-selection.playwright.spec.js",
       "tests/web/source-legend-reconciliation.playwright.spec.js",
       "tests/web/live-setting-application-g2.playwright.spec.js",
-      "tests/web/linear-auto-orientation.playwright.spec.js"
+      "tests/web/linear-auto-orientation.playwright.spec.js",
+      "tests/web/feature-anchor.playwright.spec.js"
     ],
     [
       "tests/web/annotation-style-integration.playwright.spec.js",

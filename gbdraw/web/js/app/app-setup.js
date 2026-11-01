@@ -158,6 +158,7 @@ import { createPaletteLoader } from './palettes.js';
 import { afterPaint, buildDefaultMultiRecordPositions, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { createRecordAutoOrientation } from './record-auto-orientation.js';
+import { createFeatureAnchorAction } from './feature-anchor.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
@@ -5043,6 +5044,17 @@ export const createAppSetup = () => {
   });
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
+  // Align at feature writes the record translations as one step without the
+  // alignment plan, as a manual record movement does (PD-OI-028).
+  const featureAnchor = createFeatureAnchorAction({
+    materializedSession: similarityAlignmentActions.materializedSession,
+    hasAlignmentPlan: () => Boolean(state.similarityAlignmentPlan.value),
+    runHelperOperation: runDiagramHelperOperation,
+    resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_FEATURE_ANCHOR,
+    runPlacement: ({ canonical, label }) => runCommittedCanonicalCandidate({ canonical, label, alignmentResetReceipt: null }),
+    notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
+    projectPlacement: projectCommittedSimilarityAlignment
+  });
   // Generate asks about Upload pairs without a file: each pair's row
   // takes its own file; Skip sets the pairs still without one to No comparison
   // in one History step, then Generates.
@@ -7422,6 +7434,15 @@ export const createAppSetup = () => {
     clearOrthogroupDormantOverrides: orthogroupActions.clearOrthogroupDormantOverrides,
     highlightOrthogroupById: orthogroupActions.highlightOrthogroupById,
     similarityAlignmentDraft: similarityAlignmentActions.draft,
+    featureAnchorSelector: featureAnchor.selector,
+    featureAnchorBusy: featureAnchor.busy,
+    featureAnchorPreview: featureAnchor.preview,
+    featureAnchorPreviewLines: featureAnchor.previewLines,
+    featureAnchorError: featureAnchor.error,
+    featureAnchorNotice: featureAnchor.notice,
+    resolveFeatureAnchor: featureAnchor.resolve,
+    applyFeatureAnchor: featureAnchor.apply,
+    cancelFeatureAnchor: featureAnchor.cancel,
     similarityAlignmentStatus: similarityAlignmentActions.status,
     similarityAlignmentBusy: similarityAlignmentActions.busy,
     similarityAlignmentError: similarityAlignmentActions.error,
