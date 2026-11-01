@@ -165,29 +165,50 @@ def test_protein_comparisons_leave_the_orientation_unchanged() -> None:
 
 
 @pytest.mark.linear
-def test_a_session_does_not_store_auto_orient_yet(tmp_path: Path) -> None:
-    from gbdraw.exceptions import ValidationError
-    from gbdraw.session_request_codec import encode_canonical_request
+def test_an_unplanned_request_with_auto_orient_is_not_encoded() -> None:
+    from gbdraw.session_request_codec import CanonicalRequestEncodingError, encode_canonical_request
 
     request = LinearDiagramRequest(
         records=(RecordInput(GenBankInputSource(_QUERY)), RecordInput(GenBankInputSource(_SUBJECT))),
         options=LinearDiagramOptions(auto_orient=True),
     )
-    with pytest.raises(ValidationError, match="auto_orient"):
+    with pytest.raises(CanonicalRequestEncodingError, match="auto_orient record orientation"):
         encode_canonical_request(request)
-    out = tmp_path / "out"
-    out.mkdir()
+
+
+@pytest.mark.linear
+def test_a_session_stores_the_decided_reverse_flags_and_replays_the_figure(tmp_path: Path) -> None:
+    from gbdraw.session_io import load_session
+
+    subject, table = _reversed_subject_inputs(tmp_path)
+    session = tmp_path / "saved.gbdraw-session.json"
+    auto = _render(tmp_path, "auto", subject, table, "--auto_orient", "--session_output", str(session))
+    stored = load_session(session)["renderRequest"]
+    # The planner resolved the option into the record's own Reverse complement flag.
+    assert [record["presentation"]["reverseComplement"] for record in stored["records"]] == [False, True]
+    assert "autoOrient" not in stored["diagramOptions"]
     completed = subprocess.run(
         [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear",
-         "--gbk", str(_QUERY), str(_SUBJECT), "-b", str(_TABLE), "-f", "svg",
-         "-o", str(out / "saved"), "--auto_orient", "--save_session"],
+         "--session", str(session), "-f", "svg", "-o", str(tmp_path / "replay")],
         capture_output=True, text=True, check=False,
         env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
     )
-    assert completed.returncode == 1
-    assert "A Session does not store auto_orient yet; save the Session without it." in completed.stderr
-    # Refused before anything is drawn.
-    assert list(out.iterdir()) == []
+    assert completed.returncode == 0, completed.stderr
+    assert (tmp_path / "replay.svg").read_text(encoding="utf-8") == auto
+
+
+@pytest.mark.linear
+def test_the_plan_request_keeps_the_flags_and_not_the_option() -> None:
+    request = LinearDiagramRequest(
+        records=(RecordInput(GenBankInputSource(_QUERY)), RecordInput(GenBankInputSource(_SUBJECT))),
+        options=LinearDiagramOptions(
+            auto_orient=True,
+            linear_comparisons=(LinearComparison(0, 1, _rows((1, 600, 6000, 5401, 600))),),
+        ),
+    )
+    plan = plan_linear_request(request)
+    assert plan.request.options.auto_orient is False
+    assert record_is_reverse_complemented(plan.records[1])
 
 
 @pytest.mark.linear

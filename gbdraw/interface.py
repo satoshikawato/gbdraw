@@ -412,7 +412,8 @@ class LinearComparisonOptions:
     default) colours from the identity threshold to 100%.
     ``auto_orient`` reverse-complements a record whose reverse-strand
     nucleotide hits against the row above weigh more than half of its hits
-    (off by default; protein comparisons are not read).
+    (off by default; protein comparisons are not read). A saved Session holds
+    the reverse-complement flags it decided, not the option.
     """
 
     blast_files: Sequence[str] | None = None

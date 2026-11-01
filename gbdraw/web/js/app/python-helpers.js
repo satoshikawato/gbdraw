@@ -26,6 +26,7 @@ from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_s
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.ring_search_frame import circular_ring_tables_in_search_frame_json
+from gbdraw.web_support.auto_orientation import decide_auto_orientation_json
 from gbdraw.web_support.label_fit import (
     LabelFitRowSearches,
     label_capacity_notices,
@@ -1902,6 +1903,10 @@ _WEB_JSON_HELPERS = {
     "circular_ring_tables_in_search_frame_json": (
         _with_prepared_input_lookup(circular_ring_tables_in_search_frame_json, 2, publish_inputs=True),
         "convertRingTablesToSearchFrame"
+    ),
+    # The Orient records button plans the last Generate's request: it reads the inputs that Generate prepared.
+    "decide_auto_orientation_json": (
+        _with_prepared_input_lookup(decide_auto_orientation_json, 1), "decideAutoOrientation"
     ),
     "register_web_fonts_json": (register_web_fonts_json, "registerFonts"),
     "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),

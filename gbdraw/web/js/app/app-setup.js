@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { GenerationPayload } from '../services/diagram-generation.js' */
 /** @import { SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
@@ -156,6 +157,7 @@ import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, buildDefaultMultiRecordPositions, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
+import { createRecordAutoOrientation } from './record-auto-orientation.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
@@ -1769,6 +1771,16 @@ export const createAppSetup = () => {
   // Every write of a record source (a Circular file, an input type, the Linear
   // cards) runs through it, so a replaced source's display drafts go.
   const { changeRecordSources } = recordDisplayControls;
+  // Orient records from comparisons: Python decides from the last Generate, the record display writes the flags.
+  const recordAutoOrientation = createRecordAutoOrientation({ computed, ref,
+    getCommittedSession: getCommittedCanonicalSession,
+    readCommittedRevision: readCommittedCanonicalRevision,
+    busy: () => sessionOperationAvailability(),
+    // The committed Session's resource table holds the descriptors its writer wrote.
+    decideOrientation: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION, { ...payload,
+      resources: /** @type {GenerationPayload['resources']} */ (payload.resources) }),
+    writeDecidedOrientations: recordDisplayControls.writeDecidedOrientations,
+    errorMessage: (error) => errorText(normalizeCaughtError(error, { operation: 'decideAutoOrientation', stage: 'helper' }).summaryParts) });
   window.__GBDRAW_HISTORY__ = history;
   // R13: owners receive this port, not the record display controls. The check
   // is pure (services/feature-identity.js) over the record display's binding.
@@ -7226,6 +7238,7 @@ export const createAppSetup = () => {
     unmanagedConfigOverrideEntries,
     resetUnmanagedConfigOverride,
     comparisonProfileDefault,
+    recordAutoOrientation,
     identityPercentMaximum: IDENTITY_PERCENT_MAXIMUM,
     /** @param {0 | 1} end @param {string} text */
     setIdentityScaleEnd: (end, text) => {

@@ -886,6 +886,17 @@ block genes**, **Diagonal drift**, **Merge conflicts**, **Search between**
 identity**, **Orientation**, or **Orientation + identity**). Scientific
 meanings and limits belong to the comparison reference below.
 
+**Orient records from comparisons**, under **Record orientation** below the
+Linear **Result filters**, runs the rule of `--auto_orient` on the nucleotide
+comparisons of the last Generate (uploaded BLAST tables, LOSATN, or TLOSATX)
+and checks **Reverse complement** of each record whose hits against the row
+above are mostly reverse, as one Undo step. The next Generate draws them; Undo
+restores the previous checkboxes. The button is off until a Generate has drawn
+a nucleotide comparison, and the status line says when the comparisons keep
+every record as it is, or when records or their orientation changed since that
+Generate. See [Automatic Linear
+orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation).
+
 Circular **Pairwise Comparisons** selects **Run LOSAT** or **Upload BLAST TSV**.
 Uploaded comparison tables use **BLAST outfmt 6/7 files** and **Reference side**
 (**Auto (...)**, **Query**, or **Subject**). A browser-generated Circular

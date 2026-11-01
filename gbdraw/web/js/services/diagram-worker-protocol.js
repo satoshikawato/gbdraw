@@ -1,6 +1,8 @@
 // @ts-check
 /** @import { buildPyodideAssetManifest } from './pyodide-assets.js' */
 /** @import { FontIdentity } from './font-store.js' */
+/** @import { CommittedCanonicalSession } from './session-request.js' */
+/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 /**
  * A font file the page sends a Worker (init `fonts`, and each font it
@@ -49,6 +51,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   CONVERT_MAIN_SESSION_COMPARISON_FRAME: 'convertMainSessionComparisonFrame',
   CONVERT_RING_TABLES_TO_SEARCH_FRAME: 'convertRingTablesToSearchFrame',
   CONVERT_STORED_PROTEIN_RESULT_FRAMES: 'convertStoredProteinResultFrames',
+  DECIDE_AUTO_ORIENTATION: 'decideAutoOrientation',
   EXTRACT_CDS_PROTEIN_FASTA: 'extractCdsProteinFasta',
   EXTRACT_FIRST_FASTA: 'extractFirstFasta',
   HYDRATE_PROTEIN_LOSAT_TSV: 'hydrateProteinLosatTsv',
@@ -88,9 +91,34 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: (payload) => payload.projection?.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource
 });
+
+/**
+ * The payload of `decideAutoOrientation`: the committed Linear request of the
+ * last Generate, whose resources the page stages (`resources`, its Session
+ * resource table).
+ * @typedef {object} AutoOrientationHelperPayload
+ * @property {CanonicalRenderRequest} canonicalRequest
+ * @property {CommittedCanonicalSession['resources']} resources
+ */
+
+/**
+ * One record of the `decideAutoOrientation` reply (`RecordOrientation` in
+ * gbdraw/web_support/auto_orientation.py): the record key the committed
+ * request draws it under, and the orientation `--auto_orient` draws it with.
+ * @typedef {object} RecordOrientationDecision
+ * @property {string} recordKey
+ * @property {boolean} reverseComplement
+ */
+
+/**
+ * The `decideAutoOrientation` reply (`AutoOrientationReply`): every drawn record, in drawn order.
+ * @typedef {object} AutoOrientationReply
+ * @property {readonly RecordOrientationDecision[]} records
+ */
 
 /** @type {readonly string[]} */
 export const DIAGRAM_HELPER_STAGING_OPERATIONS = Object.freeze(Object.keys(STAGED_HELPER_REFERENCES));
