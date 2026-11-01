@@ -1,8 +1,7 @@
 """The drawing has no background: the SVG paints nothing behind the figure, and a PNG keeps that transparency.
 
-The Web PNG download paints it white unless Transparent background is on
-(``tests/web/presentation-options.playwright.spec.js``); the CLI and Python PNG
-are transparent. PDF, EPS and PS pages have no background either (CairoSVG
+The Web PNG download keeps it transparent too unless White background is on
+(``tests/web/presentation-options.playwright.spec.js``). PDF, EPS and PS pages have no background either (CairoSVG
 paints none).
 """
 
