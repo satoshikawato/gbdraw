@@ -82,8 +82,10 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   its hover.
 - **UTF-8 byte order mark.** A GenBank, EMBL, GFF3, or FASTA file that starts
   with a byte order mark no longer loses its first record, or stops a one-record
-  file with an error. Record numbers after the first record of such a file shift
-  by one.
+  file with an error. A Session saved by 0.14.4 or earlier with such a file of
+  several records counted its records without the first one, so each saved
+  record index now points one record earlier; see
+  [Session and request compatibility](./REFERENCE/session-and-request-compatibility.md).
 - **Web app: recoloring comparison matches live.** A palette change on a Linear
   comparison, or on Collinear blocks colored by identity, now gives the same
   match colors as **Generate Diagram**, except where rounding differs by one in

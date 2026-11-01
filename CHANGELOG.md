@@ -35,7 +35,8 @@ write-up of a release.
   leave out every row of a comparison table; the Web app shows the same text under the
   Generate status line and in **Run Info** (**Input summary**).
 - Fixed: a UTF-8 byte order mark no longer hides the first record of a GenBank, EMBL, GFF3,
-  or FASTA file.
+  or FASTA file. A Session saved by 0.14.4 or earlier with such a file of several records
+  now points each saved record index one record earlier.
 - Fixed: a live palette change on comparison matches colored by identity matches **Generate
   Diagram** in the Web app.
 - Added: `--wrap_length AUTO|LENGTH` and the config key
