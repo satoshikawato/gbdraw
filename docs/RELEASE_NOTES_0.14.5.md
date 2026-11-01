@@ -131,9 +131,13 @@ packages, and [Installation](./INSTALL.md) explains each install route.
 
 - **Web app: the Auto Reflow setting is gone.** Each label text, **Label
   visibility**, or feature visibility edit now places the labels again, as
-  **Generate Diagram** does, also after Undo and Redo of such an edit. A Session
-  that holds the old value loads and ignores it, and keeps the labels it drew until
-  the next such edit or **Generate Diagram**.
+  **Generate Diagram** does. Undo and Redo of such an edit apply at once: they show
+  the figure from that side of the edit, and ask for a rerender only when that
+  figure was not finished, for example after a failed edit. These edits now keep
+  whole figures in History, so on a large figure fewer of the oldest steps stay
+  undoable, and the app says when it drops them. A Session that holds the old value
+  loads and ignores it, and keeps the labels it drew until the next such edit or
+  **Generate Diagram**.
 - **Built-in color tables.** `-t/--table` and `FeatureOptions.color_table`
   accept `builtin:cog`, `builtin:phrog`, `builtin:plastid`, and
   `builtin:mitochondrion`; an unknown name fails with the list of names, and a

@@ -147,11 +147,13 @@ write-up of a release.
   label texts, **Label visibility**, and label places of a Result that Reset Settings, Save, and Load
   passed before it was shown again.
 - Changed: the Web **Auto Reflow** setting is gone. Each label text, **Label visibility**, or
-  feature visibility edit places the labels again, as **Generate Diagram** does. A Session that
-  holds the old value loads and ignores it.
+  feature visibility edit places the labels again, as **Generate Diagram** does. Undo and Redo of
+  such an edit apply at once, from a figure History keeps for each side, so a large figure keeps
+  fewer undoable steps. A Session that holds the old value loads and ignores it.
 - Fixed: **Generate Diagram** failed with "The generated result could not be accepted" after a
   Legend row stroke, a delete of that row once it was renamed, a rename of all its features from the
-  feature popup, and **Restore**. The deleted row now leaves with the rename (OV-2412).
+  feature popup, or with an edit in the rule table, and **Restore**. The deleted row now leaves with
+  the write that removes its last rule, when no feature still draws its key (OV-2412).
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

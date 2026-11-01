@@ -211,10 +211,11 @@ test('Redo of an Exact product hide hides the feature again', async ({ page }) =
   await loadSessionFile(page, HMMT_SESSION);
   const id = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
     .find((feature) => feature.product === 'NADH dehydrogenase subunit 1').svg_id);
-  // Hidden: the feature's parts are hidden, or the rerender no longer draws it.
-  const display = () => page.evaluate((featureId) => [...window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+  // The parts of the feature the figure shows.
+  const shownParts = () => page.evaluate((featureId) => [...window.__GBDRAW_APP__.svgContainer.querySelector('svg')
     .querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)]
-    .every((element) => element.getAttribute('display') === 'none'), id);
+    .filter((element) => !element.closest('[display="none"]')).length, id);
+  expect(await shownParts()).toBeGreaterThan(0);
   await evaluateWithRetainedPromise(page, async (featureId) => {
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.svg_id === featureId), null);
@@ -222,13 +223,13 @@ test('Redo of an Exact product hide hides the feature again', async ({ page }) =
   }, id);
   await page.getByRole('button', { name: /Exact product/ }).click();
   await settle(page);
-  expect(await display()).toBe(true);
+  expect(await shownParts()).toBe(0);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
-  expect(await display()).toBe(false);
+  expect(await shownParts()).toBeGreaterThan(0);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await settle(page);
-  expect(await display()).toBe(true);
+  expect(await shownParts()).toBe(0);
 });
 
 test('a rename of a legend entry without features survives Generate', async ({ browser }) => {

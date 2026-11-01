@@ -5985,7 +5985,7 @@ export const createRunAnalysis = ({
             featureIds,
             report: (error) => {
               if (!isCurrentReflow()) return;
-              labelReflowLastError.value = liveEditFailure(formatError(error, 'generate', 'render'));
+              reportRerenderFailure(displayedArtifactDrawing(), formatError(error, 'generate', 'render'));
             }
           })
         })
@@ -5995,6 +5995,12 @@ export const createRunAnalysis = ({
         && Number(selectedResultIndex.value) === resultIndex
       )
     });
+  };
+
+  // A failed rerender is reported with the drawing it drew: a display reads it for its own drawing only.
+  /** @param {DrawingState} drawing @param {UserFacingError} error */
+  const reportRerenderFailure = (drawing, error) => {
+    labelReflowLastError.value = { ...liveEditFailure(error), drawingId: drawing.id };
   };
 
   // The automatic rerender re-renders the committed Session with the current
@@ -6010,7 +6016,7 @@ export const createRunAnalysis = ({
   const runLabelReflowCandidate = async (drawing, { requestId, historyRequestedAt, decorationContinuity, settings, editor, undoneHides }) => {
     const committed = getCommittedCanonicalSession?.();
     if (!committed) {
-      labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
+      reportRerenderFailure(drawing, formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
       return { status: 'skipped' };
     }
     // It commits only onto the committed Session it drew from (an Undo of a
@@ -6023,7 +6029,7 @@ export const createRunAnalysis = ({
       liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf({ linearSeqs: allLinearSeqs, files }), undoneHides });
     } catch (e) {
       const error = formatError(e, 'generate', 'render');
-      labelReflowLastError.value = liveEditFailure(error);
+      reportRerenderFailure(drawing, error);
       return { status: 'error', error };
     }
     // Values equal to the committed ones (a Generate applied them) draw nothing.
@@ -6077,7 +6083,7 @@ export const createRunAnalysis = ({
       if (execution.status === 'engine-error') {
         logPostGbdrawTimings(timingEntries);
         const error = formatError(execution.engineError, 'generate', 'render');
-        labelReflowLastError.value = liveEditFailure(error);
+        reportRerenderFailure(drawing, error);
         return { status: 'error', error };
       }
       const previousSelectedResultIndex = selectedResultIndex.value;
@@ -6147,7 +6153,7 @@ export const createRunAnalysis = ({
         return { status: 'canceled' };
       }
       const error = formatError(e, 'generate', 'render');
-      labelReflowLastError.value = liveEditFailure(error);
+      reportRerenderFailure(drawing, error);
       return { status: 'error', error };
     }
   };
@@ -6182,7 +6188,7 @@ export const createRunAnalysis = ({
         try {
           decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity, drawing);
         } catch (error) {
-          labelReflowLastError.value = liveEditFailure(formatError(error));
+          reportRerenderFailure(drawing, formatError(error));
           return;
         }
         const editor = editorRerenderRequested;

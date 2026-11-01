@@ -2294,10 +2294,66 @@ test('a rule commit beside a rule row with a Legend color of its own is applied,
   await expectLiveEqualsGenerate(page, { label: 'a rule row with a Legend color of its own recolored' });
 });
 
-// OV-2412: a whole-row rename of a deleted rule row leaves no rule naming it, so
-// no Result can draw its key again: Restore has no row to return, and its stroke
-// asks nothing of Generate. Before, Generate failed with RESULT_INVALID.
+// OV-2412: a whole-row rename of a deleted rule row leaves no rule naming it.
+// When no feature draws its key either, Restore has no row to return, and its
+// stroke asks nothing of Generate. Before, Generate failed with RESULT_INVALID.
 for (const mode of ['linear', 'circular']) {
+  // A default feature still draws the key of the rule row, so the row stays deleted.
+  test(`a deleted rule row renamed whole stays deleted when default features share its key (${mode})`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode, results: 'single' });
+    const color = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.find((entry) => entry.caption === 'repeat_region').color);
+    await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color, cap: 'repeat_region' });
+    await settleLive(page);
+    await deleteLegendRow(page, 'repeat_region');
+    await generate(page);
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.locus_tag === 'FL1'), null);
+      await window.Vue.nextTick();
+      app.clickedFeature.legendName = 'Other name';
+      const applied = app.handleLegendNameCommit();
+      while (!app.legendRenameDialog.show) await new Promise((resolve) => setTimeout(resolve, 10));
+      await app.handleLegendRenameChoice('group');
+      await applied;
+      app.clickedFeature = null;
+    });
+    await settleLive(page);
+    const rows = () => page.evaluate(() => window.__GBDRAW_APP__.deletedLegendEntries.map((entry) => entry.caption));
+    expect(await rows()).toEqual(['repeat_region']);
+    await expectLiveEqualsGenerate(page, { label: 'the rename of the deleted rule row' });
+    expect(await rows()).toEqual(['repeat_region']);
+  });
+
+  // The rule leaves the deleted row by the rule table: the row leaves with it,
+  // and Undo returns it. Before, Restore then Generate failed with RESULT_INVALID.
+  for (const [how, edit] of [
+    ['removed', (app) => app.removeSpecificRule(0)],
+    ['given another caption', (app) => app.setSpecificRuleField(0, 'cap', 'Beta row')]
+  ]) {
+    test(`a deleted stroked rule row whose rule is ${how} in the table restores, live = Generate (${mode})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode, results: 'single' });
+      await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#2a9d8f', cap: 'Alpha row' });
+      await settleLive(page);
+      await legendRowStrokeColor(page, 'Alpha row', '#7b2cbf');
+      await settleLive(page);
+      await deleteLegendRow(page, 'Alpha row');
+      await generate(page);
+      await evaluateWithRetainedPromise(page, (source) => (0, eval)(source)(window.__GBDRAW_APP__), edit.toString());
+      await settleLive(page);
+      const deleted = () => page.evaluate(() => window.__GBDRAW_APP__.deletedLegendEntries.map((entry) => entry.caption));
+      expect(await deleted()).toEqual([]);
+      await history(page, 'undo');
+      expect(await deleted()).toEqual(['Alpha row']);
+      await history(page, 'redo');
+      expect(await deleted()).toEqual([]);
+      await page.evaluate(() => window.__GBDRAW_APP__.restoreAllDeletedLegendEntries());
+      await settleLive(page);
+      await expectLiveEqualsGenerate(page, { label: `the Restore after the rule was ${how}` });
+    });
+  }
+
   test(`a deleted rule row renamed whole does not return, live = Generate (${mode})`, async ({ page }) => {
     test.setTimeout(240_000);
     await open(page, { mode, results: 'single' });

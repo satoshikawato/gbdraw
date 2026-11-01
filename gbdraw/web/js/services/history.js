@@ -1375,23 +1375,25 @@ export const createHistoryManager = ({
   // D-24 (OV-731): a rerender drawn from the current state is shown (D-36).
   // While the last step is a checkpoint and nothing is open, the state is the
   // one its after side holds, so a side not yet drawn keeps the figure the
-  // rerender drew: Redo then shows it without another Python run.
-  const keepRedrawnResult = async () => {
-    const entry = topEntry(undoStack);
+  // rerender drew: Redo then shows it without another Python run. `part`: this
+  // drawing's part of the router's last project step, which holds its bytes.
+  /** @param {{ part?: HistoryEntry, isLast?: () => boolean }} [projectStep] */
+  const keepRedrawnResult = async ({ part, isLast = () => true } = {}) => {
+    const entry = part ?? topEntry(undoStack);
     if (entry?.type !== 'checkpoint') return false;
-    const keeps = () => entry === topEntry(undoStack) && entry.after.drawn === false
+    const keeps = () => (part ? isLast() : entry === topEntry(undoStack)) && entry.after.drawn === false
       && !openTransaction() && !activeCheckpoint && !activeReplacement && !restoring.value && !capturing.value;
     if (!keeps()) return false;
     const after = await captureCheckpoint();
     if (!keeps()) return false;
     after.drawn = true;
-    removeEntryBytes(entry);
+    if (!part) removeEntryBytes(entry);
     entry.after = after;
     entry.byteSize = entry.before.byteSize + after.byteSize;
     entry.fileIds = new Set([...entry.before.fileIds, ...after.fileIds]);
-    addEntryBytes(entry);
+    if (!part) addEntryBytes(entry);
     setCurrentCheckpoint(after);
-    enforceLimits(entry);
+    if (!part) enforceLimits(entry);
     return true;
   };
 
@@ -2430,14 +2432,15 @@ export const createHistoryRouter = ({
     // checkpoint, as a caller of the action expects; each other drawing
     // captured its state first and records what `fn` changed in it. Their
     // entries are the step's parts, with the Session-level values it changed.
-    // `shouldCommit` answers, from the result, whether the step is recorded.
+    // `shouldCommit` answers, from the result, whether the step is recorded;
+    // `drawn` is the shown drawing's checkpoint's (`HistoryStepBase`).
     /**
      * @template R
      * @param {string} label
      * @param {() => R | Promise<R>} fn
-     * @param {{ shouldCommit?: (result: unknown) => boolean }} [options]
+     * @param {{ shouldCommit?: (result: unknown) => boolean, drawn?: HistoryStepBase['drawn'] }} [options]
      */
-    runProjectStep: (label, fn, { shouldCommit = () => true } = {}) => {
+    runProjectStep: (label, fn, { shouldCommit = () => true, drawn } = {}) => {
       const shownId = activeDrawingId();
       /** @type {ProjectPart[]} */
       const parts = [];
@@ -2458,7 +2461,7 @@ export const createHistoryRouter = ({
       /** @type {ReturnType<DrawingHistory['runUndoableCheckpoint']>} */
       let result;
       try {
-        result = managerOf(shownId).runUndoableCheckpoint(label, fn, { takeEntry: take(shownId), shouldCommit });
+        result = managerOf(shownId).runUndoableCheckpoint(label, fn, { takeEntry: take(shownId), shouldCommit, drawn });
       } catch (error) {
         void settle(false);
         throw error;
@@ -2471,6 +2474,20 @@ export const createHistoryRouter = ({
         async (value) => { await settle(shouldCommit(value)); return value; },
         async (error) => { await settle(false); throw error; }
       );
+    },
+    // D-24: while the last step of the shown drawing is a project step, its
+    // part holds the figure its state draws (Reset Settings): Redo then shows it at once.
+    keepRedrawnResult: async () => {
+      const shownId = activeDrawingId();
+      const project = nextProjectStep('undo');
+      if (!project) return managerOf(shownId).keepRedrawnResult();
+      const part = project.parts.find(({ drawingId }) => drawingId === shownId)?.entry;
+      if (!part) return false;
+      const kept = await managerOf(shownId).keepRedrawnResult({ part, isLast: () => nextProjectStep('undo') === project });
+      if (!kept) return false;
+      project.byteSize = project.parts.reduce((bytes, { entry }) => bytes + entry.byteSize, project.session?.byteSize ?? 0);
+      budget.enforce(project);
+      return true;
     },
     markSavePoint: () => {
       every().forEach((manager) => manager.markSavePoint());

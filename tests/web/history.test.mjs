@@ -1455,6 +1455,62 @@ const createLayoutPreferences = () => ({
   assert.equal(state.selectedOrthogroupId.value, 'og_1');
 }
 
+// A checkpoint holds the feature tables by the catalog they came from, so a step
+// on a large genome keeps little more than its figure, and a restored row is the
+// catalog's row. Tables that are not the catalog's stay in the checkpoint's JSON.
+{
+  const row = (id) => ({ svg_id: id, type: 'CDS', qualifiers: { product: ['x'.repeat(50_000)] } });
+  const tablesOf = (...ids) => ({ extractedFeatures: ids.map(row), biologicalFeatures: [row('a'), row('b')] });
+  const catalogs = new Map([[{ id: 'both' }, tablesOf('a', 'b')], [{ id: 'one' }, tablesOf('b')], [{ id: 'none' }, tablesOf()]]);
+  const [both, one, none] = [...catalogs.keys()];
+  const state = {
+    form: { prefix: '', legend: 'bottom' }, adv: { features: ['CDS'] }, files: { c_gb: null }, linearSeqs: [],
+    results: ref([]), selectedResultIndex: ref(0), mode: ref('circular'), cInputType: ref('gb'), lInputType: ref('gb'),
+    downloadDpi: ref(300), canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 }, layoutPreferences: createLayoutPreferences(),
+    featureCatalog: ref(both), extractedFeatures: ref(catalogs.get(both).extractedFeatures), biologicalFeatures: ref(catalogs.get(both).biologicalFeatures),
+    featureRecordIds: ref([]), selectedFeatureRecordIdx: ref(0),
+    featureColorOverrides: {}, featureVisibilityManualRules: [], featureOverrides: {}, featureStrokeOverrides: {}, labelTextBulkOverrides: {},
+    orthogroups: ref([]), selectedOrthogroupId: ref(''), selectedOrthogroupAlignmentFeature: ref(''), orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {},
+    lastRunInfo: ref(null), pairwiseMatchFactors: ref({}), skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false)
+  };
+  const ports = createHistorySnapshotService({
+    state: withDrawings(state), fileStore: createHistoryFileStore(), currentResults: () => state.results.value, nextTick: async () => {}, applyConfigData: () => {},
+    buildEditorStateData: () => ({ featureCatalog: state.featureCatalog.value }),
+    applyEditorStateData: (_drawing, { featureCatalog }) => { state.featureCatalog.value = featureCatalog; },
+    applyFeatureStateData: (_drawing, features) => {
+      state.extractedFeatures.value = features.extractedFeatures;
+      state.biologicalFeatures.value = features.biologicalFeatures;
+    },
+    catalogFeatureRows: (catalog) => catalogs.get(catalog) ?? null
+  }).drawingHistory('circular');
+  const history = createHistoryManager({ ...ports, maxActions: 30 });
+  const install = (catalog) => {
+    state.featureCatalog.value = catalog;
+    state.extractedFeatures.value = catalogs.get(catalog).extractedFeatures;
+    state.biologicalFeatures.value = catalogs.get(catalog).biologicalFeatures;
+    return true;
+  };
+  await history.captureBaseline();
+  const retained = () => history.getDiagnostics().retainedEntryBytes;
+  await history.runUndoableCheckpoint('hide a', () => install(one));
+  assert.ok(retained() < 20_000, 'a step holds no copy of the tables');
+  await history.runUndoableCheckpoint('nothing', () => true);
+  assert.equal(history.getUndoCount(), 1, 'the same catalog is no change');
+  await history.runUndoableCheckpoint('hide b', () => install(none));
+  await history.undo();
+  await history.undo();
+  assert.equal(state.featureCatalog.value, both);
+  assert.equal(state.extractedFeatures.value, catalogs.get(both).extractedFeatures, 'a restored row is the catalog\'s row');
+  assert.equal(state.biologicalFeatures.value, catalogs.get(both).biologicalFeatures);
+  await history.runUndoableCheckpoint('nothing', () => true);
+  assert.equal(history.getUndoCount(), 0, 'nothing changed after the restore');
+  await history.runUndoableCheckpoint('rows of no catalog', () => {
+    state.extractedFeatures.value = [row('edited')];
+    return true;
+  });
+  assert.ok(retained() >= 100_000, 'tables that are not the catalog\'s count in the bytes');
+}
+
 {
   let setting = 0;
   let artifact = { id: 'artifact-a', svg: '<svg>' + 'x'.repeat(100_000) + '</svg>' };

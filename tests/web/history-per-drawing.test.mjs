@@ -643,6 +643,28 @@ for (const later of ['redraw', 'rename']) test(`an Undo from the other drawing $
   assert.deepEqual(captions(), later === 'redraw' ? ['Hand', 'Imported', 'GC content'] : ['Hand', 'GC']);
 });
 
+// The rerender a project step asked for is the figure of its after side, as for
+// a drawing's own checkpoint, while the project step is the last step.
+test('a project step keeps the figure its rerender drew while it is the last step', async () => {
+  const { replaceLegendRows } = await import('../../gbdraw/web/js/services/drawing/paint.js');
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const circular = modeDrawing(state, 'circular');
+  const row = (caption) => ({ caption, originalCaption: caption, color: '#000000', xPos: 10, yPos: 0, featureIds: [] });
+  show(app, 'circular');
+  await history.captureBaseline();
+  await history.runProjectStep('Reset settings', () => replaceLegendRows(circular.slices.paint, [row('Reset')]), {
+    drawn: { before: () => true, change: false }
+  });
+  assert.equal(await history.keepRedrawnResult(), true, 'the part takes the figure');
+  assert.equal(await history.keepRedrawnResult(), false, 'the kept side is drawn');
+  await history.runProjectStep('Reset settings', () => replaceLegendRows(circular.slices.paint, [row('Again')]), {
+    drawn: { before: () => true, change: false }
+  });
+  await history.runUndoable('Rename Legend row', () => replaceLegendRows(circular.slices.paint, [row('Later')]));
+  assert.equal(await history.keepRedrawnResult(), false, 'a later step of the drawing is the last step');
+});
+
 // A Retry of a failed card import changes every drawing its apply reaches (the
 // earlier file's part leaves the other drawings), so it is recorded as the
 // card's own import is: one project step, not the shown drawing's checkpoint.

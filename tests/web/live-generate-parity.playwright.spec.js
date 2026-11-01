@@ -736,7 +736,8 @@ const RESET_CASES = [
   },
   {
     domain: 'a feature hidden (OV-290)',
-    edit: (page) => popupEdit(page, 'FL2', { visibility: 'off' })
+    edit: (page) => popupEdit(page, 'FL2', { visibility: 'off' }),
+    undoRedo: true
   },
   {
     // The Result Generate drew lacks the feature, so Reset asks for the rerender.
@@ -774,6 +775,241 @@ for (const { domain, edit, undoRedo, sameDrawing, resetShowsDrawn } of RESET_CAS
   });
 }
 
+// Undo and Redo of a feature hide, a Label Off, or a label text apply at once
+// (Owner: 「Undoは即時反映されないと」): when Undo or Redo returns, the figure shows
+// the step, before any rerender finishes, on any figure size. The rerender is
+// held, so these do not pass by timing. Each step leaves the figure it replaced
+// in History.
+const holdRerenders = (page) => page.evaluate(() => {
+  window.__GBDRAW_TEST_HOOKS__ ||= {};
+  window.__heldRerenders = [];
+  window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => new Promise((resolve) => { window.__heldRerenders.push(resolve); });
+});
+const releaseRerenders = async (page) => {
+  await page.evaluate(() => {
+    delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+    window.__heldRerenders.forEach((resolve) => resolve());
+  });
+  await settleLive(page);
+};
+const rerenderHeld = (page) => page.waitForFunction(() => window.__heldRerenders.length > 0);
+const failRerenders = (page) => page.evaluate(() => {
+  window.__GBDRAW_TEST_HOOKS__ ||= {};
+  window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => { throw new Error('forced rerender failure'); };
+});
+const featureIdOf = (page, locusTag) => page.evaluate((tag) => {
+  const app = window.__GBDRAW_APP__;
+  return app.extractedFeatures.find((feature) => feature.locus_tag === tag)?.svg_id;
+}, locusTag);
+// The step, and what the figure shows of the feature as it returns.
+const stepAndRead = (page, name, id) => evaluateWithRetainedPromise(page, async ({ name, id }) => {
+  await window.__GBDRAW_HISTORY__[name]();
+  await window.Vue.nextTick();
+  const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  const shown = (element) => !element.closest('[display="none"]');
+  return {
+    feature: [...root.querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)].filter(shown).length > 0,
+    labels: [...root.querySelectorAll(`text[data-label-feature-id="${CSS.escape(id)}"]`)].filter(shown).map((label) => label.textContent)
+  };
+}, { name, id });
+const SHOWN = { feature: true, labels: ['beta protein'] };
+const AT_ONCE_CASES = [
+  {
+    domain: 'a feature hide',
+    edit: (page) => popupEdit(page, 'FL2', { visibility: 'off' }),
+    edited: { feature: false, labels: [] }
+  },
+  {
+    domain: 'a Label Off',
+    edit: (page) => popupEdit(page, 'FL2', { labelVisibility: 'off' }),
+    edited: { feature: true, labels: [] }
+  },
+  {
+    domain: 'a label text',
+    edit: (page) => popupEdit(page, 'FL2', { labelText: 'at once text' }),
+    edited: { feature: true, labels: ['at once text'] }
+  },
+  {
+    domain: 'a feature hide by a visibility rule',
+    edit: (page) => addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^FL2$', action: 'off' }),
+    edited: { feature: false, labels: [] }
+  },
+  {
+    domain: 'a hide of the selected features',
+    edit: (page) => evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      app.selectedFeatureIds = new Set(app.extractedFeatures.filter((feature) => feature.locus_tag === 'FL2').map((feature) => feature.svg_id));
+      app.selectedFeatureBulkVisibility = 'off';
+      await app.applySelectedFeatureVisibility();
+    }),
+    edited: { feature: false, labels: [] }
+  }
+];
+for (const mode of ['linear', 'circular']) {
+  for (const { domain, edit, edited } of AT_ONCE_CASES) {
+    // The comparison Generates, which ends Redo, so each side has its own run.
+    for (const end of ['undo', 'redo']) {
+      test(`Undo and Redo of ${domain} apply at once with the rerender held, ending at ${end} (${mode})`, async ({ page }) => {
+        test.setTimeout(180_000);
+        await open(page, { mode, results: 'single' });
+        const id = await featureIdOf(page, 'FL2');
+        await edit(page);
+        await settleLive(page);
+        await holdRerenders(page);
+        expect(await stepAndRead(page, 'undo', id), 'Undo').toEqual(SHOWN);
+        await releaseRerenders(page);
+        await holdRerenders(page);
+        expect(await stepAndRead(page, 'redo', id), 'Redo').toEqual(edited);
+        await releaseRerenders(page);
+        if (end === 'undo') {
+          await holdRerenders(page);
+          expect(await stepAndRead(page, 'undo', id), 'Undo again').toEqual(SHOWN);
+          await releaseRerenders(page);
+        }
+        await expectLiveEqualsGenerate(page, { label: `${end} of ${domain}` });
+      });
+    }
+  }
+
+  test(`Undo of a hide brings the feature back when no rerender can run (${mode})`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode, results: 'single' });
+    const id = await featureIdOf(page, 'FL2');
+    await popupEdit(page, 'FL2', { visibility: 'off' });
+    await settleLive(page);
+    await failRerenders(page);
+    expect(await stepAndRead(page, 'undo', id)).toEqual(SHOWN);
+    await settleLive(page);
+    await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
+    expect(await stepAndRead(page, 'redo', id)).toEqual({ feature: false, labels: [] });
+    await stepAndRead(page, 'undo', id);
+    await settleLive(page);
+    await expectLiveEqualsGenerate(page, { label: 'Undo of a hide with a failing rerender' });
+  });
+
+  test(`Redo of showing a hidden feature applies at once (${mode})`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode, results: 'single' });
+    const id = await featureIdOf(page, 'FL2');
+    await popupEdit(page, 'FL2', { visibility: 'off' });
+    await settleLive(page);
+    await popupEdit(page, 'FL2', { visibility: 'default' });
+    await settleLive(page);
+    await holdRerenders(page);
+    expect(await stepAndRead(page, 'undo', id), 'Undo of the show').toEqual({ feature: false, labels: [] });
+    await releaseRerenders(page);
+    await holdRerenders(page);
+    expect(await stepAndRead(page, 'redo', id), 'Redo of the show').toEqual(SHOWN);
+    await releaseRerenders(page);
+    await expectLiveEqualsGenerate(page, { label: 'Redo of the show' });
+  });
+
+  test(`Undo of a hide made while its rerender runs applies at once (${mode})`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode, results: 'single' });
+    const id = await featureIdOf(page, 'FL2');
+    await holdRerenders(page);
+    const hide = popupEdit(page, 'FL2', { visibility: 'off' });
+    await rerenderHeld(page);
+    expect(await stepAndRead(page, 'undo', id), 'Undo').toEqual(SHOWN);
+    await releaseRerenders(page);
+    await hide;
+    await expectLiveEqualsGenerate(page, { label: 'Undo of a hide while its rerender ran' });
+  });
+
+  test(`Undo of two hides made during one rerender applies each at once (${mode})`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode, results: 'single' });
+    const fl1 = await featureIdOf(page, 'FL1');
+    const fl2 = await featureIdOf(page, 'FL2');
+    const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    await holdRerenders(page);
+    const hideFirst = popupEdit(page, 'FL1', { visibility: 'off' });
+    await rerenderHeld(page);
+    const hideSecond = popupEdit(page, 'FL2', { visibility: 'off' });
+    await page.waitForFunction((count) => window.__GBDRAW_HISTORY__.getUndoCount() === count, steps + 2);
+    await releaseRerenders(page);
+    await Promise.all([hideFirst, hideSecond]);
+    await holdRerenders(page);
+    expect((await stepAndRead(page, 'undo', fl2)).feature, 'Undo of the second').toBe(true);
+    await releaseRerenders(page);
+    await holdRerenders(page);
+    expect((await stepAndRead(page, 'undo', fl1)).feature, 'Undo of the first').toBe(true);
+    await releaseRerenders(page);
+    await expectLiveEqualsGenerate(page, { label: 'Undo of two hides' });
+  });
+}
+
+// The same by the mouse: the popup's control and the header's buttons.
+test('a hide made with the popup control comes back by the Undo button with the rerender held', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, { mode: 'linear', results: 'single' });
+  const id = await featureIdOf(page, 'FL2');
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.filteredFeatures.find((feature) => feature.locus_tag === 'FL2'), null);
+  });
+  await page.locator('.feature-popup').getByRole('combobox', { name: 'Feature visibility', exact: true }).selectOption('off');
+  // FL2 has a product, so the scope dialog asks first.
+  await page.getByRole('button', { name: /This feature One rule/ }).click();
+  await settleLive(page);
+  const shownParts = () => page.evaluate((featureId) => [...window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+    .querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)]
+    .filter((element) => !element.closest('[display="none"]')).length, id);
+  expect(await shownParts()).toBe(0);
+  await holdRerenders(page);
+  await page.locator('button[aria-label^="Undo"]').first().click();
+  await expect.poll(shownParts).toBeGreaterThan(0);
+  await page.locator('button[aria-label^="Redo"]').first().click();
+  await expect.poll(shownParts).toBe(0);
+  await releaseRerenders(page);
+  await expectLiveEqualsGenerate(page, { label: 'Redo by its button' });
+});
+
+// Redo of Reset Settings shows the figure Reset's rerender drew, at once.
+for (const mode of ['linear', 'circular']) {
+  for (const [domain, change, edited] of [
+    ['a feature hide', { visibility: 'off' }, { feature: false, labels: [] }],
+    ['a Label Off', { labelVisibility: 'off' }, { feature: true, labels: [] }]
+  ]) {
+    test(`Undo and Redo of Reset Settings after ${domain} apply at once (${mode})`, async ({ page }) => {
+      test.setTimeout(180_000);
+      await open(page, { mode, results: 'single' });
+      const id = await featureIdOf(page, 'FL2');
+      const labelSettings = await readLabelSettings(page);
+      await popupEdit(page, 'FL2', change);
+      await settleLive(page);
+      await resetKeepingLabelSettings(page);
+      await settleLive(page);
+      await holdRerenders(page);
+      expect(await stepAndRead(page, 'undo', id), 'Undo of Reset').toEqual(edited);
+      await releaseRerenders(page);
+      await holdRerenders(page);
+      expect(await stepAndRead(page, 'redo', id), 'Redo of Reset').toEqual(SHOWN);
+      await releaseRerenders(page);
+      await writeLabelSettings(page, labelSettings);
+      await expectLiveEqualsGenerate(page, { label: `Redo of Reset Settings after ${domain}` });
+    });
+  }
+
+  test(`Redo of Reset Settings asks for the rerender when Reset's own failed (${mode})`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode, results: 'single' });
+    const labelSettings = await readLabelSettings(page);
+    await popupEdit(page, 'FL2', { visibility: 'off' });
+    await settleLive(page);
+    await failRerenders(page);
+    await resetKeepingLabelSettings(page);
+    await settleLive(page);
+    await history(page, 'undo');
+    await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
+    await history(page, 'redo');
+    await settleLive(page);
+    await writeLabelSettings(page, labelSettings);
+    await expectLiveEqualsGenerate(page, { label: "Redo of Reset Settings after Reset's rerender failed" });
+  });
+}
+
 // OV-2293: Reset Settings while the other drawing is shown. Generate drew the
 // edit into this drawing's Result, so its bytes lack what the reset draft draws:
 // the arrival asks for the rerender a shown Reset asks for. The settings that
@@ -783,16 +1019,18 @@ const LABEL_SETTINGS = Object.freeze([
   ['circular', 'form', 'labels_mode'], ['circular', 'form', 'multi_record_canvas'], ['circular', 'adv', 'circular_grouping_intent'],
   ['linear', 'form', 'show_labels_linear']
 ]);
+const readLabelSettings = (page) => page.evaluate(async (settings) => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  return settings.map(([drawingMode, group, name]) => [drawingMode, group, name, window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name]]);
+}, LABEL_SETTINGS);
+const writeLabelSettings = (page, values) => page.evaluate(async (written) => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  written.forEach(([drawingMode, group, name, value]) => { window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name] = value; });
+}, values);
 const resetKeepingLabelSettings = async (page) => {
-  const kept = await page.evaluate(async (settings) => {
-    const { state } = await import('/gbdraw/web/js/state.js');
-    return settings.map(([drawingMode, group, name]) => [drawingMode, group, name, window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name]]);
-  }, LABEL_SETTINGS);
+  const kept = await readLabelSettings(page);
   await resetSettings(page);
-  await page.evaluate(async (values) => {
-    const { state } = await import('/gbdraw/web/js/state.js');
-    values.forEach(([drawingMode, group, name, value]) => { window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name] = value; });
-  }, kept);
+  await writeLabelSettings(page, kept);
 };
 const resetFromOtherDrawing = async (page, mode) => {
   await switchDrawing(page, otherMode(mode));
@@ -1668,4 +1906,57 @@ test.describe('the warm app page', () => {
     expect(await saveSession(page)).toBe('gbdraw_session.json.gz');
     expect(warmPage()).toBe('fresh: savedSessions: [] -> ["gbdraw_session.json.gz"]');
   });
+});
+
+// A failed rerender in one drawing answers for that drawing only: another
+// drawing's Result that a Reset passed asks for its own rerender.
+test('a rerender failure in one drawing leaves another drawing to rerender at its display', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openBothDrawings(page, { mode: 'circular', results: 'single' });
+  await switchDrawing(page, 'linear');
+  await popupEdit(page, 'FL2', { labelText: 'other drawing text' });
+  await settleLive(page);
+  await switchDrawing(page, 'circular');
+  await failRerenders(page);
+  await popupEdit(page, 'FL1', { labelText: 'failing text' });
+  await settleLive(page);
+  await resetKeepingLabelSettings(page);
+  await settleLive(page);
+  await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
+  await switchDrawing(page, 'linear');
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'the other drawing after Reset, with the failure in the first' });
+});
+
+// Text typed in the Features list stays through a rerender, as in the popup.
+test('text typed in the Features list label input survives a rerender', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, { mode: 'linear', results: 'single' });
+  await page.getByRole('button', { name: 'Editor', exact: true }).click();
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.featurePanelTab = 'features';
+    app.featureListExpandedId = app.filteredFeatures.find((feature) => feature.locus_tag === 'FL2').id;
+  });
+  const input = page.locator('[data-feature-list-editor] input[type="text"]');
+  await input.waitFor();
+  await holdRerenders(page);
+  const edit = popupEdit(page, 'FL1', { labelText: 'held FL1' });
+  await rerenderHeld(page);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.featureListExpandedId = app.filteredFeatures.find((feature) => feature.locus_tag === 'FL2').id;
+  });
+  await input.click();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('typed in the list');
+  await releaseRerenders(page);
+  await edit;
+  await expect(input).toHaveValue('typed in the list');
+  await input.blur();
+  await page.evaluate(() => window.__GBDRAW_APP__.handleLabelTextScopeChoice('single'));
+  await settleLive(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.getEditableLabelByFeatureId(
+    window.__GBDRAW_APP__.extractedFeatures.find((feature) => feature.locus_tag === 'FL2').svg_id).text)).toBe('typed in the list');
+  await expectLiveEqualsGenerate(page, { label: 'the text typed during a rerender' });
 });

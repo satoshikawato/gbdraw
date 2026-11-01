@@ -216,6 +216,8 @@ export const createFeatureEditor = ({
     requestAutomaticRerender: labelActions.requestAutomaticRerender,
     // D-36: the root says when a shown rerender drew the current paint.
     redrawShown: labelActions.redrawShown,
+    // A History step of the figure records its side as drawn unless a rerender is owed.
+    isRedrawOwed: labelActions.isRedrawOwed,
     specificRulePattern: ruleActions.specificRulePattern,
     specificRulePatternDraft: ruleActions.specificRulePatternDraft,
     specificRulePatternFieldId: ruleActions.specificRulePatternFieldId,

@@ -36,7 +36,7 @@ import {
 import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
-import { admitFeatureCatalog } from '../services/feature-catalog.js';
+import { admitFeatureCatalog, featureStateFromCatalog } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { inputSummaryOf } from '../services/input-summary.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
@@ -1625,6 +1625,13 @@ export const createAppSetup = () => {
     applySessionUiData,
     buildFeatureStateData,
     applyFeatureStateData,
+    catalogFeatureRows: (/** @type {unknown} */ catalog) => {
+      try {
+        return featureStateFromCatalog(/** @type {object} */ (toRaw(catalog)));
+      } catch {
+        return null;
+      }
+    },
     buildEditorStateData,
     applyEditorStateData,
     buildOrthogroupStateData,
@@ -1645,7 +1652,8 @@ export const createAppSetup = () => {
    *   captureSpecificRulePatternDrafts: ReturnType<typeof createFeatureEditor>['captureSpecificRulePatternDrafts'],
    *   restoreSpecificRulePatternDrafts: ReturnType<typeof createFeatureEditor>['restoreSpecificRulePatternDrafts'],
    *   followRestoredSpecificRules: ReturnType<typeof createFeatureEditor>['followRestoredSpecificRules'],
-   *   retainRulesForRestore: RulePreparation['retain']
+   *   retainRulesForRestore: RulePreparation['retain'],
+   *   followRestoredFigure: (drawn: boolean) => void
    * }} */
   // Each field is null only until the root registers it below (R13); no restore
   // runs before then, so the declared function types hold at every read.
@@ -1653,7 +1661,8 @@ export const createAppSetup = () => {
     captureSpecificRulePatternDrafts: /** @type {never} */ (null),
     restoreSpecificRulePatternDrafts: /** @type {never} */ (null),
     followRestoredSpecificRules: /** @type {never} */ (null),
-    retainRulesForRestore: /** @type {never} */ (null)
+    retainRulesForRestore: /** @type {never} */ (null),
+    followRestoredFigure: /** @type {never} */ (null)
   };
   /**
    * @template {unknown[]} A
@@ -1697,6 +1706,24 @@ export const createAppSetup = () => {
   // An operation's outcome shows in the notice banner (no native alert).
   const noticeBanner = createNoticeBanner({ reactive });
   const showNotice = noticeBanner.show;
+  // A checkpoint restore that changes the label or Feature visibility intent
+  // shows the figure of its side when it returns, so Undo and Redo apply at
+  // once, with no Python run when that figure is the one its state draws. A
+  // side not drawn (its rerender failed or never finished), or a rerender still
+  // running from the other side, asks for one, which places the labels later.
+  /**
+   * @param {DrawingState} drawing
+   * @param {() => Promise<unknown>} write
+   * @param {{ drawn: boolean }} restored
+   */
+  const restoreCheckpointFigure = async (drawing, write, { drawn }) => {
+    const before = editorPaintState(state, drawing);
+    const written = await write();
+    const after = editorPaintState(state, drawing);
+    if (drawing !== state.activeDrawing() || (before.labels === after.labels && before.visibility === after.visibility)) return written;
+    specificRuleRestorePorts.followRestoredFigure(drawn);
+    return written;
+  };
   // PD-OI-090: one History per drawing behind the router, which keeps the
   // manager API for the shown drawing and the project stream (the
   // Session-level values, Reset all drawings); the drawings share one byte
@@ -1720,7 +1747,7 @@ export const createAppSetup = () => {
         ),
         buildCheckpoint: ports.buildCheckpoint,
         applyCheckpoint: (checkpoint, restored) => followRuleEdits(
-          drawing, () => restoreWithSpecificRuleDrafts(ports.applyCheckpoint, checkpoint), restored
+          drawing, () => restoreCheckpointFigure(drawing, () => restoreWithSpecificRuleDrafts(ports.applyCheckpoint, checkpoint), restored), restored
         ),
         captureGeneratedArtifactHandle: () => historySnapshots.captureGeneratedArtifactHandle(drawing),
         restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
@@ -2068,6 +2095,11 @@ export const createAppSetup = () => {
   specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
   specificRuleRestorePorts.restoreSpecificRulePatternDrafts = featureActions.restoreSpecificRulePatternDrafts;
   specificRuleRestorePorts.followRestoredSpecificRules = featureActions.followRestoredSpecificRules;
+  specificRuleRestorePorts.followRestoredFigure = (drawn) => {
+    featureActions.syncLabelEditor({ queueIncompleteVisibility: false });
+    if (!drawn || labelReflowProcessing.value) featureActions.requestAutomaticRerender();
+    else labelReflowLastError.value = null;
+  };
   // R13: the drawer and the feature search come after the owners they react
   // through, so each receives its ports directly.
   const rightDrawerActions = createRightDrawerController({ state, watch, computed,
@@ -4447,8 +4479,9 @@ export const createAppSetup = () => {
       return;
     }
     const previous = resultPaintRecord.display(identity, current);
-    // A rerender that failed reports it and does not run again here (R1(c)).
-    const mayRerender = !labelReflowLastError.value;
+    // A rerender of this drawing that failed reports it and does not run again
+    // here (R1(c)); another drawing's failure says nothing of this Result.
+    const mayRerender = labelReflowLastError.value?.drawingId !== drawing.id;
     const placeLabels = mayRerender && resultPaintRecord.placedForOtherIntent(identity, previous, current);
     displayAsks = {
       identity,
@@ -4665,6 +4698,24 @@ export const createAppSetup = () => {
    * @param {{ joinsOpenStep?: boolean }} [options] History's options for the step.
    */
   const undoableAction = (label, fn, options) => (/** @type {A} */ ...args) => history.runUndoable(label, () => fn(...args), options);
+  // A step of the label or Feature visibility intent holds the figure on each
+  // of its sides: its rerender takes elements out of the bytes that its Undo or
+  // Redo must show at once, and only a figure Python drew holds them. The side
+  // after the edit becomes the rerender's figure when that is shown (`keepRedrawnResult`).
+  /** @template R @param {string} label @param {() => R | Promise<R>} fn */
+  const placementStep = (label, fn) => {
+    const drawing = state.activeDrawing();
+    return history.runUndoableCheckpoint(label, fn, {
+      drawn: { before: () => !featureActions.isRedrawOwed(drawing), change: false }
+    });
+  };
+  /**
+   * @template {unknown[]} A
+   * @template R
+   * @param {string} label
+   * @param {(...args: A) => R} fn
+   */
+  const placementAction = (label, fn) => (/** @type {A} */ ...args) => placementStep(label, () => fn(...args));
   // Python's report of the per-feature edits the Results do not draw (design
   // Q4 3.4): dormant edits outside the crop or display, edits whose feature
   // the source does not have, and the edits a source-replacing Generate removed.
@@ -4679,7 +4730,7 @@ export const createAppSetup = () => {
     return summary.dormant || summary.unmatched || summary.removed ? summary : null;
   });
   // An explicit removal of the edits Python reported unresolved (R2).
-  const removeUnmatchedFeatureEdits = undoableAction(msg('Remove unmatched feature edits'), () => {
+  const removeUnmatchedFeatureEdits = placementAction(msg('Remove unmatched feature edits'), () => {
     const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
@@ -4687,20 +4738,20 @@ export const createAppSetup = () => {
       featureEdits: drawing.slices.featureEdits, notices: featureIdentityNotices.value
     }) > 0;
   });
-  const addFeatureVisibilityRuleWithHistory = undoableAction(msg('Add feature visibility rule'), addFeatureVisibilityRule);
-  const moveFeatureVisibilityRuleDownWithHistory = undoableAction(msg('Move feature visibility rule'), moveFeatureVisibilityRuleDown);
-  const moveFeatureVisibilityRuleUpWithHistory = undoableAction(msg('Move feature visibility rule'), moveFeatureVisibilityRuleUp);
-  const removeFeatureVisibilityRuleWithHistory = undoableAction(msg('Remove feature visibility rule'), removeFeatureVisibilityRule);
-  const setFeatureVisibilityRuleFieldWithHistory = undoableAction(
+  const addFeatureVisibilityRuleWithHistory = placementAction(msg('Add feature visibility rule'), addFeatureVisibilityRule);
+  const moveFeatureVisibilityRuleDownWithHistory = placementAction(msg('Move feature visibility rule'), moveFeatureVisibilityRuleDown);
+  const moveFeatureVisibilityRuleUpWithHistory = placementAction(msg('Move feature visibility rule'), moveFeatureVisibilityRuleUp);
+  const removeFeatureVisibilityRuleWithHistory = placementAction(msg('Remove feature visibility rule'), removeFeatureVisibilityRule);
+  const setFeatureVisibilityRuleFieldWithHistory = placementAction(
     msg('Edit feature visibility rule'),
     setFeatureVisibilityRuleField
   );
-  const setFeatureVisibilityWithHistory = undoableAction(msg('Change feature visibility'), setFeatureVisibility);
-  const updateClickedFeatureVisibilityWithHistory = undoableAction(
+  const setFeatureVisibilityWithHistory = placementAction(msg('Change feature visibility'), setFeatureVisibility);
+  const updateClickedFeatureVisibilityWithHistory = placementAction(
     msg('Change feature visibility'),
     updateClickedFeatureVisibility
   );
-  const handleFeatureVisibilityScopeChoiceWithHistory = undoableAction(
+  const handleFeatureVisibilityScopeChoiceWithHistory = placementAction(
     msg('Change feature visibility'),
     handleFeatureVisibilityScopeChoice
   );
@@ -4880,9 +4931,8 @@ export const createAppSetup = () => {
     return changed;
   });
   const applySelectedFeatureVisibility = async () => {
-    const changed = await history.runUndoableCommand(msg('Change selected feature visibility'), () =>
-      buildSelectedFeaturesVisibilityCommand(selectedFeatures.value, selectedFeatureBulkVisibility.value)
-    );
+    const command = buildSelectedFeaturesVisibilityCommand(selectedFeatures.value, selectedFeatureBulkVisibility.value);
+    const changed = command ? await placementStep(msg('Change selected feature visibility'), command.apply) : false;
     if (changed) featureSelection.clearFeatureSelection({ clearStatus: true });
     return changed;
   };
@@ -4901,8 +4951,8 @@ export const createAppSetup = () => {
     if (!first) return null;
     return openFeatureEditorForFeature(first, event);
   };
-  const updateClickedFeatureLabelTextWithHistory = undoableAction(msg('Change label text'), updateClickedFeatureLabelText);
-  const handleLabelTextScopeChoiceWithHistory = undoableAction(msg('Change label text'), handleLabelTextScopeChoice);
+  const updateClickedFeatureLabelTextWithHistory = placementAction(msg('Change label text'), updateClickedFeatureLabelText);
+  const handleLabelTextScopeChoiceWithHistory = placementAction(msg('Change label text'), handleLabelTextScopeChoice);
   // The Label Not Shown choice answers the label edit whose step is open: one step, under that step's name.
   // A registered test reads the label from this line (feature-label-visual-unit.test.mjs).
   const handleHiddenLabelTextChoiceWithHistory = undoableAction(msg('Change label visibility'), handleHiddenLabelTextChoice, { joinsOpenStep: true });
@@ -4911,8 +4961,16 @@ export const createAppSetup = () => {
     requestLabelTextChangeByFeatureId
   );
   const requestLabelTextChangeByKeyWithHistory = undoableAction(msg('Change label text'), requestLabelTextChangeByKey);
-  const resetAllLabelTextOverridesWithHistory = undoableAction(msg('Reset label edits'), resetAllLabelTextOverrides);
-  const loadLabelOverrideTableWithHistory = undoableAction(msg('Load label edits'), loadLabelOverrideTable);
+  // The Features list's label input commits what was typed; its draft then follows the label.
+  /** @param {string} featureId @param {string} text */
+  const commitListLabelDraft = (featureId, text) => {
+    const committed = requestLabelTextChangeByFeatureIdWithHistory(featureId, text);
+    const entry = featureActions.getEditableLabelByFeatureId(featureId);
+    if (entry) entry.draftText = entry.text;
+    return committed;
+  };
+  const resetAllLabelTextOverridesWithHistory = placementAction(msg('Reset label edits'), resetAllLabelTextOverrides);
+  const loadLabelOverrideTableWithHistory = placementAction(msg('Load label edits'), loadLabelOverrideTable);
   const runInfoCopyStatus = ref('');
   const exactReplayCopyStatus = ref('');
 
@@ -5590,7 +5648,8 @@ export const createAppSetup = () => {
     // rerender follows the step: the rerender requests wait until it ends
     // (OV-1076). Reset is one project step (D-15-51): one Undo restores every
     // drawing.
-    return holdAutomaticRerender(() => history.runProjectStep(msg('Reset settings'), () => followRuleEdits(state.activeDrawing(), async () => {
+    const resetDrawing = state.activeDrawing();
+    return holdAutomaticRerender(() => history.runProjectStep(msg('Reset settings'), () => followRuleEdits(resetDrawing, async () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
       const before = currentEditorProjectionState(state.activeDrawing());
@@ -5653,7 +5712,7 @@ export const createAppSetup = () => {
         legendActions.extractLegendEntries();
       }
       return true;
-    })));
+    }), { drawn: { before: () => !featureActions.isRedrawOwed(resetDrawing), change: false } }));
   };
 
   // OV-1160 (Owner R15-23 Q-DR-5 A): turned on, the Instant Preview toggle
@@ -7222,10 +7281,10 @@ export const createAppSetup = () => {
     canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
     canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,
     canRetryLabelImportFailure: featureActions.canRetryLabelImportFailure,
-    retryLabelImportFailure: undoableAction(msg('Load label edits'), featureActions.retryLabelImportFailure),
+    retryLabelImportFailure: placementAction(msg('Load label edits'), featureActions.retryLabelImportFailure),
     editLabelImportFailure: featureActions.editLabelImportFailure,
     canRetryFeatureEditTableImport: featureActions.canRetryFeatureEditTableImport,
-    retryFeatureEditTableImport: undoableAction(msg('Load feature edits'), featureActions.retryFeatureEditTableImport),
+    retryFeatureEditTableImport: placementAction(msg('Load feature edits'), featureActions.retryFeatureEditTableImport),
     reselectFeatureEditTable: featureActions.reselectFeatureEditTable,
     retrySpecificRuleFailure: featureActions.retrySpecificRuleFailure,
     editSpecificRuleFailure: featureActions.editSpecificRuleFailure,
@@ -7931,12 +7990,13 @@ export const createAppSetup = () => {
     handleLabelTextScopeChoice: handleLabelTextScopeChoiceWithHistory,
     handleHiddenLabelTextChoice: handleHiddenLabelTextChoiceWithHistory,
     requestLabelTextChangeByFeatureId: requestLabelTextChangeByFeatureIdWithHistory,
+    commitListLabelDraft,
     requestLabelTextChangeByKey: requestLabelTextChangeByKeyWithHistory,
     resetAllLabelTextOverrides: resetAllLabelTextOverridesWithHistory,
     downloadLabelOverrideTable,
     loadLabelOverrideTable: loadLabelOverrideTableWithHistory,
     downloadFeatureEditTable: featureActions.downloadFeatureEditTable,
-    loadFeatureEditTable: undoableAction(msg('Load feature edits'), featureActions.loadFeatureEditTable),
+    loadFeatureEditTable: placementAction(msg('Load feature edits'), featureActions.loadFeatureEditTable),
     syncLabelEditor,
     openFeatureEditorFromList,
     legendEntries: drawingMember('legendEntries'),

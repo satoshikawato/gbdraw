@@ -762,8 +762,11 @@ export const createFeatureLabelActions = ({
     if (rerender) labelReflowLastError.value = null;
   };
 
+  /** @type {WeakSet<DrawingState>} */
+  const redrawOwed = new WeakSet();
   const queueLabelReflow = () => {
     labelReflowLastError.value = null;
+    redrawOwed.add(state.activeDrawing());
     labelReflowRequestSeq.value += 1;
   };
 
@@ -882,6 +885,10 @@ export const createFeatureLabelActions = ({
 
   /** @param {Element} svg */
   const refreshEditableList = (svg) => {
+    // Text typed in the Features list and not committed stays through a rerender.
+    const typed = new Map(editableLabels.value
+      .filter((/** @type {EditableLabelEntry} */ entry) => entry.featureId && entry.draftText !== entry.text)
+      .map((/** @type {EditableLabelEntry} */ entry) => [entry.featureId, entry.draftText]));
     /** @type {EditableLabelEntry[]} */
     const nextEntries = [];
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl, index) => {
@@ -898,7 +905,7 @@ export const createFeatureLabelActions = ({
         sourceText,
         featureId,
         kind,
-        draftText: text
+        draftText: typed.get(featureId) ?? text
       });
     });
     editableLabels.value = nextEntries;
@@ -1114,11 +1121,8 @@ export const createFeatureLabelActions = ({
   // current paint (`redrawShown`, OV-346); while one is owed, the shown
   // figure can lack rows Python draws, so a History step does not record it
   // as drawn (D-24 (OV-731)).
-  /** @type {WeakSet<DrawingState>} */
-  const redrawOwed = new WeakSet();
   const requestAutomaticRerender = () => {
     if (!svgContainer.value?.querySelector?.('svg')) return false;
-    redrawOwed.add(state.activeDrawing());
     queueLabelReflow();
     return true;
   };

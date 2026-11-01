@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { DrawnInputSummary } from './input-summary.js' */
+/** @import { ResultLabelFit } from './label-fit.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
@@ -131,6 +132,9 @@ const editedIntentPartOf = (path, value) => (
  * @property {EditorIntentData} [editorState]
  * @property {OrthogroupIntentData & GroupNameIntentData & { groups?: unknown }} [orthogroupState]
  * @property {{ lastRunInfo?: unknown, pairwiseMatchFactors?: unknown }} [runState]
+ * @property {readonly ResultLabelFit[]} [labelFitReports] What Python reported beside the figure this checkpoint holds.
+ * @property {readonly DrawnInputSummary[]} [inputSummaries] What Python counted beside the figure this checkpoint holds.
+ * @property {number} [featureRowsOfCatalog] Set when the feature tables are held by the catalog they came from: that catalog's serial.
  */
 /**
  * The presentation values a generated artifact handle keeps with its intent.
@@ -974,6 +978,8 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  * @property {((drawing: D, features: HistorySnapshotData) => unknown) | null} [applyFeatureStateData]
  *   The feature-override restore.
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildEditorStateData] The legend and stroke editor capture.
+ * @property {((catalog: unknown) => { extractedFeatures: readonly unknown[], biologicalFeatures: readonly unknown[] } | null) | null} [catalogFeatureRows]
+ *   The feature tables an admitted catalog holds (the catalog owner's `featureStateFromCatalog`).
  * @property {((drawing: D, editorState: HistorySnapshotData, options: { normalized: boolean }) => unknown) | null} [applyEditorStateData]
  *   The editor restore; `normalized` marks a state that is installed as captured.
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildOrthogroupStateData] The orthogroup capture.
@@ -1014,6 +1020,7 @@ export const createHistorySnapshotService = ({
   applyFeatureStateData = null,
   buildEditorStateData = null,
   applyEditorStateData = null,
+  catalogFeatureRows = null,
   buildOrthogroupStateData = null,
   applyOrthogroupStateData = null,
   currentResults,
@@ -1755,6 +1762,28 @@ export const createHistorySnapshotService = ({
   // retains each checkpoint object as captured.
   const checkpointFeatureCatalogs = new WeakMap();
 
+  // A checkpoint holds the feature tables by the catalog they came from, when they
+  // are that catalog's: they are most of its bytes on a large genome, and a
+  // restored row must be the catalog's row, the one the rule matches are read on.
+  // Tables that are not a catalog's (no Generate yet) stay in its JSON.
+  /** @type {WeakSet<object>} */
+  const checkpointsWithCatalogRows = new WeakSet();
+  /** @type {WeakMap<object, number>} */
+  const catalogSerials = new WeakMap();
+  let nextCatalogSerial = 0;
+  /** @param {unknown} catalog @returns {number} A number that names this catalog object in a checkpoint's signature. */
+  const catalogSerial = (catalog) => {
+    const held = /** @type {object} */ (catalog);
+    if (!catalogSerials.has(held)) catalogSerials.set(held, ++nextCatalogSerial);
+    return /** @type {number} */ (catalogSerials.get(held));
+  };
+  /** @param {ArtifactCheckpointData} snapshot */
+  const checkpointFeatureState = (snapshot) => {
+    if (!checkpointsWithCatalogRows.has(snapshot)) return snapshot?.features || {};
+    const rows = /** @type {NonNullable<typeof catalogFeatureRows>} */ (catalogFeatureRows)(checkpointFeatureCatalogs.get(snapshot));
+    return { ...snapshot.features, extractedFeatures: rows?.extractedFeatures ?? [], biologicalFeatures: rows?.biologicalFeatures ?? [] };
+  };
+
   /**
    * @param {D} drawing
    * @param {ArtifactCheckpointData} snapshot
@@ -1767,11 +1796,15 @@ export const createHistorySnapshotService = ({
       applyFallbackResultsData(state, snapshot?.results || []);
       applyFallbackUiStateData(state, drawing, { selectedResultIndex: ui.selectedResultIndex });
     }
+    // The reports and counts Python sent beside this figure go back with it.
+    setGeneratedArtifactRef(state.labelFitReports, snapshot?.labelFitReports || []);
+    setGeneratedArtifactRef(state.inputSummaries, snapshot?.inputSummaries || []);
 
+    const features = checkpointFeatureState(snapshot);
     if (typeof applyFeatureStateData === 'function') {
-      applyFeatureStateData(drawing, snapshot?.features || {});
+      applyFeatureStateData(drawing, features);
     } else {
-      applyFallbackFeatureStateData(state, drawing, snapshot?.features || {});
+      applyFallbackFeatureStateData(state, drawing, features);
     }
 
     if (typeof applyOrthogroupStateData === 'function') {
@@ -2000,15 +2033,24 @@ export const createHistorySnapshotService = ({
     const drawing = state.drawingOf(drawingId);
     const generated = buildGeneratedArtifactSnapshot(drawing);
     const { featureCatalog = null, ...editorState } = generated.editorState || {};
+    const rows = featureCatalog && catalogFeatureRows ? catalogFeatureRows(featureCatalog) : null;
+    const rowsAreCatalogs = rows !== null
+      && rows.extractedFeatures === toRaw(getGeneratedArtifactRef(state.extractedFeatures, null))
+      && rows.biologicalFeatures === toRaw(getGeneratedArtifactRef(state.biologicalFeatures, null));
+    const { extractedFeatures: _extracted, biologicalFeatures: _biological, ...withoutRows } = /** @type {Record<string, unknown>} */ (generated.features || {});
     const checkpoint = cloneJsonData({
       config: buildDrawingConfig(drawing),
       files: buildFilesData(state, drawing, fileStore),
       ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState(drawingId) } : {}),
       ...generated,
       ...(generated.ui ? { ui: withoutSessionUi(generated.ui) } : {}),
-      editorState
+      editorState,
+      ...(rowsAreCatalogs ? { features: withoutRows, featureRowsOfCatalog: catalogSerial(featureCatalog) } : {}),
+      labelFitReports: getGeneratedArtifactRef(state.labelFitReports, []),
+      inputSummaries: getGeneratedArtifactRef(state.inputSummaries, [])
     });
     checkpointFeatureCatalogs.set(checkpoint, featureCatalog);
+    if (rowsAreCatalogs) checkpointsWithCatalogRows.add(checkpoint);
     return checkpoint;
   };
 

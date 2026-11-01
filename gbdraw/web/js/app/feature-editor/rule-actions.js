@@ -43,6 +43,8 @@ import {
   legendEntryKey,
   replaceAddedLegendCaptions,
   replaceFeatureFills,
+  restoreLegendRows,
+  retireLegendPaint,
   setFeatureFill,
   setLegendColor
 } from '../../services/drawing/paint.js';
@@ -239,6 +241,26 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows),
       rendererRows
     };
+  };
+  // OV-2412: the deleted rows whose rules all left, by any write of the rule
+  // table, and whose key no feature draws: no Result can return them. Rows of a
+  // key a feature still draws stay deleted.
+  /** @param {DrawingState} drawing @param {readonly RuleRowColor[]} removedRuleRows @returns {{ indexes: Set<number>, keys: Set<PythonLegendKey> }} */
+  const emptiedDeletedRows = (drawing, removedRuleRows) => {
+    const captionOf = effectiveLegendCaptions();
+    const drawn = new Set(removedRuleRows.length ? /** @type {ColorFeature[]} */ (extractedFeatures.value).map(captionOf) : []);
+    const emptied = new Set(removedRuleRows.map((row) => row.caption).filter((key) => !drawn.has(key)));
+    /** @type {Set<number>} */
+    const indexes = new Set();
+    /** @type {Set<PythonLegendKey>} */
+    const keys = new Set();
+    drawing.deletedLegendEntries.value.forEach((/** @type {KeptLegendRow} */ entry, /** @type {number} */ at) => {
+      const key = legendEntryKey(entry);
+      if (!emptied.has(key)) return;
+      indexes.add(at);
+      keys.add(key);
+    });
+    return { indexes, keys };
   };
   // OV-43 (Owner decision 2026-10-06, option A), narrowed by R14-8 (U3a 1d):
   // a rule table change asks for the automatic rerender when the displayed
@@ -571,6 +593,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       ]);
       refreshFeatureOverrides(drawing, extractedFeatures.value);
       supersededLegendColors(drawing, intents, removedRuleRows).forEach((key) => setLegendColor(drawing.slices.paint, key, null));
+      // They leave the deleted list with their paint, in this step; Undo returns them.
+      const emptied = emptiedDeletedRows(drawing, removedRuleRows);
+      if (emptied.indexes.size) {
+        restoreLegendRows(drawing.slices.paint, emptied.indexes, drawing.legendEntries.value);
+        retireLegendPaint(drawing.slices.paint, emptied.keys);
+      }
       afterCommit(intents);
       applied = true;
       const legendRows = legend.apply();

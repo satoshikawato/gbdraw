@@ -23,8 +23,6 @@ import {
   legendEntryKey,
   renameListedLegendRow,
   replaceLegendRows,
-  restoreLegendRows,
-  retireLegendPaint,
   setFeatureStroke,
   setLegendColor,
   setLegendStroke
@@ -848,10 +846,6 @@ export const createFeatureColorActions = ({
       const retireOld = Boolean(oldEntry) && features.length > 0 && takesWholeRow(request.sourceKey, features);
       const joins = request.joins ?? null;
       const revisesRow = request.sourceScope === 'group' && sourceRules.length > 0;
-      // OV-2412: no rule names a deleted row once its rules are renamed, so no
-      // Result can draw its key again: it leaves the deleted list with its paint.
-      const emptiedDeleted = revisesRow
-        ? drawing.deletedLegendEntries.value.findIndex((entry) => legendEntryKey(entry) === request.sourceKey) : -1;
       const rules = revisesRow
         ? reviseColorRules(sourceRules, { cap: caption, color }, joins)
         : groupColorRules(features, color, caption, retireOld && !joins ? 'row' : 'group', joins);
@@ -865,10 +859,6 @@ export const createFeatureColorActions = ({
         legendPlacement: retireOld && oldEntry ? { name: caption, color, at: request.sourceKey, replaces: true }
           : request.keepBothAfter ? { name: caption, color, at: request.keepBothAfter } : null,
         afterCommit: () => {
-          if (emptiedDeleted >= 0) {
-            restoreLegendRows(drawing.slices.paint, new Set([emptiedDeleted]), drawing.legendEntries.value);
-            retireLegendPaint(drawing.slices.paint, new Set([request.sourceKey]));
-          }
           const committedCaptionOf = effectiveLegendCaptions();
           for (const feature of features) updateClickedFeatureLegendState(feature, committedCaptionOf(feature), color);
         }
