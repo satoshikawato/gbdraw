@@ -20,8 +20,10 @@ write-up of a release.
   `ComparisonRingOptions`, and the Web **Identity scale min (%)** / **Identity scale max (%)**
   fix the identity color range of comparisons.
 - Added: `--italic_gene_labels` and the Web **Italic gene names** checkbox draw labels whose
-  text comes from the `gene` qualifier in italics. The Web app also has a **Transparent
-  background** checkbox for the PNG download.
+  text comes from the `gene` qualifier in italics.
+- Changed: a PNG downloaded from the Web app keeps the drawing's transparent background, as SVG
+  and the command-line and Python PNG do. Check **White background**, next to the PNG DPI
+  choice, for the white background of earlier Web PNGs.
 - Added: `gbdraw linear --auto_orient` reverse-complements records from their nucleotide hits
   against the row above, and `--anchor_feature KEY=VALUE` aligns records at a named feature.
   Command line and Python only; a Session cannot store either yet.

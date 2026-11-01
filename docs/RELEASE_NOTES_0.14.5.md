@@ -7,8 +7,8 @@ Web app now draws a LOSATP link or Collinear block that uses a CDS across a
 circular record's origin over the CDS's own arc, as the command line and the
 Python API have done since 0.14.4. The release also adds `--wrap_length`, which
 draws one long Linear record over several rows (command line and Python), four
-built-in color tables, a fixed identity color scale, italic gene names, a
-transparent Web PNG, and two Linear alignment options (command line and Python),
+built-in color tables, a fixed identity color scale, italic gene names, a transparent
+Web PNG by default, and two Linear alignment options (command line and Python),
 and reads more real-world GenBank, EMBL, and GFF3 files. The Web app's LOSAT
 engine is now a build of a LOSAT development commit, and threaded LOSAT searches
 no longer stop on a memory fault.
@@ -131,6 +131,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
     next **Generate Diagram** for LOSATN `blastn`, `dc-megablast`, and TLOSATX.
     No Gallery example searches again.
   - `gbdraw/web/wasm/losat/losat-build.json` records the build.
+- **Web app PNG background.** A PNG downloaded from the Web app now keeps the
+  drawing's transparent background, as SVG and PNG from the command line and
+  Python already do. Check **White background**, next to the PNG DPI choice, to
+  paint it white as earlier Web PNGs were. The checkbox is a page setting: a
+  Session does not store it.
 - **Tobacco chloroplast tutorial and Gallery entry** use `-t builtin:plastid`
   (Web: **Plastid gene classes** in **Preset scheme**) instead of a downloaded
   color table. The figure keeps its layout and labels.
@@ -175,10 +180,6 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   (`labels.<mode>.italic_gene_labels` in a config file) draws in italics every
   feature label whose text comes from the `gene` qualifier; the Web app has an
   **Italic gene names** checkbox in the labels card. Off by default.
-- **Transparent PNG in the Web app.** A **Transparent background** checkbox next
-  to the DPI choice keeps the downloaded PNG transparent instead of filling it
-  white. Off by default. SVG, and PNG from the command line and Python, are
-  already transparent.
 - **`--auto_orient` for Linear diagrams (command line and Python only).**
   Reverse-complements a record when its reverse-strand nucleotide hits against
   the row above weigh more than half of its hits. Also `auto_orient` on
