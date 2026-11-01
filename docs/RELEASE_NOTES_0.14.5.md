@@ -7,15 +7,17 @@ Web app now draws a LOSATP link or Collinear block that uses a CDS across a
 circular record's origin over the CDS's own arc, as the command line and the
 Python API have done since 0.14.4. The release also adds `--wrap_length`, which
 draws one long Linear record over several rows (command line and Python), four
-built-in color tables, and reads more real-world GenBank, EMBL, and GFF3 files.
+built-in color tables, a fixed identity color scale, italic gene names, a
+transparent Web PNG, and two Linear alignment options (command line and Python),
+and reads more real-world GenBank, EMBL, and GFF3 files. The Web app's LOSAT
+engine is now a build of a LOSAT development commit, and threaded LOSAT searches
+no longer stop on a memory fault.
 Sessions are now saved as session version 50 (0.14.4 writes 49; the canonical
 `renderRequest` schema stays 9): **a Session saved by 0.14.5 opens only in
 0.14.5 or later.** Sessions saved by 0.14.4 and earlier open as before.
 [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases) gives the
 publication date, [PyPI](https://pypi.org/project/gbdraw/) lists the published
 packages, and [Installation](./INSTALL.md) explains each install route.
-
-<!-- PENDING: lead sentence of the summary above may need a mention of the LOSAT Wasm swap, OV-2369, OV-2370/OV-2380 and OV-2371 once they merge. -->
 
 ## Fixed
 
@@ -53,9 +55,31 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   - A `--gbk` file without a record next to a good file is no longer skipped
     silently: the error names the file and says whether it is empty, FASTA, or
     neither flat-file format.
-<!-- PENDING: Fixed entry for OV-2369 (title and user-visible impact from its PR once merged). -->
-<!-- PENDING: Fixed entry for OV-2370 / OV-2380 (title and user-visible impact from its PR once merged). -->
-<!-- PENDING: Fixed entry for OV-2371, #1532: LOSATP Pairwise on a Linear row with two or more records no longer exits 1 and searches every adjacent-row record pair (command line and Python only); the ordered `-b/--blast` refusal now names `--comparisons_table`. Write it from the PR body if it has merged. -->
+- **Web app: threaded LOSAT searches stop on "memory access out of bounds"
+  (OV-2369).** A threaded LOSAT search could stop with that message and run the
+  whole pair again (the console said "running the pair again"), or fail after
+  the third stop. In Chromium a copy into memory that another LOSAT thread had
+  just grown could trap. The Web app now checks each such copy and first brings
+  the thread's view of the memory up to date. Results are unchanged.
+- **LOSATP links among tied hits are the same on the command line, in Python,
+  and in the Web app (OV-2370, OV-2380).** LOSATP Pairwise and Similarity groups
+  broke ties between equal-score protein hits on an internal handle that differs
+  between the surfaces and between Web pages, so the same records and hits could
+  draw a few other links among identical paralogs. Every such tie now goes to
+  the first CDS by record and location. Inputs without ties draw as before.
+  **Generate Diagram** again on a saved Session: the derived LOSATP entries are
+  rebuilt once from the raw searches; no search runs again.
+- **`--losatp_mode pairwise` on a Linear row with two or more records
+  (OV-2371).** Command line and Python only. It exited with "Ordered
+  BLAST/protein comparison inputs are ambiguous". It now searches every record
+  pair between adjacent rows, as Similarity groups and Collinear blocks do.
+  `-b/--blast` on such a layout is still refused; the message now says to list
+  the tables in `--comparisons_table`.
+- **Web app: a hover popup after a pan.** After a pan or wheel zoom of the Result
+  preview, the hover was replayed at the point where the pointer was released,
+  and a popup could open and stay for a pointer that had already left the
+  drawing (OV-2281). A pointer that stays over a match or feature still shows
+  its hover.
 
 ## Changed behavior
 
@@ -73,7 +97,32 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   `Dbxref`, and `note`. Nothing is colored by a built-in table unless you name
   it, and a Session stores the rows that a preset or `builtin:` table added, not
   the name.
-<!-- PENDING: Changed behavior for the LOSAT Wasm swap: engine commit (LOSAT dev dde737f18), and that a raw LOSAT search cached or saved by 0.14.4 runs again once. Write from its PR body. -->
+- **Web app LOSAT engine.** The engine is the LOSAT development commit
+  `dde737f18` (version 0.2.0 before its release; it was a build of LOSAT 0.1.0),
+  not a LOSAT release. Its searches give the rows of the `losat` command of that
+  commit. LOSATP gives the same rows as before in 26-38 % of the serial time.
+  LOSATN with task `blastn` gives different E-values and hits than before (on the
+  lambda x DE3 check, 21 rows instead of 19); task `megablast` and TLOSATX give
+  the same rows.
+  - Task `dc-megablast` now runs dc-megablast (the old engine ran `blastn` for
+    it) on threaded execution: **Threaded**, and **Auto** on a cross-origin
+    isolated page. On serial execution (**Serial**, or **Auto** on a page
+    without isolation) it stops before the search with a message that
+    `dc-megablast` runs only with threaded LOSAT.
+  - **Auto** now runs LOSATN and TLOSATX threaded too, and LOSATP of any size,
+    wherever the browser supports threads; the label reads `Auto (threaded)` or
+    `Auto (serial)`. Before, **Auto** threaded only LOSATP above 500,000 FASTA
+    characters.
+  - Run Info names the engine as `LOSAT 0.2.0+dde737f188dc (wasm)`.
+  - Saved searches: a search saved by the command line or by this build is
+    reused. A search saved by an earlier Web app is reused for LOSATP and LOSATN
+    task `megablast`, which both engines give alike, and runs again once at the
+    next **Generate Diagram** for LOSATN `blastn`, `dc-megablast`, and TLOSATX.
+    Every Gallery example holds only LOSATP rows, so none searches again.
+  - `gbdraw/web/wasm/losat/losat-build.json` records the build.
+- **Tobacco chloroplast tutorial and Gallery entry** use `-t builtin:plastid`
+  (Web: **Plastid gene classes** in **Preset scheme**) instead of a downloaded
+  color table. The figure keeps its layout and labels.
 
 ## Added
 
@@ -100,6 +149,46 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   writing, and the error names a longer row length that should fit. SVG is never
   refused. See
   [limits](./REFERENCE/output-formats-and-export.md#png-and-pdf-size-limits).
+- **Fixed identity color scale.** `--identity_scale MIN MAX` (Linear and
+  Circular), `identity_scale` on `LinearComparisonOptions` and
+  `ComparisonRingOptions`, and **Identity scale min (%)** and **Identity scale
+  max (%)** in the Web comparison settings fix the identity range that colors
+  matches or similarity-ring hits, so figures drawn with different thresholds
+  share colors and Legend labels. A match below MIN or above MAX takes the end
+  color, and the Legend's two labels show MIN and MAX. `0 <= MIN < MAX <= 100`; a
+  blank Web maximum is 100%. Without it, matches are colored from the identity
+  threshold to 100% as before. The config keys are
+  `objects.blast_match.identity_scale` (Linear) and
+  `objects.conservation.identity_scale` (Circular).
+- **Italic gene names.** `--italic_gene_labels`
+  (`labels.<mode>.italic_gene_labels` in a config file) draws in italics every
+  feature label whose text comes from the `gene` qualifier; the Web app has an
+  **Italic gene names** checkbox in the labels card. Off by default.
+- **Transparent PNG in the Web app.** A **Transparent background** checkbox next
+  to the DPI choice keeps the downloaded PNG transparent instead of filling it
+  white. Off by default. SVG, and PNG from the command line and Python, are
+  already transparent.
+- **`--auto_orient` for Linear diagrams (command line and Python only).**
+  Reverse-complements a record when its reverse-strand nucleotide hits against
+  the row above weigh more than half of its hits. Also `auto_orient` on
+  `LinearComparisonOptions` and `LinearDiagramOptions`. It reads `-b/--blast`
+  files, `--comparisons_table` rows, and `--losat losatn` / `tlosatx` results;
+  protein comparisons are not read. The first row keeps its orientation, and the
+  log names each record it reverses. A Session cannot store the option yet:
+  `--save_session` and `--session_output` stop with a message when it is set.
+- **`--anchor_feature KEY=VALUE` for Linear diagrams (command line and Python
+  only).** Moves every record that has the named feature, such as
+  `--anchor_feature gene=COX1`, so that the feature's first drawn base sits under
+  the first such record's. Also `LinearOptions.anchor_feature` and
+  `LinearDiagramOptions.anchor_feature`. The selector is an exact `key=value`
+  match. A record without the feature keeps its place with a `WARNING:`; a
+  selector that matches nothing, or matches features at different starts in one
+  record, stops with a message. It is refused with records that share a row, a
+  `--wrap_length` that cuts a record, and `--similarity_alignment_feature`. A
+  Session cannot store the option yet.
+<!-- PENDING #1539: Input summary lines and the Web notice; UTF-8 byte order mark. -->
+<!-- PENDING PR-6b origin_feature: Circular --origin_feature. -->
+<!-- PENDING residuals OV-2393: lines for the residuals PR. -->
 - **Web UI strings.** The comparison notice for a split figure points to the
   `canvas.linear.wrap_length` row under **Preserved session settings**, and the
   new strings are translated in the ten non-English languages.
@@ -116,8 +205,6 @@ file. See
 [Session and request compatibility](./REFERENCE/session-and-request-compatibility.md).
 
 ## Known issues
-
-<!-- PENDING: add or drop known issues for the LOSAT Wasm swap, OV-2369, OV-2370/OV-2380 and OV-2371 once they merge. -->
 
 - A Similarity group member popup and the Similarity alignment panel still show
   the coordinates of a CDS across the origin as `1..` the record length. The

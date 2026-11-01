@@ -16,7 +16,21 @@ write-up of a release.
 
 - Patch release of 0.14.4. Sessions are saved as Session version 50 (0.14.4 writes 49); a Session
   saved by 0.14.5 opens in 0.14.5 or later only. See the [full release notes](./docs/RELEASE_NOTES_0.14.5.md).
-<!-- PENDING: LOSAT Wasm swap, OV-2369, OV-2370/OV-2380, OV-2371 (#1532) entries -->
+- Added: `--identity_scale MIN MAX`, `identity_scale` on `LinearComparisonOptions` and
+  `ComparisonRingOptions`, and the Web **Identity scale min (%)** / **Identity scale max (%)**
+  fix the identity color range of comparisons.
+- Added: `--italic_gene_labels` and the Web **Italic gene names** checkbox draw labels whose
+  text comes from the `gene` qualifier in italics. The Web app also has a **Transparent
+  background** checkbox for the PNG download.
+- Added: `gbdraw linear --auto_orient` reverse-complements records from their nucleotide hits
+  against the row above, and `--anchor_feature KEY=VALUE` aligns records at a named feature.
+  Command line and Python only; a Session cannot store either yet.
+- Fixed: the Web app's hover popup no longer opens after a pan for a pointer that has left the
+  drawing.
+- Changed: the tobacco chloroplast tutorial and Gallery entry use `builtin:plastid`.
+<!-- PENDING #1539: input summary lines, UTF-8 byte order mark -->
+<!-- PENDING PR-6b origin_feature: Circular --origin_feature -->
+<!-- PENDING residuals OV-2393 -->
 - Added: `--wrap_length AUTO|LENGTH` and the config key
   `canvas.linear.wrap_length` draw one Linear record over several rows at one
   scale, each row with its own height. The record stays one record, and a figure
