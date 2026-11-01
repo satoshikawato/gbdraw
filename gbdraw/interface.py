@@ -514,6 +514,9 @@ class CircularOptions(_CommonOptions):
 
     ``comparison_rings`` is the canonical sequence-similarity ring field.
     ``conservation`` remains a runtime compatibility constructor and attribute alias.
+    ``origin_feature`` (``key=value``, for example ``"gene=dnaA"``) rotates each
+    record so that the feature it names starts at 12 o'clock; a record without
+    it keeps its start (off by default).
     """
 
     tracks: CircularTrackOptions = field(default_factory=CircularTrackOptions)
@@ -522,6 +525,7 @@ class CircularOptions(_CommonOptions):
     strain: str | None = None
     keep_full_definition_with_title: bool = False
     thresholds: Thresholds = field(default_factory=Thresholds)
+    origin_feature: str | None = None
 
     def __post_init__(self) -> None:
         _validate_common_options(self)
@@ -993,6 +997,7 @@ def _circular_options(
         species=options.species,
         strain=options.strain,
         keep_full_definition_with_plot_title=options.keep_full_definition_with_title,
+        origin_feature=options.origin_feature,
     )
     return _CircularDiagramOptions(**values)
 

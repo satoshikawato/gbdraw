@@ -487,3 +487,30 @@ resolved record; use a [records table](input-formats-and-tsv-schemas.md#display-
 for multiple targets. `--record_topology auto|circular|linear` overrides topology. Unset adds no
 shift; explicit 1 anchors source base 1 even after reverse complementation.
 Crop and explicit start cannot be combined.
+
+### Rotate a record to a feature
+
+`gbdraw circular --origin_feature KEY=VALUE` rotates each record so that one
+feature starts at 12 o'clock. On the tobacco plastome,
+`--origin_feature gene=psbA` draws the same figure as
+`--display_start_coordinate 536`. The selector has the `feature_selector` form
+of the placement and override tables and matches a qualifier value exactly, as
+`gbdraw linear --anchor_feature` does. The feature's first base in drawn order
+becomes the display start, so the whole feature lies clockwise from 12 o'clock.
+A minus-strand gene therefore starts at its low source coordinate (psbA,
+`complement(536..1597)`, starts at 536) and reads counterclockwise. To read it
+clockwise from 12 o'clock, also reverse-complement the record (the records-table
+`reverse_complement` column); its high coordinate (1597) then becomes the start.
+A feature across the origin, such as `join(16024..16569,1..576)`, starts on its
+piece before the origin, at 16024. The Web app's Rotate to feature, "Start of
+the record", gives the same start.
+
+The feature needs exact coordinates on one strand: an unstranded or
+mixed-strand feature, a fuzzy end, `order()`, or overlapping parts stop the run.
+A gene and its CDS that start at the same base count as one match; matches at
+different starts stop the run with the candidates listed, and so does a
+selector that no record matches. A record without the feature keeps its start,
+with a warning naming it. `--origin_feature` cannot be combined with
+`--display_start_coordinate` or a records-table `display_start`, with a crop (a
+records-table `region`), or with a record drawn linear. A saved Session stores
+the resulting display start, not the option.

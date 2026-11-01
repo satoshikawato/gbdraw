@@ -1117,7 +1117,17 @@ class _ModeDiagramOptions:
 
 @dataclass(frozen=True)
 class CircularDiagramOptions(_ModeDiagramOptions):
-    """Options accepted by a Circular typed request."""
+    """Options accepted by a Circular typed request.
+
+    ``origin_feature`` rotates each record so that the feature it selects
+    (``key=value``, exact; a string is parsed with
+    :func:`gbdraw.annotations.models.parse_feature_selector`) starts at 12
+    o'clock: its first base in drawn order becomes the record's
+    ``RecordDisplayOptions.start_coordinate``
+    (:func:`gbdraw.api.record_planning.project_origin_feature_starts`). A
+    record without the feature keeps its start. The planned request carries
+    the starts, not the option.
+    """
 
     tracks: CircularRequestTrackOptions | None = None
     output: CircularOutputOptions | None = None
@@ -1136,9 +1146,17 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     losat_search: LosatSearchOptions | None = None
     conservation_losat_gencodes: Sequence[int] | None = None
     conservation_search_results: Sequence[ConservationSearchResult] | None = None
+    origin_feature: FeatureSelector | str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        if self.origin_feature is not None:
+            if not isinstance(self.origin_feature, (FeatureSelector, str)):
+                raise ValidationError(
+                    "origin_feature must be a FeatureSelector, a key=value string, or None.",
+                    diagnostic={"code": "INPUT_INVALID"},
+                )
+            object.__setattr__(self, "origin_feature", parse_feature_selector(self.origin_feature))
         for placement in self.feature_placements:
             placement.target.validate_mode("circular")
         if self.depth_tracks is not None and any(

@@ -194,6 +194,7 @@ from .record_planning import (
     resolve_record_inputs,
     reverse_resolved_records,
     similarity_alignment_evidence_edges,
+    with_origin_feature_starts,
 )
 from .render import preflight_output_paths, save_figure_to
 from .requests import (
@@ -1890,6 +1891,30 @@ def _resolve_ring_losat(
     )
 
 
+_CircularRequestT = TypeVar("_CircularRequestT", CircularDiagramRequest, CircularBatchRequest)
+
+
+def _with_origin_feature(
+    request: _CircularRequestT,
+    collection: ResolvedRecordCollection,
+) -> tuple[_CircularRequestT, ResolvedRecordCollection, bool]:
+    """Resolve ``origin_feature`` into the display start of each record it matches.
+
+    The request then carries the starts in its records, not the option, so a
+    Session stores the start the figure drew with. The flag says whether it
+    rotated.
+    """
+
+    selector = request.options.origin_feature
+    if not isinstance(selector, FeatureSelector):
+        return request, collection, False
+    return (
+        replace(request, options=replace(request.options, origin_feature=None)),
+        with_origin_feature_starts(collection, selector),
+        True,
+    )
+
+
 def plan_circular_request(
     request: CircularDiagramRequest,
 ) -> CircularRequestPlan:
@@ -1914,6 +1939,7 @@ def plan_circular_request(
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
+        unresolved_request, collection, rotated = _with_origin_feature(unresolved_request, collection)
         inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         records = collection.records
         projected_request = replace(
@@ -1928,7 +1954,8 @@ def plan_circular_request(
         resolved_layout = _layout_with_record_placements(projected_request)
         materialized_request = (
             unresolved_request
-            if _is_materialized_exact_one_request(unresolved_request)
+            if not rotated
+            and _is_materialized_exact_one_request(unresolved_request)
             and not unresolved_request.output.resolve_prefix_from_first_record
             and resolved_layout == unresolved_request.layout
             else projected_request
@@ -1975,6 +2002,7 @@ def plan_circular_batch_request(
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
+        unresolved_request, collection, rotated = _with_origin_feature(unresolved_request, collection)
         inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         records = collection.records
         outputs = (
@@ -1988,7 +2016,8 @@ def plan_circular_batch_request(
         )
         materialized_request = (
             unresolved_request
-            if _is_materialized_exact_one_request(unresolved_request)
+            if not rotated
+            and _is_materialized_exact_one_request(unresolved_request)
             and unresolved_request.output_policy is None
             else replace(
                 unresolved_request,
