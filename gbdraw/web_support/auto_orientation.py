@@ -1,16 +1,18 @@
 """Worker helper behind the Web's "Orient records from comparisons" button.
 
 The page sends the request of the last Generate, which holds the comparisons
-in the search frame as the Session keeps them. The button sets every record's
-Reverse complement from the comparisons, so the helper clears the records'
-reverse flags in its input and plans it with ``auto_orient`` as
-``--auto_orient`` does on the command line: the rule
-(:func:`gbdraw.linear_comparison.auto_orient_reversed_records`) decides in its
-one owner, and the helper returns the orientation each record is then drawn
-with, by record key. (On the command line an explicit reverse still wins; the
-rule is unchanged, only its input differs.) The page writes the records whose
-orientation changes into their Reverse complement checkboxes as one History
-step; the next Generate draws them.
+in the search frame as the Session keeps them. The button sets the Reverse
+complement of every record below the top row from the comparisons: the
+helper plans the request with ``auto_orient`` as ``--auto_orient`` does on the
+command line, with the reverse flags of the records below the top row cleared
+in its input, so the rule
+(:func:`gbdraw.linear_comparison.auto_orient_reversed_records`) decides them
+in its one owner against the top row as the user drew it. It returns the
+orientation each record is then drawn with, by record key. (On the command
+line an explicit reverse still wins; the rule is unchanged, only its input
+differs.) The page writes the records whose orientation changes into their
+Reverse complement checkboxes as one History step; the next Generate draws
+them.
 """
 
 from __future__ import annotations
@@ -21,9 +23,10 @@ from dataclasses import replace
 from typing import TypedDict
 
 from gbdraw.api.record_planning import record_is_reverse_complemented
-from gbdraw.api.request_render import plan_linear_request
+from gbdraw.api.request_render import LinearRequestPlan, plan_linear_request
 from gbdraw.api.requests import LinearDiagramRequest, RecordInput
 from gbdraw.exceptions import ValidationError
+from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.session_request_codec import decode_canonical_request
 
 
@@ -40,24 +43,28 @@ class AutoOrientationReply(TypedDict):
     records: list[RecordOrientation]
 
 
-def _without_reverse_flags(request: LinearDiagramRequest) -> LinearDiagramRequest:
-    """The request with no record reversed: its records', regions', and collection regions' flags cleared."""
-
-    def record(item: RecordInput) -> RecordInput:
-        return replace(
-            item,
-            presentation=replace(item.presentation, reverse_complement=False),
-            region=None if item.region is None else replace(item.region, reverse_complement=False),
-        )
+def _forward(item: RecordInput) -> RecordInput:
+    """The record input with its reverse flags (presentation and region) cleared."""
 
     return replace(
-        request,
-        records=tuple(record(item) for item in request.records),
-        record_options=replace(
-            request.record_options,
-            regions=tuple(replace(region, reverse_complement=False) for region in request.record_options.regions),
-        ),
+        item,
+        presentation=replace(item.presentation, reverse_complement=False),
+        region=None if item.region is None else replace(item.region, reverse_complement=False),
     )
+
+
+def _is_reversed(item: RecordInput) -> bool:
+    return item.presentation.reverse_complement or bool(item.region and item.region.reverse_complement)
+
+
+def _below_top_row_inputs(plan: LinearRequestPlan) -> frozenset[int]:
+    """The request record indexes with no drawn record in the top row, by the planner's row owner."""
+
+    rows = resolve_record_row_positions(
+        plan.records, plan.layout.multi_record_positions if plan.layout is not None else None
+    )[1]
+    top = {provenance.input_index for provenance, row in zip(plan.provenance, rows, strict=True) if row == 0}
+    return frozenset(provenance.input_index for provenance in plan.provenance) - top
 
 
 def decide_auto_orientation(
@@ -65,11 +72,14 @@ def decide_auto_orientation(
     resource_paths: Mapping[str, str],
     output_directory: str,
 ) -> AutoOrientationReply:
-    """Decide every record's orientation from the request's nucleotide comparisons.
+    """Decide the orientation of every record below the top row from the request's comparisons.
 
-    The comparisons are in the search frame, which no reverse flag changes, so
-    clearing the flags leaves them as they are; the rule then decides each
-    record, also one the request reverses.
+    The records of the top row keep their orientation, as the rule keeps them.
+    A record below it is asked with its reverse flags cleared, so the rule
+    decides it against the row above as drawn, also when the request reverses
+    it; a record that the comparisons do not decide is drawn forward. The
+    comparisons are in the search frame, which no reverse flag changes, so
+    they are read as given.
     """
 
     request = decode_canonical_request(
@@ -80,8 +90,16 @@ def decide_auto_orientation(
             "Record orientation from comparisons requires a Linear request.",
             diagnostic={"code": "HELPER_PROTOCOL"},
         )
-    unreversed = _without_reverse_flags(request)
-    plan = plan_linear_request(replace(unreversed, options=replace(unreversed.options, auto_orient=True)))
+    oriented = replace(request, options=replace(request.options, auto_orient=True))
+    plan = plan_linear_request(oriented)
+    cleared = {
+        index for index in _below_top_row_inputs(plan) if _is_reversed(request.records[index])
+    }
+    if cleared:
+        # Only a reversed record below the top row changes the rule's input; plan again without its flags.
+        plan = plan_linear_request(replace(oriented, records=tuple(
+            _forward(item) if index in cleared else item for index, item in enumerate(request.records)
+        )))
     return {"records": [
         {"recordKey": provenance.record_key, "reverseComplement": record_is_reverse_complemented(record)}
         for record, provenance in zip(plan.records, plan.provenance, strict=True)

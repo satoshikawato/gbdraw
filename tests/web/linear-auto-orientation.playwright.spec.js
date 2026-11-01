@@ -108,4 +108,14 @@ test('Orient records from comparisons checks the reversed record as one Undo ste
   await button.click();
   await expect(status).toContainText('Set Reverse complement from the comparisons');
   expect(await reverseFlags(page)).toEqual([false, false]);
+
+  // The top row keeps the box the user checked; the record below follows it.
+  // (The File card is folded here, so its checkbox is set as the card writes it.)
+  await page.evaluate(() => { window.__GBDRAW_APP__.linearSeqs[0].region_reverse = true; });
+  await generateAndWaitForResult(page);
+  expect(await drawnReverseFlags(page)).toEqual([true, false]);
+  await button.click();
+  await expect(status).toContainText('Set Reverse complement from the comparisons');
+  expect(await reverseFlags(page)).toEqual([true, true]);
+  await expect(page.getByLabel('Reverse complement for sequence 1', { exact: true })).toBeChecked();
 });

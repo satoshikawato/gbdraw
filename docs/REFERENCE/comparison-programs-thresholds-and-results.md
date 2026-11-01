@@ -218,9 +218,11 @@ rule reversed is saved with its reverse-complement flag set, so a replay of the 
 draws the same figure without `--auto_orient`.
 
 In the Web app, **Orient records from comparisons** in the Linear comparison settings
-runs the same rule on the comparisons of the last Generate with every record's reverse
-flag cleared first, so it sets each record's **Reverse complement** from the comparisons,
-also one that was checked, as one Undo step; the next Generate draws them. See
+runs the same rule on the comparisons of the last Generate with the reverse flags of the
+records below the top row cleared first. The top row keeps its orientation, and each record
+below it gets its **Reverse complement** from the comparisons, also one that was checked; a
+record that the comparisons do not decide is unchecked. The change is one Undo step, and the
+next Generate draws it. See
 [Comparison surfaces](web-app.md#comparison-surfaces).
 
 ## Selected Linear edges
