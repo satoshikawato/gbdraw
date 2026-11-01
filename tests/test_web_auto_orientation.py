@@ -10,6 +10,7 @@ import csv
 import json
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 from Bio import SeqIO
@@ -19,6 +20,7 @@ from gbdraw.api import (
     GenBankInputSource,
     LinearDiagramOptions,
     LinearDiagramRequest,
+    RecordCardinality,
     RecordInput,
     RecordPresentation,
     plan_linear_request,
@@ -49,10 +51,14 @@ def _reverse_hits_table(directory: Path) -> Path:
     return table
 
 
-def _request(table: Path, *, subject_reversed: bool = False) -> LinearDiagramRequest:
+def _request(table: Path, *, query_reversed: bool = False, subject_reversed: bool = False) -> LinearDiagramRequest:
     return LinearDiagramRequest(
         records=(
-            RecordInput(GenBankInputSource(_QUERY), record_key="card-query"),
+            RecordInput(
+                GenBankInputSource(_QUERY),
+                record_key="card-query",
+                presentation=RecordPresentation(reverse_complement=query_reversed),
+            ),
             RecordInput(
                 GenBankInputSource(_SUBJECT),
                 record_key="card-subject",
@@ -98,17 +104,61 @@ def test_the_helper_decides_what_the_cli_planner_draws(tmp_path: Path) -> None:
     assert [record["reverseComplement"] for record in reply["records"]] == _planner_flags(request)
 
 
+def _helper_flags(request: LinearDiagramRequest, directory: Path) -> list[bool]:
+    payload, paths = _committed(request, directory)
+    return [record["reverseComplement"] for record in decide_auto_orientation(
+        payload, paths, str(directory / "out"))["records"]]
+
+
 @pytest.mark.linear
-def test_mostly_forward_hits_and_an_explicit_reverse_keep_the_orientation(tmp_path: Path) -> None:
-    forward = _request(_TABLE)
-    payload, paths = _committed(forward, tmp_path / "forward")
-    assert [record["reverseComplement"] for record in decide_auto_orientation(
-        payload, paths, str(tmp_path / "out"))["records"]] == [False, False] == _planner_flags(forward)
-    # An explicit reverse wins: the record stays reversed, though its hits are forward.
-    explicit = _request(_TABLE, subject_reversed=True)
-    payload, paths = _committed(explicit, tmp_path / "explicit")
-    assert [record["reverseComplement"] for record in decide_auto_orientation(
-        payload, paths, str(tmp_path / "out"))["records"]] == [False, True] == _planner_flags(explicit)
+def test_the_helper_decides_every_record_below_the_top_row(tmp_path: Path) -> None:
+    mirrored = _reverse_hits_table(tmp_path)
+    assert _helper_flags(_request(_TABLE), tmp_path / "forward") == [False, False] == _planner_flags(_request(_TABLE))
+    # A checked Reverse complement below the top row that the comparisons contradict
+    # is decided again: the answer is the planner's on the request without that flag.
+    assert _helper_flags(_request(_TABLE, subject_reversed=True), tmp_path / "explicit") == [False, False]
+    # On the command line an explicit reverse still wins.
+    assert _planner_flags(_request(_TABLE, subject_reversed=True)) == [False, True]
+    # A record reversed by the rule and drawn so stays reversed while its hits are mostly reverse.
+    assert _helper_flags(_request(mirrored, subject_reversed=True), tmp_path / "drawn-reversed") == [
+        False, True] == _planner_flags(_request(mirrored))
+
+
+@pytest.mark.linear
+def test_the_top_row_keeps_its_orientation_and_the_rows_below_follow_it(tmp_path: Path) -> None:
+    mirrored = _reverse_hits_table(tmp_path)
+    # A reversed top row: the record below is decided against it as drawn, as the CLI decides.
+    assert _helper_flags(_request(_TABLE, query_reversed=True), tmp_path / "top") == [True, True] == _planner_flags(
+        _request(_TABLE, query_reversed=True))
+    # Already as the comparisons decide: nothing changes, the top row included.
+    assert _helper_flags(_request(_TABLE, query_reversed=True, subject_reversed=True), tmp_path / "both") == [
+        True, True]
+    # Mirrored hits against a reversed top row: the record below is drawn forward.
+    assert _helper_flags(_request(mirrored, query_reversed=True, subject_reversed=True), tmp_path / "mirrored") == [
+        True, False] == _planner_flags(_request(mirrored, query_reversed=True))
+
+
+@pytest.mark.linear
+def test_a_card_that_draws_both_records_is_decided_per_record(tmp_path: Path) -> None:
+    """A File card that draws all the records of its file, reversed: its record below the top row is decided."""
+
+    both = tmp_path / "both.gb"
+    SeqIO.write([SeqIO.read(_QUERY, "genbank"), SeqIO.read(_SUBJECT, "genbank")], both, "genbank")
+    payload, paths = _committed(LinearDiagramRequest(
+        records=(RecordInput(
+            GenBankInputSource(both), record_key="card", cardinality=RecordCardinality.ALL,
+            presentation=RecordPresentation(reverse_complement=True),
+        ),),
+        options=LinearDiagramOptions(blast_files=(str(_reverse_hits_table(tmp_path)),)),
+    ), tmp_path / "card")
+    # The Web sends such a card as one input that draws all its records.
+    card = dict(cast("dict[str, object]", cast("list[object]", payload["records"])[0]))
+    card.update(cardinality="all", recordKey="card", selector=None)
+    reply = decide_auto_orientation({**payload, "records": [card]}, paths, str(tmp_path / "out"))
+    assert reply == {"records": [
+        {"recordKey": "card:1", "reverseComplement": True},
+        {"recordKey": "card:2", "reverseComplement": False},
+    ]}
 
 
 @pytest.mark.linear

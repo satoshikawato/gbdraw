@@ -23,6 +23,7 @@ import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { draftFeatureOverlapTolerance } from '../services/session-active-config-contract.js';
 import { msg, t, tm } from '../utils/i18n.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
@@ -102,7 +103,8 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  * @property {(sequence: Record<string, any>) => Record<string, any>[]} linearRecordsFor
  * @property {(sequence: Record<string, any> | undefined) => string} linearRecordStatusFor
  * @property {(sequence: Record<string, any> | undefined) => any} linearRecordErrorFor
- * @property {(label: string, apply: () => any) => any} runUndoable History's one undoable step
+ * @property {(label: string, apply: () => unknown) => Promise<unknown>} runUndoable History's one undoable step:
+ *   the result of `apply`, or History's busy value (`{ status: 'busy', reason }`) when it refuses the step without running it
  * @property {() => Record<string, any> | null} getCommittedRequest
  * @property {() => Record<string, any> | null} getCommittedSession
  */
@@ -190,7 +192,7 @@ export const createRecordDisplayControls = ({
   /** @param {RecordDisplayRow} row */
   const surfaceFor = (row) => {
     const surface = recordDisplaySurface(row, draftFor(row), row);
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     return busy ? { ...surface, startEnabled: false, disabledReason: busy.reason } : surface;
   };
   /** @param {DrawingState} drawing @param {RecordDisplayRow} row @param {Partial<RecordDisplayDraft>} patch @param {string} label */
@@ -207,7 +209,7 @@ export const createRecordDisplayControls = ({
   /** @param {RecordDisplayRow} row @param {ResolvedRecordTransform} transform */
   const writeResolvedTransform = (row, { startCoordinate, reverseComplement, anchorIntent }) => {
     const drawing = state.drawingOfMode(row.scope);
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     if (typeof reverseComplement !== 'boolean') {
       throw new Error('Resolved record orientation must be boolean.');
@@ -459,13 +461,15 @@ export const createRecordDisplayControls = ({
   // Orientations decided for the committed request's records (by record key),
   // written as one History step the way the record popup's Reverse complement
   // writes one: the File card's checkbox, or the row of a card that draws
-  // several records. They were decided against the orientations of the last
-  // Generate, so a row whose orientation changed since then is stale.
-  /** @param {readonly RecordOrientationDecision[]} decisions @param {string} label @returns {RecordOrientationWrite} */
-  const writeDecidedOrientations = (decisions, label) => {
+  // several records. They were decided from the comparisons the last Generate
+  // drew, so a row whose orientation changed since then is stale.
+  /** @param {readonly RecordOrientationDecision[]} decisions @param {string} label @returns {Promise<RecordOrientationWrite>} */
+  const writeDecidedOrientations = async (decisions, label) => {
     // The button acts on the shown drawing, whose last Generate it read.
     const drawing = state.activeDrawing();
-    if (drawing.mode !== 'linear') return { status: 'stale' };
+    if (drawing.mode !== 'linear') return { status: 'notLinear' };
+    const busy = state.sessionOperationAvailability();
+    if (busy) return { status: 'busy', reason: busy.reason };
     refreshCommittedRows();
     const rowsByKey = new Map(committedRows.filter((row) => row.scope === 'linear').map((row) => [row.recordKey, row]));
     const drawnChanged = (/** @type {CommittedDisplayRow} */ row) => {
@@ -479,14 +483,25 @@ export const createRecordDisplayControls = ({
       return reverseComplement === row.committedReverseComplement ? [] : [{ row, reverseComplement }];
     });
     if (!changes.length) return { status: 'unchanged' };
-    runUndoable(label, () => {
+    const WRITTEN = Symbol('written');
+    // History refuses the step, without running it, while a Session operation blocks edits.
+    const outcome = await runUndoable(label, () => {
       settleDrafts(drawing);
       changes.forEach(({ row, reverseComplement }) => {
         const draft = draftOf(drawing, row);
         draft.anchorIntent = null;
         writeReverseComplement(row, draft, reverseComplement);
       });
+      return WRITTEN;
     });
+    if (outcome !== WRITTEN) {
+      // History refuses a step only with its busy value, whose reason it always words.
+      const { reason } = /** @type {{ reason?: unknown }} */ (outcome && typeof outcome === 'object' ? outcome : {});
+      if (typeof reason !== 'string' || !reason) {
+        throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'decideAutoOrientation' });
+      }
+      return { status: 'busy', reason };
+    }
     return { status: 'written', recordIds: changes.map(({ row }) => String(row.recordId || row.recordKey)) };
   };
   /** @param {RecordDraftTarget} row @returns {TargetDraftCheckpoint} */
@@ -547,7 +562,7 @@ export const createRecordDisplayControls = ({
     },
     setStart: (/** @type {RecordDisplayRow} */ row, /** @type {unknown} */ value) => {
       const drawing = state.activeDrawing();
-      return state.sessionOperationAvailability?.() || edit(drawing, row, {
+      return state.sessionOperationAvailability() || edit(drawing, row, {
         startCoordinate: parseRecordDisplayStart(value), anchorIntent: null
       }, msg('Change record display start'));
     },
@@ -557,7 +572,7 @@ export const createRecordDisplayControls = ({
     },
     setReverseComplement: (/** @type {RecordDisplayRow} */ row, /** @type {unknown} */ value) => {
       const drawing = state.activeDrawing();
-      return state.sessionOperationAvailability?.() || edit(drawing, row, {
+      return state.sessionOperationAvailability() || edit(drawing, row, {
         reverseComplementOverride: requireReverseComplementOverride(value), anchorIntent: null
       }, msg('Change record orientation'));
     },

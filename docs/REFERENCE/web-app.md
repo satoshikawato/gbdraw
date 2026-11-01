@@ -887,14 +887,20 @@ identity**, **Orientation**, or **Orientation + identity**). Scientific
 meanings and limits belong to the comparison reference below.
 
 **Orient records from comparisons**, under **Record orientation** below the
-Linear **Result filters**, runs the rule of `--auto_orient` on the nucleotide
-comparisons of the last Generate (uploaded BLAST tables, LOSATN, or TLOSATX)
-and checks **Reverse complement** of each record whose hits against the row
-above are mostly reverse, as one Undo step. The next Generate draws them; Undo
-restores the previous checkboxes. The button is off until a Generate has drawn
-a nucleotide comparison, and the status line says when the comparisons keep
-every record as it is, or when records or their orientation changed since that
-Generate. See [Automatic Linear
+Linear **Result filters**, sets the **Reverse complement** of each record below
+the top row from the nucleotide comparisons of the last Generate (uploaded BLAST
+tables, LOSATN, or TLOSATX) with the rule of `--auto_orient`, as one Undo step:
+a record whose hits against the row above are mostly reverse is checked, any
+other record below the top row is unchecked, also one whose checkbox you set.
+The records of the top row keep their orientation, so reversing a top-row
+record flips the records below it on the next press. Unlike `--auto_orient` on
+the command line, a checked record below the top row is decided again, so
+pressing the button after the comparisons change can undo an earlier
+reversal. The next Generate draws
+the new orientation; Undo restores the previous checkboxes. The button is off
+until a Generate has drawn a nucleotide comparison, and the status line says
+when the comparisons give every record its current orientation, or when
+records or their orientation changed since that Generate. See [Automatic Linear
 orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation).
 
 Circular **Pairwise Comparisons** selects **Run LOSAT** or **Upload BLAST TSV**.
