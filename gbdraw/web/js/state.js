@@ -371,9 +371,9 @@ const selectedSpecificPreset = ref(defaultEditorDraftState.selectedSpecificPrese
 const specificRulePresetLoading = ref(defaultEditorDraftState.specificRulePresetLoading);
 const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 // A choice of the PNG download, as the DPI beside it, kept for the page only:
-// on, the PNG keeps the drawing's transparent background (as the CLI's PNG
-// does); off, it is painted white. Neither a Session nor History holds it.
-const downloadTransparentBackground = ref(false);
+// off, the PNG keeps the drawing's transparent background (as the CLI's PNG
+// does); on, it is painted white. Neither a Session nor History holds it.
+const downloadWhiteBackground = ref(false);
 
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
@@ -1258,7 +1258,7 @@ export const state = Object.freeze({
   selectedSpecificPreset,
   specificRulePresetLoading,
   downloadDpi,
-  downloadTransparentBackground,
+  downloadWhiteBackground,
   extractedFeatures,
   biologicalFeatures,
   featureCatalog,

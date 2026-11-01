@@ -1,8 +1,9 @@
 // Two presentation choices, both off by default. Italic gene names
 // (`labels.<mode>.italic_gene_labels`, `--italic_gene_labels`) draws the labels
 // the label priority names from the gene qualifier in italics; a live label
-// text edit shows what the next Generate draws (R3). Transparent background
-// keeps the PNG download transparent, as the CLI's PNG is.
+// text edit shows what the next Generate draws (R3). The PNG download keeps
+// the transparent background, as the CLI's PNG does; White background paints
+// it white.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { inflateSync } = require('node:zlib');
@@ -77,7 +78,7 @@ const cornerAlpha = (png) => {
   return inflateSync(Buffer.concat(data))[4];
 };
 
-test('Transparent background keeps the PNG download transparent; off paints it white', async ({ page }) => {
+test('The PNG download is transparent by default; White background paints it white', async ({ page }) => {
   test.setTimeout(300000);
   await openWithGenBank(page, HMMT, () => { window.__GBDRAW_APP__.form.labels_mode = 'none'; });
   await generate(page);
@@ -86,9 +87,9 @@ test('Transparent background keeps the PNG download transparent; off paints it w
     await page.getByRole('button', { name: 'PNG', exact: true }).click();
     return readFileSync(await (await pending).path());
   };
-  const transparent = page.getByRole('checkbox', { name: 'Transparent background' });
-  await expect(transparent).not.toBeChecked();
-  expect(cornerAlpha(await downloadPng())).toBe(255);
-  await transparent.check();
+  const white = page.getByRole('checkbox', { name: 'White background' });
+  await expect(white).not.toBeChecked();
   expect(cornerAlpha(await downloadPng())).toBe(0);
+  await white.check();
+  expect(cornerAlpha(await downloadPng())).toBe(255);
 });
