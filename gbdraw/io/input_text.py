@@ -12,13 +12,14 @@ from __future__ import annotations
 import io
 import re
 from collections.abc import Iterator
-from typing import Literal
+from typing import Literal, TextIO
 
 from Bio.SeqFeature import SeqFeature
 
 FlatFileFormat = Literal["genbank", "embl"]
 FLAT_FILE_FORMAT_NAMES: dict[FlatFileFormat, str] = {"genbank": "GenBank", "embl": "EMBL"}
 
+_BYTE_ORDER_MARK = "\ufeff"
 # A GenBank record starts at a LOCUS line, an EMBL record at an ID line.
 _EMBL_RECORD_START = "ID   "
 # Geneious writes the sequence name, spaces included, as the LOCUS name.
@@ -149,6 +150,22 @@ def _normalized_gff3_lines(lines: Iterator[str]) -> Iterator[str]:
         yield line
 
 
+def text_lines(handle: TextIO) -> Iterator[str]:
+    """The lines of an open text file, without a UTF-8 byte order mark at its start (OV-2354).
+
+    A file opened as UTF-8 keeps the mark as U+FEFF. Biopython reads it as text
+    before the first record and skips that record, its FASTA reader skips the
+    first entry, and BCBio-GFF reads it into the first line. Every reader of an
+    input file reads its lines here first.
+    """
+
+    lines = iter(handle.readline, "")
+    first = next(lines, "")
+    if first:
+        yield first.removeprefix(_BYTE_ORDER_MARK)
+        yield from lines
+
+
 class LineStream:
     """A read-only text handle over a line iterator, as Biopython and BCBio-GFF read one."""
 
@@ -157,6 +174,9 @@ class LineStream:
 
     def __iter__(self) -> Iterator[str]:
         return self._lines
+
+    def __next__(self) -> str:
+        return next(self._lines)
 
     def readline(self) -> str:
         return next(self._lines, "")
@@ -190,4 +210,5 @@ __all__ = [
     "flat_file_format",
     "flat_file_stream",
     "gff3_stream",
+    "text_lines",
 ]

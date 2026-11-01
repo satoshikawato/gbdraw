@@ -57,3 +57,9 @@ The test checks that every file in this folder appears in the table.
 | `pgv54_no_strand.gff3` | pyGenomeViz#54 | strand `.` and `?` |
 | `clinker67_single_line_fasta.gff3` | clinker#67 | the FASTA sequence on one line, no trailing newline |
 | `gff3_fasta_missing.gff3` | many | a GFF3 whose `.fasta` partner does not exist; the CLI must say so |
+
+## Comparison tables
+
+| File | Origin | Exercises |
+|---|---|---|
+| `blast_rows_below_identity.tsv` | many | outfmt 6 rows of `PROKKA01.1` against `RAST0001.1`, all below 70% identity (best 65.2%); the run must say why no match is drawn |

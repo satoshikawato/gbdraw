@@ -6081,6 +6081,19 @@
                     <p class="font-semibold">{{ t('Comparison table rows were placed by position.') }}</p>
                     <p v-for="(warning, index) in comparisonWarnings" :key="index">{{ warning.message }}</p>
                 </div>
+                <!-- Python's input summary of the shown Result: a record or a comparison table it draws nothing of. -->
+                <div v-if="shownInputSummary && shownInputSummary.warnings.length && !shownInputSummaryStale && !processing"
+                     role="status" aria-live="polite" aria-atomic="true" data-testid="input-summary-notice"
+                     class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
+                    <p class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
+                    <p v-for="(warning, index) in shownInputSummary.warnings" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
+                </div>
+                <!-- A live Feature visibility edit no render drew: the summary's counts are the last render's. -->
+                <div v-if="shownInputSummaryStale && shownInputSummary.warnings.length && !processing"
+                     role="status" aria-live="polite" aria-atomic="true" data-testid="input-summary-stale"
+                     class="border-b border-slate-200 bg-slate-50 px-5 py-2 text-xs text-slate-700 shrink-0 break-words">
+                    <p>{{ t('The input summary counts the last render. Feature visibility changed since; Generate to count it again.') }}</p>
+                </div>
                 <!-- Crossing label leaders over the drawn figure (WARN-NOTICE): the fix is a choice, not a modal. -->
                 <div v-if="labelFitNotice && !processing"
                      role="status" aria-live="polite" aria-atomic="true" data-testid="label-fit-notice"
@@ -7721,6 +7734,14 @@
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ t('Search runtime') }}</div>
                             <ul class="space-y-0.5 text-xs font-mono text-slate-700">
                                 <li v-for="(runtime, idx) in lastRunInfo.losatRuntimes" :key="`run-info-runtime-${idx}`">{{ errorText(runtime.textParts) }}</li>
+                            </ul>
+                        </div>
+
+                        <div v-if="shownInputSummary && shownInputSummary.lines.length" class="space-y-1" data-run-info-input-summary>
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ t('Input summary') }}</div>
+                            <p v-if="shownInputSummaryStale" class="text-xs text-slate-600" data-run-info-input-summary-stale>{{ t('The input summary counts the last render. Feature visibility changed since; Generate to count it again.') }}</p>
+                            <ul class="space-y-0.5 text-xs font-mono text-slate-700 break-words">
+                                <li v-for="(line, idx) in shownInputSummary.lines" :key="`run-info-input-${idx}`">{{ line }}</li>
                             </ul>
                         </div>
 

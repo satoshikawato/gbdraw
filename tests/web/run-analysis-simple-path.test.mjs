@@ -1860,8 +1860,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
 
     // OV-1599: a reference that starts with a UTF-8 byte order mark. The browser reader declines it, and the
-    // subject database of the rings is the records the Python loader reads (Biopython skips the first record
-    // of such a file), not the records the browser's text decoder would read.
+    // subject database of the rings is the records the Python loader reads: every record (OV-2354).
     const bomReference = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOMA', 'BOMB'].map((id, index) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', `        1 ${['acgtacgt', 'ccccgggg'][index]}`, '//'
     ].join('\n')).join('\n') + '\n'], 'bom-reference.gb');
@@ -1869,8 +1868,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const helpersBeforeBomReference = workerMessages.filter(({ type }) => type === 'helper').length;
     // The record list of the new reference, then the subject database.
     workerHelperResponses.push(
-      { ok: true, result: { records: [{ selector: '#1', record_id: 'BOMB', record_length: 8 }] } },
-      { ok: true, result: { records: [{ id: 'BOMB', aliases: ['BOMB'], sequence: 'CCCCGGGG' }] } },
+      { ok: true, result: { records: [
+        { selector: '#1', record_id: 'BOMA', record_length: 8 }, { selector: '#2', record_id: 'BOMB', record_length: 8 }
+      ] } },
+      { ok: true, result: { records: [
+        { id: 'BOMA', aliases: ['BOMA'], sequence: 'ACGTACGT' }, { id: 'BOMB', aliases: ['BOMB'], sequence: 'CCCCGGGG' }
+      ] } },
       ringTablesUnchanged
     );
     const bomReferenceResult = result('bom-reference.svg', 'bom-reference');
@@ -1883,8 +1886,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
         ['convertRingTablesToSearchFrame', undefined, undefined]]
     );
     assert.equal(workerHelperResponses.length, 0);
-    assert.ok(capturedSequences.includes('>BOMB\nCCCCGGGG\n'), JSON.stringify(capturedSequences));
-    assert.ok(!capturedSequences.some((fasta) => fasta.includes('BOMA')), JSON.stringify(capturedSequences));
+    assert.ok(capturedSequences.some((fasta) => fasta.includes('>BOMA\nACGTACGT\n') && fasta.includes('>BOMB\nCCCCGGGG\n')),
+      JSON.stringify(capturedSequences));
     // The new subject searched once; the Linear section below counts its own searches.
     assert.equal(losatCalls, 1);
     losatCalls = 0;
@@ -2601,9 +2604,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(recordBytesSent, insertedFile.size);
     state.linearSeqs.splice(2);
 
-    // A file that starts with a UTF-8 byte order mark: Python reads the mark as content (Biopython then
-    // skips the first record), so the record list leaves the file to the Python reader, and the LOSAT FASTA
-    // does too. The browser's text decoder drops the mark and would search a record the drawing does not read.
+    // A file that starts with a UTF-8 byte order mark: the record list leaves the file to the Python reader,
+    // and the LOSAT FASTA does too.
     const bomFile = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOM1', 'BOM2'].map((id) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
     ].join('\n')).join('\n') + '\n'], 'bom.gb');

@@ -649,9 +649,9 @@ const startsWithUtf8ByteOrderMark = (bytes) => (
 
 // The text the browser readers (the record lists here, the LOSAT FASTA in
 // run-analysis.js) read from a file's bytes, or null to decline to the Python
-// reader. Biopython and BCBio read a leading UTF-8 byte order mark as content
-// (Biopython then skips the first record) while the browser's text decoder
-// drops it, so bytes that start with one decline.
+// reader. Bytes that start with a UTF-8 byte order mark decline. The Python
+// readers now drop the mark as the browser's text decoder does (OV-2354), so
+// the decline only costs a Worker read.
 /** @param {Uint8Array} bytes @returns {string | null} */
 export const browserReaderText = (bytes) => (
   startsWithUtf8ByteOrderMark(bytes) ? null : bytesToText(bytes)
@@ -845,7 +845,7 @@ const allSequenceRecordsFromReply = (payload) => {
  * Every record of a sequence file, in file order, as the CLI loader reads it. The browser records
  * (`readParsedSequenceRecords`) serve when the browser reader and the record-list rules (`parseSequenceRecordText`)
  * both take the file; otherwise the Worker reads it (OV-1599): a file that starts with a UTF-8 byte order mark,
- * whose first record Python skips, or a FASTA entry without an ID, which Python names '' and the browser record_N.
+ * or a FASTA entry without an ID, which Python names '' and the browser record_N.
  * Frozen, read once per File and format. The Circular conservation reference and the restored Linear and reference
  * match sequences read it.
  * @param {FileLike} file
