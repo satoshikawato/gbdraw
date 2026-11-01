@@ -22,7 +22,8 @@ write-up of a release.
   subset.
 - Fixed: Web UI: wrong meanings, broken grammar, and inconsistent terms in the Japanese,
   Simplified and Traditional Chinese, Korean, Spanish, French, Portuguese, Thai, Indonesian,
-  and Vietnamese translations. All translations are still LLM drafts.
+  and Vietnamese translations; the Align button of the similarity group drawer stayed English in every
+  language. All translations are still LLM drafts.
 - Fixed: in the Web UI record popup, the Alignment line of a record that was
   not moved shows the reason as its label reads, for example "Not moved
   (Skipped by user)"; it was lower-cased, which damaged German nouns and the
