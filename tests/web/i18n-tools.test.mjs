@@ -128,7 +128,7 @@ test('status counts missing and stale keys; --require-complete fails on either',
   const gate = await stale.run('status', '--locale', 'fr', '--require-complete');
   assert.equal(gate.code, 1);
   assert.ok(gate.lines.includes('  stale "Old text"'));
-  assert.equal((await run('status', '--locale', 'de')).code, 2);
+  assert.equal((await run('status', '--locale', 'xx')).code, 2);
 });
 
 test('export lists the missing keys with what a drafter needs; --all lists every key', async (t) => {

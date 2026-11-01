@@ -2782,6 +2782,7 @@ export default Object.freeze({
   "settings": "paramètres",
   "settings reset.": "paramètres réinitialisés.",
   "shifted by": "décalé de",
+  "similarity alignment\u0004Alignment": "Alignement",
   "size scaling\u0004Linear": "Proportionnel",
   "size-specific setting \"{setting}\" cannot be expressed by the current CLI.": "le paramètre « {setting} », propre à chaque taille, ne peut pas être exprimé dans le CLI actuel.",
   "skipped": "ignoré",

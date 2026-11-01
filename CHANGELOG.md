@@ -16,6 +16,14 @@ write-up of a release.
 
 - Patch release of 0.14.4. Sessions are saved as Session version 50 (0.14.4 writes 49); a Session
   saved by 0.14.5 opens in 0.14.5 or later only. See the [full release notes](./docs/RELEASE_NOTES_0.14.5.md).
+- Added: Web UI: German, Italian, Polish, Russian, Turkish and Ukrainian in
+  the Language menu. Polish and Turkish letters use the bundled Inter Latin
+  Extended subset, Russian and Ukrainian letters the bundled Inter Cyrillic
+  subset.
+- Fixed: in the Web UI record popup, the Alignment line of a record that was
+  not moved shows the reason as its label reads, for example "Not moved
+  (Skipped by user)"; it was lower-cased, which damaged German nouns and the
+  Turkish dotted I.
 - Added: `--identity_scale MIN MAX`, `identity_scale` on `LinearComparisonOptions` and
   `ComparisonRingOptions`, and the Web **Identity scale min (%)** / **Identity scale max (%)**
   fix the identity color range of comparisons.
