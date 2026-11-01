@@ -10,6 +10,7 @@ import csv
 import json
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 from Bio import SeqIO
@@ -19,6 +20,7 @@ from gbdraw.api import (
     GenBankInputSource,
     LinearDiagramOptions,
     LinearDiagramRequest,
+    RecordCardinality,
     RecordInput,
     RecordPresentation,
     plan_linear_request,
@@ -134,6 +136,29 @@ def test_the_top_row_keeps_its_orientation_and_the_rows_below_follow_it(tmp_path
     # Mirrored hits against a reversed top row: the record below is drawn forward.
     assert _helper_flags(_request(mirrored, query_reversed=True, subject_reversed=True), tmp_path / "mirrored") == [
         True, False] == _planner_flags(_request(mirrored, query_reversed=True))
+
+
+@pytest.mark.linear
+def test_a_card_that_draws_both_records_is_decided_per_record(tmp_path: Path) -> None:
+    """A File card that draws all the records of its file, reversed: its record below the top row is decided."""
+
+    both = tmp_path / "both.gb"
+    SeqIO.write([SeqIO.read(_QUERY, "genbank"), SeqIO.read(_SUBJECT, "genbank")], both, "genbank")
+    payload, paths = _committed(LinearDiagramRequest(
+        records=(RecordInput(
+            GenBankInputSource(both), record_key="card", cardinality=RecordCardinality.ALL,
+            presentation=RecordPresentation(reverse_complement=True),
+        ),),
+        options=LinearDiagramOptions(blast_files=(str(_reverse_hits_table(tmp_path)),)),
+    ), tmp_path / "card")
+    # The Web sends such a card as one input that draws all its records.
+    card = dict(cast("dict[str, object]", cast("list[object]", payload["records"])[0]))
+    card.update(cardinality="all", recordKey="card", selector=None)
+    reply = decide_auto_orientation({**payload, "records": [card]}, paths, str(tmp_path / "out"))
+    assert reply == {"records": [
+        {"recordKey": "card:1", "reverseComplement": True},
+        {"recordKey": "card:2", "reverseComplement": False},
+    ]}
 
 
 @pytest.mark.linear

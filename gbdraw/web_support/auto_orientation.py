@@ -22,10 +22,11 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import TypedDict
 
-from gbdraw.api.record_planning import record_is_reverse_complemented
+from gbdraw.api.record_planning import ResolvedRecordProvenance, record_is_reverse_complemented
 from gbdraw.api.request_render import LinearRequestPlan, plan_linear_request
-from gbdraw.api.requests import LinearDiagramRequest, RecordInput
+from gbdraw.api.requests import LinearDiagramRequest, RecordCardinality, RecordInput
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.record_select import RecordSelector
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.session_request_codec import decode_canonical_request
 
@@ -57,14 +58,41 @@ def _is_reversed(item: RecordInput) -> bool:
     return item.presentation.reverse_complement or bool(item.region and item.region.reverse_complement)
 
 
-def _below_top_row_inputs(plan: LinearRequestPlan) -> frozenset[int]:
-    """The request record indexes with no drawn record in the top row, by the planner's row owner."""
+def _record_input_of(item: RecordInput, provenance: ResolvedRecordProvenance) -> RecordInput:
+    """The input that draws only this record: an input that draws all its file's records, narrowed to this one."""
+
+    if item.cardinality is not RecordCardinality.ALL:
+        return item
+    index = provenance.source_record_index
+    return replace(
+        item,
+        selector=RecordSelector(raw=f"#{index + 1}", record_id=None, record_index=index),
+        cardinality=RecordCardinality.EXACTLY_ONE,
+        record_key=provenance.record_key,
+    )
+
+
+def _with_rows_below_top_unreversed(request: LinearDiagramRequest, plan: LinearRequestPlan) -> LinearDiagramRequest | None:
+    """One input per drawn record, the reverse flags cleared below the top row; ``None`` when nothing is cleared.
+
+    The rows are the planner's (``resolve_record_row_positions`` on the plan's
+    records and layout). An input that draws several records is narrowed to
+    one input per record, so a record below the top row is cleared also when
+    another record of its file is in the top row.
+    """
 
     rows = resolve_record_row_positions(
         plan.records, plan.layout.multi_record_positions if plan.layout is not None else None
     )[1]
-    top = {provenance.input_index for provenance, row in zip(plan.provenance, rows, strict=True) if row == 0}
-    return frozenset(provenance.input_index for provenance in plan.provenance) - top
+    below = [row != 0 and _is_reversed(request.records[provenance.input_index])
+             for provenance, row in zip(plan.provenance, rows, strict=True)]
+    if not any(below):
+        return None
+    # Every other input draws exactly one record, so the drawn records name the inputs in order.
+    narrowed = (_record_input_of(request.records[provenance.input_index], provenance) for provenance in plan.provenance)
+    return replace(request, records=tuple(
+        _forward(item) if clear else item for item, clear in zip(narrowed, below, strict=True)
+    ))
 
 
 def decide_auto_orientation(
@@ -92,14 +120,10 @@ def decide_auto_orientation(
         )
     oriented = replace(request, options=replace(request.options, auto_orient=True))
     plan = plan_linear_request(oriented)
-    cleared = {
-        index for index in _below_top_row_inputs(plan) if _is_reversed(request.records[index])
-    }
-    if cleared:
+    unreversed = _with_rows_below_top_unreversed(oriented, plan)
+    if unreversed is not None:
         # Only a reversed record below the top row changes the rule's input; plan again without its flags.
-        plan = plan_linear_request(replace(oriented, records=tuple(
-            _forward(item) if index in cleared else item for index, item in enumerate(request.records)
-        )))
+        plan = plan_linear_request(unreversed)
     return {"records": [
         {"recordKey": provenance.record_key, "reverseComplement": record_is_reverse_complemented(record)}
         for record, provenance in zip(plan.records, plan.provenance, strict=True)
