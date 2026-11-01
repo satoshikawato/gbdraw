@@ -80,6 +80,14 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   and a popup could open and stay for a pointer that had already left the
   drawing (OV-2281). A pointer that stays over a match or feature still shows
   its hover.
+- **UTF-8 byte order mark.** A GenBank, EMBL, GFF3, or FASTA file that starts
+  with a byte order mark no longer loses its first record, or stops a one-record
+  file with an error. Record numbers after the first record of such a file shift
+  by one.
+- **Web app: recoloring comparison matches live.** A palette change on a Linear
+  comparison, or on Collinear blocks colored by identity, now gives the same
+  match colors as **Generate Diagram**, except where rounding differs by one in
+  a channel value.
 
 ## Changed behavior
 
@@ -187,9 +195,29 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   record, stops with a message. It is refused with records that share a row, a
   `--wrap_length` that cuts a record, and `--similarity_alignment_feature`. A
   Session cannot store the option yet.
-<!-- PENDING #1539: Input summary lines and the Web notice; UTF-8 byte order mark. -->
-<!-- PENDING PR-6b origin_feature: Circular --origin_feature. -->
-<!-- PENDING residuals OV-2393: lines for the residuals PR. -->
+- **Input summary.** `gbdraw circular` and `gbdraw linear` log one `INFO:` line
+  per drawn record and per Linear comparison table. A `WARNING:` line follows when
+  a record has no feature to draw, or when the thresholds leave out every row of
+  a comparison table; the figure is still written and the exit status stays 0.
+  The Web app shows the same warnings under the Generate status line (**Part of
+  the input was not drawn.**) and the same lines in an **Input summary** section
+  of **Run Info**.
+- **`--origin_feature KEY=VALUE` for Circular diagrams (command line and Python
+  only).** Rotates each record that has the named feature, such as
+  `--origin_feature gene=psbA`, so that the feature's start as drawn is the
+  display start. Also `origin_feature` in the Python Circular options. The
+  selector is an exact `key=value` match. A minus-strand gene starts at its low
+  coordinate and reads counterclockwise; reverse-complement the record to read
+  it clockwise from its other end. A join starts on the part its path begins
+  with, and a feature across the origin starts on its piece before the origin.
+  A record without the feature keeps its start with a `WARNING:`; a selector
+  that matches nothing, or matches features at different starts in one record,
+  stops with a message. It is refused for a record that already has a display
+  start (`--display_start_coordinate`, a records-table `display_start`), a cropped
+  record, a record drawn linear, and a feature with no first base in drawn order
+  (unstranded, mixed strands, a fuzzy end, `order()`, or overlapping parts). A
+  Session saved from such a run holds the resulting `startCoordinate`, not the
+  option, and replays the same drawing.
 - **Web UI strings.** The comparison notice for a split figure points to the
   `canvas.linear.wrap_length` row under **Preserved session settings**, and the
   new strings are translated in the ten non-English languages.

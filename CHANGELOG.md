@@ -28,9 +28,16 @@ write-up of a release.
 - Fixed: the Web app's hover popup no longer opens after a pan for a pointer that has left the
   drawing.
 - Changed: the tobacco chloroplast tutorial and Gallery entry use `builtin:plastid`.
-<!-- PENDING #1539: input summary lines, UTF-8 byte order mark -->
-<!-- PENDING PR-6b origin_feature: Circular --origin_feature -->
-<!-- PENDING residuals OV-2393 -->
+- Added: `gbdraw circular --origin_feature KEY=VALUE` rotates records so that the named
+  feature's start is the display start. Command line and Python only.
+- Added: `gbdraw circular` and `gbdraw linear` log an `INFO:` line per drawn record and
+  comparison table and a `WARNING:` when a record has no feature to draw or the thresholds
+  leave out every row of a comparison table; the Web app shows the same text under the
+  Generate status line and in **Run Info** (**Input summary**).
+- Fixed: a UTF-8 byte order mark no longer hides the first record of a GenBank, EMBL, GFF3,
+  or FASTA file.
+- Fixed: a live palette change on comparison matches colored by identity matches **Generate
+  Diagram** in the Web app.
 - Added: `--wrap_length AUTO|LENGTH` and the config key
   `canvas.linear.wrap_length` draw one Linear record over several rows at one
   scale, each row with its own height. The record stays one record, and a figure
