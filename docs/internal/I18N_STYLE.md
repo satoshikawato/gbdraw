@@ -1927,8 +1927,8 @@ label itself is Sprache. This section is a draft; no text states that it is revi
   2. {count} features ready: {count} Feature bereit / {count} Features bereit
   3. From this color rule: / From these {count} color rules: Aus dieser Farbregel: / Aus diesen
      {count} Farbregeln:
-  4. Reset {count} placements to Auto: {count} Platzierung auf Automatisch zurücksetzen /
-     {count} Platzierungen auf Automatisch zurücksetzen
+  4. Reset {count} placements to Auto: {count} Platzierung auf Auto zurücksetzen /
+     {count} Platzierungen auf Auto zurücksetzen
   5. {count} chosen feature keeps its current direction.: {count} gewähltes Feature behält seine
      aktuelle Richtung. / {count} gewählte Features behalten ihre aktuelle Richtung.
 
