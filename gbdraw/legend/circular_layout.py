@@ -184,7 +184,7 @@ def _build_ring_layout(
         band_y=band_y,
         band_label_x=band_label_x,
         min_label_text=gradient_label_text(ring_entries[0].properties.get("min_value", 0)),
-        max_label_text=gradient_label_text(ring_entries[0].properties.get("max_value", 100)),
+        max_label_text=gradient_label_text(ring_entries[0].properties["max_value"]),
         min_label_x=0.0,
         max_label_x=bar_width,
         scale_label_y=scale_label_y,

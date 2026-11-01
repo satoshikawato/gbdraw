@@ -657,6 +657,23 @@ test('a preserved setting of the other diagram mode names the setting and the wa
   for (const model of [generate, save]) assert.doesNotMatch(model.summary, /Input validation failed/);
 });
 
+// R7: the Web sends a fixed identity scale as typed and Python judges it. Each shared
+// Circular vector it refuses (tests/fixtures/option_domain_vectors.json) reaches the
+// user as an input error naming the setting and the reason, from the real producer.
+test('Python refuses a Circular identity scale with the setting and the reason', () => {
+  const vectors = JSON.parse(readFileSync(new URL('../fixtures/option_domain_vectors.json', import.meta.url), 'utf8'));
+  const refused = vectors.invalid.filter((vector) => vector.id.startsWith('identity-scale-') && vector.modes.includes('circular'));
+  assert.deepEqual(refused.map((vector) => vector.reason).sort(), ['INCREASING', 'PERCENT']);
+  const reasonText = { INCREASING: 'Use a minimum below the maximum.', PERCENT: 'Use a finite value between 0 and 100.' };
+  for (const vector of refused) {
+    const model = roundtrip(invoke({ configOverrides: vector.request.configOverrides }).error);
+    assert.deepEqual([model.code, model.operation, model.stage], ['INPUT_INVALID', 'generate', 'request-validation'], vector.id);
+    assert.deepEqual(model.context, { reason: vector.reason, configPath: vector.configPath }, vector.id);
+    assert.equal(model.summary, `An input value is invalid. Setting: ${vector.configPath}. ${reasonText[vector.reason]}`, vector.id);
+    assert.deepEqual(model.actions, ['edit-input', 'retry'], vector.id);
+  }
+});
+
 // B11 (R6: an offered action must be one that can work): a live edit rerenders
 // the committed Session with the current editor tables, so repeating the edit
 // sends the same request. The note above the Result comes from the failure's

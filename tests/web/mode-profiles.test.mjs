@@ -660,3 +660,7 @@ assert.deepEqual(identityScaleWithEnd([40, 100], 1, '95.5'), [40, 95.5]);
 assert.deepEqual(identityScaleWithEnd([40, 95.5], 1, ''), [40, 100]);
 assert.deepEqual(identityScaleWithEnd([40, 90], 0, '30'), [30, 90]);
 assert.equal(identityScaleWithEnd([40, 90], 0, ' '), null);
+// A blank maximum means 100%, so a minimum of 100 with a blank maximum is the scale
+// [100, 100], sent as typed; Python refuses it as not increasing (vector
+// identity-scale-minimum-100-maximum-blank).
+assert.deepEqual(identityScaleWithEnd(null, 0, '100'), [100, 100]);

@@ -68,8 +68,9 @@ const setInput = async (page, label, value) => {
 const setThreshold = (page, value) => setInput(page, 'Linear comparison minimum identity', value);
 const setScaleMinimum = (page, value) => setInput(page, 'Linear comparison identity scale minimum', value);
 
-// Each channel of a #rrggbb colour, for a comparison that allows the 1-unit rounding difference
-// between the live recolour (rounds) and Python (truncates), OV-2393.
+// Each channel of a #rrggbb colour. Both sides truncate (OV-2393), but the live recolour reads the
+// factor Python writes with six significant digits, so a channel whose value Python computes as a
+// whole number can differ by 1 live (OV-2360).
 const channels = (color) => [1, 3, 5].map((start) => Number.parseInt(color.slice(start, start + 2), 16));
 
 test('a fixed identity scale keeps match colours and Legend labels when the threshold changes', async ({ page }) => {
@@ -126,7 +127,7 @@ test('a live palette recolour of a fixed-scale comparison equals Generate', asyn
   expect(generated.labels).toEqual(['20%', '90%']);
   expect(live.labels).toEqual(generated.labels);
   expect(Object.keys(live.fills).sort()).toEqual(Object.keys(generated.fills).sort());
-  // The live recolour reads the factor Python wrote for the fixed scale; only channel rounding may differ.
+  // The live recolour reads the factor Python wrote for the fixed scale; only the six-digit factor may differ (OV-2360).
   for (const [identity, fill] of Object.entries(generated.fills)) {
     const differences = channels(live.fills[identity]).map((value, index) => Math.abs(value - channels(fill)[index]));
     expect(Math.max(...differences), `identity ${identity}: live ${live.fills[identity]}, Generate ${fill}`)

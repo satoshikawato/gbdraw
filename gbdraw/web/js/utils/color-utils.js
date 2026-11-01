@@ -72,6 +72,8 @@ export const resolvePairwiseLegendGradientColorKeys = (legendKey) => {
 };
 
 /**
+ * Each channel is truncated, as Python's `int()` in `gbdraw/core/color.py`
+ * does, so a colour interpolated here equals the one Generate draws (OV-2393).
  * @param {number} r
  * @param {number} g
  * @param {number} b
@@ -82,7 +84,7 @@ export const rgbToHex = (r, g, b) => {
     '#' +
     [r, g, b]
       .map((x) => {
-        const hex = Math.round(Math.max(0, Math.min(255, x))).toString(16);
+        const hex = Math.trunc(Math.max(0, Math.min(255, x))).toString(16);
         return hex.length === 1 ? '0' + hex : hex;
       })
       .join('')

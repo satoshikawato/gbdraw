@@ -1,5 +1,6 @@
 // @ts-check
-import { interpolateColor, resolveColorToHex } from '../utils/color-utils.js';
+import { CONSERVATION_TEN_COLORS } from '../utils/conservation-colors.generated.js';
+import { resolveColorToHex } from '../utils/color-utils.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
 
@@ -22,22 +23,9 @@ import { interpolateColor, resolveColorToHex } from '../utils/color-utils.js';
 
 export const CONSERVATION_SLOT_MANAGER = 'circular_conservation';
 
-const CONSERVATION_SERIES_COLOR_BLEND_TO_WHITE = 0.18;
-const CONSERVATION_SERIES_BASE_COLORS = [
-  '#4e79a7',
-  '#f28e2b',
-  '#59a14f',
-  '#e15759',
-  '#76b7b2',
-  '#edc948',
-  '#b07aa1',
-  '#ff9da7',
-  '#9c755f',
-  '#bab0ac'
-];
-const CONSERVATION_SERIES_COLORS = CONSERVATION_SERIES_BASE_COLORS.map((color) =>
-  interpolateColor(color, '#ffffff', CONSERVATION_SERIES_COLOR_BLEND_TO_WHITE)
-);
+// The colour of a row without one, by position, repeating: the colours of
+// Python's `ten` ring scheme, in the order the Web has always given them.
+const CONSERVATION_SERIES_COLORS = [0, 1, 5, 3, 2, 7, 6, 9, 8, 4].map((index) => CONSERVATION_TEN_COLORS[index]);
 
 /**
  * @template T

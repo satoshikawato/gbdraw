@@ -26,6 +26,7 @@ const modulePaths = [
   'gbdraw/web/js/services/record-source-coordinates.js',
   'gbdraw/web/js/services/genbank-header.js',
   'gbdraw/web/js/services/conservation-series.js',
+  'gbdraw/web/js/utils/conservation-colors.generated.js',
   'gbdraw/web/js/utils/color-utils.js',
   'gbdraw/web/js/utils/named-colors.js',
   'gbdraw/web/js/utils/vue-raw.js',
