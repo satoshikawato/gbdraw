@@ -385,7 +385,7 @@ for (const [hidden, hide, options] of [
 // that step (`joinsOpenStep` in app-setup.js): one step, under the Apply's name.
 test('the Label Not Shown choice and the Apply that opened the dialog are one History step under the Apply\'s name', async () => {
   const wiring = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8')
-    .match(/const handleHiddenLabelTextChoiceWithHistory = undoableAction\('([^']+)', handleHiddenLabelTextChoice(, \{ joinsOpenStep: true \})?\);/);
+    .match(/const handleHiddenLabelTextChoiceWithHistory = undoableAction\(msg\('([^']+)'\), handleHiddenLabelTextChoice(, \{ joinsOpenStep: true \})?\);/);
   assert.ok(wiring, 'app-setup.js wires the choice through undoableAction');
   const [, label, joins] = wiring;
   const { actions, state, history, step } = await applyInHistoryStep();

@@ -28,7 +28,7 @@ import {
   sizeClassForRecordLengths,
   tickAnchorRadiusFactor
 } from '../services/track-slot-display.js';
-import { askTrackHide, featureSlotEdits, trackLayoutWithVisibility } from './track-slot-edits.js';
+import { askTrackHide, featureSlotEdits, trackLayoutWithVisibility, trackRowsText } from './track-slot-edits.js';
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { ownEntry } from '../utils/own-entry.js';
 import {
@@ -1374,11 +1374,11 @@ export const createCircularTrackSlotEditor = ({
       mode: 'circular',
       hiding: new Set(hidden.map((/** @type {CircularTrackSlot} */ slot) => String(slot.id))),
       asksAlone: stackInUse,
-      question: (names) => ({
+      question: (numbers) => ({
         title: texts.title(),
         // "Your custom track stack has..." is not the drawing's state when the stack is off.
         ...(stackInUse ? { description: texts.description(hidden.length) } : {}),
-        action: names.length ? texts.hideWith(listText(names)) : texts.hide(),
+        action: numbers.length ? texts.hideWith(trackRowsText(numbers)) : texts.hide(),
         keep: texts.keep()
       }),
       label: ownEntry(SUPPRESS_CONTROL_LABEL_BY_RENDERER, renderer) || msg('Hide track'),

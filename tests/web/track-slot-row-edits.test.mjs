@@ -555,7 +555,7 @@ for (const mode of ['circular', 'linear']) {
       assert.equal(questions[0].title, `Turn off Track row ${rowNumber}?`);
       assert.deepEqual(questions[0].items, [`Track row ${number} (${reachId})`]);
       assert.equal(questions[0].description, REACH_SENTENCE);
-      assert.deepEqual(questions[0].actions.map((action) => action.label), [`Turn off Track row ${rowNumber} and Track row ${number}`]);
+      assert.deepEqual(questions[0].actions.map((action) => action.label), [`Turn off Track rows ${rowNumber} and ${number}`]);
       const enabled = enabledOf(editor);
       assert.equal(enabled[rowId], false, `${rowId}: the row is off`);
       assert.equal(enabled[reachId], false, `${rowId}: the row that reaches it is off`);
@@ -621,7 +621,7 @@ test('circular: the Hide GC Content button with the rows it turns off is one tra
   const { setUiLocale } = await import(pathToFileURL(join(tempRoot, 'utils', 'i18n.js')));
   await setUiLocale('ja', async () => ({ default: {
     'Hide GC content and turn off {rows}': '{rows} をオフにして GC content を隠す',
-    'Track row {row}': 'トラック行 {row}'
+    'Track rows {rows}': 'トラック行 {rows}'
   } }));
   try {
     const questions = [];
@@ -912,7 +912,7 @@ for (const mode of ['circular', 'linear']) {
     });
     assert.equal(answer, 'applied');
     assert.equal(applied, true);
-    assert.equal(questions[0].title, 'Remove the Depth file and turn off Track row 3 and Track row 5?');
+    assert.equal(questions[0].title, 'Remove the Depth file and turn off Track rows 3 and 5?');
     assert.deepEqual(questions[0].items, ['Track row 5 (mark)']);
     assert.equal(questions[0].description, `Depth series #1 stays empty, and Generate will ask for a file or its removal. Track row 3 (cov) has no Depth file left. It stays in the stack, turned off. ${REACH_SENTENCE}`);
     assert.equal(enabledOf(editor).cov, false);

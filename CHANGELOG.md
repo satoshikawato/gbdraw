@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: Web UI text left in English in other languages: the Undo and Redo tooltips of preserved settings,
+  imported comparisons, and the Labels do not fit dialog; Auto values such as `above`, `ignored`, and
+  `endpoints only`; and the row titles and setting names in the Labels do not fit dialog.
+- Changed: the Undo and Redo tooltips and the dialogs that name a control or track row read as whole sentences in
+  more languages; English now quotes the control in the lane warning and says `Track rows 3 and 4`.
+
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
 
 - Patch release of 0.14.4. Sessions are saved as Session version 50 (0.14.4 writes 49); a Session

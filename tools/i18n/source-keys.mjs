@@ -7,7 +7,8 @@
 // of `tx()`, the table values of the error wording owner
 // (tests/web/helpers/error-text-keys.mjs), the labels of the similarity group
 // member values that Python owns (`memberValueLabelKeys`, shown with `tmx()`),
-// and the rail short names with a context key of their own
+// the words of a label fit row that Python owns (`LABEL_FIT_WORDS`, shown with
+// `tm()`), and the rail short names with a context key of their own
 // (`settingsShortKeys`). tests/web/i18n-catalogs.test.mjs, tools/i18n/sync.mjs
 // and tools/i18n/review-page-data.mjs read the keys from here.
 import { readFileSync, readdirSync } from 'node:fs';
@@ -18,6 +19,7 @@ import { CONTEXT_SEPARATOR } from '../../gbdraw/web/js/utils/i18n.js';
 import { memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
 import { SETTINGS_SECTIONS, settingsShortKeys } from '../../gbdraw/web/js/services/settings-sections.js';
 import { errorTextKeys } from '../../tests/web/helpers/error-text-keys.mjs';
+import { LABEL_FIT_WORDS } from './label-fit-words.generated.mjs';
 
 export const REPOSITORY_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 export const WEB_ROOT = join(REPOSITORY_ROOT, 'gbdraw', 'web');
@@ -136,7 +138,7 @@ const readLiteral = (source, start) => {
  * @param {string} source
  * @param {number} start
  */
-const skipExpression = (source, start) => {
+export const skipExpression = (source, start) => {
   let depth = 0;
   for (let at = start; at < source.length; at += 1) {
     const char = source[at];
@@ -451,6 +453,7 @@ export const sourceKeys = async () => {
   for (const { context, english } of memberValueLabelKeys()) {
     add(context + CONTEXT_SEPARATOR + english, english, context, { ...derivedSite('js/app/pairwise-match-popup.js', english), role: 'label' }, null);
   }
+  for (const word of LABEL_FIT_WORDS) add(word, word, null, { ...derivedSite('js/app/label-fit-dialog.js', word), role: 'label' }, null);
   for (const { context, english } of settingsShortKeys()) {
     add(context + CONTEXT_SEPARATOR + english, english, context, { ...derivedSite('js/services/settings-sections.js', english), role: 'label' }, null);
   }

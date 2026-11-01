@@ -64,7 +64,11 @@ steps 2 to 5 (English fixes, terms, drafting, review, decisions).
      not "one of the two"; File order meant "order within the file";
    - a count passed to a plain `t()`: the sentence must read right for 1 too
      (or the English is fixed to `tn()` in step 2);
-   - coined terms (ko 피처 for feature, es Discordancias for mismatches).
+   - coined terms (ko 피처 for feature, es Discordancias for mismatches);
+   - a template whose placeholder takes another key's text, read with that text
+     in place, also when it is a verb phrase (`Undo {action}`: ja
+     ファイルを削除を元に戻す, es Deshacer Quitar archivo; a colon or quotes
+     fix the class, I18N_STYLE §1.3).
    The reviewer lists proposals with a reason and a severity, not a rewrite.
 6. **Decide.** The coordinator decides each proposal against the style and the
    glossary; there is no majority vote. Record terms that remain doubtful.
