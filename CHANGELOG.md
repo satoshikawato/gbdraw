@@ -26,7 +26,9 @@ write-up of a release.
   choice, for the white background of earlier Web PNGs.
 - Added: `gbdraw linear --auto_orient` reverse-complements records from their nucleotide hits
   against the row above, and `--anchor_feature KEY=VALUE` aligns records at a named feature.
-  Command line and Python only; a Session cannot store either yet.
+  The Web app has the matching **Orient records from comparisons** button and **Align at
+  feature** action. A Session saved with either option stores the resulting Reverse
+  complement flags or record translations, not the option.
 - Fixed: the Web app's hover popup no longer opens after a pan for a pointer that has left the
   drawing.
 - Changed: the tobacco chloroplast tutorial and Gallery entry use `builtin:plastid`.

@@ -8,7 +8,8 @@ circular record's origin over the CDS's own arc, as the command line and the
 Python API have done since 0.14.4. The release also adds `--wrap_length`, which
 draws one long Linear record over several rows (command line and Python), four
 built-in color tables, a fixed identity color scale, italic gene names, a transparent
-Web PNG by default, and two Linear alignment options (command line and Python),
+Web PNG by default, and two Linear alignment options (`--auto_orient` and `--anchor_feature`, with
+Web buttons),
 and reads more real-world GenBank, EMBL, and GFF3 files. The Web app's LOSAT
 engine is now a build of a LOSAT development commit, and threaded LOSAT searches
 no longer stop on a memory fault.
@@ -180,24 +181,38 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   (`labels.<mode>.italic_gene_labels` in a config file) draws in italics every
   feature label whose text comes from the `gene` qualifier; the Web app has an
   **Italic gene names** checkbox in the labels card. Off by default.
-- **`--auto_orient` for Linear diagrams (command line and Python only).**
-  Reverse-complements a record when its reverse-strand nucleotide hits against
-  the row above weigh more than half of its hits. Also `auto_orient` on
-  `LinearComparisonOptions` and `LinearDiagramOptions`. It reads `-b/--blast`
-  files, `--comparisons_table` rows, and `--losat losatn` / `tlosatx` results;
-  protein comparisons are not read. The first row keeps its orientation, and the
-  log names each record it reverses. A Session cannot store the option yet:
-  `--save_session` and `--session_output` stop with a message when it is set.
-- **`--anchor_feature KEY=VALUE` for Linear diagrams (command line and Python
-  only).** Moves every record that has the named feature, such as
-  `--anchor_feature gene=COX1`, so that the feature's first drawn base sits under
-  the first such record's. Also `LinearOptions.anchor_feature` and
+- **`--auto_orient` and the Web button "Orient records from comparisons" for
+  Linear diagrams.** `--auto_orient` reverse-complements a record when its
+  reverse-strand nucleotide hits against the row above weigh more than half of
+  its hits. Also `auto_orient` on `LinearComparisonOptions` and
+  `LinearDiagramOptions`. It reads `-b/--blast` files, `--comparisons_table`
+  rows, and `--losat losatn` / `tlosatx` results; protein comparisons are not
+  read. The first row keeps its orientation, a record that `--reverse_complement
+  1` or a region's `:rc` reverses stays reversed, and the log names each record
+  it reverses. In the Web app, **Orient records from comparisons** (Linear,
+  Comparisons, Record orientation) applies the same rule to the comparisons of
+  the last Generate: it sets Reverse complement of every record below the top
+  row (checked when the hits lie mostly on the reverse strand, unchecked
+  otherwise, also where you set it yourself) as one History step, and the next
+  **Generate Diagram** draws it. It is disabled until a Generate has drawn a
+  nucleotide comparison. A Session saved with `--auto_orient` stores the
+  resulting Reverse complement flags, not the option, and replays the same
+  figure.
+- **`--anchor_feature KEY=VALUE` and the Web action "Align at feature" for Linear
+  diagrams.** `--anchor_feature gene=COX1` moves every record that has the named
+  feature so that the feature's first drawn base sits under the first such
+  record's. Also `LinearOptions.anchor_feature` and
   `LinearDiagramOptions.anchor_feature`. The selector is an exact `key=value`
   match. A record without the feature keeps its place with a `WARNING:`; a
   selector that matches nothing, or matches features at different starts in one
   record, stops with a message. It is refused with records that share a row, a
-  `--wrap_length` that cuts a record, and `--similarity_alignment_feature`. A
-  Session cannot store the option yet.
+  `--wrap_length` that cuts a record, and `--similarity_alignment_feature`. In
+  the Web app, **Align at feature** at the end of **Record Layout** takes a
+  `KEY=VALUE` selector, lists which records keep their place and which move by
+  how many px, and **Apply** writes the record translations as one History step;
+  later changes do not align the records again. A Session saved with
+  `--anchor_feature` stores the resulting record translations, not the option,
+  and replays the same figure.
 - **Input summary.** `gbdraw circular` and `gbdraw linear` log one `INFO:` line
   per drawn record and per Linear comparison table. A `WARNING:` line follows when
   a record has no feature to draw, or when the thresholds leave out every row of
