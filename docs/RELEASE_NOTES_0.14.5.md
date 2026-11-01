@@ -91,6 +91,13 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   comparison, or on Collinear blocks colored by identity, now gives the same
   match colors as **Generate Diagram**, except where rounding differs by one in
   a channel value.
+- **Web app: a Depth row and its last file.** A Linear Depth row now leaves with
+  its last Depth file after **Generate Diagram** too, and in a Session saved
+  earlier, so the next Generate draws instead of refusing the stack. A moved row
+  leaves too, and a file added again puts it at the default place; a height typed
+  on the row stays on its series. A Depth row you turned off now stays in the
+  stack, off, when its last file goes and when a file is added again, in Circular
+  and Linear; before, it left and came back on.
 
 ## Changed behavior
 
@@ -137,6 +144,15 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   Python already do. Check **White background**, next to the PNG DPI choice, to
   paint it white as earlier Web PNGs were. The checkbox is a page setting: a
   Session does not store it.
+- **Web app: removals that other track rows depend on.** Removing a Depth series,
+  the last Depth file of a series, or a custom stack row that another row starts
+  at or extends to (Circular and Linear), removing or clearing a Linear File that
+  holds such a last file, removing a Circular comparison source whose ring row
+  leaves with it, and **Hide GC Content** or **Hide GC Skew** with **Use custom
+  stack** off when it turns off such a row now ask first, with the dialog a row's
+  switch uses. It offers to make the change and turn those rows off as one Undo
+  step, or Cancel, which changes nothing. With no row reaching what changes,
+  nothing asks and the change applies at once, as before.
 - **Tobacco chloroplast tutorial and Gallery entry** use `-t builtin:plastid`
   (Web: **Plastid gene classes** in **Preset scheme**) instead of a downloaded
   color table. The figure keeps its layout and labels.
@@ -257,9 +273,9 @@ file. See
   the coordinates of a CDS across the origin as `1..` the record length. The
   drawing is correct; only this text is wrong.
 - After **Reset Settings** on one diagram mode, the other mode's Result keeps its
-  hidden labels and edited label text, and after a Session load the Legend rows of
-  its removed color rules, until the next **Generate Diagram**. Since 0.14.3 at
-  least.
+  hidden features, hidden labels, and edited label text, and after a Session load
+  the Legend rows of its removed color rules, until the next **Generate Diagram**.
+  Since 0.14.3 at least.
 - Edits made on a Linear File card that draws every record of its file, in a
   Session saved by gbdraw 0.13.0, do not follow its records after the first
   **Generate Diagram** splits the card into one card per record.
