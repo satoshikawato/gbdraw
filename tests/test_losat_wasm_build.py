@@ -79,7 +79,7 @@ def _custom_section(name: str, payload: bytes) -> bytes:
     return b"\0" + _leb(len(body)) + body
 
 
-_GUARD = {"version": 2, "fill": 1, "copy": 2, "atomic": 3, "atomic_helpers": 1}
+_GUARD = {"version": 3, "fill": 1, "copy": 2, "grow": 4, "atomic": 3, "atomic_helpers": 1}
 _HEADER = b"\0asm\x01\0\0\0"
 
 
@@ -99,8 +99,10 @@ def test_the_guard_record_is_the_one_losat_wrote() -> None:
     [
         (_guarded(), None),
         (_HEADER, "has no shared-memory guard record"),
-        (_guarded({**_GUARD, "version": 1}), "guard version 1 is older than 2"),
-        (_guarded({**_GUARD, "fill": 0, "copy": 0, "atomic": 0}), "guard record guards nothing"),
+        (_guarded({**_GUARD, "version": 2}), "guard version 2 is older than 3"),
+        (_guarded({"version": 2, "fill": 1, "copy": 2, "atomic": 3, "atomic_helpers": 1}), "has no shared-memory guard record"),
+        (_guarded({**_GUARD, "fill": 0, "copy": 0, "grow": 0, "atomic": 0}), "guard record guards nothing"),
+        (_guarded({**_GUARD, "fill": 0, "copy": 0, "atomic": 0}), None),
     ],
 )
 def test_a_threaded_file_needs_a_current_guard(wasm: bytes, expected: str | None) -> None:

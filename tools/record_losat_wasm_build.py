@@ -43,7 +43,7 @@ MANIFEST_SCHEMA = 1
 GUARDED_ARTIFACT = "losat-threaded.wasm"
 GUARD_TOOL = "tests/wasi_shared_memory.js"  # in LOSAT's crate
 GUARD_SECTION = "losat.shared_memory_guard"
-MINIMUM_GUARD_VERSION = 2  # version 2 guards atomic instructions as well as memory.copy and memory.fill
+MINIMUM_GUARD_VERSION = 3  # version 3 guards memory.grow and atomic instructions as well as memory.copy and memory.fill
 
 
 class ArtifactSpec(TypedDict):
@@ -83,6 +83,7 @@ class SharedMemoryGuard(TypedDict):
     version: int
     fill: int
     copy: int
+    grow: int
     atomic: int
     atomic_helpers: int
 
@@ -173,6 +174,7 @@ def shared_memory_guard(wasm: bytes) -> SharedMemoryGuard | None:
             version=record["version"],
             fill=record["fill"],
             copy=record["copy"],
+            grow=record["grow"],
             atomic=record["atomic"],
             atomic_helpers=record["atomic_helpers"],
         )
@@ -187,7 +189,7 @@ def guard_problem(wasm: bytes) -> str | None:
         return "has no shared-memory guard record"
     if guard["version"] < MINIMUM_GUARD_VERSION:
         return f"guard version {guard['version']} is older than {MINIMUM_GUARD_VERSION}"
-    if guard["fill"] + guard["copy"] + guard["atomic"] == 0:
+    if guard["fill"] + guard["copy"] + guard["grow"] + guard["atomic"] == 0:
         return "guard record guards nothing"
     return None
 

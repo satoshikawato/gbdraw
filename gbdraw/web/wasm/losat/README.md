@@ -35,6 +35,13 @@ The tool copies `wasm32-wasip1/release/LOSAT.wasm` to `losat.wasm`, writes
 not guarded, and the tool stops when the result has no current guard record), and
 rewrites `losat-build.json` and the generated module.
 
+Panic messages in the files hold the absolute paths of the build (the Cargo
+registry and LOSAT's `src/cli.rs`), so bytes depend on where it ran. For the same
+bytes as LOSAT's `WASI threading integration` artifact
+`losat-threaded-command.wasm`, build with `CARGO_HOME=/home/runner/.cargo` in a
+checkout at `/home/runner/work/LOSAT/LOSAT`; `--remap-path-prefix` is not enough,
+because it changes the file name in the module's name section.
+
 Notes:
 
 - The Web app keeps `losat.wasm` as the serial fallback.
