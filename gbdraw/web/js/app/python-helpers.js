@@ -186,6 +186,7 @@ def run_canonical_request_wrapper(
     held_feature_catalog_revision=None,
     held_segments_json=None,
     retention_json=None,
+    resource_names_json=None,
     notice=None,
 ):
     try:
@@ -205,6 +206,7 @@ def run_canonical_request_wrapper(
                     resource_identities = json.loads(identity_text)
             # A4b: the drawing it renders and the tokens the page retains ("null": none).
             retention = None if _is_blank_or_js_nullish(retention_json) else json.loads(str(retention_json))
+            resource_names = None if _is_blank_or_js_nullish(resource_names_json) else json.loads(str(resource_names_json))
         diagnostics = {"timingsMs": {}, "metrics": {}} if diagnostics_enabled else None
         # Labels near the room around the map: the Worker relays their values (JSON) while the render runs.
         with label_capacity_notices(
@@ -225,6 +227,7 @@ def run_canonical_request_wrapper(
                 _label_fit_searches=_WEB_LABEL_FIT_SEARCHES,
                 _held_feature_catalog_revision=held_revision,
                 _held_segments=held_segments,
+                _resource_names=resource_names,
             )
         if diagnostics is not None:
             for name in (

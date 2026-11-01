@@ -16,6 +16,7 @@ import pytest
 from svgwrite import Drawing
 
 import gbdraw.api.request_render as request_render_module
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.linear as linear_cli_module
 from gbdraw.api.requests import LinearDiagramRequest
 from tests.utils.session_drawing_view import session_view
@@ -135,6 +136,7 @@ def _capture_cli_options(monkeypatch, tmp_path, argv):
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
             linear_metadata=None,
         )
 

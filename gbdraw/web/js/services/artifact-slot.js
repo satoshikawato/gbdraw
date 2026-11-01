@@ -43,6 +43,7 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   featureIdentityNotices: () => [],
   comparisonWarnings: () => [],
   labelFitReports: () => [],
+  inputSummaries: () => [],
   lastRunInfo: () => null,
   pairwiseMatchFactors: () => ({}),
   editableLabels: () => [],

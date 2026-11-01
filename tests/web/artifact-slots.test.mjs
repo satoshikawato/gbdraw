@@ -31,7 +31,8 @@ snapshots.setGeneratedArtifactRuntimeOwner({
 const SWAPPED = [
   'results', 'selectedResultIndex', 'featureCatalog', 'extractedFeatures', 'featureEditorStatus', 'biologicalFeatures',
   'featureRecordIds', 'orthogroups', 'featureOrthogroupIndex', 'collinearGroups', 'trackSlotResolvedGeometry',
-  'annotationWarnings', 'featureIdentityNotices', 'comparisonWarnings', 'labelFitReports', 'lastRunInfo', 'pairwiseMatchFactors',
+  'annotationWarnings', 'featureIdentityNotices', 'comparisonWarnings', 'labelFitReports', 'inputSummaries', 'lastRunInfo',
+  'pairwiseMatchFactors',
   'editableLabels', 'generatedLegendPosition', 'generatedMultiRecordCanvas',
   'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors',
   'similarityAlignmentResetReceipt', 'originalLegendColors', 'originalSvgStroke'
@@ -61,6 +62,7 @@ const fillCircularArtifact = async () => {
     trackSlotResolvedGeometry: { slots: [] }, annotationWarnings: [{ code: 'w' }],
     featureIdentityNotices: [{ status: 'dormant' }], comparisonWarnings: [{ code: 'c' }],
     labelFitReports: [{ resultIndex: 0, resultName: 'a.svg', report: { drawn: true }, rowToken: null }],
+    inputSummaries: [{ resultIndex: 0, resultName: 'a.svg', lines: ['Record r1 (a.gb), record 1 of 1, 8 bp: drew 0 features.'], warnings: [] }],
     lastRunInfo: { invocation: { mode: 'circular' } }, pairwiseMatchFactors: { p1: 1.5 },
     editableLabels: [{ key: 'l1' }], generatedLegendPosition: 'right',
     generatedMultiRecordCanvas: true, generatedCircularPlotTitlePosition: 'top',
@@ -271,7 +273,9 @@ test('a rerender lands in the artifact of its Result\'s drawing', async () => {
   const redrawn = {
     featureCatalog: { schema: 5, items: [{ id: 'redrawn' }] }, extractedFeatures: [{ id: 'f2' }],
     biologicalFeatures: [{ id: 'b2' }], results: [{ name: 'a.svg', content: '<svg id="a2"/>' }],
-    labelFitReports: []
+    labelFitReports: [],
+    // The input summary the rerender drew replaces the Generate's (it draws the live Feature visibility).
+    inputSummaries: [{ resultIndex: 0, resultName: 'a.svg', lines: ['redrawn'], warnings: [], drawnVisibility: '[[],[]]' }]
   };
   /** @type {unknown[][]} */
   const installed = [];
@@ -285,7 +289,7 @@ test('a rerender lands in the artifact of its Result\'s drawing', async () => {
 
   snapshots.installRedrawnArtifact('circular', redrawn, { installResults });
   assert.deepEqual(installed, [redrawn.results], 'the Results commit through the caller');
-  for (const key of ['featureCatalog', 'extractedFeatures', 'biologicalFeatures', 'labelFitReports']) {
+  for (const key of ['featureCatalog', 'extractedFeatures', 'biologicalFeatures', 'labelFitReports', 'inputSummaries']) {
     assert.strictEqual(state[key].value, redrawn[key], key);
   }
 });

@@ -20,6 +20,7 @@ from .api.request_render import (
     stored_protein_result_request,
 )
 from .api.session_compat import render_session_compatible_request
+from .api.input_summary import log_input_summary
 from .features.overrides import log_feature_identity_notices
 from .api.record_planning import (
     depth_track_inputs_from_cli,
@@ -1927,6 +1928,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             warning.set_id, warning.annotation_id, warning.record_index + 1,
             warning.record_id, warning.message)
     log_feature_identity_notices(render_result.feature_identity_notices)
+    log_input_summary(render_result.input_summary)
     if render_result.linear_metadata is not None and render_result.linear_metadata.wrap is not None:
         logger.info(render_result.linear_metadata.wrap.message)
     canvas = render_result.drawing

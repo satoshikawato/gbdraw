@@ -350,9 +350,12 @@ test('Session Load clears the label fit notice of the Result shown before', asyn
   const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
   state.labelFitReports.value = [{ resultIndex: 0, resultName: 'fit.svg', rowToken: 'circular:1:0',
     report: { drawn: true, notice: ['Leader lines cross (5 pairs).'] } }];
+  state.inputSummaries.value = [{ resultIndex: 0, resultName: 'fit.svg', lines: ['Record r (a.gb), record 1 of 1, 8 bp: drew 0 features.'],
+    warnings: [{ code: 'no_drawable_features', message: 'Record r (a.gb) has no feature to draw: it has no features.' }] }];
   assert.equal((await load(gallery)).status, 'ok');
   assert.ok(state.results.value.length > 0, 'the Session has a Result');
   assert.deepEqual(state.labelFitReports.value, []);
+  assert.deepEqual(state.inputSummaries.value, [], 'a loaded Result has no input summary');
 });
 
 // Record selection D-05: each slice keeps the keys of its OFF records; an

@@ -216,6 +216,18 @@ export const requestFeatureVisibilityRules = (rules) => (Array.isArray(rules) ? 
   .map((rule) => normalizeFeatureVisibilityRule(rule))
   .filter(isSerializableRule);
 
+/**
+ * The per-feature Feature visibility of identity rows (a drawing's
+ * `featureOverrides` or a request's), as [record key, feature ID, value]; a row
+ * that sets none (a label-only edit) is left out. The one projection that the
+ * paint state, the rule matches and the committed-visibility test compare.
+ * @param {Iterable<{ readonly recordKey: string, readonly biologicalFeatureId: string, readonly featureVisibility: string | null }>} rows
+ * @returns {[string, string, string][]}
+ */
+export const featureVisibilityRows = (rows) => [...rows].flatMap((row) => (
+  row.featureVisibility ? [/** @type {[string, string, string]} */ ([row.recordKey, row.biologicalFeatureId, row.featureVisibility])] : []
+));
+
 /** @param {readonly FeatureVisibilityRuleDraft[] | null | undefined} rules */
 export const serializeFeatureVisibilityRules = (rules) => {
   const rows = requestFeatureVisibilityRules(rules)

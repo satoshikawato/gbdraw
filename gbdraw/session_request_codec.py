@@ -4123,6 +4123,7 @@ def _decode_comparisons(
                         subject_index,
                         register_prepared_resource_value(table, resource_path),
                         search_frame_text=text,
+                        source_name=resource_path.name,
                     )
                 )
             else:

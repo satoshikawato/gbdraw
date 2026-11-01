@@ -34,6 +34,7 @@ import {
   serializeLabelOverrideRows
 } from './label-override-table.js';
 import {
+  featureVisibilityRows,
   parseFeatureVisibilityRules,
   serializeFeatureVisibilityRules
 } from './feature-visibility.js';
@@ -5484,9 +5485,9 @@ const readSessionTable = (table, read) => {
 // Feature visibility decides which proteins LOSATP compares: the rules and the
 // per-feature `featureVisibility` of the request's identity rows (design Q4 3.3).
 /** @param {unknown} rows */
-const featureVisibilityRowsKey = (rows) => JSON.stringify((Array.isArray(rows) ? rows : [])
-  .filter((row) => row?.featureVisibility)
-  .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]));
+const featureVisibilityRowsKey = (rows) => JSON.stringify(featureVisibilityRows(
+  /** @type {Parameters<typeof featureVisibilityRows>[0]} */ (Array.isArray(rows) ? rows.filter(Boolean) : [])
+));
 /**
  * @param {CommittedCanonicalSession | null | undefined} committedSession
  * @param {unknown} activeRulesTsv

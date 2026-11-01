@@ -167,6 +167,7 @@ from .prepared import (
     RECORD_IDENTITY_TAG,
     register_prepared_value_identity,
 )
+from .input_summary import InputSummary, summarize_inputs
 from .record_planning import (
     decide_linear_wrap,
     GenBankLoader,
@@ -214,7 +215,7 @@ from .requests import (
 )
 
 if TYPE_CHECKING:
-    from gbdraw.linear_comparison import LinearComparison
+    from gbdraw.linear_comparison import ComparisonTableTally, LinearComparison
 
     from .requests import CircularBatchOutputPolicy
 
@@ -690,6 +691,7 @@ class PreparedDiagramRequest:
     protein_identity_manifest: Mapping[str, Any] | None = None
     transforms: tuple[RecordDisplayTransform, ...] = ()
     resolved_annotations: ResolvedAnnotationBundle = ResolvedAnnotationBundle(())
+    input_summary: InputSummary = InputSummary(())
 
     @property
     def annotation_warnings(self) -> tuple[ResolutionWarning, ...]:
@@ -721,6 +723,8 @@ class RequestRenderResult:
     protein_identity_manifest: Mapping[str, Any] | None = None
     annotation_warnings: tuple[ResolutionWarning, ...] = ()
     feature_identity_notices: tuple[FeatureIdentityNotice, ...] = ()
+    # What the diagram read from its inputs and drew of them (CLI log, Web status).
+    input_summary: InputSummary = InputSummary(())
     migration_report: SessionMigrationReport = field(
         default_factory=SessionMigrationReport
     )
@@ -3047,6 +3051,7 @@ def _build_request_plan_diagram(
                     resolved_annotations=cast(
                         ResolvedAnnotationBundle, item_plan.resolved_annotations
                     ),
+                    input_summary=_plan_input_summary(item_plan),
                 )
                 for item_plan in plan.item_plans()
             )
@@ -3136,6 +3141,29 @@ def _build_request_plan_diagram(
         losat_cache_entries=losat_cache_entries,
         losat_derived_cache_entries=losat_derived_cache_entries,
         protein_identity_manifest=protein_identity_manifest,
+        input_summary=_plan_input_summary(
+            plan, linear_metadata.comparison_tallies if linear_metadata is not None else (),
+        ),
+    )
+
+
+def _plan_input_summary(
+    plan: CircularRequestPlan | LinearRequestPlan,
+    comparisons: Sequence[ComparisonTableTally] = (),
+) -> InputSummary:
+    """The input summary of a built plan, from the feature inputs its drawing read."""
+
+    if not plan.provenance:  # A plan built without record planning has no sources to name.
+        return InputSummary((), tuple(comparisons))
+    inputs = plan.inputs
+    return summarize_inputs(
+        plan.records,
+        plan.provenance,
+        selected_features=plan.request.options.selected_features_set or DEFAULT_SELECTED_FEATURES,
+        feature_visibility_rules=inputs.features.feature_visibility_rules if inputs is not None else None,
+        specific_color_rules=inputs.features.specific_color_rules if inputs is not None else None,
+        record_features=inputs.record_features if inputs is not None else (),
+        comparisons=comparisons,
     )
 
 
@@ -3492,6 +3520,7 @@ def _render_prepared_request(
         output_paths=tuple(Path(path) for path in paths),
         annotation_warnings=prepared.annotation_warnings,
         feature_identity_notices=prepared.feature_identity_notices,
+        input_summary=prepared.input_summary,
         interactive_context=interactive_context,
         linear_metadata=prepared.linear_metadata,
         losat_cache_entries=prepared.losat_cache_entries,

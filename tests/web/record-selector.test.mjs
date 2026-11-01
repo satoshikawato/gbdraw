@@ -453,8 +453,7 @@ assert.equal(readyController.optionsFor(reuseState.activeDrawing(), reuseState.l
 }
 
 // OV-1599: a Session resource view reads its bytes with the rule every browser reader applies. One that starts
-// with a UTF-8 byte order mark goes to the Python reader, which reads the mark as content and skips the first
-// record; the browser's text decoder would drop the mark and list that record.
+// with a UTF-8 byte order mark goes to the Python reader, which drops the mark and lists every record (OV-2354).
 {
   const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
     pathToFileURL(join(sourceRoot, '..', 'services', 'session-resource-backing.js'))
@@ -473,11 +472,13 @@ assert.equal(readyController.optionsFor(reuseState.activeDrawing(), reuseState.l
     format: 'fasta',
     runHelperOperation: async (_operation, payload) => {
       formats.push(payload.format);
-      return { result: { records: [{ selector: '#1', record_id: 'F2', record_length: 4 }] } };
+      return { result: { records: [
+        { selector: '#1', record_id: 'F1', record_length: 4 }, { selector: '#2', record_id: 'F2', record_length: 4 }
+      ] } };
     }
   });
   assert.deepEqual(formats, ['fasta'], 'the Session resource goes to the Python reader');
-  assert.deepEqual(records.map(({ recordId }) => recordId), ['F2']);
+  assert.deepEqual(records.map(({ recordId }) => recordId), ['F1', 'F2']);
 }
 
 // D-15-91 (survey commit 4): a discovery's records go to the drawing it ran

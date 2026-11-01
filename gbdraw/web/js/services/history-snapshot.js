@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { ArtifactSlot, FeatureEditorStatus } from './artifact-slot.js' */
+/** @import { DrawnInputSummary } from './input-summary.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import { INPUTS_SLICE, boundInputFileIds, installBoundInputs } from './drawing/inputs.js';
@@ -830,7 +831,8 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
 
 /**
  * @typedef {Readonly<{ featureCatalog: unknown, extractedFeatures: readonly unknown[],
- *   biologicalFeatures: readonly unknown[], results: unknown[], labelFitReports: readonly unknown[] }>} RedrawnArtifact
+ *   biologicalFeatures: readonly unknown[], results: unknown[], labelFitReports: readonly unknown[],
+ *   inputSummaries: readonly DrawnInputSummary[] }>} RedrawnArtifact
  *   What a label rerender draws again of its Result's drawing (OV-111).
  */
 
@@ -969,6 +971,7 @@ export const createHistorySnapshotService = ({
       ),
       comparisonWarnings: toRaw(getGeneratedArtifactRef(state.comparisonWarnings, null)),
       labelFitReports: toRaw(getGeneratedArtifactRef(state.labelFitReports, null)),
+      inputSummaries: toRaw(getGeneratedArtifactRef(state.inputSummaries, null)),
       specificRules: colorRules.manualSpecificRules,
       trackSlotResolvedGeometry: toRaw(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
@@ -1063,6 +1066,7 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.featureIdentityNotices, ownerSet.featureIdentityNotices || []);
     setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
     setGeneratedArtifactRef(state.labelFitReports, ownerSet.labelFitReports || []);
+    setGeneratedArtifactRef(state.inputSummaries, ownerSet.inputSummaries || []);
     COLOR_RULES_SLICE.install(drawing.slices.colorRules, { manualSpecificRules: ownerSet.specificRules });
     setGeneratedArtifactRef(
       state.trackSlotResolvedGeometry,
@@ -1122,6 +1126,7 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.biologicalFeatures, redrawn.biologicalFeatures);
     installResults(redrawn.results);
     setGeneratedArtifactRef(state.labelFitReports, redrawn.labelFitReports);
+    setGeneratedArtifactRef(state.inputSummaries, redrawn.inputSummaries);
   };
 
   // E1: the displayed artifact, by reference, key by key, as the artifact of
@@ -1191,6 +1196,7 @@ export const createHistorySnapshotService = ({
     'featureIdentityNotices',
     'comparisonWarnings',
     'labelFitReports',
+    'inputSummaries',
     'lastRunInfo',
     'pairwiseMatchFactors',
     'editableLabels',

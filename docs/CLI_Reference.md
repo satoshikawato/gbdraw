@@ -91,6 +91,8 @@ Additional Information:
 
 `gbdraw gui` starts a local HTTP server on a free port and opens the web UI in your browser. Streamlit is not required.
 
+`gbdraw circular` and `gbdraw linear` print an `INFO:` summary of each drawn record and comparison table after the figure is written. A record with no feature to draw, or a comparison table whose rows the thresholds all leave out, adds a `WARNING:` line; the figure is still written and the exit status is 0. A file with no record stops the run with an `ERROR:` line and exit status 1. See [Input summary](REFERENCE/command-line.md#input-summary).
+
 ## Circular mode
 
 <!-- BEGIN GENERATED CIRCULAR HELP -->

@@ -230,6 +230,7 @@ def test_variant_draws_or_names_its_failure(
 def test_readme_lists_every_fixture() -> None:
     readme = (FIXTURES / "README.md").read_text()
     on_disk = {path.name for path in FIXTURES.iterdir() if path.name not in {"README.md", ".gitattributes"} and path.suffix != ".fasta"}
-    assert on_disk == {case.name for case in CASES}
+    # A comparison table is not a record input, so it has no case.
+    assert {name for name in on_disk if not name.endswith(".tsv")} == {case.name for case in CASES}
     for name in on_disk:
         assert f"`{name}`" in readme, name

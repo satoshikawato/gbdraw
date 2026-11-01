@@ -32,7 +32,7 @@
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
-import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors } from './result-paint-record.js';
+import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
@@ -42,6 +42,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
+import { inputSummaryOf } from '../services/input-summary.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
@@ -504,6 +505,7 @@ export const createAppSetup = () => {
     featureEditRemovalCount,
     comparisonWarnings,
     labelFitReports,
+    inputSummaries,
     matchSequenceRegistry,
     svgContent,
     svgResultIdentity,
@@ -6449,6 +6451,17 @@ export const createAppSetup = () => {
       && item.resultName === results.value[selectedResultIndex.value]?.name);
     return entry && entry.report.drawn ? entry : null;
   });
+  // The input summary of the shown Result: its warnings in the status area, its lines in Run info.
+  const shownInputSummary = computed(() => inputSummaryOf(
+    inputSummaries.value, selectedResultIndex.value, results.value[selectedResultIndex.value]?.name
+  ));
+  // A live Feature visibility edit no render drew since: the summary counts what the render drew,
+  // so it is compared with the visibility of the drawing whose Result is shown.
+  const shownInputSummaryStale = computed(() => {
+    const summary = shownInputSummary.value;
+    return summary !== null
+      && summary.drawnVisibility !== visibilityPaintState(historySnapshots.displayedArtifactDrawing());
+  });
   const openLabelFitNotice = () => {
     const entry = labelFitNotice.value;
     if (!entry) return undefined;
@@ -7372,6 +7385,8 @@ export const createAppSetup = () => {
     labelFitDialog,
     labelCapacityText,
     labelFitNotice,
+    shownInputSummary,
+    shownInputSummaryStale,
     openLabelFitNotice,
     resolveLabelFitChoice,
     editLabelFitRecordText,

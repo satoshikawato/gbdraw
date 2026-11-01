@@ -65,7 +65,13 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     conservation_series_path.write_text(
         (WEB_ROOT / "js" / "services" / "conservation-series.js")
         .read_text(encoding="utf-8")
-        .replace("../utils/color-utils.js", "./color-utils.mjs"),
+        .replace("../utils/color-utils.js", "./color-utils.mjs")
+        .replace("../utils/conservation-colors.generated.js", "./conservation-colors.generated.mjs"),
+        encoding="utf-8",
+    )
+    # conservation-series.js reads the generated ring colours.
+    (tmp_path / "conservation-colors.generated.mjs").write_text(
+        (WEB_ROOT / "js" / "utils" / "conservation-colors.generated.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (tmp_path / "record-source-coordinates.mjs").write_text(
