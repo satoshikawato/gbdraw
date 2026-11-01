@@ -76,7 +76,25 @@ only between adjacent display rows.
 
 Display filters are e-value, bit score, identity, and alignment length. Values
 must be finite and non-negative; identity is limited to 0 through 100, and
-alignment length is an integer. Protein modes can also limit candidates or
+alignment length is an integer.
+
+### Identity colour scale
+
+A Linear pairwise match and a Circular similarity-ring hit take their colour
+from where their percent identity falls between the two ends of the identity
+scale, and the comparison Legend labels those two ends. By default the scale
+runs from the identity threshold to 100%, so the same 95% match changes colour
+when the threshold changes. `--identity_scale MIN MAX` fixes the scale
+(0 <= MIN < MAX <= 100), so figures drawn with different thresholds share
+colours and Legend labels: a match below MIN takes the start colour and a match
+above MAX the end colour. The config leaf is `objects.blast_match.identity_scale`
+in Linear and `objects.conservation.identity_scale` in Circular (`"auto"` or
+`[MIN, MAX]`); the Python field is `LinearComparisonOptions.identity_scale` and
+`ComparisonRingOptions.identity_scale`, and the Web app has **Identity scale
+min (%)** and **Identity scale max (%)** beside the identity threshold. The
+scale changes colours only; the threshold still decides which matches are drawn.
+
+Protein modes can also limit candidates or
 hits per query. Collinear mode adds anchor, unit-gap, diagonal-drift, scope,
 and conflict rules. Its unit mode is `auto`, `cds`, or `locus`
 (`--collinear_unit_mode`); anchor mode is `rbh` or `all`
@@ -173,6 +191,30 @@ For a Circular ring, the selected reference side is `query`, `subject`, or
 `auto`. The renderer paints retained spans from that side on the displayed
 record. It does not infer binned coverage or a wraparound hit from one BLAST
 row.
+
+### Automatic Linear orientation
+
+`--auto_orient` (`auto_orient=True` in `LinearComparisonOptions` and in typed
+`LinearDiagramOptions`; off by default) reverse-complements Linear records
+from their nucleotide hits. It reads the `--blast` files, the
+`--comparisons_table` rows, and LOSATN and TLOSATX results, after the display
+filters, in each record's search frame. Protein comparisons (LOSATP, protein
+tables, and rows bound to source features) are not read, so with only protein
+comparisons every record keeps its orientation.
+
+Records are decided row by row, from the first row, which keeps its
+orientation. A hit between a record and a record of the row above weighs its
+alignment length (column 4). It is a reverse hit when its query and subject
+directions differ (`qstart <= qend` against `sstart <= send`), or when they
+agree and the record above is drawn reverse-complemented. The record is
+reverse-complemented when its reverse hits weigh more than half of all its hits
+against the row above. At exactly half, or without hits, the record keeps its
+orientation. A record that `--reverse_complement 1` or a region's `:rc`
+already reverses stays reversed, and the next row is decided against it as
+drawn. The figure equals the one the same explicit reverses draw; the CLI logs
+each record it reversed. A Session cannot store the option yet: with `--save_session` or
+`--session_output` the command stops with an error before it draws. The Web app does not
+offer it yet.
 
 ## Selected Linear edges
 

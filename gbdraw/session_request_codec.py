@@ -1770,6 +1770,21 @@ def _decode_linear_layout(
 
 # The planner consumes it: a Session stores what the figure drew with.
 _PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults"})
+# Options a Session does not store yet: a request that sets one is refused.
+_UNSTORED_FIELDS = frozenset({"auto_orient", "anchor_feature"})
+
+
+def require_storable_diagram_options(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+) -> None:
+    """Refuse options that a Session does not store yet, before anything renders."""
+
+    defaults = _DEFAULT_CIRCULAR_OPTIONS if isinstance(options, CircularDiagramOptions) else _DEFAULT_LINEAR_OPTIONS
+    for item in fields(options):
+        if item.name in _UNSTORED_FIELDS and getattr(options, item.name) != getattr(defaults, item.name):
+            raise CanonicalRequestEncodingError(
+                f"A Session does not store {item.name} yet; save the Session without it."
+            )
 _PLACEMENT_INPUT_FIELDS = frozenset({
     "feature_placements", "feature_placement_table", "feature_placement_table_file",
     "feature_overrides", "feature_override_table", "feature_override_table_file",
@@ -1782,6 +1797,7 @@ def _encode_diagram_options(
     record_count: int,
     resources: RequestResources,
 ) -> dict[str, Any]:
+    require_storable_diagram_options(options)
     default_options: CircularDiagramOptions | LinearDiagramOptions
     if isinstance(options, CircularDiagramOptions):
         default_options = _DEFAULT_CIRCULAR_OPTIONS
@@ -1823,6 +1839,8 @@ def _encode_diagram_options(
             or name in _PLACEMENT_INPUT_FIELDS
             or name in _PLANNER_ONLY_FIELDS
         ):
+            continue
+        if name in _UNSTORED_FIELDS:
             continue
         if name == "conservation_search_results":
             assert isinstance(options, CircularDiagramOptions)
@@ -1920,6 +1938,7 @@ def _decode_diagram_options(
         and item.name not in _RING_SEARCH_FIELDS
         and item.name not in _TABLE_PATH_FIELDS
         and item.name not in _PLANNER_ONLY_FIELDS
+        and item.name not in _UNSTORED_FIELDS
     }
     unknown = set(payload) - set(known)
     if unknown:
@@ -5740,7 +5759,7 @@ def describe_canonical_request() -> dict[str, Any]:
     # stores every depth input as depthTracks).
     unwritten = (
         _COMPARISON_FIELDS | _PLACEMENT_INPUT_FIELDS | _RING_SEARCH_FIELDS | _DEPTH_COMPATIBILITY_FIELDS
-        | _TABLE_PATH_FIELDS | _PLANNER_ONLY_FIELDS
+        | _TABLE_PATH_FIELDS | _PLANNER_ONLY_FIELDS | _UNSTORED_FIELDS
     )
 
     def option(name: str, hint: object, mode: Literal["circular", "linear"]) -> Shape:
@@ -5985,6 +6004,7 @@ __all__ = [
     "encode_canonical_request",
     "migrate_flat_config_overrides",
     "migrate_legacy_full_config",
+    "require_storable_diagram_options",
     "with_automatic_scale_interval",
     "with_stored_font_sizes_as_auto",
 ]

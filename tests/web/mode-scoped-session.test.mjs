@@ -1051,6 +1051,25 @@ test('a Session 50 keeps each Linear drawing\'s own Italic gene names through Lo
   assert.equal(italicOf('linear'), false);
 });
 
+// The identity colour scale is one setting per drawing (`config.adv.identity_scale`):
+// of two Linear drawings, the one that holds a scale keeps it through Load and Save, and
+// the other keeps no scale.
+test('a Session 50 keeps each Linear drawing\'s own identity colour scale through Load and Save', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  session.drawings.find((entry) => entry.id === 'linear-2').config.adv.identity_scale = [40, 90];
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  assert.deepEqual(state.drawingOf('linear-2').adv.identity_scale, [40, 90]);
+  assert.equal(state.drawingOf('linear').adv.identity_scale, null);
+  const result = await exportSession('identity-scale', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const scaleOf = (id) => saved.drawings.find((entry) => entry.id === id).config.adv.identity_scale;
+  assert.deepEqual(scaleOf('linear-2'), [40, 90]);
+  assert.equal(scaleOf('linear'), null);
+});
+
 test('Save checks each Session 50 drawing it writes with Save\'s checks, not Load\'s: an input type of no type is refused', async () => {
   const session = v49Session('drawings-linear-pair-losat');
   resetDrawings();

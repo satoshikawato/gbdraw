@@ -20,6 +20,12 @@ Session 50 also stores **Italic gene names** in each drawing of either mode
 (`config.adv.italic_gene_labels`); on is saved in that drawing's render
 request as `labels.<mode>.italic_gene_labels: true`, and off is left out of the
 request. A Session up to 49 loads with upright gene names in every drawing.
+Session 50 also stores the **identity colour scale** in each drawing of either
+mode (`config.adv.identity_scale`, `null` or `[MIN, MAX]`); a set scale is
+saved in that drawing's render request as `objects.blast_match.identity_scale`
+(Linear) or `objects.conservation.identity_scale` (Circular), and no scale is
+left out of the request. A Session up to 49 loads without a fixed scale in
+every drawing.
 gbdraw 0.14.4 and earlier refuse a Session 50 file.
 
 Session 49 stores the Circular **Show Definition** setting in each Circular
@@ -768,6 +774,15 @@ need to be run again. Request schema 9 keeps schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
 inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.
+A typed Linear request with `auto_orient=True` is not encoded
+(`CanonicalRequestEncodingError`), and a canonical request with `autoOrient` is
+rejected as an unknown field: no Session stores [automatic Linear
+orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation)
+yet.
+A typed Linear request with `anchor_feature` set is not encoded
+(`CanonicalRequestEncodingError`), and a canonical request with
+`anchorFeature` is rejected as an unknown field: no Session stores the
+[feature anchor](command-line.md#record-selection-and-layout) yet.
 
 ## Similarity alignment in requests and Sessions
 

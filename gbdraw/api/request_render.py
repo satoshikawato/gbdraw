@@ -69,6 +69,7 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.annotations import (
     FeatureIdentitySpan,
+    FeatureSelector,
     ResolutionWarning,
     ResolvedAnnotationBundle,
     read_annotation_options,
@@ -104,7 +105,7 @@ from gbdraw.io.comparison_sequences import (
     ComparisonSequenceFile,
     read_comparison_sequence_file,
 )
-from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_resource
 from gbdraw.io.genome import parse_gff_fasta
 from gbdraw.labels.fit import WARN_SEARCH_SECONDS, LabelFitReport
 from gbdraw.labels.filtering import (
@@ -113,6 +114,8 @@ from gbdraw.labels.filtering import (
     read_qualifier_priority_file,
 )
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
+from gbdraw.mode_profiles import ComparisonThresholds
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentCandidate,
@@ -178,6 +181,7 @@ from .record_planning import (
     _similarity_candidate_from_orthogroup_member,
     _source_key,
     effective_record_presentation,
+    project_anchor_feature_starts,
     project_similarity_alignment_centers,
     comparison_record_bindings,
     record_is_reverse_complemented,
@@ -188,6 +192,7 @@ from .record_planning import (
     resolve_implicit_record_output_prefix,
     resolve_linear_options,
     resolve_record_inputs,
+    reverse_resolved_records,
     similarity_alignment_evidence_edges,
 )
 from .render import preflight_output_paths, save_figure_to
@@ -2043,7 +2048,8 @@ def plan_linear_request(
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs)
     with _request_render_diagnostic_phase("preparation"):
-        inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
+        prepared_inputs = inputs
+        inputs = _materialize_feature_inputs(unresolved_request, collection, prepared_inputs)
         projected_request = replace(
             unresolved_request,
             records=_materialized_record_inputs(collection),
@@ -2063,9 +2069,20 @@ def plan_linear_request(
         resolved_options, losat_cache_entries = _resolve_nucleotide_losat(
             resolved_options, collection, resolved_layout
         )
+        oriented = _auto_oriented_collection(resolved_options, collection, resolved_layout)
+        reoriented = oriented is not collection
+        if reoriented:
+            # The search-frame rows, the layout and the resolved options hold
+            # for either orientation; the records and their features do not.
+            collection = oriented
+            inputs = _materialize_feature_inputs(unresolved_request, collection, prepared_inputs)
+            projected_request = replace(
+                projected_request, records=_materialized_record_inputs(collection)
+            )
         materialized_request = (
             unresolved_request
-            if _is_materialized_exact_one_request(unresolved_request)
+            if not reoriented
+            and _is_materialized_exact_one_request(unresolved_request)
             and resolved_layout == unresolved_request.layout
             and resolved_options is unresolved_request.options
             else replace(
@@ -2074,9 +2091,23 @@ def plan_linear_request(
             )
         )
         # The reference was resolved to a plan at the top of this function.
-        alignment_anchor_centers = project_similarity_alignment_centers(
-            collection,
-            cast("SimilarityAlignmentPlan | None", materialized_request.similarity_alignment),
+        # One record-position alignment at most: the request refuses an
+        # anchor_feature beside a similarity alignment.
+        anchor_feature = materialized_request.options.anchor_feature
+        alignment_anchor_centers = (
+            project_anchor_feature_starts(
+                collection,
+                anchor_feature,
+                resolve_record_row_positions(
+                    collection.records,
+                    resolved_layout.multi_record_positions if resolved_layout is not None else None,
+                )[1],
+            )
+            if isinstance(anchor_feature, FeatureSelector)
+            else project_similarity_alignment_centers(
+                collection,
+                cast("SimilarityAlignmentPlan | None", materialized_request.similarity_alignment),
+            )
         )
         # The plan checks the source bindings of the comparison rows when it is
         # built, so a Session writer rejects them; the request keeps the rows as
@@ -2092,6 +2123,54 @@ def plan_linear_request(
             alignment_anchor_centers=alignment_anchor_centers,
             losat_cache_entries=losat_cache_entries,
         )
+
+
+def _auto_oriented_collection(
+    options: LinearDiagramOptions,
+    collection: ResolvedRecordCollection,
+    layout: LinearMultiRecordOptions | None,
+) -> ResolvedRecordCollection:
+    """Reverse-complement the records ``auto_orient`` decides from nucleotide hits.
+
+    Reads the comparison files and the comparisons of ``options`` (LOSATN and
+    TLOSATX results included) in the search frame, filtered by the match
+    thresholds as the drawing filters them; protein comparisons are not read.
+    :func:`auto_orient_reversed_records` decides; a record the request already
+    reverses keeps its orientation. Returns ``collection`` itself when no
+    record changes.
+    """
+
+    if not options.auto_orient:
+        return collection
+    records = collection.records
+    _ordered, rows_by_record = resolve_record_row_positions(
+        records, layout.multi_record_positions if layout is not None else None
+    )
+    comparisons = search_frame_linear_comparisons(
+        tuple(read_comparison_resource(path) for path in options.blast_files or ()),
+        None,
+        tuple(options.linear_comparisons or ()),
+        ComparisonThresholds(
+            evalue=float(cast(float, options.evalue)),
+            bitscore=float(cast(float, options.bitscore)),
+            identity=float(cast(float, options.identity)),
+            alignment_length=int(cast(int, options.alignment_length)),
+        ),
+        rows_by_record,
+        len(set(rows_by_record)) < len(records),
+    )
+    reversed_indexes = auto_orient_reversed_records(
+        comparisons, rows_by_record, tuple(map(record_is_reverse_complemented, records))
+    )
+    if not reversed_indexes:
+        return collection
+    for index in sorted(reversed_indexes):
+        logger.info(
+            "INFO: auto_orient reverse-complemented record #%d %r: its reverse hits "
+            "against the row above weigh more than half of its hits.",
+            index + 1, str(records[index].id),
+        )
+    return reverse_resolved_records(collection, reversed_indexes)
 
 
 def _resolve_nucleotide_losat(

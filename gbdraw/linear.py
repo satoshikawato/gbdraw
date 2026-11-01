@@ -91,6 +91,7 @@ from .tracks import (
 
 from .cli_utils.common import (
     COLOR_TABLE_HELP,
+    add_identity_scale_arg,
     _add_arrow_geometry_args,
     _add_block_stroke_args,
     _add_depth_axis_args,
@@ -141,10 +142,12 @@ from .session import (
 )
 from .session_drawings import SessionDrawingArtifacts
 from .session_io import session_to_cli_args
+from .session_request_codec import require_storable_diagram_options
 from .cli_utils.losat_output import (
     parse_positive_int as _parse_positive_int,
     write_losat_output_files,
 )
+from .comparisons.identity_scale import LINEAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import losat_entry_filename, losat_pair_filename, unique_losat_filenames
 from .core.numeric import (
     argparse_float,
@@ -341,6 +344,17 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help="input BLAST result file in tab-separated format (-outfmt 6 or 7) (optional)",
         type=str,
         nargs='*')
+    parser.add_argument(
+        '--auto_orient',
+        action='store_true',
+        help=(
+            'Reverse-complement a record when its reverse-strand nucleotide hits against '
+            'the row above, as that row is drawn, weigh more than half of its hits '
+            '(sum of alignment lengths, after the match thresholds). Reads -b/--blast, '
+            '--comparisons_table, and losatn/tlosatx results, not protein comparisons; '
+            '--reverse_complement 1 keeps its record reversed (default: off).'
+        ),
+    )
     parser.add_argument(
         '--losat',
         choices=_CLI_LOSAT_PROGRAMS,
@@ -634,6 +648,19 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='Align genomes to the center (default: False). ',
         action='store_true')
     parser.add_argument(
+        '--anchor_feature',
+        metavar='KEY=VALUE',
+        default=None,
+        help=(
+            'Align the records at the first drawn base of the feature this exact '
+            'selector names in each record, for example gene=dnaA or locus_tag=b0001 '
+            '(the feature_selector form of the placement and override tables). The first '
+            'record that has the feature keeps its place; a record without it keeps its '
+            'place and is reported. Wins over --align_center for the records it moves '
+            '(default: off).'
+        ),
+    )
+    parser.add_argument(
         '--keep_definition_left_aligned',
         dest='keep_definition_left_aligned',
         help=(
@@ -666,6 +693,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help='minimum BLAST alignment length threshold (default=0)',
         type=argparse_integer,
         default=LINEAR_MODE_PROFILE.comparison.alignment_length)
+    add_identity_scale_arg(parser, "pairwise matches")
     parser.add_argument(
         '--pairwise_match_style',
         dest='pairwise_match_style',
@@ -1012,6 +1040,8 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         args.losatp_mode = "similarity_groups"
     if args.losat_output_dir and not args.losat:
         parser.error("--losat_output_dir requires --losat")
+    if args.similarity_alignment_feature and args.anchor_feature:
+        parser.error("--anchor_feature cannot be combined with --similarity_alignment_feature")
     if args.similarity_alignment_feature and (
         args.losat != "losatp" or args.losatp_mode != "similarity_groups"
     ):
@@ -1584,6 +1614,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "labels.linear.protection": args.label_protection,
         # Only the italic style is an override, so a default run's request is unchanged.
         "labels.linear.italic_gene_labels": True if args.italic_gene_labels else None,
+        LINEAR_IDENTITY_SCALE_PATH: list(args.identity_scale) if args.identity_scale else None,
         "labels.linear.placement": label_placement,
         "labels.linear.rotation": label_rotation,
         "objects.features.line_stroke_color": line_stroke_color,
@@ -1800,6 +1831,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             plot_title_font_size=plot_title_font_size,
             blast_files=tuple(blast_files) if blast_files else None,
             comparison_table_file=args.comparisons_table,
+            auto_orient=args.auto_orient,
             losat_search=losat_search,
             pairwise_match_style=pairwise_match_style,
             collinearity_params=collinearity_params,
@@ -1819,6 +1851,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 if wrap_default_overrides is None
                 else LinearWrapDefaults(wrap_default_overrides, args.wrap_track_order)
             ),
+            anchor_feature=args.anchor_feature,
         ),
         layout=linear_layout,
         similarity_alignment=(
@@ -1838,6 +1871,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         ),
     )
     diagram_output_paths = diagram_request_output_paths(canonical_request)
+    if args.save_session or args.session_output:
+        require_storable_diagram_options(canonical_request.options)
     session_output_path = preflight_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
         session_output=args.session_output,

@@ -222,6 +222,7 @@ _ADV_ROWS = _rows(
     ("min_bitscore", "both", "profile"),
     ("evalue", "both", "profile"),
     ("identity", "both", "profile"),
+    ("identity_scale", "both", "copy"),
     ("alignment_length", "both", "profile"),
 )
 

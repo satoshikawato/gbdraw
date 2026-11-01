@@ -13,8 +13,10 @@ const DEFAULT_WASM_PATH = './wasm/losat/losat.wasm';
 const DEFAULT_THREADED_WASM_PATH = LOSAT_THREADED_WASM_URL || './wasm/losat/losat-threaded.wasm';
 const DEFAULT_THREADED_MIN_FASTA_CHARS = 500000;
 // Chromium can trap a thread's memory.copy or memory.fill right after another
-// thread grows the shared memory. A job is deterministic, so a trapped job runs
-// again, up to this many times, before the run fails.
+// thread grows the shared memory; compileLosatWasm guards those operations
+// (services/losat-shared-memory-guard.js). A trap the guard does not cover, or
+// one in a module the guard declines, ends the job; a job is deterministic, so
+// a trapped job runs again, up to this many times, before the run fails.
 const THREADED_TRAP_RETRY_LIMIT = 2;
 const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal, Mapping
 
 from ..core.text import drawn_text_box
-from .circular_layout import min_gradient_label_text
+from .circular_layout import gradient_label_text
 from .metrics import legend_line_height, legend_text_x_offset, single_gradient_block_x
 from .table import LegendRowKey, as_legend_table
 
@@ -49,6 +49,7 @@ class LinearGradientLegendLayout:
     height: float
     bar_width: float
     min_label_text: str
+    max_label_text: str
     min_label_x: float
     max_label_x: float
     scale_label_y: float
@@ -134,9 +135,10 @@ def _build_gradient_layout(
 
     drawn_names = table.names()
     bar_width = GRADIENT_BAR_WIDTH_RATIO * color_rect_size
-    min_label_text = min_gradient_label_text(
+    min_label_text = gradient_label_text(
         gradient_entries[0][1].get("min_value", 0)
     )
+    max_label_text = gradient_label_text(gradient_entries[0][1].get("max_value", 100))
     # The scale labels share one line box, whatever their digits.
     scale_label_height = drawn_text_box("100%", font_family, font_size)[1]
     if len(gradient_entries) > 1:
@@ -172,6 +174,7 @@ def _build_gradient_layout(
             height=scale_label_y + scale_label_height,
             bar_width=bar_width,
             min_label_text=min_label_text,
+            max_label_text=max_label_text,
             min_label_x=bar_x,
             max_label_x=bar_x + bar_width,
             scale_label_y=scale_label_y,
@@ -201,6 +204,7 @@ def _build_gradient_layout(
         height=scale_label_y + scale_label_height,
         bar_width=bar_width,
         min_label_text=min_label_text,
+        max_label_text=max_label_text,
         min_label_x=bar_x,
         max_label_x=bar_x + bar_width,
         scale_label_y=scale_label_y,

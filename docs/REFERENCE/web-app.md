@@ -862,7 +862,13 @@ comparison row's **Comparison gencode** control applies to that comparison
 sequence, which the search passes as its query.
 
 The common Linear filters are **Bitscore**, **E-value**, **Min identity (%)**,
-and **Min length**. Collinear settings include **Max unit gap**, **Min
+and **Min length**. **Identity scale min (%)** and **Identity scale max (%)**
+beside them (also in the Circular comparison settings) fix the identity colour
+scale of the matches and the Legend, as `--identity_scale` does. The minimum fixes the
+scale: with it blank the scale runs from the identity threshold to 100%, and
+**Identity scale max (%)** stays off; a blank maximum is 100%. Each mode keeps its own scale; it
+applies on Generate and is saved in Sessions. See [Identity colour
+scale](comparison-programs-thresholds-and-results.md#identity-colour-scale). Collinear settings include **Max unit gap**, **Min
 block genes**, **Diagonal drift**, **Merge conflicts**, **Search between**
 (**Adjacent pairs** or **All records**), and **Color mode** (**Average
 identity**, **Orientation**, or **Orientation + identity**). Scientific

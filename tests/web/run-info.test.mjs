@@ -1221,6 +1221,24 @@ test('Italic gene names has its CLI flag in the Source recipe of either mode', a
   }
 });
 
+// A fixed identity colour scale writes `--identity_scale MIN MAX` from the mode's leaf; no scale writes nothing.
+test('a fixed identity scale has its CLI flag in the Source recipe of either mode', async () => {
+  const leaves = { circular: 'objects.conservation.identity_scale', linear: 'objects.blast_match.identity_scale' };
+  for (const [session, mode] of [[circularGallerySession, 'circular'], [linearGallerySession, 'linear']]) {
+    for (const scale of [[40, 95.5], undefined]) {
+      const copy = structuredClone(session);
+      const overrides = copy.renderRequest.diagramOptions.configOverrides;
+      delete overrides[leaves[mode]];
+      if (scale !== undefined) overrides[leaves[mode]] = scale;
+      const recipe = await buildSourceRecipe(copy);
+      assert.equal(recipe.available, true, recipe.unavailableReason);
+      const at = recipe.args.indexOf('--identity_scale');
+      assert.deepEqual(at < 0 ? null : recipe.args.slice(at + 1, at + 3), scale ? ['40', '95.5'] : null, JSON.stringify(recipe.args));
+      await assertCliParserAccepts(recipe);
+    }
+  }
+});
+
 // PD-OI-109: a request that hides the Circular definition writes `--hide_definition`;
 // one that shows it (no override) writes nothing.
 test('a hidden Circular definition has its CLI flag in the Source recipe', async () => {

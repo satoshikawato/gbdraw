@@ -130,7 +130,7 @@ export const CLI_RECORD_KEY_PREFIX = 'record-';
 // gbdraw/api/record_planning.py: EXPANDED_RECORD_KEY_SEPARATOR
 export const EXPANDED_RECORD_KEY_SEPARATOR = ':';
 
-// gbdraw/config/models/objects.py: UNSET_NUMBER_SPELLINGS
+// gbdraw/core/numeric.py: UNSET_NUMBER_SPELLINGS
 /** @type {readonly string[]} */
 export const CONFIG_UNSET_NUMBER_SPELLINGS = Object.freeze(['', 'auto', 'none', 'null']);
 
@@ -202,7 +202,7 @@ export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
 
 // gbdraw/config/modify.py: config_paths_reading_unset_spellings()
 /** @type {readonly string[]} */
-export const CONFIG_UNSET_NUMBER_PATHS = Object.freeze(['canvas.linear.track_axis_gap', 'objects.conservation.ring_gap', 'objects.conservation.ring_width', 'objects.definition.linear.line_styles.accession.font_size', 'objects.definition.linear.line_styles.accession.font_weight', 'objects.definition.linear.line_styles.length.font_size', 'objects.definition.linear.line_styles.length.font_weight', 'objects.definition.linear.line_styles.name.font_size', 'objects.definition.linear.line_styles.name.font_weight', 'objects.definition.linear.line_styles.replicon.font_size', 'objects.definition.linear.line_styles.replicon.font_weight', 'objects.definition.linear.line_styles.subtitle.font_size', 'objects.definition.linear.line_styles.subtitle.font_weight', 'objects.depth.large_tick_interval', 'objects.depth.max_depth', 'objects.depth.min_depth', 'objects.depth.small_tick_interval', 'objects.depth.tick_font_size', 'objects.gc_content.large_tick_interval', 'objects.gc_content.max_percent', 'objects.gc_content.min_percent', 'objects.gc_content.small_tick_interval', 'objects.gc_content.tick_font_size']);
+export const CONFIG_UNSET_NUMBER_PATHS = Object.freeze(['canvas.linear.track_axis_gap', 'objects.blast_match.identity_scale', 'objects.conservation.identity_scale', 'objects.conservation.ring_gap', 'objects.conservation.ring_width', 'objects.definition.linear.line_styles.accession.font_size', 'objects.definition.linear.line_styles.accession.font_weight', 'objects.definition.linear.line_styles.length.font_size', 'objects.definition.linear.line_styles.length.font_weight', 'objects.definition.linear.line_styles.name.font_size', 'objects.definition.linear.line_styles.name.font_weight', 'objects.definition.linear.line_styles.replicon.font_size', 'objects.definition.linear.line_styles.replicon.font_weight', 'objects.definition.linear.line_styles.subtitle.font_size', 'objects.definition.linear.line_styles.subtitle.font_weight', 'objects.depth.large_tick_interval', 'objects.depth.max_depth', 'objects.depth.min_depth', 'objects.depth.small_tick_interval', 'objects.depth.tick_font_size', 'objects.gc_content.large_tick_interval', 'objects.gc_content.max_percent', 'objects.gc_content.min_percent', 'objects.gc_content.small_tick_interval', 'objects.gc_content.tick_font_size']);
 
 // gbdraw/session_request_codec.py: describe_legacy_request_tables()
 export const LEGACY_REQUEST_TABLES = Object.freeze({

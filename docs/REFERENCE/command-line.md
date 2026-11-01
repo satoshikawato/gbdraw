@@ -106,7 +106,11 @@ boolean tokens listed by `--help`. A region is cropped first, on the record as
 stored in the file, and then reverse-complemented: `--region '#2:5001-40000'`
 with `--reverse_complement 1` for that file draws the same window as
 `--region '#2:5001-40000:rc'`. Selection, cropping, and reverse-complement
-display do not rewrite a source file.
+display do not rewrite a source file. `gbdraw linear --auto_orient` also
+reverse-complements each record whose reverse nucleotide hits against the row
+above weigh more than half of its hits; an explicit reverse wins, and protein
+comparisons are not read. The rule is in [Automatic Linear
+orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation).
 
 Circular mode writes separate results for multiple records by default.
 `--multi_record_canvas` places them on one canvas.
@@ -120,6 +124,32 @@ displayed record. Records in one row share a bp-per-pixel scale and keep input
 order. `--linear_record_gap` sets the gap within that row.
 `--record_label` and `--record_subtitle` follow displayed-record order.
 Multi-record rows cannot be combined with `--normalize_length`.
+
+`gbdraw linear --anchor_feature KEY=VALUE` lines the records up at one
+feature, for example `--anchor_feature gene=COX1` across mitogenomes. The
+selector has the `feature_selector` form of the placement and override tables
+and matches a qualifier value exactly; `locus_tag=` and `gene=` are the usual
+keys. It is resolved in each record as drawn, after `--region`,
+`--reverse_complement`, and a display start. The anchor is the feature's first
+drawn base: the point from which reading rightward covers the whole feature.
+That is its left end as drawn (on a reverse-complemented record, its end with
+the higher source coordinate); on a complete circular record, a feature that
+crosses the origin or the display start begins on its piece before that seam.
+Only features that start inside the drawn region count. The first record
+that has the feature keeps its place; every other record that has it moves
+so that the feature's start lies directly below, and that place replaces the
+record's own x, as with Similarity alignment. A record without the feature
+keeps its place, with a warning naming it, or saying that its match starts
+outside the drawn region. A gene and its CDS that start at the same base
+count as one match; matches at different starts stop the run with the
+candidates listed, and so does a selector that no record matches. With
+`--align_center`, the first record keeps its centred place and the records the
+anchor moves leave theirs. A moved record can widen the canvas. With
+`--auto_orient`, the anchor is read after the automatic reverse complement.
+`--anchor_feature` cannot be combined with `--similarity_alignment_feature`,
+with records that share a row (`--multi_record_position`), or with a
+`--wrap_length` that cuts a record, and a Session does not store it yet:
+`--save_session` with it stops before drawing.
 
 On-axis ruler coordinates depend on the canvas topology. If any Linear row
 contains multiple records, every ruler on that canvas uses record-local
@@ -286,6 +316,11 @@ file. The writer creates `DIR`, resolves session-internal runtime handles to
 stable percent-encoded protein IDs, and refuses an existing `losatp.raw.tsv`
 unless `--overwrite` is present. Display filters
 and hit caps can make the number of drawn links smaller than the raw row count.
+
+`--identity_scale MIN MAX` (both subcommands) fixes the identity colour scale
+of the pairwise matches or similarity rings and their Legend, which otherwise
+runs from `--identity` to 100%. See [Identity colour
+scale](comparison-programs-thresholds-and-results.md#identity-colour-scale).
 
 See [Comparison programs, thresholds, and result
 semantics](comparison-programs-thresholds-and-results.md) for direction,

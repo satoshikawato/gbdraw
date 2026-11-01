@@ -12,6 +12,7 @@ from pandas import DataFrame
 
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ComparisonIdentityError, ValidationError
+from gbdraw.io.comparisons import ComparisonFilter, filter_comparison_dataframe
 from gbdraw.layout.record_coordinates import (
     DisplayFragment,
     RecordDisplayTransform,
@@ -199,6 +200,58 @@ _FEATURE_BINDING_COLUMNS = frozenset(
 )
 
 
+def search_frame_linear_comparisons(
+    blast_tables: Sequence[DataFrame],
+    protein_comparisons: ProteinComparisonFrames | None,
+    linear_comparisons: Sequence[LinearComparison],
+    thresholds: ComparisonFilter,
+    rows_by_record: Sequence[int],
+    multi_record_enabled: bool,
+) -> tuple[LinearComparison, ...]:
+    """Filter, merge and validate the comparisons of a Linear diagram in the search frame.
+
+    The ordered tables (comparison files, then protein comparisons) pair
+    record ``i`` with ``i + 1``; explicit comparisons (given, then protein
+    pairs) name their records. The render stage projects the result onto the
+    records; ``auto_orient`` reads it without protein comparisons.
+    """
+
+    proteins = protein_comparisons or ProteinComparisonFrames()
+    sources = [
+        [filter_comparison_dataframe(table, thresholds) for table in source]
+        for source in (blast_tables, proteins.ordered)
+        if source
+    ]
+    ordered_frames: list[DataFrame] = []
+    for index in range(max((len(source) for source in sources), default=0)):
+        frames = [source[index] for source in sources if index < len(source)]
+        ordered_frames.append(frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True))
+    normalized = [
+        LinearComparison(
+            item.query_record_index,
+            item.subject_record_index,
+            filter_comparison_dataframe(item.matches, thresholds),
+        )
+        for item in (*linear_comparisons, *proteins.pairs)
+    ]
+    if ordered_frames:
+        if multi_record_enabled:
+            raise ValidationError(
+                "Ordered comparison tables pair record i with record i + 1, which is "
+                "ambiguous when a Linear row holds more than one record. On the command "
+                "line, list each table with its query and subject in --comparisons_table "
+                "instead of -b/--blast; in Python, pass LinearComparison values."
+            )
+        # A table past the last record fails the topology check below.
+        normalized.extend(
+            LinearComparison(index, index + 1, frame)
+            for index, frame in enumerate(ordered_frames)
+        )
+    normalized = list(merge_linear_comparisons(normalized))
+    validate_linear_comparison_topology(normalized, rows_by_record)
+    return tuple(normalized)
+
+
 def _record_id_index(records: Sequence[object]) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
     """Index record IDs and names exactly and without a version suffix."""
 
@@ -296,6 +349,60 @@ def project_search_frame_comparisons(
             *(_endpoint_frame(records[index]) for index in (comparison.query_record_index, comparison.subject_record_index)),
         ))
     return tuple(projected)
+
+
+def auto_orient_reversed_records(
+    comparisons: Sequence[LinearComparison],
+    rows_by_record: Sequence[int],
+    reversed_records: Sequence[bool],
+) -> frozenset[int]:
+    """Return the records that auto-orientation reverse-complements (``auto_orient``).
+
+    ``comparisons`` are the nucleotide comparisons of the diagram in the search
+    frame after its match thresholds; rows bound to source features (protein
+    results) are not read. ``reversed_records`` marks the records an explicit
+    reverse (a reverse flag or a region's ``:rc``) already draws
+    reverse-complemented: they keep that orientation.
+
+    Records are decided row by row; the records of the first row keep their
+    orientation. For a record R of a later row, every hit between R and a
+    record P of the row above weighs its ``alignment_length`` (BLAST column 4).
+    The hit is reverse when its strands in the search frame differ
+    (``qstart <= qend`` against ``sstart <= send``), and the other way round
+    when P is drawn reverse-complemented. R is reverse-complemented when its
+    reverse hits weigh more than half of all its hits against that row; at
+    exactly half, or without hits, it keeps its orientation.
+    """
+
+    # (record, record of the row above) -> [forward, reverse] weight in the search frame.
+    weights: dict[tuple[int, int], list[float]] = {}
+    for comparison in comparisons:
+        frame = _rows_without_feature_binding(comparison.matches)
+        if frame.empty:
+            continue
+        values = frame.loc[:, ["qstart", "qend", "sstart", "send", "alignment_length"]].apply(pd.to_numeric)
+        strand_reverse = (values["qstart"] <= values["qend"]) != (values["sstart"] <= values["send"])
+        length = values["alignment_length"]
+        query, subject = comparison.query_record_index, comparison.subject_record_index
+        for record, above in ((query, subject), (subject, query)):
+            if rows_by_record[above] == rows_by_record[record] - 1:
+                pair = weights.setdefault((record, above), [0.0, 0.0])
+                pair[0] += float(length[~strand_reverse].sum())
+                pair[1] += float(length[strand_reverse].sum())
+    drawn_reversed = [bool(value) for value in reversed_records]
+    auto_reversed: set[int] = set()
+    for record in sorted(range(len(drawn_reversed)), key=lambda index: (rows_by_record[index], index)):
+        if drawn_reversed[record]:
+            continue
+        total = reverse = 0.0
+        for (target, above), (forward_weight, reverse_weight) in weights.items():
+            if target == record:
+                total += forward_weight + reverse_weight
+                reverse += forward_weight if drawn_reversed[above] else reverse_weight
+        if 2 * reverse > total:
+            drawn_reversed[record] = True
+            auto_reversed.add(record)
+    return frozenset(auto_reversed)
 
 
 def _endpoint_frame(record: SeqRecord) -> tuple[int, bool]:
@@ -491,9 +598,11 @@ __all__ = [
     "ComparisonRecordIdWarning",
     "LinearComparison",
     "ProteinComparisonFrames",
+    "auto_orient_reversed_records",
     "merge_linear_comparisons",
     "project_search_frame_comparisons",
     "reverse_unbound_endpoint_span",
+    "search_frame_linear_comparisons",
     "validate_linear_comparison_record_ids",
     "validate_linear_comparison_topology",
 ]

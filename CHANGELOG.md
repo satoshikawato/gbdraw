@@ -35,6 +35,13 @@ write-up of a release.
   limit. A wrapped figure's PNG or PDF over its limit
   ([limits](./docs/REFERENCE/output-formats-and-export.md#png-and-pdf-size-limits))
   stops before writing, and the error names a longer row length that should fit.
+- Fixed: LOSATP Pairwise and Similarity groups draw the same links on the
+  command line, in Python, and in the Web app for the same records and hits.
+  When hits tie on score, the first CDS by record and location wins; the
+  protein ID, which differs between the surfaces and between Web pages, decided
+  before, so a few links among identical paralogs could differ. **Generate
+  Diagram** again on a saved Session to redraw it: the derived LOSATP entries
+  are rebuilt once from the raw searches.
 - Fixed: the Web app draws a LOSATP Pairwise link, Similarity group link, or
   Collinear block that uses a CDS across a circular record's origin over the
   CDS's own arc, as the command line and Python have since 0.14.4; it drew them
@@ -49,6 +56,11 @@ write-up of a release.
   and Collinear blocks do, instead of failing with "Ordered BLAST/protein comparison
   inputs are ambiguous". `-b/--blast` on such a layout is still refused; the
   message now says to list the tables in `--comparisons_table` (OV-2371).
+- Fixed: a threaded LOSAT search in the Web app could stop with "memory access
+  out of bounds" and run the whole pair again (the console said "running the
+  pair again"), or fail after the third stop. In Chromium a copy into memory
+  that another LOSAT thread had just grown could trap; the Web app now checks
+  each such copy and first brings the thread's view of the memory up to date.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

@@ -279,6 +279,7 @@ def mode_profiles_payload() -> dict[str, object]:
 
     # gbdraw.auto_sizes takes DiagramMode from this module.
     from gbdraw.auto_sizes import linear_label_size_records, tick_and_window_tiers
+    from gbdraw.comparisons.identity_scale import IDENTITY_SCALE_PATHS
     from gbdraw.config.models import GbdrawConfig
     from gbdraw.diagrams.circular.presets import circular_auto_slot_sizes, circular_track_preset_table
     from gbdraw.labels.label_style import (
@@ -343,6 +344,8 @@ def mode_profiles_payload() -> dict[str, object]:
                     "protection": DEFAULT_LABEL_PROTECTION[mode],
                     "italicGeneLabels": DEFAULT_ITALIC_GENE_LABELS[mode],
                 },
+                # The config leaf of the mode's fixed identity colour scale (an ``[MIN, MAX]`` override).
+                "identityScalePath": IDENTITY_SCALE_PATHS[mode],
             }
             for mode, profile in MODE_PROFILES.items()
         },

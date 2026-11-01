@@ -12,13 +12,13 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Session 50 stores a project and its list of drawings, the Linear wrap length, and italic gene names
+## Unreleased: Session 50 stores a project and its list of drawings, the Linear wrap length, italic gene names, and the identity colour scale
 
 Session version 50 replaces the two diagram-mode slices of Sessions 46 to 49
 with a list of drawings, so a project can hold several drawings of one mode
 (PD-OI-090), it stores the Linear wrap length in each Linear drawing, and it
-stores italic gene names in each drawing. Session 49 reached `main` with 0.14.3
-as the mode-scoped Session below, so all three changes take 50 (CLAUDE.md, "Persisted-format compatibility").
+stores italic gene names and the identity colour scale in each drawing. Session 49 reached `main` with 0.14.3
+as the mode-scoped Session below, so all four changes take 50 (CLAUDE.md, "Persisted-format compatibility").
 
 The project keeps `format`, `version`, `createdAt`, `title`, `resources`, `ui`
 (the project's view keys and `ui.activeDrawingId`), and `legacyArtifacts`. Each
@@ -76,6 +76,19 @@ same request as before. The key reached no `main` Session before 50 and shares
 its version with the drawings and the wrap length; a Session up to 49 has no key,
 and reading it gives every drawing the packaged default (off); no reader converts
 it.
+
+Session 50 also adds the config leaves `objects.blast_match.identity_scale`
+(Linear) and `objects.conservation.identity_scale` (Circular), `"auto"` or
+`[MIN, MAX]` percent identities, and each drawing's key
+`config.adv.identity_scale` (`null` or `[MIN, MAX]`, either mode), a `copy` row of the mode-scoped registry next to
+`identity`, whose replay flag is `--identity_scale MIN MAX`. A Web writer puts
+the drawing's mode leaf in the request's `configOverrides` only when a scale is set, so
+a Session without one has the same request as before. `main`'s build refuses
+that override (`UNKNOWN_CONFIG_PATH`) and the slice key (the slice's `adv` is
+closed); it ignores the leaf in a stored full config and draws the threshold
+scale, as a Session without a scale draws. The keys reached no `main` Session
+before 50 and share its version with the drawings; a Session up to 49 has none,
+and reading it gives every drawing no fixed scale (`null`); no reader converts it.
 
 ## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
 
@@ -168,6 +181,20 @@ them: `renderRequest.comparisons[0].settings.collinearityAnchorMode` and the dra
 draft) (provenance in `BGC0000708-BGC0000713.v49-one-to-one.provenance.json`). It sits in
 `tests/retired_sessions/`, outside the folders the scans of stored Sessions read, because
 they refuse a value outside the description.
+
+## Unreleased: derived LOSATP token v6 for score ties ordered by CDS
+
+No Session, request, or derived envelope version changes. A score tie between
+protein hits (a Pairwise or member hit limit, a best hit, a group's
+representative, the bitscore fit, the order of edges) was broken on the
+runtime handle, which hashes the record instance key: the CLI's record key or
+the Web page's sequence uid. Equal inputs gave other links on the CLI and the
+Web, and on two Web pages (OV-2370, OV-2380). Ties now follow the CDS order
+(record, then location), so a derived entry written before has rows of the old
+order for the same identity. The token becomes
+`derived-option-conformance-v6`: earlier derived entries are cache misses and
+are recomputed once from the raw cache at the next Generate; no search runs
+again and no reader reads them.
 
 ## Unreleased: derived LOSATP token v5 for a CDS across the origin in the Web
 

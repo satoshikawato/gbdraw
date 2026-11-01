@@ -1218,6 +1218,7 @@ def _filter_hit_tables_by_search_scope(
 
 def _select_orthogroup_edges(
     hit_tables: Mapping[tuple[int, int], DataFrame],
+    protein_map: Mapping[str, CdsProtein],
     *,
     edge_mode: CollinearityAnchorMode | str,
 ) -> dict[tuple[int, int], DataFrame]:
@@ -1237,6 +1238,7 @@ def _select_orthogroup_edges(
             selected[(query_index, subject_index)] = select_reciprocal_best_hit_edges(
                 forward_hits,
                 reverse_hits,
+                protein_map,
             )
         else:
             selected[(query_index, subject_index)] = forward_hits.copy()
@@ -1331,14 +1333,17 @@ def build_orthogroup_collinearity_blocks_from_hits(
             }
         else:
             edge_tables = _select_orthogroup_edges(
-                geometry_hit_tables, edge_mode=normalized_edge_mode,
+                geometry_hit_tables, extraction.protein_map, edge_mode=normalized_edge_mode,
             )
     else:
         edge_tables = _select_orthogroup_edges(
             {
-                pair: _select_member_candidate_hits_per_query(hits, max_hits=orthogroup_member_max_hits)
+                pair: _select_member_candidate_hits_per_query(
+                    hits, max_hits=orthogroup_member_max_hits, protein_map=extraction.protein_map
+                )
                 for pair, hits in geometry_hit_tables.items()
             },
+            extraction.protein_map,
             edge_mode=normalized_edge_mode,
         )
     comparison_edges_by_pair = {

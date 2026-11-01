@@ -5,6 +5,7 @@ from typing import Dict
 
 from pandas import DataFrame
 
+from gbdraw.comparisons.identity_scale import IdentityColorDomain, identity_color_domain
 from gbdraw.config.models import RenderProfile
 from gbdraw.core.color import (
     COLLINEAR_ORIENTATION_COLOR_KEYS,
@@ -66,6 +67,10 @@ class BlastMatchConfigurator:
         self.evalue: float = evalue
         self.bitscore: float = bitscore
         self.identity: float = identity
+        # The match colours and the Legend scale read this one domain.
+        self.identity_domain: IdentityColorDomain = identity_color_domain(
+            identity, cfg.objects.blast_match.identity_scale
+        )
         self.alignment_length: int = alignment_length
         self.sequence_length_dict: dict = sequence_length_dict
         self.min_color: str = default_colors_df[default_colors_df["feature_type"] == "pairwise_match_min"][

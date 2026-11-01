@@ -70,7 +70,7 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("FEATURE_INSTANCE_SEPARATOR", "gbdraw.features.ids", "FEATURE_INSTANCE_SEPARATOR"),
     ("CLI_RECORD_KEY_PREFIX", "gbdraw.api.record_planning", "CLI_RECORD_KEY_PREFIX"),
     ("EXPANDED_RECORD_KEY_SEPARATOR", "gbdraw.api.record_planning", "EXPANDED_RECORD_KEY_SEPARATOR"),
-    ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.config.models.objects", "UNSET_NUMBER_SPELLINGS"),
+    ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.core.numeric", "UNSET_NUMBER_SPELLINGS"),
     # Session field sets: the keys of the classes of gbdraw/session_contract.py.
     ("FLAT_DRAFT_TOP_LEVEL_FIELDS", "gbdraw.session_io", "FLAT_DRAFT_TOP_LEVEL_FIELDS"),
     ("OTHER_MODE_RESULT_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_FIELDS"),

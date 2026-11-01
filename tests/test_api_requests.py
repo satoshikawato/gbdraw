@@ -125,7 +125,9 @@ def test_new_request_fields_preserve_released_positional_arguments() -> None:
         "conservation_losat_gencodes",
         "conservation_search_results",
     ]
-    assert [item.name for item in fields(LinearDiagramOptions)][-2:] == ["comparison_table_file", "wrap_defaults"]
+    assert [item.name for item in fields(LinearDiagramOptions)][-4:] == [
+        "comparison_table_file", "wrap_defaults", "auto_orient", "anchor_feature",
+    ]
 
 
 def test_in_memory_record_source_rejects_other_objects() -> None:

@@ -263,7 +263,8 @@ def sequential_related_edges(ranked_hits, pm, group_by_protein, member_roles, me
         if hit.query_record_index != hit.subject_record_index:
             forward = hit.query_record_index < hit.subject_record_index
             return (hit.query, hit.subject) if forward else (hit.subject, hit.query)
-        return tuple(sorted((hit.query, hit.subject)))
+        # One record: the endpoints in CDS order, as the live owner orders them (OV-2370).
+        return tuple(sorted((hit.query, hit.subject), key=lambda protein_id: pc._protein_sort_key(pm[protein_id])))
     membership_pairs = {tuple(sorted((e.query_protein_id, e.subject_protein_id))) for edges in membership.values() for e in edges}
     seen = set()
     full = {None, *(gid for gid, edges in related.items() if len(edges) >= cap)}

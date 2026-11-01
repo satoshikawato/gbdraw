@@ -2339,14 +2339,15 @@ _RECORDED_DERIVED_ENTRIES = {
     # and the block E-value column went (OV-2294..2296, OV-2300: semantics v4),
     # and when the default merge orientation became "strand", which "either"
     # was a spelling of (OV-2301), and when the Web began to carry a CDS's arc
-    # across the origin (OV-2368: semantics v5; these bytes change only by the token).
+    # across the origin (OV-2368: semantics v5), and when score ties began to
+    # follow the CDS order (OV-2370: semantics v6; these bytes change only by the token).
     "similarity_groups": (
-        "d129661f4cf4fb01c805ae3f4b2a412cad7a7c9df7b7ec01630c036aacb0cad0",
-        "b99221feabf1318c6287b5960c700e842de54d858ef6d45b6e3391d4bf293917",
+        "e0545e9b7d1b28a8610ad993ecf8b95bd1be1d712463866636fb60ab4c687fd5",
+        "037eefa5685fd55a2eb4eeda3b20c511ae3a57dd0a2cba0c98d18f11d52fc8b3",
     ),
     "collinear": (
-        "edf2c145bbd0d6d8709f91ffe197121b95452ac92b37912439e81ea1d7d407e9",
-        "d506f535f5ea7c416a4072b1cf29e505859e9f23842131e88bf198bac2e8066f",
+        "975e84731ddc149abc8b6024c11300e76ee516c78c0c415bd69659058830a1df",
+        "1a22f3f688db43bffed21dacf6f1ac40266242372096c19e047889aa58914b8f",
     ),
 }
 

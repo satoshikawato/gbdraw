@@ -68,6 +68,7 @@ from gbdraw.tracks import (
     parse_linear_track_slots,
 )
 from gbdraw.annotations import AnnotationOptions
+from gbdraw.annotations.models import FeatureSelector, parse_feature_selector
 
 
 # Paths not listed here are shared by both renderers.
@@ -1402,7 +1403,20 @@ class LinearWrapDefaults:
 
 @dataclass(frozen=True)
 class LinearDiagramOptions(_ModeDiagramOptions):
-    """Options accepted by a Linear typed request."""
+    """Options accepted by a Linear typed request.
+
+    ``auto_orient`` reverse-complements records from their nucleotide hits
+    (:func:`gbdraw.linear_comparison.auto_orient_reversed_records`).
+
+    ``anchor_feature`` aligns the records at the first drawn base of the
+    feature it selects in each record (``key=value``, exact; a string is
+    parsed with :func:`gbdraw.annotations.models.parse_feature_selector`).
+    The first record that has the feature keeps its place
+    (:func:`gbdraw.api.record_planning.project_anchor_feature_starts`). The
+    x of each record it moves replaces that record's own x, explicit
+    ``LinearMultiRecordOptions.record_translations`` included, as Similarity
+    alignment does; the y is kept.
+    """
 
     tracks: LinearRequestTrackOptions | None = None
     output: LinearOutputOptions | None = None
@@ -1428,9 +1442,22 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     collinear_max_paralog_links_per_orthogroup: int = 2
     comparison_table_file: str | None = None
     wrap_defaults: LinearWrapDefaults | None = None
+    auto_orient: bool = False
+    anchor_feature: FeatureSelector | str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        if not isinstance(self.auto_orient, bool):
+            raise ValidationError(
+                "auto_orient must be a boolean.", diagnostic={"code": "INPUT_INVALID"}
+            )
+        if self.anchor_feature is not None:
+            if not isinstance(self.anchor_feature, (FeatureSelector, str)):
+                raise ValidationError(
+                    "anchor_feature must be a FeatureSelector, a key=value string, or None.",
+                    diagnostic={"code": "INPUT_INVALID"},
+                )
+            object.__setattr__(self, "anchor_feature", parse_feature_selector(self.anchor_feature))
         for placement in self.feature_placements:
             placement.target.validate_mode("linear")
         _validate_mode_config_overrides(
