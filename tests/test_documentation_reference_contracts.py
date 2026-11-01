@@ -54,6 +54,7 @@ DOCUMENTATION_PAGES = (
     REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.2.md",
     REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.3.md",
     REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.4.md",
+    REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.5.md",
     REPO_ROOT / "docs" / "FAQ.md",
     REPO_ROOT / "docs" / "GALLERY.md",
 )

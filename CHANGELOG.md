@@ -12,6 +12,37 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
+
+- Patch release of 0.14.4. Sessions are saved as Session version 50 (0.14.4 writes 49); a Session
+  saved by 0.14.5 opens in 0.14.5 or later only. See the [full release notes](./docs/RELEASE_NOTES_0.14.5.md).
+- Added: `--identity_scale MIN MAX`, `identity_scale` on `LinearComparisonOptions` and
+  `ComparisonRingOptions`, and the Web **Identity scale min (%)** / **Identity scale max (%)**
+  fix the identity color range of comparisons.
+- Added: `--italic_gene_labels` and the Web **Italic gene names** checkbox draw labels whose
+  text comes from the `gene` qualifier in italics.
+- Changed: a PNG downloaded from the Web app keeps the drawing's transparent background, as SVG
+  and the command-line and Python PNG do. Check **White background**, next to the PNG DPI
+  choice, for the white background of earlier Web PNGs.
+- Added: `gbdraw linear --auto_orient` reverse-complements records from their nucleotide hits
+  against the row above, and `--anchor_feature KEY=VALUE` aligns records at a named feature.
+  The Web app has the matching **Orient records from comparisons** button and **Align at
+  feature** action. A Session saved with either option stores the resulting Reverse
+  complement flags or record translations, not the option.
+- Fixed: the Web app's hover popup no longer opens after a pan for a pointer that has left the
+  drawing.
+- Changed: the tobacco chloroplast tutorial and Gallery entry use `builtin:plastid`.
+- Added: `gbdraw circular --origin_feature KEY=VALUE` rotates records so that the named
+  feature's start is the display start. Command line and Python only.
+- Added: `gbdraw circular` and `gbdraw linear` log an `INFO:` line per drawn record and
+  comparison table and a `WARNING:` when a record has no feature to draw or the thresholds
+  leave out every row of a comparison table; the Web app shows the same text under the
+  Generate status line and in **Run Info** (**Input summary**).
+- Fixed: a UTF-8 byte order mark no longer hides the first record of a GenBank, EMBL, GFF3,
+  or FASTA file. A Session saved by 0.14.4 or earlier with such a file of several records
+  now points each saved record index one record earlier.
+- Fixed: a live palette change on comparison matches colored by identity matches **Generate
+  Diagram** in the Web app.
 - Added: `--wrap_length AUTO|LENGTH` and the config key
   `canvas.linear.wrap_length` draw one Linear record over several rows at one
   scale, each row with its own height. The record stays one record, and a figure
@@ -64,6 +95,18 @@ write-up of a release.
   searches run again once at the next **Generate Diagram**. Searches saved by
   the command line are reused as before.
   `gbdraw/web/wasm/losat/losat-build.json` records the build.
+- Added: built-in specific-color tables. `-t/--table` and
+  `FeatureOptions.color_table` accept `builtin:cog`, `builtin:phrog`,
+  `builtin:plastid`, and `builtin:mitochondrion`; the Web app **Colors > Preset
+  scheme** lists them in place of the Pharokka and Bakta presets. The `cog`
+  table reads `db_xref`, GFF3 `Dbxref`, and `note`, so it colors Bakta's default
+  GenBank output, which the old Bakta preset did not (OV-2358).
+- Fixed: more real-world input reads, or fails with a named error. Read now: a
+  LOCUS line with spaces in the name, EMBL flat files (`.embl`, `.emb`
+  in the Web file pickers), qualifier lines indented with tabs, lowercase GFF3
+  feature types such as `cds`, and GFF3 attributes with a space after `;`. A
+  `CONTIG` record without sequence and a `--gbk` file without a record now stop
+  with an error that names the file and the reason.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

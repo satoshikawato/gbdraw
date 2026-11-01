@@ -151,34 +151,30 @@ draft) (provenance in `BGC0000708-BGC0000713.v49-one-to-one.provenance.json`). I
 `tests/retired_sessions/`, outside the folders the scans of stored Sessions read, because
 they refuse a value outside the description.
 
-## Unreleased: derived LOSATP token v6 for score ties ordered by CDS
+## Unreleased: derived LOSATP token v6 for a CDS across the origin in the Web and for score ties ordered by CDS
 
-No Session, request, or derived envelope version changes. A score tie between
-protein hits (a Pairwise or member hit limit, a best hit, a group's
-representative, the bitscore fit, the order of edges) was broken on the
-runtime handle, which hashes the record instance key: the CLI's record key or
-the Web page's sequence uid. Equal inputs gave other links on the CLI and the
-Web, and on two Web pages (OV-2370, OV-2380). Ties now follow the CDS order
-(record, then location), so a derived entry written before has rows of the old
-order for the same identity. The token becomes
-`derived-option-conformance-v6`: earlier derived entries are cache misses and
-are recomputed once from the raw cache at the next Generate; no search runs
-again and no reader reads them.
+No Session, request, or derived envelope version changes. 0.14.4 writes token
+`derived-option-conformance-v4`; the token becomes `derived-option-conformance-v6`
+for two reasons, and no released writer wrote v5. Earlier derived entries are
+cache misses and are recomputed once from the raw cache at the next Generate;
+no search runs again and no reader reads them.
 
-## Unreleased: derived LOSATP token v5 for a CDS across the origin in the Web
-
-No Session, request, or derived envelope version changes. The Web converter
-now receives each CDS's `origin_arc` and `record_length` and the record lengths
-(OV-2368), so a Web result with a CDS across a circular record's origin has new
-rows for the same inputs. The derived identity names the bindings, settings, and
-raw keys, not the protein map, so a derived entry that 0.14.4 wrote would be a
-hit with the old rows. The token becomes `derived-option-conformance-v5`:
-earlier derived entries are cache misses and are recomputed once from the raw
-cache at the next Generate; no search runs again and no reader reads them. The
-protein map itself is never saved: it lives in the page's per-file memory
-(`readOncePerFile`), and no Session field holds it, so `proteinMapSchema` and the
-Session stay as they are. The comparison tables of a saved request keep their
-rows until that Generate.
+- A CDS across the origin in the Web (OV-2368). The Web converter now receives
+  each CDS's `origin_arc` and `record_length` and the record lengths, so a Web
+  result with a CDS across a circular record's origin has new rows for the same
+  inputs. The derived identity names the bindings, settings, and raw keys, not
+  the protein map, so an entry that 0.14.4 wrote would be a hit with the old
+  rows. The protein map itself is never saved: it lives in the page's per-file
+  memory (`readOncePerFile`), and no Session field holds it, so
+  `proteinMapSchema` and the Session stay as they are. The comparison tables of
+  a saved request keep their rows until that Generate.
+- Score ties ordered by CDS (OV-2370, OV-2380). A score tie between protein hits
+  (a Pairwise or member hit limit, a best hit, a group's representative, the
+  bitscore fit, the order of edges) was broken on the runtime handle, which
+  hashes the record instance key: the CLI's record key or the Web page's
+  sequence uid. Equal inputs gave other links on the CLI and the Web, and on two
+  Web pages. Ties now follow the CDS order (record, then location), so a derived
+  entry written before has rows of the old order for the same identity.
 
 ## Unreleased: derived LOSATP token v4 for chained Collinear blocks
 
