@@ -134,7 +134,11 @@ nothing states that they are reviewed.
 - `Track row {rows}` and `Track rows {rows}` are the one noun phrase that a
   sentence inserts as an object (Turn off {rows}): it carries the article the
   sentence needs (`es` la fila de pista {rows}, `fr` les lignes de piste
-  {rows}), and in a language with letter case it starts in lower case.
+  {rows}), and in a language with letter case it starts in lower case when
+  every sentence that inserts it puts a verb, colon or other word before it;
+  a language whose dialog titles start with the phrase capitalises it as the
+  English does (`tr` İz satırı {rows}), because the code cannot capitalise the
+  first letter.
 - Quotes follow the English: a `{name}` that the English key quotes is quoted
   in the target language's quotes (`ja` 「」, `zh-Hans` “ ”, `zh-Hant` 「」,
   `ko` ‘ ’, `es` and `pt` “ ”, `fr` « », `id` straight double

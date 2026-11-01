@@ -2782,6 +2782,7 @@ export default Object.freeze({
   "settings": "cài đặt",
   "settings reset.": "đã đặt lại cài đặt.",
   "shifted by": "Độ dịch",
+  "similarity alignment\u0004Alignment": "Căn chỉnh",
   "size scaling\u0004Linear": "Tuyến tính",
   "size-specific setting \"{setting}\" cannot be expressed by the current CLI.": "CLI hiện tại không thể diễn đạt cài đặt theo kích thước “{setting}”.",
   "skipped": "đã bỏ qua",

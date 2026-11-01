@@ -2782,6 +2782,7 @@ export default Object.freeze({
   "settings": "การตั้งค่า",
   "settings reset.": "มีการรีเซ็ตการตั้งค่า",
   "shifted by": "ระยะเลื่อน",
+  "similarity alignment\u0004Alignment": "การจัดแนว",
   "size scaling\u0004Linear": "ตามสัดส่วน",
   "size-specific setting \"{setting}\" cannot be expressed by the current CLI.": "ระบุการตั้งค่าเฉพาะขนาด “{setting}” ด้วย CLI ปัจจุบันไม่ได้",
   "skipped": "ข้าม",

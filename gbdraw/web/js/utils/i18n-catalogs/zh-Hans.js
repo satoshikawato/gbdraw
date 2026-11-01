@@ -2782,6 +2782,7 @@ export default Object.freeze({
   "settings": "设置",
   "settings reset.": "设置已重置。",
   "shifted by": "偏移",
+  "similarity alignment\u0004Alignment": "对齐",
   "size scaling\u0004Linear": "成比例",
   "size-specific setting \"{setting}\" cannot be expressed by the current CLI.": "按尺寸区分的设置“{setting}”无法用当前CLI表示。",
   "skipped": "已跳过",

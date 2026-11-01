@@ -2782,6 +2782,7 @@ export default Object.freeze({
   "settings": "pengaturan",
   "settings reset.": "pengaturan diatur ulang.",
   "shifted by": "digeser sejauh",
+  "similarity alignment\u0004Alignment": "Perataan",
   "size scaling\u0004Linear": "Proporsional",
   "size-specific setting \"{setting}\" cannot be expressed by the current CLI.": "pengaturan \"{setting}\" yang spesifik per ukuran tidak dapat dinyatakan di CLI saat ini.",
   "skipped": "dilewati",
