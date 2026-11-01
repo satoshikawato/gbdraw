@@ -4,7 +4,7 @@
 /** @param {string} text */
 const msg = (text) => text;
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertMainSessionComparisonFrame', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
-  'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
+  'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords',
   'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readFeatureOverrideTable', 'registerFonts', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'synthesizeColorRules', 'validateConfigOverrides', 'session-save', 'session-load']);

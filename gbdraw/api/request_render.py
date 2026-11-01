@@ -2104,6 +2104,10 @@ def plan_linear_request(
         )
         oriented = _auto_oriented_collection(resolved_options, collection, resolved_layout)
         reoriented = oriented is not collection
+        if resolved_options.auto_orient:
+            # The request carries the decided reverse flags in its records, not
+            # the option, so a Session stores the orientation the figure drew.
+            resolved_options = replace(resolved_options, auto_orient=False)
         if reoriented:
             # The search-frame rows, the layout and the resolved options hold
             # for either orientation; the records and their features do not.

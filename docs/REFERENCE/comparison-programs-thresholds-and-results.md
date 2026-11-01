@@ -213,9 +213,14 @@ against the row above. At exactly half, or without hits, the record keeps its
 orientation. A record that `--reverse_complement 1` or a region's `:rc`
 already reverses stays reversed, and the next row is decided against it as
 drawn. The figure equals the one the same explicit reverses draw; the CLI logs
-each record it reversed. A Session cannot store the option yet: with `--save_session` or
-`--session_output` the command stops with an error before it draws. The Web app does not
-offer it yet.
+each record it reversed. A Session stores the result, not the option: each record the
+rule reversed is saved with its reverse-complement flag set, so a replay of the Session
+draws the same figure without `--auto_orient`.
+
+In the Web app, **Orient records from comparisons** in the Linear comparison settings
+runs the same rule on the comparisons of the last Generate and checks **Reverse
+complement** of each record it reverses, as one Undo step; the next Generate draws
+them. See [Comparison surfaces](web-app.md#comparison-surfaces).
 
 ## Selected Linear edges
 

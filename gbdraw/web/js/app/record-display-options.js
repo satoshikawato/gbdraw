@@ -27,6 +27,8 @@ import { errorText } from '../utils/error-text.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { RecordOrientationDecision } from '../services/diagram-worker-protocol.js' */
+/** @import { RecordOrientationWrite } from './record-auto-orientation.js' */
 /** @import { AnchorIntent, RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from '../services/record-display-model.js' */
 
 // Session Load reads no record bytes (776a2f93), so a loaded Result can have a
@@ -175,6 +177,16 @@ export const createRecordDisplayControls = ({
     if (owner) owner.region_reverse = reverseComplement;
     draft.reverseComplementOverride = owner ? null : reverseComplement;
   };
+  // A row's draft in its drawing, added when it has none yet.
+  /** @param {DrawingState} drawing @param {RecordDisplayRow} row @returns {RecordDisplayDraft} */
+  const draftOf = (drawing, row) => {
+    const found = drawing.recordDisplayDrafts.find((/** @type {RecordDisplayDraft} */ entry) => recordDisplayKey(entry) === row.key);
+    if (found) return found;
+    drawing.recordDisplayDrafts.push({ sourceUid: row.sourceUid, selector: row.selector,
+      recordId: row.recordId, topologyOverride: null, startCoordinate: null,
+      reverseComplementOverride: null, anchorIntent: null });
+    return drawing.recordDisplayDrafts[drawing.recordDisplayDrafts.length - 1];
+  };
   /** @param {RecordDisplayRow} row */
   const surfaceFor = (row) => {
     const surface = recordDisplaySurface(row, draftFor(row), row);
@@ -184,14 +196,7 @@ export const createRecordDisplayControls = ({
   /** @param {DrawingState} drawing @param {RecordDisplayRow} row @param {Partial<RecordDisplayDraft>} patch @param {string} label */
   const edit = (drawing, row, patch, label) => runUndoable(label, () => {
     settleDrafts(drawing);
-    let draft = drawing.recordDisplayDrafts.find((/** @type {RecordDisplayDraft} */ entry) => recordDisplayKey(entry) === row.key);
-    if (!draft) {
-      draft = { sourceUid: row.sourceUid, selector: row.selector,
-        recordId: row.recordId, topologyOverride: null, startCoordinate: null,
-        reverseComplementOverride: null, anchorIntent: null };
-      drawing.recordDisplayDrafts.push(draft);
-      draft = drawing.recordDisplayDrafts[drawing.recordDisplayDrafts.length - 1];
-    }
+    const draft = draftOf(drawing, row);
     const { reverseComplementOverride, ...rest } = patch;
     Object.assign(draft, rest);
     if (Object.hasOwn(patch, 'reverseComplementOverride')) {
@@ -210,22 +215,7 @@ export const createRecordDisplayControls = ({
     const resolvedStart = parseRecordDisplayStart(startCoordinate);
     const resolvedIntent = validateAnchorIntent(anchorIntent);
     settleDrafts(drawing);
-    let draft = drawing.recordDisplayDrafts.find(
-      (/** @type {RecordDisplayDraft} */ entry) => recordDisplayKey(entry) === row.key
-    );
-    if (!draft) {
-      draft = {
-        sourceUid: row.sourceUid,
-        selector: row.selector,
-        recordId: row.recordId,
-        topologyOverride: null,
-        startCoordinate: null,
-        reverseComplementOverride: null,
-        anchorIntent: null
-      };
-      drawing.recordDisplayDrafts.push(draft);
-      draft = drawing.recordDisplayDrafts[drawing.recordDisplayDrafts.length - 1];
-    }
+    const draft = draftOf(drawing, row);
     Object.assign(draft, { startCoordinate: resolvedStart, anchorIntent: resolvedIntent });
     writeReverseComplement(row, draft, reverseComplement);
   };
@@ -466,6 +456,39 @@ export const createRecordDisplayControls = ({
       }
     };
   };
+  // Orientations decided for the committed request's records (by record key),
+  // written as one History step the way the record popup's Reverse complement
+  // writes one: the File card's checkbox, or the row of a card that draws
+  // several records. They were decided against the orientations of the last
+  // Generate, so a row whose orientation changed since then is stale.
+  /** @param {readonly RecordOrientationDecision[]} decisions @param {string} label @returns {RecordOrientationWrite} */
+  const writeDecidedOrientations = (decisions, label) => {
+    // The button acts on the shown drawing, whose last Generate it read.
+    const drawing = state.activeDrawing();
+    if (drawing.mode !== 'linear') return { status: 'stale' };
+    refreshCommittedRows();
+    const rowsByKey = new Map(committedRows.filter((row) => row.scope === 'linear').map((row) => [row.recordKey, row]));
+    const drawnChanged = (/** @type {CommittedDisplayRow} */ row) => {
+      try { return requestedRecordTransform(row, draftFor(row), row).reverseComplement !== row.committedReverseComplement; }
+      catch { return true; }
+    };
+    if (decisions.length !== rowsByKey.size || decisions.some(({ recordKey }) => !rowsByKey.has(recordKey))
+      || [...rowsByKey.values()].some(drawnChanged)) return { status: 'stale' };
+    const changes = decisions.flatMap(({ recordKey, reverseComplement }) => {
+      const row = /** @type {CommittedDisplayRow} */ (rowsByKey.get(recordKey));
+      return reverseComplement === row.committedReverseComplement ? [] : [{ row, reverseComplement }];
+    });
+    if (!changes.length) return { status: 'unchanged' };
+    runUndoable(label, () => {
+      settleDrafts(drawing);
+      changes.forEach(({ row, reverseComplement }) => {
+        const draft = draftOf(drawing, row);
+        draft.anchorIntent = null;
+        writeReverseComplement(row, draft, reverseComplement);
+      });
+    });
+    return { status: 'written', recordIds: changes.map(({ row }) => String(row.recordId || row.recordKey)) };
+  };
   /** @param {RecordDraftTarget} row @returns {TargetDraftCheckpoint} */
   const captureTargetDraft = (row) => {
     const drawing = state.drawingOfMode(row.scope);
@@ -547,6 +570,7 @@ export const createRecordDisplayControls = ({
     captureAlignmentOrientationIntent,
     restoreAlignmentOrientationIntent,
     commitAlignmentOrientations,
+    writeDecidedOrientations,
     captureTargetDraft,
     restoreTargetDraft,
     targetForFeature };

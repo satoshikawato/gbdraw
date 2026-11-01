@@ -720,6 +720,8 @@ def _encode_canonical_request(
         search = request.options.losat_search
         if search is not None and search.program != "losatp":
             unresolved_reasons.append(f"{search.program} search")
+        if request.options.auto_orient:
+            unresolved_reasons.append("auto_orient record orientation")
         if request._legacy_similarity_alignment is not None:
             raise CanonicalRequestEncodingError(
                 "A legacy similarity alignment must be materialized before current encoding."
@@ -1769,10 +1771,11 @@ def _decode_linear_layout(
 
 
 # The planner consumes it: a Session stores what the figure drew with
-# (origin_feature: the record display starts it resolves to).
-_PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults", "origin_feature"})
+# (origin_feature: the record display starts it resolves to; auto_orient: the
+# reverse flags of the records it reverses).
+_PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults", "origin_feature", "auto_orient"})
 # Options a Session does not store yet: a request that sets one is refused.
-_UNSTORED_FIELDS = frozenset({"auto_orient", "anchor_feature"})
+_UNSTORED_FIELDS = frozenset({"anchor_feature"})
 
 
 def require_storable_diagram_options(

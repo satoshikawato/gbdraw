@@ -1026,6 +1026,20 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // The Orient records button: Python plans the last Generate's request with
+  // auto_orient and returns each record's drawn orientation by record key.
+  [DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION]: {
+    keys: ['canonicalRequest'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'decide_auto_orientation_json', [
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV]: {
     keys: ['entry', 'identityManifest'],
     fileRoles: [],
