@@ -459,13 +459,15 @@ export const createRecordDisplayControls = ({
   // Orientations decided for the committed request's records (by record key),
   // written as one History step the way the record popup's Reverse complement
   // writes one: the File card's checkbox, or the row of a card that draws
-  // several records. They were decided against the orientations of the last
-  // Generate, so a row whose orientation changed since then is stale.
-  /** @param {readonly RecordOrientationDecision[]} decisions @param {string} label @returns {RecordOrientationWrite} */
-  const writeDecidedOrientations = (decisions, label) => {
+  // several records. They were decided from the comparisons the last Generate
+  // drew, so a row whose orientation changed since then is stale.
+  /** @param {readonly RecordOrientationDecision[]} decisions @param {string} label @returns {Promise<RecordOrientationWrite>} */
+  const writeDecidedOrientations = async (decisions, label) => {
     // The button acts on the shown drawing, whose last Generate it read.
     const drawing = state.activeDrawing();
-    if (drawing.mode !== 'linear') return { status: 'stale' };
+    if (drawing.mode !== 'linear') return { status: 'notLinear' };
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return { status: 'busy', reason: busy.reason };
     refreshCommittedRows();
     const rowsByKey = new Map(committedRows.filter((row) => row.scope === 'linear').map((row) => [row.recordKey, row]));
     const drawnChanged = (/** @type {CommittedDisplayRow} */ row) => {
@@ -479,14 +481,22 @@ export const createRecordDisplayControls = ({
       return reverseComplement === row.committedReverseComplement ? [] : [{ row, reverseComplement }];
     });
     if (!changes.length) return { status: 'unchanged' };
-    runUndoable(label, () => {
+    const WRITTEN = Symbol('written');
+    // History refuses the step, without running it, while a Session operation blocks edits.
+    const outcome = await runUndoable(label, () => {
       settleDrafts(drawing);
       changes.forEach(({ row, reverseComplement }) => {
         const draft = draftOf(drawing, row);
         draft.anchorIntent = null;
         writeReverseComplement(row, draft, reverseComplement);
       });
+      return WRITTEN;
     });
+    if (outcome !== WRITTEN) {
+      const reason = outcome && typeof outcome === 'object' && typeof outcome.reason === 'string' && outcome.reason
+        ? outcome.reason : msg('Retry after the current operation finishes.');
+      return { status: 'busy', reason };
+    }
     return { status: 'written', recordIds: changes.map(({ row }) => String(row.recordId || row.recordKey)) };
   };
   /** @param {RecordDraftTarget} row @returns {TargetDraftCheckpoint} */

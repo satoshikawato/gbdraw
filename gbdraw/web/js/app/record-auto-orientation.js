@@ -7,7 +7,7 @@
 /** @import { AutoOrientationHelperPayload, AutoOrientationReply, RecordOrientationDecision } from '../services/diagram-worker-protocol.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 import { diagnosticError } from '../utils/error-normalization.js';
-import { msg, t } from '../utils/i18n.js';
+import { msg, t, tm } from '../utils/i18n.js';
 
 const ORIENTATION_FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'decideAutoOrientation' });
 
@@ -36,11 +36,14 @@ const readAutoOrientationReply = (value, invalid) => {
 };
 
 /**
- * What the `writeDecidedOrientations` port did: `stale` when the decisions do
- * not name the committed records or a record's orientation changed since the
- * last Generate, `unchanged` when no drawn orientation changes, otherwise the
- * record IDs whose Reverse complement it wrote.
- * @typedef {{ status: 'stale' } | { status: 'unchanged' } | { status: 'written', recordIds: string[] }} RecordOrientationWrite
+ * What the `writeDecidedOrientations` port did: `notLinear` when the shown
+ * drawing is not Linear, `busy` (with the reason) when a Session operation
+ * blocks edits, `stale` when the decisions do not name the committed records
+ * or a record's orientation changed since the last Generate, `unchanged` when
+ * no drawn orientation changes, otherwise the record IDs whose Reverse
+ * complement it wrote.
+ * @typedef {{ status: 'notLinear' } | { status: 'busy', reason: string } | { status: 'stale' } | { status: 'unchanged' }
+ *   | { status: 'written', recordIds: string[] }} RecordOrientationWrite
  */
 
 /**
@@ -52,7 +55,7 @@ const readAutoOrientationReply = (value, invalid) => {
  * @property {() => { reason: string } | null | undefined} busy A Session operation that blocks edits, with its reason.
  * @property {(payload: AutoOrientationHelperPayload) => Promise<{ result?: unknown }>} decideOrientation
  *   Runs the Worker helper `decideAutoOrientation`; the reply is read here.
- * @property {(decisions: AutoOrientationReply['records'], label: string) => RecordOrientationWrite} writeDecidedOrientations
+ * @property {(decisions: AutoOrientationReply['records'], label: string) => Promise<RecordOrientationWrite>} writeDecidedOrientations
  * @property {(error: unknown) => string} errorMessage The user-facing text of a failure.
  */
 
@@ -64,6 +67,23 @@ const hasNucleotideComparison = (session) => (
   session?.renderRequest.mode === 'linear'
   && session.renderRequest.comparisons.some((comparison) => comparison.kind === 'nucleotideBlast')
 );
+
+/**
+ * The status line after the writer answered.
+ * @param {RecordOrientationWrite} written
+ */
+const writeStatusText = (written) => {
+  switch (written.status) {
+    case 'written':
+      return t('Set Reverse complement from the comparisons: changed {records}. Generate to draw the new orientation.',
+        { records: written.recordIds.join(', ') });
+    case 'unchanged': return t('The comparisons give every record its current orientation.');
+    case 'busy': return tm(written.reason);
+    case 'notLinear': return t('The shown drawing changed while the records were being oriented. Orient the records again.');
+    default:
+      return t('The records or their orientation changed since the last Generate. Generate, then orient the records again.');
+  }
+};
 
 /** @param {RecordAutoOrientationOptions} options */
 export const createRecordAutoOrientation = ({
@@ -82,7 +102,7 @@ export const createRecordAutoOrientation = ({
     const session = getCommittedSession();
     if (pending.value || !hasNucleotideComparison(session)) return;
     const blocked = busy();
-    if (blocked) { status.value = blocked.reason; return; }
+    if (blocked) { status.value = tm(blocked.reason); return; }
     const committed = /** @type {CommittedCanonicalSession} */ (session);
     pending.value = true;
     status.value = t('Reading the comparisons of the last Generate...');
@@ -95,14 +115,9 @@ export const createRecordAutoOrientation = ({
       );
       // A Generate that committed meanwhile drew other records or comparisons.
       const written = getCommittedSession() === committed
-        ? writeDecidedOrientations(reply.records, msg('Orient records from comparisons'))
+        ? await writeDecidedOrientations(reply.records, msg('Orient records from comparisons'))
         : /** @type {RecordOrientationWrite} */ ({ status: 'stale' });
-      status.value = written.status === 'written'
-        ? t('Changed Reverse complement of {records}. Generate to draw the new orientation.',
-          { records: written.recordIds.join(', ') })
-        : written.status === 'unchanged'
-          ? t('The comparisons keep every record in its current orientation.')
-          : t('The records or their orientation changed since the last Generate. Generate, then orient the records again.');
+      status.value = writeStatusText(written);
     } catch (error) {
       status.value = errorMessage(error);
     } finally {
