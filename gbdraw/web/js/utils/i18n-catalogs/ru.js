@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "Авто ({count})",
   "Auto ({mode})": "Авто ({mode})",
   "Auto ({value})": "Авто ({value})",
-  "Auto Reflow": "Автоперераспределение",
-  "Auto Reflow failed. Current diagram is kept.": "Не удалось выполнить автоперераспределение. Текущая диаграмма сохранена.",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "Если выбрано Авто, подписи, которые помещаются, встраиваются в элемент, а остальные выносятся наружу. Если выбрано Только встроенные, подписи, которым нужно внешнее размещение, отбрасываются. Если выбрано Только внешние, подписи остаются снаружи элементов.",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "Если выбрано Авто, размещение определяется макетом треков (Выше или Элементы на оси — подписи выше; Ниже — подписи ниже). Если выбрано Над элементом, подписи рисуются над элементами (и под элементами на обратной цепи, когда включен параметр Разделять по цепям).",
   "Auto hides these fields throughout the diagram": "если выбрано Авто, эти поля скрываются на всей диаграмме",

@@ -62,7 +62,7 @@ const DEPTH_CASES = {
 for (const [name, { mode, results = 'single', shown = null, tsv = DEPTH_TSV, add, remove }] of Object.entries(DEPTH_CASES)) {
   test(`Undo and Redo of a Depth source removal match Generate (${name})`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode, results, reflow: 'off' });
+    await open(page, { mode, results });
     const inStep = async (label, change, ...args) => {
       await page.evaluate(async ({ stepLabel, source, values }) => {
         const run = new Function('app', 'text', `return (${source})(app, text && new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));`);
@@ -150,7 +150,7 @@ for (const [name, { mode, results = 'single', box, rows, count = 1, form = {}, d
   of Object.entries(HIDDEN_TRACK_CASES)) {
   test(`A hidden drawn track's Legend rows leave and return with it (${name})`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode, results, reflow: 'off' });
+    await open(page, { mode, results });
     await page.evaluate(({ values, source, text }) => {
       const app = window.__GBDRAW_APP__;
       Object.assign(app.form, values);
@@ -196,7 +196,7 @@ for (const [name, { mode, results = 'single', box, rows, count = 1, form = {}, d
 // under its name, and leaves no waiting copy; renamed back, it keeps that name.
 test('A renamed Depth row hidden and shown again returns once under its name', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await drawDepthFile()(page);
   const rowsNow = () => page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
@@ -260,7 +260,7 @@ const sessionKeyCount = (saved, key) => {
 
 test('A Depth row renamed to Coverage, hidden, shown, saves its key once', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await drawDepthFile()(page);
   await renameRow(page, 'depth', 'Coverage');
   await settleLive(page);
@@ -278,7 +278,7 @@ test('A Depth row renamed to Coverage, hidden, shown, saves its key once', async
 
 test('Two Depth series labelled depth draw depth (1) and depth (2), and Show Depth off hides both', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await page.evaluate(({ text }) => {
     const app = window.__GBDRAW_APP__;
     const file = () => new File([text], 'depth.tsv', { type: 'text/tab-separated-values' });
@@ -320,7 +320,7 @@ const CUSTOM_STACK_CASES = {
 for (const [name, { depth, flag, renderer, rows, groups }] of Object.entries(CUSTOM_STACK_CASES)) {
   test(`A Linear custom stack draws its track and row from Generate (${name})`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'linear', results: 'single' });
     if (depth) await drawDepthFile('linear')(page);
     // The checkbox's change handler, before the stack disables the checkbox.
     await page.evaluate((key) => window.__GBDRAW_APP__.setTrackShown(key, false), flag);
@@ -371,7 +371,7 @@ const SLOT_EDIT_CASES = {
 for (const [name, { mode, rows, groups, setup, edit }] of Object.entries(SLOT_EDIT_CASES)) {
   test(`A slot edit that stops drawing a track hides it and its Legend rows at once (${name})`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode, results: 'single', reflow: 'off' });
+    await open(page, { mode, results: 'single' });
     const slots = await page.evaluate(({ source, text }) => new Function('app', 'text', `return (${source})(app, text);`)(
       window.__GBDRAW_APP__, text), { source: setup.toString(), text: DEPTH_TSV });
     expect(slots, `${name}: enabled slots`).toBe(1);
@@ -401,7 +401,7 @@ for (const [name, { mode, rows, groups, setup, edit }] of Object.entries(SLOT_ED
 // Show Depth checkbox it disables says, so a Depth series without a file does not stop Generate (the build used its own copy of the rule).
 test('A Circular custom stack without a Depth slot generates with a Depth series that has no file', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   const draft = await page.evaluate((text) => {
     const app = window.__GBDRAW_APP__;
     // Series 1 has no file; series 2 has one.
@@ -423,7 +423,7 @@ test('A Circular custom stack without a Depth slot generates with a Depth series
 // row. The list must equal that Generate, and the Result must equal the list at once, also after the
 // automatic rerender the Reset requests, which draws the committed request again (OV-1198 H2).
 const resetWithDepthKept = async (page) => {
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await drawDepthFile()(page);
   await renameRow(page, 'depth', 'Coverage');
   await settleLive(page);
@@ -449,7 +449,7 @@ test('Reset Settings with the Depth files kept shows on the Result what the list
 // track claims no Legend row: a Depth series labelled CDS in the CDS fill shares the CDS row (D-15-65).
 test('Reset Settings with the Depth files kept hides a Depth track that claims no Legend row', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   const [cds] = (await semanticSnapshot(page)).legend.filter((row) => row.caption === 'CDS');
   await page.evaluate(({ text, fill }) => {
     const app = window.__GBDRAW_APP__;
@@ -471,7 +471,7 @@ test('Reset Settings with the Depth files kept hides a Depth track that claims n
 
 test('A Session saved with Depth hidden loads without a Depth row in the list', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await drawDepthFile()(page);
   await toggleDepth(page);
   expect(await depthRows(page), 'hidden before Save').toEqual([]);
@@ -491,7 +491,7 @@ test('A Session saved with Depth hidden loads without a Depth row in the list', 
 // colour are recorded; the case pins that they agree.
 test('A Depth label equal to a feature type draws the same colour live and from Generate', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await drawDepthFile()(page);
   await renameRow(page, 'depth', 'tRNA');
   await settleLive(page);
@@ -508,7 +508,7 @@ test('A Depth label equal to a feature type draws the same colour live and from 
 // Depth off keeps the row on the Result and in the list, as Generate draws it.
 test('A Depth series labelled CDS in the CDS fill shares the CDS row, and Show Depth off keeps it', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   const cdsRows = async () => (await semanticSnapshot(page)).legend.filter((row) => /^CDS( \(\d+\))?$/.test(row.caption));
   const [cds] = await cdsRows();
   await page.evaluate(({ text, fill }) => {
@@ -967,7 +967,7 @@ test.describe('OV-104 a decoration moved on one mode\'s Result', () => {
     const other = from === 'linear' ? 'circular' : 'linear';
     test(`a ${role} moved on the ${MODE_NAMES[from]} Result stays with it through a ${MODE_NAMES[other]} Generate`, async ({ page }) => {
       test.setTimeout(180_000);
-      await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+      await open(page, { mode: 'circular', results: 'single' });
       await showMode(page, 'linear');
       await page.evaluate(async (text) => {
         window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'forced_label_underlay.gb', { type: 'text/plain', lastModified: 1000 }));
@@ -1133,7 +1133,7 @@ const trackScopeText = (page) => page.evaluate(() => [...document.querySelectorA
 for (const mode of ['circular', 'linear']) {
   test(`GT B2: one of two Depth rows switched off and on applies live (${mode} stack)`, async ({ page }) => {
     test.setTimeout(300_000);
-    await open(page, { mode, results: 'single', reflow: 'off' });
+    await open(page, { mode, results: 'single' });
     await withTwoDepthSeries(mode)(page);
     await settleLive(page);
     await generate(page);
@@ -1151,7 +1151,7 @@ for (const mode of ['circular', 'linear']) {
 
   test(`GT B3/B4: a GC content row's switch hides and shows live (${mode} stack)`, async ({ page }) => {
     test.setTimeout(300_000);
-    await open(page, { mode, results: 'single', reflow: 'off' });
+    await open(page, { mode, results: 'single' });
     await page.evaluate((linear) => {
       const app = window.__GBDRAW_APP__;
       if (linear) {
@@ -1174,7 +1174,7 @@ for (const mode of ['circular', 'linear']) {
 
   test(`GT B6/B7: Show Depth on after a Generate with it off shows live, through History, a mode switch, Save and Load (${mode})`, async ({ page }) => {
     test.setTimeout(400_000);
-    await open(page, { mode, results: 'single', reflow: 'off' });
+    await open(page, { mode, results: 'single' });
     await addDepthFile(page, 'depth.tsv', mode);
     await page.evaluate(() => window.__GBDRAW_APP__.setTrackShown('show_depth', false));
     await settleLive(page);
@@ -1218,7 +1218,7 @@ for (const mode of ['circular', 'linear']) {
   for (const [name, { stack, turn }] of Object.entries(LOADED_DEPTH_HIDES)) {
     test(`${name} after a Load of a saved Session hides and shows the only Depth track live, with Undo and Redo (${mode})`, async ({ page, browser }, testInfo) => {
       test.setTimeout(400_000);
-      await open(page, { mode, results: 'single', reflow: 'off' });
+      await open(page, { mode, results: 'single' });
       await addDepthFile(page, 'depth.tsv', mode);
       if (stack) {
         await page.evaluate((linear) => {
@@ -1260,7 +1260,7 @@ for (const mode of ['circular', 'linear']) {
 
 test('GT B5: Use custom stack turned on after a Generate with it off applies live, with a spacer row (Linear)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   await addDepthFile(page, 'depth.tsv', 'linear');
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -1280,7 +1280,7 @@ test('GT B5: Use custom stack turned on after a Generate with it off applies liv
 
 test('GT B8: Undo of a Generate restores the parts it kept, so Show Depth shows live', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await addDepthFile(page, 'depth.tsv');
   await page.evaluate(() => window.__GBDRAW_APP__.setTrackShown('show_depth', false));
   await settleLive(page);
@@ -1296,7 +1296,7 @@ test('GT B8: Undo of a Generate restores the parts it kept, so Show Depth shows 
 
 test('GT B9 (PQ-4 A): in a Circular stack Hide GC Content off after a live hide waits for Generate, with the note', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true));
   await settleLive(page);
   await generate(page);
@@ -1539,7 +1539,7 @@ test('Undo of Hide GC Content with the dialog\'s choice applies at once, with th
 for (const [box, groupsName, kind] of [['Hide GC Content', 'DINUCLEOTIDE_CONTENT_GROUPS', 'gc_content'], ['Hide GC Skew', 'DINUCLEOTIDE_SKEW_GROUPS', 'gc_skew']]) {
   test(`Undo of ${box} in a Circular stack applies at once after a Generate; a pending value stays out; off by hand still waits`, async ({ page }) => {
     test.setTimeout(420_000);
-    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'circular', results: 'single' });
     await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true));
     await generate(page);
     const before = await committedTracks(page);
@@ -1572,7 +1572,7 @@ for (const [box, groupsName, kind] of [['Hide GC Content', 'DINUCLEOTIDE_CONTENT
 
   test(`Undo of ${box} with Circular track widths applies at once (stack off, after a Generate)`, async ({ page }) => {
     test.setTimeout(420_000);
-    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'circular', results: 'single' });
     await page.evaluate(() => { window.__GBDRAW_APP__.adv.gc_content_width_circular = 40; });
     await generate(page);
     const before = await committedTracks(page);
@@ -1593,7 +1593,7 @@ for (const [box, groupsName, kind] of [['Hide GC Content', 'DINUCLEOTIDE_CONTENT
 const CONTENT_GROUPS = 'DINUCLEOTIDE_CONTENT_GROUPS';
 const SKEW_GROUPS = 'DINUCLEOTIDE_SKEW_GROUPS';
 const generateWithTrackWidth = async (page) => {
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.gc_content_width_circular = 40; });
   await generate(page);
 };

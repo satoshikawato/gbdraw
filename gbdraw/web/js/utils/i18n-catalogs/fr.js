@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "Auto ({count})",
   "Auto ({mode})": "Auto ({mode})",
   "Auto ({value})": "Auto ({value})",
-  "Auto Reflow": "Réagencement auto",
-  "Auto Reflow failed. Current diagram is kept.": "Le réagencement auto a échoué. Le diagramme actuel est conservé.",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "« Auto » place à l’intérieur des éléments les étiquettes qui y tiennent et les autres à l’extérieur. « Intégrées uniquement » omet les étiquettes qui doivent être placées à l’extérieur. « Extérieures uniquement » garde les étiquettes hors du corps des éléments.",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "« Auto » suit la disposition des pistes (« Au-dessus » ou « Éléments sur l’axe » : étiquettes au-dessus ; « En dessous » : étiquettes en dessous). « Au-dessus de l’élément » place les étiquettes au-dessus des éléments (et sous les éléments du brin − lorsque « Séparer les brins » est activé).",
   "Auto hides these fields throughout the diagram": "« Auto » masque ces champs dans tout le diagramme",

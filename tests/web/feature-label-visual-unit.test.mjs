@@ -101,9 +101,7 @@ const buildHarness = ({
     ])),
     labelTextBulkOverrides: {},
     canonicalLabelOverrideRows: ref([]),
-    autoLabelReflowEnabled: ref(false),
     labelReflowRequestSeq: ref(0),
-    labelReflowForceRequestSeq: ref(0),
     labelReflowLastError: ref(null)
   };
   const actions = createFeatureLabelActions({
@@ -143,7 +141,7 @@ for (const leaderCount of [0, 1, 2]) {
     assert.equal(harness.svg.querySelector('[data-part="similar"]').getAttribute('display'), null);
     assert.equal(harness.svg.querySelector('[data-part="unrelated"]').getAttribute('display'), null);
     assert.deepEqual(harness.mutations, { commit: 1 });
-    assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
+    assert.equal(harness.state.labelReflowRequestSeq.value, 1);
 
     harness.state.clickedFeature.value.labelVisibility = 'on';
     await harness.actions.updateClickedFeatureLabelText();
@@ -152,7 +150,7 @@ for (const leaderCount of [0, 1, 2]) {
       assert.equal(part.getAttribute('data-gbdraw-label-visibility-preview'), null);
     });
     assert.deepEqual(harness.mutations, { commit: 2 });
-    assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
+    assert.equal(harness.state.labelReflowRequestSeq.value, 2);
   });
 }
 
@@ -185,7 +183,7 @@ test('stored visibility projection uses the same complete visual-unit mutation',
     assert.equal(part.getAttribute('data-gbdraw-label-visibility-preview'), 'off');
   });
   assert.deepEqual(harness.mutations, { commit: 1 });
-  assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
+  assert.equal(harness.state.labelReflowRequestSeq.value, 1);
 });
 
 test('one action serializes combined text and visual-unit visibility changes once', async () => {
@@ -226,7 +224,7 @@ test('a text edit asks whether to show a label only when the feature has none', 
   await canceled;
   assert.equal(harness.state.hiddenLabelTextDialog.show, false);
   assert.equal(rowOf(harness.state, featureId)?.labelText ?? null, null);
-  assert.equal(harness.state.labelReflowForceRequestSeq.value + harness.state.labelReflowRequestSeq.value, 0);
+  assert.equal(harness.state.labelReflowRequestSeq.value, 0);
 
   const kept = harness.actions.updateClickedFeatureLabelText();
   assert.equal(harness.state.hiddenLabelTextDialog.show, true);
@@ -236,7 +234,7 @@ test('a text edit asks whether to show a label only when the feature has none', 
   assert.equal(rowOf(harness.state, featureId).labelText, 'Renamed');
   // "Keep hidden (apply text only)" keeps Label visibility unset (design Q4 6.2).
   assert.equal(rowOf(harness.state, featureId).labelVisibility, null);
-  assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
+  assert.equal(harness.state.labelReflowRequestSeq.value, 0);
 
   harness.state.clickedFeature.value.labelText = 'Renamed again';
   const shown = harness.actions.updateClickedFeatureLabelText();
@@ -247,8 +245,7 @@ test('a text edit asks whether to show a label only when the feature has none', 
   assert.equal(rowOf(harness.state, featureId).labelVisibility, 'on');
   assert.equal(harness.state.clickedFeature.value.labelVisibility, 'on');
   assert.equal(rowOf(harness.state, featureId).labelText, 'Renamed again');
-  assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
-  assert.equal(harness.state.labelReflowRequestSeq.value, 0);
+  assert.equal(harness.state.labelReflowRequestSeq.value, 1);
 });
 
 // R-4 (FINDINGS, residual of #764): the Label Not Shown dialog and the popup
@@ -505,7 +502,7 @@ test('Label visibility On for an underlay feature waits for Keep without label o
   assert.deepEqual(state.featureOverrides, {
     [keyFor(featureId)]: rowFor(featureId, { labelVisibility: 'on', labelText: 'RPT' })
   });
-  assert.equal(state.labelReflowForceRequestSeq.value, 1);
+  assert.equal(state.labelReflowRequestSeq.value, 1);
 });
 
 for (const [name, options, labelKey] of [
@@ -525,8 +522,7 @@ for (const [name, options, labelKey] of [
       assert.equal(part.getAttribute('data-gbdraw-label-visibility-preview'), null);
     });
     assert.deepEqual(harness.mutations, { commit: 0 });
-    assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
-    assert.equal(harness.state.labelReflowRequestSeq.value, 0);
+    assert.equal(harness.state.labelReflowRequestSeq.value, 1);
   });
 }
 
@@ -542,8 +538,7 @@ test('stored override on a metadata-free Result fails closed without partial mut
     assert.equal(part.getAttribute('data-gbdraw-label-visibility-preview'), null);
   });
   assert.deepEqual(harness.mutations, { commit: 0 });
-  assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
-  assert.equal(harness.state.labelReflowRequestSeq.value, 0);
+  assert.equal(harness.state.labelReflowRequestSeq.value, 1);
 });
 
 test('mounting Results with disjoint features keeps every label override (FE-01)', () => {
@@ -593,7 +588,6 @@ test('a hidden feature hides its label through the stored visibility projection'
 test('a feature visibility edit commits its label once and queues the label reflow', () => {
   const featureId = 'feature:one/[a]';
   const harness = buildHarness();
-  harness.state.autoLabelReflowEnabled.value = true;
   setRow(harness.state, featureId, { featureVisibility: 'off' });
   assert.equal(harness.actions.applyFeatureVisibilityToLabels(), true);
   exactParts(harness.svg, featureId).forEach((part) => {
@@ -601,7 +595,6 @@ test('a feature visibility edit commits its label once and queues the label refl
   });
   assert.deepEqual(harness.mutations, { commit: 1 });
   assert.equal(harness.state.labelReflowRequestSeq.value, 1);
-  assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
 
   delete harness.state.featureOverrides[keyFor(featureId)];
   assert.equal(harness.actions.applyFeatureVisibilityToLabels({ reflow: false }), true);
@@ -611,28 +604,29 @@ test('a feature visibility edit commits its label once and queues the label refl
   assert.equal(harness.state.labelReflowRequestSeq.value, 1, 'a declined reflow is not queued');
 });
 
-// U2BFIX2 review M1 (OV-200): with Embedded Only only Python decides whether a
-// label text fits, so a projected text asks for the rerender; a label the
-// projection hides needs none. A loaded table projects the feature visibility
-// and the labels in one follow, which queues one request.
+// U2BFIX2 review M1 (OV-200): a projection that changed a label places the
+// labels, also with Embedded Only, where only Python decides whether a label
+// text fits. A projection that changed nothing asks for nothing. A loaded table
+// projects the feature visibility and the labels in one follow, which queues
+// one request.
 const EMBEDDED_ONLY = { configOverrides: { 'labels.rendering': 'embedded_only' } };
-test('with Embedded Only, a projected label text asks for one rerender and a hidden label for none', () => {
+test('a projection that changed a label asks for one rerender, and one that changed nothing for none', () => {
   const featureId = 'feature:one/[a]';
   const hidden = buildHarness({ diagramOptions: EMBEDDED_ONLY });
   setRow(hidden.state, featureId, { labelVisibility: 'off' });
   assert.equal(hidden.actions.reconcileLabelOverrides(), true);
-  assert.equal(hidden.state.labelReflowForceRequestSeq.value, 0, 'a hidden label');
+  assert.equal(hidden.state.labelReflowRequestSeq.value, 1, 'a hidden label');
+  assert.equal(hidden.actions.reconcileLabelOverrides(), false);
+  assert.equal(hidden.state.labelReflowRequestSeq.value, 1, 'nothing changed');
 
   const edited = buildHarness({ diagramOptions: EMBEDDED_ONLY });
   const { state, actions } = edited;
   setRow(state, featureId, { labelText: 'edited' });
   assert.equal(actions.reconcileLabelOverrides(), true);
-  assert.equal(state.labelReflowForceRequestSeq.value, 1, 'a changed text');
-  state.autoLabelReflowEnabled.value = true;
+  assert.equal(state.labelReflowRequestSeq.value, 1, 'a changed text');
   setRow(state, featureId, { labelText: 'edited again' });
   assert.equal(actions.applyFeatureVisibilityToLabels({ reflow: true, labels: true }), true);
-  assert.deepEqual([state.labelReflowForceRequestSeq.value, state.labelReflowRequestSeq.value], [2, 0],
-    'one request for the loaded table');
+  assert.equal(state.labelReflowRequestSeq.value, 2, 'one request for the loaded table');
 });
 
 // U2BFIX2 review L3 (OV-237): the labels of a Result no popup bound are bound

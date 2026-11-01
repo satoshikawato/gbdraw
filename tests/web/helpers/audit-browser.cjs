@@ -64,7 +64,6 @@ const openBatch = async (page) => {
     app.form.labels_mode = 'out';
     app.form.multi_record_canvas = false;
     app.adv.circular_grouping_intent = 'batch';
-    app.autoLabelReflowEnabled = false;
   });
   await generateAndWaitForResult(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(2);

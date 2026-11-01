@@ -121,11 +121,11 @@ test('a live Show and a live hide of every feature that the rerender draws: live
   expect(await summaryShown(page)).toEqual(allHidden);
 });
 
-// A live hide that no render draws (the other CDS keeps the Legend row) leaves
-// the counts of the last render: the page marks them so and holds back their
-// warning, Undo back to the rendered visibility takes the mark away, Redo
-// brings it back, and Generate counts the hide.
-test('a live hide no render draws marks the summary as the last render\'s until Undo or Generate', async ({ page }) => {
+// A live hide rerenders, and that rerender counts it; Undo and Redo count it
+// again. A hide no render drew (its rerender failed) leaves the counts of the
+// last render: the page marks them so and holds back no warning of theirs, and
+// the next rerender takes the mark away.
+test('a live hide counts in the summary through its rerender, and the summary marks a hide its rerender failed to draw', async ({ page }) => {
   test.setTimeout(600_000);
   await openRecords(page, genbankFile('batch.gb', [genbankRecord('EMPTY1', []), genbankRecord('VIS1', ['VA', 'VB'])]));
   await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
@@ -142,17 +142,19 @@ test('a live hide no render draws marks the summary as the last render\'s until 
   // Adding the rule and setting its fields are steps of their own.
   const steps = await undoCount() - stepsBefore;
   expect(steps).toBeGreaterThan(0);
-  expect(hidden).toEqual({ notice: null, staleLine: true, runInfo: rendered.runInfo, runInfoStale: true });
+  expect(hidden).toEqual({ ...rendered, runInfo: [rendered.runInfo[0], expect.stringMatching(/drew 1 feature \(1 CDS\).*hid 1 CDS/)] });
+  for (let step = 0; step < steps; step += 1) await history(page, 'undo');
+  expect(await summaryShown(page)).toEqual(rendered);
+  await page.evaluate(() => { (window.__GBDRAW_TEST_HOOKS__ ||= {}).beforeDiagramGenerationResponse = () => { throw new Error('forced rerender failure'); }; });
+  for (let step = 0; step < steps; step += 1) await history(page, 'redo');
+  const notDrawn = await summaryShown(page);
+  expect(notDrawn).toMatchObject({ staleLine: true, runInfo: rendered.runInfo, runInfoStale: true });
   await expect(page.getByTestId('input-summary-stale')).toHaveText(
     'The input summary counts the last render. Feature visibility changed since; Generate to count it again.'
   );
-  for (let step = 0; step < steps; step += 1) await history(page, 'undo');
-  expect(await summaryShown(page)).toEqual(rendered);
-  for (let step = 0; step < steps; step += 1) await history(page, 'redo');
-  expect(await summaryShown(page)).toEqual(hidden);
+  await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
   await generateAndWaitForResult(page);
-  const counted = await summaryShown(page);
-  expect(counted).toEqual({ ...rendered, runInfo: [rendered.runInfo[0], expect.stringMatching(/drew 1 feature \(1 CDS\).*hid 1 CDS/)] });
+  expect(await summaryShown(page)).toEqual(hidden);
 });
 
 // Each Result of a batch shows its own summary, through a Result switch.

@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "Tự động ({count})",
   "Auto ({mode})": "Tự động ({mode})",
   "Auto ({value})": "Tự động ({value})",
-  "Auto Reflow": "Tự động sắp xếp lại",
-  "Auto Reflow failed. Current diagram is kept.": "Không thể tự động sắp xếp lại. Đã giữ sơ đồ hiện tại.",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "“Tự động” đặt bên trong feature các nhãn vừa vặn và đưa phần còn lại ra ngoài. “Chỉ bên trong” lược bỏ các nhãn cần đặt bên ngoài. “Chỉ bên ngoài” giữ nhãn ở ngoài thân feature.",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "“Tự động” theo bố cục track (“Phía trên” hoặc “Feature trên trục”: nhãn ở trên; “Phía dưới”: nhãn ở dưới). “Phía trên feature” vẽ nhãn phía trên feature (và phía dưới feature trên mạch ngược khi bật “Tách mạch”).",
   "Auto hides these fields throughout the diagram": "“Tự động” ẩn các trường này trên toàn bộ sơ đồ",

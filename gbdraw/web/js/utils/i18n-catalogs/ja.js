@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "自動({count})",
   "Auto ({mode})": "自動（{mode}）",
   "Auto ({value})": "自動（{value}）",
-  "Auto Reflow": "自動再配置",
-  "Auto Reflow failed. Current diagram is kept.": "自動再配置に失敗しました。現在の図は保持されます。",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "「自動」は収まるラベルを内部に埋め込み、残りを外部に配置します。「埋め込みのみ」は外部配置が必要なラベルを省きます。「外部のみ」はラベルをフィーチャー本体の外に置きます。",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "「自動」はトラックレイアウトに従います（「上側」または「フィーチャーを軸上に」ではラベルは上、「下側」ではラベルは下）。「フィーチャーの上側」はラベルをフィーチャーの上に描きます（「鎖を分けて表示」がオンのときは、−鎖のフィーチャーでは下に描きます）。",
   "Auto hides these fields throughout the diagram": "「自動」ではこれらのフィールドが図全体で非表示になります",

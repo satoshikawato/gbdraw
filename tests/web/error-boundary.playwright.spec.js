@@ -230,7 +230,7 @@ test('a live edit that fails the same way for the same request offers no Retry',
   // The forced reflow request is the path a label visibility edit uses.
   await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    state.labelReflowForceRequestSeq.value += 1;
+    state.labelReflowRequestSeq.value += 1;
   });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError?.code ?? null),
     { timeout: 120000 }).toBe('RENDER_FAILED');

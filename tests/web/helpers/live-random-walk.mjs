@@ -8,8 +8,8 @@
 // by design (PD-OI-090), so the isolation check skips those steps.
 //
 // The kind schedule is the plan of tests/web/helpers/live-random-walk-plan.mjs
-// (its targets: every feasible ordered pair of kinds, and every kind in each popup and
-// Auto Reflow state; at promotion also adjacent pairs and every fixture). Each
+// (its targets: every feasible ordered pair of kinds, and every kind in each popup
+// state; at promotion also adjacent pairs and every fixture). Each
 // walk of the plan is one test that opens its fixture (both drawings with a
 // Result, so a drawing switch arrives at a Result) and draws the step
 // arguments from its own generator, so a walk replays alone with the same
@@ -74,7 +74,8 @@ export const ALLOWLIST_WALK_KINDS = Object.freeze({
   'mode switch back to a Result': 'drawingSwitch',
   'Session Load': 'load',
   'Legend rename onto a deleted row (Restore and merge)': 'legendRename',
-  'Reset Settings': 'reset'
+  'Reset Settings': 'reset',
+  'Result display after Reset Settings': 'resultSwitch'
 });
 
 // The confirmed mismatches of a step kind (multi-drawing-project FINDINGS.md),
@@ -103,15 +104,10 @@ const CAPTIONS = ['Walk caption', 'transfer RNA', 'Renamed group', 'CDS'];
 const ADDED_CAPTIONS = ['Walk group', 'Added row'];
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// The Auto Reflow state the labels shown after a step were placed under. The walk
-// Generates after every step, so an Undo returns the Result of the step before it
-// as it was; any other step's labels are placed, or left, under its own state.
-export const labelsPlacedUnder = (kind, stepReflow, placedBefore) => (kind === 'undo' ? placedBefore : stepReflow);
-
 // The fixture opened with both drawings holding a Result; the floor of the
 // other drawing's History is where its opening ends.
-const openFixture = async (page, fixture, reflow) => ({
-  [otherMode(fixture.mode)]: await openBothDrawings(page, { mode: fixture.mode, results: fixture.results, reflow: reflow ? 'on' : 'off' })
+const openFixture = async (page, fixture) => ({
+  [otherMode(fixture.mode)]: await openBothDrawings(page, { mode: fixture.mode, results: fixture.results })
 });
 
 // The file each drawing draws.
@@ -163,7 +159,6 @@ const readState = (page) => page.evaluate(async () => {
     features,
     resultCount: app.results.length,
     resultIndex: app.selectedResultIndex,
-    reflow: Boolean(app.autoLabelReflowEnabled),
     visibilityRules: app.featureVisibilityManualRules.length,
     colorRules: app.manualSpecificRules.length,
     legend: app.legendEntries.map(legendEntryKey),
@@ -241,7 +236,6 @@ export const nextStep = (random, state, kind, { fixture, canUndo }) => {
     }
     case 'colorRuleRemove':
       return state.colorRules ? { kind, index: index(state.colorRules) } : { kind, prepare: colorRuleAdd(), index: 0 };
-    case 'reflow': return { kind, enabled: !state.reflow };
     case 'legendRename': return { kind, ...row(), caption: random.pick(CAPTIONS), picks };
     case 'legendColor': return { kind, ...row(), color: random.pick(COLORS) };
     case 'legendSort': return { kind, direction: random.pick(['asc', 'desc']) };
@@ -261,7 +255,8 @@ export const nextStep = (random, state, kind, { fixture, canUndo }) => {
     }
     case 'palette': return { kind, palette: random.pick(state.palettes), picks };
     case 'undo': return canUndo ? { kind } : { kind, prepare: fill() };
-    case 'undoRedo': return canUndo ? { kind } : { kind, prepare: fill() };
+    // `settled`: the rerender of the Undo ends before the Redo, so the Redo starts from what the Undo drew.
+    case 'undoRedo': return { kind, settled: random.pick([false, true]), ...(canUndo ? {} : { prepare: fill() }) };
     case 'resultSwitch': {
       const others = [...Array(state.resultCount).keys()].filter((value) => value !== state.resultIndex);
       if (!others.length) throw new Error(`a Result switch needs two Results; the drawing shows ${state.resultCount}`);
@@ -494,10 +489,11 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (step)
         break;
       case 'undoRedo':
         await history.undo();
+        if (current.settled) {
+          await window.Vue.nextTick();
+          while (app.labelReflowProcessing) await new Promise((resolve) => { setTimeout(resolve, 50); });
+        }
         await history.redo();
-        break;
-      case 'reflow':
-        app.autoLabelReflowEnabled = current.enabled;
         break;
       default:
         throw new Error(`unknown step kind ${current.kind}`);
@@ -608,7 +604,6 @@ const bindLabels = (page, key) => evaluateWithRetainedPromise(page, async (targe
  * @property {number} index the step's position in its run (1-based)
  * @property {string} kind
  * @property {boolean} popup a feature popup was opened and closed before the step
- * @property {boolean} reflow Auto Reflow before the step
  * @property {string} drawing the drawing shown before the step
  * @property {string | null} popupFeature the feature whose popup was opened (`walkFeatureKey`)
  * @property {Record<string, unknown> & { kind: string }} step the concrete step, with its `picks` and `prepare`
@@ -616,7 +611,7 @@ const bindLabels = (page, key) => evaluateWithRetainedPromise(page, async (targe
  */
 /**
  * The steps of one run, as `walk-steps.json` and `walk-shrunk.json` hold them.
- * @typedef {{ seed: number, title: string, fixture: string, reflow: boolean, steps: RecordedStep[], shrink?: object }} WalkRecord
+ * @typedef {{ seed: number, title: string, fixture: string, steps: RecordedStep[], shrink?: object }} WalkRecord
  */
 /** @typedef {{ phase: string, drawing: string, slices: string[] }} IsolationChange */
 /** @typedef {{ index: number, kind: string, differences: string[], isolation: IsolationChange[] }} StepResult */
@@ -681,7 +676,7 @@ const isolationChanges = (phase, before, after, drawings) => drawings
   .filter(({ slices }) => slices.length);
 
 /**
- * @typedef {{ fixture: typeof FIXTURES[number], reflow: boolean, planned: readonly { kind: string, popup: boolean, reflow: boolean }[],
+ * @typedef {{ fixture: typeof FIXTURES[number], planned: readonly { kind: string, popup: boolean }[],
  *   source: StepSource, sessionPath: (index: number) => string, records?: RecordedStep[], log?: (record: RecordedStep) => void }} RunOptions
  *   `records`: the array the run appends each step to as it runs, so a caller keeps the steps when the run throws.
  */
@@ -709,21 +704,19 @@ const runWalk = async (page, options) => {
 };
 
 /** @param {import('@playwright/test').Page} page @param {RunOptions} options @returns {Promise<StepsRun>} */
-const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, records = [], log = () => {} }) => {
+const runSteps = async (page, { fixture, planned, source, sessionPath, records = [], log = () => {} }) => {
   /** @type {StepResult[]} */
   const results = [];
   /** @type {Record<string, number>} */
-  const floors = await openFixture(page, fixture, reflow);
-  let placedWithAutoReflow = reflow;
+  const floors = await openFixture(page, fixture);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(fixture.results === 'batch' ? 2 : 1);
-  for (const [offset, { kind, popup, reflow: stepReflow }] of planned.entries()) {
+  for (const [offset, { kind, popup }] of planned.entries()) {
     const index = offset + 1;
     /** @type {RecordedStep} */
-    const record = { index, kind, popup, reflow: stepReflow, drawing: '', popupFeature: null, step: { kind }, notes: [] };
+    const record = { index, kind, popup, drawing: '', popupFeature: null, step: { kind }, notes: [] };
     let before;
     let afterStep;
     try {
-      await page.evaluate((enabled) => { window.__GBDRAW_APP__.autoLabelReflowEnabled = enabled; }, stepReflow);
       await settleLive(page);
       let state = await readState(page);
       floors[state.drawing] ??= state.undoDepth;
@@ -750,10 +743,9 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
     const isolation = BARRIER_KINDS.includes(record.step.kind) ? [] : isolationChanges('the step', before, afterStep,
       Object.keys(before.drawings).filter((drawingId) => record.step.kind === 'drawingSwitch' || drawingId !== before.active));
     if (record.step.kind === 'load') for (const drawingId of Object.keys(floors)) delete floors[drawingId];
-    placedWithAutoReflow = labelsPlacedUnder(record.step.kind, stepReflow, placedWithAutoReflow);
     let differences = [];
     try {
-      await expectLiveEqualsGenerate(page, { label: `step ${index} (${record.step.kind})`, placedWithAutoReflow });
+      await expectLiveEqualsGenerate(page, { label: `step ${index} (${record.step.kind})` });
     } catch (error) {
       // expectLiveEqualsGenerate fails with the unexpected differences as `actual`.
       if (!Array.isArray(error?.matcherResult?.actual)) {
@@ -772,9 +764,9 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
 };
 
 /** @param {RecordedStep} record */
-const describeRecord = ({ index, popup, reflow, step, notes }) => {
+const describeRecord = ({ index, popup, step, notes }) => {
   const { picks, ...rest } = step;
-  return `#${index} popup ${popup ? 'opened' : 'not'}, Auto Reflow ${reflow ? 'on' : 'off'}: ${JSON.stringify(rest)}`
+  return `#${index} popup ${popup ? 'opened' : 'not'}: ${JSON.stringify(rest)}`
     + `${notes.length ? ` (${notes.join('; ')})` : ''}`;
 };
 
@@ -866,7 +858,7 @@ const runAllowance = (steps, shrinkReplays) => (OPEN_ALLOWANCE_MS + steps * STEP
  *   `stepsPath`: the run's attached `walk-steps.json`.
  */
 const reportRun = async (page, walk, run, { header, shrink, stepsPath }) => {
-  const sequence = [`#init ${FIXTURES.find(({ name }) => name === walk.fixture).mode} shown, Auto Reflow ${walk.reflow ? 'on' : 'off'}`,
+  const sequence = [`#init ${FIXTURES.find(({ name }) => name === walk.fixture).mode} shown`,
     ...run.records.map(describeRecord)];
   const report = (index, difference) => `${header}, step ${index}\nsteps so far:\n`
     + `${sequence.slice(0, index + 1).map((line) => `  ${line}`).join('\n')}\n${difference}`;
@@ -901,7 +893,7 @@ const reportRun = async (page, walk, run, { header, shrink, stepsPath }) => {
     const steps = indices.map((index) => walk.steps[index - 1]);
     try {
       const rerun = await runWalk(page, {
-        fixture, reflow: walk.reflow, planned: steps, source: recordedSource(steps),
+        fixture, planned: steps, source: recordedSource(steps),
         sessionPath: (index) => test.info().outputPath(`shrink-${replay}-step-${index}.gbdraw-session.json`)
       });
       const last = rerun.results[steps.length - 1];
@@ -961,13 +953,12 @@ export const randomWalkTests = ({ seed, level, walkLength, required = [], shrink
         test.setTimeout(runAllowance(steps.length, shrink.replays));
         // One generator per walk, so a walk replays alone with the same seed.
         const random = createRandom(seed + Math.imul(walkIndex + 1, 0x9E3779B1));
-        const reflow = random.next() < 0.5;
         // eslint-disable-next-line no-console
         console.log(`seed ${seed}, ${fixture.name}, walk ${walkIndex + 1}: kinds ${steps.map(({ kind }) => kind).join(', ')}`);
         /** @type {WalkRecord} */
-        const walk = { seed, title, fixture: fixture.name, reflow, steps: [] };
+        const walk = { seed, title, fixture: fixture.name, steps: [] };
         const { run, stepsPath } = await attachingSteps(walk, () => runWalk(page, {
-          fixture, reflow, planned: steps, source: drawnSource(random, steps), records: walk.steps,
+          fixture, planned: steps, source: drawnSource(random, steps), records: walk.steps,
           sessionPath: (index) => test.info().outputPath(`walk-step-${index}.gbdraw-session.json`),
           // eslint-disable-next-line no-console
           log: (record) => console.log(`  ${describeRecord(record)}`)
@@ -1011,7 +1002,7 @@ const readWalkRecord = (path) => {
 // oracle after every step. `records` receives the steps as they run.
 /** @param {import('@playwright/test').Page} page @param {WalkRecord} walk @param {RecordedStep[]} records */
 const replayRun = (page, walk, records, log = () => {}) => runWalk(page, {
-  fixture: FIXTURES.find(({ name }) => name === walk.fixture), reflow: walk.reflow, planned: walk.steps, source: recordedSource(walk.steps),
+  fixture: FIXTURES.find(({ name }) => name === walk.fixture), planned: walk.steps, source: recordedSource(walk.steps),
   sessionPath: (index) => test.info().outputPath(`replay-step-${index}.gbdraw-session.json`), records, log
 });
 
@@ -1041,11 +1032,11 @@ export const replayWalkTest = (path, { shrink }) => {
 // edit with its dialogs on each drawing (a replay boots again, so the feature
 // a step names must keep its identity across boots, OV-2236), a rule, and Undo.
 const RECORD_REPLAY_STEPS = Object.freeze([
-  { kind: 'fill', popup: true, reflow: false },
-  { kind: 'drawingSwitch', popup: false, reflow: false },
-  { kind: 'fill', popup: true, reflow: false },
-  { kind: 'colorRuleAdd', popup: false, reflow: true },
-  { kind: 'undo', popup: false, reflow: false }
+  { kind: 'fill', popup: true },
+  { kind: 'drawingSwitch', popup: false },
+  { kind: 'fill', popup: true },
+  { kind: 'colorRuleAdd', popup: false },
+  { kind: 'undo', popup: false }
 ]);
 
 /**
@@ -1060,12 +1051,11 @@ export const recordReplayTest = ({ seed }) => ({
     test.setTimeout(2 * runAllowance(RECORD_REPLAY_STEPS.length, 0));
     const fixture = FIXTURES[0];
     const random = createRandom(seed);
-    const reflow = random.next() < 0.5;
     const noShrink = { replays: 0, walks: 0 };
     /** @type {WalkRecord} */
-    const walk = { seed, title: test.info().title, fixture: fixture.name, reflow, steps: [] };
+    const walk = { seed, title: test.info().title, fixture: fixture.name, steps: [] };
     const { run, stepsPath } = await attachingSteps(walk, () => runWalk(page, {
-      fixture, reflow, planned: RECORD_REPLAY_STEPS, source: drawnSource(random, RECORD_REPLAY_STEPS), records: walk.steps,
+      fixture, planned: RECORD_REPLAY_STEPS, source: drawnSource(random, RECORD_REPLAY_STEPS), records: walk.steps,
       sessionPath: (index) => test.info().outputPath(`walk-step-${index}.gbdraw-session.json`)
     }));
     await reportRun(page, walk, run, { header: `seed ${seed}, recorded walk`, shrink: noShrink, stepsPath });

@@ -142,9 +142,16 @@ write-up of a release.
 - Changed: the Undo and Redo tooltips and the dialogs that name a control or track row read as whole sentences in
   more languages; English now quotes the control in the lane warning and says `Track rows 3 and 4`.
 - Fixed: after **Reset Settings**, the other mode's Result and the other Results of a batch show
-  what **Generate Diagram** draws when displayed, instead of keeping the hidden features and labels,
-  the edited label text, and after a Session load the Legend rows of removed color rules until the
-  next Generate.
+  the reset feature and label edits when you display them. A failed redraw does not run again at
+  the next display. **Applies on Generate** settings still wait for **Generate Diagram**. So do the
+  label texts, **Label visibility**, and label places of a Result that Reset Settings, Save, and Load
+  passed before it was shown again.
+- Changed: the Web **Auto Reflow** setting is gone. Each label text, **Label visibility**, or
+  feature visibility edit places the labels again, as **Generate Diagram** does. A Session that
+  holds the old value loads and ignores it.
+- Fixed: **Generate Diagram** failed with "The generated result could not be accepted" after a
+  Legend row stroke, a delete of that row once it was renamed, a rename of all its features from the
+  feature popup, and **Restore**. The deleted row now leaves with the rename (OV-2412).
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

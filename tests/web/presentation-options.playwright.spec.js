@@ -34,7 +34,6 @@ test('Italic gene names draws gene-named labels in italics, and a live label edi
   await openWithGenBank(page, HMMT, () => {
     const app = window.__GBDRAW_APP__;
     app.form.labels_mode = 'out';
-    app.autoLabelReflowEnabled = false;
     app.newPriorityRule.feat = 'CDS';
     app.newPriorityRule.order = 'gene,product';
     app.addPriorityRule();

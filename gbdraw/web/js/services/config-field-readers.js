@@ -979,7 +979,6 @@ const SESSION_UI_TABLE = Object.freeze([
     rows: [
       row('mode', readSessionUiMode),
       row('featurePanelTab', readFeaturePanelTab),
-      row('autoLabelReflow', truthy),
       row('paletteInstantPreviewEnabled', truthy),
       row('generatedMultiRecordCanvas', truthy),
       row('cInputType', readSessionInputType),

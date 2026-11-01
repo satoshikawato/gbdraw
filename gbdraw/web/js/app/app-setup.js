@@ -28,7 +28,7 @@
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
-import { createResultPaintRecord, drawnLabelIntentGone, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
+import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
@@ -556,7 +556,6 @@ export const createAppSetup = () => {
     labelSearch,
     editableLabels,
     filteredEditableLabels,
-    autoLabelReflowEnabled,
     labelReflowProcessing,
     labelReflowLastError,
     svgContainer,
@@ -3559,15 +3558,14 @@ export const createAppSetup = () => {
       // OV-1280: a Result a mode switch shows again, whose drawing changed its
       // rules while it was not shown (a file card's Remove, an Undo or Redo
       // there), is drawn again when its Legend cannot show them, as after a
-      // History restore of the rules. OV-2293: any Result displayed is drawn
-      // again when its bytes hold a label edit its drawing no longer holds (a
-      // Reset Settings while it was not shown). The rerender draws new Results
-      // from the current intent, so this does not repeat.
+      // History restore of the rules. OV-2293: a Result displayed is drawn
+      // again when its drawing's label or Feature visibility intent changed
+      // since it was last shown.
       const display = displayAsks;
       displayAsks = null;
       if (display?.identity === context.resultIdentity) {
         if (context.bindingOptions.modeArrival && display.rules) featureActions.followRestoredSpecificRules(display.rules);
-        if (display.labelIntentGone) featureActions.requestAutomaticRerender();
+        if (display.placeLabels) featureActions.requestAutomaticRerender();
       }
       // D-36: a label rerender pays the redraw its drawing owes when, as its
       // Result is ready, no later rerender runs and its figure shows the
@@ -3645,7 +3643,6 @@ export const createAppSetup = () => {
     adoptDrawnWrite: (write, request) => history.adoptDrawnWrite(write, request),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
-    moveDrawnLabelVisibility: featureActions.moveDrawnLabelVisibility,
     askChoice,
     showNotice,
     canonicalSessionVersion: SESSION_VERSION,
@@ -4136,6 +4133,10 @@ export const createAppSetup = () => {
     resetAllLabelTextOverrides
   } = featureActions;
 
+  // The History intent values that say what labels a Result draws and where.
+  const LABEL_PLACEMENT_INTENT = Object.freeze(['featureOverrides', 'featureVisibilityManualRules', 'labelOverrideRows', 'labelTextBulkOverrides']);
+  /** @param {{ path?: readonly string[] }} change */
+  const changesLabelPlacement = ({ path }) => path?.[0] === 'features' && LABEL_PLACEMENT_INTENT.includes(path[1]);
   // One projection of the canonical editor intent onto the mounted Result,
   // shared by History apply, the display of another batch Result, and Load
   // Feature Edits TSV (D-07, R3). A History step of the Legend rows and a newly
@@ -4232,6 +4233,9 @@ export const createAppSetup = () => {
       prepareRules: changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared(),
       visibility: changedDomains.has('features'),
       rerender: true,
+      // A step of the label or Feature visibility intent places the labels, as
+      // the edit did, also when no label of this Result shows the change.
+      reflow: !Array.isArray(changes) || changes.some(changesLabelPlacement),
       labels: changedDomains.has('features') || editorState,
       domains: editorPaintDomains(changes)
     });
@@ -4413,11 +4417,11 @@ export const createAppSetup = () => {
   // returns to Python's values where no operation sets it (OV-144).
   const LEGEND_STRUCTURE_DOMAINS = LIVE_EDIT_DOMAINS.legendStructure;
   // What a displayed Result asks of the rerender, read once it is ready
-  // (`afterReady`): `rules`, the rule table it was last shown with, or the one
-  // it was drawn with when that is unknown (a restored Result), for OV-1280;
-  // `labelIntentGone`, whether its bytes were drawn with a label edit its
-  // drawing no longer holds (OV-2293).
-  /** @type {{ identity: string, rules: SpecificColorRule[] | null, labelIntentGone: boolean } | null} */
+  // (`afterReady`): `rules`, the rule table a Result a mode switch shows again
+  // was last shown with (`resultPaintRecord`), or restored with, for OV-1280
+  // and OV-2326; `placeLabels`, whether its drawing's label or Feature
+  // visibility intent changed since it was last shown (OV-2293).
+  /** @type {{ identity: string, rules: SpecificColorRule[] | null, placeLabels: boolean } | null} */
   let displayAsks = null;
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
@@ -4443,16 +4447,18 @@ export const createAppSetup = () => {
       return;
     }
     const previous = resultPaintRecord.display(identity, current);
-    const drawn = resultPaintRecord.drawn(identity) ?? current;
+    // A rerender that failed reports it and does not run again here (R1(c)).
+    const mayRerender = !labelReflowLastError.value;
+    const placeLabels = mayRerender && resultPaintRecord.placedForOtherIntent(identity, previous, current);
     displayAsks = {
       identity,
-      rules: paintRuleTable(previous) ?? paintRuleTable(drawn),
-      labelIntentGone: drawnLabelIntentGone(drawn.labels, current.labels)
+      rules: context.bindingOptions.modeArrival ? paintRuleTable(previous) ?? resultPaintRecord.restoredRules(identity) : null,
+      placeLabels
     };
     const colors = !sameColors(previous.colors, current.colors);
     const visibility = previous.visibility !== current.visibility;
     const strokes = previous.strokes !== current.strokes;
-    labelProjectionResultIdentity = previous.labels !== current.labels ? identity : '';
+    labelProjectionResultIdentity = previous.labels !== current.labels || visibility ? identity : '';
     // B20: a Result last shown with another Legend order receives the current
     // order, also the default order, which is its own generated order (OV-47).
     const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder
@@ -4470,9 +4476,9 @@ export const createAppSetup = () => {
       // The palette, rules, and visibility prepare their matches when their
       // intent changed (`colors`, `visibility`); then one compile of the
       // domains the Result shows.
-      // OV-2293: a Result whose bytes were drawn with other visibility asks for
-      // the rerender when they lack a feature.
-      const preparation = { colors, visibility, rerender: drawn.visibility !== current.visibility, show: false };
+      // OV-2293: a restored Result asks for the rerender when its bytes lack a
+      // feature; `placeLabels` already asks for one.
+      const preparation = { colors, visibility, rerender: mayRerender && !placeLabels, show: false };
       let prepared = await projectMountedEditorIntent(preparation);
       // Declined with nothing blocking (the rules changed meanwhile): prepared
       // once more here, so the display still compiles once (R14-3).
@@ -4494,7 +4500,6 @@ export const createAppSetup = () => {
       phase: context.phase,
       rootGeneration: context.rootGeneration
     });
-    if (!projects && !failed) return;
     if (projects) {
       try {
         showEditorIntent({ domains, operations });
@@ -5588,6 +5593,7 @@ export const createAppSetup = () => {
     return holdAutomaticRerender(() => history.runProjectStep(msg('Reset settings'), () => followRuleEdits(state.activeDrawing(), async () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
+      const before = currentEditorProjectionState(state.activeDrawing());
       const palette = { ...appliedPaletteColors.value };
       // The deleted rows Generate drew return (a row added in the editor and
       // deleted stays gone).
@@ -5632,11 +5638,14 @@ export const createAppSetup = () => {
       depthTrackUiCounts.circular = 1;
       fitDepthSeriesToSources();
       if (shown) {
+        const after = currentEditorProjectionState(state.activeDrawing());
         // A Reset that changes the palette leaves the fills to the palette watcher.
         await projectMountedEditorIntent({
           colors: paletteColorsEqual(appliedPaletteColors.value, palette),
           visibility: true,
           rerender: true,
+          // A Reset of the label or Feature visibility intent places the labels, as those edits do.
+          reflow: before.labels !== after.labels || before.visibility !== after.visibility,
           labels: true,
           domains: [...STROKE_DOMAINS, ...LIVE_EDIT_DOMAINS.legendRows]
         });
@@ -7831,7 +7840,6 @@ export const createAppSetup = () => {
     editableLabels,
     filteredEditableLabels,
     labelTextBulkOverrides: drawingMember('labelTextBulkOverrides'),
-    autoLabelReflowEnabled,
     labelReflowProcessing,
     labelReflowLastError,
     filteredFeatures,

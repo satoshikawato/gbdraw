@@ -350,7 +350,6 @@ for (const mode of ['circular', 'linear']) {
       await noDerivedStatus(page);
       await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
-        state.autoLabelReflowEnabled.value = false;
         state.paletteInstantPreviewEnabled.value = true;
         await window.__GBDRAW_HISTORY__.runUndoable('Live color', async () => {
           window.__GBDRAW_APP__.editDefaultColor('CDS', '#123456');
@@ -361,6 +360,8 @@ for (const mode of ['circular', 'linear']) {
       await page.locator('.feature-popup input[placeholder="Edit label text"]').fill('S04 retained label');
       await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
       await closeEditor(page);
+      // The label edit's rerender keeps the pending draft out of the Result.
+      await settleLive(page);
       const edited = await inspect(page, info, `${mode}-live-pending`);
       expect(edited.editable.adv[field]).toBe(draftValue);
       expect((await snapshot(page)).mounted).toContain('S04 retained label');
@@ -409,15 +410,21 @@ for (const mode of ['circular', 'linear']) {
       expect((await snapshot(fresh)).mounted).toContain('S04 retained label');
       expect((await snapshot(fresh)).mounted).toContain('#123456');
       await evaluateWithRetainedPromise(fresh, () => window.__GBDRAW_HISTORY__.undo());
-      expectArtifact(await inspect(fresh,info,`${mode}-undo`),loaded);
+      // Trusted History restore does not hydrate transient label-editor bindings,
+      // which the Load's mounted root has: compare the Result, the request, and the
+      // comprehensive visual oracle.
+      const undone=await inspect(fresh,info,`${mode}-undo`);
+      expect(undone.selected).toBe(loaded.selected);
+      expect(undone.request).toEqual(loaded.request);
+      expect(undone.markedMounted).toBe(true);
+      expect(await semantics(fresh,readFileSync(info.outputPath(`${mode}-undo.svg`),'utf8')))
+        .toEqual(await semantics(fresh,readFileSync(info.outputPath(`${mode}-loaded.svg`),'utf8')));
       await noDerivedStatus(fresh);
       await evaluateWithRetainedPromise(fresh, () => window.__GBDRAW_HISTORY__.redo());
       const redone=await inspect(fresh,info,`${mode}-redo`);
       expect(redone.selected).toBe(generated.selected);
       expect(redone.request).toEqual(generated.request);
       expect(redone.markedMounted).toBe(true);
-      // Trusted History restore does not hydrate transient label-editor bindings.
-      // Compare the existing comprehensive visual oracle as well as Result bytes.
       expect(await semantics(fresh,readFileSync(info.outputPath(`${mode}-redo.svg`),'utf8')))
         .toEqual(await semantics(fresh,readFileSync(info.outputPath(`${mode}-generated.svg`),'utf8')));
       await noDerivedStatus(fresh);
@@ -437,7 +444,6 @@ for (const mode of ['circular','linear']) {
         const { state } = await import('./js/state.js');
         window.s04ScalePrior=state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size'];
         state.activeDrawing().adv[mode==='circular'?'scale_interval':'scale_font_size']=mode==='circular'?12345:19;
-        state.autoLabelReflowEnabled.value=true;
         window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse=()=>new Promise((resolve,reject)=>{
           window.failS04Reflow=()=>reject(new Error('S04 forced live rerender failure'));
         });

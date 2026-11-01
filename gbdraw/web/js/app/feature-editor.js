@@ -319,7 +319,6 @@ export const createFeatureEditor = ({
     closeLabelTextScopeDialog: labelActions.closeLabelTextScopeDialog,
     closeHiddenLabelTextDialog: labelActions.closeHiddenLabelTextDialog,
     clearLabelBuildNotices: labelActions.clearLabelBuildNotices,
-    moveDrawnLabelVisibility: labelActions.moveDrawnLabelVisibility,
     ...featureEditTableActions,
     downloadLabelOverrideTable: labelActions.downloadLabelOverrideTable,
     loadLabelOverrideTable: labelActions.loadLabelOverrideTable,

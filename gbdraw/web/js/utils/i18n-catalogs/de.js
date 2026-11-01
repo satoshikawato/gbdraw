@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "Auto ({count})",
   "Auto ({mode})": "Auto ({mode})",
   "Auto ({value})": "Auto ({value})",
-  "Auto Reflow": "Automatisch neu anordnen",
-  "Auto Reflow failed. Current diagram is kept.": "Automatisches Neuanordnen fehlgeschlagen. Das aktuelle Diagramm bleibt erhalten.",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "Bei „Auto“ werden Beschriftungen, die hineinpassen, eingebettet und die übrigen extern geführt. Bei „Nur eingebettete“ entfallen Beschriftungen, die eine externe Platzierung benötigen. Bei „Nur externe“ bleiben die Beschriftungen außerhalb der Feature-Körper.",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "Bei „Auto“ folgt die Platzierung dem Track-Layout (Oberhalb oder Features auf der Achse: Beschriftungen oberhalb; Unterhalb: Beschriftungen unterhalb). Bei „Oberhalb des Features“ werden Beschriftungen oberhalb der Features gezeichnet (und unterhalb von Features auf dem Rückwärtsstrang, wenn die Option „Stränge trennen“ aktiviert ist).",
   "Auto hides these fields throughout the diagram": "Bei „Auto“ werden diese Felder im gesamten Diagramm ausgeblendet",

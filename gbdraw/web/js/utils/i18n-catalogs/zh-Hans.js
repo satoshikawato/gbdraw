@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "自动（{count}）",
   "Auto ({mode})": "自动（{mode}）",
   "Auto ({value})": "自动（{value}）",
-  "Auto Reflow": "自动重排",
-  "Auto Reflow failed. Current diagram is kept.": "自动重排失败。已保留当前图谱。",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "“自动”将放得下的标签嵌入特征内部，其余标签放到外部。“仅嵌入”会丢弃需要放在外部的标签。“仅外部”将标签放在特征主体之外。",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "“自动”跟随轨道布局（“上方”或“特征位于轴上”：标签在上方；“下方”：标签在下方）。“特征上方”将标签绘制在特征上方（启用“分链显示”时，负链特征的标签绘制在其下方）。",
   "Auto hides these fields throughout the diagram": "“自动”会在整个图谱中隐藏这些字段",

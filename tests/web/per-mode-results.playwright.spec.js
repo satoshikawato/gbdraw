@@ -60,7 +60,7 @@ const setLinearSource = (page) => page.evaluate(async (text) => {
 
 // Circular source loaded and a Linear source set, Circular shown.
 const openBothSources = async (page) => {
-  await openWithGenBank(page, FIXTURE, () => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; });
+  await openWithGenBank(page, FIXTURE);
   await showMode(page, 'linear');
   await setLinearSource(page);
   await settleLive(page);

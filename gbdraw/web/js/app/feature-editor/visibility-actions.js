@@ -531,9 +531,9 @@ export const createFeatureVisibilityActions = ({
   // `projectMountedEditorIntent`. The label of a feature it hides or shows
   // follows the feature (F-3, OV-35). A History step or a loaded table
   // (`rerender`) that draws a feature the Result does not draw, or changes a
-  // Legend source, reruns the rerender, as the action did; a Result display
-  // does so only for a Result drawn with other visibility (OV-2293), so a
-  // feature Python does not draw cannot repeat it. A loaded
+  // Legend source, reruns the rerender, as the action did; so does a Result
+  // display of a Result a Load or an Undo restored, whose bytes it reads through
+  // the catalog (OV-2293). A loaded
   // table (`reflow`) also places the labels, as a visibility edit does. A
   // caller that also projects the label intent (`labels`) has the label owner
   // project it in the same follow, so the edit queues one label request.

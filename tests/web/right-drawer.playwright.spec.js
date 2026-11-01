@@ -920,7 +920,6 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
       const app = window.__GBDRAW_APP__;
       const { state } = await import('./js/state.js');
       const feature = app.extractedFeatures.find((candidate) => app.getEditableLabelByFeatureId(candidate.svg_id));
-      state.autoLabelReflowEnabled.value = true;
       window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
         throw new Error('S05 forced live rerender failure');
       };

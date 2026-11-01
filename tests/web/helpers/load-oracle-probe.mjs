@@ -173,7 +173,7 @@ const DOCUMENT_KEYS = [
   'similarityAlignmentResetReceipt', 'linearRecordTranslations', 'legacySimilarityAlignment', 'selectedOrthogroupId',
   'selectedOrthogroupAlignmentFeature', 'circularRecordList', 'paletteInstantPreviewEnabled', 'losatExecution',
   'richFeaturePopup', 'appliedPaletteName', 'appliedPaletteColors', 'downloadDpi', 'featureCatalog',
-  'biologicalFeatures', 'extractedFeatures', 'featureRecordIds', 'selectedFeatureRecordIdx', 'autoLabelReflowEnabled',
+  'biologicalFeatures', 'extractedFeatures', 'featureRecordIds', 'selectedFeatureRecordIdx',
   'generatedLegendPosition', 'generatedMode', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition',
   'featurePanelTab', 'lastRunInfo', 'zoom', 'canvasPan', 'displayedResultMetadata', 'activeDrawing',
   // What Load reports and the Result artifacts it restores.

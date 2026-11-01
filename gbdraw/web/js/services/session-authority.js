@@ -113,7 +113,6 @@ const WEB_EDITOR_UI_FIELDS = Object.freeze([
   'selectedResultIndex',
   'featurePanelTab',
   'downloadDpi',
-  'autoLabelReflow',
   'linearTypographyLinked',
   'paletteInstantPreviewEnabled',
   'appliedPaletteName',

@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { readFileSync } = require('node:fs');
 const { readPdfText } = require('./helpers/pdf-text.cjs');
-const { openApp, generateAndWaitForResult, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { openApp, generateAndWaitForResult, reveal, evaluateWithRetainedPromise, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
 const session = async (page, name = 'HmmtDNA_basic_circular.gbdraw-session.json') => {
@@ -333,7 +333,7 @@ test('a label TSV that matches no label keeps the label edits and records no Und
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const history = window.__GBDRAW_HISTORY__;
     return { bulk: { ...app.labelTextBulkOverrides }, undoCount: history.getUndoCount(), undoLabel: history.undoLabel() };
-  }, tsv);
+  }, tsv).finally(() => settleLive(page));
   const edited = await importTsv('*\t*\tlabel\t^tRNA-Phe$\tMyLabel\n');
   expect(edited).toMatchObject({ bulk: { 'tRNA-Phe': 'MyLabel' }, undoLabel: 'Load label edits' });
   await expect(notice.locator('p')).toHaveText('Loaded 1 row. Applied to 1 label.');

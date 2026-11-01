@@ -373,7 +373,7 @@ test('a failed apply does not run again', async ({ browser }) => {
     // An editor rerender after it draws the committed Session without the failed value.
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      state.labelReflowForceRequestSeq.value += 1;
+      state.labelReflowRequestSeq.value += 1;
     });
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(true);
     await settleLive(page);
@@ -694,7 +694,7 @@ test('Reset Settings on a batch Circular Result keeps its positions and draws on
   test.setTimeout(600_000);
   const page = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
   try {
-    await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+    await open(page, { mode: 'circular', results: 'batch' });
     await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0001$', color: '#c83366', cap: 'CDS' });
     await generateNow(page);
     const before = JSON.parse((await facts(page)).diagramOptions).output;
@@ -728,7 +728,7 @@ test('a live request during an editor rerender for a value equal to the committe
     await installGate(page);
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      state.labelReflowForceRequestSeq.value += 1;
+      state.labelReflowRequestSeq.value += 1;
     });
     await gateEntered(page);
     await commitValue(page, LEGEND_FONT, size);
@@ -757,7 +757,7 @@ test(`${mode}: Reset Settings that shows a hidden feature and removes a color ru
   test.setTimeout(600_000);
   const page = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
   try {
-    await open(page, { mode, results, reflow: 'off' });
+    await open(page, { mode, results });
     await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: rule, color: '#c83366', cap: 'CDS' });
     await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: hidden, action: 'off' });
     await generateNow(page);
@@ -835,7 +835,7 @@ test('a Load after a canceled apply applies none of the loaded draft', async ({ 
     // An editor rerender draws the loaded committed Session.
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      state.labelReflowForceRequestSeq.value += 1;
+      state.labelReflowRequestSeq.value += 1;
     });
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(true);
     await settleLive(page);

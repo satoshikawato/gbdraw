@@ -4,7 +4,7 @@
 /** @import { CurrentResultsPort, SvgResultEntry } from '../../services/svg-result-ingestion.js' */
 import { RULE_INPUT_CHANGE_WORDS, diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
-import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride, movedIdentityValues } from '../../services/feature-visibility.js';
+import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
 import { parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
 import { replaceBulkLabelEdits } from '../../services/drawing/label-tables.js';
 import { escapeRegexLiteral } from '../../services/feature-selector.js';
@@ -45,7 +45,7 @@ import { joinSentences, msg, t, tm, tn } from '../../utils/i18n.js';
  * The popup's label fields as one Apply reads them.
  * @typedef {{ text: string, sourceText: string, visibility: string, hasEditableLabel: boolean }} LabelPopupEdit
  */
-/** @typedef {(options?: { forceReflow?: boolean }) => unknown} LabelApply */
+/** @typedef {() => unknown} LabelApply */
 /** @typedef {{ textEl: SVGTextElement, referencePoint: LabelPoint, candidates: FeatureCentroid[], candidateById: Map<string, FeatureCentroid>, kind: string }} LabelMeta */
 /**
  * The input a Label TSV change reads: a file input, or the object the retry
@@ -672,9 +672,7 @@ export const createFeatureLabelActions = ({
     labelTextScopeDialog,
     hiddenLabelTextDialog,
     labelOnDialog,
-    autoLabelReflowEnabled,
     labelReflowRequestSeq,
-    labelReflowForceRequestSeq,
     labelReflowLastError,
     labelReflowProcessing
   } = state;
@@ -764,13 +762,8 @@ export const createFeatureLabelActions = ({
     if (rerender) labelReflowLastError.value = null;
   };
 
-  const queueLabelReflow = (force = false) => {
+  const queueLabelReflow = () => {
     labelReflowLastError.value = null;
-    if (force) {
-      labelReflowForceRequestSeq.value += 1;
-      return;
-    }
-    if (!autoLabelReflowEnabled.value) return;
     labelReflowRequestSeq.value += 1;
   };
 
@@ -863,39 +856,10 @@ export const createFeatureLabelActions = ({
     return { available: true, changed };
   };
 
-  // The Label visibility On and Off each mounted Result was drawn with, by
-  // feature identity key: the intent of the Result's first projection. Only
-  // Python decides whether Default draws a label, so a feature whose On or Off
-  // returns to Default asks for the rerender, as a missing On label does
-  // (UJ-01, R3).
-  /** @type {WeakMap<Element, Map<string, string>>} */
-  const drawnLabelVisibility = new WeakMap();
-  /** @param {DrawingState} drawing */
-  const labelVisibilityIntent = (drawing) => new Map(Object.entries(drawing.featureOverrides)
-    .map(([key, row]) => /** @type {[string, string]} */ ([key, normalizeVisibilityMode(row?.labelVisibility)]))
-    .filter(([, visibility]) => visibility !== 'default'));
-  /** @param {DrawingState} drawing @param {Element} svg */
-  const labelVisibilityReturnsToDefault = (drawing, svg) => {
-    const intent = labelVisibilityIntent(drawing);
-    const drawn = drawnLabelVisibility.get(svg);
-    if (!drawn) drawnLabelVisibility.set(svg, intent);
-    return Array.from(drawn?.keys() || []).some((key) => !intent.has(key));
-  };
-  // A Generate that moves a record's rows to its new key (OV-1949) moves them
-  // after its Result was bound: the visibility that Result was drawn with
-  // follows them, so the moved rows ask for no rerender (OV-1983).
-  /** @param {ReadonlyMap<string, string>} moves */
-  const moveDrawnLabelVisibility = (moves) => {
-    const svg = svgContainer.value?.querySelector?.('svg');
-    const drawn = svg ? drawnLabelVisibility.get(svg) : null;
-    if (!svg || !drawn || moves.size === 0) return;
-    drawnLabelVisibility.set(svg, new Map(Object.entries(movedIdentityValues(Object.fromEntries(drawn), moves))));
-  };
-
   /** @param {DrawingState} drawing @param {Element} svg */
   const applyStoredVisibilityOverridesToSvg = (drawing, svg) => {
     let changed = false;
-    let unavailableOverride = labelVisibilityReturnsToDefault(drawing, svg);
+    let unavailableOverride = false;
     const displayed = displayedFeatures();
     const context = drawnContext(drawing);
     svg.querySelectorAll(VISIBILITY_LABEL_SELECTOR).forEach((textEl) => {
@@ -1007,7 +971,7 @@ export const createFeatureLabelActions = ({
    *   reuseCurrentBinding?: boolean
    * }} [options] `reuseCurrentBinding`: opening the editor or a feature
    *   popup, which checks no feature ids, keeps a current binding (OV-923).
-   * @returns {{ changed: boolean, rerender: boolean, textChanged: boolean } | undefined} The projection; undefined when no Result is mounted.
+   * @returns {{ changed: boolean, rerender: boolean } | undefined} The projection; undefined when no Result is mounted.
    */
   const syncLabelEditor = ({
     requiredFeatureIds = [],
@@ -1090,8 +1054,7 @@ export const createFeatureLabelActions = ({
   // One projection of the label intent onto the mounted Result, shared by a
   // live edit, a Label TSV import, History apply, and the display of a Result.
   // `rerender`: only the label rerender can show the intent; a caller that
-  // queues its own reflow (`queueIncompleteVisibility: false`) forces it then.
-  // `textChanged`: a label shows another text, which only Python fits.
+  // queues its own reflow (`queueIncompleteVisibility: false`) reads it.
   /** @param {DrawingState} drawing @param {Element} svg @param {{ queueIncompleteVisibility?: boolean }} [options] */
   const projectLabelIntent = (drawing, svg, { queueIncompleteVisibility = true } = {}) => {
     const textChanged = projectLabelTextIntent(drawing, svg);
@@ -1101,21 +1064,19 @@ export const createFeatureLabelActions = ({
     const changed = textChanged || visibilityProjection.changed;
     if (changed) commitLabelEdit();
     if (queueIncompleteVisibility && visibilityProjection.unavailableOverride) {
-      queueLabelReflow(true);
+      queueLabelReflow();
     }
-    return { changed, rerender: visibilityProjection.unavailableOverride, textChanged };
+    return { changed, rerender: visibilityProjection.unavailableOverride };
   };
 
   // The mounted roots whose labels a popup or the binder bound.
   /** @type {WeakSet<Element>} */
   const boundLabelRoots = new WeakSet();
   // The label intent on the mounted Result, and the one label reflow request
-  // of the edit that projects it: `reflow` places the labels (Auto Reflow),
-  // `rerender` asks for the automatic rerender. The labels of a root no popup
-  // or binder has bound are bound first, once (OV-237). OV-200: with Embedded
-  // Only a changed label text asks for the rerender, which draws the label
-  // only when it fits, as Generate does; a label hidden, or shown as Python
-  // drew it, needs no such decision.
+  // of the edit that projects it: `reflow` and `rerender` ask for the automatic
+  // rerender, which places the labels as Generate does, and so does a projection
+  // that changed a label. The labels of a root no popup or binder has bound are bound
+  // first, once (OV-237).
   const reconcileLabelOverrides = ({ reflow = false, rerender = false } = {}) => {
     const drawing = state.activeDrawing();
     const svg = svgContainer.value?.querySelector?.('svg');
@@ -1123,16 +1084,14 @@ export const createFeatureLabelActions = ({
     const projection = boundLabelRoots.has(svg) || svg.querySelector(EDITABLE_LABEL_SELECTOR)
       ? projectLabelIntent(drawing, svg, { queueIncompleteVisibility: false })
       : syncLabelEditor({ queueIncompleteVisibility: false });
-    const force = rerender || Boolean(projection?.rerender)
-      || (Boolean(projection?.textChanged) && labelsEmbeddedOnly(getCommittedRequest()?.diagramOptions));
-    if (reflow || force) queueLabelReflow(force);
+    if (reflow || rerender || projection?.rerender || projection?.changed) queueLabelReflow();
     return Boolean(projection?.changed);
   };
 
   // A feature visibility edit shows or hides the feature's label in the same
-  // action, then Auto Reflow places the labels as Generate does (F-3). An edit
-  // that draws a feature the Result does not draw (`rerender`) always reruns
-  // the rerender, which draws it and its label (R-5). A caller that also
+  // action, then the rerender places the labels as Generate does (F-3); it also
+  // draws a feature the Result does not draw and its label (`rerender`, R-5).
+  // A caller that also
   // projects the label intent (`labels`) does so here, so the edit queues one
   // request.
   const applyFeatureVisibilityToLabels = ({ reflow = true, rerender = false, labels = false } = {}) => {
@@ -1142,12 +1101,12 @@ export const createFeatureLabelActions = ({
     if (!svg) return false;
     const projection = applyStoredVisibilityOverridesToSvg(drawing, svg);
     if (projection.changed) commitLabelEdit();
-    if (reflow || rerender) queueLabelReflow(rerender || projection.unavailableOverride);
+    if (reflow || rerender) queueLabelReflow();
     return projection.changed;
   };
 
   // An edit whose Result Python must draw again asks for the automatic
-  // rerender, Auto Reflow on or off: a specific-color rule edit or a History
+  // rerender: a specific-color rule edit or a History
   // step that changes a Legend source (Owner decision 2026-10-06, OV-43). A
   // request while one is pending joins it. D-36: an accepted request leaves a
   // redraw owed by the shown drawing (each mode has its own, PD-OI-086) until
@@ -1160,7 +1119,7 @@ export const createFeatureLabelActions = ({
   const requestAutomaticRerender = () => {
     if (!svgContainer.value?.querySelector?.('svg')) return false;
     redrawOwed.add(state.activeDrawing());
-    queueLabelReflow(true);
+    queueLabelReflow();
     return true;
   };
   /** @param {DrawingState} drawing */
@@ -1300,9 +1259,8 @@ export const createFeatureLabelActions = ({
    * @param {LabelFeature} feature
    * @param {string} featureId
    * @param {LabelPopupEdit} edit
-   * @param {{ forceReflow?: boolean }} [options]
    */
-  const applyPopupLabelEdit = (drawing, feature, featureId, edit, { forceReflow = false } = {}) => {
+  const applyPopupLabelEdit = (drawing, feature, featureId, edit) => {
     const row = rowOf(drawing, feature);
     if (edit.text.trim() && edit.visibility === 'default'
       && normalizeVisibilityMode(row?.labelVisibility) === 'default'
@@ -1318,11 +1276,11 @@ export const createFeatureLabelActions = ({
           let written;
           if (choice === 'text_only') written = writeText();
           else if (choice === 'show') {
-            written = applyLabelOn(drawing, featureId, ({ forceReflow: force = false } = {}) => {
+            written = applyLabelOn(drawing, featureId, () => {
               writeText();
               setLabelVisibilityOverride(drawing, feature, 'on');
-              const projection = applyDirectVisibilityToCurrentSvg(featureId, 'on');
-              queueLabelReflow(force || !projection.available);
+              applyDirectVisibilityToCurrentSvg(featureId, 'on');
+              queueLabelReflow();
             });
           } else written = syncClickedFeatureLabelState();
           resolve(written);
@@ -1346,16 +1304,7 @@ export const createFeatureLabelActions = ({
       syncLabelEditor({ queueIncompleteVisibility: false });
     }
 
-    if (visibilityChanged || (!edit.hasEditableLabel && textChanged)) {
-      const svg = svgContainer.value?.querySelector?.('svg');
-      queueLabelReflow(forceReflow || !visibilityProjection.available
-        || Boolean(svg && labelVisibilityReturnsToDefault(drawing, svg)));
-      return;
-    }
-
-    if (textChanged) {
-      queueLabelReflow(labelsEmbeddedOnly(getCommittedRequest()?.diagramOptions));
-    }
+    if (visibilityChanged || textChanged) queueLabelReflow();
   };
 
   const updateClickedFeatureLabelText = async () => {
@@ -1383,7 +1332,7 @@ export const createFeatureLabelActions = ({
       clickedFeature.value.labelVisibility = edit.visibility;
     }
     /** @type {LabelApply} */
-    const apply = (options) => applyPopupLabelEdit(drawing, feature, featureId, edit, options);
+    const apply = () => applyPopupLabelEdit(drawing, feature, featureId, edit);
     if (edit.visibility === 'on' && normalizeVisibilityMode(rowOf(drawing, feature)?.labelVisibility) !== 'on') {
       return applyLabelOn(drawing, featureId, apply);
     }
@@ -1498,7 +1447,7 @@ export const createFeatureLabelActions = ({
     const featureVisibility = getFeatureVisibilityOverride(drawing.featureOverrides, feature);
     // The port returns false for a feature without an identity key, which is what a null feature has.
     if (showFeature) setFeatureVisibility?.(/** @type {LabelFeature} */ (feature), 'on', { triggerReflow: false });
-    apply({ forceReflow: embeddedOnly });
+    apply();
     if (!embeddedOnly) return true;
     const applied = JSON.stringify(captureFeatureLabelIntent(drawing, feature));
     const drawn = await reflowDrawsLabel(featureId);
@@ -1637,6 +1586,8 @@ export const createFeatureLabelActions = ({
     }
     const svg = svgContainer.value?.querySelector('svg');
     if (svg) resetLabelsToSourceText(drawing, svg);
+    const heldEdits = Object.keys(drawing.labelTextBulkOverrides).length > 0
+      || Object.values(drawing.featureOverrides).some((row) => LABEL_FIELDS.some((field) => row[field] != null));
     clearOverrides(drawing);
     if (!svgContainer.value) {
       editableLabels.value = [];
@@ -1650,7 +1601,8 @@ export const createFeatureLabelActions = ({
     closeLabelTextScopeDialog();
     closeHiddenLabelTextDialog();
     commitLabelEdit();
-    queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
+    syncLabelEditor({ queueIncompleteVisibility: false });
+    if (heldEdits) queueLabelReflow();
   };
 
   // A Label TSV row selects labels in every Result of a batch. The displayed
@@ -1810,7 +1762,8 @@ export const createFeatureLabelActions = ({
 
       closeLabelTextScopeDialog();
       closeHiddenLabelTextDialog();
-      queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
+      syncLabelEditor({ queueIncompleteVisibility: false });
+      queueLabelReflow();
 
       const message = joinSentences(loadedRowsText, tn(applicable.length, 'Applied to {count} label.', 'Applied to {count} labels.'));
       const skipped = skippedNonTrackableCount > 0
@@ -1864,7 +1817,6 @@ export const createFeatureLabelActions = ({
     closeHiddenLabelTextDialog,
     closeLabelTextScopeDialog,
     hiddenLabelTextMessage,
-    moveDrawnLabelVisibility,
     downloadLabelOverrideTable,
     loadLabelOverrideTable, canRetryLabelImportFailure, retryLabelImportFailure, editLabelImportFailure,
     getEditableLabelByFeatureId,

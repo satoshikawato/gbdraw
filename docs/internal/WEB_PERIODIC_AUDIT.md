@@ -142,7 +142,7 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    (a Result switch runs only in the two-Result batch, Reset Settings and a
    drawing switch only outside it) as adjacent steps and
    within one walk, and every fixture (a Circular Result, a Linear Result, a
-   two-Result Circular batch) x kind x popup x Auto Reflow, in walks of at most
+   two-Result Circular batch) x kind x popup, in walks of at most
    `GBDRAW_RANDOM_WALK_STEPS` steps (default 50); about 800 steps in about 17
    walks, one test per walk. A cap too small for the plan to cover every target
    fails the spec's plan test before any walk runs. The step arguments (feature, color, index) are
@@ -156,7 +156,7 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
 
    After each step (feature fill with each scope choice, label text and
    visibility, Feature Visibility and specific color rules, legend rename,
-   color, and sort, Undo, Redo, Result switch, Auto Reflow), the walk requires
+   color, and sort, Undo, Redo, Result switch), the walk requires
    the displayed Result to equal the Result Generate draws from the same draft
    (R3, PD-OI-066), minus `tests/web/contracts/live-generate-parity-allowed.json`.
    The log starts with the seed; a failure names the seed, the fixture, the

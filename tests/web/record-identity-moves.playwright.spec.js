@@ -295,7 +295,7 @@ const bundleTexts = async (page, testInfo) => {
   return JSON.parse(listed.stdout);
 };
 
-const forcedLabelRerenders = (page) => page.evaluate(async () => (await import('./js/state.js')).state.labelReflowForceRequestSeq.value);
+const forcedLabelRerenders = (page) => page.evaluate(async () => (await import('./js/state.js')).state.labelReflowRequestSeq.value);
 
 test.describe('record identity moves (OV-1949)', () => {
   test.describe.configure({ timeout: 420_000 });

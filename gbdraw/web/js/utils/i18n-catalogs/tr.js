@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "Otomatik ({count})",
   "Auto ({mode})": "Otomatik ({mode})",
   "Auto ({value})": "Otomatik ({value})",
-  "Auto Reflow": "Otomatik yeniden yerleştirme",
-  "Auto Reflow failed. Current diagram is kept.": "Otomatik yeniden yerleştirme başarısız oldu. Geçerli diyagram korundu.",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "Otomatik seçeneğinde sığan etiketler gömülür, kalanlar dışarıya yönlendirilir. Yalnızca gömülü seçeneğinde harici yerleşim gerektiren etiketler atılır. Yalnızca harici seçeneğinde etiketler özellik gövdelerinin dışında tutulur.",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "Otomatik seçeneğinde etiketler iz düzenine uyar (Üstte veya Eksen üzerinde özellikler: etiketler üstte; Altta: etiketler altta). Özelliğin üstünde seçeneğinde etiketler özelliklerin üstüne çizilir; İplikleri ayır seçeneği açıkken negatif iplikteki özelliklerin altına çizilir.",
   "Auto hides these fields throughout the diagram": "Otomatik seçeneğinde bu alanlar tüm diyagramda gizlenir",

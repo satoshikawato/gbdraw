@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "Auto ({count})",
   "Auto ({mode})": "Auto ({mode})",
   "Auto ({value})": "Auto ({value})",
-  "Auto Reflow": "Automatyczne ponowne rozmieszczenie",
-  "Auto Reflow failed. Current diagram is kept.": "Automatyczne ponowne rozmieszczenie nie powiodło się. Bieżący diagram zostaje zachowany.",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "Opcja Automatycznie osadza etykiety, które się mieszczą, a pozostałe wyprowadza na zewnątrz. Opcja Tylko osadzone pomija etykiety wymagające umieszczenia na zewnątrz. Opcja Tylko zewnętrzne zachowuje etykiety poza korpusami cech.",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "Opcja Automatycznie dostosowuje rozmieszczenie etykiet do układu ścieżek (Nad lub Cechy na osi: etykiety powyżej; Pod: etykiety poniżej). Opcja Nad cechą rysuje etykiety nad cechami (a pod cechami na nici ujemnej, gdy włączona jest opcja Osobne nici).",
   "Auto hides these fields throughout the diagram": "Opcja Automatycznie ukrywa te pola w całym diagramie",

@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "อัตโนมัติ ({count})",
   "Auto ({mode})": "อัตโนมัติ ({mode})",
   "Auto ({value})": "อัตโนมัติ ({value})",
-  "Auto Reflow": "จัดเรียงใหม่อัตโนมัติ",
-  "Auto Reflow failed. Current diagram is kept.": "“จัดเรียงใหม่อัตโนมัติ” ไม่สำเร็จ ระบบคงแผนภาพปัจจุบันไว้",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "“อัตโนมัติ” จะวางป้ายกำกับที่พอดีไว้ภายในฟีเจอร์ และวางป้ายกำกับที่เหลือไว้ภายนอก “ภายในเท่านั้น” จะทิ้งป้ายกำกับที่ต้องวางไว้ภายนอก “ภายนอกเท่านั้น” จะวางป้ายกำกับไว้นอกตัวฟีเจอร์เสมอ",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "“อัตโนมัติ” จะเป็นไปตามเลย์เอาต์แทร็ก (“ด้านบน” หรือ “ฟีเจอร์บนแกน”: ป้ายกำกับอยู่ด้านบน “ด้านล่าง”: ป้ายกำกับอยู่ด้านล่าง) “เหนือฟีเจอร์” จะวาดป้ายกำกับไว้เหนือฟีเจอร์ (และใต้ฟีเจอร์บนสาย − เมื่อเปิด “แยกสาย”)",
   "Auto hides these fields throughout the diagram": "“อัตโนมัติ” ซ่อนฟิลด์เหล่านี้ทั่วทั้งแผนภาพ",

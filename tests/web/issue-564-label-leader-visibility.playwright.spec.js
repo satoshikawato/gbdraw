@@ -104,6 +104,19 @@ const labelGeometry = (page) => page.evaluate(() => Array.from(
   transform: element.getAttribute('transform')
 })));
 
+// A label edit asks for one rerender; it has ended without an error.
+// The rerender of a hidden label's edit draws no leader for it; what it still
+// draws (at most the label and its box) stays hidden.
+const expectLabelNotDrawn = (unit) => {
+  expect([0, 2]).toContain(unit.mounted.length);
+  expect(unit.mounted.every(({ display }) => display === 'none')).toBe(true);
+  expect(unit.result.every(({ display }) => display === 'none')).toBe(true);
+};
+const rerenderDone = (page) => expect.poll(() => page.evaluate(() => ({
+  processing: window.__GBDRAW_APP__.labelReflowProcessing,
+  error: window.__GBDRAW_APP__.labelReflowLastError
+})), { timeout: 180000 }).toEqual({ processing: false, error: null });
+
 test('fresh Linear visibility is atomic through reflow, Save/Load, regeneration, and export', async ({
   browser
 }, testInfo) => {
@@ -117,36 +130,23 @@ test('fresh Linear visibility is atomic through reflow, Save/Load, regeneration,
     // casing, the casing and the underline; and its default box (LP-D106), which is hidden with it.
     const target = await findCurrentLabelTarget(page, { leaderCount: 4 });
     expect(target).not.toBeNull();
-    await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; });
 
-    const geometryBefore = await labelGeometry(page);
-    const countersBefore = await page.evaluate(async () => {
-      const { state } = await import('./js/state.js');
-      return {
-        ordinary: state.labelReflowRequestSeq.value,
-        forced: state.labelReflowForceRequestSeq.value
-      };
-    });
     await setVisibility(page, target.featureId, 'off');
+    // The direct edit is in the Result before the rerender ends.
     expectUnitHidden(await inspectUnit(page, target.featureId), 4, 1);
-    expect(await labelGeometry(page)).toEqual(geometryBefore);
-    expect(await page.evaluate(async () => {
-      const { state } = await import('./js/state.js');
-      return {
-        ordinary: state.labelReflowRequestSeq.value,
-        forced: state.labelReflowForceRequestSeq.value
-      };
-    })).toEqual(countersBefore);
+    await rerenderDone(page);
+    expectLabelNotDrawn(await inspectUnit(page, target.featureId));
 
     const saved = testInfo.outputPath('issue-564-hidden-linear.gbdraw-session.json.gz');
     await download(page, 'Save Session', saved);
     fresh = await load(browser, saved);
     await fresh.evaluate(() => window.__GBDRAW_APP__.syncLabelEditor());
-    expectUnitHidden(await inspectUnit(fresh, target.featureId), 4, 1);
-    await fresh.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; });
+    expectLabelNotDrawn(await inspectUnit(fresh, target.featureId));
     await setVisibility(fresh, target.featureId, 'default');
+    await rerenderDone(fresh);
     expectUnitVisible(await inspectUnit(fresh, target.featureId), 4, 1);
     await setVisibility(fresh, target.featureId, 'off');
+    await rerenderDone(fresh);
     await generate(fresh);
     const regenerated = await inspectUnit(fresh, target.featureId);
     expect([0, 2]).toContain(regenerated.mounted.length);
@@ -178,37 +178,21 @@ test('fresh Linear visibility is atomic through reflow, Save/Load, regeneration,
     });
 
     await setVisibility(page, target.featureId, 'default');
+    await rerenderDone(page);
     const restored = await inspectUnit(page, target.featureId);
     expectUnitVisible(restored, 4, 1);
     expect(restored.override).toBeUndefined();
 
-    const autoCounters = await page.evaluate(async () => {
-      const { state } = await import('./js/state.js');
-      window.__GBDRAW_APP__.autoLabelReflowEnabled = true;
-      return {
-        ordinary: state.labelReflowRequestSeq.value,
-        forced: state.labelReflowForceRequestSeq.value
-      };
-    });
+    await rerenderDone(page);
+    const requests = await page.evaluate(async () => (await import('./js/state.js')).state.labelReflowRequestSeq.value);
     await setVisibility(page, target.featureId, 'off');
     expectUnitHidden(await inspectUnit(page, target.featureId), 4, 1);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(true);
-    await expect.poll(() => page.evaluate(() => ({
-      processing: window.__GBDRAW_APP__.labelReflowProcessing,
-      error: window.__GBDRAW_APP__.labelReflowLastError
-    })), { timeout: 180000 }).toEqual({ processing: false, error: null });
+    await rerenderDone(page);
     const postReflow = await inspectUnit(page, target.featureId);
-    expect([0, 2]).toContain(postReflow.mounted.length);
-    expect(postReflow.mounted.every(({ display }) => display === 'none')).toBe(true);
-    expect(postReflow.result.every(({ display }) => display === 'none')).toBe(true);
+    expectLabelNotDrawn(postReflow);
     expect(postReflow.override).toBe('off');
-    expect(await page.evaluate(async () => {
-      const { state } = await import('./js/state.js');
-      return {
-        ordinary: state.labelReflowRequestSeq.value,
-        forced: state.labelReflowForceRequestSeq.value
-      };
-    })).toEqual({ ordinary: autoCounters.ordinary + 1, forced: autoCounters.forced });
+    expect(await page.evaluate(async () => (await import('./js/state.js')).state.labelReflowRequestSeq.value)).toBe(requests + 1);
     expect(page.externalRequests).toEqual([]);
     expect(fresh.externalRequests).toEqual([]);
   } finally {
@@ -217,7 +201,7 @@ test('fresh Linear visibility is atomic through reflow, Save/Load, regeneration,
   }
 });
 
-test('fresh Circular two-segment leader visibility is atomic without forced regeneration', async ({
+test('fresh Circular two-segment leader visibility is atomic, and each edit asks for one rerender', async ({
   browser
 }, testInfo) => {
   test.setTimeout(300000);
@@ -225,17 +209,18 @@ test('fresh Circular two-segment leader visibility is atomic without forced rege
   try {
     await generate(page);
     await page.evaluate(() => window.__GBDRAW_APP__.syncLabelEditor());
-    await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; });
     const target = await findCurrentLabelTarget(page, { leaderCount: 2 });
     expect(target).not.toBeNull();
     const before = await page.evaluate(async () => (await import('./js/state.js'))
-      .state.labelReflowForceRequestSeq.value);
+      .state.labelReflowRequestSeq.value);
     await setVisibility(page, target.featureId, 'off');
-    expectUnitHidden(await inspectUnit(page, target.featureId), 2);
+    await rerenderDone(page);
+    expectLabelNotDrawn(await inspectUnit(page, target.featureId));
     await setVisibility(page, target.featureId, 'on');
+    await rerenderDone(page);
     expectUnitVisible(await inspectUnit(page, target.featureId), 2);
     expect(await page.evaluate(async () => (await import('./js/state.js'))
-      .state.labelReflowForceRequestSeq.value)).toBe(before);
+      .state.labelReflowRequestSeq.value)).toBe(before + 2);
     await page.screenshot({
       path: testInfo.outputPath('issue-564-restored-circular.png'),
       fullPage: true
@@ -260,7 +245,7 @@ const prepareLegacyTarget = (page) => evaluateWithRetainedPromise(page, async ()
     featureId: entry.featureId,
     mounted: document.querySelector('.origin-top svg').outerHTML,
     result: app.currentResults()[app.selectedResultIndex].content,
-    forceSeq: state.labelReflowForceRequestSeq.value
+    requestSeq: state.labelReflowRequestSeq.value
   };
 });
 
@@ -273,7 +258,6 @@ test('tracked metadata-free Session refreshes once and never exposes a partial v
     const legacy = await prepareLegacyTarget(page);
     expect(legacy.mounted).not.toContain('data-gbdraw-label-binding-schema="1"');
     await page.evaluate(() => {
-      window.__GBDRAW_APP__.autoLabelReflowEnabled = false;
       window.__GBDRAW_APP__.clickedFeature.labelVisibility = 'off';
       window.__ISSUE564_LEGACY_APPLY__ = window.__GBDRAW_APP__.updateClickedFeatureLabelText();
     });
@@ -286,13 +270,13 @@ test('tracked metadata-free Session refreshes once and never exposes a partial v
         mounted: document.querySelector('.origin-top svg').outerHTML,
         result: app.currentResults()[app.selectedResultIndex].content,
         override: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === app.clickedFeature.svg_id)),
-        forceSeq: state.labelReflowForceRequestSeq.value
+        requestSeq: state.labelReflowRequestSeq.value
       };
     });
     expect(during.mounted).toBe(legacy.mounted);
     expect(during.result).toBe(legacy.result);
     expect(during.override).toBe('off');
-    expect(during.forceSeq).toBe(legacy.forceSeq + 1);
+    expect(during.requestSeq).toBe(legacy.requestSeq + 1);
 
     await expect.poll(() => page.evaluate(() => ({
       processing: window.__GBDRAW_APP__.labelReflowProcessing,
@@ -341,7 +325,6 @@ test('metadata-free refresh failure retains the old visual and canonical overrid
       hooks.beforeDiagramGenerationResponse = async () => {
         throw new Error('Forced Issue 564 label refresh failure.');
       };
-      window.__GBDRAW_APP__.autoLabelReflowEnabled = false;
       window.__GBDRAW_APP__.clickedFeature.labelVisibility = 'off';
     });
     await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.updateClickedFeatureLabelText());
@@ -359,13 +342,13 @@ test('metadata-free refresh failure retains the old visual and canonical overrid
         mounted: document.querySelector('.origin-top svg').outerHTML,
         result: app.currentResults()[app.selectedResultIndex].content,
         override: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === targetId)),
-        forceSeq: state.labelReflowForceRequestSeq.value
+        requestSeq: state.labelReflowRequestSeq.value
       };
     }, legacy.featureId);
     expect(failed.mounted).toBe(legacy.mounted);
     expect(failed.result).toBe(legacy.result);
     expect(failed.override).toBe('off');
-    expect(failed.forceSeq).toBe(legacy.forceSeq + 1);
+    expect(failed.requestSeq).toBe(legacy.requestSeq + 1);
     expect(page.externalRequests).toEqual([]);
   } finally {
     await page.context().close();
@@ -434,7 +417,6 @@ test('same label text in two Linear records changes only the selected exact iden
         show_labels_linear: 'all'
       });
       app.adv.label_rendering = 'auto';
-      app.autoLabelReflowEnabled = false;
       await app.setLinearComparisonGlobalAction('none');
     }, {
       first: sameLabelGenbank('Issue564A', 'atg'),
@@ -464,13 +446,16 @@ test('same label text in two Linear records changes only the selected exact iden
     // Leader, its tail over the underline's casing, the casing and the underline.
     expect(targets.map(({ leaderCount }) => leaderCount)).toEqual([4, 4]);
     await setVisibility(page, targets[0].featureId, 'off');
-    expectUnitHidden(await inspectUnit(page, targets[0].featureId), 4, 1);
+    await rerenderDone(page);
+    expectLabelNotDrawn(await inspectUnit(page, targets[0].featureId));
     expectUnitVisible(await inspectUnit(page, targets[1].featureId), 4, 1);
     const embedded = await findCurrentLabelTarget(page, { leaderCount: 0 });
     expect(embedded).not.toBeNull();
     await setVisibility(page, embedded.featureId, 'off');
-    expectUnitHidden(await inspectUnit(page, embedded.featureId), 0);
+    await rerenderDone(page);
+    expectLabelNotDrawn(await inspectUnit(page, embedded.featureId));
     await setVisibility(page, embedded.featureId, 'default');
+    await rerenderDone(page);
     expectUnitVisible(await inspectUnit(page, embedded.featureId), 0);
     expect(external).toEqual([]);
   } finally {

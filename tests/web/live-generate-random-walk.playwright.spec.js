@@ -1,7 +1,7 @@
 // The PR random walk (PD-OI-066, gbdraw/web/CLAUDE.md R3): the seeded walk of
 // tests/web/helpers/live-random-walk.mjs at the pull-request level of
 // tests/web/helpers/live-random-walk-plan.mjs, with a fixed seed: every
-// feasible ordered pair of edit kinds, and every kind in each popup and Auto Reflow
+// feasible ordered pair of edit kinds, and every kind in each popup
 // state. Every step compares the live Result with a fresh Generate from the
 // same draft and checks that the drawing it did not edit keeps its slices
 // (M6). A failing walk is shrunk to a minimal reproduction within
@@ -23,7 +23,7 @@ const SHRINK = { replays: 10, walks: 2 };
 
 // Each row of the R3 work allowlist names the walk kind that draws its path
 // (or null), and the walk draws every kind, every feasible ordered pair of kinds, and
-// every kind in each popup and Auto Reflow state on every run.
+// every kind in each popup state on every run.
 test('the walk draws every kind and names a kind for each work allowlist row', () => {
   expect(Object.keys(ALLOWLIST_WALK_KINDS)).toEqual(WORK_ALLOWLIST.map(({ kind }) => kind));
   expect(Object.values(ALLOWLIST_WALK_KINDS).filter((kind) => kind !== null && !WALK_KINDS.includes(kind))).toEqual([]);
@@ -35,11 +35,11 @@ test('the walk draws every kind and names a kind for each work allowlist row', (
 
 // The case-matrix cases of live-generate-parity.playwright.spec.js that this
 // walk replaced (R3, REPLACED_MATRIX_CASES): each is a step of this plan, in
-// the fixture, popup state, and Auto Reflow state the case pinned.
+// the fixture and popup state the case pinned.
 test('the walk draws each matrix case it replaced in that case\'s states', () => {
   const { walks } = planWalk(PR_SEED, PLAN);
-  const missing = REPLACED_MATRIX_CASES.filter(({ kind, fixture, popup, reflow }) => !walks.some((walk) => FIXTURES[walk.fixtureIndex].name === fixture
-    && walk.steps.some((step) => step.kind === kind && step.popup === popup && step.reflow === reflow))).map(({ edit }) => edit);
+  const missing = REPLACED_MATRIX_CASES.filter(({ kind, fixture, popup }) => !walks.some((walk) => FIXTURES[walk.fixtureIndex].name === fixture
+    && walk.steps.some((step) => step.kind === kind && step.popup === popup))).map(({ edit }) => edit);
   expect(missing).toEqual([]);
 });
 

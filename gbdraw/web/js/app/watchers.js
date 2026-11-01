@@ -177,9 +177,7 @@ export const setupWatchers = ({
     sessionImportRollbackInProgress,
     linearSeqs,
     linearReorderNotice,
-    autoLabelReflowEnabled,
     labelReflowRequestSeq,
-    labelReflowForceRequestSeq,
     errorLog
   } = state;
 
@@ -248,16 +246,6 @@ export const setupWatchers = ({
 
   watch(
     () => labelReflowRequestSeq.value,
-    async (nextSeq, prevSeq) => {
-      if (nextSeq === prevSeq) return;
-      if (!autoLabelReflowEnabled.value) return;
-      if (typeof runLabelReflow !== 'function') return;
-      await runLabelReflow();
-    }
-  );
-
-  watch(
-    () => labelReflowForceRequestSeq.value,
     async (nextSeq, prevSeq) => {
       if (nextSeq === prevSeq) return;
       if (typeof runLabelReflow !== 'function') return;

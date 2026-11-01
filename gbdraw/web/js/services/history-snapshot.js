@@ -192,7 +192,6 @@ const editedIntentPartOf = (path, value) => (
  *   generatedMode?: unknown,
  *   generatedMultiRecordCanvas?: unknown,
  *   generatedCircularPlotTitlePosition?: unknown,
- *   autoLabelReflow?: unknown,
  *   paletteInstantPreviewEnabled?: unknown,
  *   appliedPaletteName?: unknown,
  *   appliedPaletteColors?: unknown,
@@ -203,7 +202,7 @@ const editedIntentPartOf = (path, value) => (
  *   selectedResultIndex?: number
  * }} FallbackUiData
  * @typedef {{
- *   title?: unknown, downloadDpi?: unknown, autoLabelReflow?: unknown, paletteInstantPreviewEnabled?: unknown,
+ *   title?: unknown, downloadDpi?: unknown, paletteInstantPreviewEnabled?: unknown,
  *   losatExecution?: unknown, featurePanelTab?: unknown
  * }} SessionUiData
  *   The Session-level `ui` values (`SESSION_UI_KEYS`), which the History router's project stream records.
@@ -283,7 +282,7 @@ const buildGroupNameIntentData = (drawing) => GROUP_NAMES_SLICE.capture(drawing.
 // the router's project stream records them with the drafts (R15-23), and a
 // drawing's intent and checkpoint hold none of them.
 const SESSION_UI_KEYS = Object.freeze([
-  'title', 'downloadDpi', 'autoLabelReflow', 'paletteInstantPreviewEnabled', 'losatExecution', 'featurePanelTab'
+  'title', 'downloadDpi', 'paletteInstantPreviewEnabled', 'losatExecution', 'featurePanelTab'
 ]);
 /** @param {Record<string, unknown>} ui */
 const withoutSessionUi = (ui) => {
@@ -570,7 +569,6 @@ const buildFallbackUiStateData = (state, drawing) => ({
   generatedMode: getRef(state.generatedMode, 'circular'),
   generatedMultiRecordCanvas: Boolean(getRef(state.generatedMultiRecordCanvas, false)),
   generatedCircularPlotTitlePosition: getRef(state.generatedCircularPlotTitlePosition, 'none'),
-  autoLabelReflow: Boolean(getRef(state.autoLabelReflowEnabled, false)),
   paletteInstantPreviewEnabled: Boolean(getRef(state.paletteInstantPreviewEnabled, false)),
   appliedPaletteName: getRef(state.appliedPaletteName, 'default'),
   appliedPaletteColors: clonePlainObject(getRef(state.appliedPaletteColors, {})),
@@ -589,7 +587,6 @@ const buildFallbackUiStateData = (state, drawing) => ({
 const applyFallbackSessionUiData = (state, ui) => {
   if (typeof ui.title === 'string') setRef(state.sessionTitle, ui.title);
   if (ui.downloadDpi) setRef(state.downloadDpi, ui.downloadDpi);
-  if (Object.hasOwn(ui, 'autoLabelReflow')) setRef(state.autoLabelReflowEnabled, Boolean(ui.autoLabelReflow));
   if (Object.hasOwn(ui, 'paletteInstantPreviewEnabled')) {
     setRef(state.paletteInstantPreviewEnabled, Boolean(ui.paletteInstantPreviewEnabled));
   }

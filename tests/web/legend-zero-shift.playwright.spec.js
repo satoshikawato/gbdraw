@@ -274,7 +274,6 @@ test('a wrapped Circular Legend on top is laid out as Python drew it (Z1 inputs)
   await openWithGenBank(page, FIXTURE, () => {
     const app = window.__GBDRAW_APP__;
     app.form.legend = 'top';
-    app.autoLabelReflowEnabled = false;
   });
   await generate(page);
   const rules = [
@@ -396,7 +395,7 @@ const expectShownEqualsGenerate = async (page, label) => {
   return shown;
 };
 const openControlCircular = async (page) => {
-  await openWithGenBank(page, FIXTURE, () => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; });
+  await openWithGenBank(page, FIXTURE);
   await generate(page);
 };
 const renameRow = async (page, from, to) => {

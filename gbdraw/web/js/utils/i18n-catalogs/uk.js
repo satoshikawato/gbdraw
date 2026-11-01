@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "Авто ({count})",
   "Auto ({mode})": "Авто ({mode})",
   "Auto ({value})": "Авто ({value})",
-  "Auto Reflow": "Автоматичне перекомпонування",
-  "Auto Reflow failed. Current diagram is kept.": "Автоматичне перекомпонування не вдалося. Поточну діаграму збережено.",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "«Авто» вбудовує підписи, які вміщуються, а решту виносить назовні. «Лише вбудовані» відкидає підписи, яким потрібне зовнішнє розміщення. «Лише зовнішні» залишає підписи поза межами ознак.",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "«Авто» відповідає макету доріжок («Вище» або «Ознаки на осі»: підписи вище; «Нижче»: підписи нижче). «Над ознакою» малює підписи над ознаками (а коли ввімкнено «Розділяти за ланцюгами» — під ознаками на ланцюзі −).",
   "Auto hides these fields throughout the diagram": "«Авто» приховує ці поля в усій діаграмі",

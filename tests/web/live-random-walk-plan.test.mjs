@@ -20,10 +20,10 @@ const PROMOTION_SEEDS = [...Array.from({ length: 94 }, (_, offset) => offset + 1
 test('the pull-request plan covers every pull-request target and holds the replaced matrix cases', () => {
   const plan = planWalk(PR_SEED, { level: 'pr', required: REPLACED_MATRIX_CASES });
   assert.deepEqual(coverageOf(plan, 'pr', { required: REPLACED_MATRIX_CASES }).missing, []);
-  for (const { fixture, kind, popup, reflow } of REPLACED_MATRIX_CASES) {
+  for (const { fixture, kind, popup } of REPLACED_MATRIX_CASES) {
     const fixtureIndex = FIXTURES.findIndex(({ name }) => name === fixture);
     assert.ok(plan.walks.some((walk) => walk.fixtureIndex === fixtureIndex
-      && walk.steps.some((step) => step.kind === kind && step.popup === popup && step.reflow === reflow)), `${fixture}: ${kind}`);
+      && walk.steps.some((step) => step.kind === kind && step.popup === popup)), `${fixture}: ${kind}`);
   }
   assert.ok(stepCount(plan) <= PR_STEP_BUDGET, `${stepCount(plan)} steps`);
   for (const walk of plan.walks) assert.ok(walk.steps.length <= DEFAULT_WALK_LENGTH.pr);
@@ -62,7 +62,7 @@ test('a walk length from the environment caps every walk and still covers the ta
 });
 
 test('coverage counts a pair across a barrier only when the barrier is one of the pair', () => {
-  const walk = (kinds) => ({ walks: [{ fixtureIndex: 0, steps: kinds.map((kind) => ({ kind, popup: false, reflow: false })) }] });
+  const walk = (kinds) => ({ walks: [{ fixtureIndex: 0, steps: kinds.map((kind) => ({ kind, popup: false })) }] });
   const { missing } = coverageOf(walk(['fill', 'reset', 'stroke']), 'pr');
   assert.ok(missing.includes('sequence fill>stroke'));
   assert.ok(!missing.includes('sequence fill>reset'));
@@ -89,8 +89,8 @@ test('the targets leave out the pairs no fixture can run', () => {
 // `allowedIn` with loops of their own: a test oracle for `coverageTargets`,
 // which the planner and `coverageOf` share, so that narrowing a target group
 // fails here instead of passing in both.
-const FLAG_STATES = [[false, false], [false, true], [true, false], [true, true]];
-const flagKey = (kind, popup, reflow) => `${kind}|${popup ? 'popup' : 'none'}|${reflow ? 'reflow' : 'off'}`;
+const POPUP_STATES = [false, true];
+const flagKey = (kind, popup) => `${kind}|${popup ? 'popup' : 'none'}`;
 const expectedTargets = (level, required = []) => {
   const pairs = new Set();
   const flags = new Set();
@@ -99,16 +99,16 @@ const expectedTargets = (level, required = []) => {
     for (const second of WALK_KINDS) {
       if (FIXTURES.some((fixture) => allowedIn(first, fixture) && allowedIn(second, fixture))) pairs.add(`${first}>${second}`);
     }
-    for (const [popup, reflow] of FLAG_STATES) {
-      flags.add(flagKey(first, popup, reflow));
-      for (const fixture of FIXTURES) if (allowedIn(first, fixture)) fixtureFlags.add(`${fixture.name}|${flagKey(first, popup, reflow)}`);
+    for (const popup of POPUP_STATES) {
+      flags.add(flagKey(first, popup));
+      for (const fixture of FIXTURES) if (allowedIn(first, fixture)) fixtureFlags.add(`${fixture.name}|${flagKey(first, popup)}`);
     }
   }
   const targets = {
     fixtures: new Set(FIXTURES.map(({ name }) => name)),
     sequence: pairs,
     flags,
-    required: new Set(required.map(({ fixture, kind, popup, reflow }) => `${fixture}|${flagKey(kind, popup, reflow)}`))
+    required: new Set(required.map(({ fixture, kind, popup }) => `${fixture}|${flagKey(kind, popup)}`))
   };
   return level === 'pr' ? targets : { ...targets, adjacent: new Set(pairs), fixtureFlags };
 };
@@ -121,10 +121,10 @@ test('the targets of each level are every feasible pair, kind state, and fixture
     for (const group of Object.keys(expected)) assert.deepEqual([...actual[group]].sort(), [...expected[group]].sort(), `${level} ${group}`);
   }
   const promotion = coverageTargets('promotion');
-  // 27 kinds: 27 x 27 ordered pairs less the 4 no fixture runs; 27 kinds x 4
-  // states; (26 + 26 + 25) kinds that the three fixtures run x 4 states.
+  // 26 kinds: 26 x 26 ordered pairs less the 4 no fixture runs; 26 kinds x 2
+  // popup states; (25 + 25 + 24) kinds that the three fixtures run x 2 popup states.
   assert.deepEqual(Object.fromEntries(Object.entries(promotion).map(([group, keys]) => [group, keys.size])),
-    { fixtures: 3, sequence: 725, flags: 108, required: 0, adjacent: 725, fixtureFlags: 308 });
+    { fixtures: 3, sequence: 672, flags: 52, required: 0, adjacent: 672, fixtureFlags: 148 });
   // A pair with a barrier is a target in both pair groups: a barrier may be A or B.
   for (const barrier of BARRIER_KINDS) {
     for (const kind of ['fill', barrier]) {

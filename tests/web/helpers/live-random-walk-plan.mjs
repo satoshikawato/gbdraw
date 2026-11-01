@@ -4,16 +4,15 @@
 // without a browser.
 //
 // A plan is a list of walks, each on one fixture, each a list of planned steps
-// `{ kind, popup, reflow }`. `planWalk` builds it greedily from a seed until
+// `{ kind, popup }`. `planWalk` builds it greedily from a seed until
 // every coverage target of its level is covered:
 //
 // - level `pr`: every fixture; every feasible ordered pair of kinds (A, B), A = B included,
 //   with A before B in one walk and no barrier step (Reset Settings, Session
 //   Load: they change every drawing) strictly between them; every kind in each
-//   popup and Auto Reflow state; and the steps the caller requires (fixture,
-//   kind, popup, reflow).
+//   popup state; and the steps the caller requires (fixture, kind, popup).
 // - level `promotion`: the `pr` targets, every feasible ordered pair (A, B) as
-//   adjacent steps of one walk, and every fixture x kind x popup x reflow.
+//   adjacent steps of one walk, and every fixture x kind x popup.
 //
 // At each position the planner takes the step that covers the most uncovered
 // targets, then the one that leaves the most uncovered pairs to start, then a
@@ -25,7 +24,7 @@
 export const WALK_KINDS = Object.freeze([
   'fill', 'stroke', 'featureVisibility', 'labelText', 'labelVisibility',
   'visibilityRuleAdd', 'visibilityRuleEdit', 'visibilityRuleRemove', 'colorRuleAdd', 'colorRuleEdit', 'colorRuleRemove',
-  'reflow', 'legendRename', 'legendColor', 'legendSort', 'legendSortDefault', 'legendDelete', 'legendRestore', 'legendAdd',
+  'legendRename', 'legendColor', 'legendSort', 'legendSortDefault', 'legendDelete', 'legendRestore', 'legendAdd',
   'trackData', 'palette', 'undo', 'undoRedo', 'resultSwitch', 'reset', 'load', 'drawingSwitch'
 ]);
 
@@ -43,24 +42,24 @@ export const FIXTURES = Object.freeze([
 ]);
 
 /** @typedef {'pr' | 'promotion'} PlanLevel */
-/** @typedef {{ kind: string, popup: boolean, reflow: boolean }} PlannedStep */
+/** @typedef {{ kind: string, popup: boolean }} PlannedStep */
 /** @typedef {{ fixtureIndex: number, steps: PlannedStep[] }} PlannedWalk */
 /** @typedef {{ walks: PlannedWalk[] }} WalkPlan */
 /** A step a caller requires: the fixture by name. */
-/** @typedef {{ fixture: string, kind: string, popup: boolean, reflow: boolean }} RequiredStep */
+/** @typedef {{ fixture: string, kind: string, popup: boolean }} RequiredStep */
 
 export const DEFAULT_WALK_LENGTH = Object.freeze({ pr: 40, promotion: 50 });
 
 // The pull-request walk (tests/web/live-generate-random-walk.playwright.spec.js):
 // a fixed seed, and the case-matrix cases of
 // live-generate-parity.playwright.spec.js that the walk replaced (R3), each a
-// required step in the fixture, popup state, and Auto Reflow state the case
+// required step in the fixture and popup state the case
 // pinned. Dropping one from the plan fails the walk spec and the node test:
 // restore the case, or keep a plan that draws it.
 export const PR_SEED = 20261018;
 /** @type {readonly (RequiredStep & { edit: string })[]} */
 export const REPLACED_MATRIX_CASES = Object.freeze([
-  { edit: 'Specific color rule add', kind: 'colorRuleAdd', fixture: 'Linear, one Result', popup: true, reflow: false }
+  { edit: 'Specific color rule add', kind: 'colorRuleAdd', fixture: 'Linear, one Result', popup: true }
 ]);
 // The most walks a plan may hold; a plan that reaches it leaves targets uncovered.
 const MAX_WALKS = 60;
@@ -95,12 +94,12 @@ export const createRandom = (seed) => {
   return { next, int, pick };
 };
 
-const FLAG_STATES = Object.freeze([[false, false], [false, true], [true, false], [true, true]]);
+const POPUP_STATES = Object.freeze([false, true]);
 // The pair keys, built once: the planner reads them in its inner loop.
 const PAIR_KEYS = new Map(WALK_KINDS.map((first) => [first, new Map(WALK_KINDS.map((second) => [second, `${first}>${second}`]))]));
 const pairKey = (first, second) => PAIR_KEYS.get(first).get(second);
-const flagKey = (kind, popup, reflow) => `${kind}|${popup ? 'popup' : 'none'}|${reflow ? 'reflow' : 'off'}`;
-const fixtureFlagKey = (fixtureIndex, kind, popup, reflow) => `${FIXTURES[fixtureIndex].name}|${flagKey(kind, popup, reflow)}`;
+const flagKey = (kind, popup) => `${kind}|${popup ? 'popup' : 'none'}`;
+const fixtureFlagKey = (fixtureIndex, kind, popup) => `${FIXTURES[fixtureIndex].name}|${flagKey(kind, popup)}`;
 const isBarrier = (kind) => BARRIER_KINDS.includes(kind);
 const KINDS_IN = FIXTURES.map((fixture) => WALK_KINDS.filter((kind) => allowedIn(kind, fixture)));
 const kindsIn = (fixtureIndex) => KINDS_IN[fixtureIndex];
@@ -109,9 +108,9 @@ const pairFeasibleIn = (fixtureIndex, first, second) => allowedIn(first, FIXTURE
 /**
  * The coverage targets of a level, in groups: `fixtures` (a walk on each
  * fixture), `sequence` (ordered pairs as a
- * subsequence within a barrier-free stretch), `flags` (kind x popup x reflow),
+ * subsequence within a barrier-free stretch), `flags` (kind x popup),
  * `required`, and for `promotion` also `adjacent` (ordered pairs as adjacent
- * steps) and `fixtureFlags` (fixture x kind x popup x reflow).
+ * steps) and `fixtureFlags` (fixture x kind x popup).
  * @param {PlanLevel} level
  * @param {readonly RequiredStep[]} [required]
  * @returns {Record<string, Set<string>>}
@@ -124,31 +123,31 @@ export const coverageTargets = (level, required = []) => {
       if (FIXTURES.some((_, fixtureIndex) => pairFeasibleIn(fixtureIndex, first, second))) pairs.add(pairKey(first, second));
     }
   }
-  const flags = new Set(WALK_KINDS.flatMap((kind) => FLAG_STATES.map(([popup, reflow]) => flagKey(kind, popup, reflow))));
-  const requiredKeys = new Set(required.map(({ fixture, kind, popup, reflow }) => {
+  const flags = new Set(WALK_KINDS.flatMap((kind) => POPUP_STATES.map((popup) => flagKey(kind, popup))));
+  const requiredKeys = new Set(required.map(({ fixture, kind, popup }) => {
     const fixtureIndex = FIXTURES.findIndex(({ name }) => name === fixture);
     if (fixtureIndex < 0) throw new Error(`no fixture ${fixture}`);
     if (!WALK_KINDS.includes(kind) || !allowedIn(kind, FIXTURES[fixtureIndex])) throw new Error(`${kind} cannot run in ${fixture}`);
-    return fixtureFlagKey(fixtureIndex, kind, popup, reflow);
+    return fixtureFlagKey(fixtureIndex, kind, popup);
   }));
   const fixtures = new Set(FIXTURES.map(({ name }) => name));
   const targets = { fixtures, sequence: pairs, flags, required: requiredKeys };
   if (level === 'pr') return targets;
   const fixtureFlags = new Set(FIXTURES.flatMap((_, fixtureIndex) => kindsIn(fixtureIndex)
-    .flatMap((kind) => FLAG_STATES.map(([popup, reflow]) => fixtureFlagKey(fixtureIndex, kind, popup, reflow)))));
+    .flatMap((kind) => POPUP_STATES.map((popup) => fixtureFlagKey(fixtureIndex, kind, popup)))));
   return { ...targets, adjacent: new Set(pairs), fixtureFlags };
 };
 
 // The targets a step at the end of a walk covers, by group. `segment` holds
 // the kinds since the last barrier (the barrier included); `previous` is the
 // kind before the step, or null at the start of a walk.
-const coveredBy = (fixtureIndex, segment, previous, { kind, popup, reflow }) => ({
+const coveredBy = (fixtureIndex, segment, previous, { kind, popup }) => ({
   fixtures: [FIXTURES[fixtureIndex].name],
   sequence: [...segment].map((first) => pairKey(first, kind)),
-  flags: [flagKey(kind, popup, reflow)],
-  required: [fixtureFlagKey(fixtureIndex, kind, popup, reflow)],
+  flags: [flagKey(kind, popup)],
+  required: [fixtureFlagKey(fixtureIndex, kind, popup)],
   adjacent: previous === null ? [] : [pairKey(previous, kind)],
-  fixtureFlags: [fixtureFlagKey(fixtureIndex, kind, popup, reflow)]
+  fixtureFlags: [fixtureFlagKey(fixtureIndex, kind, popup)]
 });
 // The segment after a step: a barrier starts a new one.
 const nextSegment = (segment, kind) => (isBarrier(kind) ? new Set([kind]) : new Set([...segment, kind]));
@@ -264,17 +263,17 @@ const greedyPlan = (random, { level, walkLength, required }) => {
         let bestScore = [-1, -1];
         for (const kind of candidates) {
           const potential = openPairsFrom(fixtureIndex, kind);
-          // The pairs a kind covers do not depend on its popup and Auto Reflow states.
+          // The pairs a kind covers do not depend on its popup state.
           const pairGain = gainOf({
             sequence: [...segment].map((first) => pairKey(first, kind)),
             adjacent: previous === null ? [] : [pairKey(previous, kind)]
           });
-          for (const [popup, reflow] of FLAG_STATES) {
-            const step = { kind, popup, reflow };
+          for (const popup of POPUP_STATES) {
+            const step = { kind, popup };
             const gain = pairGain + gainOf({
-              flags: [flagKey(kind, popup, reflow)],
-              required: [fixtureFlagKey(fixtureIndex, kind, popup, reflow)],
-              fixtureFlags: [fixtureFlagKey(fixtureIndex, kind, popup, reflow)]
+              flags: [flagKey(kind, popup)],
+              required: [fixtureFlagKey(fixtureIndex, kind, popup)],
+              fixtureFlags: [fixtureFlagKey(fixtureIndex, kind, popup)]
             });
             if (gain > bestScore[0] || (gain === bestScore[0] && potential > bestScore[1])) {
               best = [step];

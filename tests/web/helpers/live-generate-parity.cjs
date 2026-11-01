@@ -141,7 +141,6 @@ const semanticSnapshot = (page) => page.evaluate(() => {
       mode: app.mode,
       resultIndex: app.selectedResultIndex,
       resultCount: app.results.length,
-      autoReflow: Boolean(app.autoLabelReflowEnabled)
     },
     features,
     labels,
@@ -218,13 +217,9 @@ const diffSemanticSnapshots = (live, generated) => {
 };
 
 // The context an allowed-difference condition reads: the live Result's
-// context, and whether the feature's label is drawn on both sides. `autoReflow`
-// is the state the Result's labels were placed under when that is not the current
-// one: Turning Auto Reflow on does not move the labels already drawn, and an Undo
-// of a Generate returns the Result it replaced with its labels as they were.
-const differenceContext = (difference, live, generated, placedWithAutoReflow = live.context.autoReflow) => ({
+// context, and whether the feature's label is drawn on both sides.
+const differenceContext = (difference, live, generated) => ({
   ...live.context,
-  autoReflow: placedWithAutoReflow,
   labelDrawnInBoth: Boolean(live.labels[difference.id] && generated.labels[difference.id])
 });
 
@@ -243,8 +238,7 @@ const describeDifference = ({ kind, id, attribute, live, generated }) => (
 // Snapshots the live Result, runs Generate, snapshots again, and fails with one
 // line per unexpected difference. `allowed` defaults to every entry of the
 // allowed-difference table; `label` names the case in the message;
-// `placedWithAutoReflow` as in `differenceContext`.
-const expectLiveEqualsGenerate = async (page, { allowed = ALLOWED_DIFFERENCES, label = 'live edit', placedWithAutoReflow = undefined } = {}) => {
+const expectLiveEqualsGenerate = async (page, { allowed = ALLOWED_DIFFERENCES, label = 'live edit' } = {}) => {
   await settleLive(page);
   const live = await semanticSnapshot(page);
   await generateAndWaitForResult(page);
@@ -256,7 +250,7 @@ const expectLiveEqualsGenerate = async (page, { allowed = ALLOWED_DIFFERENCES, l
   const generated = await semanticSnapshot(page);
   const differences = diffSemanticSnapshots(live, generated).map((difference) => ({
     ...difference,
-    allowedBy: allowedBy(difference, differenceContext(difference, live, generated, placedWithAutoReflow), allowed)?.id || null
+    allowedBy: allowedBy(difference, differenceContext(difference, live, generated), allowed)?.id || null
   }));
   const unexpected = differences.filter((difference) => !difference.allowedBy);
   const tolerated = differences.filter((difference) => difference.allowedBy);

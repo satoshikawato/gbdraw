@@ -211,9 +211,10 @@ test('Redo of an Exact product hide hides the feature again', async ({ page }) =
   await loadSessionFile(page, HMMT_SESSION);
   const id = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
     .find((feature) => feature.product === 'NADH dehydrogenase subunit 1').svg_id);
+  // Hidden: the feature's parts are hidden, or the rerender no longer draws it.
   const display = () => page.evaluate((featureId) => [...window.__GBDRAW_APP__.svgContainer.querySelector('svg')
     .querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)]
-    .some((element) => element.getAttribute('display') === 'none'), id);
+    .every((element) => element.getAttribute('display') === 'none'), id);
   await evaluateWithRetainedPromise(page, async (featureId) => {
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.svg_id === featureId), null);
@@ -515,7 +516,6 @@ test('a label reflow leaves Applies on Generate draft settings out of the Result
       const app = window.__GBDRAW_APP__;
       Object.assign(app.form, { track_type: 'tuckin' });
       Object.assign(app.adv, { label_font_size: 31, block_stroke_width: 7 });
-      app.autoLabelReflowEnabled = true;
       await window.Vue.nextTick();
       const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
       await app.openFeatureEditorFromList(feature, null);
@@ -553,7 +553,7 @@ test('a successful Generate clears the note of a failed live edit, and a failed 
     window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
       throw new Error('OV-36 forced failure');
     };
-    state.labelReflowForceRequestSeq.value += 1;
+    state.labelReflowRequestSeq.value += 1;
   });
   await expect.poll(reflowFailed, { timeout: 120_000 }).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(false);
@@ -906,7 +906,7 @@ const labelOnFacts = (page) => page.evaluate(async () => {
 // Apply settles after the dialog it opens is answered.
 const startLabelOn = (page, featureId, text = null) => evaluateWithRetainedPromise(page, async (edit) => {
   const app = window.__GBDRAW_APP__;
-  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === edit.featureId), null);
+  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === edit.featureId) ?? window.__labelOnFeatures?.get(edit.featureId), null);
   await window.Vue.nextTick();
   app.clickedFeature.labelVisibility = 'on';
   if (edit.text !== null) app.clickedFeature.labelText = edit.text;
@@ -927,7 +927,7 @@ const answerLabelOn = async (page, title, choice) => {
 // The popup note on why the feature has no label (requirement of Q1, Q2).
 const popupLabelHint = (page, featureId) => evaluateWithRetainedPromise(page, async (id) => {
   const app = window.__GBDRAW_APP__;
-  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id) ?? window.__labelOnFeatures?.get(id), null);
   await window.Vue.nextTick();
   const hint = document.querySelector('[data-label-visibility-hint]')?.textContent.trim() || '';
   app.clickedFeature = null;
@@ -936,17 +936,14 @@ const popupLabelHint = (page, featureId) => evaluateWithRetainedPromise(page, as
 
 const hideFeature = (page, featureId) => evaluateWithRetainedPromise(page, async (id) => {
   const app = window.__GBDRAW_APP__;
-  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id) ?? window.__labelOnFeatures?.get(id), null);
   app.clickedFeature.featureVisibility = 'off';
   await app.updateClickedFeatureVisibility('off');
   if (app.featureVisibilityScopeDialog.show) await app.handleFeatureVisibilityScopeChoice('feature');
   app.clickedFeature = null;
 }, featureId);
 
-// Auto Reflow is off, so a hidden feature stays in the Result until a choice
-// below queues the label reflow, which draws it no more. The features are not
-// the first CDS: hiding that one changes the Legend, which asks for the
-// rerender at once (OV-42).
+// The features are not the first CDS: hiding that one changes the Legend (OV-42).
 test('Label visibility On for a hidden feature shows the feature and label or keeps the feature hidden', async ({ page }) => {
   test.setTimeout(600_000);
   await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
@@ -955,7 +952,13 @@ test('Label visibility On for a hidden feature shows the feature and label or ke
   await generate(page);
   const { fl2: first, dup: second } = await featureIdsByLocator(page);
   const labelState = () => labelEditorState(page, 'labels.circular.scope');
+  // The features as the Features list holds them: the rerender of a hide no longer draws one.
+  await page.evaluate(() => {
+    window.__labelOnFeatures = new Map(window.__GBDRAW_APP__.extractedFeatures.map((feature) => [feature.svg_id, feature]));
+  });
+  await labelOnFacts(page);
   await hideFeature(page, first);
+  await waitForLabelReflow(page);
   const hidden = await labelOnFacts(page);
   expect(hidden.featureVisibility).toEqual({ [first]: 'off' });
 
@@ -977,6 +980,7 @@ test('Label visibility On for a hidden feature shows the feature and label or ke
   expect(await labelState()).toMatchObject({ reflowError: null, labels: [[first, 'FL1_SHOWN']] });
 
   await hideFeature(page, second);
+  await waitForLabelReflow(page);
   expect(await popupLabelHint(page, second)).toBe('No label shown (the feature is hidden).');
   const shown = await labelOnFacts(page);
   await startLabelOn(page, second, 'FL2_KEPT');
@@ -1203,10 +1207,9 @@ const labeledFeatureIds = (page, featureIds) => page.evaluate((ids) => {
   return ids.filter((id) => [...root.querySelectorAll(`text[data-label-feature-id="${CSS.escape(id)}"]`)]
     .some((element) => !element.closest('[display="none"]')));
 }, featureIds);
-const autoReflowOff = (page) => page.evaluate(() => window.__GBDRAW_APP__.autoLabelReflowEnabled === false);
 
 // OV-35 (Owner 2026-10-05): a feature that a Feature Visibility rule hides
-// takes its label with it, as Generate draws it, also with Auto Reflow off and
+// takes its label with it, as Generate draws it, also
 // before the editor has bound the labels. The rule edit, Undo and Redo (History
 // apply), and Generate show the same features and labels.
 test('a Feature Visibility rule that hides a feature hides its label too', async ({ page }) => {
@@ -1215,7 +1218,6 @@ test('a Feature Visibility rule that hides a feature hides its label too', async
     window.__GBDRAW_APP__.form.labels_mode = 'out';
   });
   await generate(page);
-  expect(await autoReflowOff(page)).toBe(true);
   const { fl1, fl2 } = await featureIdsByLocator(page);
   const shown = async () => ({
     drawn: await drawnFeatureIds(page, [fl1, fl2]),
@@ -1290,7 +1292,7 @@ test('an automatic rerender requested during Generate waits for it and then runs
   expect(await page.evaluate(() => window.__OV48_RESPONSES__)).toBe(2);
 });
 
-// OV-34: with Auto Reflow off, deleting the rule that hid a feature at Generate
+// OV-34: deleting the rule that hid a feature at Generate
 // draws the feature and its label live (the automatic rerender), as Generate
 // draws them.
 test('deleting a Feature Visibility rule draws the feature it hid at Generate', async ({ page }) => {
@@ -1299,7 +1301,6 @@ test('deleting a Feature Visibility rule draws the feature it hid at Generate', 
     window.__GBDRAW_APP__.form.labels_mode = 'out';
   });
   await generate(page);
-  expect(await autoReflowOff(page)).toBe(true);
   const { fl1, fl2 } = await featureIdsByLocator(page);
   await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
   await generate(page);

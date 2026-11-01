@@ -172,7 +172,7 @@ test('Unicode regex corpus has identical live and generated color/label targets'
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(join(process.cwd(), 'tests/fixtures/regex_rules.gb'));
-  await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'out'; window.__GBDRAW_APP__.autoLabelReflowEnabled = false; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
   await generateAndWaitForResult(page);
   for (const [pattern, expected] of [
     ['(?i)NADH', ['R0', 'R1']], ['(?P<enzyme>NADH)', ['R0', 'R1']],

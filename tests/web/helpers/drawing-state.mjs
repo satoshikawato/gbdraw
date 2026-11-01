@@ -93,7 +93,7 @@ export const PROJECT_KEYS = Object.freeze([
 // read from the drawing). LOSAT execution and the rich feature popup are app
 // settings (Session `ui.losatExecution`, `ui.richFeaturePopup`).
 export const UI_KEYS = Object.freeze([
-  'activeDrawingId', 'mode', 'downloadDpi', 'autoLabelReflowEnabled', 'paletteInstantPreviewEnabled', 'paletteDefinitions',
+  'activeDrawingId', 'mode', 'downloadDpi', 'paletteInstantPreviewEnabled', 'paletteDefinitions',
   'paletteNames', 'specificRulePresets', 'featureKeys', 'defaultColorKeys', 'losatExecution', 'richFeaturePopup'
 ]);
 
@@ -118,7 +118,7 @@ export const TRANSIENT_KEYS = Object.freeze([
   'previewFeatureSearchError', 'previewFeatureSearchRenderedCount', 'previewFeatureSearchVisible', 'featureListScrollTop',
   'featureListViewportHeight', 'featureListExpandedId', 'isFeatureDrawerMounted', 'visibleFeatureRows', 'featureRecordPickerVisible',
   'featureListTopSpacerPx', 'featureListBottomSpacerPx', 'labelSearch', 'labelReflowProcessing',
-  'labelReflowRequestSeq', 'labelReflowForceRequestSeq', 'labelReflowLastError', 'undoneTrackHides', 'svgContainer',
+  'labelReflowRequestSeq', 'labelReflowLastError', 'undoneTrackHides', 'svgContainer',
   'clickedFeature', 'clickedFeaturePos', 'clickedPairwiseMatch', 'clickedPairwiseMatchPos',
   'pairwiseMatchPopupRef', 'pairwiseMatchPopupDrag', 'pairwiseMatchPopupSize', 'pairwiseMatchPopupResize',
   'featurePopupRef', 'featurePopupDrag', 'featurePopupSize', 'featurePopupResize', 'clickedLabel',

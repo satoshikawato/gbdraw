@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createResultPaintRecord, drawnLabelIntentGone, paintRuleTable } from '../../gbdraw/web/js/app/result-paint-record.js';
+import { createResultPaintRecord, paintRuleTable } from '../../gbdraw/web/js/app/result-paint-record.js';
 
 // An editor paint state as app-setup reads it (`currentEditorProjectionState`).
 /** @param {string} step @returns {import('../../gbdraw/web/js/app/result-paint-record.js').EditorPaintState} */
@@ -165,36 +165,29 @@ test('a Result shown again names the rule table it left with, and a restored Res
   assert.equal(paintRuleTable(record.display('kept', rulesOf([]))), null);
 });
 
-// OV-2293: what only a rerender shows of a label edit the Result was drawn with.
-test('a Result lacks what its drawing draws when a drawn label On, Off, or text left, and not for another value', () => {
-  const rows = (...labelRows) => JSON.stringify([labelRows.map(([key, visibility, text]) => ['record', key, visibility, text, null]), {}]);
-  const gone = drawnLabelIntentGone;
-  assert.equal(gone(rows(['a', 'off', null]), rows()), true, 'Off returned to Default, its row gone');
-  assert.equal(gone(rows(['a', 'on', null]), rows(['a', null, 'text'])), true, 'On returned to Default, its row kept');
-  assert.equal(gone(rows(['a', null, 'edit']), rows()), true, 'the text left, its row gone');
-  assert.equal(gone(rows(['a', null, 'edit']), rows(['a', 'off', null])), true, 'the text left, its row kept');
-  assert.equal(gone(rows(['a', 'off', null]), rows(['a', 'on', null])), false, 'Off to On: the label projection asks');
-  assert.equal(gone(rows(['a', null, 'edit']), rows(['a', null, 'other'])), false, 'another text: the label projection shows it');
-  assert.equal(gone(rows(), rows(['a', 'off', 'edit'])), false, 'a row added: the projection shows it');
-  const bulk = (texts) => JSON.stringify([[], texts]);
-  assert.equal(gone(bulk({ alpha: 'edit' }), bulk({})), true, 'a bulk text left');
-  assert.equal(gone(bulk({ alpha: 'edit' }), bulk({ alpha: 'other' })), true, 'a bulk text changed: its bytes hold no source text');
-  assert.equal(gone(bulk({}), bulk({ alpha: 'edit' })), false, 'a bulk text added');
+// OV-2293: a Result placed its labels for the intent it last showed.
+test('a Result answers once that its label or visibility intent changed since it was last shown', () => {
+  const record = createResultPaintRecord();
+  const held = paint('held');
+  const moved = (identity, current) => record.placedForOtherIntent(identity, record.display(identity, current), current);
+  record.commit(['shown', 'other'], 'shown', held);
+  assert.equal(moved('other', held), false, 'a Generate drew it from this intent');
+  record.shown('other', held, held);
+  record.display('shown', held);
+  const reset = { ...held, labels: 'reset' };
+  assert.equal(moved('other', reset), true, 'the labels changed while it was not shown');
+  record.shown('other', reset, reset);
+  assert.equal(moved('other', reset), false, 'answered once');
+  assert.equal(moved('other', { ...reset, visibility: 'reset' }), true, 'the visibility changed');
 });
 
-test('a Result keeps the state its bytes were drawn with while the state it shows follows the edits', () => {
+test('a restored Result answers against its drawing at the restore, not against its unknown paint', () => {
   const record = createResultPaintRecord();
-  const paint = (labels) => ({ colors: [null, ''], visibility: '[]', strokes: '', labels, legendOrder: '' });
-  const held = paint('held');
-  record.commit(['generated'], 'generated', held);
-  record.display('generated', paint('edited'));
-  record.depart(paint('edited'));
-  assert.equal(record.drawn('generated').labels, 'held');
-  assert.equal(record.display('generated', paint('reset')).labels, 'edited');
-  record.commit(['generated', 'kept'], 'generated', paint('shown drawing'), { restored: true, drawingStateOf: () => paint('its drawing') });
-  assert.equal(record.drawn('generated').labels, 'held', 'a Result already known keeps its record');
-  assert.equal(record.drawn('kept').labels, 'its drawing', 'a restored Result not displayed reads its own drawing');
-  assert.equal(record.display('kept', paint('its drawing')).labels, '', 'and shows every domain on its first display');
-  record.commit(['kept'], 'kept', paint('its drawing'));
-  assert.equal(record.drawn('generated'), undefined, 'a Result no longer live is forgotten');
+  const atRestore = paint('its drawing');
+  record.commit(['shown', 'kept'], 'shown', paint('shown drawing'), { restored: true, drawingStateOf: () => atRestore });
+  const previous = record.display('kept', atRestore);
+  assert.equal(previous.labels, '', 'it shows every domain on its first display');
+  assert.equal(record.placedForOtherIntent('kept', previous, atRestore), false, 'a Load alone moves no label');
+  assert.equal(record.placedForOtherIntent('kept', previous, { ...atRestore, labels: 'reset' }), true, 'a Reset after the Load does');
+  assert.equal(record.placedForOtherIntent('shown', record.display('shown', atRestore), atRestore), false, 'the Result shown until now followed the edits');
 });

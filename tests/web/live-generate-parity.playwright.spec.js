@@ -13,7 +13,7 @@
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
 const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { answerSessionTitle, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
+const { answerSessionTitle, evaluateWithRetainedPromise, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
@@ -92,27 +92,27 @@ const CASES = [
   {
     kind: 'visibility rule add',
     edit: 'Feature Visibility rule add',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     run: (page) => addVisibilityRule(page, FL1_OFF)
   },
   {
     kind: 'visibility rule action',
     edit: 'Feature Visibility rule action change',
-    states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: async (page) => { await addVisibilityRule(page, BATCH_0004_OFF); await generate(page); },
     run: (page) => appAction(page, 'setFeatureVisibilityRuleField', 0, 'action', 'show')
   },
   {
     kind: 'visibility rule delete',
     edit: 'Feature Visibility rule delete',
-    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'linear', results: 'single', labels: 'unbound' },
     setup: async (page) => { await addVisibilityRule(page, FL1_OFF); await generate(page); },
     run: (page) => appAction(page, 'removeFeatureVisibilityRule', 0)
   },
   {
     kind: 'feature Off',
     edit: 'Feature visibility Off (popup)',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'bound' },
+    states: { mode: 'circular', results: 'batch', labels: 'bound' },
     run: (page) => popupEdit(page, 'TESTA_0004', { visibility: 'off' })
   },
   // OV-1485: of two CDS at the same location, the one left drawn keeps its
@@ -120,52 +120,52 @@ const CASES = [
   {
     kind: 'feature Off',
     edit: 'Feature visibility Off (popup) of one of two identical features',
-    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'linear', results: 'single', labels: 'unbound' },
     run: (page) => popupEdit(page, { type: 'CDS', product: 'dup alpha' }, { visibility: 'off' })
   },
   {
     kind: 'feature On',
     edit: 'Feature visibility On (popup) for a feature a rule hid at Generate',
-    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     setup: async (page) => { await addVisibilityRule(page, FL1_OFF); await generate(page); },
     run: (page) => popupEdit(page, 'FL1', { visibility: 'on' })
   },
   {
     kind: 'label text',
     edit: 'Label text',
-    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'bound' },
+    states: { mode: 'linear', results: 'single', labels: 'bound' },
     run: (page) => popupEdit(page, 'FL1', { labelText: 'alpha protein, edited live' })
   },
   {
     kind: 'label Off',
     edit: 'Label visibility Off for a label with leaders',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'bound' },
+    states: { mode: 'circular', results: 'batch', labels: 'bound' },
     run: (page) => popupEdit(page, { type: 'tRNA', product: 'tRNA-Leu' }, { labelVisibility: 'off' })
   },
   {
     kind: 'label text',
     edit: 'Label text',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     // Too long to stay inside FL1's arc: Generate draws it outside with leaders.
     run: (page) => popupEdit(page, 'FL1', { labelText: 'alpha protein, edited live with a text far too long to stay inside its own arc' })
   },
   {
     kind: 'label On',
     edit: 'Label visibility On for a label Off at Generate',
-    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'bound' },
+    states: { mode: 'linear', results: 'single', labels: 'bound' },
     setup: async (page) => { await popupEdit(page, 'FL2', { labelVisibility: 'off' }); await generate(page); },
     run: (page) => popupEdit(page, 'FL2', { labelVisibility: 'on' })
   },
   {
     kind: 'color rule add',
     edit: 'Specific color rule add',
-    states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'bound' },
+    states: { mode: 'circular', results: 'batch', labels: 'bound' },
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'product', val: '^gtg start$', color: '#e63946', cap: 'GTG start' })
   },
   {
     kind: 'color rule color',
     edit: 'Specific color rule color change',
-    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'linear', results: 'single', labels: 'unbound' },
     setup: async (page) => {
       await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' });
       await generate(page);
@@ -175,13 +175,13 @@ const CASES = [
   {
     kind: 'feature color',
     edit: 'Feature color (popup, this feature only)',
-    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     run: (page) => popupEdit(page, 'FL1', { fill: '#c83366' })
   },
   {
     kind: 'feature color',
     edit: 'Feature color change of a feature colored at the last Generate',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: async (page) => { await popupEdit(page, 'TESTA_0005', { fill: '#c83366' }); await generate(page); },
     run: (page) => popupEdit(page, 'TESTA_0005', { fill: '#123456' })
   },
@@ -191,7 +191,7 @@ const CASES = [
   {
     kind: 'feature color',
     edit: 'Feature color (popup, this feature only) of a hidden feature, like a rule only another Result draws',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: async (page) => {
       await popupEdit(page, 'TESTA_0002', { fill: '#7b2cbf' });
       await generate(page);
@@ -203,14 +203,14 @@ const CASES = [
   {
     kind: 'undo',
     edit: 'Undo of a Feature Visibility rule add',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: (page) => addVisibilityRule(page, BATCH_0004_OFF),
     run: (page) => history(page, 'undo')
   },
   {
     kind: 'redo',
     edit: 'Redo of a specific color rule color change',
-    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'unbound' },
+    states: { mode: 'linear', results: 'single', labels: 'unbound' },
     setup: async (page) => {
       await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' });
       await generate(page);
@@ -222,64 +222,64 @@ const CASES = [
   {
     kind: 'Result switch',
     edit: 'Result switch after a feature color with the same-product scope',
-    states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'bound' },
+    states: { mode: 'circular', results: 'batch', labels: 'bound' },
     setup: (page) => popupEdit(page, 'TESTA_0001', { fill: '#c83366', scope: 'annotationLabel' }),
     run: (page) => showResult(page, 1)
   },
   {
     kind: 'Result switch',
     edit: 'Result switch after a Feature Visibility rule add',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: (page) => addVisibilityRule(page, BATCH_0004_OFF),
     run: (page) => showResult(page, 1)
   },
   // OV-42, OV-43, OV-44 (Owner decision 2026-10-06, option A): an edit that
   // changes what a Legend derives from asks for the automatic rerender, also
-  // with Auto Reflow off, and Python redraws the Legend of every Result.
+  // and Python redraws the Legend of every Result.
   {
     kind: 'visibility rule add',
     edit: 'Feature Visibility rule add that hides every CDS',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     run: (page) => addVisibilityRule(page, BATCH_CDS_OFF)
   },
   {
     kind: 'feature Off',
     edit: 'Feature visibility Off (popup) for the first drawn CDS',
-    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'bound' },
+    states: { mode: 'linear', results: 'single', labels: 'bound' },
     run: (page) => popupEdit(page, 'FL1', { visibility: 'off' })
   },
   {
     kind: 'undo',
     edit: 'Undo of a Feature Visibility rule add that reorders the Legend',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: (page) => addVisibilityRule(page, FL1_OFF),
     run: (page) => history(page, 'undo')
   },
   {
     kind: 'redo',
     edit: 'Redo of a Feature Visibility rule add that reorders the Legend',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: async (page) => { await addVisibilityRule(page, FL1_OFF); await history(page, 'undo'); },
     run: (page) => history(page, 'redo')
   },
   {
     kind: 'color rule delete',
     edit: 'Specific color rule delete of a rule Generate drew',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: async (page) => { await addColorRule(page, FL1_ALPHA); await generate(page); },
     run: (page) => appAction(page, 'removeSpecificRule', 0)
   },
   {
     kind: 'undo',
     edit: 'Undo of a specific color rule add',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: (page) => addColorRule(page, FL1_ALPHA),
     run: (page) => history(page, 'undo')
   },
   {
     kind: 'redo',
     edit: 'Redo of a specific color rule add',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: async (page) => { await addColorRule(page, FL1_ALPHA); await history(page, 'undo'); },
     run: (page) => history(page, 'redo')
   },
@@ -289,7 +289,7 @@ const CASES = [
   {
     kind: 'legend color',
     edit: 'Legend row color of a feature colored in the popup',
-    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'linear', results: 'single', labels: 'unbound' },
     setup: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
     run: (page) => legendRowColor(page, 'repeat_region', '#f4a261')
   },
@@ -298,33 +298,33 @@ const CASES = [
   {
     kind: 'legend stroke',
     edit: 'Legend row stroke on a generated row',
-    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'linear', results: 'single', labels: 'unbound' },
     run: (page) => legendRowStroke(page, 'CDS', '#e63946', 3)
   },
   {
     kind: 'legend stroke',
     edit: 'Legend row stroke on a generated row',
-    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     run: (page) => legendRowStroke(page, 'CDS', '#e63946', 3)
   },
   {
     kind: 'undo',
     edit: 'Undo of a Legend row stroke on a generated row',
-    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'bound' },
+    states: { mode: 'linear', results: 'single', labels: 'bound' },
     setup: (page) => legendRowStrokeColor(page, 'CDS', '#e63946'),
     run: (page) => history(page, 'undo')
   },
   {
     kind: 'redo',
     edit: 'Redo of a Legend row stroke on a generated row',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: async (page) => { await legendRowStrokeColor(page, 'CDS', '#e63946'); await history(page, 'undo'); },
     run: (page) => history(page, 'redo')
   },
   {
     kind: 'legend stroke',
     edit: 'Legend row stroke Reset of a stroke Generate drew',
-    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'unbound' },
+    states: { mode: 'linear', results: 'single', labels: 'unbound' },
     setup: async (page) => { await legendRowStroke(page, 'CDS', '#e63946', 3); await generate(page); },
     run: (page) => appAction(page, 'resetLegendEntryStroke', 0)
   },
@@ -333,21 +333,21 @@ const CASES = [
   {
     kind: 'legend stroke',
     edit: 'Legend row stroke on a row with a feature stroked in the popup',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     setup: (page) => popupEdit(page, 'FL1', { stroke: '#2a9d8f' }),
     run: (page) => legendRowStroke(page, 'CDS', '#e63946', 3)
   },
   {
     kind: 'feature stroke',
     edit: 'Feature stroke (popup, this feature only) on a feature of a stroked Legend row',
-    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'bound' },
+    states: { mode: 'linear', results: 'single', labels: 'bound' },
     setup: (page) => legendRowStroke(page, 'CDS', '#e63946', 3),
     run: (page) => popupEdit(page, 'FL1', { stroke: '#2a9d8f' })
   },
   {
     kind: 'feature stroke',
     edit: 'Feature stroke Reset (popup) of a feature in a stroked Legend row',
-    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     setup: async (page) => {
       await legendRowStroke(page, 'CDS', '#e63946', 3);
       await popupEdit(page, 'FL1', { stroke: '#2a9d8f' });
@@ -358,7 +358,7 @@ const CASES = [
   {
     kind: 'Result switch',
     edit: 'Result switch after a Legend row stroke on a generated row',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: (page) => legendRowStroke(page, 'CDS', '#e63946', 3),
     run: (page) => showResult(page, 1)
   },
@@ -368,7 +368,7 @@ const CASES = [
   {
     kind: 'Result switch',
     edit: 'Result switch back to a Result shown with a Legend row stroke that was reset since',
-    states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: async (page) => {
       await legendRowStroke(page, 'CDS', '#e63946', 3);
       await showResult(page, 1);
@@ -384,21 +384,14 @@ const CASES = [
   {
     kind: 'color rule color',
     edit: 'Specific color rule color change of a feature colored in the popup',
-    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     setup: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
     run: (page) => appAction(page, 'setSpecificRuleField', 0, 'color', '#f4a261')
   },
   {
     kind: 'Result switch',
-    edit: 'Result switch after a feature color with the same-product scope',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'bound' },
-    setup: (page) => popupEdit(page, 'TESTA_0001', { fill: '#c83366', scope: 'annotationLabel' }),
-    run: (page) => showResult(page, 1)
-  },
-  {
-    kind: 'Result switch',
     edit: 'Result switch after a color change of a same-product rule Generate drew',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: async (page) => {
       await popupEdit(page, 'TESTA_0001', { fill: '#c83366', scope: 'annotationLabel' });
       await generate(page);
@@ -411,7 +404,7 @@ const CASES = [
   {
     kind: 'feature Off',
     edit: 'Feature visibility Off (popup) for every feature of a Legend row with a Legend color',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: async (page) => {
       await page.evaluate(() => {
         const app = window.__GBDRAW_APP__;
@@ -424,7 +417,7 @@ const CASES = [
   {
     kind: 'feature Off',
     edit: 'Feature visibility Off (popup) for every feature of a Legend row renamed in the Legend',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: async (page) => {
       await page.evaluate(() => {
         const app = window.__GBDRAW_APP__;
@@ -437,7 +430,7 @@ const CASES = [
   {
     kind: 'visibility rule add',
     edit: 'Feature Visibility rule add that hides every feature of a Legend row with a Legend color',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     setup: async (page) => {
       await page.evaluate(() => {
         const app = window.__GBDRAW_APP__;
@@ -450,7 +443,7 @@ const CASES = [
   {
     kind: 'color rule add',
     edit: 'Specific color rule add that recaptions every feature of a Legend row with a Legend color',
-    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: async (page) => {
       await page.evaluate(() => {
         const app = window.__GBDRAW_APP__;
@@ -467,26 +460,26 @@ const CASES = [
   {
     kind: 'feature legend name',
     edit: 'Legend name (popup, this feature only) for one feature of a shared row',
-    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     run: (page) => popupEdit(page, 'FL1', { legendName: 'Complex IV' })
   },
   {
     kind: 'feature legend name',
     edit: 'Legend name (popup, this feature only) for one feature of a shared row',
-    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'bound' },
+    states: { mode: 'linear', results: 'single', labels: 'bound' },
     run: (page) => popupEdit(page, 'FL1', { legendName: 'Complex IV' })
   },
   {
     kind: 'feature color reset',
     edit: 'Reset fill color (popup) after a This feature only color',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     setup: (page) => popupEdit(page, 'FL1', { fill: '#c83366' }),
     run: (page) => popupEdit(page, 'FL1', { resetFill: true })
   },
   {
     kind: 'feature color reset',
     edit: 'Reset fill color (popup) of a This feature only color Generate drew',
-    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'unbound' },
+    states: { mode: 'linear', results: 'single', labels: 'unbound' },
     setup: async (page) => { await popupEdit(page, 'FL1', { fill: '#c83366' }); await generate(page); },
     run: (page) => popupEdit(page, 'FL1', { resetFill: true })
   },
@@ -497,21 +490,21 @@ const CASES = [
   {
     kind: 'palette',
     edit: 'Palette change after a Legend row rename with a Legend color',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: async (page) => { await legendRowColor(page, 'GC content', '#ff0000'); await renameLegendRow(page, 'GC content', 'GC percent'); },
     run: (page) => switchPalette(page, 'alpine_retreat')
   },
   {
     kind: 'palette',
     edit: 'Palette change after a palette change and a Legend row rename',
-    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     setup: async (page) => { await switchPalette(page, 'alpine_retreat'); await renameLegendRow(page, 'GC content', 'GC percent'); },
     run: (page) => switchPalette(page, 'arctic')
   },
   {
     kind: 'palette',
     edit: 'Palette change with a Legend editor row of a loaded Session',
-    states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: (page) => editorLegendRows(page, [['Manual row', '#118833']]),
     run: (page) => switchPalette(page, 'alpine_retreat')
   },
@@ -521,7 +514,7 @@ const CASES = [
   ...['circular', 'linear'].map((mode) => ({
     kind: 'palette',
     edit: 'Palette change with skew slots of their own colors and of one label',
-    states: { mode, results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode, results: 'single', labels: 'unbound' },
     setup: addSkewSlots,
     run: (page) => switchPalette(page, 'alpine_retreat')
   })),
@@ -531,28 +524,28 @@ const CASES = [
   {
     kind: 'palette',
     edit: 'Palette change after a Legend row delete',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: (page) => deleteLegendRow(page, 'tRNA'),
     run: (page) => switchPalette(page, 'alpine_retreat')
   },
   {
     kind: 'legend stroke',
     edit: 'Legend row stroke after a Legend row delete',
-    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'linear', results: 'single', labels: 'unbound' },
     setup: (page) => deleteLegendRow(page, 'repeat_region'),
     run: (page) => legendRowStroke(page, 'CDS', '#e63946', 3)
   },
   {
     kind: 'legend color',
     edit: 'Legend row color after a Legend row delete',
-    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     setup: (page) => deleteLegendRow(page, 'repeat_region'),
     run: (page) => legendRowColor(page, 'CDS', '#f4a261')
   },
   {
     kind: 'color rule add',
     edit: 'Specific color rule add after a Legend row rename with a Legend color',
-    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    states: { mode: 'circular', results: 'single', labels: 'bound' },
     setup: async (page) => { await legendRowColor(page, 'GC content', '#7b2cbf'); await renameLegendRow(page, 'GC content', 'GC percent'); },
     run: (page) => addColorRule(page, FL1_ALPHA)
   },
@@ -561,7 +554,7 @@ const CASES = [
   {
     kind: 'undo',
     edit: 'Undo of a Legend row color on the other batch Result after a palette switch',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: async (page) => {
       await switchPalette(page, 'alpine_retreat');
       await legendRowColor(page, 'CDS', '#ff0000');
@@ -572,7 +565,7 @@ const CASES = [
   {
     kind: 'undo',
     edit: 'Undo of a color rule commit after a palette switch',
-    states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: async (page) => {
       await switchPalette(page, 'alpine_retreat');
       await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0004$', color: '#c83366', cap: 'CDS' });
@@ -582,7 +575,7 @@ const CASES = [
   {
     kind: 'Result switch',
     edit: 'Result switch after deleting a same-product rule Generate drew',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'batch', labels: 'unbound' },
     setup: async (page) => {
       await popupEdit(page, 'TESTA_0001', { fill: '#c83366', scope: 'annotationLabel' });
       await generate(page);
@@ -596,7 +589,7 @@ const CASES = [
   {
     kind: 'undo',
     edit: 'Undo of a label text with Label visibility On under Show Labels None',
-    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: async (page) => {
       await showNoLabels(page);
       await popupEdit(page, 'FL1', { labelText: 'FL1-X', labelVisibility: 'on' });
@@ -606,7 +599,7 @@ const CASES = [
   {
     kind: 'undo',
     edit: 'Undo of a label text with Label visibility On under Show Labels None',
-    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'bound' },
+    states: { mode: 'linear', results: 'single', labels: 'bound' },
     setup: async (page) => {
       await showNoLabels(page);
       await popupEdit(page, 'FL1', { labelText: 'FL1-X', labelVisibility: 'on' });
@@ -616,7 +609,7 @@ const CASES = [
   {
     kind: 'label Default',
     edit: 'Label visibility Default after On under Show Labels None',
-    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'bound' },
+    states: { mode: 'circular', results: 'batch', labels: 'bound' },
     setup: async (page) => {
       await showNoLabels(page);
       await popupEdit(page, 'TESTA_0002', { labelVisibility: 'on' });
@@ -626,7 +619,7 @@ const CASES = [
   {
     kind: 'label Default',
     edit: 'Label visibility Default after On under Show Labels None',
-    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'unbound' },
+    states: { mode: 'linear', results: 'single', labels: 'unbound' },
     setup: async (page) => {
       await showNoLabels(page);
       await popupEdit(page, 'FL1', { labelVisibility: 'on' });
@@ -636,7 +629,7 @@ const CASES = [
   {
     kind: 'undo',
     edit: 'Undo of Label visibility Off that the rerender drew',
-    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'unbound' },
+    states: { mode: 'circular', results: 'single', labels: 'unbound' },
     setup: (page) => popupEdit(page, 'FL2', { labelVisibility: 'off' }),
     run: (page) => history(page, 'undo')
   }
@@ -645,14 +638,14 @@ const CASES = [
 // The label binding state before the edit: a popup opened on another feature.
 const BIND_TARGET = { single: 'FL2', batch: 'TESTA_0001' };
 
-const statesName = ({ mode, results, reflow, labels }) => (
-  `${mode}, ${results === 'batch' ? 'two-Result batch' : 'one Result'}, Auto Reflow ${reflow}, labels ${labels}`
+const statesName = ({ mode, results, labels }) => (
+  `${mode}, ${results === 'batch' ? 'two-Result batch' : 'one Result'}, labels ${labels}`
 );
 
 test('the matrix covers every edit kind and every pair of states', () => {
   expect(KINDS.filter((kind) => !CASES.some((entry) => entry.kind === kind))).toEqual([]);
   expect(CASES.filter((entry) => !KINDS.includes(entry.kind)).map(({ edit }) => edit)).toEqual([]);
-  const values = { mode: ['circular', 'linear'], results: ['single', 'batch'], reflow: ['on', 'off'], labels: ['bound', 'unbound'] };
+  const values = { mode: ['circular', 'linear'], results: ['single', 'batch'], labels: ['bound', 'unbound'] };
   const factors = Object.keys(values);
   const missing = [];
   for (const [index, left] of factors.entries()) {
@@ -758,7 +751,7 @@ const RESET_CASES = [
 for (const { domain, edit, undoRedo, sameDrawing, resetShowsDrawn } of RESET_CASES) {
   test(`Reset Settings after ${domain} shows what Generate draws`, async ({ page }) => {
     test.setTimeout(120_000);
-    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'circular', results: 'single' });
     await resetSettings(page);
     await generate(page);
     const drawn = await semanticSnapshot(page);
@@ -816,7 +809,7 @@ for (const mode of ['linear', 'circular']) {
   for (const [name, edit] of Object.entries(OTHER_DRAWING_RESET_EDITS)) {
     test(`Reset Settings from the other drawing after ${name} and a Generate shows what Generate draws (${mode})`, async ({ page }) => {
       test.setTimeout(240_000);
-      await openBothDrawings(page, { mode, results: 'single', reflow: 'off' });
+      await openBothDrawings(page, { mode, results: 'single' });
       const drawn = await semanticSnapshot(page);
       await edit(page);
       await generate(page);
@@ -826,7 +819,7 @@ for (const mode of ['linear', 'circular']) {
     });
     test(`Reset Settings from the other drawing after ${name} that no Generate drew shows what Generate draws (${mode})`, async ({ page }) => {
       test.setTimeout(240_000);
-      await openBothDrawings(page, { mode, results: 'single', reflow: 'off' });
+      await openBothDrawings(page, { mode, results: 'single' });
       await edit(page);
       await resetFromOtherDrawing(page, mode);
       await expectLiveEqualsGenerate(page, { label: `Reset Settings from the other drawing after ${name}, not generated` });
@@ -838,7 +831,7 @@ for (const mode of ['linear', 'circular']) {
 for (const [name, edit] of Object.entries(OTHER_DRAWING_RESET_EDITS)) {
   test(`Reset Settings on the Result that Generate drew after ${name} shows what Generate draws`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'circular', results: 'single' });
     await edit(page);
     await generate(page);
     await resetKeepingLabelSettings(page);
@@ -852,7 +845,7 @@ for (const [name, change] of Object.entries({
 })) {
   test(`Reset Settings while another batch Result is shown after ${name} and a Generate shows what Generate draws`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+    await open(page, { mode: 'circular', results: 'batch' });
     await showResult(page, 1);
     await popupEdit(page, { biological_feature_id: 'f5aa08bf5', record_idx: 1 }, change);
     await generate(page);
@@ -865,7 +858,7 @@ for (const [name, change] of Object.entries({
 
 test('Undo of Reset Settings from the other drawing shows what Generate draws, and Redo shows the reset', async ({ page }) => {
   test.setTimeout(240_000);
-  await openBothDrawings(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await openBothDrawings(page, { mode: 'linear', results: 'single' });
   await popupEdit(page, 'FL2', { visibility: 'off' });
   await generate(page);
   await resetFromOtherDrawing(page, 'linear');
@@ -883,7 +876,7 @@ test('Undo of Reset Settings from the other drawing shows what Generate draws, a
 // what its drawing holds at the Load: a switch alone asks for no rerender, and
 // a Reset from the other drawing asks for it.
 const loadedWithLinearShown = async (page, browser, testInfo) => {
-  await openBothDrawings(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await openBothDrawings(page, { mode: 'circular', results: 'single' });
   await addColorRule(page, FL1_ALPHA);
   await popupEdit(page, 'FL2', { visibility: 'off' });
   await generate(page);
@@ -895,7 +888,7 @@ const loadedWithLinearShown = async (page, browser, testInfo) => {
 test('a switch to a Result a Load restored asks for no rerender', async ({ page, browser }, testInfo) => {
   test.setTimeout(240_000);
   const loaded = await loadedWithLinearShown(page, browser, testInfo);
-  const rerenderRequests = () => loaded.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.labelReflowForceRequestSeq.value);
+  const rerenderRequests = () => loaded.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.labelReflowRequestSeq.value);
   const before = await rerenderRequests();
   await switchDrawing(loaded, 'circular');
   expect(await rerenderRequests()).toBe(before);
@@ -910,62 +903,257 @@ test('Reset Settings from the other drawing after a Load shows the removed color
   await loaded.context().close();
 });
 
-// OV-2410: Generate draws this label outside its arc with a leader for a text
-// that does not fit, and inside it without one for a text that does. The label
-// text edit places the label only with Auto Reflow on, as documented; with it
-// off the label keeps its place until a reflow or Generate, also through an Undo
-// of the Generate with Auto Reflow turned on meanwhile.
-const LEADER_FEATURE = { biological_feature_id: 'f5aa08bf5', record_idx: 1 };
+// OV-2293: when a displayed Result asks for the rerender: its drawing's label or
+// Feature visibility intent changed since it was last shown, or restored; once.
+const BATCH_FEATURE = { biological_feature_id: 'f5aa08bf5', record_idx: 1 };
+const rerenderRequests = (page) => page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.labelReflowRequestSeq.value);
+const expectNoRerenderOfDisplay = async (page, display) => {
+  await settleLive(page);
+  const before = await rerenderRequests(page);
+  await display();
+  await settleLive(page);
+  expect(await rerenderRequests(page), 'the display asks for no rerender').toBe(before);
+};
+test('a label text cleared live after a Generate asks for no rerender at a Result switch', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch' });
+  await showResult(page, 1);
+  await popupEdit(page, BATCH_FEATURE, { labelText: 'walk label' });
+  await generate(page);
+  await showResult(page, 1);
+  await popupEdit(page, BATCH_FEATURE, { labelText: '' });
+  await expectNoRerenderOfDisplay(page, () => showResult(page, 0));
+});
+test('a live visibility edit asks for no rerender at a Result switch', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch' });
+  await showResult(page, 1);
+  await popupEdit(page, BATCH_FEATURE, { visibility: 'off' });
+  await expectNoRerenderOfDisplay(page, () => showResult(page, 0));
+});
+test('an Undo of a live label text and of its Generate asks for no rerender at a Result switch', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch' });
+  await showResult(page, 1);
+  await popupEdit(page, BATCH_FEATURE, { labelText: 'walk label' });
+  await generate(page);
+  await history(page, 'undo');
+  await history(page, 'undo');
+  await settleLive(page);
+  const shown = await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex);
+  await expectNoRerenderOfDisplay(page, () => showResult(page, shown === 0 ? 1 : 0));
+});
+test('Reset Settings with a Result an Undo of a later Generate returned reaches what its bytes drew', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch' });
+  await showResult(page, 1);
+  await popupEdit(page, BATCH_FEATURE, { visibility: 'off' });
+  await generate(page);
+  await generate(page);
+  await history(page, 'undo');
+  await settleLive(page);
+  await showResult(page, 0);
+  await resetKeepingLabelSettings(page);
+  await showResult(page, 1);
+  await expectLiveEqualsGenerate(page, { label: 'a Result an Undo of a Generate returned' });
+});
+test('Save and Load after Reset Settings from the other drawing draws the hidden feature when its Result is shown', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await openBothDrawings(page, { mode: 'linear', results: 'single' });
+  await popupEdit(page, 'FL2', { visibility: 'off' });
+  await generate(page);
+  await switchDrawing(page, 'circular');
+  await resetKeepingLabelSettings(page);
+  const saved = testInfo.outputPath('reset-saved.gbdraw-session.json');
+  await download(page, 'Save Session', saved, { title: '' });
+  const loaded = await load(browser, saved);
+  await switchDrawing(loaded, 'linear');
+  await expectLiveEqualsGenerate(loaded, { label: 'Reset, Save, Load, then the other drawing' });
+  await loaded.context().close();
+});
+// A label text or Label visibility edit in a Result's bytes, then Reset, Save, and
+// Load before the Result is shown: nothing tells the display what the bytes hold, and
+// the labels of a loaded figure do not move until the next such edit or Generate.
+test('Save and Load after Reset Settings from the other drawing leave the labels of a loaded figure until the next edit', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await openBothDrawings(page, { mode: 'linear', results: 'single' });
+  await popupEdit(page, 'FL1', { labelText: 'walk label' });
+  await generate(page);
+  await switchDrawing(page, 'circular');
+  await resetKeepingLabelSettings(page);
+  const saved = testInfo.outputPath('reset-saved-label.gbdraw-session.json');
+  await download(page, 'Save Session', saved, { title: '' });
+  const loaded = await load(browser, saved);
+  await expectNoRerenderOfDisplay(loaded, () => switchDrawing(loaded, 'linear'));
+  await loaded.context().close();
+});
+test('a Save and Load with a label text cleared after the Generate asks for no rerender at the switch', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await openBothDrawings(page, { mode: 'linear', results: 'single' });
+  await popupEdit(page, 'FL1', { labelText: 'walk label' });
+  await generate(page);
+  await popupEdit(page, 'FL1', { labelText: '' });
+  await settleLive(page);
+  await switchDrawing(page, 'circular');
+  const saved = testInfo.outputPath('cleared-label.gbdraw-session.json');
+  await download(page, 'Save Session', saved, { title: '' });
+  const loaded = await load(browser, saved);
+  await expectNoRerenderOfDisplay(loaded, () => switchDrawing(loaded, 'linear'));
+  await loaded.context().close();
+});
+test('Reset Settings from the other drawing after a Load reaches a label text the Result draws', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await openBothDrawings(page, { mode: 'circular', results: 'single' });
+  await popupEdit(page, 'FL1', { labelText: 'walk label' });
+  await generate(page);
+  await switchDrawing(page, 'linear');
+  const saved = testInfo.outputPath('reset-after-load-label.gbdraw-session.json');
+  await download(page, 'Save Session', saved, { title: '' });
+  const loaded = await load(browser, saved);
+  await resetKeepingLabelSettings(loaded);
+  await switchDrawing(loaded, 'circular');
+  await expectLiveEqualsGenerate(loaded, { label: 'a label text in a loaded Result, then Reset from the other drawing' });
+  await loaded.context().close();
+});
+test('an Undo of a color rule step keeps what a later Reset from the other drawing asks of the Result', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openBothDrawings(page, { mode: 'linear', results: 'single' });
+  await popupEdit(page, 'FL1', { labelText: 'walk label' });
+  await generate(page);
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' });
+  await settleLive(page);
+  await history(page, 'undo');
+  await settleLive(page);
+  await resetFromOtherDrawing(page, 'linear');
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'a checkpoint Undo, then Reset from the other drawing' });
+});
+test('an Undo of Reset Settings from the other drawing after its Result was shown draws the edit again', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openBothDrawings(page, { mode: 'linear', results: 'single' });
+  await popupEdit(page, 'FL1', { labelText: 'walk label' });
+  await generate(page);
+  await resetFromOtherDrawing(page, 'linear');
+  await settleLive(page);
+  await switchDrawing(page, 'circular');
+  await history(page, 'undo');
+  await settleLive(page);
+  await switchDrawing(page, 'linear');
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'an Undo of the Reset after the Result was shown' });
+});
+test('an Undo of Reset Settings before its Result was shown asks for no rerender', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openBothDrawings(page, { mode: 'linear', results: 'single' });
+  await popupEdit(page, 'FL1', { labelText: 'walk label' });
+  await generate(page);
+  await switchDrawing(page, 'circular');
+  await resetKeepingLabelSettings(page);
+  await settleLive(page);
+  await history(page, 'undo');
+  await expectNoRerenderOfDisplay(page, () => switchDrawing(page, 'linear'));
+});
+for (const [name, text] of [['blank', ''], ['edited', 'bulk label']]) {
+  test(`Reset Settings from the other drawing after a Label TSV ${name} text and a Generate shows what Generate draws`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await openBothDrawings(page, { mode: 'linear', results: 'single' });
+    await evaluateWithRetainedPromise(page, (bulkText) => window.__GBDRAW_APP__.loadLabelOverrideTable({
+      target: { files: [new File([`*\t*\tlabel\t^alpha protein$\t${bulkText}\n`], 'labels.tsv', { type: 'text/plain' })] }
+    }), text);
+    await settleLive(page);
+    await generate(page);
+    await resetFromOtherDrawing(page, 'linear');
+    await settleLive(page);
+    await expectLiveEqualsGenerate(page, { label: `a Label TSV ${name} text, then Reset from the other drawing` });
+  });
+}
+// Finding 2 of the review: nothing of a Result shows a label its bytes lack, so
+// the step asks for the rerender from the intent it changed. No Generate between.
+const LABELS_NONE_ON = async (page) => {
+  await open(page, { mode: 'linear', results: 'single' });
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.show_labels_linear = 'none'; });
+  await generate(page);
+  await popupEdit(page, 'FL1', { labelVisibility: 'on' });
+  await settleLive(page);
+};
+test('an Undo back to Label visibility On draws the label', async ({ page }) => {
+  test.setTimeout(240_000);
+  await LABELS_NONE_ON(page);
+  await popupEdit(page, 'FL1', { labelVisibility: 'default' });
+  await settleLive(page);
+  await history(page, 'undo');
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'an Undo back to On' });
+});
+test('a Redo of Label visibility On draws the label', async ({ page }) => {
+  test.setTimeout(240_000);
+  await LABELS_NONE_ON(page);
+  await history(page, 'undo');
+  await settleLive(page);
+  await history(page, 'redo');
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'a Redo of On' });
+});
+// Generate draws this label outside its arc with a leader for a text that does
+// not fit, and inside it without one for a text that does.
 const LEADER_TEXT = 'alpha protein, edited live';
-const openLeaderCase = async (page, reflow) => {
-  await open(page, { mode: 'circular', results: 'batch', reflow });
-  await showResult(page, LEADER_FEATURE.record_idx);
+const openLeaderCase = async (page) => {
+  await open(page, { mode: 'circular', results: 'batch' });
+  await showResult(page, BATCH_FEATURE.record_idx);
 };
-const leaderDifferences = ({ tolerated }) => tolerated.map(({ kind, id, attribute, live, generated }) => ({ kind, id, attribute, live, generated }));
-const LEADER_AWAITS_REFLOW = [{ kind: 'leader', id: 'f5aa08bf5', attribute: 'drawn', live: false, generated: true }];
-const setAutoReflow = (page, enabled) => page.evaluate((value) => { window.__GBDRAW_APP__.autoLabelReflowEnabled = value; }, enabled);
-const undoGenerate = async (page) => {
+test('a label text edit that moves the label outside its arc draws its leader, also after an Undo of the Generate (circular, two-Result batch)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openLeaderCase(page);
+  await popupEdit(page, BATCH_FEATURE, { labelText: LEADER_TEXT });
+  await expectLiveEqualsGenerate(page, { allowed: [], label: 'the edit' });
   await generate(page);
-  await showResult(page, LEADER_FEATURE.record_idx);
+  await showResult(page, BATCH_FEATURE.record_idx);
   await history(page, 'undo');
-};
-test('a label text edit that moves the label outside its arc draws its leader with Auto Reflow on', async ({ page }) => {
-  test.setTimeout(240_000);
-  await openLeaderCase(page, 'on');
-  await popupEdit(page, LEADER_FEATURE, { labelText: LEADER_TEXT });
-  await expectLiveEqualsGenerate(page, { allowed: [], label: 'the edit with Auto Reflow on' });
-  await undoGenerate(page);
-  await expectLiveEqualsGenerate(page, { allowed: [], label: 'the Undo of the Generate with Auto Reflow on' });
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { allowed: [], label: 'the Undo of the Generate' });
 });
-test('a label text edit with Auto Reflow off leaves only its leader to the next placement', async ({ page }) => {
+test('a label text that fits its arc draws no leader live or from Generate (circular, two-Result batch)', async ({ page }) => {
   test.setTimeout(240_000);
-  await openLeaderCase(page, 'off');
-  await popupEdit(page, LEADER_FEATURE, { labelText: LEADER_TEXT });
-  expect(leaderDifferences(await expectLiveEqualsGenerate(page, { label: 'the edit with Auto Reflow off' }))).toEqual(LEADER_AWAITS_REFLOW);
-});
-test('an Undo of a Generate keeps the placement of the labels it returns when Auto Reflow was turned on meanwhile', async ({ page }) => {
-  test.setTimeout(240_000);
-  await openLeaderCase(page, 'off');
-  await popupEdit(page, LEADER_FEATURE, { labelText: LEADER_TEXT });
-  await generate(page);
-  await showResult(page, LEADER_FEATURE.record_idx);
-  await setAutoReflow(page, true);
-  await history(page, 'undo');
-  expect(leaderDifferences(await expectLiveEqualsGenerate(page, { label: 'the Undo with Auto Reflow on', placedWithAutoReflow: false })))
-    .toEqual(LEADER_AWAITS_REFLOW);
-});
-test('a label text that fits its arc draws no leader live or from Generate, Auto Reflow off', async ({ page }) => {
-  test.setTimeout(240_000);
-  await openLeaderCase(page, 'off');
-  await popupEdit(page, LEADER_FEATURE, { labelText: 'x' });
+  await openLeaderCase(page);
+  await popupEdit(page, BATCH_FEATURE, { labelText: 'x' });
   await expectLiveEqualsGenerate(page, { allowed: [], label: 'a text that fits' });
 });
+test('a rerender that failed on an edit does not run again when another batch Result is displayed', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch' });
+  await showResult(page, 1);
+  await page.evaluate(() => { window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => { throw new Error('forced rerender failure'); }; });
+  await popupEdit(page, BATCH_FEATURE, { labelText: 'walk label' });
+  await settleLive(page);
+  await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), 'the failure is reported').not.toBeNull();
+  await expectNoRerenderOfDisplay(page, () => showResult(page, 0));
+});
+for (const [name, edit] of [['hidden feature', { visibility: 'off' }], ['label text', { labelText: 'walk label' }]]) {
+  test(`a rerender that failed on a display does not run again at the next display (${name})`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await openBothDrawings(page, { mode: 'linear', results: 'single' });
+    await popupEdit(page, 'FL2', edit);
+    await generate(page);
+    await switchDrawing(page, 'circular');
+    await resetKeepingLabelSettings(page);
+    await page.evaluate(() => { window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => { throw new Error('forced rerender failure'); }; });
+    const before = await rerenderRequests(page);
+    await switchDrawing(page, 'linear');
+    await expect.poll(() => rerenderRequests(page), 'the display asks once').toBe(before + 1);
+    await settleLive(page);
+    await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), 'the failure is reported').not.toBeNull();
+    await switchDrawing(page, 'circular');
+    await expectNoRerenderOfDisplay(page, () => switchDrawing(page, 'linear'));
+  });
+}
 
 // A Reset that changes the palette: the palette watcher shows the default
 // palette's fills, and Reset projects the other domains.
 test('Reset Settings after a palette change and a Legend row stroke shows what Generate draws', async ({ page }) => {
   test.setTimeout(120_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await resetSettings(page);
   const palette = await page.evaluate(() => window.__GBDRAW_APP__.paletteNames
     .find((name) => name !== window.__GBDRAW_APP__.selectedPalette));
@@ -1041,7 +1229,7 @@ for (const { edit, states, setup, run, knownMismatch } of CASES) {
 for (const mode of ['circular', 'linear']) {
   test(`Palette change repaints the skew track of a request without track slots: ${mode}`, async ({ page }) => {
     test.setTimeout(90_000);
-    await open(page, { mode, results: 'single', reflow: 'off' });
+    await open(page, { mode, results: 'single' });
     if (mode === 'linear') {
       await page.evaluate(() => { window.__GBDRAW_APP__.form.show_skew = true; });
       await generate(page);
@@ -1097,7 +1285,7 @@ test('Palette change repaints the skew track and its Legend rows of a loaded Ses
 // Load leaves a batch Result that showed it when that Result is shown again.
 test('a stroke removed after Load leaves a batch Result that showed it (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'batch' });
   await legendRowStroke(page, 'CDS', '#e63946', 3);
   await showResult(page, 1);
   await showResult(page, 0);
@@ -1120,7 +1308,7 @@ test('a stroke removed after Load leaves a batch Result that showed it (circular
 // display after Load shows every paint domain, as Generate draws it.
 test('a batch Result saved before it showed the paint edits shows them after Load (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'batch' });
   await legendRowStroke(page, 'CDS', '#e63946', 3);
   await popupEdit(page, 'TESTA_0001', { stroke: '#2a9d8f' });
   await legendRowColor(page, 'tRNA', '#7b2cbf');
@@ -1137,7 +1325,7 @@ test('a batch Result saved before it showed the paint edits shows them after Loa
 // before it with their bytes as they were kept.
 test('a batch Result kept without the paint edits shows them after an Undo of Generate (circular, two-Result batch)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'batch' });
   await legendRowColor(page, 'tRNA', '#7b2cbf');
   await legendRowStroke(page, 'CDS', '#e63946', 3);
   await generate(page);
@@ -1151,7 +1339,7 @@ test('a batch Result kept without the paint edits shows them after an Undo of Ge
 // Save ends, while it stays displayed, so a later Save keeps them.
 test('a batch Result displayed while Save runs shows the edits once Save ends (circular, two-Result batch)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'batch' });
   await legendRowColor(page, 'tRNA', '#7b2cbf');
   await addVisibilityRule(page, BATCH_0004_OFF);
   await displayWhileSaveHeld(page, 1);
@@ -1167,7 +1355,7 @@ test('a batch Result displayed while Save runs shows the edits once Save ends (c
 // the app's Save.)
 test('a batch Result displayed while Save runs is saved with the edits (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'batch' });
   await addVisibilityRule(page, BATCH_0004_OFF);
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0002$', color: '#2266aa', cap: 'CDS' });
   await legendRowColor(page, 'tRNA', '#7b2cbf');
@@ -1188,7 +1376,7 @@ test('a batch Result displayed while Save runs is saved with the edits (circular
 // label as Generate draws it.
 test('a batch Result saved with a label edit removed meanwhile shows the label after Load (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'batch' });
   await showResult(page, 1);
   await popupEdit(page, 'TESTB_0001', { labelText: 'edited on B' });
   await showResult(page, 0);
@@ -1246,7 +1434,7 @@ const STROKE_RESET_CASES = {
 for (const [name, { edit, revert }] of Object.entries(STROKE_RESET_CASES)) {
   test(`${name} returns each feature part to Python's stroke (circular, two-Result batch)`, async ({ page }) => {
     test.setTimeout(120_000);
-    await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+    await open(page, { mode: 'circular', results: 'batch' });
     const drawn = await drawnStrokes(page);
     await edit(page);
     expect(await drawnStrokes(page), 'the edit changes strokes').not.toEqual(drawn);
@@ -1278,7 +1466,7 @@ test('Reset all strokes after loading a Session 44 Result saved without paint re
 // setting that only Generate draws.
 test('Reset Settings after Legend and popup strokes, a Legend row color and a Legend delete shows what Generate draws', async ({ page }) => {
   test.setTimeout(180_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await resetSettings(page);
   await generate(page);
   const drawn = await drawnStrokes(page);
@@ -1349,7 +1537,7 @@ test('a stroke and a palette change reach a Session 30 Result loaded without a f
 // run in order on one two-Result batch page.
 test('each edit kind runs only the compile stages and worker requests of its allowlist', async ({ page }) => {
   test.setTimeout(420_000);
-  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'batch' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0001$', color: '#c83366', cap: 'CDS' });
   await generate(page);
   await page.evaluate(() => {
@@ -1384,20 +1572,20 @@ test('each edit kind runs only the compile stages and worker requests of its all
 
 // OV-200 (PD-OI-066): with Label Rendering = Embedded Only, Python draws no
 // label that does not fit inside its feature. A Feature Edits TSV that turns
-// such a label On, with Auto Reflow off, shows what Generate draws: no label.
+// such a label On shows what Generate draws: no label.
 // OV-237: a TSV label text reaches labels no popup has bound yet.
 const LONG_LABEL = 'A_LABEL_TEXT_FAR_TOO_LONG_TO_FIT_INSIDE_ITS_FEATURE_'.repeat(4);
 const TSV_LABEL_CASES = [
   { mode: 'circular', rendering: 'embedded_only', visibility: 'on', text: LONG_LABEL, name: 'Label visibility On for a label that does not fit, Embedded Only' },
   { mode: 'linear', rendering: 'embedded_only', visibility: 'on', text: LONG_LABEL, name: 'Label visibility On for a label that does not fit, Embedded Only' },
   { mode: 'circular', rendering: null, visibility: '', text: 'alpha edited', name: 'a label text' },
-  // U2BFIX2 review M2: the table's label follow with Auto Reflow on.
-  { mode: 'circular', rendering: 'embedded_only', visibility: '', text: LONG_LABEL, reflow: 'on', name: 'a label text that does not fit, Embedded Only, Auto Reflow on' }
+  // U2BFIX2 review M2: the table's label follow.
+  { mode: 'circular', rendering: 'embedded_only', visibility: '', text: LONG_LABEL, name: 'a label text that does not fit, Embedded Only' }
 ];
-for (const { mode, rendering, visibility, text: labelText, reflow = 'off', name } of TSV_LABEL_CASES) {
+for (const { mode, rendering, visibility, text: labelText, name } of TSV_LABEL_CASES) {
   test(`Load Feature Edits TSV with ${name} (${mode}, one Result, labels unbound)`, async ({ page }) => {
     test.setTimeout(180_000);
-    await open(page, { mode, results: 'single', reflow });
+    await open(page, { mode, results: 'single' });
     if (rendering) {
       await page.evaluate((value) => { window.__GBDRAW_APP__.adv.label_rendering = value; }, rendering);
       await generate(page);
@@ -1411,7 +1599,7 @@ for (const { mode, rendering, visibility, text: labelText, reflow = 'off', name 
 // The same for a popup label text that no longer fits (Label visibility Default).
 test('Popup label text that does not fit, Embedded Only (circular, one Result)', async ({ page }) => {
   test.setTimeout(180_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.label_rendering = 'embedded_only'; });
   await generate(page);
   await popupEdit(page, 'FL1', { labelText: LONG_LABEL });
@@ -1439,7 +1627,7 @@ test.describe('the warm app page', () => {
 
   test('a case leaves a Linear Result, a setting and a popup edit', async ({ page }) => {
     test.setTimeout(180_000);
-    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'linear', results: 'single' });
     await popupEdit(page, 'FL1', { fill: '#123456' });
     expect((await freshBootView(page)).results).toBe(1);
   });

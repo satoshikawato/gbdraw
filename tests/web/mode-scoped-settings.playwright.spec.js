@@ -6,12 +6,12 @@
 // they guard (OV-80, OV-82, OV-84, OV-101, OV-106, OV-120, OV-142, OV-159)
 // and the plan's History cases (H1, H2).
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
-const { download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -54,11 +54,35 @@ const setLinearFile = async (page, path = SINGLE) => {
   await settleLive(page);
 };
 
-// The Circular file loaded, Circular shown, labels outside, Auto Reflow off.
+// A Session saved when Auto Reflow was a setting holds `ui.autoLabelReflow`: it
+// loads with either value, shows its saved Result without a rerender, and the
+// next Save no longer writes it.
+for (const held of [false, true]) {
+  test(`a Session that holds autoLabelReflow ${held} loads and ignores it`, async ({ browser }, testInfo) => {
+    test.setTimeout(180_000);
+    const session = JSON.parse(readFileSync('tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'));
+    expect(session.ui.autoLabelReflow, 'the fixture holds the value').toBe(false);
+    session.ui.autoLabelReflow = held;
+    const path = testInfo.outputPath('holds-auto-label-reflow.gbdraw-session.json');
+    writeFileSync(path, JSON.stringify(session));
+    const page = await load(browser, path);
+    expect(await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      return { results: app.results.length > 0, error: app.errorLog ?? '', rerender: app.labelReflowProcessing };
+    })).toMatchObject({ results: true, error: '', rerender: false });
+    const saved = testInfo.outputPath('saved-again.gbdraw-session.json');
+    await download(page, 'Save Session', saved);
+    const again = readFileSync(saved);
+    const text = (again[0] === 0x1f ? gunzipSync(again) : again).toString('utf8');
+    expect(text).not.toContain('autoLabelReflow');
+    await page.context().close();
+  });
+}
+
+// The Circular file loaded, Circular shown, labels outside.
 const openCircular = (page) => openWithGenBank(page, SINGLE, () => {
   const app = window.__GBDRAW_APP__;
   app.form.labels_mode = 'out';
-  app.autoLabelReflowEnabled = false;
 });
 
 // The same file in both modes, Circular shown.

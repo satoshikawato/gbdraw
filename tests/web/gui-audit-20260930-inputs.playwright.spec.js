@@ -505,7 +505,7 @@ test('a v31 schema-1 Session takes a live edit and Save before Generate', async 
   await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     window.__liveEditResults = state.results.value;
-    state.labelReflowForceRequestSeq.value += 1;
+    state.labelReflowRequestSeq.value += 1;
   });
   await expect.poll(() => page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');

@@ -4876,7 +4876,6 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     lInputType: state.lInputType.value,
     losatProgram: drawing.losatProgram.value,
     downloadDpi: state.downloadDpi.value,
-    autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
     linearTypographyLinked: Boolean(drawing.linearTypographyLinked.value),
     paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
     // App-level settings (History and the Load rollback restore them with the UI).
@@ -4903,7 +4902,6 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
 export const applySessionUiData = (ui) => {
   if (typeof ui.title === 'string') state.sessionTitle.value = ui.title;
   if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
-  if (Object.hasOwn(ui, 'autoLabelReflow')) state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
   if (Object.hasOwn(ui, 'paletteInstantPreviewEnabled')) state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
   // The cast: a plain object, and every field of the type is an optional unknown.
   if (isPlainObject(ui.losatExecution)) applyLosatExecutionData(/** @type {SessionLosatExecution} */ (ui.losatExecution));
@@ -6445,7 +6443,6 @@ const importSessionDocument = async (e, options = {}) => {
     state.lInputType.value = inputTypes.lInputType;
     state.downloadDpi.value = readDownloadDpi(ui.downloadDpi).value;
     // Suppressed mode watchers observe only the complete admitted document.
-    state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
     // A Session 27-44 draft's boolean Instant Preview wins over its `ui` (plan 4.2).
     state.paletteInstantPreviewEnabled.value = Boolean(
       typeof appUi.paletteInstantPreviewEnabled === 'boolean'
@@ -6872,7 +6869,6 @@ export const exportSession = (titleOverride = null, options) => {
       cInputType: state.cInputType.value,
       lInputType: state.lInputType.value,
       downloadDpi: state.downloadDpi.value,
-      autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
       paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
       appliedPaletteName: artifactUi.appliedPaletteName,
       appliedPaletteColors: artifactUi.appliedPaletteColors,

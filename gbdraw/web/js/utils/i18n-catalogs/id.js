@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "Otomatis ({count})",
   "Auto ({mode})": "Otomatis ({mode})",
   "Auto ({value})": "Otomatis ({value})",
-  "Auto Reflow": "Susun ulang otomatis",
-  "Auto Reflow failed. Current diagram is kept.": "Susun ulang otomatis gagal. Diagram saat ini dipertahankan.",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "Opsi Otomatis menempatkan label yang muat di dalam fitur dan menempatkan sisanya di luar. Opsi Hanya tersemat menghilangkan label yang memerlukan penempatan eksternal. Opsi Hanya eksternal menempatkan label di luar badan fitur.",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "Opsi Otomatis mengikuti tata letak track (Atas atau Fitur pada sumbu: label di atas; Bawah: label di bawah). Opsi Di atas fitur menggambar label di atas fitur (dan di bawah fitur untai negatif saat Pisahkan untai aktif).",
   "Auto hides these fields throughout the diagram": "Opsi Otomatis menyembunyikan bidang ini di seluruh diagram",

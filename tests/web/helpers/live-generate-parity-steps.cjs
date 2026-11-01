@@ -11,12 +11,12 @@ const { loadEditorLegendRows } = require('./mode-transition.cjs');
 
 const SINGLE_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
 
-// States: mode, results (one Result, or a two-Result Circular batch), Auto
-// Reflow, and labels (bound: a feature popup was opened after the last
+// States: mode, results (one Result, or a two-Result Circular batch), and
+// labels (bound: a feature popup was opened after the last
 // Generate and before the edit; unbound: none was). A popup edit binds the
 // labels itself.
 // `genbank` replaces the Linear fixture's text (a Linear single Result only).
-const open = async (page, { mode, results, reflow, genbank = readFileSync(SINGLE_FIXTURE, 'utf8') }) => {
+const open = async (page, { mode, results, genbank = readFileSync(SINGLE_FIXTURE, 'utf8') }) => {
   if (mode === 'linear') {
     await openFresh(page);
     await page.getByRole('button', { name: 'Linear', exact: true }).click();
@@ -38,7 +38,6 @@ const open = async (page, { mode, results, reflow, genbank = readFileSync(SINGLE
   } else {
     await openWithGenBank(page, SINGLE_FIXTURE, () => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
   }
-  await page.evaluate((enabled) => { window.__GBDRAW_APP__.autoLabelReflowEnabled = enabled; }, reflow === 'on');
   await generate(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(results === 'batch' ? 2 : 1);
 };
@@ -71,8 +70,8 @@ const switchDrawing = async (page, drawingId) => {
 // `mode`'s drawing opened as `open` does, then the other drawing with a Result,
 // then `mode`'s drawing shown. Resolves to the other drawing's History depth at
 // its Result.
-const openBothDrawings = async (page, { mode, results, reflow }) => {
-  await open(page, { mode, results, reflow });
+const openBothDrawings = async (page, { mode, results }) => {
+  await open(page, { mode, results });
   await switchDrawing(page, otherMode(mode));
   if (mode === 'circular') {
     await page.evaluate(async (text) => {
@@ -208,7 +207,7 @@ const colorLegendRow = async (page, caption, color = '#7b2cbf') => {
 // Opens one Result; a Circular diagram is generated again with the Multi-Record
 // Canvas set to `canvas` unless it is null.
 const openCanvas = async (page, mode, canvas) => {
-  await open(page, { mode, results: 'single', reflow: 'off' });
+  await open(page, { mode, results: 'single' });
   if (mode === 'circular' && canvas !== null) {
     await page.evaluate((value) => { window.__GBDRAW_APP__.form.multi_record_canvas = value; }, canvas);
     await generate(page);

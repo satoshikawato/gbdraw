@@ -33,41 +33,39 @@ const countRenders = async (page) => {
   return () => page.evaluate(() => window.__parityRenders);
 };
 
-// With Auto Reflow off, an edit that changes no Legend source asks for no
-// rerender: the other labels may wait for the reflow (Owner, OV-35), and the
-// Result still shows what Generate draws apart from that placement.
-test('an edit that changes no Legend source does not rerender with Auto Reflow off', async ({ page }) => {
+// A color rule edit that changes no Legend source asks for no rerender; each
+// label text, Label visibility, or feature visibility edit asks for one, which
+// places the labels; and the Result shows what Generate draws.
+test('a color rule edit that changes no Legend source does not rerender, and a label or visibility edit once', async ({ page }) => {
   test.setTimeout(120_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await addColorRule(page, FL1_ALPHA);
   await generate(page);
   const renders = await countRenders(page);
   await popupEdit(page, 'FL2', { labelText: 'beta protein, edited live' });
-  expect(await renders(), 'label text').toBe(0);
+  expect(await renders(), 'label text').toBe(1);
   await appAction(page, 'setSpecificRuleField', 0, 'color', '#7b2cbf');
-  expect(await renders(), 'color of a rule a drawn feature uses').toBe(0);
+  expect(await renders(), 'color of a rule a drawn feature uses').toBe(1);
   await popupEdit(page, 'FL2', { labelVisibility: 'off' });
-  expect(await renders(), 'Label visibility Off').toBe(0);
+  expect(await renders(), 'Label visibility Off').toBe(2);
   await popupEdit(page, 'FL2', { visibility: 'off' });
-  expect(await renders(), 'Off for a CDS after the first').toBe(0);
+  expect(await renders(), 'Off for a CDS after the first').toBe(3);
   await expectLiveEqualsGenerate(page, { label: 'edits that change no Legend source' });
 });
 
-// An edit that changes a Legend source rerenders once, whether Auto Reflow
-// would also place the labels or not.
+// An edit that changes a Legend source rerenders once.
 test('an edit that changes a Legend source rerenders once', async ({ page }) => {
   test.setTimeout(120_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   let renders = await countRenders(page);
   await addVisibilityRule(page, FL1_OFF);
-  expect(await renders(), 'visibility rule, Auto Reflow off').toBe(1);
-  await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; });
+  expect(await renders(), 'visibility rule').toBe(1);
   renders = await countRenders(page);
   await appAction(page, 'removeFeatureVisibilityRule', 0);
-  expect(await renders(), 'visibility rule delete, Auto Reflow on').toBe(1);
+  expect(await renders(), 'visibility rule delete').toBe(1);
   renders = await countRenders(page);
   await addColorRule(page, FL1_ALPHA);
-  expect(await renders(), 'color rule, Auto Reflow on').toBe(1);
+  expect(await renders(), 'color rule').toBe(1);
   await expectLiveEqualsGenerate(page, { label: 'edits that change a Legend source' });
 });
 
@@ -100,7 +98,7 @@ const countResultSerializations = async (page) => {
 
 test('a color rule that adds a Legend row serializes the Result once', async ({ page }) => {
   test.setTimeout(120_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   const serializations = await countResultSerializations(page);
   await addColorRule(page, FL1_ALPHA);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption))).toContain('alpha');
@@ -135,7 +133,7 @@ const chooseKeepBoth = async (page) => {
 
 test('a Legend rename onto the name of a color rule without a drawn row asks and keeps both', async ({ page }) => {
   test.setTimeout(120_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^NOMATCH$', color: '#c83366', cap: 'Zeta' });
   await renameRow(page, 'GC content', 'Zeta');
   await expect(page.getByRole('heading', { name: 'Legend Name Conflict' })).toBeVisible();
@@ -154,7 +152,7 @@ test('a Legend rename onto the name of a color rule without a drawn row asks and
 // miss it; the Generate succeeds when one Result draws it.
 test('a Legend color on a row only one Result draws survives the next Generate', async ({ page }) => {
   test.setTimeout(150_000);
-  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'batch' });
   await popupEdit(page, 'TESTA_0005', { fill: '#c83366' });
   await generate(page);
   const legendOf = async (index) => {
@@ -185,14 +183,14 @@ test('a Legend color on a row only one Result draws survives the next Generate',
 // no rule (D-15), so both cases start from a one-feature row.
 const COPIED_LEGEND_COLOR_CASES = {
   'Clear All after a one-feature row edit': {
-    states: { mode: 'circular', results: 'single', reflow: 'off' },
+    states: { mode: 'circular', results: 'single' },
     color: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
     caption: 'repeat_region',
     direct: 'CDS',
     remove: (page) => appAction(page, 'clearAllSpecificRules')
   },
   'deleting the rule of a one-feature row': {
-    states: { mode: 'linear', results: 'single', reflow: 'on' },
+    states: { mode: 'linear', results: 'single' },
     color: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
     caption: 'repeat_region',
     direct: 'CDS',
@@ -240,7 +238,7 @@ for (const [name, { states, color, caption, direct, remove }] of Object.entries(
 // the color when it is shown again, with no second row.
 test('Apply to all on a palette row sets the default color: one row, also for a feature shown later', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await popupEdit(page, 'FL2', { visibility: 'off' });
   const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   await popupEdit(page, 'FL1', { fill: '#e63946', scope: 'caption' });
@@ -262,7 +260,7 @@ test('Apply to all on a palette row sets the default color: one row, also for a 
 // the Generate still fails at result admission.
 test('a Legend style no feature can produce still fails the Generate', async ({ page }) => {
   test.setTimeout(90_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('/gbdraw/web/js/state.js');
@@ -513,7 +511,7 @@ for (const { name, from, linearFile = SINGLE_FIXTURE, row, prepare = null } of O
   test(`a Legend color on ${name} survives the other mode's Generate (OV-80)`, async ({ page }) => {
     test.setTimeout(180_000);
     const other = from === 'linear' ? 'circular' : 'linear';
-    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'circular', results: 'single' });
     await switchMode(page, 'linear');
     await page.evaluate(async ({ text, fileName }) => {
       window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'gb', new File([text], fileName, { type: 'text/plain', lastModified: 1000 }));
@@ -556,7 +554,7 @@ const mergeButton = (page) => page.getByRole('button', { name: /^Merge into "/ }
 
 test('a Legend rename of GC content onto CDS offers no Merge, and Keep both equals Generate', async ({ page }) => {
   test.setTimeout(120_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'CDS' });
   const before = await legendCaptions(page);
   await renameRow(page, 'GC content', 'CDS');
@@ -589,7 +587,7 @@ const conflictAsked = async (page) => {
 
 test('a Legend rename onto a deleted GC skew row asks with Keep both and Cancel only (OV-285)', async ({ page }) => {
   test.setTimeout(120_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   await deleteLegendRow(page, 'GC skew (-)');
   const before = await legendState(page);
   const shown = await semanticSnapshot(page);
@@ -618,7 +616,7 @@ test('a Legend rename onto a deleted GC skew row asks with Keep both and Cancel 
 // one row edits both.
 test('two rows of one name keep their own colors, and one swatch draws one row that edits as one, live = Generate (D-28, D-35)', async ({ page }) => {
   test.setTimeout(180_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   const colorRow = async (key, color) => {
     await page.evaluate(({ row, value }) => {
       const app = window.__GBDRAW_APP__;
@@ -676,7 +674,7 @@ const RULE_ROWS = [
 // a deleted one asks Restore and merge; either merge adopts the target's color.
 test('a Legend rename onto a deleted row of one feature type restores and merges it in one History step (OV-285)', async ({ page }) => {
   test.setTimeout(180_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   for (const rule of RULE_ROWS.slice(0, 2)) await addColorRule(page, rule);
   await deleteLegendRow(page, 'beta');
   const before = await legendState(page);
@@ -710,7 +708,7 @@ test('a Legend rename onto a deleted row of one feature type restores and merges
 
 test('a Legend rename between rows of different feature types offers no Merge', async ({ page }) => {
   test.setTimeout(120_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   for (const rule of RULE_ROWS) await addColorRule(page, rule);
   await renameRow(page, 'rep', 'alpha');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
@@ -739,7 +737,7 @@ const colorIdNames = (page) => page.evaluate(() => {
 const ruleTable = (page) => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ val, cap, color }) => [val, cap, color]));
 test('a Legend rename of a rule row onto another rule row of one feature type asks, and Merge equals Generate', async ({ page }) => {
   test.setTimeout(180_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   for (const rule of RULE_ROWS) await addColorRule(page, rule);
   const before = { rows: await legendState(page), rules: await ruleTable(page) };
   const shown = await semanticSnapshot(page);
@@ -791,7 +789,7 @@ const legendFills = async (page) => Object.fromEntries(
 
 test('a pick from the popup Legend name list joins the picked group with its color', async ({ page }) => {
   test.setTimeout(180_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   for (const rule of [...RULE_ROWS, UNDRAWN_RULE]) await addColorRule(page, rule);
   const before = { rows: await legendState(page), rules: await ruleTable(page) };
   const shown = await semanticSnapshot(page);
@@ -821,7 +819,7 @@ test('a pick from the popup Legend name list joins the picked group with its col
 
 test('a pick of a color rule that draws no row asks the scope and draws the feature in the rule color', async ({ page }) => {
   test.setTimeout(180_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   for (const rule of [RULE_ROWS[0], UNDRAWN_RULE]) await addColorRule(page, rule);
   const list = await openPopup(page, { locus_tag: 'FL2' });
   await list.selectOption({ label: 'Connector' });
@@ -846,7 +844,7 @@ test('a pick of a color rule that draws no row asks the scope and draws the feat
 // the picked group: its rule takes the group's name and color.
 test('a pick with All N from a color rule\'s row moves the whole row into the picked group', async ({ page }) => {
   test.setTimeout(180_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: 'protein$', color: '#2a9d8f', cap: 'beta' });
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup', color: '#e63946', cap: 'alpha' });
   const before = { rows: await legendState(page), rules: await ruleTable(page) };
@@ -884,7 +882,7 @@ test('a pick with All N from a color rule\'s row moves the whole row into the pi
 // can be joined: also one whose row draws only features of another type.
 test('the popup list offers a rule for every feature type, and a pick joins a group with rules of several types', async ({ page }) => {
   test.setTimeout(180_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   for (const rule of [
     RULE_ROWS[2],
     { feat: 'CDS', qual: 'locus_tag', val: '^NOMATCH$', color: RULE_ROWS[2].color, cap: 'rep' },
@@ -917,13 +915,7 @@ test('the popup list offers a rule for every feature type, and a pick joins a gr
 
 // U3a (R14-8): Legend edits the Result executor shows live, without the
 // automatic rerender, combined with the edits of other domains. Each case
-// ends with live = Generate, in both modes. Auto Reflow decides only whether
-// a label or feature visibility edit queues the label reflow
-// (`queueLabelReflow` without force); these steps queue none or a forced
-// one, and no request carries the setting, so a case runs the same code with
-// Auto Reflow on and off. Each runs with it off; the cases with `reflowOn`
-// also run with it on in that mode, so a Legend path that starts reading the
-// setting is seen.
+// ends with live = Generate, in both modes.
 const ALPHA_ROW = { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' };
 const renameAndSettle = async (page, caption, name) => { await renameRow(page, caption, name); await settleLive(page); };
 const ruleIndex = (page, caption) => page.evaluate(
@@ -957,7 +949,6 @@ const U3A_PARITY = [
   {
     // The row returns with the current palette fill and Python's stroke.
     name: '(4) delete a row, change the palette, Undo the delete',
-    reflowOn: 'circular',
     run: async (page) => {
       await deleteLegendRow(page, 'repeat_region');
       await switchPalette(page, 'arctic');
@@ -1013,7 +1004,6 @@ const U3A_PARITY = [
     // is shown (D-24 (OV-731)), else the commit's, whose new row is appended,
     // so Redo asks for the rerender again.
     name: '(10) Undo and Redo of a Rules-panel caption change of a whole row',
-    reflowOn: 'linear',
     setup: (page) => addColorRule(page, ALPHA_ROW),
     run: async (page) => {
       await appAction(page, 'setSpecificRuleField', await ruleIndex(page, 'alpha'), 'cap', 'Alpha row');
@@ -1039,11 +1029,11 @@ const U3A_PARITY = [
   }
 ];
 for (const mode of ['circular', 'linear']) {
-  for (const { name, setup = null, run, reflowOn = null } of U3A_PARITY) {
-    for (const reflow of reflowOn === mode ? ['off', 'on'] : ['off']) {
-      test(`U3a Legend parity ${name} (${mode}, Auto Reflow ${reflow})`, async ({ page }) => {
+  for (const { name, setup = null, run } of U3A_PARITY) {
+    {
+      test(`U3a Legend parity ${name} (${mode})`, async ({ page }) => {
         test.setTimeout(180_000);
-        await open(page, { mode, results: 'single', reflow });
+        await open(page, { mode, results: 'single' });
         if (setup) {
           await setup(page);
           await generate(page);
@@ -1056,9 +1046,9 @@ for (const mode of ['circular', 'linear']) {
   if (mode === 'circular') {
     // A batch Result that never drew the delete is not laid out again; the
     // Restore on it and the display of Result 1 show what Generate draws.
-    test('U3a Legend parity (8) delete on Result 1, Restore on Result 2 (circular batch, Auto Reflow off)', async ({ page }) => {
+    test('U3a Legend parity (8) delete on Result 1, Restore on Result 2 (circular batch)', async ({ page }) => {
       test.setTimeout(180_000);
-      await open(page, { mode, results: 'batch', reflow: 'off' });
+      await open(page, { mode, results: 'batch' });
       await deleteLegendRow(page, 'tRNA');
       await showResult(page, 1);
       await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
@@ -1070,9 +1060,9 @@ for (const mode of ['circular', 'linear']) {
   // U3a review M2: after the deleted type's features are hidden and
   // Generate runs, Python draws no row of it; its row facts say so, and the
   // Restore asks for no rerender.
-  test(`U3a Legend parity (12) Restore of a row the Result never drew (${mode}, Auto Reflow off)`, async ({ page }) => {
+  test(`U3a Legend parity (12) Restore of a row the Result never drew (${mode})`, async ({ page }) => {
     test.setTimeout(180_000);
-    await open(page, { mode, results: 'single', reflow: 'off' });
+    await open(page, { mode, results: 'single' });
     await deleteLegendRow(page, 'repeat_region');
     await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'repeat_region', qualifier: 'note', value: '^RPT_ONE$', action: 'off' });
     await generate(page);
@@ -1206,7 +1196,7 @@ test('R15-2: a Legend row the editor added in a Session main saved loads, shows,
 // Legend edit of the row reaches it.
 test('OV-243: a renamed GC skew row keeps its key through a palette change and Generate, and its delete hides it (circular)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await renameRow(page, 'GC skew (+)', 'Skew+');
   await settleLive(page);
   await switchPalette(page, 'arctic');
@@ -1235,7 +1225,7 @@ const rowStrokedFeatures = (snapshot) => Object.entries(snapshot.features)
 for (const order of ['stroke then color', 'color then stroke']) {
   test(`OV-288: a Legend row stroke and color on CDS (${order}) stroke the row's features, live = Generate (circular)`, async ({ page, browser }, testInfo) => {
     test.setTimeout(300_000);
-    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'circular', results: 'single' });
     const stroke = () => legendRowStrokeColor(page, 'CDS', ROW_STROKE);
     const color = () => legendRowColor(page, 'CDS', '#7b2cbf');
     if (order === 'stroke then color') { await stroke(); await color(); } else { await color(); await stroke(); }
@@ -1265,7 +1255,7 @@ for (const order of ['stroke then color', 'color then stroke']) {
 // R15-6).
 test('OV-291: a palette change and a stroke on a row a rule\'s caption names, live = Generate (circular)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'repeat_region' });
   await generate(page);
   await switchPalette(page, 'arctic');
@@ -1283,7 +1273,7 @@ test('OV-291: a palette change and a stroke on a row a rule\'s caption names, li
 // at Generate.
 test('OV-288: a Legend color equal to a rule\'s color on the row its caption names keeps the row\'s stroke reach, live = Generate (circular)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'repeat_region' });
   await generate(page);
   await legendRowColor(page, 'repeat_region', '#2266aa');
@@ -1300,7 +1290,7 @@ test('OV-288: a Legend color equal to a rule\'s color on the row its caption nam
 // Legend color edit of that row recolors the row, not the rule's feature.
 test('OV-294: a second Legend color on the row a rule\'s caption names recolors the row, not the rule, live = Generate (circular)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'repeat_region' });
   await generate(page);
   await legendRowColor(page, 'repeat_region', '#2266aa');
@@ -1330,7 +1320,7 @@ test('OV-294: a second Legend color on the row a rule\'s caption names recolors 
 // row's stroke reaches the rule's feature, live as at Generate.
 test('OV-307: two Legend color edits and a stroke on a rule\'s own row recolor and stroke the rule\'s feature, live = Generate (circular)', async ({ page, browser }, testInfo) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'Group' });
   await generate(page);
   await legendRowColor(page, 'Group', '#ff8800');
@@ -1368,7 +1358,7 @@ test('OV-307: two Legend color edits and a stroke on a rule\'s own row recolor a
 // delete shows it too.
 test('OV-293: deleting a stroked Legend row takes its stroke off live, and Undo, Redo and Restore follow, live = Generate (circular)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await legendRowStrokeColor(page, 'CDS', ROW_STROKE);
   const stroked = rowStrokedFeatures(await semanticSnapshot(page));
   expect(stroked.length, 'the stroke reaches the CDS features live').toBeGreaterThan(0);
@@ -1386,7 +1376,7 @@ test('OV-293: deleting a stroked Legend row takes its stroke off live, and Undo,
 
 test('OV-293: a batch Result displayed after a stroked Legend row is deleted shows no stroke, live = Generate (circular, two-Result batch)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'batch' });
   await legendRowStrokeColor(page, 'CDS', ROW_STROKE);
   await showResult(page, 1);
   expect(rowStrokedFeatures(await semanticSnapshot(page)).length, 'Result 2 shows the stroke').toBeGreaterThan(0);
@@ -1615,7 +1605,7 @@ const legendKeys = async (page) => (await legendNameFacts(page)).legends[0].map(
 
 test('legend names: tracks of one label share a row in one color and are numbered in two, live = Generate (circular)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   const names = (...gcContent) => ['CDS', 'repeat_region', gcContent[0], 'GC skew (+)', 'GC skew (-)', ...gcContent.slice(1)];
   // Two sources of one color: one row. A Legend edit of another row runs the naming pass on the live Result.
   const second = await addCircularSlot(page, 'dinucleotide_content');
@@ -1643,7 +1633,7 @@ test('legend names: tracks of one label share a row in one color and are numbere
 // (the Legend editor's rename onto a taken name asks instead, PD-OI-061).
 test('legend names: a rule renamed onto the name of another rule numbers both rows, and renamed away leaves the bare name, live = Generate (linear)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   for (const rule of RULE_ROWS.slice(0, 2)) await addColorRule(page, rule);
   const rest = ['other proteins', 'repeat_region'];
   await expectLegendNames(page, ['alpha', 'beta', ...rest], 'two rules of two names');
@@ -1661,7 +1651,7 @@ test('legend names: a rule renamed onto the name of another rule numbers both ro
 // shared and single again. A row the rule list renames is drawn anew, last.
 test('legend names: a rule row keeps its place when its key changes with the sharing of its name, also in a user order, live = Generate (linear)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   for (const rule of RULE_ROWS.slice(0, 2)) await addColorRule(page, rule);
   await setRuleField(page, 1, 'cap', 'alpha');
   await expectLegendNames(page, ['alpha (1)', 'alpha (2)', 'other proteins', 'repeat_region'], 'two rules of one name');
@@ -1683,7 +1673,7 @@ test('legend names: a rule row keeps its place when its key changes with the sha
 // features (OV-43).
 test('OV-1235: a rule color that splits the row of its caption draws the rows in rule order, live = Generate (linear)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   await addColorRule(page, RULE_ROWS[0]);
   await addColorRule(page, { ...RULE_ROWS[1], cap: 'alpha', color: RULE_ROWS[0].color });
   await expectLegendNames(page, ['alpha', 'other proteins', 'repeat_region'], 'two rules of one name and one color');
@@ -1696,7 +1686,7 @@ test('OV-1235: a rule color that splits the row of its caption draws the rows in
 // `alpha`; the live edit asks Python (OV-42).
 test('OV-1236: hiding the only feature of one color of a shared caption leaves one row of the caption, live = Generate (linear)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   await addColorRule(page, RULE_ROWS[0]);
   await addColorRule(page, { ...RULE_ROWS[1], cap: 'alpha' });
   await expectLegendNames(page, ['alpha (1)', 'alpha (2)', 'other proteins', 'repeat_region'], 'two rules of one name');
@@ -1711,7 +1701,7 @@ test('OV-1236: hiding the only feature of one color of a shared caption leaves o
 // executor recorded before it replayed the sorted order, not the order shown.
 test('OV-1486: a sorted Legend order keeps its places when removing a color rule brings back the CDS row, live = Generate (linear)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   await addColorRule(page, RULE_ROWS[0]);
   await generate(page);
   await expectLegendNames(page, ['alpha', 'other proteins', 'repeat_region'], 'a rule takes one CDS');
@@ -1726,7 +1716,7 @@ test('OV-1486: a sorted Legend order keeps its places when removing a color rule
 // and at Generate.
 test('legend names: a stroke stored on a rule row follows the row when its key changes, live = Generate (linear)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   for (const rule of RULE_ROWS.slice(0, 2)) await addColorRule(page, rule);
   await setRuleField(page, 1, 'cap', 'alpha');
   await page.evaluate(() => {
@@ -1754,7 +1744,7 @@ test('legend names: a stroke stored on a rule row follows the row when its key c
 // the edits of the second are not used (PD-OI-095, accepted residual risk).
 test('legend names: a color and a stroke stored under GC content (2) stay on the second track\'s row, and are not used once the tracks share a row (circular)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   const names = (...gcContent) => ['CDS', 'repeat_region', gcContent[0], 'GC skew (+)', 'GC skew (-)', ...gcContent.slice(1)];
   const labelled = await addCircularSlot(page, 'dinucleotide_skew', GC_CONTENT_LABELLED);
   await generate(page);
@@ -1790,7 +1780,7 @@ test('legend names: a color and a stroke stored under GC content (2) stay on the
 // beside its key, and the Legend draws the same names.
 test('legend names: Undo and Redo of a color rule commit keep the name of the rule\'s row and the drawn names (circular)', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   const tracks = ['GC content', 'GC skew (+)', 'GC skew (-)'].map((name) => [name, null, name]);
   const rows = async () => (await legendNameFacts(page)).legends[0];
   const python = await rows();
@@ -1831,7 +1821,7 @@ for (const { name, generateBetween } of [
 ]) {
   test(`a Legend row stroke moves with its row when a rule caption edit re-keys it, live = Generate: ${name} (OV-1985)`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode: 'linear', results: 'single', reflow: 'on' });
+    await open(page, { mode: 'linear', results: 'single' });
     await popupEdit(page, { type: 'CDS', start: 2000, end: 2600 }, { fill: '#e63946', scope: 'useExisting' });
     await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#e63946', cap: 'CDS' });
     await popupEdit(page, { type: 'CDS', start: 2850, end: 2900 }, { stroke: '#123456', scope: 'caption' });
@@ -1866,7 +1856,7 @@ const ruleIndexOf = (page, cap) => page.evaluate((caption) => (
 ), cap);
 test('a stroked rule row whose rule is removed leaves its feature unstroked, live = Generate (OV-1986)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'Special' });
   await legendRowStrokeColor(page, 'Special', '#123456');
   const index = await ruleIndexOf(page, 'Special');
@@ -1880,7 +1870,7 @@ for (const { name, history: steps } of [
 ]) {
   test(`a rule pattern edit that moves a feature out of a stroked row takes the row's stroke from it, live = Generate: ${name} (OV-1986)`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'linear', results: 'single' });
     await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#2266aa', cap: 'Other' });
     await legendRowStrokeColor(page, 'other proteins', '#123456');
     const index = await ruleIndexOf(page, 'Other');
@@ -1899,7 +1889,7 @@ for (const { name, history: steps } of [
 // its palette color.
 test('a stroke on a Legend row the Result no longer draws reaches no feature after a rule edit, live = Generate (OV-1987)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   await legendRowStrokeColor(page, 'CDS', '#7b2cbf');
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: 'FL2$', color: '#f4a261', cap: 'transfer RNA' });
   const index = await ruleIndexOf(page, 'transfer RNA');
@@ -1916,7 +1906,7 @@ test('a stroke on a Legend row the Result no longer draws reaches no feature aft
 // fix it kept the rule's (the old palette's) color until Generate.
 test('a palette switch recolors the CDS row a rule of a hidden feature names, live = Generate (OV-1988)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^FL2$', action: 'off' });
   await popupEdit(page, 'FL2', { fill: '#123456', scope: 'useExisting' });
   const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ feat, cap }) => ({ feat, cap })));
@@ -1939,7 +1929,7 @@ for (const [name, edit] of [
 ]) {
   test(`${name} shows its row with the block stroke after a GC row was moved first, live = Generate (OV-2188)`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'circular', results: 'single' });
     const gcContent = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.findIndex((entry) => entry.caption === 'GC content'));
     await appAction(page, 'moveLegendEntry', gcContent, 0);
     await edit(page);
@@ -1961,7 +1951,7 @@ for (const [name, field, value] of [
 ]) {
   test(`a rule edit (${name}) on a batch Result the rule does not color keeps its CDS row, live = Generate (OV-2187)`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+    await open(page, { mode: 'circular', results: 'batch' });
     await popupEdit(page, 'TESTA_0006', { fill: '#123456', scope: 'useExisting' });
     const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ feat, cap }) => ({ feat, cap })));
     expect(rules, 'Use existing color writes a CDS rule named CDS').toEqual([{ feat: 'CDS', cap: 'CDS' }]);
@@ -1981,7 +1971,7 @@ for (const [name, field, value] of [
 // The edit is one History step (PD-OI-088).
 test('a popup Legend name on the only feature of a rule row shows the Legend order Generate draws (OV-2189)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup alpha$', color: '#2a9d8f', cap: 'beta' });
   await generate(page);
@@ -2006,7 +1996,7 @@ test('a popup Legend name on the only feature of a rule row shows the Legend ord
 test('a popup Legend name on the only feature of a gene rule row keeps the row in place, live = Generate (OV-2191)', async ({ page }) => {
   test.setTimeout(240_000);
   const genbank = readFileSync(SINGLE_FIXTURE, 'utf8').replace('/product="dup alpha"', '/gene="dupA"\n                     /product="dup alpha"');
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank });
+  await open(page, { mode: 'linear', results: 'single', genbank });
   await addColorRule(page, { feat: 'CDS', qual: 'gene', val: '^dupA$', color: '#2a9d8f', cap: 'beta' });
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
   await generate(page);
@@ -2030,7 +2020,7 @@ test('a popup Legend name on the only feature of a gene rule row keeps the row i
 test('a popup Legend name on the only feature of a locus_tag rule row keeps the row in place, live = Generate (OV-2192)', async ({ page }) => {
   test.setTimeout(240_000);
   const genbank = readFileSync(SINGLE_FIXTURE, 'utf8').replace('/product="beta protein"', '/product="dup beta"');
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank });
+  await open(page, { mode: 'linear', results: 'single', genbank });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' });
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
   await generate(page);
@@ -2055,7 +2045,7 @@ test('a popup Legend name on the only feature of a locus_tag rule row keeps the 
 test('a popup Legend name that joins another row keeps that row in place, live = Generate', async ({ page }) => {
   test.setTimeout(240_000);
   const genbank = readFileSync(SINGLE_FIXTURE, 'utf8').replace('/product="beta protein"', '/product="dup beta"');
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank });
+  await open(page, { mode: 'linear', results: 'single', genbank });
   await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' });
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup alpha$', color: '#e9c46a', cap: 'delta' });
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#2a9d8f', cap: 'alpha' });
@@ -2090,7 +2080,7 @@ for (const [name, beta, rename, legend] of [
 ]) {
   test(`${name} that joins another row through a same-pattern rule keeps that row in place, live = Generate (OV-2193)`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'linear', results: 'single' });
     await addColorRule(page, { feat: 'CDS', qual: 'product', val: beta, color: '#2a9d8f', cap: 'beta' });
     await addColorRule(page, DELTA);
     await addColorRule(page, ALPHA_TEAL);
@@ -2157,7 +2147,6 @@ test('a popup color change that adds a row in a batch keeps each Result in its o
     app.form.labels_mode = 'out';
     app.form.multi_record_canvas = false;
     app.adv.circular_grouping_intent = 'batch';
-    app.autoLabelReflowEnabled = false;
   });
   await generate(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(2);
@@ -2190,7 +2179,7 @@ for (const [name, rules, legend] of [
 ]) {
   test(`a popup Legend name split off a row through ${name} of the same pattern shows the new row in Generate's place (OV-2194)`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    await open(page, { mode: 'linear', results: 'single' });
     for (const [val, cap] of rules) await addColorRule(page, { feat: 'CDS', qual: 'product', val, color: '#2a9d8f', cap });
     await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
     await generate(page);
@@ -2246,7 +2235,7 @@ for (const { name, genbank, rules, edit, legend } of [
 ]) {
   test(`${name} shows Generate's Legend order at once`, async ({ page }) => {
     test.setTimeout(240_000);
-    await open(page, { mode: 'linear', results: 'single', reflow: 'off', ...(genbank ? { genbank } : {}) });
+    await open(page, { mode: 'linear', results: 'single', ...(genbank ? { genbank } : {}) });
     for (const rule of rules) await addColorRule(page, rule);
     await generate(page);
     expect(await rowsShownAtCommit(page, edit), 'the rows the commit shows before Python redraws them')
@@ -2265,7 +2254,7 @@ for (const { name, genbank, rules, edit, legend } of [
 // old place until the next Generate.
 test('a popup color change for a rule whose row another rule also draws shows Generate\'s Legend order at once (OV-2264)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'linear', results: 'single' });
   await addColorRule(page, { ...ALPHA_TEAL, color: '#f4a261', cap: 'walk' });
   await addColorRule(page, DELTA);
   await generate(page);
@@ -2289,7 +2278,7 @@ test('a popup color change for a rule whose row another rule also draws shows Ge
 // recolors the row's rule recolors the row (OV-61).
 test('a rule commit beside a rule row with a Legend color of its own is applied, live = Generate (OV-2265)', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await open(page, { mode: 'circular', results: 'single' });
   await addColorRule(page, FL1_ALPHA);
   await legendRowColor(page, 'repeat_region', '#123456');
   await popupEdit(page, { type: 'repeat_region' }, { legendName: 'Walk group' });
@@ -2304,3 +2293,43 @@ test('a rule commit beside a rule row with a Legend color of its own is applied,
   expect(await fills(), 'the row of the recolored rule').toEqual({ alpha: '#2a9d8f', 'Walk group': '#ff0000' });
   await expectLiveEqualsGenerate(page, { label: 'a rule row with a Legend color of its own recolored' });
 });
+
+// OV-2412: a whole-row rename of a deleted rule row leaves no rule naming it, so
+// no Result can draw its key again: Restore has no row to return, and its stroke
+// asks nothing of Generate. Before, Generate failed with RESULT_INVALID.
+for (const mode of ['linear', 'circular']) {
+  test(`a deleted rule row renamed whole does not return, live = Generate (${mode})`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode, results: 'single' });
+    await legendRowStrokeColor(page, 'CDS', '#7b2cbf');
+    await renameRow(page, 'CDS', 'Renamed group');
+    await settleLive(page);
+    await deleteLegendRow(page, 'Renamed group');
+    await generate(page);
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.locus_tag === 'FL1'), null);
+      await window.Vue.nextTick();
+      app.clickedFeature.legendName = 'Walk group';
+      const applied = app.handleLegendNameCommit();
+      while (!app.legendRenameDialog.show) await new Promise((resolve) => setTimeout(resolve, 10));
+      await app.handleLegendRenameChoice('group');
+      await applied;
+      app.clickedFeature = null;
+    });
+    await settleLive(page);
+    const rows = () => page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      return { listed: app.legendEntries.map((entry) => entry.caption), deleted: app.deletedLegendEntries.map((entry) => entry.caption) };
+    });
+    await page.evaluate(() => window.__GBDRAW_APP__.restoreAllDeletedLegendEntries());
+    await settleLive(page);
+    await expectLiveEqualsGenerate(page, { label: 'the Restore after the rename' });
+    expect(await rows()).toMatchObject({ deleted: [] });
+    expect((await rows()).listed).not.toContain('Renamed group');
+    // Undo of the Generate, then of the rename, returns the deleted row.
+    await history(page, 'undo');
+    await history(page, 'undo');
+    expect((await rows()).deleted).toEqual(['Renamed group']);
+  });
+}

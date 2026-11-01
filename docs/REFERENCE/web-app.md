@@ -510,7 +510,7 @@ cards. A sequence version does not freeze its annotation table.
    To reproduce the figure, set **Label Font Size** and Record Labels' **Default
    font size** to `24`, and upload `cds_gene_qualifier_priority.tsv` as the
    **Priority File (TSV)**. Generate.
-3. Open **Editor**, turn **Auto Reflow** off for this direct-label example,
+3. Open **Editor**,
    find the Lambda portal protein, and use **Edit** and **Apply Label** to change
    its label to `portal`. Close the popup and Editor.
    This live edit is already part of the current Result.
@@ -1378,9 +1378,8 @@ rename or legend color reaches another Result at the next Generate.
 the source feature, named by its record key and biological feature ID. They stay with that feature when the displayed Result, record, or visibility
 changes. They also stay when crop, reverse complement, record order, or a second
 copy of the record changes how the feature is drawn. Every drawn copy of the
-feature shows the edit. Hiding a feature hides its label in the current Result, as Generate does;
-with **Auto Reflow** on, the remaining labels are placed again.
-**Auto Reflow** (Editor) places the labels again after each later label text, **Label visibility**, or feature visibility edit. Turning it on does not move the labels already drawn; they are placed again at the next such edit or **Generate Diagram**.
+feature shows the edit. Hiding a feature hides its label in the current Result, as Generate does.
+Each label text, **Label visibility**, or feature visibility edit places the labels again, as **Generate Diagram** does. A saved Result keeps the labels it drew until the next such edit or **Generate Diagram**.
 
 The Features list and **Search features** list the displayed Result's features
 of the types selected in **Features** at the last Generate, every feature the

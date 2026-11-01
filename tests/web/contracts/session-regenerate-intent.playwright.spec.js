@@ -12,6 +12,7 @@ const {
   getDiagramWorkerActivity,
   openApp
 } = require('../helpers/app-lifecycle.cjs');
+const { settleLive } = require('../helpers/live-generate-parity.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const svgComparisonRoot = mkdtempSync(join(tmpdir(), 'gbdraw-svg-compare-'));
@@ -283,7 +284,8 @@ const expectRulePreparationWorker = (activity, runs = 0, helpers = null) => {
   }
 };
 
-const capturePreviewWorkerStage = async (page, label, evidence, preparedRules = false) => {
+// `runs`: the label rerenders so far, which also carry resources.
+const capturePreviewWorkerStage = async (page, label, evidence, preparedRules = false, runs = 0) => {
   const activity = await getDiagramWorkerActivity(page);
   const stage = {
     label,
@@ -294,8 +296,8 @@ const capturePreviewWorkerStage = async (page, label, evidence, preparedRules = 
     transferredResourceBytes: diagramWorkerResourceBytes(activity)
   };
   if (preparedRules) {
-    expectRulePreparationWorker(activity);
-    expect(stage.transferredResourceBytes).toBe(0);
+    expectRulePreparationWorker(activity, runs);
+    if (runs === 0) expect(stage.transferredResourceBytes).toBe(0);
   } else {
     expect(stage, `${label}: preview alone must leave the Worker idle`).toEqual({
       label, constructions: 0, initializations: 0, helpers: 0, runs: 0,
@@ -397,6 +399,7 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       ? app.getEditableLabelByFeatureId(featureId(labelVisibilityFeature))
       : null;
 
+    // A Result drawn after the hide no longer lists the hidden feature.
     const visibilityFeature = expectedTarget
       ? app.extractedFeatures.find(
           (candidate) => featureId(candidate) === expectedTarget.visibilityFeatureId
@@ -405,7 +408,7 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
           featureId(candidate) !== featureId(feature)
           && hasFeatureElement(featureId(candidate))
         )) || null;
-    if (!visibilityFeature) {
+    if (!visibilityFeature && !expectedTarget) {
       throw new Error('No second loaded Feature is available for visibility editing.');
     }
 
@@ -426,9 +429,9 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
         feature.biological_feature_id || feature.biologicalFeatureId || ''
       ),
       visibilityFeature,
-      visibilityFeatureId: featureId(visibilityFeature),
-      visibilityFeatureOverrideKey: featureOverrideKey(visibilityFeature),
-      visibilityFeatureIdentity: identityKey(visibilityFeature),
+      visibilityFeatureId: visibilityFeature ? featureId(visibilityFeature) : expectedTarget.visibilityFeatureId,
+      visibilityFeatureOverrideKey: visibilityFeature ? featureOverrideKey(visibilityFeature) : expectedTarget.visibilityFeatureOverrideKey,
+      visibilityFeatureIdentity: visibilityFeature ? identityKey(visibilityFeature) : expectedTarget.visibilityFeatureIdentity,
       fillLegendCaption: String(fillLegendEntry.caption || ''),
       labelFeature,
       labelFeatureId: labelFeature ? featureId(labelFeature) : String(
@@ -519,9 +522,11 @@ const bindLoadedPreviewDirectEditLabel = (page, expected = null) => page.evaluat
       app.openFeatureEditorFromList(target.feature, { clientX: 200, clientY: 200 });
       resolved = resolveTargets();
     }
+    // A Result drawn after the label went Off no longer draws that label.
+    const labelOffGone = Boolean(expectedTarget) && !resolved.labelVisibilityEntry?.key;
     if (
       !resolved.labelFeature || !resolved.labelEntry?.key ||
-      !resolved.labelVisibilityFeature || !resolved.labelVisibilityEntry?.key
+      (!labelOffGone && (!resolved.labelVisibilityFeature || !resolved.labelVisibilityEntry?.key))
     ) {
       throw new Error('Opening the loaded Feature did not initialize two editable label bindings.');
     }
@@ -531,13 +536,20 @@ const bindLoadedPreviewDirectEditLabel = (page, expected = null) => page.evaluat
       resolved.labelFeature.record_key, resolved.labelFeature.biological_feature_id
     ]);
     target.labelKey = String(resolved.labelEntry.key || '');
-    target.labelVisibilityFeature = resolved.labelVisibilityFeature;
-    target.labelVisibilityFeatureId = featureId(resolved.labelVisibilityFeature);
-    target.labelVisibilityFeatureIdentity = JSON.stringify([
-      resolved.labelVisibilityFeature.record_key,
-      resolved.labelVisibilityFeature.biological_feature_id
-    ]);
-    target.labelVisibilityKey = String(resolved.labelVisibilityEntry.key || '');
+    if (labelOffGone) {
+      target.labelVisibilityFeature = null;
+      target.labelVisibilityFeatureId = expectedTarget.labelVisibilityFeatureId;
+      target.labelVisibilityFeatureIdentity = expectedTarget.labelVisibilityFeatureIdentity;
+      target.labelVisibilityKey = expectedTarget.labelVisibilityKey;
+    } else {
+      target.labelVisibilityFeature = resolved.labelVisibilityFeature;
+      target.labelVisibilityFeatureId = featureId(resolved.labelVisibilityFeature);
+      target.labelVisibilityFeatureIdentity = JSON.stringify([
+        resolved.labelVisibilityFeature.record_key,
+        resolved.labelVisibilityFeature.biological_feature_id
+      ]);
+      target.labelVisibilityKey = String(resolved.labelVisibilityEntry.key || '');
+    }
     target.baselineMountedContent = serializeCleanSvg(svg);
     target.loadedResultContent = String(
       window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]?.content || ''
@@ -816,16 +828,17 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
   };
 });
 
-const expectBiologicalOwnersUnchanged = (snapshot) => {
+// `rerenders`: the catalog replacements of the label rerenders so far; no direct edit replaces it.
+const expectBiologicalOwnersUnchanged = (snapshot, rerenders = 0) => {
   expect(snapshot.structural).toMatchObject({
-    directEditFeatureCatalogReplacementCount: 0,
-    directEditExtractedFeatureReplacementCount: 0,
-    directEditBiologicalFeatureReplacementCount: 0,
+    directEditFeatureCatalogReplacementCount: rerenders,
+    directEditExtractedFeatureReplacementCount: rerenders,
+    directEditBiologicalFeatureReplacementCount: rerenders,
     directEditOrthogroupReplacementCount: 0
   });
 };
 
-const expectDirectEditFlushed = (before, after) => {
+const expectDirectEditFlushed = (before, after, rerenders = 0) => {
   expect(after.result.sha256).not.toBe(before.result.sha256);
   expect(after.structural.directEditResultFlushCount).toBeGreaterThan(
     before.structural.directEditResultFlushCount
@@ -843,7 +856,7 @@ const expectDirectEditFlushed = (before, after) => {
   expect(after.history.generatedArtifactFullSerializationCount).toBe(
     before.history.generatedArtifactFullSerializationCount
   );
-  expectBiologicalOwnersUnchanged(after);
+  expectBiologicalOwnersUnchanged(after, rerenders);
 };
 
 const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (savedSvg) => {
@@ -1657,15 +1670,22 @@ test('loaded current preview supports direct edits before the first Generate', a
     textOverride: DIRECT_LABEL_TEXT,
     visibilityOverride: 'off'
   });
+  await settleLive(page);
   await settleMountedDom(page);
   const afterLabel = await captureLoadedPreviewDirectEditState(page);
-  expectDirectEditFlushed(afterVisibility, afterLabel);
-  expectLabelEdited(afterLabel);
+  // A label edit places the labels again (PD-OI-112): the first Python runs, one
+  // for each edit unless the second joins the first, which replace the catalog.
+  const labelRuns = (await getDiagramWorkerActivity(page)).runs;
+  const labelReplacements = afterLabel.structural.directEditFeatureCatalogReplacementCount;
+  expect(labelRuns).toBeGreaterThan(0);
+  expect(labelReplacements).toBeGreaterThan(0);
+  expectDirectEditFlushed(afterVisibility, afterLabel, labelReplacements);
+  expectLabelEdited(afterLabel, { generated: true });
   expect(afterLabel.overrides).toMatchObject({
     labelText: DIRECT_LABEL_TEXT,
     labelVisibility: 'off'
   });
-  await capturePreviewWorkerStage(page, 'after label text and visibility', previewWorkerStages, true);
+  await capturePreviewWorkerStage(page, 'after label text and visibility', previewWorkerStages, true, labelRuns);
 
   const legendApplied = await page.evaluate(async ({ color, stroke, strokeWidth }) => {
     const app = window.__GBDRAW_APP__;
@@ -1687,14 +1707,14 @@ test('loaded current preview supports direct edits before the first Generate', a
   expect(legendApplied).toEqual({ color: true, stroke: true, strokeWidth: true });
   await settleMountedDom(page);
   const afterLegend = await captureLoadedPreviewDirectEditState(page);
-  expectDirectEditFlushed(afterLabel, afterLegend);
+  expectDirectEditFlushed(afterLabel, afterLegend, labelReplacements);
   expectLegendEdited(afterLegend);
   expect(afterLegend.overrides.legendColor).toBe(DIRECT_LEGEND_COLOR);
   expect(afterLegend.overrides.legendStroke).toMatchObject({
     strokeColor: DIRECT_LEGEND_STROKE,
     strokeWidth: DIRECT_LEGEND_STROKE_WIDTH
   });
-  await capturePreviewWorkerStage(page, 'after legend color', previewWorkerStages, true);
+  await capturePreviewWorkerStage(page, 'after legend color', previewWorkerStages, true, labelRuns);
 
   // A draft config that applies on Generate (Strain; the Plot Title, its
   // position and Species are live edits since PD-OI-103, G1 and G2).
@@ -1702,15 +1722,15 @@ test('loaded current preview supports direct edits before the first Generate', a
   await settleMountedDom(page);
   const afterDraftConfig = await captureLoadedPreviewDirectEditState(page);
   expect(afterDraftConfig.result.sha256).toBe(afterLegend.result.sha256);
-  expectBiologicalOwnersUnchanged(afterDraftConfig);
-  await capturePreviewWorkerStage(page, 'after divergent active config', previewWorkerStages, true);
+  expectBiologicalOwnersUnchanged(afterDraftConfig, labelReplacements);
+  await capturePreviewWorkerStage(page, 'after divergent active config', previewWorkerStages, true, labelRuns);
 
   const saved = await saveCurrentSession(page, 'loaded-preview-direct-edit');
   const afterSave = await captureLoadedPreviewDirectEditState(page);
   expect(afterSave.result.sha256).toBe(afterLegend.result.sha256);
-  expectAllDirectEdits(afterSave);
-  expectBiologicalOwnersUnchanged(afterSave);
-  await capturePreviewWorkerStage(page, 'after Save without Generate', previewWorkerStages, true);
+  expectAllDirectEdits(afterSave, { generated: true });
+  expectBiologicalOwnersUnchanged(afterSave, labelReplacements);
+  await capturePreviewWorkerStage(page, 'after Save without Generate', previewWorkerStages, true, labelRuns);
   expect(
     saved.session.results[saved.session.ui.selectedResultIndex].content
   ).toBe(await page.evaluate(() => (
@@ -1757,9 +1777,9 @@ test('loaded current preview supports direct edits before the first Generate', a
     directMetrics.directEditResultFlushCount
   );
   expect(directMetrics).toMatchObject({
-    directEditFeatureCatalogReplacementCount: 0,
-    directEditExtractedFeatureReplacementCount: 0,
-    directEditBiologicalFeatureReplacementCount: 0,
+    directEditFeatureCatalogReplacementCount: labelReplacements,
+    directEditExtractedFeatureReplacementCount: labelReplacements,
+    directEditBiologicalFeatureReplacementCount: labelReplacements,
     directEditOrthogroupReplacementCount: 0
   });
 
@@ -1773,10 +1793,11 @@ test('loaded current preview supports direct edits before the first Generate', a
     freshTarget,
     await bindLoadedPreviewDirectEditLabel(freshPage, target)
   );
-  expect(freshTarget).toEqual(target);
+  // The binder numbers the labels the Result draws, so the rerender moved the key.
+  expect({ ...freshTarget, labelKey: '' }).toEqual({ ...target, labelKey: '' });
   await startLoadedPreviewDirectEditProbe(freshPage);
   const freshlyLoaded = await captureLoadedPreviewDirectEditState(freshPage);
-  expectAllDirectEdits(freshlyLoaded);
+  expectAllDirectEdits(freshlyLoaded, { generated: true });
   expect(freshlyLoaded.result.equalsLoadedResult).toBe(true);
   expect(freshlyLoaded.history).toMatchObject({
     undoCount: 0,
@@ -1829,7 +1850,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   await settleMountedDom(freshPage);
   const generatedUndo = await captureLoadedPreviewDirectEditState(freshPage);
   expect(generatedUndo.result.equalsLoadedResult).toBe(true);
-  expectAllDirectEdits(generatedUndo);
+  expectAllDirectEdits(generatedUndo, { generated: true });
   expect(generatedUndo.history).toMatchObject({
     undoCount: 0,
     redoCount: 1,

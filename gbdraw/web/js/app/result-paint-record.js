@@ -83,30 +83,6 @@ export const sameColors = (left, right) => left[0] === right[0] && left[1] === r
 /** @param {Pick<EditorPaintState, 'colors' | 'visibility'>} left @param {Pick<EditorPaintState, 'colors' | 'visibility'>} right */
 const sameFills = (left, right) => sameColors(left.colors, right.colors) && left.visibility === right.visibility;
 
-/**
- * The label rows of `EditorPaintState.labels`: [recordKey, biologicalFeatureId,
- * labelVisibility, labelText, labelSourceText], and the bulk label texts by source text.
- * @typedef {[[string, string, string | null, string | null, string | null][], Record<string, string>]} LabelPaintRows
- */
-
-// Whether a Result drawn with the label intent `drawn` lacks what `current`
-// draws: a label On or Off that returned to Default, or an edited text that
-// left. Only Python decides whether Default draws a label and which text it
-// started from, so no projection of the Result's bytes can show them; another
-// value (Off to On, one text to another) the label projection shows or asks for.
-/** @param {string} drawn @param {string} current */
-export const drawnLabelIntentGone = (drawn, current) => {
-  const [drawnRows, drawnBulk] = /** @type {LabelPaintRows} */ (JSON.parse(drawn));
-  const [rows, bulk] = /** @type {LabelPaintRows} */ (JSON.parse(current));
-  const rowKey = (/** @type {LabelPaintRows[0][number]} */ [recordKey, featureId]) => JSON.stringify([recordKey, featureId]);
-  const held = new Map(rows.map((row) => [rowKey(row), row]));
-  const shownByDefault = (/** @type {string | null | undefined} */ visibility) => visibility !== 'on' && visibility !== 'off';
-  return drawnRows.some((row) => {
-    const now = held.get(rowKey(row));
-    return (!shownByDefault(row[2]) && shownByDefault(now?.[2])) || (row[3] !== null && (now?.[3] ?? null) === null);
-  }) || Object.entries(drawnBulk).some(([source, text]) => bulk[source] !== text);
-};
-
 // A paint state no editor state equals: a Result recorded with it shows
 // every paint domain and the labels on its next display. The Legend order is
 // kept: replaying the default order needs the Result's generated inventory.
@@ -116,11 +92,10 @@ const unknownPaint = (current) => ({ ...current, colors: [null, ''], visibility:
 export const createResultPaintRecord = () => {
   /** @type {Map<string, EditorPaintState>} */
   const shownByResult = new Map();
-  // The editor state each Result's bytes were drawn with, which a live edit
-  // does not change: a rerender or a Generate draws a new Result. A restored
-  // Result is taken as drawn with the state it was restored under.
+  // The state of its drawing at the restore, for a restored Result not displayed:
+  // what its bytes are taken to show (OV-2326).
   /** @type {Map<string, EditorPaintState>} */
-  const drawnByResult = new Map();
+  const stateAtRestore = new Map();
   let bound = '';
   // The paint domains the displayed Result was not shown (a declined or
   // failed display); recorded with it when it leaves.
@@ -154,12 +129,12 @@ export const createResultPaintRecord = () => {
         if (shownByResult.has(identity)) return;
         const notDisplayed = restored && identity !== displayed;
         shownByResult.set(identity, notDisplayed ? unknownPaint(current) : drawn);
-        drawnByResult.set(identity, notDisplayed ? drawingStateOf(identity) : drawn);
+        if (notDisplayed) stateAtRestore.set(identity, drawingStateOf(identity));
       });
       [...shownByResult.keys()].forEach((identity) => {
         if (live.has(identity)) return;
         shownByResult.delete(identity);
-        drawnByResult.delete(identity);
+        stateAtRestore.delete(identity);
       });
       bound = displayed;
       const { colors, visibility } = drawn;
@@ -224,12 +199,28 @@ export const createResultPaintRecord = () => {
       return drawn ? sameFills(drawn, current) && drawn.strokes === current.strokes : false;
     },
     /**
-     * The editor state the Result's bytes were drawn with.
+     * The rule table a Result was restored with, when it is not known to show another.
      * @param {string} identity
-     * @returns {EditorPaintState | undefined}
+     * @returns {SpecificColorRule[] | null}
      */
-    drawn(identity) {
-      return drawnByResult.get(identity);
+    restoredRules(identity) {
+      const restored = stateAtRestore.get(identity);
+      return restored ? paintRuleTable(restored) : null;
+    },
+    /**
+     * Whether the label or Feature visibility intent changed since the Result
+     * was last shown (`previous`, from `display`), or restored when it has not
+     * been shown since: only a rerender places its labels for what its drawing
+     * holds now. The display records what it shows, so a Result answers once
+     * for a change.
+     * @param {string} identity
+     * @param {EditorPaintState} previous
+     * @param {EditorPaintState} current
+     */
+    placedForOtherIntent(identity, previous, current) {
+      const restored = stateAtRestore.get(identity) ?? current;
+      return (previous.labels || restored.labels) !== current.labels
+        || (previous.visibility || restored.visibility) !== current.visibility;
     },
     /** @param {string} identity The Result shown again with the intent it left with (E1). */
     rebind(identity) {

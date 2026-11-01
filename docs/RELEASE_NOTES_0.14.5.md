@@ -118,14 +118,22 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   through. The Align button of the similarity group drawer, English in every
   language until now, is translated too. All translations are still LLM drafts.
 - **Web app: Reset Settings and a Result not shown.** After **Reset Settings**, the
-  other mode's Result and the other Results of a batch now show what **Generate
-  Diagram** draws when you display them: features and labels hidden when they were
-  generated return, an edited label text returns to its own text, and after a
-  Session load the Legend rows of removed color rules leave. Before, these stayed
-  until the next Generate.
+  other mode's Result and the other Results of a batch now show the reset feature
+  and label edits when you display them: features and labels hidden there return,
+  and an edited label text returns to its own text. A failed redraw reports its
+  failure and does not run again at the next display. Settings marked **Applies on
+  Generate** still wait for **Generate Diagram**. A Result that Reset Settings, Save,
+  and Load passed before it was shown again also keeps its label texts, **Label
+  visibility**, and label places until the next such edit or **Generate Diagram**;
+  it still draws the features it lacks.
 
 ## Changed behavior
 
+- **Web app: the Auto Reflow setting is gone.** Each label text, **Label
+  visibility**, or feature visibility edit now places the labels again, as
+  **Generate Diagram** does, also after Undo and Redo of such an edit. A Session
+  that holds the old value loads and ignores it, and keeps the labels it drew until
+  the next such edit or **Generate Diagram**.
 - **Built-in color tables.** `-t/--table` and `FeatureOptions.color_table`
   accept `builtin:cog`, `builtin:phrog`, `builtin:plastid`, and
   `builtin:mitochondrion`; an unknown name fails with the list of names, and a

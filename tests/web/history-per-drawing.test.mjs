@@ -207,7 +207,7 @@ test('a title edit in Circular is undone in Linear', async () => {
 });
 
 // A3 review M1, R15-23: a checkpoint Undo restores what its drawing owns. The
-// Session title and Auto Reflow edits made later in Linear are project steps,
+// Session title and PNG DPI edits made later in Linear are project steps,
 // undone before the older Circular step, and the Linear input type stays.
 test('a Circular step older than the Session edits is undone after them and keeps Linear\'s input type', async () => {
   const app = createAppSetup();
@@ -217,18 +217,18 @@ test('a Circular step older than the Session edits is undone after them and keep
   state.lInputType.value = 'gb';
   const before = circular.form.prefix;
   const title = state.sessionTitle.value;
-  const reflowBefore = state.autoLabelReflowEnabled.value;
+  const dpiBefore = state.downloadDpi.value;
   await history.runUndoableCheckpoint('Circular checkpoint', () => { circular.form.prefix = 'checkpoint-prefix'; return true; });
   assert.equal(circular.form.prefix, 'checkpoint-prefix');
 
   assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
   await history.runUndoable('Linear input type', () => { state.lInputType.value = 'gff'; });
   await history.runUndoable('Rename Session', () => { state.sessionTitle.value = 'title set in Linear'; });
-  await history.runUndoable('Auto Reflow', () => { state.autoLabelReflowEnabled.value = !reflowBefore; });
+  await history.runUndoable('PNG DPI', () => { state.downloadDpi.value = dpiBefore === 300 ? 600 : 300; });
 
   assert.deepEqual(app.selectDrawing('circular'), { status: 'ok' });
   await app.undoHistory();
-  assert.equal(state.autoLabelReflowEnabled.value, reflowBefore, 'the newest step, Auto Reflow, is undone first');
+  assert.equal(state.downloadDpi.value, dpiBefore, 'the newest step, PNG DPI, is undone first');
   assert.equal(circular.form.prefix, 'checkpoint-prefix');
   await app.undoHistory();
   assert.equal(state.sessionTitle.value, title, 'then the title');

@@ -13,7 +13,7 @@ test.describe.configure({ retries: 0 });
 const USER_CDS = '#123456';
 
 const openWithUserColor = async (page) => {
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await evaluateWithRetainedPromise(page, async (color) => {
     await window.__GBDRAW_HISTORY__.runUndoable('Change color', async () => {
       window.__GBDRAW_APP__.editDefaultColor('CDS', color);
@@ -132,7 +132,7 @@ test('Default colors Reset asks before it discards a user default color', async 
 // key does not become a user default color.
 test('a Default colors key set to Auto shows the palette color, and Color starts from it', async ({ page }) => {
   test.setTimeout(180_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   const colors = page.locator('summary[aria-label="Colors"]');
   if ((await colors.locator('..').getAttribute('open')) === null) await colors.click();
   const panel = page.locator('h4[aria-label="DEFAULT COLORS"]').locator('../..');
@@ -163,7 +163,7 @@ test('a Default colors key set to Auto shows the palette color, and Color starts
 // live.
 test('while a palette is queued, Apply to all shows its color now and switching back asks', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await page.evaluate(async () => {
     (await import('/gbdraw/web/js/state.js')).state.paletteInstantPreviewEnabled.value = false;
   });
@@ -225,7 +225,7 @@ test('while a palette is queued, Apply to all shows its color now and switching 
 // drawing is shown again, its Result is drawn with the applied palette.
 test('a palette queued in the hidden drawing is drawn once Instant Preview is on and it is shown', async ({ page }) => {
   test.setTimeout(240_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await page.evaluate(async () => {
     (await import('/gbdraw/web/js/state.js')).state.paletteInstantPreviewEnabled.value = false;
   });
@@ -267,7 +267,7 @@ test('a palette queued in the hidden drawing is drawn once Instant Preview is on
 // rename of the row keeps its features in that color (OV-311).
 test('a palette row offers and keeps the color it shows after palette edits', async ({ page }) => {
   test.setTimeout(300_000);
-  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await open(page, { mode: 'circular', results: 'single' });
   await page.evaluate(async () => {
     (await import('/gbdraw/web/js/state.js')).state.paletteInstantPreviewEnabled.value = true;
   });

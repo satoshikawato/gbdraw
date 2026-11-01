@@ -326,7 +326,7 @@ test('a rerender of a loaded Session names the catalog under the names its Resul
       const before = await mark(page);
       await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
-        state.labelReflowForceRequestSeq.value += 1;
+        state.labelReflowRequestSeq.value += 1;
       });
       await expect.poll(async () => (await since(page, before)).transports.length, { timeout: 180_000 }).toBe(1);
       await expect.poll(() => page.evaluate(async () =>

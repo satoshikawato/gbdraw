@@ -8350,17 +8350,13 @@
                                                { label: t('Export Feature Edits TSV'), icon: 'ph-download-simple', describedby: 'help-feature-edits-tsv', run: downloadFeatureEditTable },
                                                { label: t('Load Feature Edits TSV'), icon: 'ph-upload-simple', describedby: 'help-feature-edits-tsv', disabled: !semanticMutationAvailable, run: () => $refs.featureEditTableInput.click() }
                                              ]"></action-menu>
-                                <label class="inline-flex items-center gap-2 text-[10px] text-slate-600 select-none cursor-pointer">
-                                    <input type="checkbox" v-model="autoLabelReflowEnabled" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable">
-                                    <span>{{ t('Auto Reflow') }}</span>
-                                </label>
                                 <span v-if="labelReflowProcessing" class="text-[10px] text-blue-600 flex items-center gap-1" aria-live="polite">
                                     <gbdraw-loader></gbdraw-loader>
                                     {{ t('Reflowing label placement...') }}
                                 </span>
                             </div>
                             <p v-if="labelReflowLastError" class="text-[10px] text-amber-700" :title="errorText(labelReflowLastError.summaryParts)">
-                                <i class="ph ph-warning" aria-hidden="true"></i> {{ t('Auto Reflow failed. Current diagram is kept.') }}
+                                <i class="ph ph-warning" aria-hidden="true"></i> {{ t('Live edit failed: direct edits already applied are kept; geometry may still need updating.') }}
                             </p>
                         </div>
                     </div>

@@ -98,7 +98,6 @@ const resetEditorDraftState = (state, drawing) => {
   // the caption Python draws, its key.
   resetPaintEdits(drawing.slices.paint);
 
-  state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;
 
   state.featureSearch.value = '';

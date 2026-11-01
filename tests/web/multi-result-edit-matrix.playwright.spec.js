@@ -493,7 +493,8 @@ const SWITCH_EDITS = [
     app.clickedFeature = null;
   })],
   ['feature visibility', (page) => editFeature(page, 'TESTB_0004', { visibility: 'off' })],
-  ['label text', (page) => editFeature(page, 'TESTB_0003', { labelText: 'SWITCH_LABEL' })],
+  // A label text rerenders the Results, which the binder then binds.
+  ['label text', (page) => editFeature(page, 'TESTB_0003', { labelText: 'SWITCH_LABEL' }), null, 'SWITCH_LABEL'],
   ['legend entry color', onApp((color) => {
     const app = window.__GBDRAW_APP__;
     return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'tRNA'), color);

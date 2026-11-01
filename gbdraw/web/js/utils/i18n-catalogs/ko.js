@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "자동({count})",
   "Auto ({mode})": "자동({mode})",
   "Auto ({value})": "자동({value})",
-  "Auto Reflow": "자동 재배치",
-  "Auto Reflow failed. Current diagram is kept.": "‘자동 재배치’에 실패했습니다. 현재 다이어그램은 유지됩니다.",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "‘자동’은 feature 안에 배치할 공간이 있는 레이블을 내부에 배치하고 나머지는 외부에 배치합니다. ‘내부 배치만’은 외부 배치가 필요한 레이블을 제외합니다. ‘외부 배치만’은 레이블을 feature 본체 바깥에 둡니다.",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "‘자동’은 트랙 레이아웃을 따릅니다(‘위쪽’ 또는 ‘축상 feature’: 레이블을 위쪽에 배치, ‘아래쪽’: 레이블을 아래쪽에 배치). ‘feature 위쪽’은 레이블을 feature 위쪽에 그립니다(‘가닥별 표시’가 켜져 있으면 − 가닥 feature의 레이블은 아래쪽에 그립니다).",
   "Auto hides these fields throughout the diagram": "‘자동’은 다이어그램 전체에서 이 필드를 숨깁니다",

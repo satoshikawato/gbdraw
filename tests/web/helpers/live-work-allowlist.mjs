@@ -106,8 +106,8 @@ export const WORK_ALLOWLIST = [
   {
     // One compile for the field set that changes the rules Generate reads (the
     // value); the other steps of the add leave them as they were. The rule's
-    // matches are one request; it hides features, so no rerender.
-    kind: 'Feature visibility rule add', stages: ['visibility'], compiles: 1, requests: ['evaluateRules'],
+    // matches are one request, and the rerender places the labels.
+    kind: 'Feature visibility rule add', stages: ['visibility'], compiles: 1, requests: ['evaluateRules', 'render'],
     run: (page) => addVisibilityRule(page, BATCH_0004_OFF)
   },
   {
@@ -151,30 +151,28 @@ export const WORK_ALLOWLIST = [
   {
     // OV-200 (U2BFIX2 review M1): only Python decides whether the label text
     // fits, so the table asks for the rerender; its one label follow places
-    // the labels too, so one reflow runs (Auto Reflow on). Requests: the
+    // the labels too, so one rerender runs. Requests: the
     // table and the visibility rule's matches on the catalog Generate drew;
     // the rerender's rules are Python's captions already (OV-238).
     kind: 'Feature Edits TSV load (Embedded Only)', stages: ['visibility'], compiles: 1,
     requests: ['readFeatureOverrideTable', 'evaluateRules', 'render'],
     before: async (page) => {
       await generateEmbeddedOnly(page);
-      await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; });
     },
     run: (page) => loadFeatureEdits(page, [[embeddedLabelFeatures[0], '', 'dup edited']])
   },
   {
-    // A label a table hides needs no fit decision: no rerender (Auto Reflow
-    // off). The table keeps the label text it loaded before. Requests: the
+    // The table keeps the label text it loaded before. Requests: the
     // table, and the color and visibility rule matches on the catalog the
     // rerender drew.
     kind: 'Feature Edits TSV load, label Off (Embedded Only)', stages: ['visibility'], compiles: 1,
-    requests: ['readFeatureOverrideTable', 'evaluateRules', 'evaluateRules'],
-    before: (page) => page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; }),
+    requests: ['readFeatureOverrideTable', 'evaluateRules', 'evaluateRules', 'render'],
     run: (page) => loadFeatureEdits(page, [[embeddedLabelFeatures[0], '', 'dup edited'], [embeddedLabelFeatures[1], 'off', '']])
   },
   {
-    // The rerender decides the fit; its rules are Python's captions already (OV-238).
-    kind: 'popup label text (Embedded Only)', stages: [], compiles: 0, requests: ['render'],
+    // The rerender decides the fit, and prepares the color and visibility rule
+    // matches on the catalog the rerender before it drew.
+    kind: 'popup label text (Embedded Only)', stages: [], compiles: 0, requests: ['evaluateRules', 'evaluateRules', 'render'],
     run: (page) => popupEdit(page, embeddedLabelFeatures[0], { labelText: 'dup' })
   },
   // U3a (R14-8): the Legend edits. A row's edits show live in one compile; a
@@ -306,5 +304,35 @@ export const WORK_ALLOWLIST = [
     // PD-OI-103). One action asks for one rerender (OV-1076).
     kind: 'Reset Settings', stages: ['fills', 'legend', 'legendFills', 'strokes', 'visibility'], compiles: 2, requests: ['render'],
     run: resetSettings
+  },
+  {
+    // A Result that was not displayed during Reset Settings, in a batch where
+    // the Reset cleared a Feature visibility edit: the Reset's own rerender drew
+    // the whole batch, so the display shows its Legend and asks for nothing.
+    kind: 'Result display after Reset Settings', stages: ['legend'], compiles: 1, requests: [],
+    before: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        app.form.labels_mode = 'out';
+        app.form.multi_record_canvas = false;
+        app.adv.circular_grouping_intent = 'batch';
+      });
+      await generate(page);
+      await showResult(page, 1);
+      await popupEdit(page, { biological_feature_id: 'f5aa08bf5', record_idx: 1 }, { visibility: 'off' });
+      await generate(page);
+      await showResult(page, 0);
+      const kept = await page.evaluate(() => {
+        const { form, adv } = window.__GBDRAW_APP__;
+        return { labels: form.labels_mode, canvas: form.multi_record_canvas, grouping: adv.circular_grouping_intent };
+      });
+      await resetSettings(page);
+      await page.evaluate(({ labels, canvas, grouping }) => {
+        const { form, adv } = window.__GBDRAW_APP__;
+        Object.assign(form, { labels_mode: labels, multi_record_canvas: canvas });
+        adv.circular_grouping_intent = grouping;
+      }, kept);
+    },
+    run: async (page) => { await showResult(page, 1); await settleLive(page); }
   }
 ];

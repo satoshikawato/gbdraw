@@ -202,8 +202,6 @@ export default Object.freeze({
   "Auto ({count})": "Automático ({count})",
   "Auto ({mode})": "Automático ({mode})",
   "Auto ({value})": "Automático ({value})",
-  "Auto Reflow": "Reorganização automática",
-  "Auto Reflow failed. Current diagram is kept.": "A reorganização automática falhou. O diagrama atual foi mantido.",
   "Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies.": "Com Automático, os rótulos que cabem ficam dentro das features e os demais ficam fora delas. Com Somente incorporados, os rótulos que precisam de posicionamento externo são descartados. Com Somente externos, os rótulos ficam fora do corpo das features.",
   "Auto follows the track layout (Above or Features on axis: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on).": "Com Automático, o posicionamento segue o layout das trilhas (Acima ou Features no eixo: rótulos acima; Abaixo: rótulos abaixo). Com Acima da feature, os rótulos são desenhados acima das features (e abaixo das features da fita − quando Separar fitas está ativado).",
   "Auto hides these fields throughout the diagram": "com Automático, estes campos ficam ocultos em todo o diagrama",

@@ -4,7 +4,7 @@
 // a browser.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { labelsPlacedUnder, nextStep, whyNotApplicable } from './helpers/live-random-walk.mjs';
+import { nextStep, whyNotApplicable } from './helpers/live-random-walk.mjs';
 import { createRandom } from './helpers/live-random-walk-plan.mjs';
 
 const LEGEND_ROW_KINDS = ['stroke', 'legendRename', 'legendColor', 'legendDelete'];
@@ -14,7 +14,6 @@ const walkState = ({ legend, deletedLegend }) => ({
   features: [{ key: 'record 0, feature f38ba7c3f', label: 'CDS|1|300|FL1|', span: '1|300', type: 'CDS', tag: 'FL1', product: '' }],
   resultCount: 1,
   resultIndex: 0,
-  reflow: false,
   visibilityRules: 0,
   colorRules: 0,
   legend,
@@ -64,14 +63,4 @@ test('a replay refuses a restoring step when no row is deleted', () => {
   const step = { kind: 'legendColor', prepare: { kind: 'legendRestore' }, row: 'CDS', color: '#123456' };
   assert.equal(whyNotApplicable(step, walkState({ legend: ['CDS'], deletedLegend: [] }), context),
     'its prepare step: no deleted Legend row');
-});
-
-// An Undo of the walk's Generate returns the Result as the step before left it,
-// whatever Auto Reflow says now; a run of Undos keeps the state of that step.
-test('the labels after an Undo were placed under the state of the step before it', () => {
-  assert.equal(labelsPlacedUnder('labelText', false, true), false);
-  assert.equal(labelsPlacedUnder('undo', true, false), false);
-  assert.equal(labelsPlacedUnder('undo', true, labelsPlacedUnder('undo', true, false)), false);
-  assert.equal(labelsPlacedUnder('undoRedo', true, false), true);
-  assert.equal(labelsPlacedUnder('fill', true, false), true);
 });
