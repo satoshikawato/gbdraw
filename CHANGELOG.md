@@ -20,6 +20,9 @@ write-up of a release.
   the Language menu. Polish and Turkish letters use the bundled Inter Latin
   Extended subset, Russian and Ukrainian letters the bundled Inter Cyrillic
   subset.
+- Fixed: Web UI: wrong meanings, broken grammar, and inconsistent terms in the Japanese,
+  Simplified and Traditional Chinese, Korean, Spanish, French, Portuguese, Thai, Indonesian,
+  and Vietnamese translations. All translations are still LLM drafts.
 - Fixed: in the Web UI record popup, the Alignment line of a record that was
   not moved shows the reason as its label reads, for example "Not moved
   (Skipped by user)"; it was lower-cased, which damaged German nouns and the

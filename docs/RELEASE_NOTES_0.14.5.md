@@ -109,7 +109,13 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   the row (`Undo Reset preserved setting`), the lane warning quotes the control,
   several rows read `Track rows 3 and 4`, and `Auto (subject (auto))` reads
   `Auto (subject)`. The sentences in the **Labels do not fit** dialog's notes and
-  reasons are still in English.
+  reasons, and its line with each record's label count and font size, are still
+  in English.
+- **Web app: corrected translations in the ten earlier languages.** Japanese,
+  Simplified and Traditional Chinese, Korean, Spanish, French, Portuguese, Thai,
+  Indonesian, and Vietnamese had wrong meanings, broken grammar, and inconsistent
+  terms corrected throughout the UI, the same process the six new languages went
+  through. All translations are still LLM drafts.
 - **Web app: Reset Settings and a Result not shown.** After **Reset Settings**, the
   other mode's Result and the other Results of a batch now show what **Generate
   Diagram** draws when you display them: features and labels hidden when they were
