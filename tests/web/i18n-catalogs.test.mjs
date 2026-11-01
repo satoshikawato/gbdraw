@@ -646,7 +646,7 @@ test('the English cites the controls the UI has and names what each text describ
   assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
   for (const key of [
     'Field to search', 'Tick Font Size', 'Annotation qualifier value', 'No feature types selected', 'Comparison ring color for {file}',
-    'Max hits per protein for groups', 'Protein BLASTP max hits per protein for groups', 'Color set on individual features',
+    'Max hits per protein for groups', 'Color set on individual features',
     'Upload BLAST TSV', 'Advanced similarity group settings'
   ]) assert.ok(keys.includes(key), key);
 });

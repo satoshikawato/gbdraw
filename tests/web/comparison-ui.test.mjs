@@ -102,9 +102,6 @@ test('fresh Linear state projects No comparison', () => {
   assert.equal(projection.topologyKey, 'none');
   assert.equal(projection.topologyLabel, 'No comparison');
   assert.equal(projection.activePairCount, 0);
-  assert.deepEqual(projection.sourceBreakdown, {
-    key: 'none', losat: 0, upload: 0, label: 'No active pairs'
-  });
   // The pressed action shows the intent; no status or summary text is projected.
   assert.equal(Object.hasOwn(projection, 'currentStatusLabel'), false);
   assert.equal(Object.hasOwn(projection, 'summaryText'), false);
@@ -120,9 +117,6 @@ test('adjacent LOSAT keeps selection intent separate from resolved work', () => 
   assert.equal(projection.topologyLabel, 'All adjacent pairs');
   assert.equal(projection.topologyPairLabel, '2 adjacent pairs');
   assert.equal(projection.activePairCount, 2);
-  assert.deepEqual(projection.sourceBreakdown, {
-    key: 'losat', losat: 2, upload: 0, label: '2 LOSAT'
-  });
   assert.equal(projection.activeLosatModeLabel, 'LOSATN');
   assert.match(projection.filterSummary, /^E-value <= /);
 
@@ -141,7 +135,6 @@ test('adjacent LOSAT keeps selection intent separate from resolved work', () => 
   });
   assert.equal(oneRecord.intentKey, 'losat');
   assert.equal(oneRecord.activePairCount, 0);
-  assert.equal(oneRecord.sourceBreakdown.key, 'none');
   assert.equal(oneRecord.topologyPairLabel, '0 adjacent pairs');
 });
 
@@ -165,9 +158,6 @@ test('adjacent upload summary uses only resolver-active uploads', () => {
   const projection = project(plan);
   assert.equal(projection.intentKey, 'upload');
   assert.equal(projection.activePairCount, 2);
-  assert.deepEqual(projection.sourceBreakdown, {
-    key: 'upload', losat: 0, upload: 2, label: '2 upload'
-  });
   assert.equal(projection.topologyPairLabel, '2 adjacent pairs');
   // The pair rows and the issue list say which upload pairs lack a file.
   assert(!projection.sectionKeys.settings.includes('upload-readiness'));
@@ -187,9 +177,6 @@ test('selected upload and mixed plans project custom intent and active source co
   assert.equal(selectedUpload.intentKey, 'custom');
   assert.equal(selectedUpload.topologyLabel, 'Selected pairs');
   assert.equal(selectedUpload.activePairCount, 1);
-  assert.deepEqual(selectedUpload.sourceBreakdown, {
-    key: 'upload', losat: 0, upload: 1, label: '1 upload'
-  });
   assert(!selectedUpload.sectionKeys.settings.includes('losat-mode'));
 
   const mixedPlan = {
@@ -208,9 +195,6 @@ test('selected upload and mixed plans project custom intent and active source co
   const mixed = project(mixedPlan);
   assert.equal(mixed.intentKey, 'custom');
   assert.equal(mixed.activePairCount, 2);
-  assert.deepEqual(mixed.sourceBreakdown, {
-    key: 'mixed', losat: 1, upload: 1, label: '1 LOSAT, 1 upload'
-  });
   assert(mixed.sectionKeys.settings.includes('losat-mode'));
   assert(!mixed.sectionKeys.settings.includes('upload-readiness'));
 });

@@ -121,7 +121,7 @@ const REASONS = Object.freeze({
   ARRAY: 'Use a list.', OBJECT: 'Use an object.', FIELDS: 'Check the required fields.', REQUIRED: 'Supply the required value.',
   ORDER: 'The start or minimum must not exceed the end or maximum.', INCREASING: 'Use a minimum below the maximum.', RECORD_BOUNDS: 'Keep the region within the record length.',
   STRAND: 'Use -1, 1, or no strand.', DISPLAY_START_BOUNDS: 'Use a display start between 1 and the record length.', CROP_START_CONFLICT: 'Choose a crop or an explicit display start.',
-  REFERENCE_REQUIRED: 'Supply the depth reference column.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
+  REFERENCE_REQUIRED: 'Fill in the reference name on every row of the Depth TSV.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
   WORKSPACE: 'Retry the operation.', OUT_OF_RANGE: 'Choose a record within the loaded range.',
   NO_MATCH: 'Choose an available record.', AMBIGUOUS: 'Use #<number> to distinguish records with the same ID.',
   SELECTOR_FORMAT: 'Use #<number> or a record ID.', SELECT_ONE: 'Select exactly one record.',
@@ -228,7 +228,7 @@ const DEFINITIONS = Object.freeze({
   // The same request fails the same way until the setting or the mode changes.
   MODE_SETTING: ['A preserved session setting does not apply to this diagram mode.', ['edit-input']],
   // The Session's Reset alignment evidence is bound to the records and plan of the latest Align.
-  ALIGNMENT_RESET_EVIDENCE: ['The Reset alignment evidence of the latest Align does not match the current records or alignment plan. Undo the changes made after Align, or select Align… again.', ['edit-input']],
+  ALIGNMENT_RESET_EVIDENCE: ['What Reset alignment would restore no longer matches the current records or alignment plan. Undo the changes made after Align, or select Align… again.', ['edit-input']],
   REGEX_SYNTAX: ['Not a valid regular expression.', ['edit-pattern', 'retry']],
   RESOURCE_INVALID: ['Input resource preparation failed. Reselect the input and retry.', ['select-input', 'retry']],
   HELPER_PROTOCOL: ['The helper request is invalid. Retry the operation.', ['retry', 'save-session']],
@@ -246,19 +246,19 @@ const DEFINITIONS = Object.freeze({
 });
 
 /** @type {Readonly<Record<string, string>>} */
-const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits',
-  losatp_max_hits: 'Protein BLASTP Pairwise max hits', losatp_max_target_seqs: 'Protein BLASTP Max target seqs',
-  losatp_member_max_hits: 'Protein BLASTP max hits per protein for groups',
+const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Pairwise display max hits',
+  losatp_max_hits: 'Pairwise display max hits', losatp_max_target_seqs: 'LOSATP Max target seqs',
+  losatp_member_max_hits: 'Max hits per protein for groups',
   output_prefix: 'Output Prefix',
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',
   evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length', wrap_length: 'Bases per row', anchor_feature: 'Feature selector',
-  plot_title_font_size: 'Plot Title Font Size', font_family: 'Font', feature_width_circular: 'Feature Width',
+  plot_title_font_size: 'Plot Title Font Size', font_family: 'Font', feature_width_circular: 'Feature Track Width',
   depth_width_circular: 'Depth Width', gc_content_width_circular: 'GC Content Width',
   gc_content_radius_circular: 'GC Content Radius', gc_skew_width_circular: 'GC Skew Width',
-  gc_skew_radius_circular: 'GC Skew Radius', match_height: 'Pairwise Match Height',
-  conservation_ring_width: 'Comparison ring width', conservation_ring_gap: 'Comparison ring gap',
+  gc_skew_radius_circular: 'GC Skew Radius', match_height: 'Match height',
+  conservation_ring_width: 'Ring Width', conservation_ring_gap: 'Comparison ring gap',
   center_reserved_radius: 'Center Reserved Radius', multi_record_min_radius_ratio: 'Minimum radius ratio',
   multi_record_column_gap_ratio: 'Column gap ratio', multi_record_row_gap_ratio: 'Row gap ratio' });
 const CODES = new Set(Object.keys(DEFINITIONS));
@@ -316,7 +316,7 @@ const PHRASES = Object.freeze({
   innerLabelRoom: 'Inner labels need about {ratio} times the room around the map.',
   position: 'At character {position}.', requiredColumns: 'Required columns: {count}.', loadedRecords: 'Loaded records: {count}.',
   exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
-  schema: 'Load a supported Session file or recreate it with the current writer.',
+  schema: 'Load a supported Session file, or save it again with this version of gbdraw.',
   notASession: 'This file is not a gbdraw Session: it is not valid JSON.',
   // OV-2240: Save refuses a Session that Load could not open (the cap of services/session-file.js).
   sessionNotSaved: 'The Session was not saved: it is {size} MB expanded, and the browser loads at most {limit} MB.',

@@ -91,7 +91,7 @@ test('a receipt whose binding is not a string fails the shape check and the publ
 });
 // OV-115 and OV-130: a Linear receipt checked against a Circular request (and any
 // stale receipt) reaches Generate and Save as a specific diagnostic with a way out.
-test('a stale receipt names the Reset alignment evidence and the ways out', async () => {
+test('a stale receipt says what Reset alignment would restore and the ways out', async () => {
   const f = fixture(); const receipt = await build(f);
   const circular = { ...f.after.renderRequest, mode: 'circular' };
   assert.throws(() => admitShape(receipt, circular), stale);
@@ -105,7 +105,7 @@ test('a stale receipt names the Reset alignment evidence and the ways out', asyn
       const model = normalizeUserFacingError(error, { operation, stage });
       assert.deepEqual([model.code, model.operation, model.stage, model.context, model.actions],
         ['ALIGNMENT_RESET_EVIDENCE', operation, 'request-validation', {}, ['edit-input']]);
-      assert.equal(model.summary, 'The Reset alignment evidence of the latest Align does not match the current records'
+      assert.equal(model.summary, 'What Reset alignment would restore no longer matches the current records'
         + ' or alignment plan. Undo the changes made after Align, or select Align\u2026 again.');
     }
   }

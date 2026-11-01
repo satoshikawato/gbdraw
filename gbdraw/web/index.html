@@ -2442,7 +2442,7 @@
                                             :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled"
                                             :aria-label="t('Circular record label')"
                                             :aria-describedby="`help-circular-record-label${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`"
-                                            :placeholder="t('e.g. {example}', { example: 'Streptomyces fradiae' })"
+                                            :placeholder="t('e.g., {example}', { example: 'Streptomyces fradiae' })"
                                             class="form-input px-1 py-1 text-xs"
                                         >
                                     </div>
@@ -2454,7 +2454,7 @@
                                             :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled"
                                             :aria-label="t('Circular record subtitle')"
                                             :aria-describedby="`help-circular-subtitle${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`"
-                                            :placeholder="t('e.g. Neomycin biosynthetic gene cluster')"
+                                            :placeholder="t('e.g., Neomycin biosynthetic gene cluster')"
                                             class="form-input px-1 py-1 text-xs"
                                         >
                                     </div>
@@ -3338,7 +3338,7 @@
                                                 <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" :aria-label="t('Linear comparison minimum alignment length')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
-                                                <span class="linear-primary-label mb-1"><label for="linear-identity-scale-min">{{ t('Identity scale min (%)') }}</label> <help-tip id="help-linear-identity-scale" :text="t('Fix the identity colour scale so figures with different thresholds share colours and Legend labels. Leave the minimum blank to colour from the minimum identity to 100%.')"></help-tip></span>
+                                                <span class="linear-primary-label mb-1"><label for="linear-identity-scale-min">{{ t('Identity scale min (%)') }}</label> <help-tip id="help-linear-identity-scale" :text="t('Fix the identity color scale so figures with different thresholds share colors and Legend labels. Leave the minimum blank to color from the minimum identity to 100%.')"></help-tip></span>
                                                 <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[0] : ''" id="linear-identity-scale-min" @change="setIdentityScaleEnd(0, $event.target.value)" :aria-label="t('Linear comparison identity scale minimum')" aria-describedby="help-linear-identity-scale" class="form-input px-2 py-1.5 text-xs" :placeholder="String(adv.identity)" :disabled="!semanticMutationAvailable" data-testid="linear-identity-scale-min">
                                             </div>
                                             <div>
@@ -3352,7 +3352,7 @@
                                         <div class="linear-primary-label">{{ t('Record orientation') }}</div>
                                         <div class="flex items-center gap-2">
                                             <button type="button" data-history-ignore @click="recordAutoOrientation.orient()" :disabled="!semanticMutationAvailable || !recordAutoOrientation.enabled.value" :aria-busy="recordAutoOrientation.pending.value ? 'true' : 'false'" aria-describedby="help-linear-auto-orientation" class="btn rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40" data-testid="linear-auto-orientation-button">{{ t('Orient records from comparisons') }}</button>
-                                            <help-tip id="help-linear-auto-orientation" :text="t('Sets the Reverse complement of each record below the top row from the comparisons of the last Generate with the rule of --auto_orient: checked when the nucleotide hits of the record against the row above weigh mostly on the reverse strand, unchecked otherwise, also where you set it yourself. The top row keeps its orientation. Add an uploaded BLAST table, LOSATN, or TLOSATX, then Generate first. Generate again to draw the new orientation; Undo restores the previous checkboxes.')"></help-tip>
+                                            <help-tip id="help-linear-auto-orientation" :text="t('Sets the Reverse complement of each record below the top row from the comparisons of the last Generate with the rule of --auto_orient: checked when the nucleotide hits of the record against the row above weigh mostly on the reverse strand, unchecked otherwise, including a record whose checkbox you set yourself. The top row keeps its orientation. Add an uploaded BLAST table, LOSATN, or TLOSATX, then Generate first. Generate again to draw the new orientation; Undo restores the previous checkboxes.')"></help-tip>
                                         </div>
                                         <p v-if="recordAutoOrientation.status.value" role="status" aria-live="polite" class="ui-hint" data-testid="linear-auto-orientation-status">{{ recordAutoOrientation.status.value }}</p>
                                     </div>
@@ -3878,7 +3878,7 @@
                                         <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('circular', 'alignment_length') : Number($event.target.value)" :aria-label="t('Circular comparison minimum alignment length')" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'alignment_length'))" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <span class="input-label text-[10px]"><label for="circular-identity-scale-min">{{ t('Identity scale min (%)') }}</label> <help-tip id="help-circular-identity-scale" :text="t('Fix the identity colour scale so figures with different thresholds share colours and Legend labels. Leave the minimum blank to colour from the minimum identity to 100%.')"></help-tip></span>
+                                        <span class="input-label text-[10px]"><label for="circular-identity-scale-min">{{ t('Identity scale min (%)') }}</label> <help-tip id="help-circular-identity-scale" :text="t('Fix the identity color scale so figures with different thresholds share colors and Legend labels. Leave the minimum blank to color from the minimum identity to 100%.')"></help-tip></span>
                                         <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[0] : ''" id="circular-identity-scale-min" @change="setIdentityScaleEnd(0, $event.target.value)" :aria-label="t('Circular comparison identity scale minimum')" aria-describedby="help-circular-identity-scale" class="form-input form-input-compact" :placeholder="String(adv.identity)" :disabled="!semanticMutationAvailable" data-testid="circular-identity-scale-min">
                                     </div>
                                     <div>
@@ -4304,7 +4304,7 @@
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
-                                                            <span class="track-slot-field-label">{{ t('dinucleotide') }} <help-tip :id="`help-linear-slot-dinucleotide-${entry.index}`" :text="t('Two-base code used for this content/skew track, such as GC or AT.')"></help-tip></span>
+                                                            <span class="track-slot-field-label">{{ t('dinucleotide') }} <help-tip :id="`help-linear-slot-dinucleotide-${entry.index}`" :text="t('Dinucleotide used for this content/skew track, such as GC or AT.')"></help-tip></span>
                                                             <input
                                                                 :aria-label="t('Linear track slot {id} Track dinucleotide', { id: entry.slot.id })"
                                                                 :aria-describedby="`help-linear-slot-dinucleotide-${entry.index}`"
@@ -4491,7 +4491,7 @@
                                         <div class="grid grid-cols-2 gap-1.5 rounded border border-slate-200 bg-white/70 p-1.5">
                                             <div data-setting="track-geometry">
                                                 <setting-note setting="track-geometry"></setting-note>
-                                                <span class="input-label text-[10px]">{{ t('Center Reserved Radius') }} <help-tip id="help-circular-center-reserved-radius" :text="t('Override the center-label reserved radius in px. Lower values let inside tracks move closer to the center and may overlap the label.')"></help-tip></span>
+                                                <span class="input-label text-[10px]">{{ t('Center Reserved Radius') }} <help-tip id="help-circular-center-reserved-radius" :text="t('Override the center-label reserved radius in px. Lower values let inside tracks move closer to the center, where they may overlap the label.')"></help-tip></span>
                                                 <input type="number" min="0" step="1" v-model.number="adv.center_reserved_radius" :aria-label="t('Center Reserved Radius')" aria-describedby="help-circular-center-reserved-radius" class="form-input form-input-compact" :placeholder="t('Auto')" :disabled="!semanticMutationAvailable">
                                             </div>
                                         </div>
@@ -4682,7 +4682,7 @@
                                                         <div class="mt-1 space-y-1">
                                                             <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                                 <div class="track-slot-field">
-                                                                    <span class="track-slot-field-label">{{ t('dinucleotide') }} <help-tip :id="`help-circular-slot-dinucleotide-${entry.index}`" :text="t('Two-base code used for this content/skew track, such as GC or AT.')"></help-tip></span>
+                                                                    <span class="track-slot-field-label">{{ t('dinucleotide') }} <help-tip :id="`help-circular-slot-dinucleotide-${entry.index}`" :text="t('Dinucleotide used for this content/skew track, such as GC or AT.')"></help-tip></span>
                                                                     <input :value="entry.slot.params.nt" @input="setCircularTrackSlotNt(entry.slot, $event.target.value)" :aria-label="t('Circular track slot {id} Track dinucleotide', { id: entry.slot.id })" :aria-describedby="`help-circular-slot-dinucleotide-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="circularDrawingDinucleotide()" :disabled="!semanticMutationAvailable">
                                                                 </div>
                                                                 <div class="track-slot-field">
@@ -5430,8 +5430,8 @@
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
                                         <p class="ui-hint"><i18n-text :text="t('Only show labels matching case-insensitive Python regex. Examples: {first} and {second}. Use {exact} for exact matches.')"><template #first><span class="font-mono">NADH|ATPase</span></template><template #second><span class="font-mono">(?P&lt;name&gt;NADH)</span></template><template #exact><span class="font-mono">^...$</span></template></i18n-text></p>
                                         <div v-for="(row, i) in manualWhitelist" :key="i" class="flex gap-1 mb-1">
-                                            <input :value="row.feat" @input="setWhitelistRuleField(row, 'feat', $event.target.value)" :placeholder="t('Feat')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
-                                            <input :value="row.qual" @input="setWhitelistRuleField(row, 'qual', $event.target.value)" :placeholder="t('Qual')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.feat" @input="setWhitelistRuleField(row, 'feat', $event.target.value)" :placeholder="t('Feature')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
+                                            <input :value="row.qual" @input="setWhitelistRuleField(row, 'qual', $event.target.value)" :placeholder="t('Qualifier')" class="form-input px-1 py-1 text-xs w-1/4" :disabled="!semanticMutationAvailable">
                                             <input :value="row.key" @input="setWhitelistRuleField(row, 'key', $event.target.value)" :placeholder="t('Pattern')" class="form-input px-1 py-1 text-xs w-1/3" :disabled="!semanticMutationAvailable">
                                             <button @click="removeWhitelistRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1">×</button>
                                         </div>
@@ -5634,7 +5634,7 @@
                             </div>
 
                             <p v-if="(mode === 'linear' ? form.show_labels_linear : form.labels_mode) === 'none'" class="ui-hint bg-slate-50 border border-slate-200 rounded p-2">
-                                {{ t('Enable labels to configure filtering, qualifier priority, text settings, and circular label geometry. While a feature\'s Label visibility is On, all of these except filtering show; filters do not apply to that label.') }}
+                                {{ t('Enable labels to configure filtering, qualifier priority, text settings, and circular label geometry. A feature whose Label visibility is On still shows its label with these settings, except filtering: filters do not apply to that label.') }}
                             </p>
                         </div>
                     </details>
@@ -5862,13 +5862,13 @@
                             <div class="grid grid-cols-3 gap-1.5">
                                 <div data-setting="dinucleotide-window">
                                     <setting-note setting="dinucleotide-window"></setting-note>
-                                    <span class="input-label text-[10px]">{{ t('Window') }} <help-tip id="help-gc-window" :text="t('Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb).')"></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('Window') }} <help-tip id="help-gc-window" :text="t('Window size for GC content/skew. Default: 1 kb (<1 Mb), 10 kb (<10 Mb), 100 kb (>=10 Mb).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.window_size, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
                                         <input type="number" min="1" step="1" v-model.number="adv.window_size" :aria-label="t('Window')" aria-describedby="help-gc-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
-                                    <span class="input-label text-[10px]">{{ t('Step') }} <help-tip id="help-gc-step" :text="t('Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb).')"></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('Step') }} <help-tip id="help-gc-step" :text="t('Step size for GC content/skew. Default: 100 bp (<1 Mb), 1 kb (<10 Mb), 10 kb (>=10 Mb).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.step_size, 'dinucleotideStep')" :text="autoValueText('dinucleotideStep')">
                                         <input type="number" min="1" step="1" v-model.number="adv.step_size" :aria-label="t('Step')" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
@@ -6176,7 +6176,7 @@
                      role="status" aria-live="polite" aria-atomic="true" data-testid="feature-identity-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
                     <p v-if="featureIdentityNoticeSummary.dormant">{{ tn(featureIdentityNoticeSummary.dormant, '{count} feature edit applies to a feature outside the current crop or display; it applies again when that feature is drawn.', '{count} feature edits apply to features outside the current crop or display; they apply again when those features are drawn.') }}</p>
-                    <p v-if="featureIdentityNoticeSummary.removed">{{ tn(featureIdentityNoticeSummary.removed, 'Removed {count} feature edit whose feature the replaced source no longer has.', 'Removed {count} feature edits whose features the replaced source no longer has.') }}</p>
+                    <p v-if="featureIdentityNoticeSummary.removed">{{ tn(featureIdentityNoticeSummary.removed, 'Removed {count} feature edit whose feature is no longer in the input files.', 'Removed {count} feature edits whose features are no longer in the input files.') }}</p>
                     <p v-if="featureIdentityNoticeSummary.unmatched" class="flex flex-wrap items-center gap-2">
                         <span>{{ tn(featureIdentityNoticeSummary.unmatched, '{count} feature edit names a feature the source does not have.', '{count} feature edits name features the source does not have.') }}</span>
                         <button type="button" class="btn btn-secondary text-xs h-7 px-2" @click="removeUnmatchedFeatureEdits" :disabled="!semanticMutationAvailable">{{ tn(featureIdentityNoticeSummary.unmatched, 'Remove {count} unmatched feature edit', 'Remove {count} unmatched feature edits') }}</button>
@@ -6244,7 +6244,7 @@
                         {{ t('{count} aligned', { count: similarityAlignmentSummary.aligned }) }} ·
                         {{ t('{count} unchanged', { count: similarityAlignmentSummary.unchanged }) }} ·
                         {{ t('{count} explicitly skipped', { count: similarityAlignmentSummary.explicitlySkipped }) }} ·
-                        {{ t('{count} no-candidate', { count: similarityAlignmentSummary.noCandidate }) }} ·
+                        {{ t('{count} without a candidate', { count: similarityAlignmentSummary.noCandidate }) }} ·
                         {{ t('{count} reversed', { count: similarityAlignmentSummary.reversed }) }}
                     </span>
                 </div>
@@ -7946,7 +7946,7 @@
                             <!-- The strips are a picture of the rows below them; the rows carry everything they show. -->
                             <div v-if="similarityAlignmentReview.lineX !== null" class="alignment-review-caption" aria-hidden="true">
                                 <span>{{ t('After Apply') }}</span>
-                                <span class="alignment-review-key"><i class="is-chosen"></i>{{ t('chosen') }}<i class="is-other"></i>{{ t('other candidate') }}<i class="is-line"></i>{{ t('reference line') }}</span>
+                                <span class="alignment-review-key"><i class="is-chosen"></i>{{ t('chosen candidate') }}<i class="is-other"></i>{{ t('other candidate') }}<i class="is-line"></i>{{ t('reference line') }}</span>
                             </div>
                             <template v-for="group in similarityAlignmentReview.groups" :key="group.id">
                                 <h3 v-if="group.title" class="alignment-review-section" :class="{ 'is-need': group.cards.some((card) => card.needsChoice) }"
@@ -8401,7 +8401,7 @@
                                                 </div>
                                                 <span v-if="record.reversedFromSource"
                                                       class="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 font-bold text-indigo-700"
-                                                      :aria-label="t('{record} reversed relative to source', { record: record.recordLabel })">{{ t('rev') }}</span>
+                                                      :aria-label="t('{record} reversed relative to the source file', { record: record.recordLabel })">{{ t('rev') }}</span>
                                             </li>
                                         </ul>
                                     </div>

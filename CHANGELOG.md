@@ -24,9 +24,13 @@ write-up of a release.
   Simplified and Traditional Chinese, Korean, Spanish, French, Portuguese, Thai, Indonesian,
   and Vietnamese translations; the Align button of the similarity group drawer stayed English in every
   language. All translations are still LLM drafts.
+- Fixed: Web UI: English text that no translation could correct. Raw values such as `circular`,
+  `plus`, `reverse`, and `compress` now show as the names the controls use, screen-reader labels of
+  file inputs are translated, counted sentences read correctly at 1, messages name settings as the
+  settings pane does, and internal words in messages are gone.
 - Fixed: in the Web UI record popup, the Alignment line of a record that was
-  not moved shows the reason as its label reads, for example "Not moved
-  (Skipped by user)"; it was lower-cased, which damaged German nouns and the
+  not moved shows the reason as its label reads, for example "Not moved:
+  Skipped by user"; it was lower-cased, which damaged German nouns and the
   Turkish dotted I.
 - Added: `--identity_scale MIN MAX`, `identity_scale` on `LinearComparisonOptions` and
   `ComparisonRingOptions`, and the Web **Identity scale min (%)** / **Identity scale max (%)**

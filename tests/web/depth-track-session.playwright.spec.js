@@ -1712,7 +1712,7 @@ test('Session preflight rejects invalid canonical data without resetting live st
     await expect.poll(() => page.evaluate(() => window.__SESSION_REJECTIONS__)).toBe(count);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
     await expect(page.getByRole('alert', { name: 'Session not loaded' }))
-      .toContainText('Load a supported Session file or recreate it with the current writer.');
+      .toContainText('Load a supported Session file, or save it again with this version of gbdraw.');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
       code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason }
     });

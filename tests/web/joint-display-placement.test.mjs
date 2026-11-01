@@ -217,7 +217,7 @@ for (const mode of ['circular', 'linear']) {
           assert.equal(actions.valueFor(feature), side);
         } else {
           const before = structuredClone(state.featurePlacementOverrides);
-          assert.throws(() => actions.setPlacement([feature], side), /current draft feature slot/);
+          assert.throws(() => actions.setPlacement([feature], side), /current feature track/);
           assert.deepEqual(state.featurePlacementOverrides, before);
         }
       }

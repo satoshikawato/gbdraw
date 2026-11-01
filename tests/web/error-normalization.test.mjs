@@ -389,7 +389,7 @@ test('Circular geometry shortcut rejection is a recognized diagnostic (X-01)', (
     const model = normalizeUserFacingError(error, { operation: 'generate', stage: 'request-validation' });
     assert.equal(model.code, 'INPUT_INVALID');
     assert.deepEqual(model.context, { field: 'feature_width_circular', reason: 'POSITIVE_OR_AUTO' });
-    assert.match(model.summary, /Field: Feature Width\. Use Auto or a finite value greater than zero\./);
+    assert.match(model.summary, /Field: Feature Track Width\. Use Auto or a finite value greater than zero\./);
     return true;
   });
 });

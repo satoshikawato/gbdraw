@@ -142,7 +142,7 @@ export const createFeaturePlacementActions = ({
         return targets.some((target) => value === 'main' ? target.kind === 'main' : target.side === value);
       });
       return { value, enabled, label: value === 'auto' ? t('Auto') : value === 'main' ? t('Main') : LANE_ONE_LABEL[value](),
-      reason: enabled ? '' : t('Unavailable in the current draft feature slot.') };
+      reason: enabled ? '' : t('Unavailable in the current feature track.') };
     });
   };
   /**

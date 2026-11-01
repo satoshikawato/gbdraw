@@ -3897,7 +3897,7 @@ export const createAppSetup = () => {
     if (result?.status === 'ok') {
       // The Depth panel shows each loaded Circular series, with or without a Depth file (BA-OD94).
       depthTrackUiCounts.circular = Math.max(1, state.drawingOfMode('circular').adv.depth_tracks.length);
-      showNotice({ text: name ? t('Session loaded: {file}', { file: name }) : t('Session loaded.'), items: result.notices || [] });
+      showNotice({ text: name ? t('Session loaded: {file}.', { file: name }) : t('Session loaded.'), items: result.notices || [] });
     } else if (result?.status === 'legacy') {
       showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
     }
@@ -4942,7 +4942,7 @@ export const createAppSetup = () => {
     if (!command) return;
     try {
       await copyTextToClipboard(command);
-      const copied = t('Copied');
+      const copied = t('Copied!');
       status.value = copied;
       setTimeout(() => {
         if (status.value === copied) status.value = '';
@@ -6279,7 +6279,7 @@ export const createAppSetup = () => {
       ? tm(RECORDS_NOT_INSPECTED_LABEL)
       : entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
         ? (drawnCount < entries.length ? tn(entries.length, '{drawn} of {count} record (separate diagrams)', '{drawn} of {count} records (separate diagrams)', { drawn: drawnCount }) : t('All records (separate diagrams)'))
-        : t('Automatic (only record)');
+        : t('Automatic (single record)');
     return [
       { value: '', label: automaticLabel, synthetic: false },
       ...(current && selection.status !== 'resolved'
@@ -7003,7 +7003,7 @@ export const createAppSetup = () => {
       rebindAnnotationRecords();
       if (listMode !== 'linear') return;
       invalidateLinearComparisonArtifacts(state.drawingOfMode('linear'), { preserveLosatCacheInfo: true });
-      similarityAlignmentActions?.clearForMutation?.(msg('record drawing changed.'));
+      similarityAlignmentActions?.clearForMutation?.(msg('drawn records changed.'));
     },
     removeSource: removeRecordSource,
     askRemoveSource: askRecordFileRemoval,

@@ -529,7 +529,7 @@ const successfulSummary = (plan, reversed) => {
     explicitlySkipped,
     noCandidate,
     reversed,
-    text: t('Alignment applied: {aligned} aligned, {unchanged} unchanged, {explicitlySkipped} explicitly skipped, {noCandidate} no-candidate, {reversed} reversed.',
+    text: t('Alignment applied: {aligned} aligned, {unchanged} unchanged, {explicitlySkipped} explicitly skipped, {noCandidate} without a candidate, {reversed} reversed.',
       { aligned, unchanged, explicitlySkipped, noCandidate, reversed })
   });
 };

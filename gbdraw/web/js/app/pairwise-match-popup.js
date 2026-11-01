@@ -176,7 +176,7 @@ export const PAIRWISE_MATCH_SELECTOR = [
 const MATCH_KIND_TITLES = {
   pairwise: msg('Pairwise match'),
   orthogroup: msg('Similarity-group match'),
-  collinear: msg('Collinearity block'),
+  collinear: msg('Collinear block'),
   homology: msg('Comparison ring match')
 };
 
@@ -2286,7 +2286,7 @@ export const buildMatchPopupPayload = (
   addRow(alignmentRows, msg('Identity'), descriptor.identity);
   addRow(alignmentRows, msg('Alignment length'), attr(element, 'data-alignment-length'));
   addRow(alignmentRows, msg('E-value'), attr(element, 'data-evalue'));
-  addRow(alignmentRows, msg('Bit score'), attr(element, 'data-bitscore'));
+  addRow(alignmentRows, msg('Bitscore'), attr(element, 'data-bitscore'));
   addRow(alignmentRows, msg('Mismatches'), attr(element, 'data-mismatches'));
   addRow(alignmentRows, msg('Gap opens'), attr(element, 'data-gap-opens'));
   addRow(alignmentRows, msg('Edge kind'), attr(element, 'data-edge-kind'));

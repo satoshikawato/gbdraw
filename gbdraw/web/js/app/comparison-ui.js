@@ -219,27 +219,6 @@ const plannedSources = (plan) => {
   });
 };
 
-/** @param {readonly LinearComparisonResolvedEdge[]} edges */
-const projectSourceBreakdown = (edges) => {
-  const losat = edges.filter((edge) => edge?.source === LINEAR_COMPARISON_SOURCES.LOSAT).length;
-  const upload = edges.filter((edge) => edge?.source === LINEAR_COMPARISON_SOURCES.UPLOAD).length;
-  const key = losat > 0 && upload > 0
-    ? 'mixed'
-    : losat > 0
-      ? LINEAR_COMPARISON_SOURCES.LOSAT
-      : upload > 0
-        ? LINEAR_COMPARISON_SOURCES.UPLOAD
-        : 'none';
-  const label = key === 'mixed'
-    ? t('{losat} LOSAT, {upload} upload', { losat, upload })
-    : key === LINEAR_COMPARISON_SOURCES.LOSAT
-      ? t('{losat} LOSAT', { losat })
-      : key === LINEAR_COMPARISON_SOURCES.UPLOAD
-        ? t('{upload} upload', { upload })
-        : t('No active pairs');
-  return Object.freeze({ key, losat, upload, label });
-};
-
 /**
  * @param {LinearComparisonPlan} plan
  * @param {readonly LinearComparisonResolvedEdge[]} activeEdges
@@ -642,7 +621,6 @@ export const projectLinearComparisonUi = ({
   // normalizeLosatProgram and normalizeBlastpMode return only keys of these two tables.
   const losatModeLabel = /** @type {ComparisonModeEntry} */ (LOSAT_MODE_BY_KEY.get(losatModeKey)).label;
   const losatpModeLabel = /** @type {ComparisonModeEntry} */ (LOSATP_MODE_BY_KEY.get(losatpModeKey)).label;
-  const sourceBreakdown = projectSourceBreakdown(activeEdges);
   const activePairCount = activeEdges.length;
   const dormantDraftCount = retainedDormantDraftCount(normalizedPlan, activeEdges);
   const topology = projectTopology(normalizedPlan, activePairCount);
@@ -665,7 +643,6 @@ export const projectLinearComparisonUi = ({
     topologyLabel: topology.label,
     topologyPairLabel: topology.pairLabel,
     activePairCount,
-    sourceBreakdown,
     activeLosatModeKey: losatModeKey,
     activeLosatModeLabel: losatModeLabel,
     losatModes: projectLosatModes(losatModeKey),

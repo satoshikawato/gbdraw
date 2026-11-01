@@ -379,7 +379,7 @@ const featureOverrideTableRow = (renderRequest, row) => {
   if (![null, 'on', 'off', 'exclude_matching'].includes(feature) || ![null, 'on', 'off'].includes(label)
     || (text !== null && (typeof text !== 'string' || !text.trim() || /[\t\r\n\0]/.test(text)))
     || (feature === null && label === null && text === null)) {
-    throw identityTableUnavailable(msg('a feature edit has a value that the feature override table cannot carry.'));
+    throw identityTableUnavailable(msg('a feature edit has a value that the Feature Edits TSV cannot carry.'));
   }
   return { ...cells, feature_visibility: feature ?? '', label_visibility: label ?? '', label_text: text ?? '' };
 };
@@ -1646,7 +1646,7 @@ const appendTrackOptions = (args, request) => {
     return;
   }
   if (!Array.isArray(slots)) {
-    throw recipeUnavailable(msg('canonical track slots must be an array or null.'));
+    throw recipeUnavailable(msg('canonical track slots must be a list or have no value.'));
   }
   if (slots.length === 0) {
     throw recipeUnavailable(msg('an explicit empty track list means no tracks, which the current CLI cannot express.'));
@@ -1799,7 +1799,7 @@ const appendDiagramOptions = (args, request, files, colorTablePath) => {
   }
   if (options.selectedFeaturesSet !== null && options.selectedFeaturesSet !== undefined) {
     if (!Array.isArray(options.selectedFeaturesSet)) {
-      throw recipeUnavailable(msg('selected features must be an array or null.'));
+      throw recipeUnavailable(msg('selected features must be a list or have no value.'));
     }
     if (!options.selectedFeaturesSet.every((feature) => (
       typeof feature === 'string' && feature.trim().length > 0
@@ -1876,7 +1876,7 @@ const requireExactRecords = async (renderRequest, files) => {
     if (record.cardinality === 'exactly_one') continue;
     const source = sourceSpec(record);
     if (await files.resourceRecordCount(source.ids.at(-1), source.kind === 'genbank' ? 'genbank' : 'fasta') !== 1) {
-      throw identityTableUnavailable(msg('feature placements and feature edits require exact materialized records.'));
+      throw identityTableUnavailable(msg('feature placements and feature edits require each input file to hold exactly one record.'));
     }
   }
 };
@@ -2098,7 +2098,7 @@ const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
     const path = String(pathRaw || '').trim();
     const name = allocatedMetadata.get(path)?.name;
     if (!name) {
-      throw recipeUnavailable(msg('a generated helper dependency has no allocated filename.'));
+      throw recipeUnavailable(msg('a generated helper file has no file name.'));
     }
     return name;
   };
