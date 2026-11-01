@@ -98,6 +98,17 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   on the row stays on its series. A Depth row you turned off now stays in the
   stack, off, when its last file goes and when a file is added again, in Circular
   and Linear; before, it left and came back on.
+- **Web app: text left in English or hard to read in other languages.** The Undo
+  and Redo tooltips of preserved settings, imported comparisons, and the
+  **Labels do not fit** dialog, Auto values such as `above` and `ignored`, and
+  that dialog's row titles and setting names stayed in English in every language;
+  they now follow the language setting. Tooltips and dialogs that insert an action,
+  a control, or a track row now read as sentences in more languages (Japanese
+  「ファイルを削除」を元に戻す). In English, a tooltip no longer names the path or
+  the row (`Undo Reset preserved setting`), the lane warning quotes the control,
+  several rows read `Track rows 3 and 4`, and `Auto (subject (auto))` reads
+  `Auto (subject)`. The sentences in the **Labels do not fit** dialog's notes and
+  reasons are still in English.
 
 ## Changed behavior
 
