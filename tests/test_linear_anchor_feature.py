@@ -342,3 +342,39 @@ def test_the_anchor_is_read_after_auto_orient() -> None:
     assert oriented.alignment_anchor_centers == explicit.alignment_anchor_centers == (
         _HUMAN_COX1_START, 16596.0 - 7975.0,
     )
+
+
+def _join_records(*, reverse_first: bool) -> LinearDiagramRequest:
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import CompoundLocation, SeqFeature, SimpleLocation
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.api import InMemoryRecordSource
+
+    def record(name: str, location: SimpleLocation | CompoundLocation) -> SeqRecord:
+        result = SeqRecord(Seq("ACGT" * 25), id=name, annotations={"molecule_type": "DNA", "topology": "circular"})
+        result.features = [SeqFeature(location, type="gene", qualifiers={"gene": ["x"]})]
+        return result
+
+    # join(11..13,71..73): its path runs from 11 across the wider gap to 73.
+    first = record("first", CompoundLocation([SimpleLocation(10, 13, strand=1), SimpleLocation(70, 73, strand=1)]))
+    second = record("second", SimpleLocation(30, 40, strand=1))
+    return LinearDiagramRequest(
+        records=(
+            RecordInput(InMemoryRecordSource(first), presentation=RecordPresentation(reverse_complement=reverse_first)),
+            RecordInput(InMemoryRecordSource(second)),
+        ),
+        options=LinearDiagramOptions(anchor_feature="gene=x"),
+    )
+
+
+@pytest.mark.linear
+def test_a_join_starts_where_its_path_begins_as_drawn() -> None:
+    # Forward, the path begins at its 5' base 11 (offset 10), not at 71 after the wider gap.
+    assert plan_linear_request(_join_records(reverse_first=False)).alignment_anchor_centers == (10.0, 30.0)
+
+
+@pytest.mark.linear
+def test_a_reversed_join_starts_at_its_3_prime_base() -> None:
+    # Reversed, the path's 3' base 73 is drawn first: offset 100 - 73.
+    assert plan_linear_request(_join_records(reverse_first=True)).alignment_anchor_centers == (27.0, 30.0)

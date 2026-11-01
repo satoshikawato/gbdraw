@@ -130,11 +130,13 @@ feature, for example `--anchor_feature gene=COX1` across mitogenomes. The
 selector has the `feature_selector` form of the placement and override tables
 and matches a qualifier value exactly; `locus_tag=` and `gene=` are the usual
 keys. It is resolved in each record as drawn, after `--region`,
-`--reverse_complement`, and a display start. The anchor is the feature's first
-drawn base: the point from which reading rightward covers the whole feature.
-That is its left end as drawn (on a reverse-complemented record, its end with
-the higher source coordinate); on a complete circular record, a feature that
-crosses the origin or the display start begins on its piece before that seam.
+`--reverse_complement`, and a display start. The anchor is the feature's
+start as drawn: its 5' base when the feature reads rightward as drawn, and its
+3' base otherwise, following its parts in biological order. For a feature in one
+part that is its left end as drawn (on a reverse-complemented record, its end
+with the higher source coordinate). A join starts on the part its path begins
+with as drawn, even when another of its parts lies further left, and a feature
+across the origin or a display start begins on its piece before that seam.
 Only features that start inside the drawn region count. The first record
 that has the feature keeps its place; every other record that has it moves
 so that the feature's start lies directly below, and that place replaces the
@@ -495,14 +497,18 @@ feature starts at 12 o'clock. On the tobacco plastome,
 `--origin_feature gene=psbA` draws the same figure as
 `--display_start_coordinate 536`. The selector has the `feature_selector` form
 of the placement and override tables and matches a qualifier value exactly, as
-`gbdraw linear --anchor_feature` does. The feature's first base in drawn order
-becomes the display start, so the whole feature lies clockwise from 12 o'clock.
-A minus-strand gene therefore starts at its low source coordinate (psbA,
+`gbdraw linear --anchor_feature` does. The feature's start as drawn becomes the
+display start: its 5' base when the feature reads clockwise as drawn, and its
+3' base otherwise, following its parts in biological order. A minus-strand gene
+therefore starts at its low source coordinate (psbA,
 `complement(536..1597)`, starts at 536) and reads counterclockwise. To read it
 clockwise from 12 o'clock, also reverse-complement the record (the records-table
 `reverse_complement` column); its high coordinate (1597) then becomes the start.
-A feature across the origin, such as `join(16024..16569,1..576)`, starts on its
-piece before the origin, at 16024. The Web app's Rotate to feature, "Start of
+A join starts on the part its path begins with as drawn: the trans-spliced
+rps12 gene `complement(join(100062..100855,72224..72337))` starts at 100062, its
+3' base, although its other part lies at 72224..72337. A feature across the
+origin, such as `join(16024..16569,1..576)`, starts on its piece before the
+origin, at 16024. The Web app's Rotate to feature, "Start of
 the record", gives the same start.
 
 The feature needs exact coordinates on one strand: an unstranded or

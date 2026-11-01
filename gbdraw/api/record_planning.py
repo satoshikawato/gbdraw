@@ -800,37 +800,27 @@ def _selector_text(selector: FeatureSelector) -> str:
     return selector.value if selector.key is None else f"{selector.key}={selector.value}"
 
 
-def feature_drawn_start(
-    feature: SourceFeatureIdentity, transform: RecordDisplayTransform, drawn_length: int,
-) -> float:
-    """The display offset where a source feature starts as drawn: its first drawn base.
+def feature_drawn_start(feature: SourceFeatureIdentity, transform: RecordDisplayTransform) -> float:
+    """The display offset of a source feature's first base as drawn.
 
-    It is the boundary from which walking rightward in drawn order covers the
-    whole feature as one stretch. On a complete circular record that walk may
-    pass the seam of the drawn axis, so a feature across the origin or across
-    a rotated display start begins on its piece before the seam; otherwise it
-    is the feature's left end as drawn.
+    The one feature-start rule of ``anchor_feature`` and ``origin_feature``,
+    and the Web's Rotate to feature "Start of the record" (``resolveFeatureAnchor``).
+    The feature is read along its parts in biological order (the order of
+    ``location_parts``); the first base as drawn is where that path begins,
+    its 5' base, when the feature reads forward as drawn, and where it ends,
+    its 3' base, otherwise. An unstranded or mixed-strand feature is read along
+    its parts as listed, as a plus-strand one. The source base is then mapped
+    through the transform, so a feature across the origin or a display start
+    begins on the piece its path begins on.
     """
 
-    # Each part as (leading display offset, covered bases) in drawn order.
-    arcs = sorted(
-        (
-            float(transform.source_boundary_to_display_offset(start if transform.source_step == 1 else end)),
-            end - start,
-        )
-        for start, end, _strand in feature.location_parts
+    parts = feature.location_parts
+    minus = all(strand == -1 for _start, _end, strand in parts)
+    five_prime, three_prime = (
+        (parts[0][1], parts[-1][0] + 1) if minus else (parts[0][0] + 1, parts[-1][1])
     )
-    length = transform.length
-    if not transform.is_circular or drawn_length != length:
-        return arcs[0][0]
-    arcs = sorted((offset % length, size) for offset, size in arcs)
-    # The feature starts after the widest uncovered stretch of the circle.
-    gaps = [
-        ((arcs[(index + 1) % len(arcs)][0] - (offset + size)) % length, (index + 1) % len(arcs))
-        for index, (offset, size) in enumerate(arcs)
-    ]
-    _gap, first = max(gaps, key=lambda item: (item[0], -item[1]))
-    return arcs[first][0]
+    reads_forward = minus == (transform.source_step == -1)
+    return float(transform.source_base_to_display_index(five_prime if reads_forward else three_prime))
 
 
 _Start = TypeVar("_Start", int, float)
@@ -937,10 +927,40 @@ def project_anchor_feature_starts(
         transform: RecordDisplayTransform,
         drawn_length: int,
     ) -> float | None:
-        start = feature_drawn_start(feature, transform, drawn_length)
+        start = feature_drawn_start(feature, transform)
         return start if 0.0 <= start < float(drawn_length) else None
 
     return _match_feature_starts(collection, selector, "anchor_feature", "place", drawn_start)
+
+
+# The features without a start as drawn, by the Web capability code
+# that refuses each (``resolveFeatureAnchor``, the twin of
+# :func:`resolve_origin_feature_start`), in the order the Web checks them.
+FEATURE_START_REFUSALS: Mapping[str, str] = {
+    "location-parts-overlap": "its parts overlap",
+    "location-fuzzy": "it has inexact (fuzzy) coordinates",
+    "location-order-ambiguous": "its parts are joined with order()",
+    "location-operator-unknown": "its parts are joined in an unknown way",
+    "location-traversal-ambiguous": "its parts lie on both strands or in no known order",
+    "feature-start-direction-unavailable": "it has no strand",
+}
+
+
+def _feature_start_refusal(feature: SourceFeatureIdentity, profile: _SourceFeatureAnchorProfile) -> str | None:
+    bounds = sorted(part[:2] for part in feature.location_parts)
+    if any(start < previous_end for (_start, previous_end), (start, _end) in zip(bounds, bounds[1:])):
+        return "location-parts-overlap"
+    if profile.precision != "exact":
+        return "location-fuzzy"
+    if profile.operator == "order":
+        return "location-order-ambiguous"
+    if profile.operator not in {"single", "join"}:
+        return "location-operator-unknown"
+    if profile.part_order == "ambiguous" or profile.strand == "mixed":
+        return "location-traversal-ambiguous"
+    if profile.strand not in {"+", "-"}:
+        return "feature-start-direction-unavailable"
+    return None
 
 
 def resolve_origin_feature_start(
@@ -950,8 +970,8 @@ def resolve_origin_feature_start(
 ) -> int:
     """The 1-based source base at which a complete circular record starts so it opens with ``feature``.
 
-    It is the feature's first base in drawn order (:func:`feature_drawn_start`
-    on the uncropped record, across the origin as one arc), converted back to
+    It is the feature's start as drawn (:func:`feature_drawn_start` on the
+    uncropped record), converted back to
     the source base ``RecordDisplayOptions.start_coordinate`` takes: the Web
     Rotate to feature "Start of the record" (``resolveFeatureAnchor``, the twin
     in tools/twins.json; tests/fixtures/feature-start-anchor-vectors.json).
@@ -966,26 +986,14 @@ def resolve_origin_feature_start(
             "Record rotation requires an effectively circular record.",
             diagnostic={"code": "INPUT_INVALID"},
         )
-    reason = (
-        "it has inexact (fuzzy) coordinates" if profile.precision != "exact"
-        else "its parts are joined with order()" if profile.operator == "order"
-        else "its parts are joined in an unknown way" if profile.operator not in {"single", "join"}
-        else "its parts lie on both strands or in no known order"
-        if profile.part_order == "ambiguous" or profile.strand == "mixed"
-        else "it has no strand" if profile.strand not in {"+", "-"}
-        else None
-    )
-    parts = sorted(part[:2] for part in feature.location_parts)
-    if reason is None and any(start < previous_end for (_s, previous_end), (start, _e) in zip(parts, parts[1:])):
-        reason = "its parts overlap"
-    if reason is not None:
+    refusal = _feature_start_refusal(feature, profile)
+    if refusal is not None:
         raise ValidationError(
-            f"{feature.feature_type} {_feature_location_text(feature)} has no first base in drawn "
-            f"order: {reason}.",
+            f"{feature.feature_type} {_feature_location_text(feature)} has no start as drawn: "
+            f"{FEATURE_START_REFUSALS[refusal]}.",
             diagnostic={"code": "INPUT_INVALID"},
         )
-    offset = feature_drawn_start(feature, transform, transform.length)
-    return transform.display_index_to_source_base(int(offset))
+    return transform.display_index_to_source_base(int(feature_drawn_start(feature, transform)))
 
 
 def project_origin_feature_starts(

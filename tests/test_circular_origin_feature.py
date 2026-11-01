@@ -2,7 +2,7 @@
 
 The selector (``key=value``, exact, the feature-selector form of the
 annotation and placement tables) is resolved on each record, and the
-feature's first base in drawn order becomes the record's display start
+feature's start as drawn becomes the record's display start
 (``RecordDisplayOptions.start_coordinate``). The figure equals the one drawn
 with that start given explicitly, and a saved Session stores the start, not
 the option. The start base is a twin of the Web Rotate to feature "Start of
@@ -35,7 +35,7 @@ from gbdraw.api import (
     RecordInput,
     plan_circular_request,
 )
-from gbdraw.api.record_planning import resolve_origin_feature_start
+from gbdraw.api.record_planning import FEATURE_START_REFUSALS, resolve_origin_feature_start
 from gbdraw.api.request_render import plan_circular_batch_request
 from gbdraw.api.requests import CircularBatchOutputPolicy, CircularBatchRequest
 from gbdraw.core.record_metadata import _SourceFeatureAnchorProfile
@@ -49,7 +49,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 _TOBACCO = _ROOT / "tests" / "test_inputs" / "NC_001879.gbk"
 _HUMAN = _ROOT / "gbdraw" / "web" / "tutorial-data" / "human-mitochondrion" / "HmmtDNA.gbk"
 _PSBA = FeatureSelector(value="psbA", key="gene")
-# psbA is complement(536..1597): its first base in drawn order is 536.
+# psbA is complement(536..1597): drawn forward, its 3' base 536 comes first.
 _PSBA_START = 536
 _VECTORS = _ROOT / "tests" / "fixtures" / "feature-start-anchor-vectors.json"
 
@@ -260,6 +260,8 @@ def test_the_start_base_agrees_with_the_web_vector(case: dict[str, object]) -> N
         with pytest.raises(ValidationError) as raised:
             resolve_origin_feature_start(feature, transform, profile)
         assert raised.value.diagnostic is not None
+        # The Web refuses it with this code, for the same reason.
+        assert f": {FEATURE_START_REFUSALS[case['refused']]}." in str(raised.value)
     else:
         assert resolve_origin_feature_start(feature, transform, profile) == case["startCoordinate"]
 
@@ -270,3 +272,10 @@ def test_an_unplanned_request_with_origin_feature_is_not_encoded() -> None:
 
     with pytest.raises(CanonicalRequestEncodingError, match="origin_feature record rotation"):
         encode_canonical_request(_request(origin_feature=_PSBA))
+
+
+@pytest.mark.parametrize("selector", ["gene=", "", "=x"])
+def test_an_empty_selector_is_refused_with_a_diagnostic(selector: str) -> None:
+    with pytest.raises(ValidationError, match="Feature selector") as raised:
+        CircularDiagramOptions(origin_feature=selector)
+    assert raised.value.diagnostic == {"code": "INPUT_INVALID", "reason": "REQUIRED"}

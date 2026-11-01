@@ -300,11 +300,12 @@ options:
                         Rotate each record so that the feature this exact
                         selector names starts at 12 o'clock, for example
                         gene=dnaA or locus_tag=b0001 (the feature_selector
-                        form of the placement and override tables): its first
-                        base in drawn order becomes the display start. A
-                        record without the feature keeps its start and is
-                        reported. Cannot be combined with
-                        --display_start_coordinate or a crop (default: off).
+                        form of the placement and override tables): its start
+                        as drawn (its 5' base when it reads clockwise, else
+                        its 3' base) becomes the display start. A record
+                        without the feature keeps its start and is reported.
+                        Cannot be combined with --display_start_coordinate or
+                        a crop (default: off).
   --center_reserved_radius CENTER_RESERVED_RADIUS
                         Override the center-label reserved radius for circular
                         track packing (in px; must be >= 0).
@@ -1439,7 +1440,8 @@ options:
                         > 0).
   --align_center        Align genomes to the center (default: False).
   --anchor_feature KEY=VALUE
-                        Align the records at the first drawn base of the
+                        Align the records at the start as drawn (its 5' base
+                        when it reads rightward, else its 3' base) of the
                         feature this exact selector names in each record, for
                         example gene=dnaA or locus_tag=b0001 (the
                         feature_selector form of the placement and override

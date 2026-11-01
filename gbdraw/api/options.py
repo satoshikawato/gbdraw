@@ -1122,7 +1122,8 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     ``origin_feature`` rotates each record so that the feature it selects
     (``key=value``, exact; a string is parsed with
     :func:`gbdraw.annotations.models.parse_feature_selector`) starts at 12
-    o'clock: its first base in drawn order becomes the record's
+    o'clock: its start as drawn (its 5' base when it reads clockwise as drawn,
+    else its 3' base) becomes the record's
     ``RecordDisplayOptions.start_coordinate``
     (:func:`gbdraw.api.record_planning.project_origin_feature_starts`). A
     record without the feature keeps its start. The planned request carries
@@ -1426,8 +1427,9 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     ``auto_orient`` reverse-complements records from their nucleotide hits
     (:func:`gbdraw.linear_comparison.auto_orient_reversed_records`).
 
-    ``anchor_feature`` aligns the records at the first drawn base of the
-    feature it selects in each record (``key=value``, exact; a string is
+    ``anchor_feature`` aligns the records at the start as drawn (its 5' base
+    when it reads rightward as drawn, else its 3' base) of the feature it
+    selects in each record (``key=value``, exact; a string is
     parsed with :func:`gbdraw.annotations.models.parse_feature_selector`).
     The first record that has the feature keeps its place
     (:func:`gbdraw.api.record_planning.project_anchor_feature_starts`). The

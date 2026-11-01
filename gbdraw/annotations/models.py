@@ -75,9 +75,15 @@ class FeatureSelector:
         value = str(self.value).strip()
         key = str(self.key).strip() if self.key is not None else None
         if not value:
-            raise ValidationError("Feature selector value cannot be empty.")
+            raise ValidationError(
+                "Feature selector value cannot be empty.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "REQUIRED"},
+            )
         if key == "":
-            raise ValidationError("Feature selector key cannot be empty.")
+            raise ValidationError(
+                "Feature selector key cannot be empty.",
+                diagnostic={"code": "INPUT_INVALID", "reason": "REQUIRED"},
+            )
         object.__setattr__(self, "value", value)
         object.__setattr__(self, "key", key)
 
@@ -87,7 +93,10 @@ def parse_feature_selector(value: str | FeatureSelector) -> FeatureSelector:
         return value
     text = str(value).strip()
     if not text:
-        raise ValidationError("Feature selector cannot be empty.")
+        raise ValidationError(
+            "Feature selector cannot be empty.",
+            diagnostic={"code": "INPUT_INVALID", "reason": "REQUIRED"},
+        )
     if "=" in text:
         key, selector_value = text.split("=", 1)
         return FeatureSelector(value=selector_value, key=key)
