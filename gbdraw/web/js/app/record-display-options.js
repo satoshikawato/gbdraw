@@ -23,6 +23,7 @@ import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { draftFeatureOverlapTolerance } from '../services/session-active-config-contract.js';
 import { msg, t, tm } from '../utils/i18n.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
@@ -494,8 +495,12 @@ export const createRecordDisplayControls = ({
       return WRITTEN;
     });
     if (outcome !== WRITTEN) {
+      // History refuses a step only with its busy value, whose reason it always words.
       const { reason } = /** @type {{ reason?: unknown }} */ (outcome && typeof outcome === 'object' ? outcome : {});
-      return { status: 'busy', reason: typeof reason === 'string' ? reason : '' };
+      if (typeof reason !== 'string' || !reason) {
+        throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'decideAutoOrientation' });
+      }
+      return { status: 'busy', reason };
     }
     return { status: 'written', recordIds: changes.map(({ row }) => String(row.recordId || row.recordKey)) };
   };

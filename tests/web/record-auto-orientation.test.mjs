@@ -73,6 +73,12 @@ test('a step History refuses is busy with its reason, and nothing is written', a
   assert.deepEqual(reversed(), [false, false]);
 });
 
+test('a History result that is neither the write nor a worded refusal is a failure, not a blank status', async () => {
+  const { controls, reversed } = controlsFor({ runUndoable: async () => undefined });
+  await assert.rejects(controls.writeDecidedOrientations(DECISIONS, 'Orient'), { code: 'RESULT_INVALID' });
+  assert.deepEqual(reversed(), [false, false]);
+});
+
 test('a pending Session operation is busy before History is asked', async () => {
   const reason = 'Loading session. Retry after loading finishes.';
   let asked = false;
