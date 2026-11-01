@@ -11,8 +11,8 @@ built-in color tables, a fixed identity color scale, italic gene names, a transp
 Web PNG by default, and two Linear alignment options (`--auto_orient` and `--anchor_feature`, with
 Web buttons),
 and reads more real-world GenBank, EMBL, and GFF3 files. The Web app's LOSAT
-engine is now a build of a LOSAT development commit, and threaded LOSAT searches
-no longer stop on a memory fault.
+engine is now a build of a LOSAT development commit, and the memory copies that
+stopped threaded LOSAT searches with a memory fault are now checked first.
 Sessions are now saved as session version 50 (0.14.4 writes 49; the canonical
 `renderRequest` schema stays 9): **a Session saved by 0.14.5 opens only in
 0.14.5 or later.** Sessions saved by 0.14.4 and earlier open as before.
@@ -280,6 +280,10 @@ file. See
 
 ## Known issues
 
+- In Chromium, a threaded LOSAT search can still stop with "memory access out of
+  bounds" at an atomic operation, which the Web app's check of memory copies does
+  not cover. The Web app then runs the pair again, and fails after the third stop.
+  How often this happens in ordinary use has not been measured.
 - A Similarity group member popup and the Similarity alignment panel still show
   the coordinates of a CDS across the origin as `1..` the record length. The
   drawing is correct; only this text is wrong.
