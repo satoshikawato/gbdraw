@@ -7,11 +7,12 @@ function-to-function call stays in the frozen namespace.
 """
 import ast
 from contextlib import ExitStack, contextmanager
+from dataclasses import replace
 import gzip
 import math
 from pathlib import Path
 import sys
-from types import ModuleType
+from types import FunctionType, ModuleType
 from unittest.mock import patch
 
 from gbdraw.analysis import collinearity as cc, protein_colinearity as pc
@@ -75,12 +76,41 @@ def frozen_module():
 frozen = frozen_module()
 
 
+# Since OV-2370 the live hit selectors take the protein map that orders a
+# score tie by CDS; the frozen copies order it by ID. Live callers pass the map,
+# which a frozen copy drops; a differential gives IDs in CDS order.
+_POSITIONAL_PROTEIN_MAP = {'select_best_hits_per_query': 1, 'select_reciprocal_best_hit_edges': 2}
+
+
+def without_protein_map(name, function):
+    if not isinstance(function, FunctionType):
+        return function
+    arity = _POSITIONAL_PROTEIN_MAP.get(name)
+
+    def call(*args, protein_map=None, **kwargs):
+        return function(*(args if arity is None else args[:arity]), **kwargs)
+    return call
+
+
+def ids_in_cds_order(pm, tables):
+    """Rename the proteins so that ID order is CDS order.
+
+    The frozen copies break a score tie on the protein ID, the live code on the
+    CDS (OV-2370); with both orders equal, a differential compares the rest.
+    """
+    order = sorted(pm, key=lambda pid: pc._protein_sort_key(pm[pid]))
+    names = {pid: f'c{rank:04d}_{pid}' for rank, pid in enumerate(order)}
+    renamed = {names[pid]: replace(pm[pid], protein_id=names[pid]) for pid in order}
+    return renamed, {pair: table.assign(query=table['query'].map(names), subject=table['subject'].map(names))
+                     for pair, table in tables.items()}
+
+
 @contextmanager
 def frozen_collinear_callers():
     with ExitStack() as stack:
         for name, value in vars(cc).items():
             if name in vars(frozen) and value is vars(pc).get(name) and callable(value):
-                stack.enter_context(patch.object(cc, name, vars(frozen)[name]))
+                stack.enter_context(patch.object(cc, name, without_protein_map(name, vars(frozen)[name])))
         yield
 
 

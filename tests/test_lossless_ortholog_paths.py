@@ -226,9 +226,14 @@ def test_alias_keys_and_equal_protein_order_keys_preserve_legacy_order(tmp_path)
 # paralog 77, low confidence 8 in 587 groups to 35, 35, 78, 7 in 586 groups
 # (gallery-collinear), and from 45, 23, 67, 7 in 577 groups to 35, 33, 68, 7 in 576
 # groups (gallery-orthogroup).
+# Re-pinned for score ties ordered by CDS, not by runtime handle (OV-2370): the same
+# groups, members, roles, representatives, blocks, anchors, and edges by protein pair
+# and kind; an edge's endpoints follow CDS order, so 27 of 1937 membership edges and
+# 158 of 351 related edges change direction, and 117 groups list their related edges
+# in another order (gallery-collinear; 30, 115, and 96 in gallery-orthogroup).
 S04_SCIENCE_SHA256 = {
-    "gallery-collinear": "5e8906d08476581a830c1ffa175df22d0b1225cda383f992d2a2a138808a9427",
-    "gallery-orthogroup": "60ba9eb1747a87c2320706501cf94da858c09150a55e1d485c4b6fa00d4a371b",
+    "gallery-collinear": "373cf5d6603d74d5d0af848234addb5ed132385059ca75c3c83f62418b769376",
+    "gallery-orthogroup": "9a3c28b3c556e0ec418777d678d3f37a7c77fc34611a321565807e502fca2856",
 }
 
 

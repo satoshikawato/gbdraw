@@ -39,7 +39,7 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 | Type and field | Type | Default |
 |---|---|---|
 | `FeatureOptions.types` | sequence of feature names or `None` | `CDS`, `rRNA`, `tRNA`, `tmRNA`, `ncRNA`, `misc_RNA`, `repeat_region` |
-| `FeatureOptions.color_table` | path or `DataFrame` | `None` |
+| `FeatureOptions.color_table` | path, `builtin:<name>` (a [built-in table](palettes-feature-rules-labels-shapes-and-tracks.md#built-in-color-tables)), or `DataFrame` | `None` |
 | `FeatureOptions.default_colors` | path or `DataFrame` | `None` |
 | `FeatureOptions.palette` | string | `default` |
 | `FeatureOptions.visibility` | path or `DataFrame` | `None` |
@@ -86,15 +86,42 @@ Each `DepthTrackOptions` represents one logical series. `source` is one path or 
 
 `CircularOptions.tracks` defaults to an empty `CircularTrackOptions`. `comparison_rings` defaults to an empty `ComparisonRingOptions`; `species` and `strain` default to `None`; `keep_full_definition_with_title` defaults to `False`. Circular title position accepts `None`, `none`, `top`, or `bottom`.
 
-`ComparisonRingOptions` defaults to no tracks, `reference="auto"`, and automatic ring width and gap. `reference` accepts `query`, `subject`, or `auto`. Without `losat`, every `ComparisonRingTrackOptions` requires `source`, a BLAST/LOSAT table path or `DataFrame`; its label, color, and comparison sequence source (FASTA, GenBank, or DDBJ) are optional. A track without a label is labelled with the table's file name without the last extension, or `Conservation N` for a `DataFrame`. All tracks in one diagram must use the same source kind. If any ring has a label or color, every ring must provide that field.
+`ComparisonRingOptions` defaults to no tracks, `reference="auto"`, automatic ring width and gap, and `identity_scale=None`. `reference` accepts `query`, `subject`, or `auto`. Without `losat`, every `ComparisonRingTrackOptions` requires `source`, a BLAST/LOSAT table path or `DataFrame`; its label, color, and comparison sequence source (FASTA, GenBank, or DDBJ) are optional. A track without a label is labelled with the table's file name without the last extension, or `Conservation N` for a `DataFrame`. All tracks in one diagram must use the same source kind. If any ring has a label or color, every ring must provide that field.
 
 `ComparisonRingOptions(losat="losatn" | "tlosatx")` runs the ring searches: each track leaves `source` unset and names its comparison genome file with `comparison_sequence_source`, which is the query; the subject is the whole reference file (every record that has a sequence, uncropped, also records that are not drawn; for GFF3, every FASTA entry; records passed in memory, as given), and `reference` must stay `auto` or `subject`. `losatn_task` (default `megablast`) applies to LOSATN; `reference_gencode` and each track's `losat_gencode` (default 1) apply to TLOSATX. A track without `label` is labelled like the CLI ring: a GenBank or DDBJ file's DEFINITION (or organism), otherwise the file name without the last extension. `losat_executable`, `ncbi_blast_executable`, and `threads` choose the runtime. The typed equivalent is `CircularDiagramOptions.losat_search` (`LosatSearchOptions` with `program` `losatn` or `tlosatx`; `losatp`, `pairs`, and the LOSATP fields are rejected), `conservation_sequence_files`, and `conservation_losat_gencodes`; the planner replaces them with `conservation_search_results` (`ConservationSearchResult` name and rows), which a Session stores as `conservationBlastFiles`. The search reports positions on the whole reference file, and the planner puts the rows in the search frame of the drawn records, as every ring table is; the raw-cache entries keep the search output.
 
 `CircularOptions.comparison_rings` is the current field name. The `conservation` constructor and attribute alias remains available for compatible code, but passing both names is an error.
 
+`CircularOptions.origin_feature` (default `None`) takes a `"key=value"` feature
+selector, such as `"gene=psbA"`, and rotates each record so that the feature's
+start as drawn (its 5' base when it reads clockwise as drawn, else its 3' base)
+sits at 12 o'clock, like the CLI `--origin_feature`
+(see [Rotate a record to a feature](command-line.md#rotate-a-record-to-a-feature)
+for the rules). The typed `CircularDiagramOptions.origin_feature` accepts the
+same string or a `FeatureSelector`. The planner writes the start into each
+matched record's `RecordDisplayOptions.start_coordinate` and clears the
+option, so the planned request, and a Session saved from it, carries the start.
+`encode_canonical_request()` refuses an unplanned request that still sets it.
+It cannot be combined with a `start_coordinate` of its own, a crop, or a record
+drawn linear, and it refuses a feature without one strand and exact parts.
+
 ## Linear options
 
 `LinearOptions.tracks` defaults to an empty `LinearTrackOptions`; `comparisons` defaults to `LinearComparisonOptions()`. Linear title position accepts `None`, `center`, `top`, or `bottom`.
+
+`LinearOptions.anchor_feature` (default `None`) takes a `"key=value"` feature
+selector, such as `"gene=COX1"`, and aligns the records at that feature's first
+drawn base, like the CLI `--anchor_feature` (see [Record selection and
+layout](command-line.md#record-selection-and-layout) for the rules). The typed
+`LinearDiagramOptions.anchor_feature` accepts the same string or a
+`FeatureSelector`. It cannot be combined with `similarity_alignment`.
+`resolve_request()` draws the request once, writes each record's translation
+into `LinearMultiRecordOptions.record_translations`, and clears the option, so
+the resolved request, and a Session saved from it, carries the translations.
+`encode_canonical_request()` refuses a request that still sets it. For each record
+it moves, its x replaces the record's own x, including an explicit
+`LinearMultiRecordOptions.record_translations` entry, as Similarity alignment
+does; the y is kept.
 
 Important `LinearComparisonOptions` defaults are:
 
@@ -106,6 +133,8 @@ Important `LinearComparisonOptions` defaults are:
 | `gencodes` | `None` (runtime default, 1; used when `losat="tlosatx"`) |
 | `pairs` | `None` (records in adjacent rows are compared) |
 | `match_style` | `ribbon` |
+| `identity_scale` | `None` (colours from the identity threshold to 100%) |
+| `auto_orient` | `False` (see [Automatic Linear orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation)) |
 | `collinearity_unit` | `auto` |
 | `collinearity_anchor` | `rbh` |
 | `collinearity_scope` | `adjacent` |
@@ -119,6 +148,8 @@ Important `LinearComparisonOptions` defaults are:
 | `orthogroup_membership` | `anchor_core_v1` |
 | `member_max_hits` | `None` (unbounded) |
 | `max_paralog_links` | `2` |
+
+`identity_scale` (`LinearComparisonOptions` and `ComparisonRingOptions`) takes `(MIN, MAX)` with 0 <= MIN < MAX <= 100 and fixes the identity colour scale of the matches or rings and their Legend, like the CLI `--identity_scale`; any other value raises `ValidationError`. See [Identity colour scale](comparison-programs-thresholds-and-results.md#identity-colour-scale).
 
 `losat` takes `"losatn"`, `"tlosatx"`, or `"losatp"` and runs that search; `losat=None` runs no search. `gencodes` is one translation table for every record or one per record. `pairs` lists explicit `(query, subject)` record indexes for any program (LOSATP: Pairwise only). `losatp_mode` accepts `similarity_groups`, `collinear`, or `pairwise`. With `losatp_mode="collinear"`, `collinearity_anchor` takes `rbh` or `all`, and `collinearity_infer_orthogroups=True` adds within-record searches and builds similarity groups before blocks, like the CLI `--collinear_infer_orthogroups on`. `similarity_groups` means gbdraw Similarity groups; it does not claim phylogenetic orthology. `losat_executable` and `ncbi_blast_executable` are mutually exclusive; `None` selects the runtime automatically.
 
@@ -342,7 +373,7 @@ representation. See [Session and request compatibility](session-and-request-comp
 
 ## Combined rotation and placement example
 
-Use a new directory containing the four inputs obtained in the
+Use a new directory containing the three inputs obtained in the
 [CLI example](command-line.md#rotate-a-plastome-and-place-a-multipart-feature).
 This program constructs the placement table in memory; it does not need
 `tables/placements.tsv`. Save it as `rotated_placed_chloroplast.py` and run
@@ -417,7 +448,7 @@ options = CircularOptions(
             "misc_RNA",
             "rep_origin",
         ),
-        color_table=Path("chloroplast_specific_table.tsv"),
+        color_table="builtin:plastid",
         placements=DataFrame([{
             "record": "NC_001879.2",
             "feature_selector": "protein_id=NP_054479.1",

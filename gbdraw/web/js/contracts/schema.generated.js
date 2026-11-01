@@ -3,11 +3,11 @@
 // above each constant; do not edit manually.
 
 // gbdraw/session_io.py: CURRENT_SESSION_VERSION
-export const SESSION_VERSION = 49;
+export const SESSION_VERSION = 50;
 
 // gbdraw/session_io.py: SUPPORTED_SESSION_VERSIONS
 /** @type {readonly number[]} */
-export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49]);
+export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49, 50]);
 
 // gbdraw/session_io.py: TYPED_DRAFT_SESSION_MIN_VERSION
 export const TYPED_DRAFT_SESSION_VERSION = 44;
@@ -74,7 +74,8 @@ export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({
   46: 5,
   47: 5,
   48: 5,
-  49: 5
+  49: 5,
+  50: 5
 });
 
 // gbdraw/analysis/protein_colinearity.py: PROTEIN_LOSAT_CACHE_SCHEMA
@@ -123,7 +124,7 @@ export const CLI_RECORD_KEY_PREFIX = 'record-';
 // gbdraw/api/record_planning.py: EXPANDED_RECORD_KEY_SEPARATOR
 export const EXPANDED_RECORD_KEY_SEPARATOR = ':';
 
-// gbdraw/config/models/objects.py: UNSET_NUMBER_SPELLINGS
+// gbdraw/core/numeric.py: UNSET_NUMBER_SPELLINGS
 /** @type {readonly string[]} */
 export const CONFIG_UNSET_NUMBER_SPELLINGS = Object.freeze(['', 'auto', 'none', 'null']);
 
@@ -195,7 +196,7 @@ export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
 
 // gbdraw/config/modify.py: config_paths_reading_unset_spellings()
 /** @type {readonly string[]} */
-export const CONFIG_UNSET_NUMBER_PATHS = Object.freeze(['canvas.linear.track_axis_gap', 'objects.conservation.ring_gap', 'objects.conservation.ring_width', 'objects.definition.linear.line_styles.accession.font_size', 'objects.definition.linear.line_styles.accession.font_weight', 'objects.definition.linear.line_styles.length.font_size', 'objects.definition.linear.line_styles.length.font_weight', 'objects.definition.linear.line_styles.name.font_size', 'objects.definition.linear.line_styles.name.font_weight', 'objects.definition.linear.line_styles.replicon.font_size', 'objects.definition.linear.line_styles.replicon.font_weight', 'objects.definition.linear.line_styles.subtitle.font_size', 'objects.definition.linear.line_styles.subtitle.font_weight', 'objects.depth.large_tick_interval', 'objects.depth.max_depth', 'objects.depth.min_depth', 'objects.depth.small_tick_interval', 'objects.depth.tick_font_size', 'objects.gc_content.large_tick_interval', 'objects.gc_content.max_percent', 'objects.gc_content.min_percent', 'objects.gc_content.small_tick_interval', 'objects.gc_content.tick_font_size']);
+export const CONFIG_UNSET_NUMBER_PATHS = Object.freeze(['canvas.linear.track_axis_gap', 'objects.blast_match.identity_scale', 'objects.conservation.identity_scale', 'objects.conservation.ring_gap', 'objects.conservation.ring_width', 'objects.definition.linear.line_styles.accession.font_size', 'objects.definition.linear.line_styles.accession.font_weight', 'objects.definition.linear.line_styles.length.font_size', 'objects.definition.linear.line_styles.length.font_weight', 'objects.definition.linear.line_styles.name.font_size', 'objects.definition.linear.line_styles.name.font_weight', 'objects.definition.linear.line_styles.replicon.font_size', 'objects.definition.linear.line_styles.replicon.font_weight', 'objects.definition.linear.line_styles.subtitle.font_size', 'objects.definition.linear.line_styles.subtitle.font_weight', 'objects.depth.large_tick_interval', 'objects.depth.max_depth', 'objects.depth.min_depth', 'objects.depth.small_tick_interval', 'objects.depth.tick_font_size', 'objects.gc_content.large_tick_interval', 'objects.gc_content.max_percent', 'objects.gc_content.min_percent', 'objects.gc_content.small_tick_interval', 'objects.gc_content.tick_font_size']);
 
 // gbdraw/session_request_codec.py: describe_legacy_request_tables()
 export const LEGACY_REQUEST_TABLES = Object.freeze({
@@ -260,6 +261,15 @@ export const LEGACY_REQUEST_TABLES = Object.freeze({
   collinearityStandardParalogLinks: 'maxParalogLinksPerOrthogroup',
   paralogLinksSetting: 'collinearMaxParalogLinksPerOrthogroup',
   paralogLinksDefault: 2
+});
+
+// gbdraw/session_request_codec.py: describe_fresh_protein_comparison()
+export const FRESH_PROTEIN_COMPARISON_DEFAULTS = Object.freeze({
+  collinearInferOrthogroups: false,
+  hitLimits: Object.freeze({
+    candidateLimit: null,
+    orthogroupMemberMaxHits: null
+  })
 });
 
 // gbdraw/core/record_metadata.py: organism_name_rule_data()
@@ -391,6 +401,15 @@ export const ORGANISM_NAME_RULE = Object.freeze({
     source: '\\s*;\\s*',
     flags: ''
   })
+});
+
+// gbdraw/comparisons/losat_runtime.py: losat_search_flags()
+export const LOSAT_SEARCH_FLAGS = Object.freeze({
+  "--task": '-task',
+  "--query-gencode": '-query_gencode',
+  "--db-gencode": '-db_gencode',
+  "--max-hsps-per-subject": '-max_hsps',
+  "--max-target-seqs": '-max_target_seqs'
 });
 
 // gbdraw/analysis/protein_colinearity.py: OrthogroupMember.role

@@ -44,6 +44,21 @@ command: the command line prints it and exits with status 1, and Python
 `save_figure_to()`, `render_to_bytes()`, `Diagram.save()`, and typed requests
 raise it as `ValidationError`.
 
+## PNG and PDF size limits
+
+On the command line and in Python, a PNG side cannot exceed 32,767 px, and a
+wrapped figure's PDF page side cannot exceed 14,400 pt. A PNG there has one pixel
+per SVG pixel and a PDF page has 0.75 pt per SVG pixel, so 14,400 pt is 19,200
+SVG px. A figure over a limit stops before anything is written, as a failed
+conversion does. For a [wrapped figure](command-line.md#wrap-one-record-over-several-rows)
+the error names the next longer 1-2-5 row length that should fit, or says that
+none would. That length is estimated from the drawn height and the row count,
+so the true height can differ when labels or the size class change with the row
+length. SVG, Interactive SVG, EPS, and PS have no such limit.
+
+An unwrapped PDF over 14,400 pt is still written, as before; some PDF viewers
+may refuse such a page.
+
 ## Static, interactive, and raster output
 
 Static SVG contains the diagram and supported semantic groups but no embedded
@@ -71,6 +86,14 @@ PNG dimensions scale from the SVG canvas by `DPI / 96`; **96 (Screen)** keeps
 the canvas pixel dimensions and **300 (Print)** produces a larger raster.
 Check the downloaded dimensions and file signature instead of trusting the
 extension.
+
+gbdraw draws no background. SVG and Interactive SVG have no background shape,
+and command-line, Python, and web app PNG keep the background transparent. PDF,
+EPS, and PS paint no page background, so a viewer shows its own page color,
+usually white. The web app PNG export fills the background white when
+**White background** is on next to the DPI choice; it is off by default, is a
+page setting that is not saved in Sessions, and is not an Undo step. The web
+app PDF has no background either way.
 
 SVG lengths are CSS pixels (96 px per inch). A web PDF page is the SVG canvas
 at 0.75 pt per px, the same physical size as the CLI (CairoSVG) PDF; a

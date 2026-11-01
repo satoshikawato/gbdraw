@@ -774,6 +774,12 @@ class LinearDiagramRequest:
             raise ValidationError(
                 "Linear request similarity_alignment has an unsupported type."
             )
+        if self.similarity_alignment is not None and self.options.anchor_feature is not None:
+            # Both decide where records sit along their rows.
+            raise ValidationError(
+                "anchor_feature cannot be combined with a similarity alignment.",
+                diagnostic={"code": "INPUT_INVALID"},
+            )
         if (
             isinstance(self.similarity_alignment, SimilarityAlignmentReference)
             and (

@@ -718,6 +718,21 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]);
     }
   },
+  // Align at feature: Python resolves the anchor on the committed request,
+  // staged as Generate stages it, and returns the record translations.
+  [DIAGRAM_HELPER_OPERATIONS.RESOLVE_FEATURE_ANCHOR]: {
+    keys: ['canonicalRequest', 'selector'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'resolve_feature_anchor_json', [
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(payload.selector, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   // Load Feature Edits TSV: Python reads the table against the records of the
   // committed request, staged as Generate stages them (design Q4 6.4, R4).
   [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE]: {
@@ -1026,6 +1041,20 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // The Orient records button: Python plans the last Generate's request with
+  // auto_orient and returns each record's drawn orientation by record key.
+  [DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION]: {
+    keys: ['canonicalRequest'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'decide_auto_orientation_json', [
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV]: {
     keys: ['entry', 'identityManifest'],
     fileRoles: [],
@@ -1207,6 +1236,10 @@ const runGeneration = async ({
     const preparedInputRetentionJson = JSON.stringify(
       buildPreparedInputRetention(drawingId, retainedResourceTokens, heldResourceTokens)
     );
+    // The file names the input summary gives the staged resources (gbdraw/api/input_summary.py).
+    const resourceNamesJson = JSON.stringify(Object.fromEntries(
+      resourceManifest.map(({ resourceId, name }) => [resourceId, name])
+    ));
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-manifest-json-end', {
       characters: resourcePathsJson.length,
       preparedIdentityCharacters: preparedResourceIdentitiesJson.length
@@ -1229,6 +1262,7 @@ const runGeneration = async ({
       held?.revision ?? null,
       JSON.stringify(heldSegments.map(({ revision }) => revision)),
       preparedInputRetentionJson,
+      resourceNamesJson,
       // CAPACITY-WARN: Python calls this with the JSON text of labels that may not fit, before it places them;
       // the page words it while the render goes on. Pyodide passes the function as a JsProxy for the call.
       (/** @type {unknown} */ notice) => {

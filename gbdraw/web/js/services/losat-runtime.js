@@ -1,4 +1,7 @@
 // @ts-check
+import { guardSharedMemoryBulkOps } from './losat-shared-memory-guard.js';
+import { LOSAT_SEARCH_FLAGS } from '../contracts/schema.generated.js';
+
 /**
  * The exports of the direct LOSAT wasm API (`hasDirectLosatApi` checks for it).
  * @typedef {object} LosatDirectExports
@@ -43,10 +46,42 @@
 /** @type {Promise<WebAssembly.Instance> | null} */
 let directInstancePromise = null;
 
+/** @type {Readonly<Record<string, string>>} */
+const SEARCH_FLAGS = LOSAT_SEARCH_FLAGS;
+
+/**
+ * The words of a search's options as LOSAT reads them. Generate keeps the raw-cache spelling in its args
+ * (`--task`, the CLI's cache spelling too); LOSAT reads the NCBI spelling (`-task`).
+ * @param {readonly unknown[] | undefined} extraArgs
+ * @returns {string[]}
+ */
+export const losatSearchArgs = (extraArgs) => (
+  Array.isArray(extraArgs) ? extraArgs.map((arg) => SEARCH_FLAGS[String(arg)] ?? String(arg)) : []
+);
+
+/**
+ * The argv of the LOSAT command for one pair whose inputs are `query.fa` and `subject.fa`.
+ * @param {{ program: string, outfmt?: string, extraArgs?: readonly unknown[], threads?: number }} search
+ * @returns {string[]}
+ */
+export const losatCommandArgs = ({ program, outfmt = '6', extraArgs, threads }) => {
+  const args = [
+    'losat', program, '-query', 'query.fa', '-subject', 'subject.fa', '-outfmt', String(outfmt || '6'),
+    ...losatSearchArgs(extraArgs)
+  ];
+  if (threads !== undefined && !args.some((arg) => arg === '-num_threads' || arg.startsWith('-num_threads='))) {
+    args.push('-num_threads', String(threads));
+  }
+  return args;
+};
+
 /**
  * Fetch and compile a packaged LOSAT wasm. Its URL carries no version, so the
  * request always revalidates (`no-cache`): an unchanged file costs a 304, and a
- * file replaced at the same URL is never served from a stale cache.
+ * file replaced at the same URL is never served from a stale cache. A threaded
+ * module's bulk memory operations are guarded (`guardSharedMemoryBulkOps`);
+ * a module the guard declines compiles as it is, and a trapped threaded job
+ * still runs again (`services/losat.js`).
  * @param {string} wasmUrl
  * @param {string} label the asset named when it is missing
  * @returns {Promise<WebAssembly.Module>}
@@ -56,7 +91,10 @@ export const compileLosatWasm = async (wasmUrl, label) => {
   if (!response.ok) {
     throw new Error(`Missing packaged asset: ${label} not found at ${wasmUrl}`);
   }
-  return WebAssembly.compile(await response.arrayBuffer());
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const guarded = guardSharedMemoryBulkOps(bytes);
+  if (!guarded) console.warn(`${label} at ${wasmUrl}: its bulk memory operations could not be guarded; it runs unguarded.`);
+  return WebAssembly.compile(guarded ? guarded.bytes : bytes);
 };
 
 /** @param {Uint8Array[]} chunks */
@@ -105,18 +143,7 @@ export const runLosatPairWasi = async ({
   const stdout = new ConsoleStdout((/** @type {Uint8Array} */ data) => stdoutChunks.push(data));
   const stderr = new ConsoleStdout((/** @type {Uint8Array} */ data) => stderrChunks.push(data));
   const stdin = new OpenFile(new File(new Uint8Array(), { readonly: true }));
-  const args = [
-    'losat',
-    program,
-    '--query',
-    'query.fa',
-    '--subject',
-    'subject.fa',
-    '--outfmt',
-    String(outfmt),
-    ...(Array.isArray(extraArgs) ? extraArgs : [])
-  ];
-  const wasi = new WASI(args, [], [stdin, stdout, stderr, preopen]);
+  const wasi = new WASI(losatCommandArgs({ program, outfmt, extraArgs }), [], [stdin, stdout, stderr, preopen]);
   const instance = await WebAssembly.instantiate(wasmModule, {
     wasi_snapshot_preview1: wasi.wasiImport
   });
@@ -201,28 +228,21 @@ export const runLosatPairDirect = async ({
   // hasDirectLosatApi admitted this module, so its exports are the direct API.
   const exports = /** @type {LosatDirectExports} */ (instance.exports);
   const encoder = new TextEncoder();
-  const argsText = Array.isArray(extraArgs) ? extraArgs.map(String).join('\0') : '';
-  const allocations = [
-    copyBytesToWasm(exports, encoder.encode(String(program))),
-    copyBytesToWasm(exports, encoder.encode(String(queryFasta))),
-    copyBytesToWasm(exports, encoder.encode(String(subjectFasta))),
-    copyBytesToWasm(exports, encoder.encode(String(outfmt))),
-    copyBytesToWasm(exports, encoder.encode(argsText))
-  ];
+  const words = [program, queryFasta, subjectFasta, outfmt, losatSearchArgs(extraArgs).join('\0')];
+  /** @type {{ ptr: number, len: number }[]} */
+  const allocations = [];
+  let exitCode;
+  try {
+    words.forEach((word) => allocations.push(copyBytesToWasm(exports, encoder.encode(String(word)))));
+    exitCode = exports.losat_web_run_pair(...allocations.flatMap(({ ptr, len }) => [ptr, len]));
+  } catch (error) {
+    // A trap (LOSAT docs/web/abi_v1.md §9): the instance is never called again, not even to free or clear;
+    // the next pair instantiates the module again.
+    directInstancePromise = null;
+    throw error;
+  }
 
   try {
-    const exitCode = exports.losat_web_run_pair(
-      allocations[0].ptr,
-      allocations[0].len,
-      allocations[1].ptr,
-      allocations[1].len,
-      allocations[2].ptr,
-      allocations[2].len,
-      allocations[3].ptr,
-      allocations[3].len,
-      allocations[4].ptr,
-      allocations[4].len
-    );
     if (exitCode !== 0) {
       const detail = readWasmString(
         exports,

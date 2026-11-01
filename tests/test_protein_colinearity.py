@@ -18,6 +18,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.api.diagram as api_diagram_module
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.api.request_render as request_render_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.comparisons.losat_runtime as losat_runtime_module
@@ -1563,7 +1564,7 @@ def test_select_best_hits_per_query_avoids_secondary_paralog_merge() -> None:
         columns=COMPARISON_COLUMNS,
     )
 
-    selected = select_best_hits_per_query(hits)
+    selected = select_best_hits_per_query(hits, {})
 
     assert selected[["query", "subject"]].to_records(index=False).tolist() == [
         ("a", "b1")
@@ -1584,24 +1585,9 @@ def test_select_reciprocal_best_hit_edges_requires_directional_reciprocity() -> 
         columns=COMPARISON_COLUMNS,
     )
 
-    selected = select_reciprocal_best_hit_edges(forward, reverse)
+    selected = select_reciprocal_best_hit_edges(forward, reverse, {})
 
     assert selected.empty
-
-
-@pytest.mark.linear
-def test_select_top_hits_per_query_is_deterministic_on_subject_tie() -> None:
-    hits = pd.DataFrame.from_records(
-        [
-            _hit_row("a", "b2", bitscore=300),
-            _hit_row("a", "b1", bitscore=300),
-        ],
-        columns=COMPARISON_COLUMNS,
-    )
-
-    selected = select_top_hits_per_query(hits, max_hits=1)
-
-    assert selected.iloc[0]["subject"] == "b1"
 
 
 @pytest.mark.linear
@@ -1856,7 +1842,7 @@ def test_hsp_adjacent_reverse_clamped_union_and_all_selected_hsps(monkeypatch):
         _hit_row("q", "s", bitscore=190, alignment_length=30, qstart=21, qend=50, sstart=50, send=21),
         _hit_row("q", "s", bitscore=180, alignment_length=40, qstart=150, qend=61, sstart=61, send=150)])
     for limit in (1, None):
-        selected = pc._select_member_candidate_hits_per_query(hits, max_hits=limit)
+        selected = pc._select_member_candidate_hits_per_query(hits, max_hits=limit, protein_map=pm)
         result = pc._normalize_directional_hit_table(selected, pm, min_coverage=0.0)
         pair = result.loc[result["subject"] == "s"].iloc[0]
         assert pair["hsp_count"] == 3
@@ -4809,6 +4795,8 @@ def test_linear_cli_forwards_protein_blastp_options(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -4878,6 +4866,8 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -4994,11 +4984,14 @@ def test_similarity_groups_with_two_records_on_one_row_link_adjacent_rows(
 
 
 @pytest.mark.linear
-def test_cli_similarity_groups_with_multi_record_rows_draws_adjacent_row_links(
+@pytest.mark.parametrize("mode", ("similarity_groups", "pairwise"))
+def test_cli_protein_modes_with_multi_record_rows_draw_adjacent_row_links(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    mode: str,
 ) -> None:
-    """OV-2297: the CLI row layout with --losatp_mode similarity_groups renders."""
+    """OV-2297, OV-2371: the CLI row layout renders with --losatp_mode
+    similarity_groups and pairwise, and both join the same record pairs."""
 
     import re
 
@@ -5020,7 +5013,7 @@ def test_cli_similarity_groups_with_multi_record_rows_draws_adjacent_row_links(
             "--gbk", "a.gb", "b.gb", "c.gb",
             *(argument for position in _TWO_RECORDS_ON_ROW_ONE for argument in ("--multi_record_position", position)),
             "--losat", "losatp",
-            "--losatp_mode", "similarity_groups",
+            "--losatp_mode", mode,
             "-f", "svg",
             "-o", str(output_prefix),
         ]

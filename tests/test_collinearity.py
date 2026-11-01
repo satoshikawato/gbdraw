@@ -9,15 +9,17 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+
+from gbdraw.comparisons.identity_scale import identity_color_domain
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.analysis.collinearity as collinearity_module
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
-import gbdraw.diagrams.linear.assemble as linear_assemble_module
 import gbdraw.io.comparisons as comparisons_io_module
 from gbdraw.legend.sources import ComparisonLegendSource
 from tests.utils.comparison_tables import converted_pair_rows, ribbon_group
@@ -26,6 +28,7 @@ from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityResult,
     LosslessCollinearityParameters,
+    RecordExtent,
     build_collinearity_blocks_from_hits,
     call_collinearity_blocks,
     cluster_lossless_collinearity_anchors,
@@ -253,9 +256,9 @@ def test_collinear_scope_partitions_table_identity(monkeypatch, search_scope, ed
         captured["semantic"] = tables
         return infer(tables, *args, **kwargs)
 
-    def capture_geometry(tables, **kwargs):
+    def capture_geometry(tables, *args, **kwargs):
         captured["geometry"] = tables
-        return select_geometry(tables, **kwargs)
+        return select_geometry(tables, *args, **kwargs)
 
     monkeypatch.setattr(collinearity_module, "select_rbh_orthogroup_edges_from_directional_hits", capture_semantic)
     monkeypatch.setattr(collinearity_module, "_select_orthogroup_edges", capture_geometry)
@@ -2352,6 +2355,8 @@ def test_linear_cli_forwards_collinearity_options(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
@@ -3108,7 +3113,7 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
 
     comparisons = convert_collinearity_blocks_to_comparisons(
         result,
-        record_ids=["record_a", "record_b"],
+        records=[RecordExtent("record_a", 1000), RecordExtent("record_b", 1000)],
         color_mode="orientation",
         search_scope="adjacent",
     )
@@ -3356,7 +3361,7 @@ def test_orientation_collinearity_suppresses_pairwise_identity_legend() -> None:
     blast_config = SimpleNamespace(
         min_color="#ffffff",
         max_color="#000000",
-        identity=0,
+        identity_domain=identity_color_domain(0, None),
     )
 
     legend_table = prepare_legend_table(
@@ -3400,7 +3405,7 @@ def test_average_identity_collinearity_legend_uses_average_identity_label() -> N
     blast_config = SimpleNamespace(
         min_color="#ffffff",
         max_color="#000000",
-        identity=0,
+        identity_domain=identity_color_domain(0, None),
     )
 
     legend_table = prepare_legend_table(
@@ -3445,7 +3450,7 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
     blast_config = SimpleNamespace(
         min_color="#ffffff",
         max_color="#000000",
-        identity=0,
+        identity_domain=identity_color_domain(0, None),
     )
 
     legend_table = prepare_legend_table(
@@ -3482,6 +3487,7 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
             "stroke": "none",
             "width": 0,
             "min_value": 0,
+            "max_value": 100,
         },
         "Inverted": {
             "type": "gradient",
@@ -3490,6 +3496,7 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
             "stroke": "none",
             "width": 0,
             "min_value": 0,
+            "max_value": 100,
         },
     }
 
@@ -3545,6 +3552,7 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
             "stroke": "none",
             "width": 0,
             "min_value": 20,
+            "max_value": 100,
         },
     }
 
@@ -3629,6 +3637,7 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
             "stroke": "none",
             "width": 0,
             "min_value": 20,
+            "max_value": 100,
         },
     }
 
@@ -3989,7 +3998,7 @@ def _protein_float_reductions():
         anchors=anchors,
     )
     (row,) = convert_collinearity_blocks_to_pair_comparisons(
-        CollinearityResult(blocks=(block,)), record_ids=["a", "b"]
+        CollinearityResult(blocks=(block,)), records=[RecordExtent("a", 10000), RecordExtent("b", 10000)]
     )[(0, 1)][["bitscore", "identity"]].itertuples(index=False)
     size = 12
     hits = pd.DataFrame(
@@ -4004,7 +4013,7 @@ def _protein_float_reductions():
         block.score,
         collinearity_module._weighted_identity(anchors),
         tuple(row),
-        protein_colinearity_module._fit_expected_bitscore_model(hits, top_fraction=1.0),
+        protein_colinearity_module._fit_expected_bitscore_model(hits, {}, top_fraction=1.0),
     )
 
 

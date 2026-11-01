@@ -551,7 +551,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const count = popup?.querySelector('[data-match-group-count]'); const rows = Array.from(popup?.querySelectorAll('[data-match-group] tbody tr') || []); const lastShown = rows[Math.min(rows.length, 4) - 1]?.querySelector('td'); if (!popup || !count || !lastShown) throw new Error('Compact og_31 member table not found.'); popup.children[0]?.setAttribute('data-capture', 'og31-popup-header'); count.setAttribute('data-capture', 'og31-popup-count'); lastShown.setAttribute('data-capture', 'og31-popup-member-row'); document.activeElement?.blur();"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const count = popup?.querySelector('[data-match-group-count]'); const rows = Array.from(popup?.querySelectorAll('[data-match-group] tbody tr') || []); const lastShown = rows[Math.min(rows.length, 4) - 1]?.querySelector('td'); if (!popup || !count || !lastShown) throw new Error('Compact og_31 member table not found.'); popup.querySelector('[data-popup-header]').setAttribute('data-capture', 'og31-popup-header'); count.setAttribute('data-capture', 'og31-popup-count'); lastShown.setAttribute('data-capture', 'og31-popup-member-row'); document.activeElement?.blur();"
               }
             ],
             "clipSelectors": ["path[data-gbdraw-match-id='comparison1_match1']", "[data-capture='og31-popup-header']", "[data-capture='og31-popup-count']", "[data-capture='og31-popup-member-row']"],

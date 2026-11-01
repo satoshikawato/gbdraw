@@ -9,6 +9,7 @@ import shutil
 from time import perf_counter
 from typing import AbstractSet, Any, Iterator, Literal, Mapping, MutableMapping, TypedDict, cast
 
+from gbdraw.api.input_summary import input_summary_payload, with_source_names
 from gbdraw.api.request_render import (
     CircularBatchRenderResult,
     RequestRenderResult,
@@ -220,6 +221,7 @@ def _render_canonical_web_request_with_prepared_inputs(
     _label_fit_searches: LabelFitRowSearches | None,
     _held_feature_catalog_revision: str | None,
     _held_segments: AbstractSet[str],
+    _source_names: Mapping[str, str] | None = None,
 ) -> WebRenderReply:
     def render() -> WebRenderReply:
         # The request's color table is the app's rule list, not a saved file.
@@ -237,6 +239,7 @@ def _render_canonical_web_request_with_prepared_inputs(
                 label_fit_searches=_label_fit_searches,
                 held_feature_catalog_revision=_held_feature_catalog_revision,
                 held_segments=_held_segments,
+                source_names=_source_names,
             )
 
     if _prepared_input_cache is None:
@@ -270,6 +273,7 @@ def _render_canonical_web_request(
     label_fit_searches: LabelFitRowSearches | None,
     held_feature_catalog_revision: str | None,
     held_segments: AbstractSet[str],
+    source_names: Mapping[str, str] | None,
 ) -> WebRenderReply:
 
     if not isinstance(payload, Mapping):
@@ -413,6 +417,27 @@ def _render_canonical_web_request(
         for result_index, item in enumerate(items)
         if item.linear_metadata is not None
         for warning in item.linear_metadata.comparison_warnings
+    ]
+    # The CLI logs the same summary and warnings (gbdraw.api.input_summary); not saved in a Session.
+    metadata["inputSummaries"] = [
+        input_summary_payload(
+            with_source_names(item.input_summary, source_names) if source_names else item.input_summary,
+            result_index=result_index,
+            result_name=results[result_index]["name"],
+        )
+        for result_index, item in enumerate(items)
+    ]
+    metadata["linearWrap"] = [
+        {
+            "resultIndex": result_index,
+            "resultName": results[result_index]["name"],
+            "rowLength": item.linear_metadata.wrap.row_length,
+            "rowCount": item.linear_metadata.wrap.row_count,
+            "requested": item.linear_metadata.wrap.requested,
+            "recordRows": list(item.linear_metadata.wrap.record_rows),
+        }
+        for result_index, item in enumerate(items)
+        if item.linear_metadata is not None and item.linear_metadata.wrap is not None
     ]
     # Crossing label leaders drawn anyway: the counts, and a token that names
     # the figure whose rows the dialog computes later (OD-F14).
@@ -561,6 +586,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
     _label_fit_searches: LabelFitRowSearches | None = None,
     _held_feature_catalog_revision: str | None = None,
     _held_segments: AbstractSet[str] = frozenset(),
+    _resource_names: Mapping[str, object] | None = None,
 ) -> WebRenderReply:
     _require_resource_map(resource_paths)
     workspace_path = Path(workspace)
@@ -609,6 +635,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
             # its source then names a file that lives as long as its key does
             # (OV-1581), and the workspace is removed below.
             validated_paths[resource_id] = resolved
+        source_names = _staged_source_names(_resource_names, validated_paths)
         validated_identities = _validate_prepared_resource_identities(
             _resource_identities,
             resource_paths=validated_paths,
@@ -634,6 +661,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
             _label_fit_searches=_label_fit_searches,
             _held_feature_catalog_revision=_held_feature_catalog_revision,
             _held_segments=_held_segments,
+            _source_names=source_names,
         )
     except BaseException as exc:
         render_error = exc
@@ -690,6 +718,32 @@ def prepared_input_lookup(
         publish_inputs=publish_inputs,
     ):
         yield
+
+
+def _staged_source_names(
+    names: Mapping[str, object] | None, resource_paths: Mapping[str, Path]
+) -> dict[str, str] | None:
+    """The file name of each staged resource, by the name of the file the request reads.
+
+    The Worker stages a resource under its content token; the input summary
+    names the file the page read (``resourceManifest[].name``). The page keeps
+    one resource for files with the same bytes, so they share the first name.
+    """
+
+    if names is None:
+        return None
+    if not isinstance(names, Mapping) or not set(names) <= set(resource_paths):
+        raise ValidationError(
+            "The staged Web render resource names do not match its manifest.", diagnostic={"code": "HELPER_PROTOCOL"}
+        )
+    staged: dict[str, str] = {}
+    for resource_id, name in names.items():
+        if not isinstance(name, str) or not name:
+            raise ValidationError(
+                f"Invalid staged Web render resource name for {resource_id!r}.", diagnostic={"code": "HELPER_PROTOCOL"}
+            )
+        staged.setdefault(resource_paths[resource_id].name, name)
+    return staged
 
 
 def _validate_prepared_resource_identities(

@@ -52,6 +52,7 @@ from .api.requests import (
 )
 from .config.modify import modify_config_dict
 from .layout.record_placement import parse_record_row_position
+from .api.input_summary import log_input_summary
 from .features.overrides import log_feature_identity_notices
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
@@ -65,8 +66,9 @@ from .tracks import (
 )
 
 from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
+from .comparisons.identity_scale import CIRCULAR_IDENTITY_SCALE_PATH
 from .comparisons.losat_jobs import unique_losat_filenames
-from .core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
+from .core.numeric import argparse_float, argparse_integer, argparse_scale_interval, parse_ascii_finite_float
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
     _add_arrow_geometry_args,
@@ -284,6 +286,19 @@ def _get_args(
         '--keep_full_definition_with_plot_title',
         help='Keep the full species/strain center label when a circular plot title is shown (default: False).',
         action='store_true')
+    parser.add_argument(
+        '--origin_feature',
+        metavar='KEY=VALUE',
+        default=None,
+        help=(
+            'Rotate each record so that the feature this exact selector names starts at 12 o\'clock, '
+            'for example gene=dnaA or locus_tag=b0001 (the feature_selector form of the placement and '
+            'override tables): its start as drawn (its 5\' base when it reads clockwise, else its 3\' '
+            'base) becomes the display start. A record without '
+            'the feature keeps its start and is reported. Cannot be combined with '
+            '--display_start_coordinate or a crop (default: off).'
+        ),
+    )
     parser.add_argument(
         '--center_reserved_radius',
         help='Override the center-label reserved radius for circular track packing (in px; must be >= 0).',
@@ -572,8 +587,8 @@ def _get_args(
         type=argparse_float)
     parser.add_argument(
         '--scale_interval',
-        help='Manual scale interval for circular mode (in bp; must be > 0). Overrides automatic calculation.',
-        type=argparse_integer)
+        help='Manual scale interval for circular mode (a length in bp with an optional unit, for example 5000 or 5kb; must be > 0). Overrides automatic calculation.',
+        type=argparse_scale_interval)
     parser.add_argument(
         '--hide_scale',
         help='Hide the primary genome-coordinate scale while retaining the circular axis.',
@@ -1227,9 +1242,12 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         # Only a hidden definition is an override, so a default run's request is unchanged.
         "objects.definition.circular.show": False if args.hide_definition else None,
         "objects.conservation.color_scheme": args.conservation_color_scheme,
+        CIRCULAR_IDENTITY_SCALE_PATH: list(args.identity_scale) if args.identity_scale else None,
         "labels.rendering": label_rendering,
         "labels.circular.line": args.label_line,
         "labels.circular.protection": args.label_protection,
+        # Only the italic style is an override, so a default run's request is unchanged.
+        "labels.circular.italic_gene_labels": True if args.italic_gene_labels else None,
         "labels.circular.placement": circular_label_placement,
         "labels.filtering.raw": filtering_override,
         "labels.unified_adjustment.outer_labels.x_radius_offset": outer_label_x_radius_offset,
@@ -1427,6 +1445,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         bitscore=bitscore,
         identity=identity,
         alignment_length=alignment_length,
+        origin_feature=args.origin_feature,
     )
     request_records = record_manifest.records
 
@@ -1528,6 +1547,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 warning.set_id, warning.annotation_id, warning.record_index + 1,
                 warning.record_id, warning.message)
         log_feature_identity_notices(rendered_item.feature_identity_notices)
+        log_input_summary(rendered_item.input_summary)
         if not rendered_item.output_paths:
             raise ValidationError("Circular request renderer did not produce an SVG output.")
         svg_path = Path(rendered_item.output_paths[0])

@@ -12,7 +12,8 @@ import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
  * @typedef {'none' | 'halo' | 'box'} LabelProtection
  * @typedef {{
  *   comparison: { alignmentLength: number, bitscore: number, evalue: number, identity: number },
- *   labelStyle: { line: LabelLine, protection: LabelProtection },
+ *   labelStyle: { line: LabelLine, protection: LabelProtection, italicGeneLabels: boolean },
+ *   identityScalePath: string,
  *   linearAxisColor: string | null,
  *   linearRulerAxisColor: string | null,
  *   tracks: { gc: boolean, skew: boolean }
@@ -86,14 +87,44 @@ export const modeProfile = (mode) => /** @type {ModeProfileData} */ (MODE_PROFIL
 /** The values of `labels.<mode>.line` and `.protection`. */
 export const LABEL_STYLE_CHOICES = /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).labelStyleChoices;
 
-// The packaged feature label style of a mode (`labels.<mode>.line` and `.protection`), as `adv` fields.
+// The packaged feature label style of a mode (`labels.<mode>.line`, `.protection` and
+// `.italic_gene_labels`), as `adv` fields.
 /**
  * @param {unknown} mode
- * @returns {{ label_line: LabelLine, label_protection: LabelProtection }}
+ * @returns {{ label_line: LabelLine, label_protection: LabelProtection, italic_gene_labels: boolean }}
  */
 export const labelStyleForMode = (mode) => {
-  const { line, protection } = modeProfile(mode).labelStyle;
-  return { label_line: line, label_protection: protection };
+  const { line, protection, italicGeneLabels } = modeProfile(mode).labelStyle;
+  return { label_line: line, label_protection: protection, italic_gene_labels: italicGeneLabels };
+};
+
+/**
+ * The config leaf of a mode's fixed identity colour scale (`[MIN, MAX]`, or
+ * unset for the threshold to 100%); Python names it (gbdraw/comparisons/identity_scale.py).
+ * @param {unknown} mode
+ * @returns {string}
+ */
+export const identityScalePathForMode = (mode) => modeProfile(mode).identityScalePath;
+
+/** The top of the percent identity domain (100), the maximum of a scale without a fixed one. */
+export const IDENTITY_PERCENT_MAXIMUM = Number(
+  /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).comparisonDomains.identity.maximum
+);
+
+/**
+ * The `adv.identity_scale` after one end of the scale was typed in the form.
+ * The minimum fixes the scale: blank, there is none (null, the threshold to
+ * 100%). A blank maximum is the top of the identity domain (100%); without a
+ * minimum the maximum changes nothing. Python checks the range.
+ * @param {[number, number] | null} scale
+ * @param {0 | 1} end
+ * @param {string} text
+ * @returns {[number, number] | null}
+ */
+export const identityScaleWithEnd = (scale, end, text) => {
+  const value = String(text).trim() === '' ? null : Number(text);
+  if (end === 0) return value === null ? null : [value, scale ? scale[1] : IDENTITY_PERCENT_MAXIMUM];
+  return scale ? [scale[0], value ?? IDENTITY_PERCENT_MAXIMUM] : null;
 };
 
 /** @param {unknown} mode */

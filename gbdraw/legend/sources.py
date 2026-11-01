@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
+from gbdraw.comparisons.identity_scale import IdentityColorDomain
 from gbdraw.core.sequence import check_feature_presence
 from gbdraw.features.colors import precompute_used_color_rules
 from gbdraw.tracks.parsing import SlotView, slot_skew_colors
@@ -170,15 +171,15 @@ def depth_legend_sources(tracks: Iterable[DepthTrackData] | None) -> tuple[Depth
 
 @dataclass(frozen=True)
 class ComparisonLegendSource:
-    """The pairwise identity gradient of a comparison: its end colors and minimum identity."""
+    """The pairwise identity gradient of a comparison: its end colors and its identity domain."""
 
     min_color: str
     max_color: str
-    identity: float
+    domain: IdentityColorDomain
 
     @classmethod
     def of(cls, config: BlastMatchConfigurator) -> ComparisonLegendSource:
-        return cls(config.min_color, config.max_color, config.identity)
+        return cls(config.min_color, config.max_color, config.identity_domain)
 
 
 @dataclass(frozen=True)

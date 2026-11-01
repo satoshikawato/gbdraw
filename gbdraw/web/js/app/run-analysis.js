@@ -17,6 +17,7 @@
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
+import { drawnInputSummaries, validateInputSummaries } from '../services/input-summary.js';
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { trackHidesOn } from '../services/setting-application.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
@@ -31,7 +32,7 @@ import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadat
 import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
-import { DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION, readCollinearMergeOrientation } from '../services/losat-normalization.js';
+import { ABSENT_COLLINEAR_INFER_ORTHOGROUPS, DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION, readCollinearMergeOrientation } from '../services/losat-normalization.js';
 import {
   losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
 } from '../services/linear-sources.js';
@@ -167,6 +168,7 @@ import {
   losatEdgeFilename,
   validateDerivedProteinReferences,
   webLosatRuntimeRecord,
+  isReusableLosatEntry,
   writtenLegacyProteinArtifacts
 } from '../services/losat-cache.js';
 import {
@@ -187,7 +189,7 @@ import {
   prepareCandidateRenderCommit,
   prepareReflowResultCommit
 } from './candidate-render.js';
-import { editorPaintState } from './result-paint-record.js';
+import { editorPaintState, visibilityPaintState } from './result-paint-record.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -544,6 +546,7 @@ const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) =>
 
   for (const [key, entry] of cacheMap.entries()) {
     if (classifyRawLosatCacheEntry(entry) !== 'nucleotide-current') continue;
+    if (!isReusableLosatEntry(entry)) continue;
     if ((entry.searchContext ?? null) !== (metadata.searchContext ?? null)) continue;
     if (String(entry.queryCanonicalHash || '') !== expectedQuery) continue;
     if (String(entry.subjectCanonicalHash || '') !== expectedSubject) continue;
@@ -808,7 +811,7 @@ const canReuseResolvedProteinArtifacts = ({
 
   /** @type {Partial<CanonicalLosslessCollinearityParameters>} */
   const parameters = settings.collinearityParams?.parameters || {};
-  const committedInference = settings.collinearInferOrthogroups ?? true;
+  const committedInference = settings.collinearInferOrthogroups ?? ABSENT_COLLINEAR_INFER_ORTHOGROUPS;
   return (
     sameNumber(parameters.minAnchors ?? 1, active.minAnchors)
     && sameNumber(parameters.maxUnitGap ?? 0, active.maxUnitGap)
@@ -1413,6 +1416,8 @@ export const executeCanonicalRenderCandidate = async ({
   const comparisonWarnings = validateComparisonWarnings(metadata.comparisonWarnings, results);
   // Crossing label leaders drawn anyway: each Result's report (LP-D46).
   const labelFitReports = normalizeResultLabelFits(metadata.labelFitReports, results);
+  // What each Result read and drew, and its warnings (Python's input summary).
+  const inputSummaries = validateInputSummaries(metadata.inputSummaries, results);
   // Edits by source identity that a Result does not draw (design Q4 3.4).
   const featureIdentityNotices = Array.isArray(metadata.featureIdentityNotices)
     ? metadata.featureIdentityNotices : [];
@@ -1447,6 +1452,7 @@ export const executeCanonicalRenderCandidate = async ({
     featureIdentityNotices,
     comparisonWarnings,
     labelFitReports,
+    inputSummaries,
     results,
     catalogAdmission: catalogState,
     catalog: catalogState.catalog,
@@ -2611,6 +2617,8 @@ export const createRunAnalysis = ({
     let requestDrawing = drawing;
     /** @type {ReturnType<typeof requestLabelProjection> | null} */
     let generatedLabelProjection = null;
+    // The Feature visibility the request draws, kept with the input summaries.
+    let drawnVisibility = '';
     // The record key moves of this run (OV-1949), and the record lists its identities are read from.
     /** @type {ReadonlyMap<string, string>} */
     let recordMoves = new Map();
@@ -2903,6 +2911,7 @@ export const createRunAnalysis = ({
           manualSpecificRules: candidateRules
         };
       }
+      drawnVisibility = visibilityPaintState(requestDrawing);
       if (mode.value === 'linear') {
         requireLinearComparisonPlanSnapshot(activeComparisonPlanSnapshot);
       }
@@ -4582,12 +4591,12 @@ export const createRunAnalysis = ({
             );
             /** @type {Record<string, any> | null} */
             let convertedPayload = null;
+            // A payload converted from rows this Generate searched again (another LOSAT build searched the cached
+            // ones) is converted again: its key names the raw keys, not the rows.
             if (useDerivedProteinPayloadCache) {
-              convertedPayload = getLosatDerivedCacheEntry(
-                derivedCacheMap,
-                derivedCacheKey,
-                workingProteinIdentityManifest
-              );
+              convertedPayload = losatTiming.cacheMisses === 0
+                ? getLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, workingProteinIdentityManifest)
+                : null;
               if (convertedPayload) {
                 convertedPayload = {
                   ...convertedPayload,
@@ -5177,6 +5186,7 @@ export const createRunAnalysis = ({
         featureIdentityNotices: canonicalExecution.featureIdentityNotices,
         comparisonWarnings: canonicalExecution.comparisonWarnings,
         labelFitReports: canonicalExecution.labelFitReports,
+        inputSummaries: drawnInputSummaries(canonicalExecution.inputSummaries, drawnVisibility),
         specificRules: candidateRules,
         proteinIdentityManifest: workingProteinIdentityManifest,
         legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
@@ -5725,6 +5735,7 @@ export const createRunAnalysis = ({
         featureIdentityNotices: execution.featureIdentityNotices,
         comparisonWarnings: execution.comparisonWarnings,
         labelFitReports: execution.labelFitReports,
+        inputSummaries: drawnInputSummaries(execution.inputSummaries, drawnPaint.visibility),
         matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
           candidateCommit.featureState.sequenceSources
         ) || currentOwnerSet.matchSequenceOwner,
@@ -6094,7 +6105,9 @@ export const createRunAnalysis = ({
           biologicalFeatures: execution.commit.featureState.biologicalFeatures,
           results: execution.commit.results,
           // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
-          labelFitReports: execution.labelFitReports
+          labelFitReports: execution.labelFitReports,
+          // So does the input summary: the rerender draws the live Feature visibility.
+          inputSummaries: drawnInputSummaries(execution.inputSummaries, drawnPaint.visibility)
         }, {
           installResults(nextResults) {
             results.value = nextResults;

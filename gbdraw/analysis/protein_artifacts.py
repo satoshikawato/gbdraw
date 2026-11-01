@@ -390,7 +390,7 @@ def validate_current_derived_protein_artifacts(
 # the `buildProteinLosatCacheKeys` reply) and the Python API call it, so equal
 # inputs give one key on every surface.
 
-DERIVED_LOSATP_SEMANTICS = "derived-option-conformance-v4"
+DERIVED_LOSATP_SEMANTICS = "derived-option-conformance-v6"
 DERIVED_LOSATP_CONVERTER = "convert_losatp_blastp_pairs_to_genomic_payload"
 
 DerivedLosatpMode = Literal["pairwise", "orthogroup", "collinear"]
@@ -494,15 +494,17 @@ def normalize_derived_losatp_settings(
     anchor_mode: DerivedSettingValue = None,
     search_scope: DerivedSettingValue = None,
     max_paralog_links: DerivedSettingValue = None,
-    infer_orthogroups: object = True,
+    infer_orthogroups: object = None,
     explicit_display_pairs: object = False,
 ) -> DerivedLosatpSettings:
     """Validate and normalize the settings of one LOSATP conversion.
 
     Numbers normalize to numbers, so ``0``, ``0.0`` and ``"0"`` give one
     identity; spellings normalize through their mode owners. ``None`` is an
-    unset setting, which takes its default.
+    unset setting, which takes its default from the Python options.
     """
+
+    from gbdraw.api.options import LinearDiagramOptions
 
     from .collinearity import (
         LosslessCollinearityParameters,
@@ -521,46 +523,47 @@ def normalize_derived_losatp_settings(
         normalized_max_hits = _setting_int(max_hits, 5)
         if normalized_max_hits <= 0:
             raise ValueError("protein_blastp_max_hits must be > 0")
-    normalized_membership_mode = "anchor_core_v1"
+    normalized_membership_mode = LinearDiagramOptions.orthogroup_membership_mode
     normalized_member_max_hits: int | None = None
     if normalized_mode in {"orthogroup", "collinear"}:
         normalized_membership_mode = normalize_orthogroup_membership_mode(
-            _setting_text(membership_mode, "anchor_core_v1")
+            _setting_text(membership_mode, LinearDiagramOptions.orthogroup_membership_mode)
         )
         if member_max_hits is not None:
             normalized_member_max_hits = _setting_int(member_max_hits, 0)
             if normalized_member_max_hits <= 0:
                 raise ValueError("orthogroup_member_max_hits must be > 0 or None")
-    paralog_links = 2
+    paralog_links = LinearDiagramOptions.collinear_max_paralog_links_per_orthogroup
     if normalized_mode in {"orthogroup", "collinear"}:
-        paralog_links = _setting_int(max_paralog_links, 2)
+        paralog_links = _setting_int(max_paralog_links, paralog_links)
         if paralog_links <= 0:
             raise ValueError("collinear_max_paralog_links_per_orthogroup must be > 0")
     params = LosslessCollinearityParameters()
-    unit = "auto"
-    color = "orientation"
-    anchor = "rbh"
-    scope = "adjacent"
-    infer = True
+    unit = LinearDiagramOptions.collinearity_unit_mode
+    color = LinearDiagramOptions.collinearity_color_mode
+    anchor = LinearDiagramOptions.collinearity_anchor_mode
+    scope = LinearDiagramOptions.collinearity_search_scope
+    infer = LinearDiagramOptions.collinear_infer_orthogroups
     explicit = False
     if normalized_mode == "collinear":
-        if not isinstance(infer_orthogroups, bool):
-            raise ValueError("collinear_infer_orthogroups must be a boolean")
-        infer = infer_orthogroups
+        if infer_orthogroups is not None:
+            if not isinstance(infer_orthogroups, bool):
+                raise ValueError("collinear_infer_orthogroups must be a boolean")
+            infer = infer_orthogroups
         explicit = explicit_display_pairs is True
-        unit = normalize_collinearity_unit_mode(_setting_text(unit_mode, "auto"))
-        color = normalize_collinearity_color_mode(_setting_text(color_mode, "orientation"))
-        anchor = normalize_collinearity_anchor_mode(_setting_text(anchor_mode, "rbh"))
-        scope = normalize_collinearity_search_scope(_setting_text(search_scope, "adjacent"))
+        unit = normalize_collinearity_unit_mode(_setting_text(unit_mode, str(unit)))
+        color = normalize_collinearity_color_mode(_setting_text(color_mode, str(color)))
+        anchor = normalize_collinearity_anchor_mode(_setting_text(anchor_mode, str(anchor)))
+        scope = normalize_collinearity_search_scope(_setting_text(search_scope, str(scope)))
         params = LosslessCollinearityParameters(
-            min_anchors=_setting_int(min_anchors, 1),
-            max_unit_gap=_setting_int(max_unit_gap, 0),
-            max_diagonal_drift=_setting_int(max_diagonal_drift, 0),
-            max_conflicts=_setting_int(max_conflicts, 1),
+            min_anchors=_setting_int(min_anchors, params.min_anchors),
+            max_unit_gap=_setting_int(max_unit_gap, params.max_unit_gap),
+            max_diagonal_drift=_setting_int(max_diagonal_drift, params.max_diagonal_drift),
+            max_conflicts=_setting_int(max_conflicts, params.max_conflicts),
             # The parameters read the old spelling "either" as "strand".
             merge_orientation=cast(
                 "CollinearityMergeOrientation",
-                _setting_text(merge_orientation, LosslessCollinearityParameters.merge_orientation),
+                _setting_text(merge_orientation, params.merge_orientation),
             ),
         )
         params.validate()

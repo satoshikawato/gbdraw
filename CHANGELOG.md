@@ -12,6 +12,102 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
+
+- Patch release of 0.14.4. Sessions are saved as Session version 50 (0.14.4 writes 49); a Session
+  saved by 0.14.5 opens in 0.14.5 or later only. See the [full release notes](./docs/RELEASE_NOTES_0.14.5.md).
+- Added: `--identity_scale MIN MAX`, `identity_scale` on `LinearComparisonOptions` and
+  `ComparisonRingOptions`, and the Web **Identity scale min (%)** / **Identity scale max (%)**
+  fix the identity color range of comparisons.
+- Added: `--italic_gene_labels` and the Web **Italic gene names** checkbox draw labels whose
+  text comes from the `gene` qualifier in italics.
+- Changed: a PNG downloaded from the Web app keeps the drawing's transparent background, as SVG
+  and the command-line and Python PNG do. Check **White background**, next to the PNG DPI
+  choice, for the white background of earlier Web PNGs.
+- Added: `gbdraw linear --auto_orient` reverse-complements records from their nucleotide hits
+  against the row above, and `--anchor_feature KEY=VALUE` aligns records at a named feature.
+  The Web app has the matching **Orient records from comparisons** button and **Align at
+  feature** action. A Session saved with either option stores the resulting Reverse
+  complement flags or record translations, not the option.
+- Fixed: the Web app's hover popup no longer opens after a pan for a pointer that has left the
+  drawing.
+- Changed: the tobacco chloroplast tutorial and Gallery entry use `builtin:plastid`.
+- Added: `gbdraw circular --origin_feature KEY=VALUE` rotates records so that the named
+  feature's start is the display start. Command line and Python only.
+- Added: `gbdraw circular` and `gbdraw linear` log an `INFO:` line per drawn record and
+  comparison table and a `WARNING:` when a record has no feature to draw or the thresholds
+  leave out every row of a comparison table; the Web app shows the same text under the
+  Generate status line and in **Run Info** (**Input summary**).
+- Fixed: a UTF-8 byte order mark no longer hides the first record of a GenBank, EMBL, GFF3,
+  or FASTA file. A Session saved by 0.14.4 or earlier with such a file of several records
+  now points each saved record index one record earlier.
+- Fixed: a live palette change on comparison matches colored by identity matches **Generate
+  Diagram** in the Web app.
+- Added: `--wrap_length AUTO|LENGTH` and the config key
+  `canvas.linear.wrap_length` draw one Linear record over several rows at one
+  scale, each row with its own height. The record stays one record, and a figure
+  with no record longer than the row draws as if the option were absent. The
+  command line and Python draw it now; the Web app has no control for it yet. See
+  [Wrap one record over several rows](./docs/REFERENCE/command-line.md#wrap-one-record-over-several-rows).
+- Added: `--scale_interval` takes a unit, for example `5kb`.
+- Changed: a PNG over 32,767 px per side fails with an error that names the
+  limit. A wrapped figure's PNG or PDF over its limit
+  ([limits](./docs/REFERENCE/output-formats-and-export.md#png-and-pdf-size-limits))
+  stops before writing, and the error names a longer row length that should fit.
+- Fixed: LOSATP Pairwise and Similarity groups draw the same links on the
+  command line, in Python, and in the Web app for the same records and hits.
+  When hits tie on score, the first CDS by record and location wins; the
+  protein ID, which differs between the surfaces and between Web pages, decided
+  before, so a few links among identical paralogs could differ. **Generate
+  Diagram** again on a saved Session to redraw it: the derived LOSATP entries
+  are rebuilt once from the raw searches.
+- Fixed: the Web app draws a LOSATP Pairwise link, Similarity group link, or
+  Collinear block that uses a CDS across a circular record's origin over the
+  CDS's own arc, as the command line and Python have since 0.14.4; it drew them
+  over the whole record. **Generate Diagram** again on a Session saved by 0.14.4
+  to redraw it: the derived LOSATP entries are rebuilt once from the raw searches.
+- Fixed: upgrading an older Session in Python, or re-saving it with
+  `--session_output`, writes `rbh` for a retired Collinear anchor mode such as
+  `one_to_one`, in its requests and drafts. A hand-edited spelling of a retired
+  mode, such as `ONE-TO-ONE`, now reads and upgrades instead of being refused.
+- Fixed: `--losatp_mode pairwise` on a Linear layout with two or more records in
+  one row searches every record pair between adjacent rows, as Similarity groups
+  and Collinear blocks do, instead of failing with "Ordered BLAST/protein comparison
+  inputs are ambiguous". `-b/--blast` on such a layout is still refused; the
+  message now says to list the tables in `--comparisons_table` (OV-2371).
+- Fixed: a threaded LOSAT search in the Web app could stop with "memory access
+  out of bounds" and run the whole pair again (the console said "running the
+  pair again"), or fail after the third stop. In Chromium a copy into memory
+  that another LOSAT thread had just grown could trap; the Web app now checks
+  each such copy and first brings the thread's view of the memory up to date.
+- Changed: the Web app's LOSAT engine is the LOSAT development commit
+  `dde737f18` (version 0.2.0 before its release; it was a build of LOSAT
+  0.1.0). Its searches give the rows of the `losat` command of that commit;
+  LOSATN with task `blastn` gives different E-values and hits than before.
+  Task `dc-megablast` now runs dc-megablast (the old engine ran `blastn` for
+  it) on threaded execution: the default, and **Auto** on a cross-origin
+  isolated page. **Serial**, or a page without isolation, stops before the
+  search with a message that `dc-megablast` needs threaded LOSAT. **Auto** now
+  runs LOSATN and TLOSATX on threaded execution too, wherever the page allows
+  it. Run Info names the engine's version. Saved LOSATP and LOSATN `megablast`
+  searches of an earlier Web app are reused, because this engine gives the
+  same rows; its saved LOSATN `blastn` and `dc-megablast` searches and TLOSATX
+  searches run again once at the next **Generate Diagram**. Searches saved by
+  the command line are reused as before.
+  `gbdraw/web/wasm/losat/losat-build.json` records the build.
+- Added: built-in specific-color tables. `-t/--table` and
+  `FeatureOptions.color_table` accept `builtin:cog`, `builtin:phrog`,
+  `builtin:plastid`, and `builtin:mitochondrion`; the Web app **Colors > Preset
+  scheme** lists them in place of the Pharokka and Bakta presets. The `cog`
+  table reads `db_xref`, GFF3 `Dbxref`, and `note`, so it colors Bakta's default
+  GenBank output, which the old Bakta preset did not (OV-2358).
+- Fixed: more real-world input reads, or fails with a named error. Read now: a
+  LOCUS line with spaces in the name, EMBL flat files (`.embl`, `.emb`
+  in the Web file pickers), qualifier lines indented with tabs, lowercase GFF3
+  feature types such as `cds`, and GFF3 attributes with a space after `;`. A
+  `CONTIG` record without sequence and a `--gbk` file without a record now stop
+  with an error that names the file and the reason.
+
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 
 - Patch release of 0.14.3. Sessions are still saved as Session version 49; Sessions saved by

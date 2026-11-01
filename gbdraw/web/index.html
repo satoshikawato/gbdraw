@@ -2291,7 +2291,7 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="cInputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="cInputType === 'gb'">
-                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="setCircularSourceFile('c_gb', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="setCircularSourceFile('c_gb', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
                             <file-uploader :label="t('GFF3 File')" :model-value="files.c_gff" @update:model-value="setCircularSourceFile('c_gff', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
@@ -2639,7 +2639,7 @@
                                 <file-uploader
                                     :label="t('GenBank / DDBJ File')"
                                     :test-id="`linear-genbank-${sourceIndex + 1}`"
-                                    accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
+                                    accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*"
                                     :model-value="source.sequence.gb"
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
@@ -3257,7 +3257,24 @@
                                                 <label class="linear-primary-label mb-1">{{ t('Min length') }}</label>
                                                 <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" :aria-label="t('Linear comparison minimum alignment length')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))" :disabled="!semanticMutationAvailable">
                                             </div>
+                                            <div>
+                                                <span class="linear-primary-label mb-1"><label for="linear-identity-scale-min">{{ t('Identity scale min (%)') }}</label> <help-tip id="help-linear-identity-scale" :text="t('Fix the identity colour scale so figures with different thresholds share colours and Legend labels. Leave the minimum blank to colour from the minimum identity to 100%.')"></help-tip></span>
+                                                <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[0] : ''" id="linear-identity-scale-min" @change="setIdentityScaleEnd(0, $event.target.value)" :aria-label="t('Linear comparison identity scale minimum')" aria-describedby="help-linear-identity-scale" class="form-input px-2 py-1.5 text-xs" :placeholder="String(adv.identity)" :disabled="!semanticMutationAvailable" data-testid="linear-identity-scale-min">
+                                            </div>
+                                            <div>
+                                                <label class="linear-primary-label mb-1">{{ t('Identity scale max (%)') }}</label>
+                                                <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[1] : ''" @change="setIdentityScaleEnd(1, $event.target.value)" :aria-label="t('Linear comparison identity scale maximum')" class="form-input px-2 py-1.5 text-xs" :placeholder="String(identityPercentMaximum)" :disabled="!semanticMutationAvailable || !adv.identity_scale" data-testid="linear-identity-scale-max">
+                                            </div>
                                         </div>
+                                    </div>
+
+                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('result-filters')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3" data-testid="linear-auto-orientation">
+                                        <div class="linear-primary-label">{{ t('Record orientation') }}</div>
+                                        <div class="flex items-center gap-2">
+                                            <button type="button" data-history-ignore @click="recordAutoOrientation.orient()" :disabled="!semanticMutationAvailable || !recordAutoOrientation.enabled.value" :aria-busy="recordAutoOrientation.pending.value ? 'true' : 'false'" aria-describedby="help-linear-auto-orientation" class="btn rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40" data-testid="linear-auto-orientation-button">{{ t('Orient records from comparisons') }}</button>
+                                            <help-tip id="help-linear-auto-orientation" :text="t('Sets the Reverse complement of each record below the top row from the comparisons of the last Generate with the rule of --auto_orient: checked when the nucleotide hits of the record against the row above weigh mostly on the reverse strand, unchecked otherwise, also where you set it yourself. The top row keeps its orientation. Add an uploaded BLAST table, LOSATN, or TLOSATX, then Generate first. Generate again to draw the new orientation; Undo restores the previous checkboxes.')"></help-tip>
+                                        </div>
+                                        <p v-if="recordAutoOrientation.status.value" role="status" aria-live="polite" class="ui-hint" data-testid="linear-auto-orientation-status">{{ recordAutoOrientation.status.value }}</p>
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('comparison-appearance')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
@@ -3299,7 +3316,7 @@
                                         <div class="linear-primary-label">{{ t('Performance') }}</div>
                                         <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                             <div>
-                                                <span class="linear-primary-label mb-1">{{ t('Execution') }} <help-tip id="help-comparison-execution" :text="t('Auto chooses threaded LOSAT only when browser support and workload allow it.')"></help-tip></span>
+                                                <span class="linear-primary-label mb-1">{{ t('Execution') }} <help-tip id="help-comparison-execution" :text="t('Auto runs threaded LOSAT when this browser supports it, and serial LOSAT otherwise. LOSATN task dc-megablast needs threaded LOSAT.')"></help-tip></span>
                                                 <select v-model="losatExecution.executionMode" :aria-label="t('LOSAT execution')" aria-describedby="help-comparison-execution" data-comparison-focus="losat-execution" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                     <option value="auto">{{ t('Auto ({mode})', { mode: losatEffectiveExecutionMode }) }}</option>
                                                     <option value="serial">{{ t('Serial') }}</option>
@@ -3529,6 +3546,23 @@
                                     <label class="linear-primary-label block">{{ t('Record gap (px)') }}
                                         <input type="number" min="0" step="1" v-model.number="linearRecordGap" :aria-label="t('Linear record gap')" class="form-input mt-1 min-w-0 px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </label>
+                                </div>
+                                <div class="min-w-0 space-y-1.5 border-t border-slate-200 pt-2" data-feature-anchor>
+                                    <span class="linear-primary-label mb-1"><label for="linear-anchor-feature-selector">{{ t('Align at feature') }}</label> <help-tip id="help-linear-anchor-feature" :text="t('Move each record so that the named feature starts at the same x position as in the first record that has it. Type a KEY=VALUE selector, such as gene=COX1 or locus_tag=<tag>. Records without the feature keep their place. Apply writes the record positions once; later changes do not align again.')"></help-tip></span>
+                                    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-1">
+                                        <input type="text" id="linear-anchor-feature-selector" v-model.trim="featureAnchorSelector" data-history-ignore aria-describedby="help-linear-anchor-feature" class="form-input min-w-0 px-2 py-1.5 text-xs" placeholder="gene=COX1" :disabled="!semanticMutationAvailable || featureAnchorBusy" data-testid="linear-anchor-feature-selector">
+                                        <button type="button" data-history-managed class="btn btn-secondary px-2 py-1 text-xs" @click="resolveFeatureAnchor" :disabled="!svgContent || !featureAnchorSelector || !semanticMutationAvailable || featureAnchorBusy" data-testid="linear-anchor-feature-resolve">{{ t('Align at feature…') }}</button>
+                                    </div>
+                                    <div v-if="featureAnchorPreview" class="min-w-0 space-y-1 rounded border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] text-blue-900" data-testid="linear-anchor-feature-preview">
+                                        <ul class="space-y-0.5"><li v-for="line in featureAnchorPreviewLines" :key="line">{{ line }}</li></ul>
+                                        <p v-if="featureAnchorPreview.clearsAlignment">{{ t('Apply clears the active similarity alignment.') }}</p>
+                                        <div class="grid grid-cols-2 gap-1">
+                                            <button type="button" data-history-managed class="btn btn-primary px-1 py-0.5 text-[10px]" @click="applyFeatureAnchor" :disabled="featureAnchorBusy || !semanticMutationAvailable" data-testid="linear-anchor-feature-apply">{{ t('Apply') }}</button>
+                                            <button type="button" data-history-managed class="btn btn-secondary px-1 py-0.5 text-[10px]" @click="cancelFeatureAnchor" :disabled="featureAnchorBusy">{{ t('Cancel') }}</button>
+                                        </div>
+                                    </div>
+                                    <p v-if="featureAnchorError" role="alert" class="text-[10px] text-red-700" data-testid="linear-anchor-feature-error">{{ errorText(featureAnchorError.summaryParts) }}</p>
+                                    <p v-if="featureAnchorNotice" role="status" aria-live="polite" class="text-[10px] text-slate-600" data-testid="linear-anchor-feature-notice">{{ featureAnchorNotice }}</p>
                                 </div>
                             </section>
 
@@ -3762,6 +3796,14 @@
                                     <div>
                                         <label class="input-label text-[10px]">{{ t('Minimum Length') }}</label>
                                         <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('circular', 'alignment_length') : Number($event.target.value)" :aria-label="t('Circular comparison minimum alignment length')" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'alignment_length'))" :disabled="!semanticMutationAvailable">
+                                    </div>
+                                    <div>
+                                        <span class="input-label text-[10px]"><label for="circular-identity-scale-min">{{ t('Identity scale min (%)') }}</label> <help-tip id="help-circular-identity-scale" :text="t('Fix the identity colour scale so figures with different thresholds share colours and Legend labels. Leave the minimum blank to colour from the minimum identity to 100%.')"></help-tip></span>
+                                        <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[0] : ''" id="circular-identity-scale-min" @change="setIdentityScaleEnd(0, $event.target.value)" :aria-label="t('Circular comparison identity scale minimum')" aria-describedby="help-circular-identity-scale" class="form-input form-input-compact" :placeholder="String(adv.identity)" :disabled="!semanticMutationAvailable" data-testid="circular-identity-scale-min">
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">{{ t('Identity scale max (%)') }}</label>
+                                        <input type="number" min="0" max="100" :value="adv.identity_scale ? adv.identity_scale[1] : ''" @change="setIdentityScaleEnd(1, $event.target.value)" :aria-label="t('Circular comparison identity scale maximum')" class="form-input form-input-compact" :placeholder="String(identityPercentMaximum)" :disabled="!semanticMutationAvailable || !adv.identity_scale" data-testid="circular-identity-scale-max">
                                     </div>
                                 </div>
                             </div>
@@ -4925,7 +4967,7 @@
                                         <span v-else>{{ t('Apply') }}</span>
                                     </button>
                                 </div>
-                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules; the palette is unchanged.') }}<template v-if="selectedSpecificPreset === 'bakta'">{{ sentenceSeparator() }}{{ t('Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.') }}</template></p>
+                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules; the palette is unchanged.') }}<template v-if="selectedSpecificPreset === 'cog'">{{ sentenceSeparator() }}{{ t('Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.') }}</template></p>
                             </div>
 
                             <div>
@@ -5384,6 +5426,13 @@
                                                 <option value="halo">{{ t('Halo') }}</option>
                                                 <option value="box">{{ t('Box') }}</option>
                                             </select>
+                                        </div>
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.italic_gene_labels" aria-describedby="help-label-italic-gene-labels" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>{{ t('Italic gene names') }}</span>
+                                            </label>
+                                            <help-tip id="help-label-italic-gene-labels" :text="t('Draws each label that the label priority names from the gene qualifier in italics, also after its text is edited. Other labels stay upright.')"></help-tip>
                                         </div>
                                         <template v-if="mode === 'circular'">
                                             <div>
@@ -6022,6 +6071,11 @@
                             <select v-model="downloadDpi" aria-label="PNG DPI" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
                                 <option v-for="choice in pngDpiChoices" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
                             </select>
+                            <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer select-none">
+                                <input type="checkbox" v-model="downloadWhiteBackground" aria-describedby="help-png-white-background" class="form-checkbox">
+                                <span>{{ t('White background') }}</span>
+                            </label>
+                            <help-tip id="help-png-white-background" :text="t('Paints the PNG background white. Turned off, the PNG keeps the transparent background of the drawing. SVG and PDF downloads have no background either way.')"></help-tip>
                         </div>
                         <button type="button" aria-label="SVG" @click="downloadSVG" aria-describedby="session-export-help" class="btn btn-secondary px-3 py-1 text-sm" :title="t('Download a static SVG for publication and conversion workflows')"><i class="ph ph-download-simple" aria-hidden="true"></i> SVG</button>
                         <button @click="downloadInteractiveSVG" aria-describedby="session-export-help" class="btn btn-secondary px-3 py-1 text-sm" :title="t('Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded.')"><i class="ph ph-cursor-click" aria-hidden="true"></i> {{ t('Interactive SVG') }}</button>
@@ -6053,6 +6107,19 @@
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
                     <p class="font-semibold">{{ t('Comparison table rows were placed by position.') }}</p>
                     <p v-for="(warning, index) in comparisonWarnings" :key="index">{{ warning.message }}</p>
+                </div>
+                <!-- Python's input summary of the shown Result: a record or a comparison table it draws nothing of. -->
+                <div v-if="shownInputSummary && shownInputSummary.warnings.length && !shownInputSummaryStale && !processing"
+                     role="status" aria-live="polite" aria-atomic="true" data-testid="input-summary-notice"
+                     class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
+                    <p class="font-semibold">{{ t('Part of the input was not drawn.') }}</p>
+                    <p v-for="(warning, index) in shownInputSummary.warnings" :key="index" :data-input-warning="warning.code">{{ warning.message }}</p>
+                </div>
+                <!-- A live Feature visibility edit no render drew: the summary's counts are the last render's. -->
+                <div v-if="shownInputSummaryStale && shownInputSummary.warnings.length && !processing"
+                     role="status" aria-live="polite" aria-atomic="true" data-testid="input-summary-stale"
+                     class="border-b border-slate-200 bg-slate-50 px-5 py-2 text-xs text-slate-700 shrink-0 break-words">
+                    <p>{{ t('The input summary counts the last render. Feature visibility changed since; Generate to count it again.') }}</p>
                 </div>
                 <!-- Crossing label leaders over the drawn figure (WARN-NOTICE): the fix is a choice, not a modal. -->
                 <div v-if="labelFitNotice && !processing"
@@ -6409,7 +6476,7 @@
                            richFeaturePopup ? '' : 'feature-popup--simple'
                          ]"
                          :style="featurePopupStyle">
-                        <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100">
+                        <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100" data-popup-header>
                             <div class="w-4 h-4 rounded mt-1 shrink-0" :style="{ backgroundColor: clickedFeature.color }"></div>
                             <div class="min-w-0 flex-1">
                                 <div tabindex="-1" data-dialog-initial-focus class="text-base font-bold text-slate-700 truncate" data-feature-popup-title>{{ clickedFeatureHeading.title }}</div>
@@ -6420,7 +6487,7 @@
                                 <i class="ph ph-x" aria-hidden="true"></i>
                             </button>
                         </div>
-                        <div v-if="richFeaturePopup" class="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
+                        <div v-if="richFeaturePopup" class="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true" data-feature-popup-tabs>
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'edit'"
                                     :class="[
@@ -6923,7 +6990,7 @@
                          class="fixed z-50 feature-popup pairwise-match-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
                          :class="{ 'preview-item-popup': clickedPairwiseMatch.previewItem }"
                          :style="pairwiseMatchPopupStyle">
-                        <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move">
+                        <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move" data-popup-header>
                             <color-swatch v-if="!previewItemView || previewItemView.kind === 'legend-entry'"
                                  class="w-4 h-4 shrink-0 rounded mt-1 border border-slate-200"
                                  :color="(previewItemView && previewItemView.color) || clickedPairwiseMatch.fill || '#94a3b8'"></color-swatch>
@@ -7694,6 +7761,14 @@
                             <div class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ t('Search runtime') }}</div>
                             <ul class="space-y-0.5 text-xs font-mono text-slate-700">
                                 <li v-for="(runtime, idx) in lastRunInfo.losatRuntimes" :key="`run-info-runtime-${idx}`">{{ errorText(runtime.textParts) }}</li>
+                            </ul>
+                        </div>
+
+                        <div v-if="shownInputSummary && shownInputSummary.lines.length" class="space-y-1" data-run-info-input-summary>
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ t('Input summary') }}</div>
+                            <p v-if="shownInputSummaryStale" class="text-xs text-slate-600" data-run-info-input-summary-stale>{{ t('The input summary counts the last render. Feature visibility changed since; Generate to count it again.') }}</p>
+                            <ul class="space-y-0.5 text-xs font-mono text-slate-700 break-words">
+                                <li v-for="(line, idx) in shownInputSummary.lines" :key="`run-info-input-${idx}`">{{ line }}</li>
                             </ul>
                         </div>
 
@@ -9151,7 +9226,7 @@
             @keydown.enter.prevent="uploadAvailable && $refs.input.click()"
             @keydown.space.prevent="uploadAvailable && $refs.input.click()"
         >
-            <input type="file" ref="input" :multiple="multiple" :disabled="!uploadAvailable" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" :aria-label="$attrs['data-input-aria-label'] || label" @change="handleFile" :data-testid="testId || undefined" class="hidden">
+            <input type="file" ref="input" :multiple="multiple" :disabled="!uploadAvailable" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" :aria-label="$attrs['data-input-aria-label'] || label" @change="handleFile" :data-testid="testId || undefined" class="hidden">
             <div v-if="!hasSelection" class="flex items-center justify-center gap-1.5 text-slate-500">
                 <i class="ph ph-upload-simple" aria-hidden="true"></i>
                 <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">{{ t('Click to Browse') }}</span>

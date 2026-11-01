@@ -5,10 +5,25 @@
 ## Sequence and annotation files
 
 GenBank and GBFF files may contain one or more biological records. DDBJ records
-are accepted when downloaded in GenBank flat-file format; native EMBL
-flat-file syntax is not. gbdraw preserves the parsed record ID, description,
-topology, sequence, feature locations, strand, and qualifiers. The reader does
-not split one biological sequence into artificial records.
+are read in GenBank flat-file format. EMBL flat files are read through the same
+`--gbk` option and Web file input: a file whose first non-blank line starts with
+`ID` and three spaces is EMBL, any other is GenBank. gbdraw preserves the parsed
+record ID, description, topology, sequence, feature locations, strand, and
+qualifiers. The reader does not split one biological sequence into artificial
+records.
+
+Before parsing, the reader repairs two layouts that other tools write: a
+`LOCUS` name that contains spaces (Geneious) is read with each run of spaces
+as one `_`, and tabs that indent a feature-table line, or separate a feature
+key from its location, are read as the standard column layout. A tab inside a
+qualifier value is kept. Feature keys are matched to the INSDC spelling
+regardless of case, so a GFF3 type `cds` or `trna` is read as `CDS` or `tRNA`.
+A file without any record stops with an error that says whether it is empty,
+FASTA, or neither flat-file format. A record without a sequence (a `CONTIG`
+line or no `ORIGIN` sequence, as in NCBI's default GenBank download of a
+scaffold) stops both diagram modes with an error that names the record; download
+it as "GenBank (full)" (`rettype=gbwithparts`), or give the sequence as GFF3
+and FASTA.
 
 GFF3 must be paired with FASTA from the same biological source. GFF3 column 1
 and the first token of the matching FASTA header must agree exactly. The
@@ -22,7 +37,9 @@ a circular definition count soft-masked (lower-case) bases like upper-case
 ones.
 Coordinates are 1-based and inclusive; strand is `+` or `-`; CDS phase is `0`,
 `1`, or `2`. `ID` values should be unique, and `Parent` should preserve the
-source annotation model.
+source annotation model. Rows that share an `ID` form one multipart feature;
+rows without an `ID` are separate features. Spaces around the `;` between
+attributes are ignored (exonerate writes ` ; `).
 
 CDS protein sequences use the GenBank `/translation` qualifier or the GFF3
 `translation` attribute when present. Otherwise gbdraw translates the CDS

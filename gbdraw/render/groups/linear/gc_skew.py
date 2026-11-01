@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from collections.abc import Sequence
+
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
 
 from ....analysis.skew import skew_df
 from ...drawers.linear.gc_skew import SkewDrawer
+from ...drawers.linear.wrap_rows import draw_track_rows
 from ....configurators import GcSkewConfigurator
 
 
@@ -30,11 +33,13 @@ class GcSkewGroup:
         gc_df: DataFrame | None = None,
         group_id: str = "gc_skew",
         record_transform: RecordDisplayTransform | None = None,
+        row_shifts: Sequence[float] = (),
     ) -> None:
         """
         Initializes the GcSkewGroup with the given parameters and configurations.
         """
         self.record_transform = record_transform
+        self.row_shifts = row_shifts
         self.skew_group: Group = Group(id=group_id)
         self.start_x: float = start_x
         self.start_y: float = start_y
@@ -61,17 +66,26 @@ class GcSkewGroup:
         """
         Adds the GC skew visualization elements to the SVG group.
         """
-        self.skew_group = SkewDrawer(self.skew_config).draw(
+        drawer = SkewDrawer(self.skew_config)
+        self.skew_group = draw_track_rows(
             self.skew_group,
-            self.skew_df,
+            self.record_transform,
             self.record_len,
             self.sequence_width,
-            self.track_height,
-            self.start_x,
-            self.start_y,
-            self.dinucleotide,
-            self.group_id,
-            record_transform=self.record_transform,
+            self.row_shifts,
+            lambda group, length, width, row: drawer.draw(
+                group,
+                self.skew_df,
+                length,
+                width,
+                self.track_height,
+                self.start_x,
+                self.start_y,
+                self.dinucleotide,
+                self.group_id,
+                record_transform=self.record_transform,
+                row=row,
+            ),
         )
 
     def get_group(self) -> Group:

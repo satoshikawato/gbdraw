@@ -52,6 +52,7 @@ from gbdraw.features.shapes import (
 from gbdraw.layout.composition import LegendPlacement
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.mode_profiles import (
+    linear_wrap_default_overrides,
     ComparisonThresholds,
     DiagramMode,
     get_mode_profile,
@@ -67,6 +68,7 @@ from gbdraw.tracks import (
     parse_linear_track_slots,
 )
 from gbdraw.annotations import AnnotationOptions
+from gbdraw.annotations.models import FeatureSelector, parse_feature_selector
 
 
 # Paths not listed here are shared by both renderers.
@@ -1115,7 +1117,18 @@ class _ModeDiagramOptions:
 
 @dataclass(frozen=True)
 class CircularDiagramOptions(_ModeDiagramOptions):
-    """Options accepted by a Circular typed request."""
+    """Options accepted by a Circular typed request.
+
+    ``origin_feature`` rotates each record so that the feature it selects
+    (``key=value``, exact; a string is parsed with
+    :func:`gbdraw.annotations.models.parse_feature_selector`) starts at 12
+    o'clock: its start as drawn (its 5' base when it reads clockwise as drawn,
+    else its 3' base) becomes the record's
+    ``RecordDisplayOptions.start_coordinate``
+    (:func:`gbdraw.api.record_planning.project_origin_feature_starts`). A
+    record without the feature keeps its start. The planned request carries
+    the starts, not the option.
+    """
 
     tracks: CircularRequestTrackOptions | None = None
     output: CircularOutputOptions | None = None
@@ -1134,9 +1147,17 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     losat_search: LosatSearchOptions | None = None
     conservation_losat_gencodes: Sequence[int] | None = None
     conservation_search_results: Sequence[ConservationSearchResult] | None = None
+    origin_feature: FeatureSelector | str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        if self.origin_feature is not None:
+            if not isinstance(self.origin_feature, (FeatureSelector, str)):
+                raise ValidationError(
+                    "origin_feature must be a FeatureSelector, a key=value string, or None.",
+                    diagnostic={"code": "INPUT_INVALID"},
+                )
+            object.__setattr__(self, "origin_feature", parse_feature_selector(self.origin_feature))
         for placement in self.feature_placements:
             placement.target.validate_mode("circular")
         if self.depth_tracks is not None and any(
@@ -1373,8 +1394,49 @@ class CircularDiagramOptions(_ModeDiagramOptions):
 
 
 @dataclass(frozen=True)
+class LinearWrapTrackOrder:
+    """A track order whose layout the record lengths decide: its slots under each layout, and the axis index.
+
+    Which slots are valid at that axis index depends on the layout, so they are checked when one is chosen.
+    """
+
+    slots_when_cut: Sequence[LinearTrackSlot]
+    slots_when_not_cut: Sequence[LinearTrackSlot]
+    axis_index: int | None = None
+
+    def tracks(self, *, cut: bool) -> LinearRequestTrackOptions:
+        return LinearRequestTrackOptions(self.slots_when_cut if cut else self.slots_when_not_cut, self.axis_index)
+
+
+@dataclass(frozen=True)
+class LinearWrapDefaults:
+    """What a request that asks to wrap draws with if a record is cut, for the planner to apply then.
+
+    It holds the leaves and the track order the request left to the wrap defaults, so that "left unset" survives until
+    the record lengths are known. The planner consumes it; a Session stores what was drawn, never this.
+    """
+
+    config_overrides: Mapping[str, object]
+    track_order: LinearWrapTrackOrder | None = None
+
+
+@dataclass(frozen=True)
 class LinearDiagramOptions(_ModeDiagramOptions):
-    """Options accepted by a Linear typed request."""
+    """Options accepted by a Linear typed request.
+
+    ``auto_orient`` reverse-complements records from their nucleotide hits
+    (:func:`gbdraw.linear_comparison.auto_orient_reversed_records`).
+
+    ``anchor_feature`` aligns the records at the start as drawn (its 5' base
+    when it reads rightward as drawn, else its 3' base) of the feature it
+    selects in each record (``key=value``, exact; a string is
+    parsed with :func:`gbdraw.annotations.models.parse_feature_selector`).
+    The first record that has the feature keeps its place
+    (:func:`gbdraw.api.record_planning.project_anchor_feature_starts`). The
+    x of each record it moves replaces that record's own x, explicit
+    ``LinearMultiRecordOptions.record_translations`` included, as Similarity
+    alignment does; the y is kept.
+    """
 
     tracks: LinearRequestTrackOptions | None = None
     output: LinearOutputOptions | None = None
@@ -1399,9 +1461,30 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     collinear_infer_orthogroups: bool = False
     collinear_max_paralog_links_per_orthogroup: int = 2
     comparison_table_file: str | None = None
+    wrap_defaults: LinearWrapDefaults | None = None
+    auto_orient: bool = False
+    anchor_feature: FeatureSelector | str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        if not isinstance(self.auto_orient, bool):
+            raise ValidationError(
+                "auto_orient must be a boolean.", diagnostic={"code": "INPUT_INVALID"}
+            )
+        if self.anchor_feature is not None:
+            if not isinstance(self.anchor_feature, (FeatureSelector, str)):
+                raise ValidationError(
+                    "anchor_feature must be a FeatureSelector, a key=value string, or None.",
+                    diagnostic={"code": "INPUT_INVALID"},
+                )
+            try:
+                selector = parse_feature_selector(self.anchor_feature)
+            except ValidationError as exc:
+                raise ValidationError(
+                    f"anchor_feature: {exc}",
+                    diagnostic={"code": "INPUT_INVALID", "field": "anchor_feature", "reason": "REQUIRED"},
+                ) from exc
+            object.__setattr__(self, "anchor_feature", selector)
         for placement in self.feature_placements:
             placement.target.validate_mode("linear")
         _validate_mode_config_overrides(
@@ -1577,10 +1660,15 @@ def resolve_linear_diagram_options(
 
     if not isinstance(options, LinearDiagramOptions):
         raise ValidationError("options must be LinearDiagramOptions.")
-    return cast(
+    resolved = cast(
         LinearDiagramOptions,
         _resolve_options_for_mode(options, mode="linear"),
     )
+    if options.config is not None or options.wrap_defaults is not None:
+        return resolved
+    # Only the request's own overrides say what it left unset; a built config cannot.
+    defaults = linear_wrap_default_overrides(options.config_overrides)
+    return resolved if defaults is None else replace(resolved, wrap_defaults=LinearWrapDefaults(defaults))
 
 
 __all__ = [
@@ -1594,6 +1682,8 @@ __all__ = [
     "LinearDiagramOptions",
     "LinearOutputOptions",
     "LinearRequestTrackOptions",
+    "LinearWrapDefaults",
+    "LinearWrapTrackOrder",
     "LinearTrackOptions",
     "LosatProgram",
     "LosatRuntimeOptions",

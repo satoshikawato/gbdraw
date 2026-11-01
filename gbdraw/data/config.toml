@@ -50,6 +50,9 @@ ruler_on_axis = false
 align_center = false
 keep_definition_left_aligned = false
 normalize_length = false
+# Base pairs per row of one wrapped record: "none" (one row), "auto", or a length (50000 or "50kb").
+# No effect on a figure whose records all fit on one row.
+wrap_length = "none"
 [canvas.linear.default_cds_height]
   short = 80
   long = 20
@@ -79,6 +82,7 @@ stroke_color = 'none'
 stroke_width = 0
 style = 'ribbon'
 curve_tension = 0.5
+identity_scale = "auto"  # auto: colour from the identity threshold to 100%; [MIN, MAX]: a fixed scale
 
 [objects.conservation]
 fill_opacity = 1.0
@@ -93,6 +97,7 @@ ring_width = "auto"
 ring_gap = "auto"
 reference = "auto"
 color_scheme = "same"
+identity_scale = "auto"
 
 [objects.sliding_window]
 up10m = [100000, 10000]
@@ -252,12 +257,14 @@ feature = ["note"]
   rotation = 0.0
   line = "under"        # none | under: a line under a horizontal label that continues the leader
   protection = "box"    # none | halo | box: what keeps a leader behind the letters off them
+  italic_gene_labels = false  # true: a label named from the gene qualifier is drawn in italics
 
 [labels.circular]
   scope = "none"
   placement = "horizontal"
   line = "none"
   protection = "none"
+  italic_gene_labels = false
 [labels.spacing]
   circular = 3.0
   linear = 3.0

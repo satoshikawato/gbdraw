@@ -3,6 +3,7 @@ import { webcrypto } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { LOSAT_WASM_BUILD } from '../../gbdraw/web/js/services/losat-build.generated.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
 globalThis.window = {
@@ -1718,7 +1719,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       outfmt: '6',
       args: ['--task', 'megablast'],
       queryCanonicalHash,
-      subjectCanonicalHash
+      subjectCanonicalHash,
+      runtime: { kind: 'losat', source: 'wasm', version: LOSAT_WASM_BUILD.version, program: 'blastn' }
     }]);
   }
   state.losatCache.value = new Map(cacheEntries);
@@ -1858,8 +1860,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
 
     // OV-1599: a reference that starts with a UTF-8 byte order mark. The browser reader declines it, and the
-    // subject database of the rings is the records the Python loader reads (Biopython skips the first record
-    // of such a file), not the records the browser's text decoder would read.
+    // subject database of the rings is the records the Python loader reads: every record (OV-2354).
     const bomReference = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOMA', 'BOMB'].map((id, index) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', `        1 ${['acgtacgt', 'ccccgggg'][index]}`, '//'
     ].join('\n')).join('\n') + '\n'], 'bom-reference.gb');
@@ -1867,8 +1868,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const helpersBeforeBomReference = workerMessages.filter(({ type }) => type === 'helper').length;
     // The record list of the new reference, then the subject database.
     workerHelperResponses.push(
-      { ok: true, result: { records: [{ selector: '#1', record_id: 'BOMB', record_length: 8 }] } },
-      { ok: true, result: { records: [{ id: 'BOMB', aliases: ['BOMB'], sequence: 'CCCCGGGG' }] } },
+      { ok: true, result: { records: [
+        { selector: '#1', record_id: 'BOMA', record_length: 8 }, { selector: '#2', record_id: 'BOMB', record_length: 8 }
+      ] } },
+      { ok: true, result: { records: [
+        { id: 'BOMA', aliases: ['BOMA'], sequence: 'ACGTACGT' }, { id: 'BOMB', aliases: ['BOMB'], sequence: 'CCCCGGGG' }
+      ] } },
       ringTablesUnchanged
     );
     const bomReferenceResult = result('bom-reference.svg', 'bom-reference');
@@ -1881,8 +1886,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
         ['convertRingTablesToSearchFrame', undefined, undefined]]
     );
     assert.equal(workerHelperResponses.length, 0);
-    assert.ok(capturedSequences.includes('>BOMB\nCCCCGGGG\n'), JSON.stringify(capturedSequences));
-    assert.ok(!capturedSequences.some((fasta) => fasta.includes('BOMA')), JSON.stringify(capturedSequences));
+    assert.ok(capturedSequences.some((fasta) => fasta.includes('>BOMA\nACGTACGT\n') && fasta.includes('>BOMB\nCCCCGGGG\n')),
+      JSON.stringify(capturedSequences));
     // The new subject searched once; the Linear section below counts its own searches.
     assert.equal(losatCalls, 1);
     losatCalls = 0;
@@ -2042,7 +2047,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const searchedEntries = Array.from(state.losatCache.value.entries());
     assert.ok(searchedEntries.length > 0);
     for (const [key, entry] of searchedEntries) {
-      assert.deepEqual(entry.runtime, { kind: 'losat', source: 'wasm', version: null, program: 'blastn' });
+      assert.deepEqual(entry.runtime, { kind: 'losat', source: 'wasm', version: LOSAT_WASM_BUILD.version, program: 'blastn' });
       const { runtime: _runtime, ...withoutRuntime } = entry;
       assert.equal(key, await sha256Text(JSON.stringify(buildLosatCachePayload(withoutRuntime))));
       assert.equal(key, await sha256Text(JSON.stringify(buildLosatCachePayload(entry))));
@@ -2050,13 +2055,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.deepEqual(state.lastRunInfo.value.losatRuntimes, [{
       program: 'blastn',
       kind: 'losat',
-      version: null,
+      version: LOSAT_WASM_BUILD.version,
       source: 'wasm',
       path: null,
-      text: 'blastn: LOSAT, version not recorded (wasm)',
-      textParts: [{
-        text: '{program}: {name}, version not recorded ({origin})', params: { program: 'blastn', name: 'LOSAT', origin: 'wasm' }
-      }]
+      text: `blastn: LOSAT ${LOSAT_WASM_BUILD.version} (wasm)`,
+      textParts: [{ text: `blastn: LOSAT ${LOSAT_WASM_BUILD.version} (wasm)`, verbatim: true }]
     }]);
     // Generated LOSATN rows stay in the search frame; the Python planner
     // projects the reversed record (PD-OI-073), so no Web conversion runs.
@@ -2601,9 +2604,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(recordBytesSent, insertedFile.size);
     state.linearSeqs.splice(2);
 
-    // A file that starts with a UTF-8 byte order mark: Python reads the mark as content (Biopython then
-    // skips the first record), so the record list leaves the file to the Python reader, and the LOSAT FASTA
-    // does too. The browser's text decoder drops the mark and would search a record the drawing does not read.
+    // A file that starts with a UTF-8 byte order mark: the record list leaves the file to the Python reader,
+    // and the LOSAT FASTA does too.
     const bomFile = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOM1', 'BOM2'].map((id) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
     ].join('\n')).join('\n') + '\n'], 'bom.gb');

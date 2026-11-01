@@ -119,13 +119,16 @@ def test_new_request_fields_preserve_released_positional_arguments() -> None:
     assert request.grouping == "single"
     assert request.record_options == RecordCollectionOptions()
     # Ring LOSAT fields (PR-4) follow the released fields.
-    assert [item.name for item in fields(CircularDiagramOptions)][-4:] == [
+    assert [item.name for item in fields(CircularDiagramOptions)][-5:] == [
         "conservation_table_file",
         "losat_search",
         "conservation_losat_gencodes",
         "conservation_search_results",
+        "origin_feature",
     ]
-    assert fields(LinearDiagramOptions)[-1].name == "comparison_table_file"
+    assert [item.name for item in fields(LinearDiagramOptions)][-4:] == [
+        "comparison_table_file", "wrap_defaults", "auto_orient", "anchor_feature",
+    ]
 
 
 def test_in_memory_record_source_rejects_other_objects() -> None:

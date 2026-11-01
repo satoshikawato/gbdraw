@@ -113,3 +113,17 @@ assert.deepEqual(buildPaletteColorOverrideRows({
   colors: { CDS: '#ABC', rRNA: ' #71ee7d ', tRNA: null, misc_feature: '', repeat_region: 'none' },
   paletteColors: { CDS: '#aabbcc', rRNA: '#71EE7D', tRNA: '#123456', misc_feature: '#123456', repeat_region: '#123456' }
 }), [['repeat_region', 'none']]);
+// OV-2393: the live recolour of comparison matches interpolates as Python's
+// `gbdraw.core.color.interpolate_color` does, truncating each channel, so live
+// equals Generate. Expected values computed once with that Python function; the
+// first is identity 25.556 on a [20, 90] scale (`data-identity-factor` 0.0793714).
+for (const [low, high, factor, expected] of [
+  ['#FFE7E7', '#FF7272', 0.0793714, '#ffdddd'],
+  ['#f0f1f5', '#8b9cc1', 0.333333, '#ced4e3'],
+  ['#FFE7E7', '#E15759', 0.777778, '#e77678'],
+  ['#ffffff', '#000000', 0.5, '#7f7f7f'],
+  ['#FFE7E7', '#FF7272', 0, '#ffe7e7'],
+  ['#FFE7E7', '#FF7272', 1, '#ff7272']
+]) {
+  assert.equal(interpolateColor(low, high, factor), expected, `${low} to ${high} at ${factor}`);
+}

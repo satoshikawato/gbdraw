@@ -23,6 +23,7 @@ import { catalogNameIndex } from '../services/feature-catalog.js';
  * @import { FeatureCatalog } from '../services/feature-catalog.js'
  * @import { AnnotationCatalogRecord, AnnotationRecordCatalog } from './annotations/record-catalog.js'
  * @import { AliasSource, CommittedRecord } from '../services/feature-identity.js'
+ * @import { CommittedCanonicalSession } from '../services/session-request.js'
  */
 
 const { computed, ref, watch } = window.Vue;
@@ -1466,6 +1467,13 @@ export const createSimilarityAlignmentActions = ({
   };
 
   /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
+  const announceClearedPlan = (reason) => {
+    summary.value = null;
+    repair.value = null;
+    publishNotice(t('Alignment cleared: {reason}', { reason: tm(reason) }), true);
+  };
+
+  /** @param {string} reason A `msg`-marked English clause; the caller marks it. */
   const clearCommittedPlan = (reason) => {
     const hadPlan = Boolean(state.similarityAlignmentPlan?.value);
     if (activeApply && typeof cancelRunAnalysis === 'function') cancelRunAnalysis();
@@ -1477,10 +1485,18 @@ export const createSimilarityAlignmentActions = ({
     resetDialogOpen.value = false;
     if (!hadPlan) return false;
     state.similarityAlignmentPlan.value = null;
-    summary.value = null;
-    repair.value = null;
-    publishNotice(t('Alignment cleared: {reason}', { reason: tm(reason) }), true);
+    announceClearedPlan(reason);
     return true;
+  };
+
+  /**
+   * Another record placement committed a step that holds no plan (Align at
+   * feature, PD-OI-028 manual record movement): forget the draft and say why.
+   * @param {string} reason A `msg`-marked English clause; the caller marks it.
+   */
+  const notePlanReplaced = (reason) => {
+    clearCommittedPlan(reason);
+    announceClearedPlan(reason);
   };
 
   /** @returns {AlignmentChoice[]} */
@@ -2310,6 +2326,13 @@ export const createSimilarityAlignmentActions = ({
     validateBeforeGenerate,
     resetAlignment,
     clearForMutation: clearCommittedPlan,
+    notePlanReplaced,
+    /**
+     * The committed Session with the active plan materialized into the record
+     * translations the Result draws, and no plan: the base a record placement starts from.
+     * @returns {CommittedCanonicalSession}
+     */
+    materializedSession: () => /** @type {CommittedCanonicalSession} */ (baseline({ materializePlan: true }).canonical),
     retainForStableReorder,
     beforeRecordDrag,
     afterRecordDrag,

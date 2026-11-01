@@ -17,6 +17,7 @@ from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityResult,
     LosslessCollinearityParameters,
+    RecordExtent,
     convert_collinearity_blocks_to_pair_comparisons,
     normalize_collinearity_anchor_mode,
 )
@@ -28,6 +29,7 @@ from gbdraw import session_request_codec as codec
 from gbdraw.interface import _linear_options
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+ONE_TO_ONE_FIXTURE = REPO_ROOT / "tests/retired_sessions/BGC0000708-BGC0000713.v49-one-to-one.gbdraw-session.json.gz"
 
 
 def test_collinear_defaults_are_one_set_on_every_surface() -> None:
@@ -163,7 +165,7 @@ def test_block_rows_name_a_group_scope_only_when_groups_exist(
         kind="cluster",
     )
     frames = convert_collinearity_blocks_to_pair_comparisons(
-        CollinearityResult(blocks=(block,)), record_ids=["A", "B"], search_scope="all"
+        CollinearityResult(blocks=(block,)), records=[RecordExtent("A", 10000), RecordExtent("B", 10000)], search_scope="all"
     )
     frame = frames[(0, 1)]
     if expected_scope is None:
@@ -250,17 +252,22 @@ def test_every_recorded_collinear_command_states_the_inference_flag() -> None:
 def test_a_released_session_with_the_removed_anchor_mode_loads_as_rbh(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A released schema 9 request may hold one_to_one (OV-2303) and holds "either"."""
+    """The released Session 49 with the choosable anchor mode written in loads as rbh and "strand" (OV-2303).
 
+    No released file holds this value: the fixture is the Session 49 file of v0.14.3 with the
+    setting a user could choose written in.
+    """
+
+    import gzip
     import json
 
     from gbdraw.session import load_session_document, materialize_session, session_to_request
 
-    path = REPO_ROOT / "tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json"
-    session = json.loads(path.read_text(encoding="utf-8"))
+    session = json.loads(gzip.decompress(ONE_TO_ONE_FIXTURE.read_bytes()))
+    assert session["version"] == 49 and session["renderRequest"]["schema"] == 9
     (settings,) = [item["settings"] for item in session["renderRequest"]["comparisons"] if "settings" in item]
     assert settings["collinearityParams"]["parameters"]["mergeOrientation"] == "either"
-    settings["collinearityAnchorMode"] = "one_to_one"
+    assert settings["collinearityAnchorMode"] == "one_to_one"
 
     with caplog.at_level("WARNING"), materialize_session(
         load_session_document(session), output_directory=tmp_path
@@ -269,3 +276,177 @@ def test_a_released_session_with_the_removed_anchor_mode_loads_as_rbh(
     assert options.collinearity_anchor_mode == "rbh"
     assert options.collinearity_params.merge_orientation == "strand"
     assert "one_to_one" in caplog.text
+
+
+def test_the_fixture_draft_with_the_removed_anchor_mode_replays_as_rbh(tmp_path: Path) -> None:
+    """The draft key the 0.14.3 select binds (``modes.linear.config.losat.blastp``) reads as rbh.
+
+    Python reads that key only on the settings-only replay (``session_io._append_linear_gui_blastp_args``);
+    ``session_to_cli_args`` refuses a canonical request, so the draft of the fixture is fed to it as a
+    settings-only Session (with the LOSAT source the replay needs).
+    """
+
+    import base64
+    import gzip
+    import json
+
+    from gbdraw.session_io import session_to_cli_args
+
+    draft = json.loads(gzip.decompress(ONE_TO_ONE_FIXTURE.read_bytes()))["modes"]["linear"]["config"]
+    assert draft["losat"]["blastp"]["collinearAnchorMode"] == "one_to_one"
+    # The replay reads the anchor mode only for a Collinear search; the file's draft holds the stored mode "orthogroup".
+    draft["losat"]["blastp"]["mode"] = "collinear"
+    content = b"LOCUS       A\n"
+    entry = {"name": "a.gb", "type": "application/octet-stream", "size": len(content), "lastModified": 0,
+             "data": base64.b64encode(content).decode("ascii")}
+    session = {
+        "format": "gbdraw-session", "version": 30, "createdAt": "2026-06-22T00:00:00Z",
+        "config": {**draft, "blastSource": "losat"}, "ui": {"mode": "linear", "lInputType": "gb"},
+        "files": {"linearSeqs": [{"gb": entry}, {"gb": entry}]},
+    }
+    spec = session_to_cli_args(session, mode="linear", temp_dir=tmp_path, output_override=None, format_override=None)
+    assert spec.args[spec.args.index("--collinear_anchor_mode") + 1] == "rbh"
+
+
+def _stored_anchor_modes(session: dict[str, object]) -> list[object]:
+    """The request's and the Linear draft's anchor mode of a Session with one protein comparison."""
+
+    (settings,) = [item["settings"] for item in session["renderRequest"]["comparisons"] if "settings" in item]
+    return [
+        settings["collinearityAnchorMode"],
+        session["modes"]["linear"]["config"]["losat"]["blastp"]["collinearAnchorMode"],
+    ]
+
+
+def test_an_upgrade_replaces_the_removed_anchor_mode_in_both_copies(caplog: pytest.LogCaptureFixture) -> None:
+    """A Session 49 from 0.14.3 upgrades to a file its own description accepts (OV-2307)."""
+
+    from gbdraw.session import upgrade_session_document
+    from tests.test_session_contract import _problems
+
+    with caplog.at_level("WARNING"):
+        upgraded = upgrade_session_document(ONE_TO_ONE_FIXTURE).document.to_dict()
+
+    assert upgraded["version"] == session_io.CURRENT_SESSION_VERSION
+    assert _stored_anchor_modes(upgraded) == ["rbh", "rbh"]
+    assert _problems(upgraded) == []
+    warnings = [record.getMessage() for record in caplog.records if "was removed" in record.getMessage()]
+    assert [warning.split(":")[0] for warning in warnings] == [
+        "renderRequest.comparisons[0].settings.collinearityAnchorMode",
+        "modes.linear.config.losat.blastp.collinearAnchorMode",
+    ]
+
+
+def test_a_cli_resave_writes_the_replacement_to_its_file(tmp_path: Path) -> None:
+    """The re-save builds on the upgrade: the file holds both replacements."""
+
+    import json
+
+    from gbdraw.cli_utils.session import render_session_drawings_cli
+    from gbdraw.session import load_session_document
+
+    output = tmp_path / "resaved.gbdraw-session.json"
+    render_session_drawings_cli(
+        load_session_document(ONE_TO_ONE_FIXTURE),
+        drawings=None,
+        output_override=str(tmp_path / "figure"),
+        format_override="svg",
+        save_session=False,
+        session_output=str(output),
+    )
+
+    saved = json.loads(output.read_text(encoding="utf-8"))
+    assert saved["version"] == session_io.CURRENT_SESSION_VERSION
+    assert _stored_anchor_modes(saved) == ["rbh", "rbh"]
+
+
+def test_an_upgrade_from_a_flat_draft_replaces_the_retired_spelling_in_the_draft() -> None:
+    """A Session before 46 re-encodes its request, but its flat draft moves to the Linear slice as stored."""
+
+    import gzip
+    import json
+
+    from gbdraw.session import upgrade_session_document
+
+    path = REPO_ROOT / "tests/fixtures/sessions/BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz"
+    session = json.loads(gzip.decompress(path.read_bytes()))
+    assert session["version"] == 39
+    session["config"]["losat"]["blastp"]["collinearAnchorMode"] = "top1"
+    (settings,) = [item["settings"] for item in session["renderRequest"]["comparisons"] if "settings" in item]
+    settings["collinearityAnchorMode"] = "one_to_one"
+
+    assert _stored_anchor_modes(upgrade_session_document(session).document.to_dict()) == ["rbh", "rbh"]
+
+
+def test_the_anchor_mode_repair_covers_every_request_and_slice_by_their_keys() -> None:
+    """The other mode's committed request and each mode's slice are repaired; other values and the input are not."""
+
+    from copy import deepcopy
+
+    from gbdraw.session_migration import session_with_current_anchor_modes
+
+    def blastp(mode: str) -> dict[str, object]:
+        return {"config": {"losat": {"blastp": {"collinearAnchorMode": mode, "collinearMergeOrientation": "either"}}}}
+
+    def request(mode: str) -> dict[str, object]:
+        return {"comparisons": [{"kind": "file"}, {"settings": {"collinearityAnchorMode": mode}}]}
+
+    session = {
+        "renderRequest": request("all"),
+        "otherModeResult": {"renderRequest": request("mutual_best"), "results": []},
+        "modes": {"linear": blastp("one2one"), "circular": blastp("rbh")},
+    }
+    source = deepcopy(session)
+
+    repaired = session_with_current_anchor_modes(session)
+
+    assert session == source
+    assert repaired == {
+        "renderRequest": request("all"),
+        "otherModeResult": {"renderRequest": request("rbh"), "results": []},
+        "modes": {"linear": blastp("rbh"), "circular": blastp("rbh")},
+    }
+    current = {"renderRequest": None, "modes": {"linear": blastp("all")}, "config": {"losat": None}}
+    assert session_with_current_anchor_modes(current) == current
+
+
+def test_a_current_session_with_the_removed_anchor_mode_stays_unchanged_and_readable(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A Session 50 written before the fix keeps its bytes; every read repairs it, as before."""
+
+    from gbdraw.session import load_session_document, materialize_session, session_to_request, upgrade_session_document
+
+    stored = upgrade_session_document(ONE_TO_ONE_FIXTURE).document.to_dict()
+    (settings,) = [item["settings"] for item in stored["renderRequest"]["comparisons"] if "settings" in item]
+    settings["collinearityAnchorMode"] = "one_to_one"
+    stored["modes"]["linear"]["config"]["losat"]["blastp"]["collinearAnchorMode"] = "one_to_one"
+
+    document = load_session_document(stored)
+    assert upgrade_session_document(document).document is document
+    assert _stored_anchor_modes(document.to_dict()) == ["one_to_one", "one_to_one"]
+
+    # The upgrade above logged the value too: only the read below may satisfy the assertion.
+    caplog.clear()
+    with caplog.at_level("WARNING"), materialize_session(document, output_directory=tmp_path) as materialized:
+        assert session_to_request(materialized).options.collinearity_anchor_mode == "rbh"
+    assert "one_to_one" in caplog.text
+
+
+def test_a_plain_read_and_an_upgrade_agree_on_a_hand_edited_spelling(tmp_path: Path) -> None:
+    """A spelling of a retired mode reads as its replacement in the description check as in decode."""
+
+    import gzip
+    import json
+
+    from gbdraw.session import load_session_document, materialize_session, session_to_request, upgrade_session_document
+
+    session = json.loads(gzip.decompress(ONE_TO_ONE_FIXTURE.read_bytes()))
+    assert session["renderRequest"]["schema"] == 9
+    (settings,) = [item["settings"] for item in session["renderRequest"]["comparisons"] if "settings" in item]
+    settings["collinearityAnchorMode"] = "ONE-TO-ONE"
+
+    document = load_session_document(session)
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        assert session_to_request(materialized).options.collinearity_anchor_mode == "rbh"
+    assert _stored_anchor_modes(upgrade_session_document(document).document.to_dict()) == ["rbh", "rbh"]

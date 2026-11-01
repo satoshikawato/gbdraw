@@ -158,7 +158,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
   let committed = { resources, renderRequest: { mode: linear ? 'linear' : 'circular', records: components.map(({ resourceId }, i) => ({
     recordKey: `record-${i + 1}`, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
     selector: null })) } };
-  const state = { mode: { value: linear ? 'linear' : 'circular' }, cInputType: { value: 'gb' },
+  const state = { sessionOperationAvailability: () => null, mode: { value: linear ? 'linear' : 'circular' }, cInputType: { value: 'gb' },
     lInputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [],
     form: createDefaultForm(), adv: createDefaultAdv('circular'),
     recordDisplayDrafts: [], featurePlacementOverrides: {},
@@ -413,7 +413,7 @@ test('a feature whose record key is not text is not current, with a source drawn
     assert.equal(isCurrentFeature(feature, binding), false, JSON.stringify(feature));
   }
   // The placement control reads a feature's identity from either spelling; the check reads `record_key`.
-  const state = { mode: { value: 'linear' }, form: createDefaultForm(), adv: createDefaultAdv('linear'),
+  const state = { sessionOperationAvailability: () => null, mode: { value: 'linear' }, form: createDefaultForm(), adv: createDefaultAdv('linear'),
     featurePlacementOverrides: {}, featureCatalog: { value: { items: [{ recordKeys: ['card:1'] }] } } };
   const actions = createFeaturePlacementActions({ state: withDrawings(state), runUndoable: (_label, fn) => fn(),
     getCommittedRequest: () => request, isCurrentFeature: (feature) => isCurrentFeature(feature, binding) });
@@ -531,7 +531,7 @@ test('fresh loaded alignment binds canonical sources before discovery and restor
 
 test('Circular discovery metadata belongs only to the current source and complete input pair', () => {
   const source = {};
-  const state = { cInputType: { value: 'gb' }, files: { c_gb: source },
+  const state = { sessionOperationAvailability: () => null, cInputType: { value: 'gb' }, files: { c_gb: source },
     circularRecordList: { value: [{ selector: '#1', record_id: 'committed' }] },
     circularRecordDiscovery: { status: 'ready', inputType: 'gb', primaryFile: source, pairedFile: null, error: '' } };
   assert.equal(circularDiscoveryForInput(state).status, 'ready');
@@ -574,7 +574,7 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
   const table = adoptCurrentSessionResources(resources);
   const committed = { resources, renderRequest: { mode: 'linear', records: [{ recordKey: 'record-1', cardinality: 'exactly_one',
     source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' } }] } };
-  const state = { mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' }, files: { c_gb: null },
+  const state = { sessionOperationAvailability: () => null, mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' }, files: { c_gb: null },
     linearSeqs: [{ uid: 'record-1', gb: createSessionResourceFileView(table, 'both'), region_record_id: 'second', region_reverse: false }],
     form: createDefaultForm(), adv: createDefaultAdv('linear'),
     recordDisplayDrafts: [{ sourceUid: 'record-1', selector: '#1', recordId: 'second', topologyOverride: null,
@@ -644,7 +644,7 @@ const sourceControls = () => {
     startCoordinate: null, reverseComplementOverride: null, anchorIntent: null });
   const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), recordDisplayDrafts: [draft('circular')] };
   const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')] };
-  const state = withModeDrawings({ mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' },
+  const state = withModeDrawings({ sessionOperationAvailability: () => null, mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' },
     files: { c_gb: new Blob(['c']) }, circularRecordList: { value: [] }, featureCatalog: { value: null },
     linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: new Blob([uid]), region_record_id: '', region_reverse: false })) },
   { circular, linear });

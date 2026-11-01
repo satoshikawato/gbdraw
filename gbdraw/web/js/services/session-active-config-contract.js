@@ -18,7 +18,7 @@ import { validateRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
-import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+import { FRESH_PROTEIN_COMPARISON_DEFAULTS, ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { DEFAULT_COLLINEAR_ANCHOR_MODE, DEFAULT_MERGE_ORIENTATION } from './losat-normalization.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 // The Feature overlap tolerance of a new drawing, in bp.
@@ -100,7 +100,7 @@ export const createDefaultAdv = (mode = 'circular') => ({
   depth_small_tick_interval: null, depth_tick_font_size: null, linear_track_slots_enabled: false, linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   linear_track_slots_axis_index: null, linear_track_slots: createDefaultLinearTrackSlots(), gc_content_mode: 'deviation', gc_content_min_percent: 0,
   gc_content_max_percent: 100, gc_content_show_axis: true, gc_content_show_ticks: true, gc_content_tick_interval: 20, gc_content_small_tick_interval: null,
-  gc_content_tick_font_size: null, comparison_height: null, pairwise_match_style: mode === 'linear' ? 'curve' : 'ribbon', ...comparisonStateForMode(mode), scale_interval: null,
+  gc_content_tick_font_size: null, comparison_height: null, pairwise_match_style: mode === 'linear' ? 'curve' : 'ribbon', ...comparisonStateForMode(mode), identity_scale: null, scale_interval: null,
   scale_font_size: null, ruler_label_font_size: null, scale_stroke_width: null, scale_stroke_color: null, ruler_label_color: null, circular_grouping_intent: 'auto',
   multi_record_size_mode: 'auto', multi_record_min_radius_ratio: 0.55, multi_record_column_gap_ratio: 0.10, multi_record_row_gap_ratio: 0.05,
   multi_record_positions: [], tick_label_font_size: null, plot_title_font_size: null, keep_full_definition_with_plot_title: false, show_definition: true,
@@ -110,9 +110,9 @@ export const createDefaultAdv = (mode = 'circular') => ({
   outer_label_x_offset: null, outer_label_y_offset: null, inner_label_x_offset: null, inner_label_y_offset: null
 });
 export const createDefaultLosatpHitLimits = () => ({
-  pairwise: { candidateLimit: null, orthogroupMemberMaxHits: null },
-  orthogroup: { candidateLimit: null, orthogroupMemberMaxHits: null },
-  collinear: { candidateLimit: null, orthogroupMemberMaxHits: null }
+  pairwise: { ...FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits },
+  orthogroup: { ...FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits },
+  collinear: { ...FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits }
 });
 // How LOSAT runs: one app-level setting for both drawings (Session `ui.losatExecution`).
 export const createDefaultLosatExecution = () => ({
@@ -120,8 +120,9 @@ export const createDefaultLosatExecution = () => ({
 });
 export const createDefaultLosat = () => ({
   outfmt: '6',
-  blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: null, orthogroupMembershipMode: ORTHOGROUP_INFERENCE_VERSION,
-    orthogroupMemberMaxHits: null, collinearInferOrthogroups: false, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
+  blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits.candidateLimit, orthogroupMembershipMode: ORTHOGROUP_INFERENCE_VERSION,
+    orthogroupMemberMaxHits: FRESH_PROTEIN_COMPARISON_DEFAULTS.hitLimits.orthogroupMemberMaxHits,
+    collinearInferOrthogroups: /** @type {boolean} */ (FRESH_PROTEIN_COMPARISON_DEFAULTS.collinearInferOrthogroups), collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
     collinearUnitMode: 'auto', collinearAnchorMode: DEFAULT_COLLINEAR_ANCHOR_MODE, collinearMergeOrientation: DEFAULT_MERGE_ORIENTATION, collinearSearchScope: 'adjacent' }
 });

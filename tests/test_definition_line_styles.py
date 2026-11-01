@@ -12,6 +12,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.api.request_render as request_render_module
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.linear as linear_cli_module
 import gbdraw.session_io as session_io
 from gbdraw.api.options import LinearDiagramOptions
@@ -216,6 +217,8 @@ def test_linear_cli_definition_line_style_forwards(monkeypatch: pytest.MonkeyPat
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)

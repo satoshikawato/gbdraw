@@ -7,7 +7,7 @@ import logging
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Hashable, Literal, Mapping, MutableMapping, NamedTuple, Sequence, TypeAlias, cast
+from typing import Any, Callable, Hashable, Literal, Mapping, MutableMapping, NamedTuple, Sequence, TypeAlias, TypeVar, cast
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
@@ -23,11 +23,15 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupMember,
     OrthogroupResult,
 )
+from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.canvas import LINEAR_WRAP_LENGTH_PATH, LinearWrapLength, linear_wrap_length_from_config
+from gbdraw.config.modify import modify_config_dict, raw_config_value, with_config_overrides
 from gbdraw.exceptions import ValidationError
 from gbdraw.core.numeric import ascii_float, parse_ascii_integer
 from gbdraw.core.record_metadata import (
     _feature_source_index_map,
     _iter_source_features,
+    _SourceFeatureAnchorProfile,
     _read_coord_map,
     _source_feature_index,
 )
@@ -37,12 +41,14 @@ from gbdraw.io.cli_tables import (
     read_records_table,
 )
 from gbdraw.io.comparisons import read_comparison_resource
-from gbdraw.io.genome import filter_features_by_type, load_gbks, parse_gff_fasta
+from gbdraw.io.genome import feature_types_left_out, filter_features_by_type, load_gbks, parse_gff_fasta, require_record_sequence
 from gbdraw.io.record_select import (
     RecordSelector,
     parse_record_selector,
+    reverse_records,
 )
 from gbdraw.io.regions import RegionSpec, crop_record_to_region, crop_then_reverse_records, parse_region_spec
+from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import resolve_record_row_positions
@@ -55,13 +61,16 @@ from gbdraw.layout.similarity_alignment import (
 )
 from gbdraw.linear_comparison import LinearComparison, reverse_unbound_endpoint_span
 
+from .config import apply_config_overrides
 from .options import (
+    LinearWrapDefaults,
     CircularDiagramOptions,
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
 )
 from gbdraw.features.source import SourceFeatureCatalog, SourceFeatureIdentity, capture_source_features
+from gbdraw.annotations.models import FeatureSelector
 from gbdraw.features.ids import compute_feature_hash_from_location_parts
 
 from .prepared import (
@@ -171,6 +180,14 @@ class ResolvedRecordProvenance:
     source_record_id_unique: bool = True
     resolved_display: ResolvedRecordDisplay | None = None
     source_features: SourceFeatureCatalog = field(kw_only=True, repr=False)
+    # GFF3 features whose type the request does not draw, left out when the record
+    # was planned, by type (the GFF3 type filter); the input summary counts them.
+    feature_types_left_out_at_load: tuple[tuple[str, int], ...] = field(default=(), kw_only=True)
+
+    @property
+    def source_name(self) -> str:
+        """The file name of the record's source, as the input summary names it."""
+        return Path(self.source_paths[0]).name if self.source_paths else "in-memory record"
 
     @property
     def source_feature_catalog(self) -> tuple[SourceFeatureIdentity, ...]:
@@ -787,6 +804,278 @@ def _alignment_source_feature(
     return matches[0]
 
 
+def _selector_text(selector: FeatureSelector) -> str:
+    return selector.value if selector.key is None else f"{selector.key}={selector.value}"
+
+
+def feature_drawn_start(feature: SourceFeatureIdentity, transform: RecordDisplayTransform) -> float:
+    """The display offset of a source feature's first base as drawn.
+
+    The one feature-start rule of ``anchor_feature`` and ``origin_feature``,
+    and the Web's Rotate to feature "Start of the record" (``resolveFeatureAnchor``).
+    The feature is read along its parts in biological order (the order of
+    ``location_parts``); the first base as drawn is where that path begins,
+    its 5' base, when the feature reads forward as drawn, and where it ends,
+    its 3' base, otherwise. An unstranded or mixed-strand feature is read along
+    its parts as listed, as a plus-strand one. The source base is then mapped
+    through the transform, so a feature across the origin or a display start
+    begins on the piece its path begins on.
+    """
+
+    parts = feature.location_parts
+    minus = all(strand == -1 for _start, _end, strand in parts)
+    five_prime, three_prime = (
+        (parts[0][1], parts[-1][0] + 1) if minus else (parts[0][0] + 1, parts[-1][1])
+    )
+    reads_forward = minus == (transform.source_step == -1)
+    return float(transform.source_base_to_display_index(five_prime if reads_forward else three_prime))
+
+
+_Start = TypeVar("_Start", int, float)
+
+
+def _match_feature_starts(
+    collection: ResolvedRecordCollection,
+    selector: FeatureSelector,
+    option: str,
+    kept: str,
+    start_of: Callable[[SourceFeatureIdentity, ResolvedRecordProvenance, RecordDisplayTransform, int], _Start | None],
+) -> tuple[_Start | None, ...]:
+    """Where ``selector``'s feature starts in each record, by ``start_of``.
+
+    The one owner of how a feature-start option (``anchor_feature``,
+    ``origin_feature``) matches features. The selector matches a record's
+    source features exactly (:class:`FeatureSelector`); ``start_of`` gives a
+    match's start, or ``None`` when it starts outside the drawn region. Matches
+    with the same start (a gene and its CDS) are one match, and matches at
+    different starts are refused with the candidates. A record without a
+    match has ``None`` and keeps its ``kept`` with a WARNING; a selector that
+    no record matches is refused. A refusal ``start_of`` raises names the
+    option and the record.
+    """
+
+    text = _selector_text(selector)
+    starts: list[_Start | None] = []
+    for index, (record, provenance, transform) in enumerate(zip(
+        collection.records, collection.provenance, collection.transforms, strict=True,
+    )):
+        by_start: dict[_Start, list[SourceFeatureIdentity]] = {}
+        outside = 0
+        name = f"record #{index + 1} {str(record.id)!r}"
+        for feature in provenance.source_feature_catalog:
+            if not feature.matches(key=selector.key, value=selector.value, record_id=provenance.source_record_id):
+                continue
+            try:
+                start = start_of(feature, provenance, transform, len(record))
+            except ValidationError as exc:
+                raise ValidationError(
+                    f"{option} {text} in {name}: {exc}", diagnostic={"code": "INPUT_INVALID"},
+                ) from exc
+            if start is None:
+                outside += 1
+            else:
+                by_start.setdefault(start, []).append(feature)
+        if len(by_start) > 1:
+            candidates = "; ".join(
+                f"{feature.feature_type} {_feature_location_text(feature)}"
+                for matches in by_start.values()
+                for feature in matches
+            )
+            raise ValidationError(
+                f"{option} {text} matches {sum(map(len, by_start.values()))} features at "
+                f"different starts in {name}: {candidates}. Use a selector that names one "
+                "feature, such as locus_tag=<tag>.",
+                diagnostic={"code": "INPUT_INVALID", "field": option, "reason": "SELECTOR_AMBIGUOUS"},
+            )
+        if not by_start:
+            logger.warning(
+                "WARNING: %s %s %s; the record keeps its %s.",
+                option,
+                text,
+                f"matched no feature in {name}"
+                if not outside
+                else f"matched {outside} feature(s) in {name} whose start lies outside its drawn region",
+                kept,
+            )
+        starts.append(next(iter(by_start), None))
+    if all(start is None for start in starts):
+        raise ValidationError(
+            f"{option} {text} matched no feature in any record.",
+            diagnostic={"code": "INPUT_INVALID", "field": option, "reason": "SELECTOR_NO_MATCH"},
+        )
+    return tuple(starts)
+
+
+def project_anchor_feature_starts(
+    collection: ResolvedRecordCollection,
+    selector: FeatureSelector,
+    rows_by_record: Sequence[int],
+) -> tuple[float | None, ...]:
+    """Where ``selector``'s feature starts in each record as drawn, in display bp.
+
+    The one owner of the ``anchor_feature`` positions and of what they cannot
+    align. Matching and its ambiguity rule are :func:`_match_feature_starts`;
+    the start is :func:`feature_drawn_start` in the record's drawn transform,
+    so it is read after any crop, reverse complement or display start, and
+    only matches that start inside the drawn region count. Records that share
+    a row (``rows_by_record``), which one x per record cannot align, are
+    refused.
+    """
+
+    if len(set(rows_by_record)) != len(rows_by_record):
+        raise ValidationError(
+            f"anchor_feature {_selector_text(selector)} cannot align records that share a row; "
+            "give each record its own row.",
+            diagnostic={"code": "INPUT_INVALID", "field": "anchor_feature", "reason": "ANCHOR_SHARED_ROW"},
+        )
+
+    def drawn_start(
+        feature: SourceFeatureIdentity,
+        _provenance: ResolvedRecordProvenance,
+        transform: RecordDisplayTransform,
+        drawn_length: int,
+    ) -> float | None:
+        start = feature_drawn_start(feature, transform)
+        return start if 0.0 <= start < float(drawn_length) else None
+
+    return _match_feature_starts(collection, selector, "anchor_feature", "place", drawn_start)
+
+
+# The features without a start as drawn, by the Web capability code
+# that refuses each (``resolveFeatureAnchor``, the twin of
+# :func:`resolve_origin_feature_start`), in the order the Web checks them.
+FEATURE_START_REFUSALS: Mapping[str, str] = {
+    "location-parts-overlap": "its parts overlap",
+    "location-fuzzy": "it has inexact (fuzzy) coordinates",
+    "location-order-ambiguous": "its parts are joined with order()",
+    "location-operator-unknown": "its parts are joined in an unknown way",
+    "location-traversal-ambiguous": "its parts lie on both strands or in no known order",
+    "feature-start-direction-unavailable": "it has no strand",
+}
+
+
+def _feature_start_refusal(feature: SourceFeatureIdentity, profile: _SourceFeatureAnchorProfile) -> str | None:
+    bounds = sorted(part[:2] for part in feature.location_parts)
+    if any(start < previous_end for (_start, previous_end), (start, _end) in zip(bounds, bounds[1:])):
+        return "location-parts-overlap"
+    if profile.precision != "exact":
+        return "location-fuzzy"
+    if profile.operator == "order":
+        return "location-order-ambiguous"
+    if profile.operator not in {"single", "join"}:
+        return "location-operator-unknown"
+    if profile.part_order == "ambiguous" or profile.strand == "mixed":
+        return "location-traversal-ambiguous"
+    if profile.strand not in {"+", "-"}:
+        return "feature-start-direction-unavailable"
+    return None
+
+
+def resolve_origin_feature_start(
+    feature: SourceFeatureIdentity,
+    transform: RecordDisplayTransform,
+    profile: _SourceFeatureAnchorProfile,
+) -> int:
+    """The 1-based source base at which a complete circular record starts so it opens with ``feature``.
+
+    It is the feature's start as drawn (:func:`feature_drawn_start` on the
+    uncropped record), converted back to
+    the source base ``RecordDisplayOptions.start_coordinate`` takes: the Web
+    Rotate to feature "Start of the record" (``resolveFeatureAnchor``, the twin
+    in tools/twins.json; tests/fixtures/feature-start-anchor-vectors.json).
+    ``profile`` is the feature's source-location profile, the one the Web
+    feature metadata carries. The first base needs exact, non-overlapping
+    parts on one strand, joined in a known order; any other feature is
+    refused, as on the Web.
+    """
+
+    if not transform.is_circular:
+        raise ValidationError(
+            "Record rotation requires an effectively circular record.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    refusal = _feature_start_refusal(feature, profile)
+    if refusal is not None:
+        raise ValidationError(
+            f"{feature.feature_type} {_feature_location_text(feature)} has no start as drawn: "
+            f"{FEATURE_START_REFUSALS[refusal]}.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    return transform.display_index_to_source_base(int(feature_drawn_start(feature, transform)))
+
+
+def project_origin_feature_starts(
+    collection: ResolvedRecordCollection,
+    selector: FeatureSelector,
+) -> tuple[int | None, ...]:
+    """The display start of each record for ``origin_feature``, a 1-based source base or ``None``.
+
+    The one owner of the ``origin_feature`` starts and of the records it
+    cannot rotate: a record that is cropped, not circular, or already given a
+    display start is refused. Matching and its ambiguity rule are
+    :func:`_match_feature_starts`, shared with ``anchor_feature``; the start
+    is :func:`resolve_origin_feature_start`.
+    """
+
+    text = _selector_text(selector)
+    for index, (record, provenance, transform) in enumerate(zip(
+        collection.records, collection.provenance, collection.transforms, strict=True,
+    )):
+        name = f"record #{index + 1} {str(record.id)!r}"
+        refusal = (
+            f"cannot be combined with a display start (the display start of {name})"
+            if provenance.display.start_coordinate is not None
+            else f"cannot rotate the cropped {name}" if len(record) != transform.length
+            or provenance.is_cropped or provenance.region is not None or provenance.has_collection_region
+            else f"cannot rotate the linear {name}; give it a circular topology"
+            if not transform.is_circular
+            else None
+        )
+        if refusal is not None:
+            raise ValidationError(f"origin_feature {text} {refusal}.", diagnostic={"code": "INPUT_INVALID"})
+
+    def origin_start(
+        feature: SourceFeatureIdentity,
+        provenance: ResolvedRecordProvenance,
+        transform: RecordDisplayTransform,
+        _drawn_length: int,
+    ) -> int:
+        return resolve_origin_feature_start(
+            feature, transform, provenance.source_features.anchor_profile(feature.source_feature_index)
+        )
+
+    return _match_feature_starts(collection, selector, "origin_feature", "start", origin_start)
+
+
+def with_origin_feature_starts(
+    collection: ResolvedRecordCollection,
+    selector: FeatureSelector | None,
+) -> ResolvedRecordCollection:
+    """``collection`` with each matched record's display start set for ``origin_feature``.
+
+    Returns ``collection`` itself when ``selector`` is ``None``.
+    """
+
+    if selector is None:
+        return collection
+    starts = project_origin_feature_starts(collection, selector)
+    return ResolvedRecordCollection(
+        collection.records,
+        tuple(
+            item if start is None else replace(item, display=replace(item.display, start_coordinate=start))
+            for item, start in zip(collection.provenance, starts, strict=True)
+        ),
+    )
+
+
+def _feature_location_text(feature: SourceFeatureIdentity) -> str:
+    """The feature's span in 1-based source coordinates, with ``complement`` for the minus strand."""
+
+    parts = ",".join(f"{start + 1}..{end}" for start, end, _strand in feature.location_parts)
+    text = parts if len(feature.location_parts) == 1 else f"join({parts})"
+    return f"complement({text})" if feature.location_parts[0][2] == -1 else text
+
+
 @dataclass(frozen=True)
 class AlignmentAnchorDisplayFact:
     """Source-bound anchor geometry in one already resolved display transform."""
@@ -1369,6 +1658,23 @@ def _apply_collection_options(
     return records, cropped
 
 
+def reverse_resolved_records(
+    collection: ResolvedRecordCollection,
+    indexes: frozenset[int],
+) -> ResolvedRecordCollection:
+    """Reverse-complement the resolved records at ``indexes`` after their crop.
+
+    The order :func:`crop_then_reverse_records` applies to a record's own
+    reverse flag, so each record draws as an explicit reverse of it draws.
+    """
+
+    records = list(collection.records)
+    for index in sorted(indexes):
+        (records[index],) = reverse_records((records[index],), True, log=logger)
+        _apply_provenance_annotations(records[index], collection.provenance[index])
+    return ResolvedRecordCollection(tuple(records), collection.provenance)
+
+
 def _detached_record(record: SeqRecord) -> SeqRecord:
     """Return a record whose own fields can be written without changing ``record``.
 
@@ -1433,7 +1739,10 @@ def resolve_record_inputs(
         expands = len(source_indexes) > 1
         for source_record_index in source_indexes:
             source_record = raw_records[source_record_index]
+            require_record_sequence(source_record, source_paths[0] if source_paths else "the record input")
+            types_left_out: tuple[tuple[str, int], ...] = ()
             if source_kind == "gff_fasta":
+                types_left_out = feature_types_left_out(source_record.features, gff_types)
                 source_record = filter_features_by_type(
                     source_record, gff_types, source_indexes=_feature_source_index_map(source_record.features),
                 )
@@ -1479,6 +1788,7 @@ def resolve_record_inputs(
                 detected_topology=_detected_topology(source_record, source_kind),
                 is_cropped=source_cropped,
                 source_features=parsed.source_features[source_record_index],
+                feature_types_left_out_at_load=types_left_out,
             )
             _apply_record_key(record, record_key=record_key)
             _apply_provenance_annotations(record, item)
@@ -1731,6 +2041,83 @@ def _resolve_linear_comparison_selector(
     )
 
 
+def _requested_wrap_length(options: LinearDiagramOptions) -> LinearWrapLength:
+    """A request's wrap length, read without building its config: a figure that does not wrap pays nothing."""
+
+    overrides = options.config_overrides or {}
+    if LINEAR_WRAP_LENGTH_PATH in overrides:
+        return linear_wrap_length_from_config(overrides[LINEAR_WRAP_LENGTH_PATH])
+    if isinstance(options.config, GbdrawConfig):
+        return options.config.canvas.linear.wrap_length
+    if options.config is None:
+        return "none"
+    return linear_wrap_length_from_config(raw_config_value(options.config, LINEAR_WRAP_LENGTH_PATH))
+
+
+def _with_wrap_defaults(options: LinearDiagramOptions, defaults: LinearWrapDefaults | None) -> LinearDiagramOptions:
+    """``options`` with the leaves and slots a request left to the wrap defaults."""
+
+    if defaults is None:
+        return replace(options, wrap_defaults=None)
+    config = options.config
+    tracks = options.tracks if defaults.track_order is None else defaults.track_order.tracks(cut=True)
+    if config is None:
+        return replace(
+            options,
+            config_overrides={**defaults.config_overrides, **(options.config_overrides or {})},
+            tracks=tracks,
+            wrap_defaults=None,
+        )
+    return replace(
+        options,
+        config=(
+            with_config_overrides(config, defaults.config_overrides)
+            if isinstance(config, GbdrawConfig)
+            else modify_config_dict(config, defaults.config_overrides)
+        ),
+        tracks=tracks,
+        wrap_defaults=None,
+    )
+
+
+def decide_linear_wrap(
+    options: LinearDiagramOptions,
+    *,
+    records: Sequence[SeqRecord],
+    layout: LinearMultiRecordOptions | None,
+    similarity_alignment: object = None,
+) -> LinearDiagramOptions:
+    """The one place a wrap length meets the record lengths: what the figure draws with, or its refusal.
+
+    With nothing to cut the request is the same request without the option. When a record is cut, the wrap defaults
+    apply and what rows cannot draw is refused, before any comparison search.
+    """
+
+    defaults = options.wrap_defaults
+    if resolve_wrap_length(_requested_wrap_length(options), [len(record.seq) for record in records]) is None:
+        if defaults is None:
+            return options
+        tracks = options.tracks if defaults.track_order is None else defaults.track_order.tracks(cut=False)
+        return replace(options, tracks=tracks, wrap_defaults=None)
+    decided = _with_wrap_defaults(options, defaults)
+    refuse_undrawable_wrap(
+        apply_config_overrides(decided.config, decided.config_overrides),
+        resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
+        wrap_blocking_inputs(
+            blast_files=decided.blast_files,
+            comparison_table_file=decided.comparison_table_file,
+            linear_comparisons=decided.linear_comparisons,
+            protein_comparisons=decided.protein_comparisons,
+            orthogroups=decided.orthogroups,
+            collinearity_blocks=decided.collinearity_blocks,
+            losat_search=decided.losat_search,
+            similarity_alignment=similarity_alignment,
+        ),
+        anchor_feature=decided.anchor_feature is not None,
+    )
+    return decided
+
+
 def resolve_linear_options(
     options: LinearDiagramOptions,
     *,
@@ -1813,7 +2200,7 @@ def resolve_linear_options(
                 f"{table.table_path}: row {row.row_number}, column 'blast': {exc}"
             ) from exc
         comparisons.append(
-            LinearComparison(query_index, subject_index, matches)
+            LinearComparison(query_index, subject_index, matches, source_name=Path(row.blast).name)
         )
     search = options.losat_search
     if losat_pairs and search is None:
@@ -1909,6 +2296,11 @@ __all__ = [
     "depth_track_inputs_from_cli",
     "parse_cli_bool",
     "prepared_parsed_source",
+    "feature_drawn_start",
+    "project_anchor_feature_starts",
+    "project_origin_feature_starts",
+    "resolve_origin_feature_start",
+    "with_origin_feature_starts",
     "record_input_manifest_from_paths",
     "record_input_manifest_from_table",
     "resolve_circular_batch_outputs",
@@ -1916,4 +2308,5 @@ __all__ = [
     "resolve_implicit_record_output_prefix",
     "resolve_linear_options",
     "resolve_record_inputs",
+    "reverse_resolved_records",
 ]

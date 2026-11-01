@@ -123,7 +123,7 @@ for (const name of sessionNames) {
     assert.equal(Object.hasOwn(publishedForm, 'multi_record_canvas'), false, name);
   }
   if (name === 'tobacco-chloroplast.gbdraw-session.json') {
-    assert.equal(slice.config.rules.length, 71, name);
+    assert.equal(slice.config.rules.length, 19, name);
     assert.deepEqual(slice.config.qualifierPriorityRules, [
       { feat: 'CDS', order: 'gene,old_locus_tag' }
     ], name);
@@ -323,7 +323,7 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 49 or historical versions 31-33\/39-44\/46-48/
+    /supports current version 50 or historical versions 31-33\/39-44\/46-49/
   );
 }
 

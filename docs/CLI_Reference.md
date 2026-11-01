@@ -41,7 +41,7 @@ rewritten, see [Retired inputs](./REFERENCE/session-and-request-compatibility.md
 ## Main command
 
 ```text
-gbdraw v. 0.14.4: A diagram generator for small genomes
+gbdraw v. 0.14.5: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]
@@ -91,6 +91,8 @@ Additional Information:
 
 `gbdraw gui` starts a local HTTP server on a free port and opens the web UI in your browser. Streamlit is not required.
 
+`gbdraw circular` and `gbdraw linear` print an `INFO:` summary of each drawn record and comparison table after the figure is written. A record with no feature to draw, or a comparison table whose rows the thresholds all leave out, adds a `WARNING:` line; the figure is still written and the exit status is 0. A file with no record stops the run with an `ERROR:` line and exit status 1. See [Input summary](REFERENCE/command-line.md#input-summary).
+
 ## Circular mode
 
 <!-- BEGIN GENERATED CIRCULAR HELP -->
@@ -118,6 +120,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--hide_definition] [--plot_title PLOT_TITLE]
               [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--keep_full_definition_with_plot_title]
+              [--origin_feature KEY=VALUE]
               [--center_reserved_radius CENTER_RESERVED_RADIUS]
               [--no_track_narrowing]
               [--track_narrowing_min_px TRACK_NARROWING_MIN_PX]
@@ -144,12 +147,12 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--losat_bin PATH | --ncbi_blast_bin PATH] [--losat_threads N]
               [--losat_output_dir DIR] [--evalue EVALUE] [--bitscore BITSCORE]
               [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
-              [--depth_color DEPTH_COLOR] [--depth_width DEPTH_WIDTH]
-              [--depth_window DEPTH_WINDOW] [--depth_step DEPTH_STEP]
-              [--share_depth_axis] [--depth_min DEPTH_MIN]
-              [--depth_max DEPTH_MAX] [--depth_log_scale]
-              [--no_depth_log_scale] [--show_depth_axis] [--hide_depth_axis]
-              [--show_depth_ticks] [--hide_depth_ticks]
+              [--identity_scale MIN MAX] [--depth_color DEPTH_COLOR]
+              [--depth_width DEPTH_WIDTH] [--depth_window DEPTH_WINDOW]
+              [--depth_step DEPTH_STEP] [--share_depth_axis]
+              [--depth_min DEPTH_MIN] [--depth_max DEPTH_MAX]
+              [--depth_log_scale] [--no_depth_log_scale] [--show_depth_axis]
+              [--hide_depth_axis] [--show_depth_ticks] [--hide_depth_ticks]
               [--depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL]
               [--depth_small_tick_interval DEPTH_SMALL_TICK_INTERVAL]
               [--depth_tick_font_size DEPTH_TICK_FONT_SIZE] [-l LEGEND]
@@ -168,7 +171,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
-              [--label_table LABEL_TABLE]
+              [--label_table LABEL_TABLE] [--italic_gene_labels]
               [--feature_visibility_table FEATURE_TABLE]
               [--annotation_table ANNOTATION_TABLE]
               [--outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET]
@@ -224,7 +227,7 @@ options:
   --display_start_coordinate DISPLAY_START_COORDINATE
                         1-based source coordinate at the display start;
                         requires one complete circular record.
-  --gbk [GBK_FILE ...]  GenBank/DDBJ flat file
+  --gbk [GBK_FILE ...]  GenBank, DDBJ, or EMBL flat file
   --gff [GFF3_FILE ...]
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
@@ -237,7 +240,9 @@ options:
                         overwrite).
   -p, --palette PALETTE
                         Palette name (default: default)
-  -t, --table TABLE     color table (optional)
+  -t, --table TABLE     color table: a TSV file, or a built-in table
+                        (builtin:cog, builtin:phrog, builtin:plastid,
+                        builtin:mitochondrion) (optional)
   -d, --default_colors DEFAULT_COLORS
                         TSV file that overrides the color palette (optional)
   -n, --nt NT           dinucleotide: two letters from A, C, G, T, and U;
@@ -293,6 +298,16 @@ options:
   --keep_full_definition_with_plot_title
                         Keep the full species/strain center label when a
                         circular plot title is shown (default: False).
+  --origin_feature KEY=VALUE
+                        Rotate each record so that the feature this exact
+                        selector names starts at 12 o'clock, for example
+                        gene=dnaA or locus_tag=b0001 (the feature_selector
+                        form of the placement and override tables): its start
+                        as drawn (its 5' base when it reads clockwise, else
+                        its 3' base) becomes the display start. A record
+                        without the feature keeps its start and is reported.
+                        Cannot be combined with --display_start_coordinate or
+                        a crop (default: off).
   --center_reserved_radius CENTER_RESERVED_RADIUS
                         Override the center-label reserved radius for circular
                         track packing (in px; must be >= 0).
@@ -410,6 +425,12 @@ options:
   --alignment_length ALIGNMENT_LENGTH
                         Minimum BLAST alignment length retained for similarity
                         rings (default: 0).
+  --identity_scale MIN MAX
+                        Fix the identity colour scale of the similarity rings
+                        and their Legend to MIN..MAX percent (0 <= MIN < MAX
+                        <= 100), so figures with different --identity
+                        thresholds share one scale (default: from --identity
+                        to 100).
   --depth_color DEPTH_COLOR
                         Depth track fill color (optional; default: #4A90E2).
   --depth_width DEPTH_WIDTH
@@ -509,6 +530,10 @@ options:
   --label_table LABEL_TABLE
                         Path to a TSV file defining post-filter label text
                         overrides (optional)
+  --italic_gene_labels  Draw each feature label that the qualifier priority
+                        names from the gene qualifier in italics, also when
+                        --label_table replaces its text; other labels stay
+                        upright (default: off).
   --feature_visibility_table FEATURE_TABLE
                         Path to a TSV file defining per-feature visibility
                         overrides (optional)
@@ -528,8 +553,9 @@ options:
                         Inner label y-radius offset factor (float; default
                         from config)
   --scale_interval SCALE_INTERVAL
-                        Manual scale interval for circular mode (in bp; must
-                        be > 0). Overrides automatic calculation.
+                        Manual scale interval for circular mode (a length in
+                        bp with an optional unit, for example 5000 or 5kb;
+                        must be > 0). Overrides automatic calculation.
   --hide_scale          Hide the primary genome-coordinate scale while
                         retaining the circular axis.
   --tick_label_font_size TICK_LABEL_FONT_SIZE
@@ -1042,7 +1068,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [--records_table TSV]
               [--multi_record_position SELECTOR@ROW] [--linear_record_gap PX]
-              [--comparisons_table TSV] [-b [BLAST ...]]
+              [--comparisons_table TSV] [-b [BLAST ...]] [--auto_orient]
               [--losat {losatn,tlosatx,losatp}]
               [--losatp_mode {similarity_groups,collinear,pairwise}]
               [--losatn_task {megablast,blastn,dc-megablast}]
@@ -1089,9 +1115,9 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL]
               [--depth_small_tick_interval DEPTH_SMALL_TICK_INTERVAL]
               [--depth_tick_font_size DEPTH_TICK_FONT_SIZE] [--align_center]
-              [--keep_definition_left_aligned] [--evalue EVALUE]
-              [--bitscore BITSCORE] [--identity IDENTITY]
-              [--alignment_length ALIGNMENT_LENGTH]
+              [--anchor_feature KEY=VALUE] [--keep_definition_left_aligned]
+              [--evalue EVALUE] [--bitscore BITSCORE] [--identity IDENTITY]
+              [--alignment_length ALIGNMENT_LENGTH] [--identity_scale MIN MAX]
               [--pairwise_match_style {ribbon,curve}] [-k FEATURES]
               [--feature_shape TYPE=SHAPE]
               [--arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO]
@@ -1116,7 +1142,8 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--label_line {none,under}] [--label_protection {none,halo,box}]
               [--label_rotation LABEL_ROTATION]
               [--linear_label_spacing LINEAR_LABEL_SPACING]
-              [--track_layout {above,middle,below}] [--track_axis_gap AUTO|PX]
+              [--track_layout {above,middle,below}]
+              [--wrap_length AUTO|LENGTH] [--track_axis_gap AUTO|PX]
               [--linear_track_order LINEAR_TRACK_ORDER]
               [--linear_track_slot SLOT]
               [--linear_track_axis_index LINEAR_TRACK_AXIS_INDEX]
@@ -1125,7 +1152,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--resolve_overlaps] [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
-              [--label_table LABEL_TABLE]
+              [--label_table LABEL_TABLE] [--italic_gene_labels]
               [--feature_visibility_table FEATURE_TABLE]
               [--annotation_table ANNOTATION_TABLE]
               [--feature_height FEATURE_HEIGHT] [--gc_height GC_HEIGHT]
@@ -1165,7 +1192,7 @@ options:
   --display_start_coordinate DISPLAY_START_COORDINATE
                         1-based source coordinate at the display start;
                         requires one complete circular record.
-  --gbk [GBK_FILE ...]  GenBank/DDBJ flat file
+  --gbk [GBK_FILE ...]  GenBank, DDBJ, or EMBL flat file
   --gff [GFF3_FILE ...]
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
@@ -1183,6 +1210,13 @@ options:
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
+  --auto_orient         Reverse-complement a record when its reverse-strand
+                        nucleotide hits against the row above, as that row is
+                        drawn, weigh more than half of its hits (sum of
+                        alignment lengths, after the match thresholds). Reads
+                        -b/--blast, --comparisons_table, and losatn/tlosatx
+                        results, not protein comparisons; --reverse_complement
+                        1 keeps its record reversed (default: off).
   --losat {losatn,tlosatx,losatp}
                         Run a LOSAT comparison between the records: losatn
                         compares the nucleotide sequences (LOSAT blastn),
@@ -1195,8 +1229,8 @@ options:
   --losatp_mode {similarity_groups,collinear,pairwise}
                         LOSATP display with --losat losatp: similarity_groups
                         (Similarity groups across all records), collinear
-                        (Collinear blocks), or pairwise (adjacent-record
-                        ribbons) (default: similarity_groups).
+                        (Collinear blocks), or pairwise (links between records
+                        in adjacent rows) (default: similarity_groups).
   --losatn_task {megablast,blastn,dc-megablast}
                         LOSATN search task with --losat losatn. A native
                         runtime that does not support the task stops before
@@ -1297,7 +1331,9 @@ options:
                         Collinear ribbon color mode: average_identity,
                         orientation, or orientation_identity (default:
                         orientation).
-  -t, --table TABLE     color table (optional)
+  -t, --table TABLE     color table: a TSV file, or a built-in table
+                        (builtin:cog, builtin:phrog, builtin:plastid,
+                        builtin:mitochondrion) (optional)
   -p, --palette PALETTE
                         Palette name (default: default)
   -d, --default_colors DEFAULT_COLORS
@@ -1405,6 +1441,16 @@ options:
                         Depth coverage tick label font size (optional; must be
                         > 0).
   --align_center        Align genomes to the center (default: False).
+  --anchor_feature KEY=VALUE
+                        Align the records at the start as drawn (its 5' base
+                        when it reads rightward, else its 3' base) of the
+                        feature this exact selector names in each record, for
+                        example gene=dnaA or locus_tag=b0001 (the
+                        feature_selector form of the placement and override
+                        tables). The first record that has the feature keeps
+                        its place; a record without it keeps its place and is
+                        reported. Wins over --align_center for the records it
+                        moves (default: off).
   --keep_definition_left_aligned
                         Keep linear record definitions in the left column. In
                         a multi-record row, a label or subtitle that no record
@@ -1419,6 +1465,12 @@ options:
   --identity IDENTITY   identity threshold (default=0)
   --alignment_length ALIGNMENT_LENGTH
                         minimum BLAST alignment length threshold (default=0)
+  --identity_scale MIN MAX
+                        Fix the identity colour scale of the pairwise matches
+                        and their Legend to MIN..MAX percent (0 <= MIN < MAX
+                        <= 100), so figures with different --identity
+                        thresholds share one scale (default: from --identity
+                        to 100).
   --pairwise_match_style {ribbon,curve}
                         Pairwise comparison link style: ribbon keeps straight
                         filled ribbons; curve draws curved filled ribbons that
@@ -1520,7 +1572,14 @@ options:
                         (optional; float; must be > 0).
   --track_layout {above,middle,below}
                         Linear track layout mode ("above", "middle", or
-                        "below"; default: "middle").
+                        "below"; default: "middle", or "above" when
+                        --wrap_length cuts a record).
+  --wrap_length AUTO|LENGTH
+                        Draw each record over several rows of this length: a
+                        length in bp with an optional unit (for example 50000,
+                        50kb, 0.5Mb), or "auto" (at most 50 kb per row, by the
+                        longest record). With no record longer than one row,
+                        the option has no effect. Default: no wrapping.
   --track_axis_gap AUTO|PX
                         Gap between axis and nearest feature edge in pixels
                         for above/below layouts. Use 'auto' to derive it from
@@ -1562,6 +1621,10 @@ options:
   --label_table LABEL_TABLE
                         Path to a TSV file defining post-filter label text
                         overrides (optional)
+  --italic_gene_labels  Draw each feature label that the qualifier priority
+                        names from the gene qualifier in italics, also when
+                        --label_table replaces its text; other labels stay
+                        upright (default: off).
   --feature_visibility_table FEATURE_TABLE
                         Path to a TSV file defining per-feature visibility
                         overrides (optional)
@@ -1581,8 +1644,8 @@ options:
   --hide_scale          Hide the coordinate scale while retaining each record
                         axis (default: False).
   --scale_style {bar,ruler}
-                        Style for the length scale (default: "bar"; "bar",
-                        "ruler")
+                        Style for the length scale ("bar", "ruler"; default:
+                        "bar", or "ruler" when --wrap_length cuts a record)
   --scale_stroke_color SCALE_STROKE_COLOR
                         Scale bar/ruler stroke color (optional; str; default:
                         "black")
@@ -1601,7 +1664,8 @@ options:
                         color when --ruler_on_axis is active, otherwise
                         black).
   --scale_interval SCALE_INTERVAL
-                        Manual tick interval for "ruler" scale style (in bp;
+                        Manual tick interval for "ruler" scale style (a length
+                        in bp with an optional unit, for example 5000 or 5kb;
                         must be > 0). Overrides automatic calculation;
                         optional
   --legend_box_size LEGEND_BOX_SIZE

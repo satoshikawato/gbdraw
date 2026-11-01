@@ -80,6 +80,12 @@ from gbdraw.layout.similarity_alignment import (
 )
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.objects import CONSERVATION_COLOR_SCHEME_PATH, ConservationColorScheme
+from gbdraw.comparisons.identity_scale import (
+    CIRCULAR_IDENTITY_SCALE_PATH,
+    LINEAR_IDENTITY_SCALE_PATH,
+    IdentityScale,
+    identity_scale_from_config,
+)
 from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
     ComparisonThresholds,
@@ -352,7 +358,9 @@ class ComparisonRingOptions:
     ``"ten"`` (ten colors, repeating from ring 11) or ``"per_five"`` (one
     color per five rings, repeating from ring 31). ``None`` (the default)
     keeps the config's ``objects.conservation.color_scheme``; a value
-    overrides it.
+    overrides it. ``identity_scale`` ``(MIN, MAX)`` fixes the identity colour
+    scale of the rings and their Legend (0 <= MIN < MAX <= 100); ``None``
+    (the default) colours from the identity threshold to 100%.
     """
 
     tracks: Sequence[ComparisonRingTrackOptions] = ()
@@ -366,6 +374,12 @@ class ComparisonRingOptions:
     ncbi_blast_executable: str | None = None
     threads: int | None = None
     color_scheme: ConservationColorScheme | None = None
+    identity_scale: IdentityScale | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "identity_scale", identity_scale_from_config(self.identity_scale, path=CIRCULAR_IDENTITY_SCALE_PATH)
+        )
 
 
 # Compatibility aliases for the original package-root names.
@@ -393,6 +407,13 @@ class LinearComparisonOptions:
     ``collinearity_infer_orthogroups`` adds within-record searches to
     ``losatp_mode="collinear"`` and groups proteins into similarity groups
     before blocks are built (off by default).
+    ``identity_scale`` ``(MIN, MAX)`` fixes the identity colour scale of the
+    pairwise matches and their Legend (0 <= MIN < MAX <= 100); ``None`` (the
+    default) colours from the identity threshold to 100%.
+    ``auto_orient`` reverse-complements a record whose reverse-strand
+    nucleotide hits against the row above weigh more than half of its hits
+    (off by default; protein comparisons are not read). A saved Session holds
+    the reverse-complement flags it decided, not the option.
     """
 
     blast_files: Sequence[str] | None = None
@@ -437,6 +458,13 @@ class LinearComparisonOptions:
     similarity_alignment: (
         SimilarityAlignmentPlan | SimilarityAlignmentReference | None
     ) = None
+    identity_scale: IdentityScale | None = None
+    auto_orient: bool = _LINEAR_DIAGRAM_DEFAULTS.auto_orient
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "identity_scale", identity_scale_from_config(self.identity_scale, path=LINEAR_IDENTITY_SCALE_PATH)
+        )
 
 
 @dataclass(frozen=True)
@@ -487,6 +515,9 @@ class CircularOptions(_CommonOptions):
 
     ``comparison_rings`` is the canonical sequence-similarity ring field.
     ``conservation`` remains a runtime compatibility constructor and attribute alias.
+    ``origin_feature`` (``key=value``, for example ``"gene=dnaA"``) rotates each
+    record so that the feature it names starts at 12 o'clock; a record without
+    it keeps its start (off by default).
     """
 
     tracks: CircularTrackOptions = field(default_factory=CircularTrackOptions)
@@ -495,6 +526,7 @@ class CircularOptions(_CommonOptions):
     strain: str | None = None
     keep_full_definition_with_title: bool = False
     thresholds: Thresholds = field(default_factory=Thresholds)
+    origin_feature: str | None = None
 
     def __post_init__(self) -> None:
         _validate_common_options(self)
@@ -578,11 +610,18 @@ setattr(CircularOptions, "__init__", _circular_options_init)
 
 @dataclass(frozen=True)
 class LinearOptions(_CommonOptions):
-    """Options accepted only by :func:`draw_linear`."""
+    """Options accepted only by :func:`draw_linear`.
+
+    ``anchor_feature`` (``key=value``, for example ``"gene=dnaA"``) aligns the
+    records at the start as drawn (its 5' base when it reads rightward as
+    drawn, else its 3' base) of the feature it names in each record; the first record that has it keeps its place, and a record
+    without it keeps its place (off by default).
+    """
 
     tracks: LinearTrackOptions = field(default_factory=LinearTrackOptions)
     comparisons: LinearComparisonOptions = field(default_factory=LinearComparisonOptions)
     thresholds: Thresholds = field(default_factory=Thresholds)
+    anchor_feature: str | None = None
 
     def __post_init__(self) -> None:
         _validate_common_options(self)
@@ -942,11 +981,16 @@ def _circular_options(
                 )
             values["conservation_labels"] = labels
         values.update(_ring_color_values(comparison_rings.tracks))
-    if comparison_rings.color_scheme is not None:
-        values["config_overrides"] = {
-            **(options.config_overrides or {}),
-            CONSERVATION_COLOR_SCHEME_PATH: comparison_rings.color_scheme,
-        }
+    ring_overrides = {
+        path: value
+        for path, value in (
+            (CONSERVATION_COLOR_SCHEME_PATH, comparison_rings.color_scheme),
+            (CIRCULAR_IDENTITY_SCALE_PATH, None if comparison_rings.identity_scale is None else list(comparison_rings.identity_scale)),
+        )
+        if value is not None
+    }
+    if ring_overrides:
+        values["config_overrides"] = {**(options.config_overrides or {}), **ring_overrides}
     values.update(
         conservation_reference=comparison_rings.reference,
         conservation_ring_width=comparison_rings.ring_width,
@@ -954,6 +998,7 @@ def _circular_options(
         species=options.species,
         strain=options.strain,
         keep_full_definition_with_plot_title=options.keep_full_definition_with_title,
+        origin_feature=options.origin_feature,
     )
     return _CircularDiagramOptions(**values)
 
@@ -1087,12 +1132,18 @@ def _linear_options(
         ),
     )
     comparisons = options.comparisons
+    if comparisons.identity_scale is not None:
+        values["config_overrides"] = {
+            **(options.config_overrides or {}),
+            LINEAR_IDENTITY_SCALE_PATH: list(comparisons.identity_scale),
+        }
     values.update(
         blast_files=comparisons.blast_files,
         linear_comparisons=comparisons.comparisons,
         protein_comparisons=comparisons.protein_comparisons,
         orthogroups=comparisons.orthogroups,
         losat_search=_linear_losat_search(comparisons),
+        auto_orient=comparisons.auto_orient,
         pairwise_match_style=comparisons.match_style,
         collinearity_blocks=comparisons.collinearity_blocks,
         collinearity_params=comparisons.collinearity_params,
@@ -1103,6 +1154,7 @@ def _linear_options(
         collinear_infer_orthogroups=comparisons.collinearity_infer_orthogroups,
         orthogroup_membership_mode=comparisons.orthogroup_membership,
         collinear_max_paralog_links_per_orthogroup=comparisons.max_paralog_links,
+        anchor_feature=options.anchor_feature,
     )
     return _LinearDiagramOptions(**values)
 

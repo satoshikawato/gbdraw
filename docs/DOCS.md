@@ -62,6 +62,7 @@ back to reproducible Tutorials or the relevant technical documentation.
 - [Get the tutorial inputs](./GETTING_TUTORIAL_DATA.md)
 - [Palette Explorer](https://gbdraw.app/gallery/palettes/)
 - [About and citation](./ABOUT.md)
+- [0.14.5 release notes](./RELEASE_NOTES_0.14.5.md)
 - [0.14.4 release notes](./RELEASE_NOTES_0.14.4.md)
 - [0.14.3 release notes](./RELEASE_NOTES_0.14.3.md)
 - [0.14.2 release notes](./RELEASE_NOTES_0.14.2.md)

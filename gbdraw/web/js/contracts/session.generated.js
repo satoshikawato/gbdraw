@@ -174,8 +174,10 @@
  * @property {unknown} [gc_skew_radius_circular]
  * @property {unknown} [gc_skew_width_circular]
  * @property {unknown} [identity]
+ * @property {unknown} [identity_scale]
  * @property {unknown} [inner_label_x_offset]
  * @property {unknown} [inner_label_y_offset]
+ * @property {unknown} [italic_gene_labels]
  * @property {unknown} [keep_full_definition_with_plot_title]
  * @property {unknown} [label_font_size]
  * @property {unknown} [label_line]
@@ -233,6 +235,7 @@
  * @property {unknown} [labels_mode]
  * @property {unknown} [linear_ruler_on_axis]
  * @property {unknown} [linear_track_layout]
+ * @property {unknown} [linear_wrap_length]
  * @property {unknown} [multi_record_canvas]
  * @property {unknown} [normalize_length]
  * @property {unknown} [plot_title]
@@ -614,8 +617,10 @@
  * @property {unknown} [gc_skew_radius_circular]
  * @property {unknown} [gc_skew_width_circular]
  * @property {unknown} [identity]
+ * @property {unknown} [identity_scale]
  * @property {unknown} [inner_label_x_offset]
  * @property {unknown} [inner_label_y_offset]
+ * @property {unknown} [italic_gene_labels]
  * @property {unknown} [keep_full_definition_with_plot_title]
  * @property {unknown} [label_font_size]
  * @property {unknown} [label_line]
@@ -673,6 +678,7 @@
  * @property {unknown} [labels_mode]
  * @property {unknown} [linear_ruler_on_axis]
  * @property {unknown} [linear_track_layout]
+ * @property {unknown} [linear_wrap_length]
  * @property {unknown} [multi_record_canvas]
  * @property {unknown} [normalize_length]
  * @property {unknown} [plot_title]
@@ -773,7 +779,7 @@
  * @property {unknown} [runMetadata]
  * @property {unknown} [cliInvocation]
  * @property {'gbdraw-session'} format
- * @property {46 | 47 | 48 | 49} version
+ * @property {46 | 47 | 48 | 49 | 50} version
  * @property {unknown} [createdAt]
  * @property {unknown} renderRequest
  * @property {Record<string, unknown>} resources

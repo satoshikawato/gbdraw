@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from collections.abc import Sequence
 from typing import NamedTuple
 
 from Bio.SeqRecord import SeqRecord
@@ -12,6 +13,7 @@ from ....core.record_metadata import _read_coord_map, _record_source_start
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.label_backing import feature_label_box, label_halo, underline_casing
 from ...drawers.linear.labels import LabelDrawer
+from ...drawers.linear.wrap_rows import wrap_row_group
 from ....labels.label_ink import linear_label_ink
 from ....labels.label_style import label_leader_width_px
 from ....labels.linear import linear_leader_polyline, linear_record_labels, place_linear_label_row
@@ -21,6 +23,7 @@ from ....layout.linear import LinearFeatureLaneGeometry, LinearFeatureTrackLayou
 from ....features.factory import FeatureBuildResult
 from ....configurators import FeatureDrawingConfigurator
 from ....svg.ids import record_group_svg_id, stable_svg_id
+from ....layout.linear_wrap import drawn_axis_length
 from ....layout.record_labels import source_ruler_ticks
 from ...label_binding import bind_label_part
 from .feature_identity import LinearFeatureDomIndex
@@ -71,10 +74,15 @@ class SeqRecordGroup:
         feature_offset_y: float = 0.0,
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
         record_transform: RecordDisplayTransform | None = None,
+        axis_row_offsets: Sequence[float] = (),
+        feature_row_shifts: Sequence[float] = (),
         *,
         sequence_width: float,
     ) -> None:
         self.record_transform = record_transform
+        # A wrapped record's plan (``LinearRecordVerticalPlan``): each row's axis and features. Empty otherwise.
+        self.axis_row_offsets = axis_row_offsets
+        self.feature_row_shifts = feature_row_shifts
         self.gb_record = gb_record
         self.geometry = geometry
         self.length_param = geometry.length_param
@@ -238,7 +246,22 @@ class SeqRecordGroup:
                 return _LabelParts(True, leader_layer, tail, casing, underline, box)
         return _LabelParts(True, leader, None, None, None, box)
 
-    def _draw_axis_ruler(self, group: Group, *, bar_length: float, record_length: int) -> None:
+    def _row_axis_groups(self, group: Group, bar_length: float, record_length: int) -> list[Group]:
+        """One axis per row of a wrapped record, each as long as the bases on it at the one scale."""
+
+        assert self.record_transform is not None
+        rows = []
+        for row, offset in enumerate(self.axis_row_offsets):
+            row_group = wrap_row_group(row, offset)
+            row_group.attribs["data-gbdraw-wrap-part"] = "axis"
+            row_group.add(self.draw_linear_axis(bar_length * self.record_transform.row_length(row) / record_length))
+            group.add(row_group)
+            rows.append(row_group)
+        return rows
+
+    def _draw_axis_ruler(
+        self, group: Group, *, bar_length: float, record_length: int, row_groups: Sequence[Group] | None = None
+    ) -> None:
         if not self.axis_ruler_enabled or bar_length <= 0 or record_length <= 0:
             return
 
@@ -254,8 +277,8 @@ class SeqRecordGroup:
 
         tick_coords = self._axis_tick_coordinates(start_coord, end_coord, interval)
         projected_ticks = None
-        if self.record_transform is not None and self.record_transform.start_coordinate is not None:
-            projected_ticks = dict(source_ruler_ticks(self.record_transform, interval))
+        if self.record_transform is not None and self.record_transform.projects:
+            projected_ticks = {tick.base: tick for tick in source_ruler_ticks(self.record_transform, interval)}
             tick_coords = list(projected_ticks)
         if not tick_coords:
             return
@@ -271,8 +294,11 @@ class SeqRecordGroup:
             dominant_baseline = "text-after-edge"
 
         for coord in tick_coords:
+            target = group
             if projected_ticks is not None:
-                x_pos = bar_length * projected_ticks[coord] / record_length
+                x_pos = bar_length * projected_ticks[coord].offset / record_length
+                if row_groups is not None:
+                    target = row_groups[projected_ticks[coord].row]
             elif coord_span <= 0:
                 x_pos = 0.0
             else:
@@ -288,7 +314,7 @@ class SeqRecordGroup:
                 stroke=self.scale_stroke_color,
                 stroke_width=self.axis_stroke_width,
             )
-            group.add(tick_line)
+            target.add(tick_line)
 
             label_text = format_linear_tick_label(
                 int(coord),
@@ -306,7 +332,7 @@ class SeqRecordGroup:
                 text_anchor="middle",
                 dominant_baseline=dominant_baseline,
             )
-            group.add(text_element)
+            target.add(text_element)
 
     def draw_record(
         self,
@@ -322,9 +348,12 @@ class SeqRecordGroup:
         """Draws the genomic features onto the provided SVG group."""
         bar_length: float = alignment_width
         # Draw the axis
-        axis_path = self.draw_linear_axis(alignment_width)
-        group.add(axis_path)
-        self._draw_axis_ruler(group, bar_length=bar_length, record_length=record_length)
+        row_axes = None
+        if self.axis_row_offsets:
+            row_axes = self._row_axis_groups(group, bar_length, record_length)
+        else:
+            group.add(self.draw_linear_axis(alignment_width))
+        self._draw_axis_ruler(group, bar_length=bar_length, record_length=record_length, row_groups=row_axes)
 
         feature_group = group
         has_feature_shift = abs(self.feature_offset_y) > 1e-9
@@ -362,6 +391,11 @@ class SeqRecordGroup:
         # Draw features
         if self.draw_features_enabled:
             feature_drawer = FeatureDrawer(self.feature_config)
+            row_groups = (
+                [wrap_row_group(row, shift) for row, shift in enumerate(self.feature_row_shifts)]
+                if self.feature_row_shifts
+                else None
+            )
             for feature_object in feature_dict.values():
                 feature_strand = feature_object.strand
                 feature_group = feature_drawer.draw(
@@ -379,7 +413,11 @@ class SeqRecordGroup:
                     record_index=self.record_index,
                     record_count=self.record_count,
                     feature_instance_id=feature_object.rendered_instance_index,
+                    row_groups=row_groups,
                 )
+            for row_group in row_groups or ():
+                if row_group.elements:
+                    feature_group.add(row_group)
 
         # Add labels: in front of every leader and glyph, the boxes, the halos, the underline casings, the
         # leader tails, the underlines, then the letters (a halo or a casing must not erode an underline).
@@ -424,14 +462,15 @@ class SeqRecordGroup:
         record_group.attribs["data-gbdraw-record-id"] = str(self.gb_record.id)
         record_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
 
-        record_length: int = len(self.gb_record.seq)
+        source_length: int = len(self.gb_record.seq)
+        record_length: int = drawn_axis_length(self.gb_record, self.record_transform)
         # Input-file span of a cropped or reverse-complemented record (PD-OI-076):
         # match popups and FASTA headers report source coordinates through it.
         source_base, source_step = _read_coord_map(self.gb_record)
-        if record_length and (source_base, source_step) != (1, 1):
+        if source_length and (source_base, source_step) != (1, 1):
             source_low = _record_source_start(self.gb_record)
             record_group.attribs["data-gbdraw-record-source-start"] = str(source_low)
-            record_group.attribs["data-gbdraw-record-source-end"] = str(source_low + record_length - 1)
+            record_group.attribs["data-gbdraw-record-source-end"] = str(source_low + source_length - 1)
             record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)
 
         feature_dict = self.feature_layers.foreground_features

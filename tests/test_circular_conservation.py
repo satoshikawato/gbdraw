@@ -592,6 +592,7 @@ def _ring_rows(names: list[str], fills: list[str] | None = None) -> dict[str, di
             "min_color": "#f0f1f5",
             "max_color": "#8b9cc1",
             "min_value": 0,
+            "max_value": 100,
         }
         for index, name in enumerate(names)
     }

@@ -23,10 +23,13 @@ import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { draftFeatureOverlapTolerance } from '../services/session-active-config-contract.js';
 import { msg, t, tm } from '../utils/i18n.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { RecordOrientationDecision } from '../services/diagram-worker-protocol.js' */
+/** @import { RecordOrientationWrite } from './record-auto-orientation.js' */
 /** @import { AnchorIntent, RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from '../services/record-display-model.js' */
 
 // Session Load reads no record bytes (776a2f93), so a loaded Result can have a
@@ -100,7 +103,8 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  * @property {(sequence: Record<string, any>) => Record<string, any>[]} linearRecordsFor
  * @property {(sequence: Record<string, any> | undefined) => string} linearRecordStatusFor
  * @property {(sequence: Record<string, any> | undefined) => any} linearRecordErrorFor
- * @property {(label: string, apply: () => any) => any} runUndoable History's one undoable step
+ * @property {(label: string, apply: () => unknown) => Promise<unknown>} runUndoable History's one undoable step:
+ *   the result of `apply`, or History's busy value (`{ status: 'busy', reason }`) when it refuses the step without running it
  * @property {() => Record<string, any> | null} getCommittedRequest
  * @property {() => Record<string, any> | null} getCommittedSession
  */
@@ -175,23 +179,26 @@ export const createRecordDisplayControls = ({
     if (owner) owner.region_reverse = reverseComplement;
     draft.reverseComplementOverride = owner ? null : reverseComplement;
   };
+  // A row's draft in its drawing, added when it has none yet.
+  /** @param {DrawingState} drawing @param {RecordDisplayRow} row @returns {RecordDisplayDraft} */
+  const draftOf = (drawing, row) => {
+    const found = drawing.recordDisplayDrafts.find((/** @type {RecordDisplayDraft} */ entry) => recordDisplayKey(entry) === row.key);
+    if (found) return found;
+    drawing.recordDisplayDrafts.push({ sourceUid: row.sourceUid, selector: row.selector,
+      recordId: row.recordId, topologyOverride: null, startCoordinate: null,
+      reverseComplementOverride: null, anchorIntent: null });
+    return drawing.recordDisplayDrafts[drawing.recordDisplayDrafts.length - 1];
+  };
   /** @param {RecordDisplayRow} row */
   const surfaceFor = (row) => {
     const surface = recordDisplaySurface(row, draftFor(row), row);
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     return busy ? { ...surface, startEnabled: false, disabledReason: busy.reason } : surface;
   };
   /** @param {DrawingState} drawing @param {RecordDisplayRow} row @param {Partial<RecordDisplayDraft>} patch @param {string} label */
   const edit = (drawing, row, patch, label) => runUndoable(label, () => {
     settleDrafts(drawing);
-    let draft = drawing.recordDisplayDrafts.find((/** @type {RecordDisplayDraft} */ entry) => recordDisplayKey(entry) === row.key);
-    if (!draft) {
-      draft = { sourceUid: row.sourceUid, selector: row.selector,
-        recordId: row.recordId, topologyOverride: null, startCoordinate: null,
-        reverseComplementOverride: null, anchorIntent: null };
-      drawing.recordDisplayDrafts.push(draft);
-      draft = drawing.recordDisplayDrafts[drawing.recordDisplayDrafts.length - 1];
-    }
+    const draft = draftOf(drawing, row);
     const { reverseComplementOverride, ...rest } = patch;
     Object.assign(draft, rest);
     if (Object.hasOwn(patch, 'reverseComplementOverride')) {
@@ -202,7 +209,7 @@ export const createRecordDisplayControls = ({
   /** @param {RecordDisplayRow} row @param {ResolvedRecordTransform} transform */
   const writeResolvedTransform = (row, { startCoordinate, reverseComplement, anchorIntent }) => {
     const drawing = state.drawingOfMode(row.scope);
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     if (typeof reverseComplement !== 'boolean') {
       throw new Error('Resolved record orientation must be boolean.');
@@ -210,22 +217,7 @@ export const createRecordDisplayControls = ({
     const resolvedStart = parseRecordDisplayStart(startCoordinate);
     const resolvedIntent = validateAnchorIntent(anchorIntent);
     settleDrafts(drawing);
-    let draft = drawing.recordDisplayDrafts.find(
-      (/** @type {RecordDisplayDraft} */ entry) => recordDisplayKey(entry) === row.key
-    );
-    if (!draft) {
-      draft = {
-        sourceUid: row.sourceUid,
-        selector: row.selector,
-        recordId: row.recordId,
-        topologyOverride: null,
-        startCoordinate: null,
-        reverseComplementOverride: null,
-        anchorIntent: null
-      };
-      drawing.recordDisplayDrafts.push(draft);
-      draft = drawing.recordDisplayDrafts[drawing.recordDisplayDrafts.length - 1];
-    }
+    const draft = draftOf(drawing, row);
     Object.assign(draft, { startCoordinate: resolvedStart, anchorIntent: resolvedIntent });
     writeReverseComplement(row, draft, reverseComplement);
   };
@@ -466,6 +458,52 @@ export const createRecordDisplayControls = ({
       }
     };
   };
+  // Orientations decided for the committed request's records (by record key),
+  // written as one History step the way the record popup's Reverse complement
+  // writes one: the File card's checkbox, or the row of a card that draws
+  // several records. They were decided from the comparisons the last Generate
+  // drew, so a row whose orientation changed since then is stale.
+  /** @param {readonly RecordOrientationDecision[]} decisions @param {string} label @returns {Promise<RecordOrientationWrite>} */
+  const writeDecidedOrientations = async (decisions, label) => {
+    // The button acts on the shown drawing, whose last Generate it read.
+    const drawing = state.activeDrawing();
+    if (drawing.mode !== 'linear') return { status: 'notLinear' };
+    const busy = state.sessionOperationAvailability();
+    if (busy) return { status: 'busy', reason: busy.reason };
+    refreshCommittedRows();
+    const rowsByKey = new Map(committedRows.filter((row) => row.scope === 'linear').map((row) => [row.recordKey, row]));
+    const drawnChanged = (/** @type {CommittedDisplayRow} */ row) => {
+      try { return requestedRecordTransform(row, draftFor(row), row).reverseComplement !== row.committedReverseComplement; }
+      catch { return true; }
+    };
+    if (decisions.length !== rowsByKey.size || decisions.some(({ recordKey }) => !rowsByKey.has(recordKey))
+      || [...rowsByKey.values()].some(drawnChanged)) return { status: 'stale' };
+    const changes = decisions.flatMap(({ recordKey, reverseComplement }) => {
+      const row = /** @type {CommittedDisplayRow} */ (rowsByKey.get(recordKey));
+      return reverseComplement === row.committedReverseComplement ? [] : [{ row, reverseComplement }];
+    });
+    if (!changes.length) return { status: 'unchanged' };
+    const WRITTEN = Symbol('written');
+    // History refuses the step, without running it, while a Session operation blocks edits.
+    const outcome = await runUndoable(label, () => {
+      settleDrafts(drawing);
+      changes.forEach(({ row, reverseComplement }) => {
+        const draft = draftOf(drawing, row);
+        draft.anchorIntent = null;
+        writeReverseComplement(row, draft, reverseComplement);
+      });
+      return WRITTEN;
+    });
+    if (outcome !== WRITTEN) {
+      // History refuses a step only with its busy value, whose reason it always words.
+      const { reason } = /** @type {{ reason?: unknown }} */ (outcome && typeof outcome === 'object' ? outcome : {});
+      if (typeof reason !== 'string' || !reason) {
+        throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'decideAutoOrientation' });
+      }
+      return { status: 'busy', reason };
+    }
+    return { status: 'written', recordIds: changes.map(({ row }) => String(row.recordId || row.recordKey)) };
+  };
   /** @param {RecordDraftTarget} row @returns {TargetDraftCheckpoint} */
   const captureTargetDraft = (row) => {
     const drawing = state.drawingOfMode(row.scope);
@@ -524,7 +562,7 @@ export const createRecordDisplayControls = ({
     },
     setStart: (/** @type {RecordDisplayRow} */ row, /** @type {unknown} */ value) => {
       const drawing = state.activeDrawing();
-      return state.sessionOperationAvailability?.() || edit(drawing, row, {
+      return state.sessionOperationAvailability() || edit(drawing, row, {
         startCoordinate: parseRecordDisplayStart(value), anchorIntent: null
       }, msg('Change record display start'));
     },
@@ -534,7 +572,7 @@ export const createRecordDisplayControls = ({
     },
     setReverseComplement: (/** @type {RecordDisplayRow} */ row, /** @type {unknown} */ value) => {
       const drawing = state.activeDrawing();
-      return state.sessionOperationAvailability?.() || edit(drawing, row, {
+      return state.sessionOperationAvailability() || edit(drawing, row, {
         reverseComplementOverride: requireReverseComplementOverride(value), anchorIntent: null
       }, msg('Change record orientation'));
     },
@@ -547,6 +585,7 @@ export const createRecordDisplayControls = ({
     captureAlignmentOrientationIntent,
     restoreAlignmentOrientationIntent,
     commitAlignmentOrientations,
+    writeDecidedOrientations,
     captureTargetDraft,
     restoreTargetDraft,
     targetForFeature };

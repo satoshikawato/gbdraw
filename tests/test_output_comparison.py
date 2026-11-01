@@ -181,6 +181,25 @@ TEST_CASES = {
         "gbk": ["AP027078.gb"],
         "args": ["--legend", "none"],
     },
+    "linear_wrap_lambda": {
+        "type": "linear",
+        "gbk": ["NC_001416.gb"],
+        "args": ["--wrap_length", "10kb", "--gc", "--skew", "--show_labels", "all", "--legend", "none"],
+    },
+    "linear_wrap_rotated_annotation": {
+        "type": "linear",
+        "gbk": ["NC_001416.gb"],
+        "input_args": {"--annotation_table": "lambda_wrap_regions.tsv"},
+        "args": [
+            "--wrap_length", "10kb", "--record_topology", "circular", "--display_start_coordinate", "20000",
+            "--gc", "--skew", "--show_labels", "all", "--legend", "none",
+        ],
+    },
+    "linear_wrap_two_records": {
+        "type": "linear",
+        "gbk": ["NC_001416.gb", "HmmtDNA.gbk"],
+        "args": ["--wrap_length", "10kb", "--gc", "--skew", "--show_labels", "all", "--legend", "none"],
+    },
 }
 
 
@@ -202,7 +221,14 @@ def _render_case(name, config, output_dir, find_test_input, gbdraw_runner) -> Pa
         name,
         output_dir,
         blast_files=blast_files,
-        extra_args=config["args"],
+        extra_args=[
+            *(
+                item
+                for option, filename in config.get("input_args", {}).items()
+                for item in (option, str(find_test_input(filename)))
+            ),
+            *config["args"],
+        ],
     )
     if returncode != 0:
         raise RuntimeError(f"gbdraw failed: {output}")

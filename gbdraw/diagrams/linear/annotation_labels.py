@@ -53,7 +53,7 @@ from gbdraw.labels.linear import (
 from gbdraw.layout.linear import LinearFeatureLaneGeometry
 from gbdraw.layout.spatial import Aabb
 from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
-from gbdraw.render.drawers.linear.annotations import LinearAnnotationLabel, linear_annotation_labels
+from gbdraw.render.drawers.linear.annotations import AnnotationRowFrame, LinearAnnotationLabel, linear_annotation_labels
 
 from .track_slots import LinearRecordVerticalPlan
 
@@ -94,6 +94,7 @@ def _feature_label_box(label: LinearLabel) -> Aabb:
             float(label["font_size"]),
             dominant_baseline="central",
             text_anchor=label["text_anchor"],
+            font_style=label["font_style"],
         )
         if is_horizontal_label(label)
         else None
@@ -169,23 +170,39 @@ def linear_feature_glyph_boxes(
     """Each feature part's lane across its x range and stroke, from the record's bar start and
     axis: the ink a label inside a filled mark keeps clear of (LP-D75)."""
 
-    origin_y = next((float(slot.origin_y) for slot in plan.slots if slot.renderer == "features"), None)
-    if origin_y is None:
+    slot = next((slot for slot in plan.slots if slot.renderer == "features"), None)
+    if slot is None:
         return []
+    origin_y = float(slot.origin_y)
+    # A wrapped record's rows, in its first row's frame.
+    row_shifts = plan.slot_row_shifts(slot.id)
     half_stroke = 0.5 * stroke_width
     boxes: list[Aabb] = []
     for feature in features.values():
         band = geometry.lane_for(
             strand=feature.strand, track_id=feature.feature_track_id, separate_strands=separate_strands
         ).band.translate(origin_y)
-        parts = (
-            feature.location if feature.display_parts is None else [part.location for part in feature.display_parts]
-        )
+        if feature.display_parts is None:
+            located = [(part, 0.0) for part in feature.location]
+        else:
+            located = [
+                (part.location, row_shifts[part.fragment.row] if row_shifts else 0.0)
+                for part in feature.display_parts
+            ]
         boxes.extend(
-            Aabb(part.start * scale - half_stroke, band.top_y, part.end * scale + half_stroke, band.bottom_y)
-            for part in parts
+            Aabb(part.start * scale - half_stroke, band.top_y + shift, part.end * scale + half_stroke, band.bottom_y + shift)
+            for part, shift in located
         )
     return boxes
+
+
+def linear_annotation_row_frames(plan: LinearRecordVerticalPlan, slot_id: str) -> tuple[AnnotationRowFrame, ...]:
+    """An annotation slot on each row of a wrapped record (nothing otherwise)."""
+
+    return tuple(
+        AnnotationRowFrame(shift, float(row.plan.slot_by_id(slot_id).height))
+        for row, shift in zip(plan.wrap_rows, plan.slot_row_shifts(slot_id), strict=True)
+    )
 
 
 def _place_along_span(label: LinearAnnotationLabel, origin_y: float, obstacles: Sequence[LabelObstacle], gap: float) -> float:
@@ -295,10 +312,14 @@ def _track_inks(plan: LinearRecordVerticalPlan, slot_id: str, glyphs: Sequence[A
     """What a label placed off its one-line room keeps clear of: the feature glyphs, the axis
     and the paint of every other slot that is not an annotation track, across the bar."""
 
-    bands = [plan.axis_band] + [
-        slot.paint_band
-        for slot in plan.slots
-        if slot.id != slot_id and slot.paint_band is not None and slot.renderer not in {"features", "spacer", "annotations"}
+    bands = [
+        band.translate(row.axis_offset_y)
+        for row in plan.rows
+        for band in [row.plan.axis_band] + [
+            slot.paint_band
+            for slot in row.plan.slots
+            if slot.id != slot_id and slot.paint_band is not None and slot.renderer not in {"features", "spacer", "annotations"}
+        ]
     ]
     return [*glyphs, *(Aabb(0.0, band.top_y, width, band.bottom_y) for band in bands if band.height > 0.0)]
 
@@ -539,6 +560,7 @@ def place_linear_annotation_labels(
             height_px=float(slot.height),
             font_family=font_family,
             params=params,
+            row_frames=linear_annotation_row_frames(plan, slot.id),
         )
         slot_labels: list[LinearAnnotationLabel] = []
         origin_y = float(slot.origin_y)
@@ -611,6 +633,7 @@ __all__ = [
     "ObstacleOwner",
     "PlacedAnnotationLabels",
     "linear_annotation_label_inks",
+    "linear_annotation_row_frames",
     "linear_feature_glyph_boxes",
     "linear_feature_label_obstacles",
     "place_linear_annotation_labels",

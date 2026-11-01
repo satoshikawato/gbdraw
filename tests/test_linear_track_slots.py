@@ -14,6 +14,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.api.request_render as request_render_module
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.linear as linear_cli_module
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
@@ -724,9 +725,11 @@ def test_linear_cli_forwards_track_slots_to_api(
         return SimpleNamespace(
             drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
             interactive_context=None,
+            linear_metadata=None,
             records=tuple(item.source.record for item in resolved.records),
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
             losat_cache_entries=(),
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,

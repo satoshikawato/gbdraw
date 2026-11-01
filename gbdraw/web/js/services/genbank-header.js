@@ -10,6 +10,7 @@
 const GENBANK_INDENT = 12;
 const GENBANK_SPACER = ' '.repeat(GENBANK_INDENT);
 const GENBANK_RECORD_START = 'LOCUS       ';
+const EMBL_RECORD_START = 'ID   ';
 const GENBANK_HEADER_ENDS = new Set(['FEATURES', 'ORIGIN', 'CONTIG', 'BASE COUNT', 'WGS', 'TSA', 'TLS']);
 const GENBANK_LINEAGE_ROOTS = new Set([
   'Bacteria.', 'Archaea.', 'Eukaryota.', 'Unclassified.', 'Viruses.',
@@ -145,15 +146,21 @@ export const genbankHeaderIds = (chunk) => {
   return { locus, accession, version, recordId };
 };
 
-// The number of records the loader reads from GenBank text: one per line that
-// starts with "LOCUS" and seven spaces (GENBANK_RECORD_START).
+// The number of records the loader reads from GenBank/DDBJ or EMBL text. As
+// gbdraw.io.input_text.flat_file_format decides, a first non-blank line that
+// starts with "ID" and three spaces makes the text EMBL, read one record per such
+// line; other text is GenBank, one record per line that starts with "LOCUS" and
+// seven spaces (GENBANK_RECORD_START).
 /** @param {unknown} text */
 export const countGenBankRecords = (text) => {
   const source = String(text || '');
+  const recordStart = /^.*\S.*$/m.exec(source)?.[0].startsWith(EMBL_RECORD_START)
+    ? EMBL_RECORD_START
+    : GENBANK_RECORD_START;
   let count = 0;
   let lineStart = 0;
   while (lineStart >= 0 && lineStart < source.length) {
-    if (source.startsWith(GENBANK_RECORD_START, lineStart)) count += 1;
+    if (source.startsWith(recordStart, lineStart)) count += 1;
     const newline = source.indexOf('\n', lineStart);
     lineStart = newline < 0 ? -1 : newline + 1;
   }

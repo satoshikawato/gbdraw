@@ -9,6 +9,7 @@ import test from 'node:test';
 const {
   applyComparisonSequenceRecordLabel,
   defaultConservationSeriesLabel,
+  normalizeConservationSeriesColor,
   reconcileConservationSeries,
   withoutConservationSeries
 } = await import('../../gbdraw/web/js/services/conservation-series.js');
@@ -103,4 +104,15 @@ test('withoutConservationSeries leaves out one series with its files; later seri
   assert.equal(withoutConservationSeries({ blasts: ['b.tsv'], fastas: [], sequenceSources: [], series: [series[0]] }, 0).enabled, false,
     'with no series left the comparison is off');
   assert.equal(series[2].sourceIndex, 2, 'the stored entries are not changed');
+});
+
+// A row without a colour takes its colour by position, repeating after ten. The
+// list stays as it was when it was derived by rounding (OV-2393 moved the colour
+// conversion to truncation); each colour is one of the CLI's `ten` scheme.
+test('a row without a colour takes the colour of its position', () => {
+  const colors = ['#6e91b7', '#f4a251', '#77b26f', '#e67577', '#8fc4c0',
+    '#f0d369', '#be92b2', '#ffafb7', '#ae8e7c', '#c6bebb'];
+  assert.deepEqual(colors.map((_, index) => normalizeConservationSeriesColor(null, index)), colors);
+  assert.equal(normalizeConservationSeriesColor('', 10), colors[0]);
+  assert.equal(normalizeConservationSeriesColor('#ABC', 3), '#aabbcc');
 });

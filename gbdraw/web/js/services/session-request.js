@@ -34,6 +34,7 @@ import {
   serializeLabelOverrideRows
 } from './label-override-table.js';
 import {
+  featureVisibilityRows,
   parseFeatureVisibilityRules,
   serializeFeatureVisibilityRules
 } from './feature-visibility.js';
@@ -139,6 +140,7 @@ import {
 } from '../utils/feature-rendering.js';
 import {
   comparisonFiltersForMode,
+  identityScalePathForMode,
   effectiveLinearAxisColor,
   isModeProfileDefault,
   labelStyleForMode,
@@ -729,10 +731,19 @@ const MODE_LABEL_SCOPE_PATHS = Object.freeze({
   circular: 'labels.circular.scope',
   linear: 'labels.linear.scope'
 });
-// The feature label style of a drawing's mode: its `adv` field and config path.
-const MODE_LABEL_STYLE_PATHS = Object.freeze({
-  circular: Object.freeze({ label_line: 'labels.circular.line', label_protection: 'labels.circular.protection' }),
-  linear: Object.freeze({ label_line: 'labels.linear.line', label_protection: 'labels.linear.protection' })
+// The `adv` fields a drawing's mode writes as they are to one config leaf of
+// that mode: the feature label style and the fixed identity colour scale.
+const MODE_ADV_CONFIG_PATHS = Object.freeze({
+  circular: Object.freeze({
+    label_line: 'labels.circular.line', label_protection: 'labels.circular.protection',
+    italic_gene_labels: 'labels.circular.italic_gene_labels',
+    identity_scale: identityScalePathForMode('circular')
+  }),
+  linear: Object.freeze({
+    label_line: 'labels.linear.line', label_protection: 'labels.linear.protection',
+    italic_gene_labels: 'labels.linear.italic_gene_labels',
+    identity_scale: identityScalePathForMode('linear')
+  })
 });
 
 /** @type {Readonly<Record<string, string>>} */
@@ -828,7 +839,7 @@ export const managedConfigOverridePathsForMode = (mode) => {
     Object.values(CONFIG_OVERRIDE_PATHS).filter((path) => !excluded.has(path))
   );
   paths.add(MODE_LABEL_SCOPE_PATHS[mode]);
-  Object.values(MODE_LABEL_STYLE_PATHS[mode]).forEach((path) => paths.add(path));
+  Object.values(MODE_ADV_CONFIG_PATHS[mode]).forEach((path) => paths.add(path));
   for (const path of [
     SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth,
     SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth,
@@ -1635,6 +1646,20 @@ const effectiveLabelRendering = (form, adv, circular, linearLabelPlacement) => {
 // R7: a config leaf is projected literally; Python validates its domain.
 /** @param {string} configPath @param {unknown} value */
 const configLeaf = (configPath, value) => projectOptionalNumber(value, { configPath });
+/**
+ * A fixed identity scale is sent as the two numbers in the draft; no scale is
+ * left unstated. Anything else is refused with the leaf's path (R7); Python
+ * judges the range and the order.
+ * @param {string} configPath @param {unknown} value @returns {[number, number] | null}
+ */
+const identityScaleLeaf = (configPath, value) => {
+  if (value === null || value === undefined) return null;
+  const ends = Array.isArray(value) && value.length === 2 ? value.map((end) => configLeaf(configPath, end)) : [];
+  if (ends.length !== 2 || typeof ends[0] !== 'number' || typeof ends[1] !== 'number') {
+    throw diagnosticError('INPUT_INVALID', { configPath, reason: 'FINITE' });
+  }
+  return [ends[0], ends[1]];
+};
 // A shared length leaf is sent as its `.short` and `.long` overrides, and
 // blank sends neither.
 /** @param {string} path @param {unknown} value @returns {Record<string, number>} */
@@ -2642,10 +2667,15 @@ const buildConfigOverrides = (
     ...trackFlagOverrides(form, circular, depthRequested),
     [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: labelScopeOverride(form, circular),
     // The mode's packaged style is left unstated, as a request that predates the setting leaves it.
-    [MODE_LABEL_STYLE_PATHS[state.mode.value].label_line]:
+    [MODE_ADV_CONFIG_PATHS[state.mode.value].label_line]:
       adv.label_line === labelStyleForMode(state.mode.value).label_line ? null : adv.label_line,
-    [MODE_LABEL_STYLE_PATHS[state.mode.value].label_protection]:
+    [MODE_ADV_CONFIG_PATHS[state.mode.value].label_protection]:
       adv.label_protection === labelStyleForMode(state.mode.value).label_protection ? null : adv.label_protection,
+    [MODE_ADV_CONFIG_PATHS[state.mode.value].italic_gene_labels]:
+      Boolean(adv.italic_gene_labels) === labelStyleForMode(state.mode.value).italic_gene_labels ? null : Boolean(adv.italic_gene_labels),
+    // Without a fixed scale the colours run from the threshold to 100%, as before the setting.
+    [MODE_ADV_CONFIG_PATHS[state.mode.value].identity_scale]:
+      identityScaleLeaf(MODE_ADV_CONFIG_PATHS[state.mode.value].identity_scale, adv.identity_scale),
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
     [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: leaf(CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp, adv.feature_overlap_tolerance_bp),
@@ -5430,9 +5460,9 @@ const readSessionTable = (table, read) => {
 // Feature visibility decides which proteins LOSATP compares: the rules and the
 // per-feature `featureVisibility` of the request's identity rows (design Q4 3.3).
 /** @param {unknown} rows */
-const featureVisibilityRowsKey = (rows) => JSON.stringify((Array.isArray(rows) ? rows : [])
-  .filter((row) => row?.featureVisibility)
-  .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]));
+const featureVisibilityRowsKey = (rows) => JSON.stringify(featureVisibilityRows(
+  /** @type {Parameters<typeof featureVisibilityRows>[0]} */ (Array.isArray(rows) ? rows.filter(Boolean) : [])
+));
 /**
  * @param {CommittedCanonicalSession | null | undefined} committedSession
  * @param {unknown} activeRulesTsv
@@ -5524,7 +5554,7 @@ const projectFullConfigOverrides = (config, mode) => {
   const paths = new Set(Object.values(CONFIG_OVERRIDE_PATHS));
   const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
   paths.add(labelScopePath);
-  Object.values(MODE_LABEL_STYLE_PATHS[mode]).forEach((path) => paths.add(path));
+  Object.values(MODE_ADV_CONFIG_PATHS[mode]).forEach((path) => paths.add(path));
   Object.values(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS).forEach((path) => {
     paths.add(`${path}.short`);
     paths.add(`${path}.long`);
@@ -5584,7 +5614,7 @@ const projectCanonicalConfigOverrides = (overrides, mode) => {
   if (Object.prototype.hasOwnProperty.call(overrides, labelScopePath)) {
     projected.label_scope = overrides[labelScopePath];
   }
-  for (const [field, path] of Object.entries(MODE_LABEL_STYLE_PATHS[mode])) {
+  for (const [field, path] of Object.entries(MODE_ADV_CONFIG_PATHS[mode])) {
     if (Object.prototype.hasOwnProperty.call(overrides, path)) projected[field] = overrides[path];
   }
   for (const [semanticName, path] of Object.entries(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS)) {
@@ -6722,6 +6752,8 @@ export const projectCanonicalSessionRequest = ({
     // A request without a label style drew its mode's default, which Load gives a missing field.
     ...(Object.hasOwn(overrides, 'label_line') ? { label_line: overrides.label_line } : {}),
     ...(Object.hasOwn(overrides, 'label_protection') ? { label_protection: overrides.label_protection } : {}),
+    ...(Object.hasOwn(overrides, 'italic_gene_labels') ? { italic_gene_labels: overrides.italic_gene_labels === true } : {}),
+    identity_scale: Array.isArray(overrides.identity_scale) ? [...overrides.identity_scale] : null,
     circular_label_placement: renderRequest.mode === 'circular'
       ? (overrides.circular_label_placement || 'horizontal')
       : 'horizontal',

@@ -28,6 +28,7 @@ import { PREVIEW_MATCH_BUTTON_ATTRIBUTE } from './preview-affordances.js';
  * @property {ExportRef<Element | null>} svgContainer
  * @property {ExportRef<string | null>} svgContent
  * @property {ExportRef<number | string>} downloadDpi
+ * @property {ExportRef<boolean>} downloadWhiteBackground
  * @property {ExportRef<boolean>} [richFeaturePopup]
  * @property {ExportRef<FeatureCatalog | null>} [featureCatalog]
  * @property {ExportRef<ReadonlyArray<{ featureId: string, text: string, sourceText: string }>>} [editableLabels]
@@ -213,6 +214,7 @@ export const captureSvgExport = (state, drawing, { interactive = false } = {}) =
     svgContent: state.svgContent.value,
     name,
     dpi: state.downloadDpi.value,
+    whiteBackground: state.downloadWhiteBackground.value,
     ...(interactive ? { interactivity: {
       popupMode: state.richFeaturePopup?.value === false ? 'simple' : 'rich',
       featureCatalog: state.featureCatalog?.value,

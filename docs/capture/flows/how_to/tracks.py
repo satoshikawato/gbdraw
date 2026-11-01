@@ -15,7 +15,7 @@ from Bio import SeqIO
 from playwright.sync_api import BrowserType, Page, expect
 
 from assertions.svg_semantics import inspect_first_circular_svg
-from config import ACTION_TIMEOUT_MS
+from config import ACTION_TIMEOUT_MS, VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
@@ -548,6 +548,7 @@ def _fit_circular_preview(
             steps=10,
         )
         page.mouse.up()
+        page.mouse.move(VIEWPORT_WIDTH - 40, VIEWPORT_HEIGHT - 30)
     page.evaluate("() => window.getSelection()?.removeAllRanges()")
 
 

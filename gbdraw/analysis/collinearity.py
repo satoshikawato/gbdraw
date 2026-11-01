@@ -130,6 +130,12 @@ RETIRED_COLLINEARITY_ANCHOR_MODES: Mapping[str, CollinearityAnchorMode] = {
 }
 
 
+def retired_collinearity_anchor_mode_replacement(mode: str) -> CollinearityAnchorMode | None:
+    """What a stored anchor mode is read as when ``mode`` is a retired spelling."""
+
+    return RETIRED_COLLINEARITY_ANCHOR_MODES.get(mode.strip().lower().replace("-", "_"))
+
+
 @dataclass(frozen=True)
 class CollinearityAnchor:
     query_protein_id: str
@@ -1212,6 +1218,7 @@ def _filter_hit_tables_by_search_scope(
 
 def _select_orthogroup_edges(
     hit_tables: Mapping[tuple[int, int], DataFrame],
+    protein_map: Mapping[str, CdsProtein],
     *,
     edge_mode: CollinearityAnchorMode | str,
 ) -> dict[tuple[int, int], DataFrame]:
@@ -1231,6 +1238,7 @@ def _select_orthogroup_edges(
             selected[(query_index, subject_index)] = select_reciprocal_best_hit_edges(
                 forward_hits,
                 reverse_hits,
+                protein_map,
             )
         else:
             selected[(query_index, subject_index)] = forward_hits.copy()
@@ -1325,14 +1333,17 @@ def build_orthogroup_collinearity_blocks_from_hits(
             }
         else:
             edge_tables = _select_orthogroup_edges(
-                geometry_hit_tables, edge_mode=normalized_edge_mode,
+                geometry_hit_tables, extraction.protein_map, edge_mode=normalized_edge_mode,
             )
     else:
         edge_tables = _select_orthogroup_edges(
             {
-                pair: _select_member_candidate_hits_per_query(hits, max_hits=orthogroup_member_max_hits)
+                pair: _select_member_candidate_hits_per_query(
+                    hits, max_hits=orthogroup_member_max_hits, protein_map=extraction.protein_map
+                )
                 for pair, hits in geometry_hit_tables.items()
             },
+            extraction.protein_map,
             edge_mode=normalized_edge_mode,
         )
     comparison_edges_by_pair = {
@@ -1512,15 +1523,19 @@ def build_collinearity_blocks_from_hits(
     )
 
 
-def _record_ids(
-    records: Sequence[SeqRecord] | None,
-    record_ids: Sequence[str] | None,
-) -> list[str]:
-    if record_ids is not None:
-        return [str(record_id) for record_id in record_ids]
-    if records is not None:
-        return [str(record.id) for record in records]
-    return []
+@dataclass(frozen=True)
+class RecordExtent:
+    """What block rows read of a record, for a caller that holds no parsed record."""
+
+    id: str
+    length: int
+
+    def __len__(self) -> int:
+        return self.length
+
+
+def _record_ids(records: Sequence[SeqRecord | RecordExtent] | None) -> list[str]:
+    return [str(record.id) for record in records] if records is not None else []
 
 
 def _block_link_side(
@@ -1614,8 +1629,7 @@ def _joined_anchor_endpoint_values(
 def convert_collinearity_blocks_to_pair_comparisons(
     result: CollinearityResult,
     *,
-    records: Sequence[SeqRecord] | None = None,
-    record_ids: Sequence[str] | None = None,
+    records: Sequence[SeqRecord | RecordExtent] | None = None,
     color_mode: CollinearityColorMode | str = "orientation",
     search_scope: CollinearitySearchScope | str | None = None,
 ) -> dict[tuple[int, int], DataFrame]:
@@ -1630,7 +1644,7 @@ def convert_collinearity_blocks_to_pair_comparisons(
     """
 
     normalized_color_mode = normalize_collinearity_color_mode(str(color_mode))
-    resolved_record_ids = _record_ids(records, record_ids)
+    resolved_record_ids = _record_ids(records)
     record_count = len(resolved_record_ids)
     if records is not None:
         record_count = len(records)
@@ -1757,8 +1771,7 @@ def convert_collinearity_blocks_to_pair_comparisons(
 def convert_collinearity_blocks_to_comparisons(
     result: CollinearityResult,
     *,
-    records: Sequence[SeqRecord] | None = None,
-    record_ids: Sequence[str] | None = None,
+    records: Sequence[SeqRecord | RecordExtent] | None = None,
     color_mode: CollinearityColorMode | str = "orientation",
     search_scope: CollinearitySearchScope | str | None = None,
 ) -> list[DataFrame]:
@@ -1767,11 +1780,10 @@ def convert_collinearity_blocks_to_comparisons(
     pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
         result,
         records=records,
-        record_ids=record_ids,
         color_mode=color_mode,
         search_scope=search_scope,
     )
-    record_count = len(records) if records is not None else len(_record_ids(records, record_ids))
+    record_count = len(records) if records is not None else 0
     if records is None:
         for query_index, subject_index in pair_comparisons:
             record_count = max(record_count, query_index + 1, subject_index + 1)
@@ -1803,6 +1815,7 @@ __all__ = [
     "CollinearityResult",
     "CollinearitySearchScope",
     "LosslessCollinearityParameters",
+    "RecordExtent",
     "build_collinearity_blocks_from_hits",
     "build_orthogroup_collinearity_blocks",
     "build_orthogroup_collinearity_blocks_from_hits",

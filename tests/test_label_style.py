@@ -27,6 +27,7 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.labels.label_style import (
     BOX_OPACITY,
+    DEFAULT_ITALIC_GENE_LABELS,
     DEFAULT_LABEL_LINE,
     DEFAULT_LABEL_PROTECTION,
     FeatureLabelStyle,
@@ -63,20 +64,19 @@ def _leader_widths(svg: str) -> set[str]:
 def test_each_mode_has_its_packaged_label_style() -> None:
     # Linear: an underline on a white box at 0.8; Circular: neither (a halo can be chosen, LP-D110).
     config = GbdrawConfig.from_dict(load_default_config())
-    assert LinearRenderProfile(config).label_style == FeatureLabelStyle("under", "box")
-    assert CircularRenderProfile(config).label_style == FeatureLabelStyle("none", "none")
+    assert LinearRenderProfile(config).label_style == FeatureLabelStyle("under", "box", False)
+    assert CircularRenderProfile(config).label_style == FeatureLabelStyle("none", "none", False)
     assert BOX_OPACITY == 0.8
     packaged = load_config_toml("gbdraw.data", "config.toml")["labels"]
     for mode in ("linear", "circular"):
-        assert (packaged[mode]["line"], packaged[mode]["protection"]) == (
-            DEFAULT_LABEL_LINE[mode],
-            DEFAULT_LABEL_PROTECTION[mode],
-        )
+        defaults = (DEFAULT_LABEL_LINE[mode], DEFAULT_LABEL_PROTECTION[mode], DEFAULT_ITALIC_GENE_LABELS[mode])
+        assert (packaged[mode]["line"], packaged[mode]["protection"], packaged[mode]["italic_gene_labels"]) == defaults
         # A stored config written before the settings existed takes the same defaults.
         stored = load_default_config()
-        del stored["labels"][mode]["line"], stored["labels"][mode]["protection"]
+        for key in ("line", "protection", "italic_gene_labels"):
+            del stored["labels"][mode][key]
         labels = getattr(GbdrawConfig.from_dict(stored).labels, mode)
-        assert (labels.line, labels.protection) == (DEFAULT_LABEL_LINE[mode], DEFAULT_LABEL_PROTECTION[mode])
+        assert (labels.line, labels.protection, labels.italic_gene_labels) == defaults
 
 
 @pytest.mark.parametrize(("font_size", "width"), [(5.0, 1.0), (8.0, 1.0), (14.0, 1.0), (24.0, 1.68)])
@@ -90,6 +90,7 @@ def _linear_label_with_leader(font_size: float, x: float, leader_end_y: float) -
     return {
         "label_text": "orf",
         "font_family": "'Liberation Sans', sans-serif",
+        "font_style": "normal",
         "font_size": font_size,
         "middle_x": x,
         "middle_y": -2.0 * font_size,
@@ -119,7 +120,7 @@ def test_each_leader_keeps_its_own_width_clear_in_a_figure_with_two_label_sizes(
     band = measure_linear_label_band([big, small])
     assert band is not None and band.bottom_y == pytest.approx(40.0 + 0.5)
 
-    style = FeatureLabelStyle(line="none", protection="none")
+    style = FeatureLabelStyle(line="none", protection="none", italic_gene_labels=False)
     leaders = {
         obstacle.owner[2]: obstacle.box.max_x - obstacle.box.min_x
         for obstacle in linear_feature_label_obstacles([big, small], SimpleNamespace(slots=(), features_origin_y=0.0), 0, label_style=style)
@@ -152,7 +153,7 @@ def test_only_a_horizontal_label_gets_the_underline_and_its_obstacles_agree() ->
     from gbdraw.labels.linear import linear_leader_polyline
     from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
 
-    under, plain = FeatureLabelStyle(line="under", protection="box"), FeatureLabelStyle(line="none", protection="box")
+    under, plain = FeatureLabelStyle(line="under", protection="box", italic_gene_labels=False), FeatureLabelStyle(line="none", protection="box", italic_gene_labels=False)
     assert under.draws_underline(turned=False) and not under.draws_underline(turned=True)
     assert not plain.draws_underline(turned=False)
     flat = _linear_label_with_leader(10.0, 0.0, -14.0)
@@ -182,12 +183,13 @@ def test_a_circular_radial_label_gets_no_underline_even_where_it_reads_horizonta
     from gbdraw.labels.circular_radial import radial_text_orientation
     from gbdraw.labels.label_ink import circular_label_ink
 
-    under = FeatureLabelStyle(line="under", protection="none")
+    under = FeatureLabelStyle(line="under", protection="none", italic_gene_labels=False)
     rotation, anchor, baseline = radial_text_orientation(angle, is_inner=False)
     point = {"start_x": 100.0, "start_y": 0.0, "middle_x": 90.0, "middle_y": 0.0, "feature_middle_x": 80.0}
     label = {
         "label_text": "orf",
         "font_family": "'Liberation Sans', sans-serif",
+        "font_style": "normal",
         "font_size": 10.0,
         "middle": 1000,
         "is_inner": False,
@@ -266,8 +268,8 @@ def test_the_four_settings_reach_the_drawing_from_cli_and_python(tmp_path: Path,
         GbdrawConfig.from_dict(load_default_config()),
         {"labels.linear.line": "none", "labels.circular.protection": "box"},
     )
-    assert LinearRenderProfile(cfg).label_style == FeatureLabelStyle("none", "box")
-    assert CircularRenderProfile(cfg).label_style == FeatureLabelStyle("none", "box")
+    assert LinearRenderProfile(cfg).label_style == FeatureLabelStyle("none", "box", False)
+    assert CircularRenderProfile(cfg).label_style == FeatureLabelStyle("none", "box", False)
 
 
 @pytest.mark.parametrize(
@@ -301,7 +303,7 @@ def test_a_label_gets_its_box_when_it_has_a_leader_or_sits_beside_its_feature() 
     from gbdraw.labels.label_ink import linear_label_ink
     from gbdraw.labels.linear import linear_leader_polyline
 
-    box, none = FeatureLabelStyle(line="under", protection="box"), FeatureLabelStyle(line="under", protection="none")
+    box, none = FeatureLabelStyle(line="under", protection="box", italic_gene_labels=False), FeatureLabelStyle(line="under", protection="none", italic_gene_labels=False)
     for has_leader in (False, True):
         for beside_feature in (False, True):
             assert box.draws_box(has_leader=has_leader, beside_feature=beside_feature) is (has_leader or beside_feature)

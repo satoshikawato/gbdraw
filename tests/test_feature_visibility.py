@@ -15,6 +15,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
@@ -877,6 +878,8 @@ def test_linear_cli_feature_visibility_table_is_forwarded(
             protein_identity_manifest=None,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
+            linear_metadata=None,
             request=resolved,
         )
 
@@ -991,6 +994,8 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
             protein_identity_manifest=None,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
+            linear_metadata=None,
             request=resolved,
         )
 

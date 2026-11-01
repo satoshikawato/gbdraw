@@ -12,6 +12,53 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
+## Unreleased: Session 50 stores the Linear wrap length, italic gene names, and the identity colour scale
+
+Session version 50 adds the config leaf `canvas.linear.wrap_length` (`"none"`,
+`"auto"`, or a positive length in bp) and the Linear slice's
+`form.linear_wrap_length`, an `own` row of the mode-scoped registry
+(`gbdraw/web_support/mode_scoped_settings.py`) whose replay flag is
+`--wrap_length`. Wrapped rows are drawn now: Python, the CLI and a loaded Session
+draw a record longer than the length over several rows, so a writer can produce
+a wrapped file. Session 49 reached `main` with 0.14.3, so the format needs a new
+version. Measured against `main`'s build: it refuses a Session with
+`modes.linear.config.form.linear_wrap_length` (the slice's `form` is closed,
+`_validate_mode_slice_fields`) and a `configOverrides` entry
+`canvas.linear.wrap_length` (`UNKNOWN_CONFIG_PATH`), and it accepts a CLI Session
+with a stored `canvas.linear.wrap_length` leaf and silently draws the record on
+one row (`from_dict` ignores the unknown leaf). An unwrapped CLI Session holds
+the leaf as `"none"`, which an older build ignores and draws the same.
+
+A Session up to 49 has no key and loads with no wrap (`"none"`); no reader
+converts it. A Web **Save Session** keeps a length loaded from a Session in the
+request's `configOverrides`; the Web has no control for it yet. The Gallery and
+test-input Sessions were refreshed to 50 (`tools/refresh_gallery_sessions.py`);
+they differ from Session 49 in the version and the `"none"` leaf. Positive
+fixtures of Session 49: `tests/fixtures/sessions/*.v49.*`.
+
+Session 50 also adds the config leaf `labels.<mode>.italic_gene_labels` (true or
+false, default false) in both modes and the slice key
+`adv.italic_gene_labels`, a `copy` row of the mode-scoped registry next to
+`label_protection`, whose replay flag is `--italic_gene_labels`. A Web writer
+puts `labels.<mode>.italic_gene_labels: true` in the request's
+`configOverrides` only when the setting is on, so a Session with it off has the
+same request as before. The key reached no `main` Session before 50 and shares
+its version with the wrap length; a Session up to 49 has no key and loads with
+it off, and no reader converts it.
+
+Session 50 also adds the config leaves `objects.blast_match.identity_scale`
+(Linear) and `objects.conservation.identity_scale` (Circular), `"auto"` or
+`[MIN, MAX]` percent identities, and the slice key `adv.identity_scale`
+(`null` or `[MIN, MAX]`), a `copy` row of the mode-scoped registry next to
+`identity`, whose replay flag is `--identity_scale MIN MAX`. A Web writer puts
+the mode's leaf in the request's `configOverrides` only when a scale is set, so
+a Session without one has the same request as before. `main`'s build refuses
+that override (`UNKNOWN_CONFIG_PATH`) and the slice key (the slice's `adv` is
+closed); it ignores the leaf in a stored full config and draws the threshold
+scale, as a Session without a scale draws. The keys reached no `main` Session
+before 50 and share its version; a Session up to 49 has none and loads without
+a fixed scale, and no reader converts it.
+
 ## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
 
 Session version 49 adds `adv.show_definition` (boolean, Circular **Show
@@ -53,13 +100,16 @@ No Session or request version changes; the generated request description and
 - Anchor mode: `one_to_one` and its spellings (`top1`, `mutual_best`, ...) are
   removed from `collinearityAnchorMode`. A stored one reads as `rbh`
   (`RETIRED_COLLINEARITY_ANCHOR_MODES`): Python logs a warning
-  (`_read_retired_anchor_mode`, applied before the schema 9 description check
+  (`read_retired_anchor_mode`, applied before the schema 9 description check
   by `_as_decoded_settings`); the Web request repair takes the description
   default `rbh` with a `setting-replaced` row, and the Web draft reader
   (`readCollinearAnchorMode`) does the same. That description default is the
   repair target, not a writer's empty form: the Web repair replaces every
   unreadable stored anchor mode (an unknown word as well) by `rbh` with the
-  row, where Python refuses an unknown word.
+  row, where Python refuses an unknown word. For a retired spelling,
+  `upgrade_session_document` writes the replacement in the requests and drafts of an
+  older Session, so a Python upgrade and a CLI re-save hold `rbh` there. `cliInvocation.args`,
+  derived entry identities, and other draft values stay as stored.
 - Inference: the CLI and Python default of `collinear_infer_orthogroups`
   becomes off, as on the Web. A request without `collinearInferOrthogroups`
   still reads it as on (`_ABSENT_PROTEIN_SETTINGS`). A Session below 31
@@ -82,13 +132,49 @@ No Session or request version changes; the generated request description and
   derived entry written with `either` in its identity is recomputed once from
   the raw cache (token v4, not yet on `main`).
 
-Positive fixtures: the Gallery Sessions that store `either`
-(`gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json` and
-others); `tests/test_collinear_option_surfaces.py` and
-`tests/web/stored-request-read.test.mjs` set `one_to_one` in that Session.
+Positive fixtures: the Gallery Session requests now store `strand`, so the
+request-level `either` comes from the `v0.14.3` file
+(`tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json` at that tag) and from
+the fixture below (the Gallery drafts still hold `either` in
+`collinearMergeOrientation`); `tests/test_collinear_option_surfaces.py` and
+`tests/web/stored-request-read.test.mjs` read the stored fixture
+`tests/retired_sessions/BGC0000708-BGC0000713.v49-one-to-one.gbdraw-session.json.gz`.
 Release tag `v0.14.3` offered `one_to_one` (`gbdraw/web/index.html`,
 `<option value="one_to_one">`; the request literal listed it), so a released
-writer could store it; no stored file holds it.
+writer could store it. No file in this repository was written by a 0.14.3 run
+with it selected (users' saved files may hold it): the fixture is the Session 49 file of
+that tag (`tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json`, request schema 9)
+with both copies of the setting a user could choose written in, as the select stores
+them: `renderRequest.comparisons[0].settings.collinearityAnchorMode` and the draft key
+`modes.linear.config.losat.blastp.collinearAnchorMode` (the request derives from the
+draft) (provenance in `BGC0000708-BGC0000713.v49-one-to-one.provenance.json`). It sits in
+`tests/retired_sessions/`, outside the folders the scans of stored Sessions read, because
+they refuse a value outside the description.
+
+## Unreleased: derived LOSATP token v6 for a CDS across the origin in the Web and for score ties ordered by CDS
+
+No Session, request, or derived envelope version changes. 0.14.4 writes token
+`derived-option-conformance-v4`; the token becomes `derived-option-conformance-v6`
+for two reasons, and no released writer wrote v5. Earlier derived entries are
+cache misses and are recomputed once from the raw cache at the next Generate;
+no search runs again and no reader reads them.
+
+- A CDS across the origin in the Web (OV-2368). The Web converter now receives
+  each CDS's `origin_arc` and `record_length` and the record lengths, so a Web
+  result with a CDS across a circular record's origin has new rows for the same
+  inputs. The derived identity names the bindings, settings, and raw keys, not
+  the protein map, so an entry that 0.14.4 wrote would be a hit with the old
+  rows. The protein map itself is never saved: it lives in the page's per-file
+  memory (`readOncePerFile`), and no Session field holds it, so
+  `proteinMapSchema` and the Session stay as they are. The comparison tables of
+  a saved request keep their rows until that Generate.
+- Score ties ordered by CDS (OV-2370, OV-2380). A score tie between protein hits
+  (a Pairwise or member hit limit, a best hit, a group's representative, the
+  bitscore fit, the order of edges) was broken on the runtime handle, which
+  hashes the record instance key: the CLI's record key or the Web page's
+  sequence uid. Equal inputs gave other links on the CLI and the Web, and on two
+  Web pages. Ties now follow the CDS order (record, then location), so a derived
+  entry written before has rows of the old order for the same identity.
 
 ## Unreleased: derived LOSATP token v4 for chained Collinear blocks
 

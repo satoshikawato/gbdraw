@@ -251,7 +251,7 @@ test('SVG, Interactive SVG and PNG exports carry the chosen font, and the checkb
     context.drawImage(bitmap, 0, 0);
     const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
     let dark = 0;
-    for (let index = 0; index < data.length; index += 4) if (data[index] + data[index + 1] + data[index + 2] < 192) dark += 1;
+    for (let index = 0; index < data.length; index += 4) if (data[index + 3] > 127 && data[index] + data[index + 1] + data[index + 2] < 192) dark += 1;
     return dark;
   }, bytes.toString('base64'));
   const embeddedPng = await exported(page, 'downloadPNG');

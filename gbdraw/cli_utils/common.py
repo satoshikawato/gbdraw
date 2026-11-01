@@ -13,6 +13,7 @@ import sys
 from dataclasses import replace
 from typing import Sequence
 
+from gbdraw.comparisons.identity_scale import IDENTITY_SCALE_RULE, identity_scale_from_config
 from gbdraw.core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
@@ -24,7 +25,7 @@ from gbdraw.io.cli_tables import RecordsTable
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 from gbdraw.mode_profiles import CIRCULAR_MODE_PROFILE, DEFAULT_FEATURE_TYPES
 from gbdraw.render.export import require_cairosvg
-from gbdraw.io.colors import require_palette_name
+from gbdraw.io.colors import BUILTIN_COLOR_TABLE_PREFIX, BUILTIN_COLOR_TABLES, require_palette_name
 from gbdraw.render.formats import (
     SVG_FORMAT,
     is_cairosvg_format,
@@ -93,7 +94,7 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--gbk",
         metavar="GBK_FILE",
-        help='GenBank/DDBJ flat file',
+        help='GenBank, DDBJ, or EMBL flat file',
         type=str,
         nargs='*')
     parser.add_argument(
@@ -381,6 +382,38 @@ def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
         help='Minimum BLAST alignment length retained for similarity rings (default: 0).',
         type=argparse_integer,
         default=thresholds.alignment_length)
+    add_identity_scale_arg(parser, "similarity rings")
+
+
+class _IdentityScaleAction(argparse.Action):
+    """Read ``--identity_scale MIN MAX`` with the scale's one validator; a refusal names the option."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: object,
+        option_string: str | None = None,
+    ) -> None:
+        try:
+            scale = identity_scale_from_config(values, path=self.dest)
+        except ValidationError:
+            parser.error(f"argument {option_string}: must be {IDENTITY_SCALE_RULE}")
+        setattr(namespace, self.dest, scale)
+
+
+def add_identity_scale_arg(parser: argparse.ArgumentParser, drawn: str) -> None:
+    """``--identity_scale MIN MAX`` of either mode; ``drawn`` names what the scale colours."""
+
+    parser.add_argument(
+        '--identity_scale',
+        help=f'Fix the identity colour scale of the {drawn} and their Legend to MIN..MAX percent '
+        '(0 <= MIN < MAX <= 100), so figures with different --identity thresholds share one scale '
+        '(default: from --identity to 100).',
+        nargs=2,
+        metavar=('MIN', 'MAX'),
+        type=argparse_float,
+        action=_IdentityScaleAction)
 
 
 def _add_gc_content_axis_args(parser: argparse.ArgumentParser) -> None:
@@ -510,6 +543,13 @@ def cli_font_family(args: argparse.Namespace) -> str | None:
     return None
 
 
+# -t/--table of both modes: a color table file or a built-in table by name.
+COLOR_TABLE_HELP = (
+    "color table: a TSV file, or a built-in table "
+    f"({', '.join(BUILTIN_COLOR_TABLE_PREFIX + name for name in BUILTIN_COLOR_TABLES)}) (optional)"
+)
+
+
 def add_color_args(parser: argparse.ArgumentParser) -> None:
     """Add color-related arguments (-p, -t, -d)."""
     parser.add_argument(
@@ -521,7 +561,7 @@ def add_color_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '-t',
         '--table',
-        help='color table (optional)',
+        help=COLOR_TABLE_HELP,
         type=str,
         default="")
     parser.add_argument(
@@ -585,6 +625,11 @@ def add_label_args(parser: argparse.ArgumentParser) -> None:
         help='Path to a TSV file defining post-filter label text overrides (optional)',
         type=str,
         default="")
+    parser.add_argument(
+        '--italic_gene_labels',
+        help='Draw each feature label that the qualifier priority names from the gene qualifier in italics, '
+        'also when --label_table replaces its text; other labels stay upright (default: off).',
+        action='store_true')
     parser.add_argument(
         '--feature_visibility_table',
         dest='feature_table',
@@ -758,6 +803,7 @@ def _require_one_records_table_record(records_table: RecordsTable, row, loaded):
 
 __all__ = [
     "add_analysis_args",
+    "COLOR_TABLE_HELP",
     "add_color_args",
     "add_feature_args",
     "add_input_args",

@@ -8,7 +8,8 @@
 // locales.json (the languages with a catalog, {tag, label}, in menu order),
 // keys.json (each key with its id, context, first call site and glossary
 // hints; no line numbers, so the data changes only when text changes),
-// draft-<locale>.json (the catalog by key id), notes-<locale>.json
+// draft-<locale>.json (the catalog by key id, each value one string:
+// `reviewDraftText`), notes-<locale>.json
 // (empty: drafting notes have no owner in the repository), glossary.json
 // (I18N_GLOSSARY.tsv), style.md (I18N_STYLE.md), and shots.json: the
 // screenshot map, read from --shots or from the old <out>/shots.json, with
@@ -21,9 +22,10 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { UI_LOCALES } from '../../gbdraw/web/js/utils/i18n.js';
-import { CATALOG_LOCALES, glossaryMatcher, readCatalog, readGlossary } from './catalogs.mjs';
+import { CATALOG_LOCALES, glossaryMatcher, pluralFormEntries, readCatalog, readGlossary } from './catalogs.mjs';
 import { REPOSITORY_ROOT, sourceKeys } from './source-keys.mjs';
 
+/** @import { PluralForms } from '../../gbdraw/web/js/utils/i18n.js' */
 /** @typedef {import('./source-keys.mjs').KeyRole} KeyRole */
 /**
  * One string of the review page (data/keys.json).
@@ -46,6 +48,15 @@ import { REPOSITORY_ROOT, sourceKeys } from './source-keys.mjs';
 
 /** @param {string} key */
 export const reviewKeyId = (key) => createHash('sha1').update(key, 'utf8').digest('hex').slice(0, 12);
+
+/**
+ * The text the review page shows for a catalog value: the string, or the
+ * plural forms joined in CLDR category order (`few: … | many: … | other: …`).
+ * @param {string | PluralForms} value
+ * @returns {string}
+ */
+export const reviewDraftText = (value) => (typeof value === 'string' ? value
+  : pluralFormEntries(value).map(([category, text]) => `${category}: ${text}`).join(' | '));
 
 /** @param {unknown} value */
 const json = (value) => JSON.stringify(value, null, 0);
@@ -76,7 +87,7 @@ export const reviewPageData = async ({ shots }) => {
   ]);
   for (const locale of CATALOG_LOCALES) {
     const { entries } = readCatalog(locale);
-    files.set(`draft-${locale}.json`, json(Object.fromEntries(rows.filter(({ key }) => Object.hasOwn(entries, key)).map(({ id, key }) => [id, entries[key]]))));
+    files.set(`draft-${locale}.json`, json(Object.fromEntries(rows.filter(({ key }) => Object.hasOwn(entries, key)).map(({ id, key }) => [id, reviewDraftText(entries[key])]))));
     files.set(`notes-${locale}.json`, '{}');
   }
   files.set('glossary.json', json(glossary.map((row) => Object.fromEntries(['en', ...CATALOG_LOCALES, 'note'].map((column) => [column, row[column] ?? ''])))));

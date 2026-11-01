@@ -1,0 +1,15 @@
+##gff-version 3
+##sequence-region ctg1 1 3000
+ctg1	AUGUSTUS	gene	101	1400	.	+	.	ID=g1
+ctg1	AUGUSTUS	transcript	101	1400	.	+	.	ID=g1.t1;Parent=g1
+ctg1	AUGUSTUS	start_codon	101	103	.	+	0	Parent=g1.t1
+ctg1	AUGUSTUS	CDS	101	400	0.9	+	0	ID=g1.t1.cds;Parent=g1.t1
+ctg1	AUGUSTUS	exon	101	400	.	+	.	Parent=g1.t1
+ctg1	AUGUSTUS	intron	401	600	.	+	.	Parent=g1.t1
+ctg1	AUGUSTUS	CDS	601	900	0.9	+	1	ID=g1.t1.cds;Parent=g1.t1
+ctg1	AUGUSTUS	exon	601	900	.	+	.	Parent=g1.t1
+ctg1	AUGUSTUS	stop_codon	898	900	.	+	0	Parent=g1.t1
+ctg1	AUGUSTUS	gene	1601	2400	.	-	.	ID=g2
+ctg1	AUGUSTUS	transcript	1601	2400	.	-	.	ID=g2.t1;Parent=g2
+ctg1	AUGUSTUS	exon	1601	2400	.	-	.	Parent=g2.t1
+ctg1	AUGUSTUS	CDS	1601	2400	0.8	-	0	ID=g2.t1.cds;Parent=g2.t1

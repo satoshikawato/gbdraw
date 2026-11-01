@@ -78,7 +78,8 @@ app's Wasm execution and assets are unchanged.
 ## Shared input rules
 
 GenBank and GBFF files use `--gbk`, including DDBJ records downloaded in
-GenBank flat-file format. Native EMBL flat-file syntax is not accepted. GFF3
+GenBank flat-file format and EMBL flat files
+([input formats](input-formats-and-tsv-schemas.md#sequence-and-annotation-files)). GFF3
 uses `--gff` with a positionally matched `--fasta` list. A `--records_table`
 replaces those direct path lists and stores source paths and record-specific
 settings together. Relative paths inside any manifest resolve from the
@@ -105,7 +106,11 @@ boolean tokens listed by `--help`. A region is cropped first, on the record as
 stored in the file, and then reverse-complemented: `--region '#2:5001-40000'`
 with `--reverse_complement 1` for that file draws the same window as
 `--region '#2:5001-40000:rc'`. Selection, cropping, and reverse-complement
-display do not rewrite a source file.
+display do not rewrite a source file. `gbdraw linear --auto_orient` also
+reverse-complements each record whose reverse nucleotide hits against the row
+above weigh more than half of its hits; an explicit reverse wins, and protein
+comparisons are not read. The rule is in [Automatic Linear
+orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation).
 
 Circular mode writes separate results for multiple records by default.
 `--multi_record_canvas` places them on one canvas.
@@ -120,6 +125,34 @@ order. `--linear_record_gap` sets the gap within that row.
 `--record_label` and `--record_subtitle` follow displayed-record order.
 Multi-record rows cannot be combined with `--normalize_length`.
 
+`gbdraw linear --anchor_feature KEY=VALUE` lines the records up at one
+feature, for example `--anchor_feature gene=COX1` across mitogenomes. The
+selector has the `feature_selector` form of the placement and override tables
+and matches a qualifier value exactly; `locus_tag=` and `gene=` are the usual
+keys. It is resolved in each record as drawn, after `--region`,
+`--reverse_complement`, and a display start. The anchor is the feature's
+start as drawn: its 5' base when the feature reads rightward as drawn, and its
+3' base otherwise, following its parts in biological order. For a feature in one
+part that is its left end as drawn (on a reverse-complemented record, its end
+with the higher source coordinate). A join starts on the part its path begins
+with as drawn, even when another of its parts lies further left, and a feature
+across the origin or a display start begins on its piece before that seam.
+Only features that start inside the drawn region count. The first record
+that has the feature keeps its place; every other record that has it moves
+so that the feature's start lies directly below, and that place replaces the
+record's own x, as with Similarity alignment. A record without the feature
+keeps its place, with a warning naming it, or saying that its match starts
+outside the drawn region. A gene and its CDS that start at the same base
+count as one match; matches at different starts stop the run with the
+candidates listed, and so does a selector that no record matches. With
+`--align_center`, the first record keeps its centred place and the records the
+anchor moves leave theirs. A moved record can widen the canvas. With
+`--auto_orient`, the anchor is read after the automatic reverse complement.
+`--anchor_feature` cannot be combined with `--similarity_alignment_feature`,
+with records that share a row (`--multi_record_position`), or with a
+`--wrap_length` that cuts a record. A saved Session stores the resulting
+record translations, not the option.
+
 On-axis ruler coordinates depend on the canvas topology. If any Linear row
 contains multiple records, every ruler on that canvas uses record-local
 distance and ascends from left to right, including rulers for
@@ -129,9 +162,58 @@ from left to right.
 
 `--track_layout above|below` with `--scale_style ruler` allows
 `--ruler_on_axis`; other layout combinations ignore the on-axis ruler with a
-warning. `--hide_scale` hides genome-coordinate ticks and labels but keeps
-the record axes. Quantitative axes remain independent, and `--hide_length`
-separately controls Linear definition text.
+warning. With `--wrap_length` that warning is not given: rows always have the
+on-axis ruler, and with nothing to cut the flag has no effect. `--hide_scale`
+hides genome-coordinate ticks and labels but keeps the record axes. Quantitative
+axes remain independent, and `--hide_length` separately controls Linear
+definition text.
+
+### Wrap one record over several rows
+
+`--wrap_length` draws each record longer than the given length over several
+rows of that length, all at one scale. It takes a length in bp with an optional
+unit (`10000`, `10kb`, `0.5Mb`) or `auto`, which picks 10, 20, or 50 kb so the
+longest record takes at most five rows, and 50 kb when none does.
+
+The option has no effect on a figure with nothing to cut. When no record is
+longer than the row (or, under `auto`, none is longer than 10 kb), the figure and
+the exit status are those of the same command without `--wrap_length`: the same
+layout, the same scale style, and none of the refusals below. A figure draws
+middle with a bar for a short genome and rows for a long one from the same
+command.
+
+The record stays one record. Each row has its own height from its own labels, a
+cut feature keeps one identity and one label, on the row with its longest part,
+and GC content, GC skew, and depth are computed over the whole record. A shorter
+record in the same figure stays one row at the same scale.
+
+When a record is cut, `--track_layout` defaults to `above`, `--scale_style` to
+`ruler`, and the ruler stands on each row's axis. `--track_layout middle`, a
+feature slot with `side=overlay`, `--scale_style bar`, `--normalize_length`,
+comparison inputs, and several records in one `--multi_record_position` row are
+refused, comparison inputs before any search runs. A wrapped figure can pass the
+[PNG and PDF size limits](output-formats-and-export.md#png-and-pdf-size-limits).
+
+<!-- executable:H-CLI-15:start -->
+```bash
+gbdraw linear \
+  --gbk NC_001416.gb \
+  --qualifier_priority cds_gene_qualifier_priority.tsv \
+  --show_labels all \
+  --resolve_overlaps \
+  --gc \
+  --skew \
+  --wrap_length 10kb \
+  --legend right \
+  -o lambda_wrapped \
+  -f svg
+```
+<!-- executable:H-CLI-15:end -->
+
+The command writes `lambda_wrapped.svg` and logs `Wrapping at 10 kb per row: 5
+rows`.
+
+![Lambda phage genome wrapped at 10 kb per row with labels, GC content, GC skew, and a legend](../images/h-cli-15/lambda_wrapped.svg)
 
 ## Tracks, annotations, and presentation
 
@@ -179,6 +261,18 @@ on its feature; labels move away from the axis off each other and off the
 record's definition text, a horizontal label by whole `auto` rows. In both modes region labels keep
 off a feature label's underline and box as off its letters.
 
+`--italic_gene_labels` draws in italics each feature label that the qualifier
+priority (`--qualifier_priority`, or the default order) takes from the `gene`
+qualifier. The label stays italic when a `--label_table` row or a feature
+override replaces its text; every other label stays upright. It is off by
+default. gbdraw measures an italic label with the italic face of its font, as
+the bundled Liberation fonts have, or with the regular face when the font has
+no italic face.
+
+gbdraw draws no background, so no option is needed for one: SVG output has no
+background shape, and PNG output keeps it transparent. See
+[Static, interactive, and raster output](output-formats-and-export.md#static-interactive-and-raster-output).
+
 `--font_family` sets the font of all diagram text: one family name such as
 `"DejaVu Serif"` or a CSS font-family list. The default is Liberation Sans.
 gbdraw measures text with the font file of the first family it finds: a
@@ -209,8 +303,10 @@ missing, unreadable, or malformed file stops the run instead of being skipped.
 The table rules are in [Comparison and numeric
 tables](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
 
-LOSATP Pairwise mode searches each adjacent input pair. With three or
-more records, it does not add an implicit first-to-last comparison.
+LOSATP Pairwise mode searches each record against each record of the next row,
+the pairs Similarity groups and Collinear blocks draw. With one record per row
+these are the consecutive records; it does not add an implicit first-to-last
+comparison.
 
 `--losat_output_dir DIR` (with `--losat`) writes the raw search rows of the run.
 LOSATN and TLOSATX write one TSV per compared record pair and `comparisons.tsv`
@@ -222,6 +318,11 @@ file. The writer creates `DIR`, resolves session-internal runtime handles to
 stable percent-encoded protein IDs, and refuses an existing `losatp.raw.tsv`
 unless `--overwrite` is present. Display filters
 and hit caps can make the number of drawn links smaller than the raw row count.
+
+`--identity_scale MIN MAX` (both subcommands) fixes the identity colour scale
+of the pairwise matches or similarity rings and their Legend, which otherwise
+runs from `--identity` to 100%. See [Identity colour
+scale](comparison-programs-thresholds-and-results.md#identity-colour-scale).
 
 See [Comparison programs, thresholds, and result
 semantics](comparison-programs-thresholds-and-results.md) for direction,
@@ -257,7 +358,7 @@ With `--session`, only output and format overrides, session-output options,
 `--font_file`, `--no_font_embedding`, `--drawing`, and `--overwrite` are accepted; other diagram flags would mix
 persisted and new settings.
 
-A Session holds one or more drawings, one per diagram. Session 49 holds at most
+A Session holds one or more drawings, one per diagram. Session 50 holds at most
 a Circular drawing (ID `circular`) and a Linear drawing (ID `linear`).
 `gbdraw render --session FILE` renders every drawing with a committed render
 and skips a drawing without one (a settings-only Session) with a notice.
@@ -299,6 +400,36 @@ impossible layouts, incompatible track stacks, and unsafe output paths fail
 before a successful result is reported. A warning identifies an ignored or
 adjusted combination; it does not make the requested combination valid.
 
+### Input summary
+
+After the figure is written, each run prints what it read and drew, one `INFO:`
+line per drawn record and per comparison table:
+
+```text
+INFO: Record PROKKA01.1 (genome.gb), record 1 of 1, 1,001..2,000 of 3,000 bp: drew 3 features (1 CDS, 1 rRNA, 1 tRNA); left out 1 source (type not drawn).
+INFO: Comparison table pair.tsv (record #1 PROKKA01.1 and record #2 RAST0001.1): kept 1 of 5 rows; 4 rows below bitscore 100 (best 90); 3 rows below identity 60% (best 58.4%).
+```
+
+A record line counts the features drawn per type, the features left out because
+their type is not drawn (`-k/--features`, and for GFF3 the types read), and the
+features a visibility rule or feature edit hides; a cropped record also names its
+region, and gives the GFF3 types left out at load for the whole record, since the
+load filters before the crop. A comparison line counts the rows each threshold (`--evalue`,
+`--bitscore`, `--identity`, `--alignment_length`) leaves out, with the best value
+among those rows. A row can fail more than one threshold. A LOSATP protein
+comparison line counts the protein matches drawn (hits, collinearity blocks, or
+reciprocal best-hit pairs, by mode) and no threshold, because the protein
+analysis applies the thresholds itself.
+
+A `WARNING:` line follows when a record has no feature to draw, naming its
+feature types when it has some, and when the thresholds leave out every row of a
+comparison table or the table has no rows. These runs still write the figure and
+exit with status 0. A file with no record stops the run with an `ERROR:` line and
+status 1, and nothing is written.
+
+A UTF-8 byte order mark at the start of a GenBank, EMBL, GFF3, or FASTA file is
+ignored, so the first record is read.
+
 The command line, the Python API, and Web or Session requests share one set of
 value checks. `--window`, `--step`, `--depth_window`, and `--depth_step` take
 positive integers. `-n/--nt` and a track slot's `nt` take two letters from `A`,
@@ -321,8 +452,8 @@ This example keeps the colors, radial labels and GC track of the
 and marks the structural regions with brackets.
 Start in an empty directory. Download the complete GenBank record from
 [NCBI NC_001879.2](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2), saving it as
-`NC_001879.gbk` (155,943 bp, circular). Obtain three support tables:
-`chloroplast_specific_table.tsv` and `qualifier_priority.tsv` from that tutorial,
+`NC_001879.gbk` (155,943 bp, circular). Obtain two support tables:
+`qualifier_priority.tsv` from that tutorial,
 and the bracket table
 [`nicotiana-tabacum-regions.tsv`](../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv).
 
@@ -342,7 +473,7 @@ start; the source sequence and feature locations are unchanged.
 ```bash
 gbdraw circular \
   --gbk NC_001879.gbk \
-  -t chloroplast_specific_table.tsv \
+  -t builtin:plastid \
   -k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin \
   --species '<i>Nicotiana tabacum</i>' \
   --track_type tuckin \
@@ -388,3 +519,34 @@ resolved record; use a [records table](input-formats-and-tsv-schemas.md#display-
 for multiple targets. `--record_topology auto|circular|linear` overrides topology. Unset adds no
 shift; explicit 1 anchors source base 1 even after reverse complementation.
 Crop and explicit start cannot be combined.
+
+### Rotate a record to a feature
+
+`gbdraw circular --origin_feature KEY=VALUE` rotates each record so that one
+feature starts at 12 o'clock. On the tobacco plastome,
+`--origin_feature gene=psbA` draws the same figure as
+`--display_start_coordinate 536`. The selector has the `feature_selector` form
+of the placement and override tables and matches a qualifier value exactly, as
+`gbdraw linear --anchor_feature` does. The feature's start as drawn becomes the
+display start: its 5' base when the feature reads clockwise as drawn, and its
+3' base otherwise, following its parts in biological order. A minus-strand gene
+therefore starts at its low source coordinate (psbA,
+`complement(536..1597)`, starts at 536) and reads counterclockwise. To read it
+clockwise from 12 o'clock, also reverse-complement the record (the records-table
+`reverse_complement` column); its high coordinate (1597) then becomes the start.
+A join starts on the part its path begins with as drawn: the trans-spliced
+rps12 gene `complement(join(100062..100855,72224..72337))` starts at 100062, its
+3' base, although its other part lies at 72224..72337. A feature across the
+origin, such as `join(16024..16569,1..576)`, starts on its piece before the
+origin, at 16024. The Web app's Rotate to feature, "Start of
+the record", gives the same start.
+
+The feature needs exact coordinates on one strand: an unstranded or
+mixed-strand feature, a fuzzy end, `order()`, or overlapping parts stop the run.
+A gene and its CDS that start at the same base count as one match; matches at
+different starts stop the run with the candidates listed, and so does a
+selector that no record matches. A record without the feature keeps its start,
+with a warning naming it. `--origin_feature` cannot be combined with
+`--display_start_coordinate` or a records-table `display_start`, with a crop (a
+records-table `region`), or with a record drawn linear. A saved Session stores
+the resulting display start, not the option.

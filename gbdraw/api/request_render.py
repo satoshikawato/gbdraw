@@ -69,6 +69,7 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.annotations import (
     FeatureIdentitySpan,
+    FeatureSelector,
     ResolutionWarning,
     ResolvedAnnotationBundle,
     read_annotation_options,
@@ -104,7 +105,7 @@ from gbdraw.io.comparison_sequences import (
     ComparisonSequenceFile,
     read_comparison_sequence_file,
 )
-from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_resource
 from gbdraw.io.genome import parse_gff_fasta
 from gbdraw.labels.fit import WARN_SEARCH_SECONDS, LabelFitReport
 from gbdraw.labels.filtering import (
@@ -113,6 +114,8 @@ from gbdraw.labels.filtering import (
     read_qualifier_priority_file,
 )
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
+from gbdraw.mode_profiles import ComparisonThresholds
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentCandidate,
@@ -164,7 +167,9 @@ from .prepared import (
     RECORD_IDENTITY_TAG,
     register_prepared_value_identity,
 )
+from .input_summary import InputSummary, summarize_inputs
 from .record_planning import (
+    decide_linear_wrap,
     GenBankLoader,
     GffFastaLoader,
     ResolvedRecordCollection,
@@ -177,6 +182,7 @@ from .record_planning import (
     _similarity_candidate_from_orthogroup_member,
     _source_key,
     effective_record_presentation,
+    project_anchor_feature_starts,
     project_similarity_alignment_centers,
     comparison_record_bindings,
     record_is_reverse_complemented,
@@ -187,7 +193,9 @@ from .record_planning import (
     resolve_implicit_record_output_prefix,
     resolve_linear_options,
     resolve_record_inputs,
+    reverse_resolved_records,
     similarity_alignment_evidence_edges,
+    with_origin_feature_starts,
 )
 from .render import preflight_output_paths, save_figure_to
 from .requests import (
@@ -207,7 +215,7 @@ from .requests import (
 )
 
 if TYPE_CHECKING:
-    from gbdraw.linear_comparison import LinearComparison
+    from gbdraw.linear_comparison import ComparisonTableTally, LinearComparison
 
     from .requests import CircularBatchOutputPolicy
 
@@ -683,6 +691,7 @@ class PreparedDiagramRequest:
     protein_identity_manifest: Mapping[str, Any] | None = None
     transforms: tuple[RecordDisplayTransform, ...] = ()
     resolved_annotations: ResolvedAnnotationBundle = ResolvedAnnotationBundle(())
+    input_summary: InputSummary = InputSummary(())
 
     @property
     def annotation_warnings(self) -> tuple[ResolutionWarning, ...]:
@@ -714,6 +723,8 @@ class RequestRenderResult:
     protein_identity_manifest: Mapping[str, Any] | None = None
     annotation_warnings: tuple[ResolutionWarning, ...] = ()
     feature_identity_notices: tuple[FeatureIdentityNotice, ...] = ()
+    # What the diagram read from its inputs and drew of them (CLI log, Web status).
+    input_summary: InputSummary = InputSummary(())
     migration_report: SessionMigrationReport = field(
         default_factory=SessionMigrationReport
     )
@@ -1884,6 +1895,30 @@ def _resolve_ring_losat(
     )
 
 
+_CircularRequestT = TypeVar("_CircularRequestT", CircularDiagramRequest, CircularBatchRequest)
+
+
+def _with_origin_feature(
+    request: _CircularRequestT,
+    collection: ResolvedRecordCollection,
+) -> tuple[_CircularRequestT, ResolvedRecordCollection, bool]:
+    """Resolve ``origin_feature`` into the display start of each record it matches.
+
+    The request then carries the starts in its records, not the option, so a
+    Session stores the start the figure drew with. The flag says whether it
+    rotated.
+    """
+
+    selector = request.options.origin_feature
+    if not isinstance(selector, FeatureSelector):
+        return request, collection, False
+    return (
+        replace(request, options=replace(request.options, origin_feature=None)),
+        with_origin_feature_starts(collection, selector),
+        True,
+    )
+
+
 def plan_circular_request(
     request: CircularDiagramRequest,
 ) -> CircularRequestPlan:
@@ -1908,6 +1943,7 @@ def plan_circular_request(
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
+        unresolved_request, collection, rotated = _with_origin_feature(unresolved_request, collection)
         inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         records = collection.records
         projected_request = replace(
@@ -1922,7 +1958,8 @@ def plan_circular_request(
         resolved_layout = _layout_with_record_placements(projected_request)
         materialized_request = (
             unresolved_request
-            if _is_materialized_exact_one_request(unresolved_request)
+            if not rotated
+            and _is_materialized_exact_one_request(unresolved_request)
             and not unresolved_request.output.resolve_prefix_from_first_record
             and resolved_layout == unresolved_request.layout
             else projected_request
@@ -1969,6 +2006,7 @@ def plan_circular_batch_request(
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
+        unresolved_request, collection, rotated = _with_origin_feature(unresolved_request, collection)
         inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         records = collection.records
         outputs = (
@@ -1982,7 +2020,8 @@ def plan_circular_batch_request(
         )
         materialized_request = (
             unresolved_request
-            if _is_materialized_exact_one_request(unresolved_request)
+            if not rotated
+            and _is_materialized_exact_one_request(unresolved_request)
             and unresolved_request.output_policy is None
             else replace(
                 unresolved_request,
@@ -2042,7 +2081,8 @@ def plan_linear_request(
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs)
     with _request_render_diagnostic_phase("preparation"):
-        inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
+        prepared_inputs = inputs
+        inputs = _materialize_feature_inputs(unresolved_request, collection, prepared_inputs)
         projected_request = replace(
             unresolved_request,
             records=_materialized_record_inputs(collection),
@@ -2050,16 +2090,36 @@ def plan_linear_request(
         )
         resolved_layout = _linear_layout_with_record_placements(projected_request)
         resolved_options = resolve_linear_options(
-            projected_request.options,
+            decide_linear_wrap(
+                projected_request.options,
+                records=collection.records,
+                layout=resolved_layout,
+                similarity_alignment=projected_request.similarity_alignment,
+            ),
             records=collection.records,
             layout=resolved_layout,
         )
         resolved_options, losat_cache_entries = _resolve_nucleotide_losat(
             resolved_options, collection, resolved_layout
         )
+        oriented = _auto_oriented_collection(resolved_options, collection, resolved_layout)
+        reoriented = oriented is not collection
+        if resolved_options.auto_orient:
+            # The request carries the decided reverse flags in its records, not
+            # the option, so a Session stores the orientation the figure drew.
+            resolved_options = replace(resolved_options, auto_orient=False)
+        if reoriented:
+            # The search-frame rows, the layout and the resolved options hold
+            # for either orientation; the records and their features do not.
+            collection = oriented
+            inputs = _materialize_feature_inputs(unresolved_request, collection, prepared_inputs)
+            projected_request = replace(
+                projected_request, records=_materialized_record_inputs(collection)
+            )
         materialized_request = (
             unresolved_request
-            if _is_materialized_exact_one_request(unresolved_request)
+            if not reoriented
+            and _is_materialized_exact_one_request(unresolved_request)
             and resolved_layout == unresolved_request.layout
             and resolved_options is unresolved_request.options
             else replace(
@@ -2068,9 +2128,23 @@ def plan_linear_request(
             )
         )
         # The reference was resolved to a plan at the top of this function.
-        alignment_anchor_centers = project_similarity_alignment_centers(
-            collection,
-            cast("SimilarityAlignmentPlan | None", materialized_request.similarity_alignment),
+        # One record-position alignment at most: the request refuses an
+        # anchor_feature beside a similarity alignment.
+        anchor_feature = materialized_request.options.anchor_feature
+        alignment_anchor_centers = (
+            project_anchor_feature_starts(
+                collection,
+                anchor_feature,
+                resolve_record_row_positions(
+                    collection.records,
+                    resolved_layout.multi_record_positions if resolved_layout is not None else None,
+                )[1],
+            )
+            if isinstance(anchor_feature, FeatureSelector)
+            else project_similarity_alignment_centers(
+                collection,
+                cast("SimilarityAlignmentPlan | None", materialized_request.similarity_alignment),
+            )
         )
         # The plan checks the source bindings of the comparison rows when it is
         # built, so a Session writer rejects them; the request keeps the rows as
@@ -2086,6 +2160,54 @@ def plan_linear_request(
             alignment_anchor_centers=alignment_anchor_centers,
             losat_cache_entries=losat_cache_entries,
         )
+
+
+def _auto_oriented_collection(
+    options: LinearDiagramOptions,
+    collection: ResolvedRecordCollection,
+    layout: LinearMultiRecordOptions | None,
+) -> ResolvedRecordCollection:
+    """Reverse-complement the records ``auto_orient`` decides from nucleotide hits.
+
+    Reads the comparison files and the comparisons of ``options`` (LOSATN and
+    TLOSATX results included) in the search frame, filtered by the match
+    thresholds as the drawing filters them; protein comparisons are not read.
+    :func:`auto_orient_reversed_records` decides; a record the request already
+    reverses keeps its orientation. Returns ``collection`` itself when no
+    record changes.
+    """
+
+    if not options.auto_orient:
+        return collection
+    records = collection.records
+    _ordered, rows_by_record = resolve_record_row_positions(
+        records, layout.multi_record_positions if layout is not None else None
+    )
+    comparisons = search_frame_linear_comparisons(
+        tuple(read_comparison_resource(path) for path in options.blast_files or ()),
+        None,
+        tuple(options.linear_comparisons or ()),
+        ComparisonThresholds(
+            evalue=float(cast(float, options.evalue)),
+            bitscore=float(cast(float, options.bitscore)),
+            identity=float(cast(float, options.identity)),
+            alignment_length=int(cast(int, options.alignment_length)),
+        ),
+        rows_by_record,
+        len(set(rows_by_record)) < len(records),
+    )
+    reversed_indexes = auto_orient_reversed_records(
+        comparisons, rows_by_record, tuple(map(record_is_reverse_complemented, records))
+    )
+    if not reversed_indexes:
+        return collection
+    for index in sorted(reversed_indexes):
+        logger.info(
+            "INFO: auto_orient reverse-complemented record #%d %r: its reverse hits "
+            "against the row above weigh more than half of its hits.",
+            index + 1, str(records[index].id),
+        )
+    return reverse_resolved_records(collection, reversed_indexes)
 
 
 def _resolve_nucleotide_losat(
@@ -2440,9 +2562,52 @@ def plan_request(request: DiagramRequest) -> DiagramRequestPlan:
 
 
 def resolve_request(request: DiagramRequest) -> DiagramRequest:
-    """Resolve an unresolved typed request to an exact-one projection."""
+    """Resolve an unresolved typed request to an exact-one projection.
 
-    return plan_request(request).request
+    A Linear ``anchor_feature`` resolves to the record translations it was
+    drawn with (:func:`resolved_plan_request`).
+    """
+
+    return resolved_plan_request(plan_request(request))
+
+
+def resolved_plan_request(plan: DiagramRequestPlan) -> DiagramRequest:
+    """The request ``plan`` resolves to, as :func:`resolve_request` and every Session writer store it.
+
+    A Linear ``anchor_feature`` is resolved when the figure is laid out, so
+    such a plan is built once (:func:`with_anchor_feature_translations`).
+    """
+
+    if isinstance(plan, LinearRequestPlan) and plan.request.options.anchor_feature is not None:
+        return build_request_plan_diagram(plan).request
+    return plan.request
+
+
+def with_anchor_feature_translations(
+    request: LinearDiagramRequest,
+    metadata: LinearDiagramMetadata,
+) -> LinearDiagramRequest:
+    """``request`` with its ``anchor_feature`` replaced by the record translations its drawing used.
+
+    The one owner of what an anchored figure stores: every record's
+    translation as ``_final_record_translations`` applied it (the records the
+    anchor moved, and every other record's own translation), without the
+    option, so a Session replays the figure without aligning again and the
+    Web's Align at feature writes the same values. ``metadata`` is the build
+    result of ``request``'s plan. Returns ``request`` itself when it sets no
+    anchor.
+    """
+
+    if request.options.anchor_feature is None:
+        return request
+    return replace(
+        request,
+        options=replace(request.options, anchor_feature=None),
+        layout=replace(
+            request.layout if request.layout is not None else LinearMultiRecordOptions(),
+            record_translations=metadata.record_translations,
+        ),
+    )
 
 
 def _source_protein_mode(
@@ -2933,6 +3098,7 @@ def _build_request_plan_diagram(
                     resolved_annotations=cast(
                         ResolvedAnnotationBundle, item_plan.resolved_annotations
                     ),
+                    input_summary=_plan_input_summary(item_plan),
                 )
                 for item_plan in plan.item_plans()
             )
@@ -2978,6 +3144,7 @@ def _build_request_plan_diagram(
             )
         drawing = linear_build.drawing
         linear_metadata = linear_build.metadata
+        request = with_anchor_feature_translations(plan.request, linear_metadata)
         with _request_render_diagnostic_phase("comparisonPreparation"):
             protein_entries = (
                 tuple(linear_artifacts.cache.session_entries())
@@ -3022,6 +3189,29 @@ def _build_request_plan_diagram(
         losat_cache_entries=losat_cache_entries,
         losat_derived_cache_entries=losat_derived_cache_entries,
         protein_identity_manifest=protein_identity_manifest,
+        input_summary=_plan_input_summary(
+            plan, linear_metadata.comparison_tallies if linear_metadata is not None else (),
+        ),
+    )
+
+
+def _plan_input_summary(
+    plan: CircularRequestPlan | LinearRequestPlan,
+    comparisons: Sequence[ComparisonTableTally] = (),
+) -> InputSummary:
+    """The input summary of a built plan, from the feature inputs its drawing read."""
+
+    if not plan.provenance:  # A plan built without record planning has no sources to name.
+        return InputSummary((), tuple(comparisons))
+    inputs = plan.inputs
+    return summarize_inputs(
+        plan.records,
+        plan.provenance,
+        selected_features=plan.request.options.selected_features_set or DEFAULT_SELECTED_FEATURES,
+        feature_visibility_rules=inputs.features.feature_visibility_rules if inputs is not None else None,
+        specific_color_rules=inputs.features.specific_color_rules if inputs is not None else None,
+        record_features=inputs.record_features if inputs is not None else (),
+        comparisons=comparisons,
     )
 
 
@@ -3378,6 +3568,7 @@ def _render_prepared_request(
         output_paths=tuple(Path(path) for path in paths),
         annotation_warnings=prepared.annotation_warnings,
         feature_identity_notices=prepared.feature_identity_notices,
+        input_summary=prepared.input_summary,
         interactive_context=interactive_context,
         linear_metadata=prepared.linear_metadata,
         losat_cache_entries=prepared.losat_cache_entries,
@@ -3410,5 +3601,7 @@ __all__ = [
     "render_request",
     "render_prepared_request",
     "resolve_request",
+    "resolved_plan_request",
     "resolve_similarity_alignment_plan",
+    "with_anchor_feature_translations",
 ]

@@ -85,7 +85,8 @@ nothing states that they are reviewed.
   `t('Save Session')`, `tn(count, one, other)` (the English text of each form is a key),
   `tx(context, text)` (key `context + '\u0004' + text`, for homonyms), `msg()`
   to keep a text until `tm()` translates it where it is shown. A catalog
-  `<locale>.js` maps those keys to plain strings.
+  `<locale>.js` maps those keys to plain strings; only the `other` key of a
+  `tn` pair may map to plural forms (below).
 - `{name}` placeholders are copied verbatim: the same set as the English key,
   never translated, never added or dropped. They may move inside the
   sentence.
@@ -95,6 +96,15 @@ nothing states that they are reviewed.
   have no plural forms either: `Intl.PluralRules` selects `other` for every
   count, so their `one` rows are never shown (they carry the `other` text or a
   natural singular; §9.5, §10.5, §11.5).
+- A `tn` key's translation is one string, except that in a language whose
+  plural rule has `few` or `many` categories (Polish, Russian, Ukrainian)
+  the `other` key holds an object of the CLDR categories the language uses,
+  with `other` required, for example
+  `{"one": "…", "few": "…", "many": "…", "other": "…"}`. The `one` key is
+  then the text for exactly 1 and stays a string; the object's `one` is the
+  text of the other counts the rule calls `one` (21, 31, … in Russian and
+  Ukrainian), so it must not read as "this one thing". A category the object
+  leaves out shows its `other` text.
 - A sentence that counts things is a `tn` pair; no key writes a plural as "(s)".
   A track, mode, control or setting name is never a placeholder inside a
   sentence: each name has a whole-sentence key (Hide GC content?, No Circular

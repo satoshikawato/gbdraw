@@ -11,6 +11,7 @@ from svgwrite.container import Group
 
 from ...canvas import CircularCanvasConfigurator
 from ...layout.spatial import Aabb
+from ...render.document import parse_svg_number as _parse_svg_number
 
 DefinitionPosition = Literal["center", "top", "bottom"]
 _SUPPORTED_DEFINITION_POSITIONS = {"center", "top", "bottom"}
@@ -28,18 +29,6 @@ def normalize_definition_position(
             f"{argument_name} must be one of: center, top, bottom"
         )
     return cast(DefinitionPosition, normalized)
-
-
-def _parse_svg_number(value: object, *, default: float = 0.0) -> float:
-    if value is None:
-        return float(default)
-    raw = str(value).strip()
-    if raw.endswith("px"):
-        raw = raw[:-2]
-    try:
-        return float(raw)
-    except (TypeError, ValueError):
-        return float(default)
 
 
 def _definition_group_vertical_bounds(group: Group) -> tuple[float, float]:

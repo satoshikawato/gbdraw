@@ -931,6 +931,14 @@ def _assert_linear_regions_orientation_layout(
         raise RecipeContractError("H-CLI-04 record labels or subtitles are missing.")
 
 
+def _assert_wrapped_figure_rows(path: Path, *, expected_rows: int) -> None:
+    root = ElementTree.parse(path).getroot()
+    rows = {element.attrib["data-gbdraw-wrap-row"] for element in root.iter() if "data-gbdraw-wrap-row" in element.attrib}
+    records = {element.attrib["data-gbdraw-record-id"] for element in root.iter() if "data-gbdraw-record-id" in element.attrib}
+    if len(rows) != expected_rows or len(records) != 1:
+        raise RecipeContractError(f"H-CLI-15 drew {len(rows)} rows of {len(records)} records.")
+
+
 def _match_elements(root: ElementTree.Element) -> list[ElementTree.Element]:
     return [
         element
@@ -1829,7 +1837,7 @@ def _assert_gallery_chloroplast(
 
     expected_values = {
         "--gbk": "NC_001879.gbk",
-        "-t": "chloroplast_specific_table.tsv",
+        "-t": "builtin:plastid",
         "-k": "CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin",
         "--species": "<i>Nicotiana tabacum</i>",
         "--track_type": "tuckin",
@@ -1890,7 +1898,7 @@ def _assert_gallery_chloroplast(
         "photosystem I",
         "photosystem II",
         "RNA polymerase",
-        "rep_origin",
+        "origin of replication",
     }
     if not required_text <= evidence.text_nodes:
         raise RecipeContractError("T-CLI-06 SVG is missing Gallery labels.")
@@ -1940,7 +1948,7 @@ def _assert_gallery_chloroplast(
     }:
         raise RecipeContractError("T-CLI-06 annotation identities changed.")
     fills = {element.attrib.get("fill") for element in root.iter()}
-    if not {"#00662c", "#328925", "#bd1220", "#e95d0f", "#ffec00"} <= fills:
+    if not {"#2c6d3e", "#53924d", "#b4514c", "#de844f", "#eada78"} <= fills:
         raise RecipeContractError("T-CLI-06 lost functional chloroplast colors.")
 
     python_output = (
@@ -2534,6 +2542,8 @@ def run_scenario(
                     _assert_linear_regions_orientation_layout(chapter, generated_path)
                 elif scenario_id == "H-CLI-14":
                     validate_joint_chloroplast(chapter, output_path=generated_path)
+                elif scenario_id == "H-CLI-15":
+                    _assert_wrapped_figure_rows(generated_path, expected_rows=5)
                 elif scenario_id in {"T-CLI-06", "T-CLI-10"}:
                     inspect_standard_svg(chapter, output_path=generated_path)
                 else:

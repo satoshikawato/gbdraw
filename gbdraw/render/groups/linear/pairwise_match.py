@@ -197,7 +197,7 @@ class PairWiseMatchGroup:
         self.sequence_length_dict: Dict[str, int] = sequence_length_dict
         self.comparison_df: DataFrame = comparison_df
         self.match_fill_color: str = blast_config.fill_color
-        self.min_identity: float = blast_config.identity
+        self.identity_domain = blast_config.identity_domain
         self.match_min_color: str = blast_config.min_color
         self.match_max_color: str = blast_config.max_color
         self.match_fill_opacity: float = blast_config.fill_opacity
@@ -392,14 +392,7 @@ class PairWiseMatchGroup:
         subject_start_y: float
         subject_end_x: float
         subject_end_y: float
-        identity_percent = float(row.identity)
-        if self.min_identity >= 100:
-            factor = 1.0 if identity_percent >= 100 else 0.0
-        else:
-            factor = (identity_percent - self.min_identity) / (
-                100 - self.min_identity
-            )
-            factor = max(0.0, min(1.0, factor))
+        factor = self.identity_domain.factor(float(row.identity))
         default_gradient_color = self._gradient_color(
             ("pairwise_match_min", self.match_min_color),
             ("pairwise_match_max", self.match_max_color),

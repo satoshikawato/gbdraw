@@ -8,12 +8,15 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+from gbdraw.comparisons.identity_scale import identity_color_domain
 import pandas as pd
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.api.diagram as api_diagram_module
+from gbdraw.api.input_summary import InputSummary
 import gbdraw.api.request_render as request_render_module
 import gbdraw.linear as linear_cli_module
 from gbdraw.legend.sources import ComparisonLegendSource
@@ -184,6 +187,8 @@ def test_linear_cli_alignment_length_is_forwarded(
             request=resolved,
             annotation_warnings=(),
             feature_identity_notices=(),
+            input_summary=InputSummary(()),
+            linear_metadata=None,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
@@ -332,7 +337,7 @@ def test_pairwise_match_ribbon_path_uses_straight_segments() -> None:
 @pytest.mark.linear
 def test_pairwise_match_identity_100_uses_the_maximum_color() -> None:
     group = _build_pairwise_group("ribbon")
-    group.min_identity = 100
+    group.identity_domain = identity_color_domain(100, None)
     row = _build_match_row()
     row.identity = 100
 
@@ -345,7 +350,7 @@ def test_pairwise_match_identity_100_uses_the_maximum_color() -> None:
 @pytest.mark.circular
 def test_circular_conservation_identity_100_uses_the_maximum_color() -> None:
     drawer = ConservationDrawer(
-        min_identity=100,
+        identity_domain=identity_color_domain(100, None),
         min_color="#ffffff",
         max_color="#000000",
         fill_opacity=1,
@@ -379,7 +384,7 @@ def test_identity_100_legend_is_a_safe_zero_span_at_the_maximum_color() -> None:
     blast_config = SimpleNamespace(
         min_color="#ffffff",
         max_color="#000000",
-        identity=100,
+        identity_domain=identity_color_domain(100, None),
     )
 
     legend = prepare_legend_table(

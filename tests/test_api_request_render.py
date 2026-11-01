@@ -455,7 +455,8 @@ def test_the_web_adapter_reads_js_null_and_blank_settings_as_unset() -> None:
         "mode": "collinear", "collinearMinAnchors": "", "collinearMaxUnitGap": "null",
         "collinearMaxConflictsInMergeGap": None, "collinearUnitMode": "undefined",
         "orthogroupMemberMaxHits": JsUndefined(), "collinearMaxParalogLinksPerOrthogroup": " ",
-    }) == normalize_derived_losatp_settings(mode="collinear")
+        "collinearInferOrthogroups": False,
+    }) == normalize_derived_losatp_settings(mode="collinear", infer_orthogroups=False)
 
 
 def test_the_paralog_link_limit_reaches_a_similarity_groups_identity() -> None:
@@ -2337,14 +2338,16 @@ _RECORDED_DERIVED_ENTRIES = {
     # (OV-1145: semantics v3), and when Collinear blocks became longest chains
     # and the block E-value column went (OV-2294..2296, OV-2300: semantics v4),
     # and when the default merge orientation became "strand", which "either"
-    # was a spelling of (OV-2301).
+    # was a spelling of (OV-2301), and when the Web began to carry a CDS's arc
+    # across the origin (OV-2368: semantics v5), and when score ties began to
+    # follow the CDS order (OV-2370: semantics v6; these bytes change only by the token).
     "similarity_groups": (
-        "6b1dfc2b33423552ff2f9b6210928bf22c640619a81c5fab117ab6a3d30c2a8f",
-        "92675b3ccb5fb991e5b6baaffe892c48aae067b611911fc297d502f55b75b8cc",
+        "e0545e9b7d1b28a8610ad993ecf8b95bd1be1d712463866636fb60ab4c687fd5",
+        "037eefa5685fd55a2eb4eeda3b20c511ae3a57dd0a2cba0c98d18f11d52fc8b3",
     ),
     "collinear": (
-        "1c335911c992797b48ab4f36315726541903c150b9966e1edee418340efc2a38",
-        "154fde7cae802b09b0ff0d807edb5500f193fcb09c9242ba249808f0d678c362",
+        "975e84731ddc149abc8b6024c11300e76ee516c78c0c415bd69659058830a1df",
+        "1a22f3f688db43bffed21dacf6f1ac40266242372096c19e047889aa58914b8f",
     ),
 }
 

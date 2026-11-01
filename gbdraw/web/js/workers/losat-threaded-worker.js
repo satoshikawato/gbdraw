@@ -1,50 +1,18 @@
-import { compileLosatWasm, concatUint8Arrays } from '../services/losat-runtime.js';
+import { compileLosatWasm, concatUint8Arrays, losatCommandArgs } from '../services/losat-runtime.js';
+import { LOSAT_WASM_BUILD } from '../services/losat-build.generated.js';
 
-const DEFAULT_INITIAL_MEMORY_PAGES = 21;
-const DEFAULT_MAXIMUM_MEMORY_PAGES = 16384;
+// The shared memory of a job: the initial pages the threaded file imports (recorded from the file), and at most
+// 1 GiB (16384 pages) reserved, below the file's own maximum.
+const MEMORY_INITIAL_PAGES = LOSAT_WASM_BUILD.threadedMemoryPages.initial;
+const MEMORY_MAXIMUM_PAGES = Math.min(16384, LOSAT_WASM_BUILD.threadedMemoryPages.maximum);
 const WORKER_PREPARE_TIMEOUT_MS = 120000;
 const WORKER_START_TIMEOUT_MS = 30000;
 
 const childWorkerUrl = new URL('./losat-wasi-thread-worker.js', import.meta.url).toString();
 
-const parsePositiveInt = (value, fallback) => {
-  const parsed = Number.parseInt(String(value ?? ''), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
 const compileLosatModule = async (module, wasmUrl) => {
   if (module instanceof WebAssembly.Module) return module;
   return compileLosatWasm(wasmUrl, 'threaded LOSAT wasm');
-};
-
-const hasNumThreadsArg = (args) =>
-  args.some((arg) => {
-    const text = String(arg || '');
-    return text === '-n' ||
-      text === '--num-threads' ||
-      text === '--num_threads' ||
-      text === '-num_threads' ||
-      text.startsWith('--num-threads=') ||
-      text.startsWith('--num_threads=') ||
-      text.startsWith('-num_threads=');
-  });
-
-const buildLosatArgs = ({ program, outfmt, extraArgs, threadsPerJob }) => {
-  const args = [
-    'losat',
-    program,
-    '--query',
-    'query.fa',
-    '--subject',
-    'subject.fa',
-    '--outfmt',
-    String(outfmt || '6'),
-    ...(Array.isArray(extraArgs) ? extraArgs.map(String) : [])
-  ];
-  if (!hasNumThreadsArg(args)) {
-    args.push('--num-threads', String(threadsPerJob));
-  }
-  return args;
 };
 
 const getChildWorkerCount = (threadsPerJob) =>
@@ -57,32 +25,10 @@ const instantiateWithMemory = async ({ module, memory, wasi, spawnThread }) =>
     wasi_snapshot_preview1: wasi.wasiImport
   });
 
-const instantiateMain = async ({ module, wasi, spawnThread, memoryInitialPages, memoryMaximumPages }) => {
-  let initial = parsePositiveInt(memoryInitialPages, DEFAULT_INITIAL_MEMORY_PAGES);
-  let maximum = parsePositiveInt(memoryMaximumPages, DEFAULT_MAXIMUM_MEMORY_PAGES);
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const memory = new WebAssembly.Memory({ initial, maximum, shared: true });
-    try {
-      const instance = await instantiateWithMemory({ module, memory, wasi, spawnThread });
-      return { instance, memory };
-    } catch (error) {
-      const message = error?.message ? String(error.message) : String(error);
-      const initialMatch = message.match(/smaller than initial (\d+)/);
-      if (initialMatch) {
-        initial = Number.parseInt(initialMatch[1], 10);
-        continue;
-      }
-      const maximumMatch = message.match(/larger maximum size \d+ than the module's declared maximum (\d+)/);
-      if (maximumMatch) {
-        maximum = Number.parseInt(maximumMatch[1], 10);
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  throw new Error('failed to instantiate threaded LOSAT wasm memory after limit retries');
+const instantiateMain = async ({ module, wasi, spawnThread }) => {
+  const memory = new WebAssembly.Memory({ initial: MEMORY_INITIAL_PAGES, maximum: MEMORY_MAXIMUM_PAGES, shared: true });
+  const instance = await instantiateWithMemory({ module, memory, wasi, spawnThread });
+  return { instance, memory };
 };
 
 const terminateWorkers = async (workers) => {
@@ -218,8 +164,6 @@ const runThreadedLosat = async ({
   queryFasta,
   subjectFasta,
   threadsPerJob,
-  memoryInitialPages,
-  memoryMaximumPages,
   faultChannel
 }) => {
   if (typeof SharedArrayBuffer !== 'function') {
@@ -249,11 +193,11 @@ const runThreadedLosat = async ({
   const preopen = new PreopenDirectory('.', files);
   const effectiveThreads = Math.max(1, Number(threadsPerJob) || 1);
   const childWorkerCount = getChildWorkerCount(effectiveThreads);
-  const args = buildLosatArgs({
+  const args = losatCommandArgs({
     program: job.program,
     outfmt: job.outfmt,
     extraArgs: job.extraArgs,
-    threadsPerJob: effectiveThreads
+    threads: effectiveThreads
   });
   const env = [
     `LOSAT_WASI_THREAD_CAP=${effectiveThreads}`,
@@ -365,9 +309,7 @@ const runThreadedLosat = async ({
     const instantiated = await instantiateMain({
       module: compiledModule,
       wasi,
-      spawnThread,
-      memoryInitialPages,
-      memoryMaximumPages
+      spawnThread
     });
     mainMemory = instantiated.memory;
     const { instance } = instantiated;

@@ -13,6 +13,7 @@ import {
   parseLinearTrackSlotSpec
 } from '../services/linear-track-slot-model.js';
 import { countGenBankRecords } from '../services/genbank-header.js';
+import { identityScalePathForMode } from '../mode-profiles.js';
 import { msg, t } from '../utils/i18n.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
@@ -1304,6 +1305,9 @@ const appendConfigOverrides = (args, request) => {
     appendOption(args, option, shortValue);
   });
 
+  appendBooleanOption(args, take(`labels.${request.mode}.italic_gene_labels`), '--italic_gene_labels');
+  const identityScale = take(identityScalePathForMode(request.mode));
+  if (Array.isArray(identityScale)) args.push('--identity_scale', String(identityScale[0]), String(identityScale[1]));
   if (request.mode === 'circular') {
     appendBooleanOption(args, take('canvas.circular.track_narrowing'), '', '--no_track_narrowing');
     appendBooleanOption(args, take('objects.definition.circular.show'), '', '--hide_definition');

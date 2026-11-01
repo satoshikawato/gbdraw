@@ -92,6 +92,18 @@ import { isCardRow, markedRows } from './file-imports.js';
  */
 const row = (field, read) => ({ field, read: (value) => read(value) });
 
+/**
+ * A fixed identity colour scale `[MIN, MAX]` (two finite numbers), or null:
+ * the threshold to 100%. Python checks the range when it renders.
+ * @param {unknown} value
+ * @returns {{ value: [number, number] | null, lost: boolean }}
+ */
+const readIdentityScale = (value) => (
+  Array.isArray(value) && value.length === 2
+    && value.every((item) => typeof item === 'number' && Number.isFinite(item))
+    ? { value: [value[0], value[1]], lost: false }
+    : { value: null, lost: !isUnsetValue(value) }
+);
 /** @type {FieldRow['read']} */
 const retiredField = (value) => ({ value: undefined, lost: !isUnsetValue(value) });
 
@@ -573,6 +585,8 @@ const advRows = (mode) => Object.freeze([
   row('ruler_label_font_size', positiveNumberOrNull),
   row('keep_full_definition_with_plot_title', onlyTrue),
   row('show_definition', trueUnlessFalse),
+  row('italic_gene_labels', labelStyleForMode(mode).italic_gene_labels ? trueUnlessFalse : onlyTrue),
+  row('identity_scale', readIdentityScale),
   row('depth_color', (value) => ({ value: resolveColorToHex(String(value || '#4A90E2')), lost: false })),
   row('depth_normalize', onlyTrue),
   row('depth_show_axis', trueUnlessFalse),

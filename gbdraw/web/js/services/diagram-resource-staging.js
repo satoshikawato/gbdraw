@@ -223,7 +223,8 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
       resourceManifest.push({
         resourceId,
         cacheToken,
-        name: String(descriptor.name || `${resourceId}.bin`),
+        // The input summary names the file the user chose (gbdraw/api/input_summary.py), not its Session name.
+        name: owner instanceof File && owner.name ? owner.name : String(descriptor.name || `${resourceId}.bin`),
         kind: String(descriptor.kind || 'web-file'),
         type: String(descriptor.type || 'application/octet-stream'),
         size: descriptor.size,

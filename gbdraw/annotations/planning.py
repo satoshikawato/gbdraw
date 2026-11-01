@@ -45,9 +45,9 @@ def prepare_annotation_track_slots(
         projected = []
         for item in bundle.annotations:
             transform = transforms.get(item.record_index)
-            if transform is not None and transform.start_coordinate is not None:
+            if transform is not None and transform.projects:
                 parts = transform.project_local_parts(tuple(SourceInterval(start, end) for start, end in item.segments))
-                # A set start_coordinate makes project_local_parts return DisplayFragments.
+                # A projecting transform makes project_local_parts return DisplayFragments.
                 item = replace(
                     item, display_parts=tuple(cast("Sequence[DisplayFragment]", parts))
                 )

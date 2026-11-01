@@ -26,6 +26,7 @@ from typing import (
     NamedTuple,
     NoReturn,
     Sequence,
+    TypedDict,
     Union,
     cast,
     get_args,
@@ -47,6 +48,7 @@ from gbdraw.analysis.collinearity import (
     COLLINEARITY_SEARCH_SCOPE_SPELLINGS,
     COLLINEARITY_SEARCH_SCOPES,
     RETIRED_COLLINEARITY_ANCHOR_MODES,
+    retired_collinearity_anchor_mode_replacement,
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityResult,
@@ -84,6 +86,7 @@ from gbdraw.features.placement import (
     FeaturePlacementOverride,
     FeaturePlacementTarget,
 )
+from gbdraw.io.colors import color_table_path
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
@@ -705,9 +708,13 @@ def _encode_canonical_request(
         ring_search = request.options.losat_search
         if ring_search is not None:
             unresolved_reasons.append(f"{ring_search.program} ring search")
+        if request.options.origin_feature is not None:
+            unresolved_reasons.append("origin_feature record rotation")
     if isinstance(request, LinearDiagramRequest):
         if request.output.resolve_prefix_from_first_record:
             unresolved_reasons.append("record-derived output prefix")
+        if request.options.anchor_feature is not None:
+            unresolved_reasons.append("anchor_feature record placement")
         if request.options.comparison_table_file is not None:
             unresolved_reasons.append("Linear comparison table")
         if isinstance(request.similarity_alignment, SimilarityAlignmentReference):
@@ -715,6 +722,8 @@ def _encode_canonical_request(
         search = request.options.losat_search
         if search is not None and search.program != "losatp":
             unresolved_reasons.append(f"{search.program} search")
+        if request.options.auto_orient:
+            unresolved_reasons.append("auto_orient record orientation")
         if request._legacy_similarity_alignment is not None:
             raise CanonicalRequestEncodingError(
                 "A legacy similarity alignment must be materialized before current encoding."
@@ -1586,6 +1595,25 @@ def _decode_similarity_alignment_plan(
     )
 
 
+class EncodedRecordTranslation(TypedDict):
+    """One ``renderRequest.layout.recordTranslations`` entry as a request stores it."""
+
+    recordKey: str
+    x: float
+    y: float
+
+
+def encode_record_translations(
+    translations: SequenceABC[LinearRecordTranslation],
+) -> list[EncodedRecordTranslation]:
+    """The stored form of Linear record translations (the request layout, and the Web's Align at feature reply)."""
+
+    return [
+        {"recordKey": translation.record_key, "x": translation.x, "y": translation.y}
+        for translation in translations
+    ]
+
+
 def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
     if isinstance(request, CircularBatchRequest):
         return {}
@@ -1599,14 +1627,7 @@ def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
                 if request.layout.multi_record_positions is not None
                 else None
             ),
-            "recordTranslations": [
-                {
-                    "recordKey": translation.record_key,
-                    "x": translation.x,
-                    "y": translation.y,
-                }
-                for translation in request.layout.record_translations
-            ],
+            "recordTranslations": encode_record_translations(request.layout.record_translations),
             # encode_canonical_request rejects an unresolved reference first.
             "similarityAlignment": _encode_similarity_alignment_plan(
                 cast("SimilarityAlignmentPlan | None", request.similarity_alignment)
@@ -1763,6 +1784,12 @@ def _decode_linear_layout(
     return result, None
 
 
+# The planner consumes it: a Session stores what the figure drew with
+# (origin_feature: the record display starts it resolves to; auto_orient: the
+# reverse flags of the records it reverses; anchor_feature: the record
+# translations it resolves to, with_anchor_feature_translations).
+_PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults", "origin_feature", "auto_orient", "anchor_feature"})
+
 _PLACEMENT_INPUT_FIELDS = frozenset({
     "feature_placements", "feature_placement_table", "feature_placement_table_file",
     "feature_overrides", "feature_override_table", "feature_override_table_file",
@@ -1810,7 +1837,12 @@ def _encode_diagram_options(
     ], "featureOverrides": [row.to_mapping() for row in options.feature_overrides]}
     for item in fields(options):
         name = item.name
-        if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
+        if (
+            name in _COMPARISON_FIELDS
+            or name in _ALL_DEPTH_INPUT_FIELDS
+            or name in _PLACEMENT_INPUT_FIELDS
+            or name in _PLANNER_ONLY_FIELDS
+        ):
             continue
         if name == "conservation_search_results":
             assert isinstance(options, CircularDiagramOptions)
@@ -1907,6 +1939,7 @@ def _decode_diagram_options(
         and item.name not in _PLACEMENT_INPUT_FIELDS
         and item.name not in _RING_SEARCH_FIELDS
         and item.name not in _TABLE_PATH_FIELDS
+        and item.name not in _PLANNER_ONLY_FIELDS
     }
     unknown = set(payload) - set(known)
     if unknown:
@@ -3072,7 +3105,11 @@ def _encode_colors(value: object, *, resources: RequestResources) -> dict[str, A
             else None
         ),
         "colorTableFile": (
-            _file_ref("colors-color-table-file", value.color_table_file, resources=resources)
+            _file_ref(
+                "colors-color-table-file",
+                color_table_path(value.color_table_file),
+                resources=resources,
+            )
             if value.color_table_file is not None
             else None
         ),
@@ -4080,6 +4117,7 @@ def _decode_comparisons(
                         subject_index,
                         register_prepared_resource_value(table, resource_path),
                         search_frame_text=text,
+                        source_name=resource_path.name,
                     )
                 )
             else:
@@ -4266,7 +4304,7 @@ def _decode_pipeline(
             )
             continue
         if name == "collinearity_anchor_mode":
-            raw = _read_retired_anchor_mode(raw, path=f"{path}.settings.{key}")
+            raw = read_retired_anchor_mode(raw, path=f"{path}.settings.{key}")
         names = _setting_names(name)
         if names and schema >= _SETTING_NAMES_SCHEMA and raw not in names:
             raise CanonicalRequestDecodingError(
@@ -4308,12 +4346,12 @@ def _absent_protein_setting(key: str) -> object:
     return _ABSENT_PROTEIN_SETTINGS[key]
 
 
-def _read_retired_anchor_mode(raw: object, *, path: str) -> object:
+def read_retired_anchor_mode(raw: object, *, path: str) -> object:
     """A retired anchor mode, read as its replacement with a warning."""
 
     if not isinstance(raw, str):
         return raw
-    replacement = RETIRED_COLLINEARITY_ANCHOR_MODES.get(raw.strip().lower().replace("-", "_"))
+    replacement = retired_collinearity_anchor_mode_replacement(raw)
     if replacement is None:
         return raw
     logger.warning(
@@ -5266,29 +5304,77 @@ def _undescribed_parts(payload: object) -> list[str]:
     )
 
 
-def _as_decoded_settings(payload: object) -> object:
-    """``payload`` with the retired anchor mode "one_to_one", which a released
-    schema 9 writer stored, read as "rbh" (``_read_retired_anchor_mode``); the
-    Web repair of the request reads it as the description's default, with a
-    row."""
+def _with_anchor_modes_read(
+    payload: Mapping[str, object], read: Callable[[str, int], object]
+) -> Mapping[str, object]:
+    """``payload`` with each comparison's stored anchor mode replaced by
+    ``read(stored, comparison_index)``."""
 
-    if not isinstance(payload, MappingABC):
-        return payload
     comparisons = payload.get("comparisons")
     if not isinstance(comparisons, list):
         return payload
-    read: list[object] = []
-    for item in comparisons:
+    replaced: list[object] = []
+    for index, item in enumerate(comparisons):
         settings = item.get("settings") if isinstance(item, MappingABC) else None
-        if not isinstance(settings, MappingABC):
-            read.append(item)
+        if not isinstance(settings, MappingABC) or not isinstance(settings.get("collinearityAnchorMode"), str):
+            replaced.append(item)
             continue
-        settings = dict(settings)
-        mode = settings.get("collinearityAnchorMode")
-        if isinstance(mode, str) and mode in RETIRED_COLLINEARITY_ANCHOR_MODES:
-            settings["collinearityAnchorMode"] = RETIRED_COLLINEARITY_ANCHOR_MODES[mode]
-        read.append({**item, "settings": settings})
-    return {**payload, "comparisons": read}
+        mode = read(settings["collinearityAnchorMode"], index)
+        replaced.append({**item, "settings": {**settings, "collinearityAnchorMode": mode}})
+    return {**payload, "comparisons": replaced}
+
+
+def _as_decoded_settings(payload: object) -> object:
+    """``payload`` with a retired anchor mode, which a released schema 9 writer
+    could store as "one_to_one", read as "rbh" (``read_retired_anchor_mode``);
+    the Web repair of the request reads it as the description's default, with
+    a row."""
+
+    if not isinstance(payload, MappingABC):
+        return payload
+    return _with_anchor_modes_read(
+        payload, lambda mode, _index: retired_collinearity_anchor_mode_replacement(mode) or mode
+    )
+
+
+def request_with_current_anchor_modes(request: Mapping[str, object], path: str) -> Mapping[str, object]:
+    """A stored request holding the replacement of each retired anchor mode,
+    each replacement warned about (``read_retired_anchor_mode``). ``path`` names
+    the request in the warning."""
+
+    return _with_anchor_modes_read(
+        request,
+        lambda mode, index: read_retired_anchor_mode(
+            mode, path=f"{path}.comparisons[{index}].settings.collinearityAnchorMode"
+        ),
+    )
+
+
+class FreshProteinHitLimits(TypedDict):
+    candidateLimit: int | None
+    orthogroupMemberMaxHits: int | None
+
+
+class FreshProteinComparisonDefaults(TypedDict):
+    collinearInferOrthogroups: bool
+    hitLimits: FreshProteinHitLimits
+
+
+def describe_fresh_protein_comparison() -> FreshProteinComparisonDefaults:
+    """What a new protein comparison holds, from the Python options.
+
+    The Web's fresh draft reads these. A stored request without the inference
+    flag reads ``_ABSENT_PROTEIN_SETTINGS`` instead, which stays on when this
+    default changes.
+    """
+
+    return {
+        "collinearInferOrthogroups": _DEFAULT_LINEAR_OPTIONS.collinear_infer_orthogroups,
+        "hitLimits": {
+            "candidateLimit": _UNSET_LOSAT_SEARCH.losatp_max_target_seqs,
+            "orthogroupMemberMaxHits": _UNSET_LOSAT_SEARCH.losatp_member_max_hits,
+        },
+    }
 
 
 def describe_legacy_request_tables() -> dict[str, Any]:
@@ -5565,7 +5651,7 @@ def describe_canonical_request() -> dict[str, Any]:
     # stores every depth input as depthTracks).
     unwritten = (
         _COMPARISON_FIELDS | _PLACEMENT_INPUT_FIELDS | _RING_SEARCH_FIELDS | _DEPTH_COMPATIBILITY_FIELDS
-        | _TABLE_PATH_FIELDS
+        | _TABLE_PATH_FIELDS | _PLANNER_ONLY_FIELDS
     )
 
     def option(name: str, hint: object, mode: Literal["circular", "linear"]) -> Shape:
@@ -5799,13 +5885,16 @@ __all__ = [
     "CanonicalRequestEncodingError",
     "CanonicalRequestResource",
     "EncodedCanonicalRequest",
+    "EncodedRecordTranslation",
     "decode_canonical_typed_resource",
     "decode_canonical_request",
     "describe_canonical_request",
+    "describe_fresh_protein_comparison",
     "describe_legacy_request_tables",
     "encode_canonical_table",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
+    "encode_record_translations",
     "migrate_flat_config_overrides",
     "migrate_legacy_full_config",
     "with_automatic_scale_interval",

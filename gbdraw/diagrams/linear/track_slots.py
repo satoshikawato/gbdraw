@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Mapping, Sequence, cast
+from typing import Callable, Mapping, Sequence, cast
 
 from ...annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
 from ...canvas import LinearCanvasConfigurator
@@ -12,6 +12,7 @@ from ...layout.linear import (
     VerticalBand,
     union_vertical_bands,
 )
+from ...layout.linear_wrap import stack_row_offsets
 from ...tracks import NormalizedLinearTrackSlot
 
 
@@ -55,6 +56,30 @@ class LinearRecordVerticalPlan:
     record_body_band: VerticalBand
     comparison_exclusion_band: VerticalBand
     canvas_band: VerticalBand
+    # A wrapped record's rows, the one owner of their offsets (``stack_linear_wrap_rows``). Empty: one row,
+    # which this plan is. The fields above are its first row's, with bands that cover every row.
+    wrap_rows: tuple[LinearWrapRow, ...] = ()
+
+    @property
+    def rows(self) -> tuple[LinearWrapRow, ...]:
+        """Every row of the record, one when it does not wrap."""
+
+        return self.wrap_rows or (LinearWrapRow(0.0, self),)
+
+    @property
+    def row_offsets(self) -> tuple[float, ...]:
+        """Each row's axis below the record's axis."""
+
+        return tuple(row.axis_offset_y for row in self.rows)
+
+    def slot_row_shifts(self, slot_id: str) -> tuple[float, ...]:
+        """How far one slot lies on each row of a wrapped record below where it lies on the first (a label
+        band moves the slots past it, so a slot's place in its row differs by row). Empty otherwise."""
+
+        origin_y = self.slot_by_id(slot_id).origin_y
+        return tuple(
+            row.axis_offset_y + row.plan.slot_by_id(slot_id).origin_y - origin_y for row in self.wrap_rows
+        )
 
     @property
     def paint_band(self) -> VerticalBand:
@@ -98,6 +123,34 @@ class LinearRecordVerticalPlan:
             if slot.id == slot_id:
                 return slot
         raise KeyError(slot_id)
+
+
+@dataclass(frozen=True)
+class LinearWrapRow:
+    """One row of a wrapped record: where its axis lies below the record's, and its own packed slots."""
+
+    axis_offset_y: float
+    plan: LinearRecordVerticalPlan
+
+
+def stack_linear_wrap_rows(row_plans: Sequence[LinearRecordVerticalPlan], row_gap: float) -> LinearRecordVerticalPlan:
+    """A wrapped record's plan from each row's own plan: every row as tall as its own content needs, and the
+    record's bands the union of its rows, so the record's bottom extent is the sum of its rows."""
+
+    offsets = stack_row_offsets([plan.canvas_band for plan in row_plans], row_gap)
+
+    def union(band_of: Callable[[LinearRecordVerticalPlan], VerticalBand]) -> VerticalBand:
+        return union_vertical_bands(
+            [band_of(plan).translate(offset) for offset, plan in zip(offsets, row_plans, strict=True)]
+        )
+
+    return replace(
+        row_plans[0],
+        record_body_band=union(lambda plan: plan.record_body_band),
+        comparison_exclusion_band=union(lambda plan: plan.comparison_exclusion_band),
+        canvas_band=union(lambda plan: plan.canvas_band),
+        wrap_rows=tuple(LinearWrapRow(offset, plan) for offset, plan in zip(offsets, row_plans, strict=True)),
+    )
 
 
 def _resolve_scalar_px(value, default: float) -> float:
@@ -790,6 +843,8 @@ __all__ = [
     "LinearResolvedSlot",
     "LinearSlotFootprint",
     "LinearTrackLayout",
+    "LinearWrapRow",
+    "stack_linear_wrap_rows",
     "resolve_linear_track_layout",
     "resolve_linear_record_vertical_plan",
 ]

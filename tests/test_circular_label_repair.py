@@ -33,7 +33,9 @@ def _fixture(name: str) -> tuple[list[dict], int, tuple[Aabb, ...]]:
     """A final layout as ``prepare_label_list`` hands it to the repair (written by the engine of this branch)."""
 
     data = json.loads((FIXTURES / f"{name}.json").read_text())
-    return data["labels"], int(data["total_length"]), tuple(Aabb(*box) for box in data["definition_text"])
+    # The layouts were recorded before a label carried its font style; each was drawn upright.
+    labels = [{"font_style": "normal", **label} for label in data["labels"]]
+    return labels, int(data["total_length"]), tuple(Aabb(*box) for box in data["definition_text"])
 
 
 # Each fixture's repair (and yield) runs once per test process; tests read copies, so none can change a shared

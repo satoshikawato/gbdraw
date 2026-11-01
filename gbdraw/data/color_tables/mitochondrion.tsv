@@ -1,0 +1,20 @@
+# Mitochondrial gene classes by /gene name for animal (nad/ND, cox/COX, cob/CYTB, atp, mt- prefixes)
+# and plant genomes (sdh, ccm, rps, rpl, mat, mtt), after OGDRAW's classes
+# (Greiner, Lehwark & Bock 2019, Nucleic Acids Res 47:W59-W64).
+# Columns: feature_type, qualifier_key, value (case-insensitive regular expression), color, caption.
+CDS	gene	^(mt-)?(nad|nd)[0-9]+l?$	#eada78	complex I (NADH dehydrogenase)
+CDS	gene	^sdh[0-9]+$	#7cd2ae	complex II (succinate dehydrogenase)
+CDS	gene	^(mt-)?(cob|cytb|cyb)$	#869542	complex III (ubiquinol-cytochrome c reductase)
+CDS	gene	^(mt-)?(cox[1-3]|co[1-3]|coi|coii|coiii)$	#d47c79	complex IV (cytochrome c oxidase)
+CDS	gene	^(mt-)?atp[0-9]+$	#9bc06a	ATP synthase
+CDS	gene	^ccm[A-Z]	#4fa1a5	cytochrome c biogenesis
+CDS	gene	^rps[0-9]+	#dab78c	ribosomal proteins (SSU)
+CDS	gene	^rpl[0-9]+	#a97b53	ribosomal proteins (LSU)
+CDS	gene	^mat[A-Z]$	#de844f	maturases
+CDS	gene	^(mtt[A-Z]|tat[A-Z])$	#9480bb	other genes
+CDS	gene	^orf[0-9]+	#95a0ab	ORFs
+CDS	product	^hypothetical protein$	#95a0ab	ORFs
+tRNA	gene	.	#43629c	transfer RNAs
+tRNA	product	.	#43629c	transfer RNAs
+rRNA	gene	.	#b86797	ribosomal RNAs
+rRNA	product	.	#b86797	ribosomal RNAs

@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { GenerationPayload } from '../services/diagram-generation.js' */
 /** @import { SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
@@ -27,7 +28,7 @@
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
-import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors } from './result-paint-record.js';
+import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
@@ -37,6 +38,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
+import { inputSummaryOf } from '../services/input-summary.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
@@ -155,6 +157,8 @@ import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, buildDefaultMultiRecordPositions, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
+import { createRecordAutoOrientation } from './record-auto-orientation.js';
+import { createFeatureAnchorAction } from './align-at-feature.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
@@ -278,7 +282,9 @@ import {
   getDepthTrackFileBaseName,
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
-import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
+import {
+  comparisonProfileDefault, IDENTITY_PERCENT_MAXIMUM, identityScaleWithEnd, linearAxisRulerApplies
+} from '../mode-profiles.js';
 import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, tx, uiLocale } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import {
@@ -469,6 +475,7 @@ export const createAppSetup = () => {
     featureEditRemovalCount,
     comparisonWarnings,
     labelFitReports,
+    inputSummaries,
     matchSequenceRegistry,
     svgContent,
     svgResultIdentity,
@@ -508,6 +515,7 @@ export const createAppSetup = () => {
     selectedSpecificPreset,
     specificRulePresetLoading,
     downloadDpi,
+    downloadWhiteBackground,
     extractedFeatures,
     biologicalFeatures,
     selectedFeatureIds,
@@ -1764,6 +1772,16 @@ export const createAppSetup = () => {
   // Every write of a record source (a Circular file, an input type, the Linear
   // cards) runs through it, so a replaced source's display drafts go.
   const { changeRecordSources } = recordDisplayControls;
+  // Orient records from comparisons: Python decides from the last Generate, the record display writes the flags.
+  const recordAutoOrientation = createRecordAutoOrientation({ computed, ref,
+    getCommittedSession: getCommittedCanonicalSession,
+    readCommittedRevision: readCommittedCanonicalRevision,
+    busy: () => sessionOperationAvailability(),
+    // The committed Session's resource table holds the descriptors its writer wrote.
+    decideOrientation: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION, { ...payload,
+      resources: /** @type {GenerationPayload['resources']} */ (payload.resources) }),
+    writeDecidedOrientations: recordDisplayControls.writeDecidedOrientations,
+    errorMessage: (error) => errorText(normalizeCaughtError(error, { operation: 'decideAutoOrientation', stage: 'helper' }).summaryParts) });
   window.__GBDRAW_HISTORY__ = history;
   // R13: owners receive this port, not the record display controls. The check
   // is pure (services/feature-identity.js) over the record display's binding.
@@ -5026,6 +5044,18 @@ export const createAppSetup = () => {
   });
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
+  // Align at feature writes the record translations as one step without the
+  // alignment plan, as a manual record movement does (PD-OI-028).
+  const featureAnchor = createFeatureAnchorAction({
+    materializedSession: similarityAlignmentActions.materializedSession,
+    hasAlignmentPlan: () => Boolean(state.similarityAlignmentPlan.value),
+    runHelperOperation: runDiagramHelperOperation,
+    resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_FEATURE_ANCHOR,
+    runPlacement: ({ canonical, label }) => runCommittedCanonicalCandidate({ canonical, label, alignmentResetReceipt: null }),
+    notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
+    projectPlacement: projectCommittedSimilarityAlignment,
+    recordTranslations: () => state.linearRecordTranslations.value
+  });
   // Generate asks about Upload pairs without a file: each pair's row
   // takes its own file; Skip sets the pairs still without one to No comparison
   // in one History step, then Generates.
@@ -6190,6 +6220,15 @@ export const createAppSetup = () => {
       && item.resultName === results.value[selectedResultIndex.value]?.name);
     return entry && entry.report.drawn ? entry : null;
   });
+  // The input summary of the shown Result: its warnings in the status area, its lines in Run info.
+  const shownInputSummary = computed(() => inputSummaryOf(
+    inputSummaries.value, selectedResultIndex.value, results.value[selectedResultIndex.value]?.name
+  ));
+  // A live Feature visibility edit no render drew since: the summary counts what the render drew.
+  const shownInputSummaryStale = computed(() => {
+    const summary = shownInputSummary.value;
+    return summary !== null && summary.drawnVisibility !== visibilityPaintState(state.activeDrawing());
+  });
   const openLabelFitNotice = () => {
     const entry = labelFitNotice.value;
     if (!entry) return undefined;
@@ -6966,6 +7005,8 @@ export const createAppSetup = () => {
     labelFitDialog,
     labelCapacityText,
     labelFitNotice,
+    shownInputSummary,
+    shownInputSummaryStale,
     openLabelFitNotice,
     resolveLabelFitChoice,
     editLabelFitRecordText,
@@ -7210,6 +7251,13 @@ export const createAppSetup = () => {
     unmanagedConfigOverrideEntries,
     resetUnmanagedConfigOverride,
     comparisonProfileDefault,
+    recordAutoOrientation,
+    identityPercentMaximum: IDENTITY_PERCENT_MAXIMUM,
+    /** @param {0 | 1} end @param {string} text */
+    setIdentityScaleEnd: (end, text) => {
+      const drawing = state.activeDrawing();
+      drawing.adv.identity_scale = identityScaleWithEnd(drawing.adv.identity_scale, end, text);
+    },
     comparisonHeightValidationError,
     optionalNumberInputValue,
     setOptionalNumberInputValue,
@@ -7387,6 +7435,15 @@ export const createAppSetup = () => {
     clearOrthogroupDormantOverrides: orthogroupActions.clearOrthogroupDormantOverrides,
     highlightOrthogroupById: orthogroupActions.highlightOrthogroupById,
     similarityAlignmentDraft: similarityAlignmentActions.draft,
+    featureAnchorSelector: featureAnchor.selector,
+    featureAnchorBusy: featureAnchor.busy,
+    featureAnchorPreview: featureAnchor.preview,
+    featureAnchorPreviewLines: featureAnchor.previewLines,
+    featureAnchorError: featureAnchor.error,
+    featureAnchorNotice: featureAnchor.notice,
+    resolveFeatureAnchor: featureAnchor.resolve,
+    applyFeatureAnchor: featureAnchor.apply,
+    cancelFeatureAnchor: featureAnchor.cancel,
     similarityAlignmentStatus: similarityAlignmentActions.status,
     similarityAlignmentBusy: similarityAlignmentActions.busy,
     similarityAlignmentError: similarityAlignmentActions.error,
@@ -7752,6 +7809,7 @@ export const createAppSetup = () => {
     getDefinitionLineStyleSwatchValue,
     isDefinitionLineStyleMuted,
     downloadDpi,
+    downloadWhiteBackground,
     pngDpiChoices: PNG_DPI_CHOICES,
     runAnalysis,
     generateFromError,
