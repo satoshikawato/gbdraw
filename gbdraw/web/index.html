@@ -8530,7 +8530,7 @@
                                             :title="t('Align to the selected exact feature')"
                                             class="min-w-0 text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
                                         <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
-                                        {{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}
+                                        {{ similarityAlignmentStatus === 'resolving' ? t('Resolving…') : similarityAlignmentStatus === 'applying' ? t('Applying…') : t('Align…') }}
                                     </button>
                                     <button type="button"
                                             data-history-managed
