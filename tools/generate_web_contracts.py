@@ -25,7 +25,7 @@ RULE_SYNTHESIS_TARGET = TARGET.with_name("rule-synthesis.generated.js")
 BUILTIN_COLOR_TABLES_TARGET = TARGET.parent.parent / "builtin-color-tables.generated.js"
 # The colours of the similarity rings without a colour of their own: data, like the
 # built-in color tables, so the module stays outside `contracts/` too.
-CONSERVATION_COLORS_TARGET = TARGET.parent.parent / "conservation-colors.generated.js"
+CONSERVATION_COLORS_TARGET = TARGET.parent.parent / "utils" / "conservation-colors.generated.js"
 sys.path.insert(0, str(REPO_ROOT))
 
 # (Web name, Python module that defines the value, Python name). The Web keeps

@@ -22,8 +22,6 @@ await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), j
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 // track-slot-display.js reads the generated size-class boundaries.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'), join(tempRoot, 'mode-profiles.generated.js'));
-// conservation-series.js reads the generated ring colours.
-await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'conservation-colors.generated.js'), join(tempRoot, 'conservation-colors.generated.js'));
 // The services the slot editors import.
 for (const leaf of ['conservation-series.js', 'current-option-values.js', 'depth-track-state.js', 'linear-label-visibility.js', 'losat-normalization.js',
   'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js', 'linear-track-slot-model.js']) {

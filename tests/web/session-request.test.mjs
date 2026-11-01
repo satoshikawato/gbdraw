@@ -814,6 +814,9 @@ const assertIdentityScaleProjection = (build, mode) => {
     state.adv.identity_scale = [...leaf];
     assert.deepEqual(overrides()[configPath], leaf, `${vector.id}-${mode}`);
   }
+  // A fractional end is sent as typed, not rounded.
+  state.adv.identity_scale = [12.5, 90];
+  assert.deepEqual(overrides()[configPath], [12.5, 90], `${mode} fractional pair`);
   for (const value of [Number.NaN, 7, '1e-50x', [5], [Number.NaN, 100], ['x', 100], [null, 100], [40, 90, 100]]) {
     const label = `${mode}.identity_scale=${JSON.stringify(value)}`;
     state.adv.identity_scale = value;

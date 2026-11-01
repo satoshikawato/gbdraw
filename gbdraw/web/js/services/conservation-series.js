@@ -1,5 +1,5 @@
 // @ts-check
-import { CONSERVATION_TEN_COLORS } from '../conservation-colors.generated.js';
+import { CONSERVATION_TEN_COLORS } from '../utils/conservation-colors.generated.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
