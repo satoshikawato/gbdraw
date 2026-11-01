@@ -102,7 +102,8 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  * @property {(sequence: Record<string, any>) => Record<string, any>[]} linearRecordsFor
  * @property {(sequence: Record<string, any> | undefined) => string} linearRecordStatusFor
  * @property {(sequence: Record<string, any> | undefined) => any} linearRecordErrorFor
- * @property {(label: string, apply: () => any) => any} runUndoable History's one undoable step
+ * @property {(label: string, apply: () => unknown) => Promise<unknown>} runUndoable History's one undoable step:
+ *   the result of `apply`, or History's busy value (`{ status: 'busy', reason }`) when it refuses the step without running it
  * @property {() => Record<string, any> | null} getCommittedRequest
  * @property {() => Record<string, any> | null} getCommittedSession
  */
@@ -190,7 +191,7 @@ export const createRecordDisplayControls = ({
   /** @param {RecordDisplayRow} row */
   const surfaceFor = (row) => {
     const surface = recordDisplaySurface(row, draftFor(row), row);
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     return busy ? { ...surface, startEnabled: false, disabledReason: busy.reason } : surface;
   };
   /** @param {DrawingState} drawing @param {RecordDisplayRow} row @param {Partial<RecordDisplayDraft>} patch @param {string} label */
@@ -207,7 +208,7 @@ export const createRecordDisplayControls = ({
   /** @param {RecordDisplayRow} row @param {ResolvedRecordTransform} transform */
   const writeResolvedTransform = (row, { startCoordinate, reverseComplement, anchorIntent }) => {
     const drawing = state.drawingOfMode(row.scope);
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return busy;
     if (typeof reverseComplement !== 'boolean') {
       throw new Error('Resolved record orientation must be boolean.');
@@ -466,7 +467,7 @@ export const createRecordDisplayControls = ({
     // The button acts on the shown drawing, whose last Generate it read.
     const drawing = state.activeDrawing();
     if (drawing.mode !== 'linear') return { status: 'notLinear' };
-    const busy = state.sessionOperationAvailability?.();
+    const busy = state.sessionOperationAvailability();
     if (busy) return { status: 'busy', reason: busy.reason };
     refreshCommittedRows();
     const rowsByKey = new Map(committedRows.filter((row) => row.scope === 'linear').map((row) => [row.recordKey, row]));
@@ -493,9 +494,8 @@ export const createRecordDisplayControls = ({
       return WRITTEN;
     });
     if (outcome !== WRITTEN) {
-      const reason = outcome && typeof outcome === 'object' && typeof outcome.reason === 'string' && outcome.reason
-        ? outcome.reason : msg('Retry after the current operation finishes.');
-      return { status: 'busy', reason };
+      const { reason } = /** @type {{ reason?: unknown }} */ (outcome && typeof outcome === 'object' ? outcome : {});
+      return { status: 'busy', reason: typeof reason === 'string' ? reason : '' };
     }
     return { status: 'written', recordIds: changes.map(({ row }) => String(row.recordId || row.recordKey)) };
   };
@@ -557,7 +557,7 @@ export const createRecordDisplayControls = ({
     },
     setStart: (/** @type {RecordDisplayRow} */ row, /** @type {unknown} */ value) => {
       const drawing = state.activeDrawing();
-      return state.sessionOperationAvailability?.() || edit(drawing, row, {
+      return state.sessionOperationAvailability() || edit(drawing, row, {
         startCoordinate: parseRecordDisplayStart(value), anchorIntent: null
       }, msg('Change record display start'));
     },
@@ -567,7 +567,7 @@ export const createRecordDisplayControls = ({
     },
     setReverseComplement: (/** @type {RecordDisplayRow} */ row, /** @type {unknown} */ value) => {
       const drawing = state.activeDrawing();
-      return state.sessionOperationAvailability?.() || edit(drawing, row, {
+      return state.sessionOperationAvailability() || edit(drawing, row, {
         reverseComplementOverride: requireReverseComplementOverride(value), anchorIntent: null
       }, msg('Change record orientation'));
     },
