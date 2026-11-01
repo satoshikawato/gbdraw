@@ -12,6 +12,24 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: in the Web app, removing a Depth series, the last Depth file of a series, or a custom
+  stack row that another row starts at or extends to (Circular and Linear), removing or clearing a
+  Linear File that holds such a last file (after the File's own question), removing a Circular
+  comparison source whose ring row leaves with it, and **Hide GC Content** or **Hide GC Skew** with
+  **Use custom stack** off when it turns off such a row (Circular), ask with the same dialog: it
+  offers to make the change and turn those rows off as one Undo step, or Cancel, which changes
+  nothing. A Depth row with a width, spacing, or ID you set, which stays with no file, turns off
+  with them. With two or more series, when Generate will ask for that series' file (**Show Depth**
+  on, or a Depth row still on in the custom stack), the dialog also says the series stays empty
+  and Generate will ask for a file or its removal.
+- Fixed: a Linear Depth row now leaves with its last Depth file after **Generate Diagram** too,
+  and in a Session saved earlier, as it does before the first Generate; before, it stayed and the
+  next Generate refused the stack. A moved row leaves too, and a file added again puts it at the
+  default place. A height typed on the row stays on its series. With no row reaching it, nothing
+  asks.
+- Fixed: a Depth row you turned off now stays in the stack, off, when its last file goes and when a
+  file is added again, in Circular and Linear; before, it left and came back on.
+
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
 
 - Patch release of 0.14.4. Sessions are saved as Session version 50 (0.14.4 writes 49); a Session

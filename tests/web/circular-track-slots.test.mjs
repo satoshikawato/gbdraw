@@ -31,13 +31,11 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'),
   join(tempRoot, 'mode-profiles.generated.js')
 );
-// color-utils.js reads the generated palette name aliases.
-await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'contracts', 'schema.generated.js'),
-  join(tempRoot, 'contracts', 'schema.generated.js')
-);
+// color-utils.js reads the generated palette name aliases, losat-normalization.js the request shape.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'contracts'), join(tempRoot, 'contracts'), { recursive: true });
 // The track-slot leaves the slot editors import.
-for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js']) {
+for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js',
+  'linear-track-slot-model.js', 'current-option-values.js', 'linear-label-visibility.js', 'losat-normalization.js', 'track-legend-rows.js']) {
   await cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
     join(tempRoot, 'services', leaf)
