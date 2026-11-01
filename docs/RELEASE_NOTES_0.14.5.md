@@ -13,6 +13,7 @@ Web buttons),
 and reads more real-world GenBank, EMBL, and GFF3 files. The Web app's LOSAT
 engine is now a build of a LOSAT development commit, and threaded LOSAT searches
 no longer stop on a memory fault.
+The Web UI is available in 17 languages (English and 16 translations).
 Sessions are now saved as session version 50 (0.14.4 writes 49; the canonical
 `renderRequest` schema stays 9): **a Session saved by 0.14.5 opens only in
 0.14.5 or later.** Sessions saved by 0.14.4 and earlier open as before.
@@ -169,6 +170,12 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   color table. The figure keeps its layout and labels.
 
 ## Added
+
+- **Web UI: German, Italian, Polish, Russian, Turkish and Ukrainian.** The
+  Language menu offers these six languages, each with a complete translation of
+  the UI. Polish and Turkish letters use the bundled Inter Latin Extended
+  subset, and Russian and Ukrainian letters the bundled Inter Cyrillic subset.
+  The figure, the exports, Session files, and the command line stay English.
 
 - **`--wrap_length` for Linear diagrams.** `--wrap_length AUTO|LENGTH` (for
   example `50000`, `50kb`, `0.5Mb`, or `auto`) and the config key
