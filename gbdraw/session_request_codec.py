@@ -710,6 +710,8 @@ def _encode_canonical_request(
         ring_search = request.options.losat_search
         if ring_search is not None:
             unresolved_reasons.append(f"{ring_search.program} ring search")
+        if request.options.origin_feature is not None:
+            unresolved_reasons.append("origin_feature record rotation")
     if isinstance(request, LinearDiagramRequest):
         if request.output.resolve_prefix_from_first_record:
             unresolved_reasons.append("record-derived output prefix")
@@ -1768,8 +1770,9 @@ def _decode_linear_layout(
     return result, None
 
 
-# The planner consumes it: a Session stores what the figure drew with.
-_PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults"})
+# The planner consumes it: a Session stores what the figure drew with
+# (origin_feature: the record display starts it resolves to).
+_PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults", "origin_feature"})
 # Options a Session does not store yet: a request that sets one is refused.
 _UNSTORED_FIELDS = frozenset({"auto_orient", "anchor_feature"})
 

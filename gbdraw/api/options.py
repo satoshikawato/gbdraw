@@ -1117,7 +1117,18 @@ class _ModeDiagramOptions:
 
 @dataclass(frozen=True)
 class CircularDiagramOptions(_ModeDiagramOptions):
-    """Options accepted by a Circular typed request."""
+    """Options accepted by a Circular typed request.
+
+    ``origin_feature`` rotates each record so that the feature it selects
+    (``key=value``, exact; a string is parsed with
+    :func:`gbdraw.annotations.models.parse_feature_selector`) starts at 12
+    o'clock: its start as drawn (its 5' base when it reads clockwise as drawn,
+    else its 3' base) becomes the record's
+    ``RecordDisplayOptions.start_coordinate``
+    (:func:`gbdraw.api.record_planning.project_origin_feature_starts`). A
+    record without the feature keeps its start. The planned request carries
+    the starts, not the option.
+    """
 
     tracks: CircularRequestTrackOptions | None = None
     output: CircularOutputOptions | None = None
@@ -1136,9 +1147,17 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     losat_search: LosatSearchOptions | None = None
     conservation_losat_gencodes: Sequence[int] | None = None
     conservation_search_results: Sequence[ConservationSearchResult] | None = None
+    origin_feature: FeatureSelector | str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        if self.origin_feature is not None:
+            if not isinstance(self.origin_feature, (FeatureSelector, str)):
+                raise ValidationError(
+                    "origin_feature must be a FeatureSelector, a key=value string, or None.",
+                    diagnostic={"code": "INPUT_INVALID"},
+                )
+            object.__setattr__(self, "origin_feature", parse_feature_selector(self.origin_feature))
         for placement in self.feature_placements:
             placement.target.validate_mode("circular")
         if self.depth_tracks is not None and any(
@@ -1408,8 +1427,9 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     ``auto_orient`` reverse-complements records from their nucleotide hits
     (:func:`gbdraw.linear_comparison.auto_orient_reversed_records`).
 
-    ``anchor_feature`` aligns the records at the first drawn base of the
-    feature it selects in each record (``key=value``, exact; a string is
+    ``anchor_feature`` aligns the records at the start as drawn (its 5' base
+    when it reads rightward as drawn, else its 3' base) of the feature it
+    selects in each record (``key=value``, exact; a string is
     parsed with :func:`gbdraw.annotations.models.parse_feature_selector`).
     The first record that has the feature keeps its place
     (:func:`gbdraw.api.record_planning.project_anchor_feature_starts`). The

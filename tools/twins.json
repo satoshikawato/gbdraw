@@ -1204,8 +1204,7 @@
       "vector": "tests/fixtures/feature-start-anchor-vectors.json",
       "reason": "gbdraw circular --origin_feature and the Web Rotate to feature 'Start of the record' must put the same base at 12 o'clock for one feature and orientation.",
       "retireWhen": "the popup reads the feature start from Python feature metadata, or the CLI option is removed",
-      "source": "user-rescue-20261031 WP-6 (D-50)",
-      "pending": true
+      "source": "user-rescue-20261031 WP-6 (D-50)"
     }
   ]
 }

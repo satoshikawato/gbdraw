@@ -118,6 +118,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--hide_definition] [--plot_title PLOT_TITLE]
               [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--keep_full_definition_with_plot_title]
+              [--origin_feature KEY=VALUE]
               [--center_reserved_radius CENTER_RESERVED_RADIUS]
               [--no_track_narrowing]
               [--track_narrowing_min_px TRACK_NARROWING_MIN_PX]
@@ -295,6 +296,16 @@ options:
   --keep_full_definition_with_plot_title
                         Keep the full species/strain center label when a
                         circular plot title is shown (default: False).
+  --origin_feature KEY=VALUE
+                        Rotate each record so that the feature this exact
+                        selector names starts at 12 o'clock, for example
+                        gene=dnaA or locus_tag=b0001 (the feature_selector
+                        form of the placement and override tables): its start
+                        as drawn (its 5' base when it reads clockwise, else
+                        its 3' base) becomes the display start. A record
+                        without the feature keeps its start and is reported.
+                        Cannot be combined with --display_start_coordinate or
+                        a crop (default: off).
   --center_reserved_radius CENTER_RESERVED_RADIUS
                         Override the center-label reserved radius for circular
                         track packing (in px; must be >= 0).
@@ -1429,7 +1440,8 @@ options:
                         > 0).
   --align_center        Align genomes to the center (default: False).
   --anchor_feature KEY=VALUE
-                        Align the records at the first drawn base of the
+                        Align the records at the start as drawn (its 5' base
+                        when it reads rightward, else its 3' base) of the
                         feature this exact selector names in each record, for
                         example gene=dnaA or locus_tag=b0001 (the
                         feature_selector form of the placement and override

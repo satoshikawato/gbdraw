@@ -15,8 +15,10 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame, isna
 
 from gbdraw.core.record_metadata import (
+    _SourceFeatureAnchorProfile,
     _feature_source_index_map,
     _iter_source_features,
+    _source_feature_anchor_profile,
     _source_feature_index,
     _stamp_source_feature_hash,
 )
@@ -102,6 +104,14 @@ class SourceFeatureCatalog:
             )
             for item, identity in zip(self.captured, identities, strict=True)
         )
+
+    @cached_property
+    def _captured_by_index(self) -> Mapping[int, _CapturedSourceFeature]:
+        return {item.source_feature_index: item for item in self.captured}
+
+    def anchor_profile(self, source_feature_index: int) -> _SourceFeatureAnchorProfile:
+        """The source-location profile of one feature, the one the Web feature metadata carries."""
+        return _source_feature_anchor_profile(self._captured_by_index[source_feature_index].feature)
 
 
 def capture_source_features(record: SeqRecord, *, stamp: bool = True) -> SourceFeatureCatalog:
