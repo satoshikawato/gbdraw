@@ -2388,7 +2388,7 @@ const formatPairwiseMatchHoverRows = ({
   if (matchKind === 'collinear') {
     const groups = String(blockOrthogroupCount ?? '');
     // A count of groups, not the LOSATP mode of that name: a locale may word the two apart.
-    if (groupScope === 'adjacent_local') addFirst(msg('Collinear groups'), groups);
+    if (groupScope === 'adjacent_local') addRow(rows, 'Collinear groups', groups, tx('number of groups in a block', 'Collinear groups'));
     else addRow(rows, 'Similarity groups', groups, tx('number of groups in a block', 'Similarity groups'));
   } else {
     addFirst(msg('Similarity group'), orthogroupId);

@@ -987,8 +987,8 @@ test('sentences with a count or a qualifier are whole keys, and none is built fr
     'This tool runs entirely in your browser.', 'It uses WebAssembly (Pyodide).',
     '{feature} where a qualifier matches “{pattern}”', 'Any feature where a qualifier matches “{pattern}”',
     'All features that share:',
-    'Room kept toward the center for the inner tracks: {px} px.',
-    'Room kept toward the center for the inner tracks, among them GC content, GC skew, and the scale: {px} px.',
+    'Room kept toward the center for the inside tracks: {px} px.',
+    'Room kept toward the center for the inside tracks (among them GC content, GC skew, and the scale): {px} px.',
     'number of groups in a block\u0004Similarity groups'
   ]) assert.ok(keys.has(key), key);
   for (const key of [

@@ -7003,7 +7003,7 @@ export const createAppSetup = () => {
       rebindAnnotationRecords();
       if (listMode !== 'linear') return;
       invalidateLinearComparisonArtifacts(state.drawingOfMode('linear'), { preserveLosatCacheInfo: true });
-      similarityAlignmentActions?.clearForMutation?.(msg('drawn records changed.'));
+      similarityAlignmentActions?.clearForMutation?.(msg('records to draw changed.'));
     },
     removeSource: removeRecordSource,
     askRemoveSource: askRecordFileRemoval,

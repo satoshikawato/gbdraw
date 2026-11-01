@@ -537,17 +537,17 @@ test('a Circular placement names the room the GC rows keep inside it and their r
   const both = layout({ reason: 'CENTER_RESERVED', innerPx: 190, outerPx: 386, keptInsidePx: 67, keptInsideTracks: 'gc_content,gc_skew' });
   assert.equal(both.context.keptInsideTracks, 'gc_content,gc_skew');
   assert.match(both.summary, new RegExp('^A circular track does not fit\\. The Center Reserved Radius limits the inside tracks\\. .* Available band: 190–386 px\\. '
-    + 'Room kept toward the center for the inner tracks, among them GC content and GC skew: 67 px\\. '
+    + 'Room kept toward the center for the inside tracks \\(among them GC content and GC skew\\): 67 px\\. '
     + `${gcRemedies}$`));
   // Review N-1: the Depth row that shares the room (tests/test_circular_definition_fit.py, lambda + Depth) is not
   // a named row, so the sentence does not give all of the room to the GC rows.
   const depth = layout({ reason: 'CENTER_RESERVED', innerPx: 213, outerPx: 386, keptInsidePx: 91, keptInsideTracks: 'gc_content,gc_skew' });
-  assert.match(depth.summary, / Room kept toward the center for the inner tracks, among them GC content and GC skew: 91 px\. To make room, /);
+  assert.match(depth.summary, / Room kept toward the center for the inside tracks \(among them GC content and GC skew\): 91 px\. To make room, /);
   const skew = layout({ reason: 'CANNOT_FIT', innerPx: 156, outerPx: 386, keptInsidePx: 34, keptInsideTracks: 'gc_skew' });
-  assert.match(skew.summary, / Available band: 156–386 px\. Room kept toward the center for the inner tracks, among them GC skew: 34 px\. To make room, do one of the following\. Select Hide GC Skew, or reduce GC Skew Width \(with Custom Track Slots on, the row width\)\.$/);
+  assert.match(skew.summary, / Available band: 156–386 px\. Room kept toward the center for the inside tracks \(among them GC skew\): 34 px\. To make room, do one of the following\. Select Hide GC Skew, or reduce GC Skew Width \(with Custom Track Slots on, the row width\)\.$/);
   // Room kept for other rows is a fact, without a remedy.
   assert.match(layout({ reason: 'CANNOT_FIT', innerPx: 156, outerPx: 386, keptInsidePx: 34 }).summary,
-    / Available band: 156–386 px\. Room kept toward the center for the inner tracks: 34 px\.$/);
+    / Available band: 156–386 px\. Room kept toward the center for the inside tracks: 34 px\.$/);
   // OV-1276: scale ticks that do not fit beside the center reservation offer the scale's control.
   const ticks = layout({ reason: 'CENTER_RESERVED', innerPx: 123, outerPx: 386, slotTrack: 'ticks' });
   assert.equal(ticks.context.slotTrack, 'ticks');
