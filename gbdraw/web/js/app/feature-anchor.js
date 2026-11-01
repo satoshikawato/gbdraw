@@ -64,6 +64,8 @@ import { computed, ref } from '../utils/reactivity.js';
  * @property {(input: { committed: CommittedCanonicalSession, plan: null, translations: FeatureAnchorTranslation[],
  *   orientations: { recordKey: string, reverseComplement: boolean }[] }) => CommittedCanonicalSession} projectPlacement
  *   The candidate Session: `committed` with these record translations and orientations, and no alignment plan.
+ * @property {() => readonly unknown[]} recordTranslations The record translations drawn now (reactive):
+ *   the notice after Apply holds only while they are the ones Apply wrote, so Undo retires it.
  */
 
 const STATUSES = new Set(['reference', 'aligned', 'unmatched']);
@@ -114,7 +116,8 @@ const previewLine = (record, index) => {
 
 /** @param {FeatureAnchorPorts} ports */
 export const createFeatureAnchorAction = ({
-  materializedSession, hasAlignmentPlan, runHelperOperation, resolveOperation, runPlacement, notePlanReplaced, projectPlacement
+  materializedSession, hasAlignmentPlan, runHelperOperation, resolveOperation, runPlacement, notePlanReplaced, projectPlacement,
+  recordTranslations
 }) => {
   /** @type {Ref<string>} */
   const selector = ref('');
@@ -124,8 +127,18 @@ export const createFeatureAnchorAction = ({
   const preview = ref(null);
   /** @type {Ref<Record<string, unknown> | null>} */
   const error = ref(null);
-  /** @type {Ref<string>} */
-  const notice = ref('');
+  /** @type {Ref<{ text: string, written: FeatureAnchorTranslation[] }>} */
+  const noticeState = ref({ text: '', written: [] });
+  // The notice holds while the records are where Apply put them: Undo, a drag, or a Load retires it.
+  const notice = computed(() => {
+    const { text, written } = noticeState.value;
+    const drawn = recordTranslations();
+    const holds = drawn.length === written.length && written.every((entry, index) => {
+      const current = drawn[index];
+      return isObject(current) && current.recordKey === entry.recordKey && current.x === entry.x && current.y === entry.y;
+    });
+    return holds ? text : '';
+  });
   let actionId = 0;
   const busy = computed(() => status.value === 'resolving' || status.value === 'applying');
   const previewLines = computed(() => (preview.value ? preview.value.reply.records.map(previewLine) : []));
@@ -148,7 +161,7 @@ export const createFeatureAnchorAction = ({
     const expected = ++actionId;
     preview.value = null;
     error.value = null;
-    notice.value = '';
+    noticeState.value = { text: '', written: [] };
     status.value = 'resolving';
     try {
       const canonical = materializedSession();
@@ -175,17 +188,29 @@ export const createFeatureAnchorAction = ({
     const current = preview.value;
     if (!current || status.value !== 'reviewing') return { status: 'rejected' };
     const expected = ++actionId;
-    const committed = materializedSession();
-    if (JSON.stringify(committed.renderRequest) !== current.request) {
+    /** @type {CommittedCanonicalSession} */
+    let canonical;
+    /** @type {boolean} */
+    let clearsAlignment;
+    // A Result that changed or is gone since the preview (a live edit, a Load) refuses Apply
+    // with the reason, and the action returns to idle.
+    try {
+      /** @type {CommittedCanonicalSession | null} */
+      let committed = null;
+      try { committed = materializedSession(); } catch { committed = null; }
+      if (!committed || JSON.stringify(committed.renderRequest) !== current.request) {
+        throw diagnosticError('INPUT_INVALID', { field: 'anchor_feature', reason: 'ANCHOR_STALE' });
+      }
+      clearsAlignment = hasAlignmentPlan();
+      canonical = projectPlacement({ committed, plan: null,
+        translations: current.reply.recordTranslations,
+        orientations: committed.renderRequest.records.map((record) => ({ recordKey: record.recordKey,
+          reverseComplement: canonicalRecordReverseComplement(record) })) });
+    } catch (cause) {
       cancel();
-      publishError(diagnosticError('INPUT_INVALID', { field: 'anchor_feature', reason: 'ANCHOR_STALE' }));
-      return { status: 'stale' };
+      publishError(cause);
+      return { status: 'refused' };
     }
-    const clearsAlignment = hasAlignmentPlan();
-    const canonical = projectPlacement({ committed, plan: null,
-      translations: current.reply.recordTranslations,
-      orientations: committed.renderRequest.records.map((record) => ({ recordKey: record.recordKey,
-        reverseComplement: canonicalRecordReverseComplement(record) })) });
     status.value = 'applying';
     /** @type {{ status?: string, error?: unknown } | null | undefined} */
     let outcome;
@@ -194,7 +219,8 @@ export const createFeatureAnchorAction = ({
     if (expected !== actionId) return { status: 'stale' };
     if (outcome?.status === 'ok') {
       if (clearsAlignment) notePlanReplaced(msg('records aligned at a feature.'));
-      notice.value = t('Records aligned at {selector}.', { selector: current.reply.selector });
+      noticeState.value = { text: t('Records aligned at {selector}.', { selector: current.reply.selector }),
+        written: current.reply.recordTranslations };
       preview.value = null;
       status.value = 'idle';
       return { status: 'ok' };

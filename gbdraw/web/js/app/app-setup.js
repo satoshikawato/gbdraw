@@ -5053,7 +5053,8 @@ export const createAppSetup = () => {
     resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_FEATURE_ANCHOR,
     runPlacement: ({ canonical, label }) => runCommittedCanonicalCandidate({ canonical, label, alignmentResetReceipt: null }),
     notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
-    projectPlacement: projectCommittedSimilarityAlignment
+    projectPlacement: projectCommittedSimilarityAlignment,
+    recordTranslations: () => state.linearRecordTranslations.value
   });
   // Generate asks about Upload pairs without a file: each pair's row
   // takes its own file; Skip sets the pairs still without one to No comparison
