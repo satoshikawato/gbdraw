@@ -23,9 +23,13 @@ import json
 import shutil
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 from typing import TypedDict
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - Python 3.10
+    import tomli as tomllib
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WASM_DIR = REPO_ROOT / "gbdraw" / "web" / "wasm" / "losat"

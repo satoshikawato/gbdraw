@@ -5,7 +5,10 @@ from __future__ import annotations
 import importlib.util
 import shutil
 import sys
+import types
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _SPEC = importlib.util.spec_from_file_location(
@@ -15,6 +18,20 @@ assert _SPEC is not None and _SPEC.loader is not None
 build_tool = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = build_tool
 _SPEC.loader.exec_module(build_tool)
+
+
+def test_the_tool_loads_on_python_3_10_with_tomli(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Python 3.10 has no tomllib; the tool must fall back to tomli, which
+    # pyproject.toml installs there (OV-2406).
+    tomli = types.ModuleType("tomli")
+    monkeypatch.setitem(sys.modules, "tomli", tomli)
+    monkeypatch.setitem(sys.modules, "tomllib", None)
+    monkeypatch.setattr(sys, "version_info", (3, 10, 0, "final", 0))
+    spec = importlib.util.spec_from_file_location("record_losat_wasm_build_py310", build_tool.__file__)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.tomllib is tomli
 
 
 def test_shipped_wasm_files_match_the_manifest() -> None:
