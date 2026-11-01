@@ -30,7 +30,7 @@ assert.equal(notSession.summary, 'This file is not a gbdraw Session: it is not v
 // Every other Session reason keeps its known correction.
 const obsoleteSlots = normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'TRACK_SCHEMA' } },
   { operation: 'session-load' });
-assert.match(obsoleteSlots.summary, /Recreate Custom Track Slots with the current schema\..*Load a supported Session file/);
+assert.match(obsoleteSlots.summary, /Recreate Custom Track Slots with the current schema\./);
 assert.equal(operationErrorTitle('session-load'), 'Session not loaded');
 // OV-1253: a Session version this app does not read is named with the versions
 // it reads, in the CLI's words (gbdraw/session_io.py `validate_session`); the
@@ -867,4 +867,51 @@ test('a refused rule commit names what to change and offers no Retry (OV-644)', 
     ['RULE_INPUTS_CHANGED', 'evaluateRules', 'rule-validation', ['retry']]);
   assert.equal(gaveUp.summary, 'The Specific rules file was not applied: colors, color rules, the Legend, or the'
     + ' diagram\'s inputs changed while it was applied. Retry the table import.');
+});
+
+// A rejected file never loads, so the advice names another file; it belongs to
+// a load only, and "schema" is not a field anyone can find on the screen.
+test('the Session load advice follows a load reason, and no message names the schema field', () => {
+  const advice = 'Load a Session file that this version of gbdraw supports.';
+  const summary = (reason, operation) => normalizeUserFacingError(
+    { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason } }, { operation }).summary;
+  for (const reason of ['SESSION_TOO_NEW', 'SESSION_VERSION_UNSUPPORTED', 'SESSION_TOO_OLD', 'SESSION_FORMAT', 'SESSION_FIELDS']) {
+    assert.ok(summary(reason, 'session-load').includes(advice), reason);
+  }
+  assert.ok(summary('FIELDS', 'session-load').includes(advice));
+  for (const [reason, operation] of [['TRACK_SCHEMA', 'session-load'], ['TRACK_SCHEMA', 'generate'], ['FIELDS', 'generate'], ['RECORDS_REQUIRED', 'generate']]) {
+    assert.ok(!summary(reason, operation).includes(advice), `${reason} ${operation}`);
+  }
+  for (const reason of ['SESSION_TOO_NEW', 'TRACK_SCHEMA', 'FIELDS']) {
+    for (const operation of ['session-load', 'generate']) assert.doesNotMatch(summary(reason, operation), /Field:/);
+  }
+});
+
+// A setting the user types or chooses is named as its control is, on each channel that reaches the message.
+test('a field a user can type or choose is named by its control label', () => {
+  const labels = (source) => normalizeUserFacingError(source).summary.match(/Field: (.*?)\. /)?.[1];
+  for (const [message, label] of [
+    ['Protein BLASTP Pairwise max hits must be a positive integer.', 'Pairwise display max hits'],
+    ['Protein BLASTP max hits per protein for groups must be a positive integer.', 'Max hits per protein for groups'],
+    ['Collinear minimum anchors must be a positive integer.', 'Min block genes'],
+    ['Collinear maximum unit gap must be a non-negative integer.', 'Max unit gap'],
+    ['Collinear maximum diagonal drift must be a non-negative integer.', 'Diagonal drift'],
+    ['Collinear maximum conflicts in merge gap must be a non-negative integer.', 'Merge conflicts'],
+    ['Collinear maximum paralog links per orthogroup must be a positive integer.', 'Paralog links per group'],
+    ['Protein BLASTP Max target seqs must be a positive integer or None.', 'LOSATP Max target seqs'],
+    ['Collinear orthogroup inference must be a boolean.', 'Build similarity groups with within-record searches'],
+    ['Circular multi-record size mode must be one of: auto, linear, equal.', 'Record Size Mode'],
+    ['Linear track layout must be one of: above, middle, below.', 'Track Layout'],
+    ['Linear label placement must be one of: auto, above_feature.', 'Label Placement'],
+    ['Protein BLASTP mode must be one of: pairwise, orthogroup, collinear.', 'LOSATP mode']
+  ]) assert.equal(labels(new Error(message)), label, message);
+  for (const [field, label] of [
+    ['collinear_merge_orientation', 'Merge orientation'], ['collinear_unit_mode', 'Unit mode'], ['collinear_anchor_mode', 'Anchor mode'],
+    ['collinear_search_scope', 'Search between'], ['collinear_color_mode', 'Color mode'], ['overflow', 'Overflow behavior'],
+    ['layer', 'Annotation layer'], ['set_id', 'Annotation set'], ['anchor_slot', 'Enabled drawable anchor'], ['to_slot', 'Extend to'],
+    ['renderer', 'Renderer'], ['side', 'Track placement'], ['spacing', 'Spacing'], ['depth_min', 'Depth Min'], ['depth_max', 'Depth Max'],
+    ['min_depth', 'Depth Min'], ['max_depth', 'Depth Max'], ['conservation_ring_gap', 'Ring Gap'],
+    ['multi_record_min_radius_ratio', 'Min Radius Ratio'], ['multi_record_column_gap_ratio', 'Column Gap Ratio'],
+    ['multi_record_row_gap_ratio', 'Row Gap Ratio']
+  ]) assert.equal(labels({ code: 'INPUT_INVALID', stage: 'request-validation', context: { field, reason: 'FINITE' } }), label, field);
 });

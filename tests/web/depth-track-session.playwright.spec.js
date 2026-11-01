@@ -1712,7 +1712,7 @@ test('Session preflight rejects invalid canonical data without resetting live st
     await expect.poll(() => page.evaluate(() => window.__SESSION_REJECTIONS__)).toBe(count);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
     await expect(page.getByRole('alert', { name: 'Session not loaded' }))
-      .toContainText('Load a supported Session file, or save it again with this version of gbdraw.');
+      .toContainText('Load a Session file that this version of gbdraw supports.');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
       code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason }
     });
@@ -3001,7 +3001,7 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
     'The Source recipe uses only the original source files.'
   );
   await expect(page.locator('.run-info-panel')).toContainText('Exact replay file:');
-  await expect(page.locator('.run-info-panel')).not.toContainText('Source recipe helper files:');
+  await expect(page.locator('.run-info-panel')).not.toContainText('Source recipe helper file');
   const sourceCopy = page.locator('.run-info-panel').getByTitle('Copy command');
   const replayCopy = page.locator('.run-info-panel').getByTitle('Copy exact replay command');
   await sourceCopy.click();
@@ -3031,10 +3031,10 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
       downloadBundle: {
         ...app.lastRunInfo.downloadBundle,
         description:
-          'Source recipe helper files: browser-comparison.tsv. Exact replay file: out.gbdraw-session.json.',
+          'Source recipe helper file: browser-comparison.tsv. Exact replay file: out.gbdraw-session.json.',
         descriptionParts: [
           {
-            text: 'Source recipe helper files: {files}.',
+            text: 'Source recipe helper file: {files}.',
             params: { files: { text: 'browser-comparison.tsv', verbatim: true } }
           },
           {
@@ -3046,7 +3046,7 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
     };
   });
   await expect(page.locator('.run-info-panel')).toContainText(
-    'Source recipe helper files: browser-comparison.tsv.'
+    'Source recipe helper file: browser-comparison.tsv.'
   );
 
   await page.evaluate(() => {

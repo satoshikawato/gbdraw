@@ -554,7 +554,7 @@ current Result stays in the Preview until the next successful Generate.
 
 | Source | **Record** choice | Next Generate |
 |---|---|---|
-| One record | **Automatic (only record)** | One diagram of that record |
+| One record | **Automatic (single record)** | One diagram of that record |
 | Several records | **All records (separate diagrams)** | One diagram per record |
 | Several records | One listed record | One diagram of that record |
 
@@ -1325,7 +1325,7 @@ runtime starts. A legend row that a color rule draws under the name of a
 generated row in another color (the two are then numbered, such as `rRNA (1)`
 and `rRNA (2)`) belongs to that rule: renaming it or changing its color edits
 the rule, and the generated row stays a legend-only row. The color scope dialog offers **This feature only** first, then,
-under **All features with the same**, the matching **Color rule**, **Legend item**, **Label**, and **Source label**
+under **All features that share:**, the matching **Color rule**, **Legend item**, **Label**, and **Source label**
 with their feature counts. **Label** and **Source label** become
 one anchored qualifier rule only when the selected features share one feature
 type, qualifier, and value and that rule matches exactly the intended loaded

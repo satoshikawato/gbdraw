@@ -20,7 +20,8 @@ import {
   CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, pluralTranslation, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
   uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
-import { memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { COLLINEAR_COLOR_MODE_TEXT, memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { COLLINEARITY_COLOR_MODES } from '../../tools/i18n/collinearity-words.generated.mjs';
 import { detectedTopologyNote } from '../../gbdraw/web/js/services/record-display-model.js';
 import { CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, catalogStatus } from '../../tools/i18n/catalogs.mjs';
 import {
@@ -910,12 +911,40 @@ test('the record row names the topology its file declares through one key per va
     ['(file: circular)', '(file: linear)', '(file: unknown)', '(file: unknown)']);
 });
 
+// A "Choose" sentence names the options as their controls show them: a label of
+// the page, or of the two option tables the page lists (comparison-ui, pairwise-match-popup).
+test('each name in a Choose sentence of an error is a control label', () => {
+  const read = (path) => readFileSync(new URL(`../../gbdraw/web/${path}`, import.meta.url), 'utf8');
+  const labels = [read('index.html'), read('js/app/comparison-ui.js'), read('js/app/pairwise-match-popup.js')].join('\n');
+  const sentences = [...read('js/utils/error-normalization.js').matchAll(/: '(Choose [A-Z][^']*)\.'/g)].map((match) => match[1])
+    .filter((sentence) => !sentence.includes(' for '));
+  assert.ok(sentences.length >= 11, String(sentences.length));
+  const isLabel = (name) => labels.includes(`'${name}')`) || labels.includes(`>${name}</option>`);
+  const missing = sentences.flatMap((sentence) => sentence.slice('Choose '.length).split(/, or |, | or /)
+    .filter((name) => !isLabel(name)).map((name) => `${sentence}: ${name}`));
+  assert.deepEqual(missing, []);
+});
+
+// Python's color modes reach the shared table through the generator, so a new mode fails here.
+test('the Collinear color mode table lists the modes Python writes', () => {
+  assert.deepEqual(Object.keys(COLLINEAR_COLOR_MODE_TEXT), [...COLLINEARITY_COLOR_MODES]);
+  const page = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  assert.match(page, /v-for="\[value, label\] in collinearColorModeOptions"/);
+  assert.doesNotMatch(page, /<option value="orientation_identity">/);
+});
+
+// The copied summary uses the keys of the popup that shows it.
+test('the copied Collinear block summary holds no English of its own', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/app/pairwise-match-popup.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /summaryText: `Collinear block:/);
+});
+
 // The sentences of the Source recipe name no mode: the recipe is of one diagram.
-test('the record topology a file declares and the option values of an error are whole keys that name what the UI shows', async () => {
+test('the record topology a file declares and the option values of an error are whole keys', async () => {
   const keys = [...(await sourceKeys()).keys.keys()];
   for (const key of [
     '(file: circular)', '(file: linear)', '(file: unknown)',
-    'Choose Error on overflow, Compress, or Clip.', 'Choose Foreground or Underlay.', 'Choose Auto, Linear, or Equal.',
+    'Choose Error on overflow, Compress, or Clip.', 'Choose Foreground or Underlay.', 'Choose Auto (Default), Linear, or Equal.',
     'Choose Above, Features on axis, or Below.', 'Choose Auto or Above Feature.',
     'Choose Pairwise matches, Similarity groups, or Collinear blocks.', 'Choose Adjacent pairs or All records.',
     'Choose Auto, CDS, or Locus.', 'Choose All hits or Reciprocal best hits.', 'Choose Strand or Gene order.',

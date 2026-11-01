@@ -26,8 +26,8 @@ write-up of a release.
   language. All translations are still LLM drafts.
 - Fixed: Web UI: English text that no translation could correct. Raw values such as `circular`,
   `plus`, `reverse`, and `compress` now show as the names the controls use, screen-reader labels of
-  file inputs are translated, counted sentences read correctly at 1, messages name settings as the
-  settings pane does, and internal words in messages are gone.
+  file inputs are translated, counted sentences read correctly at 1, messages name a setting you can
+  type or choose as its control does, and several words from the code in messages are replaced.
 - Fixed: in the Web UI record popup, the Alignment line of a record that was
   not moved shows the reason as its label reads, for example "Not moved:
   Skipped by user"; it was lower-cased, which damaged German nouns and the

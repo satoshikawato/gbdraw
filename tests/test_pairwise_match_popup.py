@@ -748,6 +748,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         }}
         assert(block.pairCount === 2 && block.pairsLabel === '2 gene pairs', JSON.stringify(block));
         assert(block.summaryText.startsWith('Collinear block: '), block.summaryText);
+        assert(block.summaryText.includes(' vs '), block.summaryText);
         const queryRows = block.genePairs.map((pair) => pair.query);
         const subjectRows = block.genePairs.map((pair) => pair.subject);
         assert(queryRows.length === 2, JSON.stringify(queryRows));

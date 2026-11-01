@@ -3311,9 +3311,7 @@
                                         <div>
                                             <label class="linear-primary-label mb-1">{{ t('Color mode') }}</label>
                                             <select v-model="losat.blastp.collinearColorMode" :aria-label="t('Collinear color mode')" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
-                                                <option value="average_identity">{{ t('Average identity') }}</option>
-                                                <option value="orientation">{{ t('Orientation') }}</option>
-                                                <option value="orientation_identity">{{ t('Orientation + identity') }}</option>
+                                                <option v-for="[value, label] in collinearColorModeOptions" :key="value" :value="value">{{ tm(label) }}</option>
                                             </select>
                                         </div>
                                     </div>
@@ -6176,7 +6174,7 @@
                      role="status" aria-live="polite" aria-atomic="true" data-testid="feature-identity-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
                     <p v-if="featureIdentityNoticeSummary.dormant">{{ tn(featureIdentityNoticeSummary.dormant, '{count} feature edit applies to a feature outside the current crop or display; it applies again when that feature is drawn.', '{count} feature edits apply to features outside the current crop or display; they apply again when those features are drawn.') }}</p>
-                    <p v-if="featureIdentityNoticeSummary.removed">{{ tn(featureIdentityNoticeSummary.removed, 'Removed {count} feature edit whose feature is no longer in the input files.', 'Removed {count} feature edits whose features are no longer in the input files.') }}</p>
+                    <p v-if="featureIdentityNoticeSummary.removed">{{ tn(featureIdentityNoticeSummary.removed, 'Removed {count} feature edit whose feature is no longer in the records in use.', 'Removed {count} feature edits whose features are no longer in the records in use.') }}</p>
                     <p v-if="featureIdentityNoticeSummary.unmatched" class="flex flex-wrap items-center gap-2">
                         <span>{{ tn(featureIdentityNoticeSummary.unmatched, '{count} feature edit names a feature the source does not have.', '{count} feature edits name features the source does not have.') }}</span>
                         <button type="button" class="btn btn-secondary text-xs h-7 px-2" @click="removeUnmatchedFeatureEdits" :disabled="!semanticMutationAvailable">{{ tn(featureIdentityNoticeSummary.unmatched, 'Remove {count} unmatched feature edit', 'Remove {count} unmatched feature edits') }}</button>

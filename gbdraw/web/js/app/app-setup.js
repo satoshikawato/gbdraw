@@ -149,7 +149,7 @@ import {
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { appliedFeatureColors, COMPARISON_COLOR_KEYS, colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
-import { groupCountText } from './pairwise-match-popup.js';
+import { COLLINEAR_COLOR_MODE_TEXT, groupCountText } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
 import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
@@ -7246,6 +7246,7 @@ export const createAppSetup = () => {
     selectedResultIndex,
     failedGeneratePreservedResult,
     generationFailureRecovery,
+    collinearColorModeOptions: Object.entries(COLLINEAR_COLOR_MODE_TEXT),
     importedComparisonIntent: drawingMember('importedComparisonIntent'),
     importedComparisonNeedsResolution,
     importedComparisonActionLabels,

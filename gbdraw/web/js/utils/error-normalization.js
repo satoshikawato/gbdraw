@@ -47,7 +47,7 @@ const REASONS = Object.freeze({
   TRACK_LANE: 'Use a supported feature lane and matching side.', CONSERVATION_SOURCE: 'Use the supported conservation workflow and select a comparison source.',
   TICK_PARAMETER: 'Use large_tick_interval instead of tick_interval.', FEATURES_COUNT: 'Use the supported number of feature tracks for this layout.',
 
-  CIRCULAR_MULTI_RECORD_SIZE_MODE: 'Choose Auto, Linear, or Equal.',
+  CIRCULAR_MULTI_RECORD_SIZE_MODE: 'Choose Auto (Default), Linear, or Equal.',
   LINEAR_TRACK_LAYOUT: 'Choose Above, Features on axis, or Below.',
   LINEAR_LABEL_PLACEMENT: 'Choose Auto or Above Feature.',
   PROTEIN_BLASTP_MODE: 'Choose Pairwise matches, Similarity groups, or Collinear blocks.',
@@ -258,9 +258,19 @@ const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Pairwise display 
   depth_width_circular: 'Depth Width', gc_content_width_circular: 'GC Content Width',
   gc_content_radius_circular: 'GC Content Radius', gc_skew_width_circular: 'GC Skew Width',
   gc_skew_radius_circular: 'GC Skew Radius', match_height: 'Match height',
-  conservation_ring_width: 'Ring Width', conservation_ring_gap: 'Comparison ring gap',
-  center_reserved_radius: 'Center Reserved Radius', multi_record_min_radius_ratio: 'Minimum radius ratio',
-  multi_record_column_gap_ratio: 'Column gap ratio', multi_record_row_gap_ratio: 'Row gap ratio' });
+  conservation_ring_width: 'Ring Width', conservation_ring_gap: 'Ring Gap',
+  center_reserved_radius: 'Center Reserved Radius', multi_record_min_radius_ratio: 'Min Radius Ratio',
+  multi_record_column_gap_ratio: 'Column Gap Ratio', multi_record_row_gap_ratio: 'Row Gap Ratio',
+  orthogroup_member_max_hits: 'Max hits per protein for groups', protein_blastp_candidate_limit: 'LOSATP Max target seqs',
+  protein_blastp_mode: 'LOSATP mode', collinear_min_anchors: 'Min block genes', collinear_max_unit_gap: 'Max unit gap',
+  collinear_max_diagonal_drift: 'Diagonal drift', collinear_max_conflicts: 'Merge conflicts',
+  collinear_max_paralog_links_per_orthogroup: 'Paralog links per group',
+  collinear_infer_orthogroups: 'Build similarity groups with within-record searches', collinear_search_scope: 'Search between',
+  collinear_unit_mode: 'Unit mode', collinear_anchor_mode: 'Anchor mode', collinear_merge_orientation: 'Merge orientation',
+  collinear_color_mode: 'Color mode', circular_multi_record_size_mode: 'Record Size Mode', linear_track_layout: 'Track Layout',
+  linear_label_placement: 'Label Placement', overflow: 'Overflow behavior', layer: 'Annotation layer', set_id: 'Annotation set',
+  anchor_slot: 'Enabled drawable anchor', to_slot: 'Extend to', renderer: 'Renderer', side: 'Track placement', spacing: 'Spacing',
+  depth_min: 'Depth Min', depth_max: 'Depth Max', min_depth: 'Depth Min', max_depth: 'Depth Max' });
 const CODES = new Set(Object.keys(DEFINITIONS));
 // Python exception classes the adapter may name for RENDER_FAILED (class names, never messages).
 const EXCEPTION_TYPES = new Set(`ValidationError ParseError ConfigError ExportError GbdrawError ZeroDivisionError
@@ -316,7 +326,7 @@ const PHRASES = Object.freeze({
   innerLabelRoom: 'Inner labels need about {ratio} times the room around the map.',
   position: 'At character {position}.', requiredColumns: 'Required columns: {count}.', loadedRecords: 'Loaded records: {count}.',
   exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
-  schema: 'Load a supported Session file, or save it again with this version of gbdraw.',
+  schema: 'Load a Session file that this version of gbdraw supports.',
   notASession: 'This file is not a gbdraw Session: it is not valid JSON.',
   // OV-2240: Save refuses a Session that Load could not open (the cap of services/session-file.js).
   sessionNotSaved: 'The Session was not saved: it is {size} MB expanded, and the browser loads at most {limit} MB.',
@@ -738,6 +748,17 @@ const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, 
   return null;
 };
 
+// The reasons only a Session load gives. `FIELDS` also comes from other work,
+// so it counts as a load only in the Load Session operation.
+const SESSION_LOAD_REASONS = new Set(['SESSION_FORMAT', 'SESSION_FIELDS', 'SESSION_TOO_NEW', 'SESSION_VERSION_UNSUPPORTED', 'SESSION_TOO_OLD']);
+/**
+ * @param {{ code: string, operation: string }} result
+ * @param {string | undefined} field
+ * @param {string | undefined} reason
+ */
+const sessionLoadRejected = ({ code, operation }, field, reason) => code === 'INPUT_INVALID' && field === 'schema'
+  && (SESSION_LOAD_REASONS.has(String(reason)) || (reason === 'FIELDS' && operation === 'session-load'));
+
 // OV-1274, OV-1276: the room a Circular placement keeps below its band for the
 // inside rows after it (other rows may share it), and the off controls and widths
 // of the failed row and the kept rows that have them.
@@ -819,7 +840,7 @@ export const normalizeUserFacingError = (value, {
     featureName && { text: PHRASES.feature, params: { feature: featureName } },
     // `undefined > 1` is false: with no count there is no line.
     /** @type {number} */ (featureCount) > 1 && { text: PHRASES.featuresAffected, params: { count: /** @type {number} */ (featureCount) } },
-    field && { text: PHRASES.field, params: { field: FIELD_LABELS[field] ? { text: FIELD_LABELS[field] } : field } },
+    field && field !== 'schema' && { text: PHRASES.field, params: { field: FIELD_LABELS[field] ? { text: FIELD_LABELS[field] } : field } },
     sessionVersionGuidance(result.context)
       || (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null),
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
@@ -833,7 +854,7 @@ export const normalizeUserFacingError = (value, {
     recordCount !== undefined && { text: PHRASES.loadedRecords, params: { count: recordCount } },
     exceptionType && { text: PHRASES.exception, params: { type: exceptionType } },
     result.operation === 'align' && field === 'direction' && reason === 'SOURCE_VIEW_CONFLICT' && { text: PHRASES.applyAgain },
-    result.code === 'INPUT_INVALID' && field === 'schema' && { text: PHRASES.schema }
+    sessionLoadRejected(result, field, reason) && { text: PHRASES.schema }
   ];
   // A file chosen in Load Session that is not JSON is not a Session;
   // every other Session reason keeps its correction.

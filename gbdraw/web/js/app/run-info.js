@@ -1876,7 +1876,7 @@ const requireExactRecords = async (renderRequest, files) => {
     if (record.cardinality === 'exactly_one') continue;
     const source = sourceSpec(record);
     if (await files.resourceRecordCount(source.ids.at(-1), source.kind === 'genbank' ? 'genbank' : 'fasta') !== 1) {
-      throw identityTableUnavailable(msg('feature placements and feature edits require each input file to hold exactly one record.'));
+      throw identityTableUnavailable(msg('feature placements and feature edits require each input file to hold exactly one record or to have exactly one selected.'));
     }
   }
 };
@@ -2333,12 +2333,14 @@ export const buildRunInfo = ({
     sourceAvailable
       ? (
           sourceHelpers.length > 0
-            ? { text: msg('Source recipe helper files: {files}.'), params: { files: helperFileList(sourceHelpers) } }
+            ? { text: sourceHelpers.length === 1 ? msg('Source recipe helper file: {files}.') : msg('Source recipe helper files: {files}.'),
+              params: { files: helperFileList(sourceHelpers) } }
             : { text: msg('The Source recipe uses only the original source files.') }
         )
       : { text: msg('The Source recipe is unavailable.') },
     exact && exact.helperFiles.length > 0
-      ? { text: msg('Exact replay file: {files}.'), params: { files: helperFileList(exact.helperFiles) } }
+      ? { text: exact.helperFiles.length === 1 ? msg('Exact replay file: {files}.') : msg('Exact replay files: {files}.'),
+        params: { files: helperFileList(exact.helperFiles) } }
       : { text: msg('No Exact replay file is available.') }
   ];
 

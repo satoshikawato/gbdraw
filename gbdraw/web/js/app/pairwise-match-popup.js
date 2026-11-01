@@ -1797,8 +1797,10 @@ const buildBlockOrthogroups = ({
 // Collinear block popup (UX-B01): one summary line, the gene pairs, and the
 // block facts behind "Details".
 const COLLINEAR_ORIENTATION_TEXT = Object.freeze({ plus: msg('Same orientation'), minus: msg('Inverted') });
-// The option labels of Color mode in the settings.
-const COLLINEAR_COLOR_MODE_TEXT = Object.freeze({
+// The labels of Color mode: the settings list them (`collinearColorModeOptions`)
+// and the block popup shows the one a match carries. A test holds them to
+// Python's modes (COLLINEARITY_COLOR_MODES, generated).
+export const COLLINEAR_COLOR_MODE_TEXT = Object.freeze({
   average_identity: msg('Average identity'), orientation: msg('Orientation'), orientation_identity: msg('Orientation + identity')
 });
 /**
@@ -1957,7 +1959,7 @@ const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }
     pairsLabel,
     groupHeading,
     genePairs,
-    summaryText: `Collinear block: ${query.text} vs ${subject.text}; ${facts.join('; ')}`,
+    summaryText: `${tm(MATCH_KIND_TITLES.collinear)}: ${query.text} ${t('vs {record}', { record: subject.text })}; ${facts.join('; ')}`,
     pairsCopyText: [
       ['Query record', 'Query location', 'Query protein ID', 'Query product',
         'Subject record', 'Subject location', 'Subject protein ID', 'Subject product',

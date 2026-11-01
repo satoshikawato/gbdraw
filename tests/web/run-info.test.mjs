@@ -1754,3 +1754,11 @@ test('OV-1678: in Simplified Chinese the Run info shows its notes, files descrip
     await setUiLocale(SOURCE_LOCALE);
   }
 });
+
+test('the download description counts its helper files', () => {
+  const exactFile = (name) => ({ name, slot: 'generatedFiles.canonical_render_session', kind: 'generated' });
+  const description = (paths) => buildRunInfo({ mode: 'circular', exactReplayArgs: ['--session', ...paths],
+    fileMetadata: Object.fromEntries(paths.map((path) => [path, exactFile(`${path.slice(1)}.json`)])) }).downloadBundle.descriptionParts.at(-1);
+  assert.equal(description(['/one']).text, 'Exact replay file: {files}.');
+  assert.equal(description(['/one', '/two']).text, 'Exact replay files: {files}.');
+});
