@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
-import { joinSentences, listText, msg, t, tm, tn } from '../utils/i18n.js';
+import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { recordTranslationsFor } from '../services/linear-record-layout.js';
@@ -249,6 +249,9 @@ const directionExclusionLabels = Object.freeze({
   unusable_anchor: msg('The selected anchor cannot be displayed.'),
   unknown_strand: msg('The selected anchor has no known direction; it is never guessed.')
 });
+
+/** @param {boolean} reversed Whether a record reads opposite to its source file. */
+const recordDirectionWord = (reversed) => reversed ? tx('record direction', 'reverse') : tx('record direction', 'forward');
 
 /** @param {unknown} arrow */
 const arrowLabel = (arrow) => arrow === 1 ? t('right-facing') : arrow === -1 ? t('left-facing') : t('unknown');
@@ -1900,6 +1903,7 @@ export const createSimilarityAlignmentActions = ({
       return {recordKey: delta.recordKey, label: recordName?.label || t('Unavailable record'),
         name: shortRecordName(recordName) || t('Unavailable record'),
         current: baseReverseComplement(record), restored: delta.before,
+        currentWord: recordDirectionWord(baseReverseComplement(record)), restoredWord: recordDirectionWord(delta.before),
         laterManualEdit: baseReverseComplement(record) !== delta.after};
     });
     const count = targets.length;

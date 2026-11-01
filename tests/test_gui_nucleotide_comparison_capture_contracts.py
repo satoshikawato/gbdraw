@@ -259,7 +259,7 @@ def test_nucleotide_capture_accessibility_labels_are_in_the_public_ui() -> None:
         'aria-label="Advanced comparison and layout"',
         ':data-edge-key="pair.edgeKey"',
         'label="BLAST TSV"',
-        ':data-input-aria-label="`BLAST TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"',
+        ":data-input-aria-label=\"t('BLAST TSV for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })\"",
         ">Raw LOSAT filename</label>",
         "t('Raw LOSAT filename for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })",
         "t('Save Raw LOSAT TSV for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })",

@@ -1101,6 +1101,9 @@ test('Align A then B resets to B before, including reference and only affected l
   assert.equal(f.actions.resetPreview.value.targets[0].name,'Exact displayed record');
   assert.equal(f.actions.resetPreview.value.directionsLabel,'Positions and directions (2 records)');
   assert.equal(f.actions.resetPreview.value.targets[0].laterManualEdit,true);
+  // The direction words go through the catalogs (the template never holds them).
+  const {current,restored,currentWord,restoredWord}=f.actions.resetPreview.value.targets[0];
+  assert.deepEqual([currentWord,restoredWord],[current,restored].map(reverse=>reverse?'reverse':'forward'));
   assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'ok');
   assert.deepEqual(f.state.linearSeqs.map(row=>row.region_reverse),[...afterA.slice(0,2),true]);
   assert.equal(f.state.similarityAlignmentResetReceipt.value,null);

@@ -450,8 +450,8 @@ test('a record the alignment did not move shows its reason label unchanged', () 
     alignment: { recordKey: 'uid-1', ...alignment }
   }), { kind: 'record-definition', recordIndex: 0, recordId: 'BGC0000708' })
     .facts.find((fact) => fact.label === 'Alignment').value;
-  assert.equal(alignmentOf({ status: 'skipped', rationaleLabel: 'Skipped by user' }), 'Not moved (Skipped by user)');
-  assert.equal(alignmentOf({ status: 'skipped', rationaleLabel: '' }), 'Not moved (skipped)');
+  assert.equal(alignmentOf({ status: 'skipped', rationaleLabel: 'Skipped by user' }), 'Not moved: Skipped by user');
+  assert.equal(alignmentOf({ status: 'skipped', rationaleLabel: '' }), 'Not moved');
 });
 
 // The record's place in a similarity alignment and a sequence alignment (the

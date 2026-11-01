@@ -623,7 +623,7 @@ test('OV-1476: no key names a control, row or syntax the UI does not have', asyn
 // sentence; each case is a whole sentence of its own.
 test('OV-1477: track, mode, control and setting names are not placeholders inside sentences', () => {
   const keys = sourceCalls().map((call) => call.key).filter(Boolean);
-  const inserted = [/\{track\}/, /\{control\}/, /No \{mode\} Result/, /^\{setting\} removes/];
+  const inserted = [/\{track\}/, /\{control\}/, /No \{mode\} Result/, /^\{setting\} removes/, /\{mode\} track/, /\{topology\}/];
   assert.deepEqual(keys.filter((key) => inserted.some((pattern) => pattern.test(key))), []);
   for (const key of [
     'Hide GC content?', 'Keep GC skew', 'Hidden: Hide GC Content is on.', 'No Circular Result yet. Configure settings and click Generate.',
@@ -845,4 +845,84 @@ test('OV-1690: the record list sentence is one key, joined to the next with the 
   assert.match(block, /<i18n-text :text="t\('\{file\}: \{records\}\.'\)">/);
   assert.match(block, /sentenceSeparator\(\) \+ settingApplicationSentence\('inputs'\)/);
   assert.doesNotMatch(block, /<\/span>\.|<\/strong>:/);
+});
+
+// A literal with words as a branch of a shown expression is English in every
+// locale: `{{ on ? 'reverse' : 'forward' }}`. A literal inside a call
+// (`t('…')`, `settingApplicationText(on ? 'live' : 'generate')`) and the right
+// side of a comparison are not branches.
+/**
+ * The word literals an expression can show: its whole value, or a branch of its
+ * outermost conditional.
+ * @param {string} expression
+ * @returns {string[]}
+ */
+const bareEnglishBranches = (expression) => {
+  /** @type {string[]} */
+  const found = [];
+  let depth = 0;
+  let afterBranch = true;
+  for (let at = 0; at < expression.length; at += 1) {
+    const char = expression[at];
+    if (char === '\'' || char === '"' || char === '`') {
+      let end = at + 1;
+      while (end < expression.length && expression[end] !== char) end += expression[end] === '\\' ? 2 : 1;
+      const literal = expression.slice(at, end + 1);
+      if (depth === 0 && afterBranch && /[A-Za-z]/.test(literal.replace(/\$\{[^}]*\}/g, ''))) found.push(literal);
+      afterBranch = false;
+      at = end;
+    } else if (/\s/.test(char)) {
+      continue;
+    } else {
+      if ('([{'.includes(char)) depth += 1;
+      if (')]}'.includes(char)) depth -= 1;
+      afterBranch = depth === 0 && (char === ':' || (char === '?' && expression[at + 1] !== '.' && expression[at + 1] !== '?' && expression[at - 1] !== '?'));
+    }
+  }
+  return found;
+};
+const SHOWN_BINDING = /\s:(aria-label|title|placeholder|label|alt|data-input-aria-label)="([^"]*)"/g;
+
+test('the bare English branch check finds a literal branch and leaves calls and comparisons alone', () => {
+  assert.deepEqual(bareEnglishBranches("on ? 'reverse' : 'forward'"), ["'reverse'", "'forward'"]);
+  assert.deepEqual(bareEnglishBranches("a ? t('A') : b === 'ready' ? t('B') : 'Align…'"), ["'Align…'"]);
+  assert.deepEqual(bareEnglishBranches('`Depth TSV for sequence ${index + 1}`'), ['`Depth TSV for sequence ${index + 1}`']);
+  assert.deepEqual(bareEnglishBranches("label(on ? 'live' : 'generate')"), []);
+  assert.deepEqual(bareEnglishBranches("a ? t('A') : t('B')"), []);
+  assert.deepEqual(bareEnglishBranches("index ? ', ' : ''"), []);
+  assert.deepEqual(bareEnglishBranches('unit ? ` ${unit}` : \'\''), []);
+  assert.deepEqual(bareEnglishBranches("a?.b ?? c"), []);
+});
+
+test('no mustache or shown attribute of index.html has a bare English literal as a branch', () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const lineOf = (/** @type {number} */ index) => html.slice(0, index).split('\n').length;
+  const found = [
+    ...[...html.matchAll(/\{\{([\s\S]*?)\}\}/g)].map((match) => [match.index, match[1]]),
+    ...[...html.matchAll(SHOWN_BINDING)].map((match) => [match.index, match[2]])
+  ].flatMap(([index, expression]) => bareEnglishBranches(String(expression)).map((literal) => `index.html:${lineOf(Number(index))}: ${literal}`));
+  assert.deepEqual(found, []);
+});
+
+// The sentences of the Source recipe name no mode: the recipe is of one diagram.
+test('the record topology a file declares and the option values of an error are whole keys that name what the UI shows', async () => {
+  const keys = [...(await sourceKeys()).keys.keys()];
+  for (const key of [
+    '(file: circular)', '(file: linear)', '(file: unknown)',
+    'Choose Error on overflow, Compress, or Clip.', 'Choose Foreground or Underlay.', 'Choose Auto, Linear, or Equal.',
+    'Choose Above, Features on axis, or Below.', 'Choose Auto or Above Feature.',
+    'Choose Pairwise matches, Similarity groups, or Collinear blocks.', 'Choose Adjacent pairs or All records.',
+    'Choose Auto, CDS, or Locus.', 'Choose All hits or Reciprocal best hits.', 'Choose Strand or Gene order.',
+    'Choose Average identity, Orientation, or Orientation + identity.',
+    'Depth TSV for file {file}, series {series}', 'Depth TSV for sequence {sequence}, series {series}',
+    'BLAST TSV for #{from} to #{to}',
+    'vs {record}', 'Not moved: {reason}', 'Not moved', 'Session file: {path} could not be read and is left out.',
+    'record direction\u0004forward', 'record direction\u0004reverse', 'collinearity block kind\u0004syntenic'
+  ]) assert.ok(keys.includes(key), key);
+  const stale = [
+    /^Choose error, compress/, /^Choose foreground or/, /^Choose auto,/, /^Choose above, middle/, /^Choose auto or above_feature/,
+    /^Choose pairwise,/, /^Choose adjacent or all/, /^Choose all or rbh/, /^Choose strand or order/, /^Choose average_identity/,
+    /^vs$/, /^Not moved \(/, /^skipped$/, /\{name\} \(\{path\}\)/
+  ];
+  assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
 });

@@ -1489,15 +1489,15 @@ const TRACK_PARAM_KEY_NAMES = [...new Set(Object.values(TRACK_PARAM_KEYS)
  */
 const validateTrackParams = (mode, renderer, params) => {
   if (!isPlainObject(params)) {
-    throw recipeUnavailable(msg('a canonical {mode} track slot has malformed params.'), { mode });
+    throw recipeUnavailable(msg('a canonical track slot has malformed params.'));
   }
   const allowed = TRACK_PARAM_KEYS[mode]?.[renderer];
   if (!allowed) {
-    throw recipeUnavailable(msg('{mode} track renderer "{renderer}" is not accepted by the current CLI.'), { mode, renderer });
+    throw recipeUnavailable(msg('track renderer "{renderer}" is not accepted by the current CLI.'), { renderer });
   }
   const unsupported = Object.keys(params).find((key) => !allowed.has(key));
   if (unsupported) {
-    throw recipeUnavailable(msg('{mode} track field "{field}" cannot be projected losslessly.'), { mode, field: `params.${unsupported}` });
+    throw recipeUnavailable(msg('track field "{field}" cannot be projected losslessly.'), { field: `params.${unsupported}` });
   }
 };
 
@@ -1507,10 +1507,10 @@ const validateTrackParams = (mode, renderer, params) => {
  */
 const validateStructuredTrackSlot = (slot, mode) => {
   if (!isPlainObject(slot)) {
-    throw recipeUnavailable(msg('a canonical {mode} track slot is malformed.'), { mode });
+    throw recipeUnavailable(msg('a canonical track slot is malformed.'));
   }
   if (slot.kind !== `${mode}TrackSlot`) {
-    throw recipeUnavailable(msg('a canonical {mode} track slot has an invalid kind.'), { mode });
+    throw recipeUnavailable(msg('a canonical track slot has an invalid kind.'));
   }
   const id = typeof slot.id === 'string' ? slot.id.trim() : '';
   const renderer = typeof slot.renderer === 'string' ? slot.renderer.trim() : '';
@@ -1521,7 +1521,7 @@ const validateStructuredTrackSlot = (slot, mode) => {
     !id || !renderer || typeof slot.enabled !== 'boolean' || !Number.isInteger(slot.z)
     || (slot.side !== null && !allowedSides.has(slot.side))
   ) {
-    throw recipeUnavailable(msg('a canonical {mode} track slot has invalid identity fields.'), { mode });
+    throw recipeUnavailable(msg('a canonical track slot has invalid identity fields.'));
   }
   validateTrackParams(mode, renderer, slot.params);
   return slot;
@@ -1533,11 +1533,10 @@ const validateStructuredTrackSlot = (slot, mode) => {
 // the CLI would cut, re-split, or rename makes the recipe unavailable.
 /**
  * @param {string} token
- * @param {CanonicalRenderRequest['mode']} mode
  * @param {{ id: string, renderer: string, exact?: boolean }} identity
  */
-const assertCliSlotTokenLossless = (token, mode, { id, renderer, exact = false }) => {
-  const unavailable = () => recipeUnavailable(msg('a {mode} track slot contains text (",", ":", "@", or " #") that the CLI slot grammar cannot carry.'), { mode });
+const assertCliSlotTokenLossless = (token, { id, renderer, exact = false }) => {
+  const unavailable = () => recipeUnavailable(msg('a track slot contains text (",", ":", "@", or " #") that the CLI slot grammar cannot carry.'));
   const text = String(token).trim();
   const commentIndex = [' #', '\t#'].map((marker) => text.indexOf(marker)).find((index) => index >= 0);
   if (!text || text.startsWith('#') || commentIndex !== undefined) throw unavailable();
@@ -1556,7 +1555,7 @@ const assertCliSlotTokenLossless = (token, mode, { id, renderer, exact = false }
     });
   if (readId !== String(id).trim() || readRenderer !== String(renderer).trim()) throw unavailable();
   if (entries.some(([key, value]) => !key || !value)) {
-    throw recipeUnavailable(msg('a canonical {mode} track slot has a malformed option.'), { mode });
+    throw recipeUnavailable(msg('a canonical track slot has a malformed option.'));
   }
   const reread = `${readId}:${readRenderer}${entries.length
     ? `@${entries.map(([key, value]) => `${key}=${value}`).join(',')}`
@@ -1573,17 +1572,17 @@ const trackSlotForRecipe = (slot, mode, options) => {
   if (typeof slot === 'string') {
     const text = slot.trim();
     if (!text) {
-      throw recipeUnavailable(msg('a canonical {mode} track slot cannot be empty.'), { mode });
+      throw recipeUnavailable(msg('a canonical track slot cannot be empty.'));
     }
     try {
       const parsed = mode === 'circular'
         ? parseCircularTrackSlotSpec(text)
         : parseLinearTrackSlotSpec(text);
-      assertCliSlotTokenLossless(text, mode, parsed);
+      assertCliSlotTokenLossless(text, parsed);
       validateTrackParams(mode, parsed.renderer, parsed.params || {});
     } catch (error) {
       if (error instanceof SourceRecipeUnavailable) throw error;
-      throw recipeUnavailable(msg('a canonical {mode} track slot is not accepted by the current CLI.'), { mode });
+      throw recipeUnavailable(msg('a canonical track slot is not accepted by the current CLI.'));
     }
     return text;
   }
@@ -1607,9 +1606,9 @@ const trackSlotForRecipe = (slot, mode, options) => {
     }
   } catch (error) {
     if (error instanceof SourceRecipeUnavailable) throw error;
-    throw recipeUnavailable(msg('a canonical {mode} track slot cannot be projected losslessly.'), { mode });
+    throw recipeUnavailable(msg('a canonical track slot cannot be projected losslessly.'));
   }
-  assertCliSlotTokenLossless(token, mode, { id: slot.id, renderer: slot.renderer, exact: true });
+  assertCliSlotTokenLossless(token, { id: slot.id, renderer: slot.renderer, exact: true });
   return token;
 };
 
@@ -1641,15 +1640,15 @@ const appendTrackOptions = (args, request) => {
   const slots = tracks[field];
   if (slots === null || slots === undefined) {
     if (tracks[axisField] !== null && tracks[axisField] !== undefined) {
-      throw recipeUnavailable(msg('{mode} track axis placement has no explicit track slots.'), { mode: request.mode });
+      throw recipeUnavailable(msg('track axis placement has no explicit track slots.'));
     }
     return;
   }
   if (!Array.isArray(slots)) {
-    throw recipeUnavailable(msg('canonical {mode} track slots must be an array or null.'), { mode: request.mode });
+    throw recipeUnavailable(msg('canonical track slots must be an array or null.'));
   }
   if (slots.length === 0) {
-    throw recipeUnavailable(msg('an explicit empty {mode} track list means no tracks, which the current CLI cannot express.'), { mode: request.mode });
+    throw recipeUnavailable(msg('an explicit empty track list means no tracks, which the current CLI cannot express.'));
   }
   const option = request.mode === 'circular' ? '--circular_track_slot' : '--linear_track_slot';
   slots.forEach((slot) => appendOption(args, option, trackSlotForRecipe(slot, request.mode, options)));

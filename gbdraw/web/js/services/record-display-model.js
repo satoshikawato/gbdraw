@@ -5,11 +5,18 @@
 // (app/record-display-options.js) edit it.
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { t } from '../utils/i18n.js';
+import { msg, t, tm } from '../utils/i18n.js';
 
 /** @import { RecordEntryInput } from './record-options.js' */
 /** @import { FieldReading } from '../utils/field-reading.js' */
 /** @typedef {'circular' | 'linear'} RecordDisplayScope */
+// The topology a file declares, one whole key each (`detectedTopology` of services/record-discovery.js).
+const DETECTED_TOPOLOGY_NOTES = Object.freeze({
+  circular: msg('(file: circular)'), linear: msg('(file: linear)'), unknown: msg('(file: unknown)')
+});
+/** @param {unknown} topology a record row's `detectedTopology` */
+export const detectedTopologyNote = (topology) => tm(topology === 'circular' || topology === 'linear'
+  ? DETECTED_TOPOLOGY_NOTES[topology] : DETECTED_TOPOLOGY_NOTES.unknown);
 /**
  * @typedef {{
  *   anchor: 'five-prime' | 'midpoint' | 'three-prime' | null,

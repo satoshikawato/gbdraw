@@ -2816,8 +2816,8 @@
                                             :model-value="track.status.file"
                                             @update:model-value="setLinearSourceDepthFile(source, track.index, $event)"
                                             :data-input-aria-label="sourceIndex === 0 && track.index === 0
-                                                ? 'Depth TSV'
-                                                : `Depth TSV for file ${sourceIndex + 1}, series ${track.index + 1}`"
+                                                ? t('Depth TSV')
+                                                : t('Depth TSV for file {file}, series {series}', { file: sourceIndex + 1, series: track.index + 1 })"
                                             :test-id="`linear-source-depth-${sourceIndex + 1}-${track.index + 1}`"
                                         ></file-uploader>
                                         <button
@@ -2926,7 +2926,7 @@
                                                 accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
                                                 :model-value="getLinearDepthFile(seq, track.index)"
                                                 @update:model-value="setLinearDepthFile(seq, track.index, $event)"
-                                                :data-input-aria-label="`Depth TSV for sequence ${idx + 1}, series ${track.index + 1}`"
+                                                :data-input-aria-label="t('Depth TSV for sequence {sequence}, series {series}', { sequence: idx + 1, series: track.index + 1 })"
                                             ></file-uploader>
                                         </div>
                                     </div>
@@ -3475,7 +3475,7 @@
                                                 label="BLAST TSV"
                                                 :data-linear-comparison-pair-upload="pair.edgeKey"
                                                 data-comparison-focus="pair-upload"
-                                                :data-input-aria-label="`BLAST TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"
+                                                :data-input-aria-label="t('BLAST TSV for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })"
                                                 small
                                                 accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*"
                                                 :model-value="pair.draft?.fileActive ? pair.draft.file : null"
@@ -7184,7 +7184,7 @@
                                 <section class="match-lead" data-collinear-summary>
                                     <div><span class="font-semibold">{{ clickedPairwiseMatch.block.query.recordId }}</span> {{ clickedPairwiseMatch.block.query.intervalText }}<span v-if="clickedPairwiseMatch.block.query.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.query.lengthText }})</span></div>
                                     <div v-if="clickedPairwiseMatch.block.query.tableInterval" class="match-lead-note">{{ t('Table coordinates {interval}', { interval: clickedPairwiseMatch.block.query.tableInterval }) }}</div>
-                                    <div><span class="match-muted">{{ t('vs') }}{{ ' ' }}</span><span class="font-semibold">{{ clickedPairwiseMatch.block.subject.recordId }}</span> {{ clickedPairwiseMatch.block.subject.intervalText }}<span v-if="clickedPairwiseMatch.block.subject.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.subject.lengthText }})</span></div>
+                                    <div><i18n-text :text="t('vs {record}')" text-class="match-muted"><template #record><span class="font-semibold">{{ clickedPairwiseMatch.block.subject.recordId }}</span></template></i18n-text> {{ clickedPairwiseMatch.block.subject.intervalText }}<span v-if="clickedPairwiseMatch.block.subject.lengthText" class="match-muted"> ({{ clickedPairwiseMatch.block.subject.lengthText }})</span></div>
                                     <div v-if="clickedPairwiseMatch.block.subject.tableInterval" class="match-lead-note">{{ t('Table coordinates {interval}', { interval: clickedPairwiseMatch.block.subject.tableInterval }) }}</div>
                                     <div class="match-lead-facts">{{ clickedPairwiseMatch.block.facts.join(' · ') }}</div>
                                     <div class="match-actions">
@@ -8749,7 +8749,7 @@
                             <ul :aria-label="t('Alignment direction restoration targets')" class="mt-1 space-y-0.5">
                                 <li v-for="target in similarityAlignmentResetPreview.targets" :key="target.recordKey" class="flex items-baseline gap-2 text-slate-800">
                                     <strong class="min-w-0 truncate" :title="target.label">{{ target.name }}:</strong>
-                                    <span class="shrink-0">{{ target.current ? 'reverse' : 'forward' }} → {{ target.restored ? 'reverse' : 'forward' }}<span v-if="target.laterManualEdit" class="text-amber-800">{{ ' ' }}{{ t('· changed after Align') }}</span></span>
+                                    <span class="shrink-0">{{ target.currentWord }} → {{ target.restoredWord }}<span v-if="target.laterManualEdit" class="text-amber-800">{{ ' ' }}{{ t('· changed after Align') }}</span></span>
                                 </li>
                             </ul>
                             <p class="mt-2 text-slate-600">{{ t('Direction changes you made after Align on these records are replaced.') }}</p>
@@ -9195,7 +9195,7 @@
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <label class="flex items-center gap-1.5"><input ref="topology" data-history-managed type="checkbox" class="form-checkbox" :disabled="!controlAvailable" :checked="surface.effectiveCircular" @change="controller.setTopology(row, $event.target.checked)" :aria-label="t('Circular record {record} {selector}', { record: row.recordId, selector: row.selector })"> {{ t('Circular record') }}</label>
-      <span class="ui-hint">{{ t('(file: {topology})', { topology: row.detectedTopology }) }}</span>
+      <span class="ui-hint">{{ detectedTopologyNote(row.detectedTopology) }}</span>
       <button v-if="draft.topologyOverride != null" data-history-managed type="button" :disabled="!controlAvailable" class="ml-auto text-[10px] text-blue-600" @click="$refs.topology.focus(); controller.setTopology(row, null)">{{ t('Reset to detected') }}</button>
     </div>
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">

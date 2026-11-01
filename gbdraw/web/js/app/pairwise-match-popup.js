@@ -1796,6 +1796,21 @@ const buildBlockOrthogroups = ({
 // Collinear block popup (UX-B01): one summary line, the gene pairs, and the
 // block facts behind "Details".
 const COLLINEAR_ORIENTATION_TEXT = Object.freeze({ plus: msg('Same orientation'), minus: msg('Inverted') });
+// The option labels of Color mode in the settings.
+const COLLINEAR_COLOR_MODE_TEXT = Object.freeze({
+  average_identity: msg('Average identity'), orientation: msg('Orientation'), orientation_identity: msg('Orientation + identity')
+});
+/**
+ * How a value Python writes on a match shows in the UI language; a value the
+ * table does not list (a newer Python) shows as written. Own keys only:
+ * `constructor` and `__proto__` name inherited members, not values (OV-322).
+ * @param {Readonly<Record<string, string>>} table
+ * @param {unknown} value
+ */
+const shownMatchValue = (table, value) => {
+  const key = normalizeText(value).toLowerCase();
+  return Object.hasOwn(table, key) ? tm(table[key]) : normalizeText(value);
+};
 const COLLINEAR_BLOCK_NOTE = msg('Block envelopes may include intergenic sequence and genes that are not anchors.');
 
 /** @param {number} value */
@@ -1841,9 +1856,10 @@ const collinearDetailRows = (element, descriptor) => {
   const identity = finiteNumber(descriptor.identity);
   const alignedLength = finiteNumber(attr(element, 'data-alignment-length'));
   addRow(rows, msg('Block ID'), descriptor.collinearityBlockId);
-  addRow(rows, msg('Kind'), attr(element, 'data-collinearity-block-kind'));
-  addRow(rows, msg('Orientation'), attr(element, 'data-collinearity-orientation'));
-  addRow(rows, msg('Color mode'), attr(element, 'data-collinearity-color-mode'));
+  // Python's words (`COLLINEARITY_BLOCK_KINDS`, generated for tools/i18n/source-keys.mjs): an unknown one shows as written.
+  addRow(rows, msg('Kind'), tmx('collinearity block kind', attr(element, 'data-collinearity-block-kind')));
+  addRow(rows, msg('Orientation'), shownMatchValue(COLLINEAR_ORIENTATION_TEXT, attr(element, 'data-collinearity-orientation')));
+  addRow(rows, msg('Color mode'), shownMatchValue(COLLINEAR_COLOR_MODE_TEXT, attr(element, 'data-collinearity-color-mode')));
   if (descriptor.matchKind === 'collinear') {
     addRow(rows, msg('Average identity'), identity === null ? descriptor.identity : `${identity.toFixed(2)}%`);
     // LOSATP anchors: the summed protein alignment length.
@@ -1922,11 +1938,7 @@ const genePairCells = (row) => (row
 const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }) => {
   const query = blockSpanView(descriptor.queryRecordId, descriptor.queryInterval, descriptor.queryTableInterval);
   const subject = blockSpanView(descriptor.subjectRecordId, descriptor.subjectInterval, descriptor.subjectTableInterval);
-  const orientation = normalizeText(descriptor.orientation).toLowerCase();
-  // Own keys only: `constructor` and `__proto__` name inherited members, not orientations (OV-322).
-  const orientationText = Object.hasOwn(COLLINEAR_ORIENTATION_TEXT, orientation)
-    ? tm(COLLINEAR_ORIENTATION_TEXT[/** @type {keyof typeof COLLINEAR_ORIENTATION_TEXT} */ (orientation)])
-    : orientation;
+  const orientationText = shownMatchValue(COLLINEAR_ORIENTATION_TEXT, descriptor.orientation);
   const identity = finiteNumber(descriptor.identity);
   const identityText = identity === null ? '' : t('{identity}% identity', { identity: Math.round(identity) });
   const pairCount = genePairs.filter((pair) => pair.query && pair.subject).length;
@@ -2259,7 +2271,7 @@ export const buildMatchPopupPayload = (
   addRow(summaryRows, msg('Query table interval'), descriptor.queryTableInterval);
   addRow(summaryRows, msg('Subject interval'), sInterval);
   addRow(summaryRows, msg('Subject table interval'), descriptor.subjectTableInterval);
-  addRow(summaryRows, msg('Orientation'), descriptor.orientation);
+  addRow(summaryRows, msg('Orientation'), shownMatchValue(COLLINEAR_ORIENTATION_TEXT, descriptor.orientation));
   if (matchKind === 'homology') {
     addRow(summaryRows, msg('Ring label'), attr(element, 'data-track-label'));
     const rawSourceIndex = integerAttr(element, 'data-source-index');
@@ -2358,14 +2370,15 @@ const formatPairwiseMatchHoverRows = ({
    */
   const addFirst = (id, value) => addRow(rows, id, value);
   if (!matchKind) return rows;
+  const kindText = shownMatchValue(MATCH_KIND_TITLES, matchKind);
   if (matchKind === 'orthogroup') {
-    addFirst(msg('Kind'), matchKind);
+    addFirst(msg('Kind'), kindText);
     addFirst(msg('Similarity group'), orthogroupId);
     addFirst(msg('Display name'), displayName);
     addFirst(msg('Genes'), memberCount);
     return rows.slice(0, 6);
   }
-  addFirst(msg('Kind'), matchKind);
+  addFirst(msg('Kind'), kindText);
   addFirst(msg('Identity'), identity);
   addFirst(msg('Query'), queryInterval);
   addFirst(msg('Subject'), subjectInterval);

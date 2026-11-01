@@ -187,7 +187,7 @@ const WORDING = {
   // The Session document (services/session-authority.js `readSessionDocument`).
   'session-part-dropped': (repairs) => repairs.map(({ path }) => (
     SESSION_PART_WORDING[path]?.(path)
-    ?? t('Session file: {name} ({path}) could not be read and is left out.', { name: path, path }))),
+    ?? t('Session file: {path} could not be read and is left out.', { path }))),
   'session-field-dropped': (repairs) => {
     const items = cappedList(repairs.map(({ path, label }) => (label === undefined ? path : `${path} (${label})`)));
     return [tn(repairs.length,
