@@ -8,8 +8,15 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-losat-cache-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
-// losat-cache.js reads the generated schema constants and the shipped LOSAT build.
-for (const module of ['services/losat-cache.js', 'contracts/schema.generated.js', 'services/losat-build.generated.js']) {
+// losat-cache.js reads the generated schema constants, the typed-result shapes (checked with contract-shape.js),
+// and the shipped LOSAT build.
+for (const module of [
+  'services/losat-cache.js',
+  'contracts/schema.generated.js',
+  'contracts/derived-result-shape.generated.js',
+  'utils/contract-shape.js',
+  'services/losat-build.generated.js'
+]) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', module), join(tempRoot, module));
 }
 
@@ -635,7 +642,23 @@ for (const [label, entry, admitted] of [
   }), false],
   ['an unblocked anchor', typedZeroHitEntry('collinear', (result) => { result.value.fields.unblockedAnchors = [{}]; }), false],
   ['the other mode\'s result', typedZeroHitEntry('orthogroup', (result) => { result.kind = 'result'; }), false],
-  ['an older typed schema', typedZeroHitEntry('orthogroup', (result) => { result.schema = 2; }), false]
+  ['an older typed schema', typedZeroHitEntry('orthogroup', (result) => { result.schema = 2; }), false],
+  // OV-1926 (R17-19 (a)): the result must decode as Python's typed codec decodes it, not only carry its envelope.
+  ['a typed result without its fields', typedZeroHitEntry('orthogroup', (result) => { result.value.fields = {}; }), false],
+  ['a nested typed result without its fields', typedZeroHitEntry('collinear', (result) => {
+    result.value.fields.orthogroups.fields = {};
+  }), false],
+  ['an unknown result field', typedZeroHitEntry('orthogroup', (result) => { result.value.fields.extra = {}; }), false],
+  ['another key beside the typed result', typedZeroHitEntry('orthogroup', (result) => { result.extra = 1; }), false],
+  ['an array where a mapping is typed', typedZeroHitEntry('orthogroup', (result) => {
+    result.value.fields.orthogroups = [];
+  }), false],
+  ['another nested result type', typedZeroHitEntry('collinear', (result) => {
+    result.value.fields.orthogroups.type = 'OrthogroupResult';
+  }), false],
+  ['a Collinear result without its orthogroups', typedZeroHitEntry('collinear', (result) => {
+    result.value.fields.orthogroups = null;
+  }), true]
 ]) {
   assert.equal(cache.validateDerivedProteinReferences(entry, manifest), admitted, `zero-hit: ${label}`);
 }

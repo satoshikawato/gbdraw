@@ -1,17 +1,22 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, answerLoadRepairs, answerSessionTitle, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, NEWEST_READ_SESSION_VERSION, assertDiagramWorkerIdle, assertLegacyLoadConvertedOnce, generateAndWaitForResult, openApp, reveal, answerChoicePrompt, answerLoadRepairs, answerSessionTitle, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const snapshot = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
   const { buildConfigData, getCommittedCanonicalSession } = await import('./js/services/config.js');
+  const circular = s.drawingList().find(drawing => drawing.mode === 'circular');
+  const linear = s.drawingList().find(drawing => drawing.mode === 'linear');
   return {
     mode: s.mode.value, config: buildConfigData(s.activeDrawing()),
-    circularSources: ['c_gb', 'c_gff', 'c_fasta'].map(key => Boolean(s.files[key])),
-    linearSources: s.linearSeqs.map(row => ['gb', 'gff', 'fasta'].map(key => Boolean(row[key]))),
+    // A mode the project has no drawing of (a new Session starts with a Circular one) holds no source.
+    circularSources: ['c_gb', 'c_gff', 'c_fasta'].map(key => Boolean(circular?.files[key])),
+    linearSources: (linear ? linear.linearSeqs : []).map(row => ['gb', 'gff', 'fasta'].map(key => Boolean(row[key]))),
     results: s.results.value.length, catalog: s.featureCatalog.value,
     committed: getCommittedCanonicalSession(), error: s.errorLog.value
   };
@@ -53,7 +58,9 @@ const loadFile = async (page, file, message = 'Session loaded') => {
   const input = page.locator('input[accept^=".json,"]');
   await input.setInputFiles(file);
   if (typeof message === 'string') {
-    await expect(page.locator('[data-app-notice]')).toContainText(message);
+    // A Session 27-44 Load converts through Python, which starts the diagram Worker first: without
+    // the CI Pyodide snapshot that alone takes about 5 s, the expect default.
+    await expect(page.locator('[data-app-notice]')).toContainText(message, { timeout: 120_000 });
     await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     return;
@@ -136,9 +143,9 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     assertSourceFree(await snapshot(page));
     await (await reveal(page.locator('#circular-label-mode'))).selectOption('both');
     await (await reveal(page.locator('#circular-track-preset'))).selectOption('middle');
-    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(page, { kind: 'linear' });
     await (await reveal(page.locator('#linear-show-labels'))).selectOption('all');
-    await page.getByRole('button', { name: 'Circular', exact: true }).click();
+    await showDrawing(page, { kind: 'circular' });
     const before = await snapshot(page);
     expect(before.config.form.labels_mode).toBe('both');
     expect(before.config.form.track_type).toBe('middle');
@@ -153,10 +160,10 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     const saved = await save(page, testInfo, 'first', { title: 'J08 settings' });
     expect(saved.document.version).toBe(CURRENT_SESSION_VERSION);
     expect(saved.document).not.toHaveProperty('runMetadata');
-    // Each mode's settings are its slice (Session 46).
-    for (const mode of ['circular', 'linear']) {
-      expect(saved.document.modes[mode].config.adv).not.toHaveProperty('linear_show_accession');
-      expect(saved.document.modes[mode].config.adv).not.toHaveProperty('linear_show_length');
+    // Each drawing's settings are its own (Session 49).
+    for (const id of ['circular', 'linear']) {
+      expect(savedDrawing(saved.document, id).config.adv).not.toHaveProperty('linear_show_accession');
+      expect(savedDrawing(saved.document, id).config.adv).not.toHaveProperty('linear_show_length');
     }
     assertSourceFree(await snapshot(page));
     await assertDiagramWorkerIdle(page);
@@ -173,11 +180,11 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     expect(after.config).toEqual(before.config);
     await assertDiagramWorkerIdle(restored);
     const again = await save(restored, testInfo, 'second');
-    expect(again.document.modes).toEqual(saved.document.modes);
+    expect(again.document.drawings).toEqual(saved.document.drawings);
     expect(again.document.resources).toEqual(saved.document.resources);
-    await restored.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(restored, { kind: 'linear' });
     expect((await snapshot(restored)).config.form.show_labels_linear).toBe('all');
-    await restored.getByRole('button', { name: 'Circular', exact: true }).click();
+    await showDrawing(restored, { kind: 'circular' });
     expect((await snapshot(restored)).config.form.labels_mode).toBe('both');
     await assertDiagramWorkerIdle(restored);
     // Original J08's real source/Generate/Undo/Redo suffix, with restored
@@ -188,7 +195,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     await restored.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(
       path.join(process.cwd(), 'tests/fixtures/sessions/cli-web-mito.gb'));
     await restored.waitForFunction(async () =>
-      (await import('./js/state.js')).state.circularRecordDiscovery.status !== 'loading');
+      (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status !== 'loading');
     await generateAndWaitForResult(restored);
     const generated = await snapshot(restored);
     expect(generated.committed.renderRequest.diagramOptions.configOverrides['canvas.circular.track_type']).toBe('middle');
@@ -236,23 +243,33 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   // Save writes the loaded Gallery request (schema 8) in the current schema.
   const promoted = { ...committed, schema: CURRENT_REQUEST_SCHEMA,
     diagramOptions: { ...committed.diagramOptions, featureOverrides: [] } };
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await settle(page);
   const inactive = await snapshot(page);
   expect(inactive.circularSources[0]).toBe(true);
   expect(inactive.linearSources.flat().some(Boolean)).toBe(false);
   // E1: Linear has no Result of its own, so it shows and exports none; Save
-  // still writes the Circular Result, and Load opens on Circular, which has one.
+  // still writes the Circular Result. The Linear drawing shown at Save has no
+  // file, changed setting, edit, or Result, so Save does not write it and Load
+  // opens the saved drawing of the previous tab, the Circular one (PD-OI-090
+  // 〔Save と Load〕, R16-8). Run metadata belongs to each drawing.
   expect(inactive.results).toBe(0);
   expect(await page.locator('.origin-top svg').count()).toBe(0);
   const inactiveSave = await save(page, testInfo, 'inactive-source');
-  expect(inactiveSave.document.renderRequest).toEqual(promoted);
-  expect(inactiveSave.document.runMetadata).toEqual(runMetadata);
+  expect(savedDrawing(inactiveSave.document, 'circular').renderRequest).toEqual(promoted);
+  expect(savedDrawing(inactiveSave.document, 'circular').runMetadata).toEqual(runMetadata);
+  expect(inactiveSave.document.drawings.map(drawing => drawing.id)).toEqual(['circular']);
+  expect(inactiveSave.document.ui.activeDrawingId).toBe('circular');
   await loadFile(page, inactiveSave.file);
-  expect(await page.evaluate(async () => {
+  const runState = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return { annotationWarnings: state.annotationWarnings.value, trackSlotGeometry: state.trackSlotResolvedGeometry.value };
-  })).toEqual(runMetadata);
+  });
+  expect(await runState()).toEqual(runMetadata);
+  await showDrawing(page, { kind: 'linear' });
+  expect(await runState()).toEqual({ annotationWarnings: [], trackSlotGeometry: null });
+  await showDrawing(page, { kind: 'circular' });
+  expect(await runState()).toEqual(runMetadata);
   expect((await snapshot(page)).circularSources[0]).toBe(true);
   expect((await snapshot(page)).committed.renderRequest).toEqual(promoted);
   const full = await save(page, testInfo, 'full-control', { again: true });
@@ -266,18 +283,24 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   // anything (BA-D25), and Cancel keeps the prior Session. A retired home that
   // the mode slice fills is dropped with no row (E-OD03), so that file loads as
   // the same Session.
-  const unbound = slot => `Input files: 1 entry of webFiles.bindings.${slot} could not be read and was dropped.`;
-  const requestDropped = 'Saved diagram: the settings of the saved diagram (renderRequest) could not be read.'
+  // A Session 49 Load names a drawing's value by its place in `drawings`.
+  const at = id => full.document.drawings.findIndex(drawing => drawing.id === id);
+  expect(full.document.drawings.map(drawing => drawing.id)).toEqual(['circular']);
+  const unbound = (slot, id = 'circular') => `Input files: 1 entry of drawings[${at(id)}].webFiles.bindings.${slot} could not be read and was dropped.`;
+  const requestDropped = `Saved diagram: the settings of the saved diagram (drawings[${at('circular')}].renderRequest) could not be read.`
     + ' The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.';
   const cases = [
+    ['config', d => { savedDrawing(d, 'circular').config.form = []; }, [`Settings: the value "[]" (drawings[${at('circular')}].config.form) cannot be used; its default is used.`]],
+    ['binding', d => { savedDrawing(d, 'circular').webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
+    ['version', d => { d.version = 999; }, { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: 999, latestSessionVersion: NEWEST_READ_SESSION_VERSION }],
+    // A top-level `config` is the pre-49 shape: the file takes the migrated path and opens the Circular drawing, not the one shown at Save.
+    // A Session 49 holds each drawing's settings in its drawing only (Session format).
+    ['retired-config', d => { d.config = structuredClone(savedDrawing(d, 'circular').config); }, 'Session loaded'],
     // A null request of a file that holds Results reads as a missing one (E-OD29).
-    ['null-request-with-result', d => { d.renderRequest = null; }, [requestDropped]],
-    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]],
-    ['config', d => { d.modes.circular.config.form = []; }, ['Settings: the value "[]" (modes.circular.config.form) cannot be used; its default is used.']],
-    ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
-    ['version', d => { d.version = 999; }, { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: 999, latestSessionVersion: CURRENT_SESSION_VERSION }],
-    // A Session 46 holds the draft in `modes` only (Session format).
-    ['retired-config', d => { d.config = structuredClone(d.modes.circular.config); }, 'Session loaded']
+    ['null-request-with-result', d => { savedDrawing(d, 'circular').renderRequest = null; }, [requestDropped]],
+    // Each drawing binds its own color table, so each saved drawing loses it;
+    // the unused Linear drawing is not saved (R16-8).
+    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]]
   ];
   for (const [name, mutate, expected] of cases) {
     const candidate = structuredClone(full.document);
@@ -294,24 +317,29 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     } else {
       error = (await loadFile(page, file, expected)) ?? null;
     }
-    expect(await snapshot(page), `${name}: complete state at Load completion`).toEqual({ ...before, error });
+    // A Load that succeeds opens the saved drawings only; the unused Linear drawing made above is not saved (R16-8),
+    // so the loaded project holds none until the next case makes it again.
+    const loaded = expected === 'Session loaded';
+    expect(await snapshot(page), `${name}: complete state at Load completion`)
+      .toEqual({ ...before, error, ...(loaded ? { linearSources: [] } : {}) });
     const after = await capture(page, testInfo, `kept-${name}`);
     await assertCoherent(after, `${name}: canceled, refused or same Load`);
     expect(after.completed.selected).toEqual(visual.completed.selected);
+    if (loaded) {
+      await showDrawing(page, { kind: 'linear' });
+      await showDrawing(page, { kind: 'circular' });
+    }
   }
-  const priorActivity = await getDiagramWorkerActivity(page);
   await loadFile(page, path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
   const replaced = await snapshot(page);
   assertSourceFree(replaced);
   expect(replaced.config.form.labels_mode).toBe('both');
   expect(replaced.config.form.track_type).toBe('middle');
   expect(await page.locator('.origin-top svg').count()).toBe(0);
-  const replacedActivity = await getDiagramWorkerActivity(page);
-  for (const field of ['constructions', 'initializations', 'helpers', 'runs']) {
-    expect(replacedActivity[field], `settings-only Load starts no Worker work: ${field}`).toBe(priorActivity[field]);
-  }
+  // A Session 27-44 Load makes one Python conversion and no render run.
+  await assertLegacyLoadConvertedOnce(page);
   const saved = await save(page, testInfo, 'replacement');
-  expect(saved.document.renderRequest).toBeNull();
+  expect(shownSavedDrawing(saved.document).renderRequest).toBeNull();
   expect(saved.document.resources).toEqual({});
 });
 
@@ -322,13 +350,14 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
   await openApp(page);
   // Distinct explicit values in each mode's drawing.
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.axis_stroke_color = '#13579b'; });
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await (await reveal(page.locator('#linear-show-labels'))).selectOption('all');
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.axis_stroke_color = '#2468ac'; });
   // Empty input rows can carry auxiliary depth files and retain their identity.
   await page.getByRole('button', { name: 'Add sequence', exact: true }).first().click();
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.linearSeqs[1].depth = new File(['chr1\t1\t10\n'], 'depth.tsv', { lastModified: 123 });
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
+    window.__GBDRAW_APP__.linearSeqs[1].depth = bound(new File(['chr1\t1\t10\n'], 'depth.tsv', { lastModified: 123 }));
   });
   const bytes = Buffer.from('CDS\tgene,product,locus_tag\r\n');
   await page.getByLabel('Priority File (TSV)', { exact: true }).setInputFiles({
@@ -336,10 +365,10 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
   });
   const original = await save(page, testInfo, 'profiles', { title: 'Profiles and priority' });
   await assertDiagramWorkerIdle(page);
-  const binding = original.document.webFiles.bindings.qualifier_priority;
+  const binding = savedDrawing(original.document, 'linear').webFiles.bindings.qualifier_priority;
   expect(Buffer.from(original.document.resources[binding.resourceId].data, 'base64')).toEqual(bytes);
-  expect(original.document.modes.circular.config.adv.axis_stroke_color).toBe('#13579b');
-  expect(original.document.modes.linear.config.adv.axis_stroke_color).toBe('#2468ac');
+  expect(savedDrawing(original.document, 'circular').config.adv.axis_stroke_color).toBe('#13579b');
+  expect(savedDrawing(original.document, 'linear').config.adv.axis_stroke_color).toBe('#2468ac');
   const context = await browser.newContext();
   try {
     const restored = await context.newPage();
@@ -351,12 +380,11 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
     expect(state.mode).toBe('linear');
     expect(state.config.adv.axis_stroke_color).toBe('#2468ac');
     const again = await save(restored, testInfo, 'profiles-again');
-    expect(again.document.modes).toEqual(original.document.modes);
-    expect(again.document.webFiles).toEqual(original.document.webFiles);
+    expect(again.document.drawings).toEqual(original.document.drawings);
     expect(again.document.resources).toEqual(original.document.resources);
-    await restored.getByRole('button', { name: 'Circular', exact: true }).click();
+    await showDrawing(restored, { kind: 'circular' });
     expect((await snapshot(restored)).config.adv.axis_stroke_color).toBe('#13579b');
-    await restored.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(restored, { kind: 'linear' });
     expect((await snapshot(restored)).config.adv.axis_stroke_color).toBe('#2468ac');
     await assertDiagramWorkerIdle(restored);
   } finally { await context.close(); }

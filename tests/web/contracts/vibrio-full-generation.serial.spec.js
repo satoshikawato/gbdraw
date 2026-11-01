@@ -255,9 +255,7 @@ const activeIntentSummary = (page) => page.evaluate(async () => {
   };
   const summary = {
     mode: state.mode.value,
-    inputType: state.mode.value === 'circular'
-      ? state.cInputType.value
-      : state.lInputType.value,
+    inputType: state.activeDrawing().inputType.value,
     palette: {
       selected: state.activeDrawing().selectedPalette.value,
       currentColorsSha256: await digest(state.activeDrawing().currentColors.value),

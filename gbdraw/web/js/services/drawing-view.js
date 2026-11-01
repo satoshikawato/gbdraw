@@ -16,6 +16,7 @@
 /** @import { ColorRulesSlice, ColorRulesView } from './drawing/color-rules.js' */
 /** @import { FeatureEditsSlice, FeatureEditsView } from './drawing/feature-edits.js' */
 /** @import { GroupNamesSlice, GroupNamesView } from './drawing/group-names.js' */
+/** @import { InputsSlice, InputsView } from './drawing/inputs.js' */
 /** @import { LabelTablesSlice, LabelTablesView } from './drawing/label-tables.js' */
 /** @import { PaintSlice, PaintView } from './drawing/paint.js' */
 /** @import { PaletteSlice, PaletteView } from './drawing/palette.js' */
@@ -26,10 +27,8 @@
  * The identity of a drawing, its key in `state.drawings`. A drawing's mode is
  * its `mode` member: code never reads a mode from an ID. Until a project holds
  * several drawings of one mode, each mode has one drawing, whose ID is the
- * mode's name, so a writer that knows only a mode (a mode button, a Session's
- * `ui.mode`, a Result's request) names the drawing of that mode through
- * `drawingIdOfMode`, the one constructor of an ID. The brand keeps a mode from
- * standing in for an ID unnoticed.
+ * mode's name; `allocateDrawingId` is the one constructor of an ID. The brand
+ * keeps a mode from standing in for an ID unnoticed.
  * @typedef {string & { readonly __drawingId: true }} DrawingId
  */
 /**
@@ -49,7 +48,8 @@
  *   readonly canvas: CanvasSlice,
  *   readonly featureEdits: FeatureEditsSlice,
  *   readonly paint: PaintSlice,
- *   readonly settings: SettingsSlice
+ *   readonly settings: SettingsSlice,
+ *   readonly inputs: InputsSlice
  * }} DrawingSlices
  */
 
@@ -70,22 +70,72 @@
 
 /**
  * @typedef {DrawingIdentity & VisibilityRulesView & ColorRulesView & PaletteView & LabelTablesView & AnnotationSetsView
- *   & GroupNamesView & CanvasView & FeatureEditsView & PaintView & DrawingSettings
+ *   & GroupNamesView & CanvasView & FeatureEditsView & PaintView & DrawingSettings & InputsView
  *   & { readonly slices: DrawingSlices }} DrawingView
  */
 
 /**
- * The ID of the drawing of `mode`: each mode has one drawing, named by the
- * mode. The one cast to a `DrawingId`.
+ * The ID a new drawing of `mode` gets beside `takenIds`: the mode when free,
+ * else `<mode>-<n>` with the smallest free n >= 2 (B2-D4). Python's
+ * `gbdraw.session_drawings.allocate_drawing_id` takes the same rule; both read
+ * the `ids` vectors of `tests/fixtures/sessions/drawings-vectors.json`.
  * @param {ModeProfileName} mode
+ * @param {Iterable<string>} takenIds
  * @returns {DrawingId}
  */
-export const drawingIdOfMode = (mode) => /** @type {DrawingId} */ (mode);
+export const allocateDrawingId = (mode, takenIds) => {
+  const taken = new Set(takenIds);
+  let id = String(mode);
+  for (let number = 2; taken.has(id); number += 1) id = `${mode}-${number}`;
+  return /** @type {DrawingId} */ (id);
+};
+
+// The name of each mode's first drawing (Python's `DRAWING_NAMES`).
+/** @type {Readonly<Record<ModeProfileName, string>>} */
+const MODE_DRAWING_NAMES = Object.freeze({ circular: 'Circular', linear: 'Linear' });
 
 /**
- * The input type a drawing's slots read: the app-level ref of its mode. A
- * History restore of one drawing writes only this one (OIC-030).
- * @param {DrawingIdentity} drawing
- * @returns {'cInputType' | 'lInputType'}
+ * The name a new drawing gets: its mode's name, followed by its ID's number
+ * for a second drawing of the mode (`linear-2` is "Linear 2"). Python's
+ * `gbdraw.session_drawings.allocate_session_drawing` takes the same rule; both
+ * read the `names.defaults` vectors of
+ * `tests/fixtures/sessions/drawings-vectors.json`. The drawing bar passes
+ * `modeName` in the UI language to show a default name (`app/drawing-list.js`).
+ * @param {ModeProfileName} mode
+ * @param {DrawingId} drawingId
+ * @param {string} [modeName] the mode's name, by default as a Session stores it
+ * @returns {string}
  */
-export const inputTypeKeyOf = (drawing) => (drawing.mode === 'linear' ? 'lInputType' : 'cInputType');
+export const defaultDrawingName = (mode, drawingId, modeName = MODE_DRAWING_NAMES[mode]) => {
+  const number = String(drawingId).slice(String(mode).length + 1);
+  return modeName + (number ? ` ${number}` : '');
+};
+
+/**
+ * A copy's name (T-B4-5): "<name> copy", then "<name> copy 2", "<name> copy
+ * 3" ..., the first that no name in `names` repeats under the rule of
+ * `drawingNamesProblem`. Python names no copy, so this rule has no twin.
+ * @param {string} name @param {readonly string[]} names
+ * @returns {string}
+ */
+export const copyDrawingName = (name, names) => {
+  for (let number = 1; ; number += 1) {
+    const candidate = `${name} copy${number > 1 ? ` ${number}` : ''}`;
+    if (!drawingNamesProblem([...names, candidate])) return candidate;
+  }
+};
+
+/**
+ * Why `names` cannot name the drawings of a project, if they cannot: a blank
+ * name, or two names that differ only in case. Python's
+ * `gbdraw.session_drawings._identity_problem` takes the same rule (case
+ * folding as `str.casefold`); both read the `names.identities` vectors of
+ * `tests/fixtures/sessions/drawings-vectors.json`.
+ * @param {readonly string[]} names
+ * @returns {'BLANK_NAME' | 'REPEATED_NAME' | null}
+ */
+export const drawingNamesProblem = (names) => {
+  if (names.some((name) => name.trim() === '')) return 'BLANK_NAME';
+  const folded = names.map((name) => name.toUpperCase().toLowerCase());
+  return new Set(folded).size === folded.length ? null : 'REPEATED_NAME';
+};

@@ -13,6 +13,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from tests.utils.session_drawing_view import drawing_view
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GALLERY_SESSIONS = REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions"
 CIRCULAR_SESSION = GALLERY_SESSIONS / "HmmtDNA_basic_circular.gbdraw-session.json"
@@ -33,15 +35,16 @@ def _rename_references(value: Any, aliases: dict[str, str]) -> Any:
 
 
 def two_mode_session(linear: dict[str, Any] | None = None) -> dict[str, Any]:
-    """The Session; ``linear`` replaces the Linear Gallery Session as the other set."""
+    """The Session; ``linear`` (a one-drawing view) replaces the Linear Gallery Session as the other set."""
 
-    circular = json.loads(CIRCULAR_SESSION.read_text(encoding="utf-8"))
-    linear = json.loads(LINEAR_SESSION.read_text(encoding="utf-8")) if linear is None else linear
+    circular = drawing_view(json.loads(CIRCULAR_SESSION.read_text(encoding="utf-8")))
+    linear = drawing_view(json.loads(LINEAR_SESSION.read_text(encoding="utf-8"))) if linear is None else linear
     aliases = {resource_id: f"linear-{resource_id}" for resource_id in linear["resources"]}
     resources = dict(circular["resources"])
     for resource_id, descriptor in linear["resources"].items():
         resources[aliases[resource_id]] = {**descriptor, "name": f"linear-{descriptor['name']}"}
     session = copy.deepcopy(circular)
+    session["version"] = 48  # the 46-48 layout this helper builds; a 49 holds no otherModeResult
     session["resources"] = resources
     session["otherModeResult"] = {
         "renderRequest": _rename_references(linear["renderRequest"], aliases),

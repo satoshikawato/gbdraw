@@ -15,10 +15,13 @@ import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { SESSION_VERSION } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { sessionDocumentOfViews } from '../../gbdraw/web/js/services/session-drawings-upgrade.js';
 
 globalThis.window = {
   Vue: {
@@ -33,6 +36,10 @@ installFakeSvgDom();
 globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 50 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const REPO = new URL('../../', import.meta.url);
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
@@ -44,13 +51,24 @@ const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-rep
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { importSession } = callerSession(sessionConfig, state);
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const read = (path) => {
   const raw = readFileSync(new URL(path, REPO));
   return JSON.parse((raw[0] === 0x1f ? gunzipSync(raw) : raw).toString('utf8'));
 };
-const gallery = (name) => read(`gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`);
+// A bundled Session is a 50; the tests read the shown drawing as its one-drawing view.
+// The view carries `drawingOrigin` so `load` can write it back as the drawing's 49.
+const galleryView = (saved) => {
+  if (saved?.format !== 'gbdraw-session' || !saved.drawings) return saved;
+  const id = saved.ui.activeDrawingId;
+  const drawing = saved.drawings.find((entry) => entry.id === id);
+  return { ...savedDrawingView(saved, id), drawingOrigin: { id, name: drawing.name } };
+};
+const asSaved = ({ drawingOrigin, ...view }) => (drawingOrigin
+  ? sessionDocumentOfViews([{ ...drawingOrigin, view }], drawingOrigin.id) : view);
+const gallery = (name) => galleryView(read(`gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`));
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const contextOf = (session, path = 'renderRequest') => ({
   featureCatalog: session.editorState?.featureCatalog ?? null,
@@ -66,7 +84,7 @@ const readRequest = (session, change = () => {}) => {
 const rows = (result) => result.repairs.map(({ code, path, used }) => ({ code, path, ...(used === undefined ? {} : { used }) }));
 
 const input = (session) => ({
-  target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
+  target: { files: [new File([JSON.stringify(asSaved(session))], 'session.json', { type: 'application/json' })], value: 'selected' }
 });
 /** Load with [Load] answered; the dialog lines and the result. */
 const load = async (session) => {
@@ -306,7 +324,7 @@ test('a request that cannot be read at its root loads the Session as settings on
     assert.equal(result.status, 'ok', `${name}: ${JSON.stringify(result.error)}`);
     assert.equal(state.results.value.length, 0, name);
     assert.equal(dialogs.length, 1, name);
-    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(renderRequest(\.mode)?\) could not be read\. The file loads as settings only/);
+    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest(\.mode)?\) could not be read\. The file loads as settings only/);
     assert.ok(result.repairs.some((repair) => repair.code === 'request-dropped'), name);
   }
 });
@@ -317,9 +335,9 @@ test('a Session 42 to 47 with no stored request loads as settings only, listed; 
   const { result, dialogs } = await load(session);
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
   assert.equal(state.results.value.length, 0);
-  assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'renderRequest']]);
+  assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'drawings[0].renderRequest']]);
   assert.equal(dialogs.length, 1);
-  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(renderRequest\) could not be read\. The file loads as settings only/);
+  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\) could not be read\. The file loads as settings only/);
 });
 
 test('a Linear layout whose record translations do not cover the drawn records drops the request at its root (vector 027, C-OD20)', async () => {
@@ -330,9 +348,9 @@ test('a Linear layout whose record translations do not cover the drawn records d
   const { result, dialogs } = await load(session);
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
   assert.equal(state.results.value.length, 0);
-  assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'renderRequest.layout']]);
+  assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'drawings[0].renderRequest.layout']]);
   assert.equal(dialogs.length, 1);
-  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(renderRequest\.layout\) could not be read\. The file loads as settings only/);
+  assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\.layout\) could not be read\. The file loads as settings only/);
 });
 
 test('the other diagram\'s request is read at Load: its repairs are listed, and an unreadable one leaves only that set out (OV-670)', async () => {
@@ -357,9 +375,10 @@ test('the other diagram\'s request is read at Load: its repairs are listed, and 
 
 const sessionConfig2 = await import('../../gbdraw/web/js/services/config.js');
 const { getCommittedCanonicalSession } = sessionConfig2;
-const { exportSession } = callerSession(sessionConfig2, state);
+const { exportSession } = callerSession(sessionConfig2, state, await sessionRollbackPort(state));
 const frame = () => {
-  const intent = modeDrawing(state, 'linear').importedComparisonIntent;
+  // The drawing the Load opened holds the intent (a Circular request carrying Linear comparisons opens a Circular drawing).
+  const intent = state.activeDrawing().importedComparisonIntent;
   return [intent.disposition, intent.message];
 };
 
@@ -383,12 +402,7 @@ test('a request whose comparisons Load holds is promoted like any other, and the
       const session = gallery('BGC0000708-BGC0000713');
       session.renderRequest.comparisons[0].kind = 'other';
       return session;
-    }, 'DECISION_REQUIRED', ['setting-entries-dropped'], 'The saved comparison kind \'other\' is unsupported.'],
-    ['Linear comparison in a Circular request', () => {
-      const session = gallery('HmmtDNA_basic_circular');
-      session.renderRequest.comparisons = clone(gallery('BGC0000708-BGC0000713').renderRequest.comparisons.slice(0, 1));
-      return session;
-    }, 'DECISION_REQUIRED', [], 'A Circular session contains unsupported Linear comparison data.']
+    }, 'DECISION_REQUIRED', ['setting-entries-dropped'], 'The saved comparison kind \'other\' is unsupported.']
   ];
   for (const [name, make, disposition, codes, message] of cases) {
     const { result } = await load(make());
@@ -400,12 +414,44 @@ test('a request whose comparisons Load holds is promoted like any other, and the
   }
 });
 
+// A Circular request of a Session 27-49 that carries a Linear comparison keeps the Comparisons notice in the Linear
+// Comparisons card after the Load upgrades it to 49, as before (C-OD14): the Linear drawing holds the classification
+// of the stored request, and the Circular drawing stays editable (its Generate is not held by a choice only the
+// Linear card offers).
+const linearComparison = () => clone(gallery('BGC0000708-BGC0000713').renderRequest.comparisons.slice(0, 1));
+test('a Linear comparison in a Circular request of a v44 keeps the Comparisons notice in the Linear card (C-OD14)', async () => {
+  const v44 = read('tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz');
+  v44.renderRequest.comparisons = linearComparison();
+  const { result } = await load(v44);
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  assert.equal(state.activeDrawing().mode, 'circular');
+  assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
+  const intent = modeDrawing(state, 'linear').importedComparisonIntent;
+  assert.deepEqual([intent.disposition, intent.message],
+    ['DECISION_REQUIRED', 'A Circular session contains unsupported Linear comparison data.']);
+});
+
+// OV-1873, Owner PQ-F3-1 (C, 2026-10-26): in a Session 50 a Linear comparison in a Circular drawing's request is a
+// setting only the other diagram type uses, so Load drops it with no notice and holds no Generate on a choice.
+test('a Linear comparison in a Session 50 Circular request is dropped with no notice (OV-1873, PQ-F3-1 C)', async () => {
+  const session = gallery('HmmtDNA_basic_circular');
+  session.renderRequest.comparisons = linearComparison();
+  const { result } = await load(session);
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  // A one-mode Load makes no Linear drawing (D-15-120), so no Linear drawing holds a decision either.
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.mode), ['circular']);
+  assert.notEqual(modeDrawing(state, 'circular').importedComparisonIntent?.disposition, 'DECISION_REQUIRED');
+  assert.deepEqual((result.repairs || []).filter(requestRow), []);
+});
+
 test('Save writes the request Load read: the legacy alignment keeps the feature the Load context names (OV-770, BC-1)', async () => {
   const { result } = await load(read('tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json'));
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
   const saved = await exportSession('probe', { askChoice: async () => 'download' });
   assert.equal(saved.status, 'saved', JSON.stringify(saved.error));
-  const session = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+  const document = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+  // A Session 50 holds the request in its drawing's entry; the Load opened the stored Result's drawing.
+  const session = savedDrawingView(document, document.ui.activeDrawingId);
   assert.equal(session.renderRequest.schema, 9);
   assert.equal(session.renderRequest.layout.similarityAlignment.reference.sourceFeatureIndex, 14);
 });
@@ -436,7 +482,7 @@ test('a saved comparison entry that is neither resource-backed nor a generated c
     session.files = { ...(session.files || {}), linearCanonicalComparisons: value };
     const { result, dialogs } = await load(session);
     assert.equal(result.status, 'ok', JSON.stringify(result.error));
-    assert.deepEqual(state.files.linearCanonicalComparisons, [], JSON.stringify(value));
+    assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, [], JSON.stringify(value));
     assert.ok(result.repairs.some(({ code, path }) => code === 'setting-entries-dropped'
       && path === 'files.linearCanonicalComparisons'), JSON.stringify(value));
     assert.ok(dialogs.flat().some((line) => line.includes('files.linearCanonicalComparisons')));
@@ -563,8 +609,8 @@ test('a request whose schema is no integer is unreadable (K22): settings only wi
     const { result, dialogs } = await load(session);
     assert.equal(result.status, 'ok', `${JSON.stringify(request)}: ${JSON.stringify(result.error)}`);
     assert.equal(state.results.value.length, 0);
-    assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'renderRequest.schema']]);
-    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(renderRequest\.schema\) could not be read\. The file loads as settings only/);
+    assert.deepEqual(result.repairs.map(({ code, path }) => [code, path]), [['request-dropped', 'drawings[0].renderRequest.schema']]);
+    assert.match(dialogs[0][0], /^Saved diagram: the settings of the saved diagram \(drawings\[0\]\.renderRequest\.schema\) could not be read\. The file loads as settings only/);
     for (const name of ['se08-main-linear-cli.v42.gbdraw-session.json.gz', 'scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz']) {
       const cli = fixture(name);
       cli.renderRequest = clone(request);
@@ -598,8 +644,12 @@ test('R4 alone refuses a CLI or Python API Session 42, 44 or 47 whose request is
   const sessions = [
     ['se08-main-linear-cli.v42', fixture('se08-main-linear-cli.v42.gbdraw-session.json.gz')],
     ['scale-interval-zero-circular-cli.v44', fixture('scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz')],
-    ['cli.v47', { ...cliCurrent, version: 47 }],
-    ['cli.current', cliCurrent]
+    // The version the case names: the CLI's Session 50 drawing as a Session 47 (a 50 drawing without a request is
+    // an undrawn drawing and loads, PD-OI-090).
+    ['cli.v47', (() => {
+      const { modes: _modes, ...view } = savedDrawingView(cliCurrent, cliCurrent.ui.activeDrawingId);
+      return { ...view, version: 47 };
+    })()]
   ];
   assert.equal(cliCurrent.version, SESSION_VERSION);
   for (const [name, base] of sessions) {
@@ -646,7 +696,7 @@ const HARNESS_CANNOT_LOAD = new Map([
   ['feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz', 'feature extraction Worker'],
   ['hash-color-rule-linear-rc.v30.gbdraw-session.json.gz', 'feature extraction Worker'],
   // Their comparison tables are converted to the display frame by a Worker
-  // (`convertMainSessionComparisonFrames`; OV-775, C-OD19 F2).
+  // (OV-775, C-OD19 F2; Python converts them now).
   ['q-frame-main-web-losatn.v42.gbdraw-session.json.gz', 'comparison conversion Worker'],
   ['q-frame-main-web-upload.v42.gbdraw-session.json.gz', 'comparison conversion Worker']
 ]);
@@ -663,7 +713,7 @@ test('every Gallery Session and Session fixture loads with no stored-request row
   let loaded = 0;
   for (const folder of ['gbdraw/web/gallery/sessions/', 'tests/fixtures/sessions/']) {
     for (const name of readdirSync(new URL(folder, REPO)).filter((file) => /\.json(\.gz)?$/.test(file)).sort()) {
-      const session = read(folder + name);
+      const session = galleryView(read(folder + name));
       if (session?.format !== 'gbdraw-session' || HARNESS_CANNOT_LOAD.has(name)) continue;
       const stored = session.renderRequest?.schema ?? null;
       const { result } = await load(session);
@@ -723,7 +773,8 @@ const differences = (stored, committed, parts = []) => {
   return [parts];
 };
 const placeName = (parts) => ['renderRequest', ...parts].map((part) => (typeof part === 'number' ? `[${part}]` : `.${part}`)).join('').slice(1);
-const namedBy = (path, repairs) => repairs.some((repair) => repair.path === path || path.startsWith(`${repair.path}.`)
+// A 49 Load names a value by the drawing's place in `drawings`; the place here is the request's own.
+const namedBy = (path, rawRepairs) => rawRepairs.map((repair) => ({ ...repair, path: repair.path.replace(/^drawings\[\d+\]\./, '') })).some((repair) => repair.path === path || path.startsWith(`${repair.path}.`)
   || path.startsWith(`${repair.path}[`) || repair.path.startsWith(`${path}.`) || repair.path.startsWith(`${path}[`));
 
 test('Load commits a stored request that differs from the stored one only where a row names (G2, S6)', async () => {
@@ -776,7 +827,8 @@ test('a schema-1 Session takes a live edit and Save before any Generate (H2)', a
     assert.equal(edited.renderRequest.schema, 9, name);
     const saved = await save(name);
     assert.equal(saved.status, 'saved', `${name}: ${saved.error?.code}`);
-    const document = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+    const saved49 = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+    const document = savedDrawingView(saved49, saved49.ui.activeDrawingId);
     assert.equal(document.renderRequest.schema, 9, name);
   }
 });

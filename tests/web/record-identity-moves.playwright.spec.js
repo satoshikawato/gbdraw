@@ -14,6 +14,7 @@ const { spawnSync } = require('node:child_process');
 const { join, resolve } = require('node:path');
 const { openApp, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 const { generate } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const twoRecords = ['BGC0000708', 'BGC0000709']
@@ -51,11 +52,12 @@ const historySettled = (page) => expect.poll(() => page.evaluate(() => {
 const startCircular = async (page, content = twoRecords, form = {}) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
+  await showDrawing(page, { kind: 'circular' });
   await page.evaluate(({ content, form }) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('circular');
-    app.cInputType = 'gb';
-    app.files.c_gb = new File([content], 'two-records.gbk', { type: 'text/plain', lastModified: 1 });
+    app.setCircularInputType('gb');
+    // The File transition runs the record discovery the record list waits for (R10).
+    app.setCircularSourceFile('c_gb', new File([content], 'two-records.gbk', { type: 'text/plain', lastModified: 1 }));
     Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'out' }, form);
     app.sessionTitle = 'record-identity-moves';
   }, { content, form });
@@ -68,9 +70,9 @@ const startCircular = async (page, content = twoRecords, form = {}) => {
 const startLinear = async (page, files = 1) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     app.lInputType = 'gb';
     await app.setLinearComparisonGlobalAction('none');
     Object.assign(app.form, { show_gc: false, show_skew: false, show_depth: false, show_labels_linear: 'all' });

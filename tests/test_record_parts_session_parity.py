@@ -22,6 +22,7 @@ import pytest
 
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from tests.test_web_render_preparation_cache import _render
+from tests.utils.session_drawing_view import session_view
 
 pytestmark = pytest.mark.slow
 
@@ -145,7 +146,7 @@ _ROWS: dict[str, tuple[tuple[str, Change | None, Change], ...]] = {
 def test_the_g2_changes_of_a_gallery_session_render_warm_as_cold(session: str, tmp_path: Path) -> None:
     path = SESSIONS / session
     with gzip.open(path, "rt", encoding="utf-8") as handle:
-        document = json.load(handle)
+        document = session_view(json.load(handle))
     base = document["renderRequest"]
     cache = PreparedBiologicalInputCache()
     request_ids = iter(range(1, 10_000))

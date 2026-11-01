@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -790,7 +791,8 @@ const exactFixturePath = new URL(
   'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz',
   repoRoot
 );
-const exactSession = JSON.parse(gunzipSync(await readFile(exactFixturePath)).toString('utf8'));
+const exactSaved = JSON.parse(gunzipSync(await readFile(exactFixturePath)).toString('utf8'));
+const exactSession = savedDrawingView(exactSaved, exactSaved.ui.activeDrawingId);
 const exactAdmission = admitFeatureCatalog(
   exactSession.editorState.featureCatalog,
   exactSession.results,

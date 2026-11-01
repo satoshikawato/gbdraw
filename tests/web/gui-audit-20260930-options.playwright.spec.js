@@ -7,6 +7,7 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { promisify } = require('node:util');
 const { answerChoicePrompt, generateAndWaitForResult, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   BATCH_FIXTURE,
   HMMT,
@@ -58,9 +59,10 @@ test('a non-numeric comparison e-value is rejected instead of using the default 
   test.setTimeout(300_000);
   await openFresh(page);
   const examples = path.join(root, 'examples');
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async ({ first, second, table }) => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     await window.Vue.nextTick();
     if (app.linearSeqs.length < 2) app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));
@@ -70,7 +72,7 @@ test('a non-numeric comparison e-value is rejected instead of using the default 
     app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length, {
       id: 'audit-edge', queryUid: app.linearSeqs[0].uid, subjectUid: app.linearSeqs[1].uid,
       included: true, fileActive: true, losatFilenameActive: false, source: 'upload',
-      file: new File([table], 'MjeNMV.MelaMJNV.tblastx.out', { type: 'text/plain' }), losatFilename: ''
+      file: bound(new File([table], 'MjeNMV.MelaMJNV.tblastx.out', { type: 'text/plain' })), losatFilename: ''
     });
     await window.Vue.nextTick();
   }, {
@@ -438,7 +440,7 @@ test('Undo while a Generate is running is rejected as busy', async ({ page }) =>
 test('default threaded LOSAT without cross-origin isolation reports a recognized diagnostic', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   expect(await page.evaluate(() => globalThis.crossOriginIsolated)).toBe(false);
   await page.evaluate(async (records) => {

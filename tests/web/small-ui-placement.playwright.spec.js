@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { load, popup: openFromFeatureList, seeds } = require('./helpers/mode-transition.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 // Small UI fixes from the 2026-10-05 re-audit: panel wording that states what a
 // preset or the rule order does (FL-11, FL-12), and two overlays that must not
@@ -239,12 +240,15 @@ const clickShape = async (page, selector) => {
   return point;
 };
 
-const popupBounds = (page, popup, bodySelector) => popup.evaluate((element, selector) => {
+const popupBounds = (page, popup, bodySelector) => popup.evaluate(async (element, selector) => {
+  const { popupViewportBounds } = await import('./js/utils/popup-bounds.js');
   const box = element.getBoundingClientRect();
   const body = element.querySelector(selector);
   return {
     top: box.top, bottom: box.bottom, left: box.left, right: box.right,
     header: document.querySelector('header.app-header').getBoundingClientRect().bottom,
+    // The app's top limit for popups: below the header, and below a notice that ends in the upper half (OV-496).
+    limitTop: popupViewportBounds().top,
     footer: document.querySelector('[data-app-footer]').getBoundingClientRect().top,
     width: innerWidth,
     scrolls: body.scrollHeight > body.clientHeight + 1
@@ -259,7 +263,7 @@ const expectPlaced = (placed, point, name) => {
   const covers = point.x >= placed.left && point.x <= placed.right && point.y >= placed.top && point.y <= placed.bottom;
   expect(covers, `${name} leaves the clicked point visible`).toBe(false);
   // The popup opens as tall as its content needs, up to the space it has.
-  if (placed.scrolls) expect(placed.bottom - placed.top, `${name} uses the height it has`).toBeGreaterThan(placed.footer - placed.header - 48);
+  if (placed.scrolls) expect(placed.bottom - placed.top, `${name} uses the height it has`).toBeGreaterThan(placed.footer - placed.limitTop - 48);
 };
 
 test('OV-371 feature and ribbon popups open inside the window beside the clicked item', async ({ browser }) => {
@@ -322,22 +326,18 @@ const expectInsideWindow = async (page, popup, name) => {
   expect(box.x + box.width, `${name}: inside the window`).toBeLessThanOrEqual(width);
 };
 
-// OV-496: on a one-column page the notice banner lies below the sidebar, far
-// under the window while the page is scrolled above the Result. It was still
+// OV-496: on a one-column page the notice banner lay below the sidebar, far
+// under the window while the page was scrolled above the Result. It was still
 // read as the popups' top limit, so a popup dragged or opened there left the
 // window.
-test('OV-496 at 390x844 a popup stays inside the window, also with the Result scrolled away', async ({ browser }) => {
+test('OV-496 at 390x844 a popup stays inside the window, opened and dragged', async ({ browser }) => {
   test.setTimeout(300000);
   const page = await load(browser, BGC, { width: 390, height: 844 });
   try {
+    await showPhonePane(page, 'preview');
     const featureSelector = `[data-gbdraw-feature-id="${LIVE}"]`;
     const expectInside = (popup, name) => expectInsideWindow(page, popup, name);
-    const scrollAboveResult = async () => {
-      await page.mouse.move(195, 40);
-      await page.mouse.wheel(0, -100000);
-      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
-      expect((await page.locator('[data-app-notice]').boundingBox()).y, 'the notice is below the window').toBeGreaterThan(844);
-    };
+    // The phone layout's Preview pane holds the notice at its top or scrolled above it, never below the window.
 
     // A tap on a feature that is in view.
     await page.locator(featureSelector).first().evaluate(element => element.scrollIntoView({ block: 'center', inline: 'center' }));
@@ -347,20 +347,18 @@ test('OV-496 at 390x844 a popup stays inside the window, also with the Result sc
     await expect(featurePopup).toBeVisible({ timeout: 180000 });
     await expectInside(featurePopup, 'feature popup opened by a tap');
 
-    // The page scrolled back to the sidebar, then the popup dragged by its top edge.
-    await scrollAboveResult();
+    // The popup dragged by its top edge.
     const box = await featurePopup.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + 6);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2, box.y + 26, { steps: 4 });
     await page.mouse.up();
-    await expectInside(featurePopup, 'feature popup dragged with the Result scrolled away');
+    await expectInside(featurePopup, 'feature popup dragged');
     await featurePopup.getByRole('button', { name: 'Close feature popup', exact: true }).click();
     await expect(featurePopup).toHaveCount(0);
 
-    // Enter on a focused Legend row after the page was scrolled away from it.
+    // Enter on a focused Legend row.
     await page.locator('.gbdraw-preview-surface g[data-legend-key="Core biosynthetic genes"]').first().focus();
-    await scrollAboveResult();
     await page.keyboard.press('Enter');
     const legendPopup = page.locator('.pairwise-match-popup[role="dialog"]');
     await expect(legendPopup).toBeVisible();

@@ -7,10 +7,11 @@ import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -25,13 +26,18 @@ installFakeSvgDom();
 globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConfig;
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const fixture = (name) => {
   const bytes = readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url));
@@ -51,6 +57,7 @@ const BASES = {
   v44: () => fixture('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'),
   v44L: () => fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'),
   v46: () => fixture('legend-renamed-rows.v46.gbdraw-session.json.gz'),
+  // The bundled Gallery Session is a 49: a leaf is edited in its drawing (`drawings[0]`), and a row names it there.
   g47L: () => gallery('lambda_basic_linear.gbdraw-session.json')
 };
 const set = (value, path, leaf) => {
@@ -74,20 +81,20 @@ const saves = async () => {
 const CASES = [
   // OV-757, A17c: a default type's shape of no name keeps its default shape.
   ['v44', 'config.adv.feature_shapes.CDS', 'hexagon', ['setting-replaced config.adv.feature_shapes.CDS']],
-  ['g47L', 'modes.linear.config.adv.feature_shapes.CDS', 'hexagon', ['setting-replaced modes.linear.config.adv.feature_shapes.CDS']],
+  ['g47L', 'drawings.0.config.adv.feature_shapes.CDS', 'hexagon', ['setting-replaced drawings[0].config.adv.feature_shapes.CDS']],
   // A17d: an arrow ratio out of range is the default; its text reads as its number.
-  ['g47L', 'modes.linear.config.adv.arrow_shaft_width_ratio', 2, ['setting-replaced modes.linear.config.adv.arrow_shaft_width_ratio']],
+  ['g47L', 'drawings.0.config.adv.arrow_shaft_width_ratio', 2, ['setting-replaced drawings[0].config.adv.arrow_shaft_width_ratio']],
   ['v44', 'config.adv.arrow_head_length_ratio', -1, ['setting-replaced config.adv.arrow_head_length_ratio']],
   ['v44', 'config.adv.arrow_shaft_width_ratio', '0.5', []],
   // A17e: an option value of no choice is the default; an older name is read as its current name.
   ['v44L', 'config.form.linear_track_layout', 'zigzag', ['setting-replaced config.form.linear_track_layout']],
   ['v44L', 'config.form.linear_track_layout', 'spreadout', []],
-  ['g47L', 'modes.linear.config.adv.label_placement', 'inside', ['setting-replaced modes.linear.config.adv.label_placement']],
+  ['g47L', 'drawings.0.config.adv.label_placement', 'inside', ['setting-replaced drawings[0].config.adv.label_placement']],
   ['v44', 'config.adv.multi_record_size_mode', 'huge', ['setting-replaced config.adv.multi_record_size_mode']],
-  ['g47L', 'modes.linear.config.losat.blastp.mode', 'bogus', ['setting-replaced modes.linear.config.losat.blastp.mode']],
-  ['g47L', 'modes.linear.config.losat.blastp.hitLimitsByMode', null, []],
-  ['g47L', 'modes.linear.config.losat.blastp.collinearInferOrthogroups', 'x',
-    ['setting-replaced modes.linear.config.losat.blastp.collinearInferOrthogroups']],
+  ['g47L', 'drawings.0.config.losat.blastp.mode', 'bogus', ['setting-replaced drawings[0].config.losat.blastp.mode']],
+  ['g47L', 'drawings.0.config.losat.blastp.hitLimitsByMode', null, []],
+  ['g47L', 'drawings.0.config.losat.blastp.collinearInferOrthogroups', 'x',
+    ['setting-replaced drawings[0].config.losat.blastp.collinearInferOrthogroups']],
   // A17h.
   ['v44', 'config.adv.feature_overlap_tolerance_bp', -1, ['setting-replaced config.adv.feature_overlap_tolerance_bp']],
   // A17f: a collection of another kind, and an entry that is no object.
@@ -97,31 +104,31 @@ const CASES = [
   ['v44', 'config.unmanagedConfigOverrides', 'x', ['setting-replaced config.unmanagedConfigOverrides']],
   // A17b, TB19: a key no gbdraw writer wrote is dropped with a row.
   ['v44', 'config.adv.zzz', 1, ['setting-replaced config.adv.zzz']],
-  ['g47L', 'modes.linear.config.form.zzz', 1, ['setting-replaced modes.linear.config.form.zzz']],
-  ['g47L', 'modes.linear.config.zzz', 1, ['setting-replaced modes.linear.config.zzz']],
+  ['g47L', 'drawings.0.config.form.zzz', 1, ['setting-replaced drawings[0].config.form.zzz']],
+  ['g47L', 'drawings.0.config.zzz', 1, ['setting-replaced drawings[0].config.zzz']],
   ['v44', 'config.rules', [{ feat: 'CDS', qual: 'product', val: 'x', color: '#ff0000', cap: 'x', zzz: 1 }],
     ['setting-replaced config.rules[0].zzz']],
   // A17b': a value only the other mode's drawing draws.
   ['v46', 'modes.circular.config.form.linear_track_layout', 'zigzag', []],
   // A17g: a retired name reads as its current name at every version.
   ['v44', 'config.adv.depth_tick_interval', 5, []],
-  ['g47L', 'modes.linear.config.adv.depth_tick_interval', 5, []],
+  ['g47L', 'drawings.0.config.adv.depth_tick_interval', 5, []],
   ['v44', 'config.adv.linear_show_accession', false, []],
   // OV-764: the drawing's lists and maps read per entry.
-  ['g47L', 'modes.linear.config.recordsOff', [5], ['setting-entries-dropped modes.linear.config.recordsOff']],
-  ['g47L', 'modes.linear.config.recordsOff', ['zzz', 'zzz'], []],
+  ['g47L', 'drawings.0.config.recordsOff', [5], ['setting-entries-dropped drawings[0].config.recordsOff']],
+  ['g47L', 'drawings.0.config.recordsOff', ['zzz', 'zzz'], []],
   ['v44L', 'config.recordsOff', 'x', ['setting-replaced config.recordsOff']],
-  ['g47L', 'modes.linear.config.linearComparisonPlan', 'x', ['setting-replaced modes.linear.config.linearComparisonPlan']],
-  ['g47L', 'modes.linear.config.linearComparisonPlan.mode', 'bogus', ['setting-replaced modes.linear.config.linearComparisonPlan.mode']],
+  ['g47L', 'drawings.0.config.linearComparisonPlan', 'x', ['setting-replaced drawings[0].config.linearComparisonPlan']],
+  ['g47L', 'drawings.0.config.linearComparisonPlan.mode', 'bogus', ['setting-replaced drawings[0].config.linearComparisonPlan.mode']],
   ['v44L', 'config.linearComparisonPlan.edges', [5], ['setting-replaced config.linearComparisonPlan.edges[0]']],
-  ['g47L', 'modes.linear.config.losat.blastp.hitLimitsByMode', { pairwise: { candidateLimit: 'x' } },
-    ['setting-replaced modes.linear.config.losat.blastp.hitLimitsByMode.pairwise.candidateLimit']],
+  ['g47L', 'drawings.0.config.losat.blastp.hitLimitsByMode', { pairwise: { candidateLimit: 'x' } },
+    ['setting-replaced drawings[0].config.losat.blastp.hitLimitsByMode.pairwise.candidateLimit']],
   ['v44L', 'config.featurePlacementOverrides', { a: 5 }, ['setting-entries-dropped config.featurePlacementOverrides']],
-  ['g47L', 'modes.linear.config.unmanagedConfigOverrides', { 'zzz.yyy': 1 },
-    ['setting-replaced modes.linear.config.unmanagedConfigOverrides["zzz.yyy"]']],
+  ['g47L', 'drawings.0.config.unmanagedConfigOverrides', { 'zzz.yyy': 1 },
+    ['setting-replaced drawings[0].config.unmanagedConfigOverrides["zzz.yyy"]']],
   // A23': a drawing's feature edits read per row.
-  ['g47L', 'modes.linear.features.featureOverrides', 'x', ['setting-replaced modes.linear.features.featureOverrides']],
-  ['g47L', 'modes.linear.features.featureOverrides', { a: 5 }, ['setting-entries-dropped modes.linear.features.featureOverrides']],
+  ['g47L', 'drawings.0.features.featureOverrides', 'x', ['setting-replaced drawings[0].features.featureOverrides']],
+  ['g47L', 'drawings.0.features.featureOverrides', { a: 5 }, ['setting-entries-dropped drawings[0].features.featureOverrides']],
   // OV-639, OV-611: a record display row read per row, its selector text first.
   ['v44', 'config.recordDisplayDrafts', {}, ['setting-replaced config.recordDisplayDrafts']],
   ['v40', 'config.recordDisplayDrafts', [{ scope: 'circular', sourceUid: 'circular', selector: ['#1'], recordId: 'same',
@@ -170,7 +177,7 @@ test('E1a: a retired name stored with its current name gives way to it', async (
 test('E1a: a configuration file lists what its drawing cannot read, and saves', async () => {
   // The configuration applies to the shown drawing, which holds a Result.
   assert.deepEqual(await load(BASES.g47L()), []);
-  const config = structuredClone(BASES.g47L().modes.linear.config);
+  const config = structuredClone(BASES.g47L().drawings[0].config);
   delete config.unmanagedConfigOverrides;
   Object.assign(config, {
     zzz: 1, recordDisplayDrafts: {}, recordsOff: [5], unmanagedConfigOverrides: { 'zzz.yyy': 1 },

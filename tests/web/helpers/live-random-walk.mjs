@@ -31,6 +31,7 @@ import { expect, test } from '@playwright/test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { evaluateWithRetainedPromise, takePageErrors } from './app-lifecycle.cjs';
+import { showDrawing } from './drawing-bar.cjs';
 import { expectLiveEqualsGenerate, settleLive, showResult } from './live-generate-parity.cjs';
 import { download } from './mode-transition.cjs';
 import { SINGLE_FIXTURE, generate, open } from './live-generate-parity-steps.cjs';
@@ -104,12 +105,11 @@ const ADDED_CAPTIONS = ['Walk group', 'Added row'];
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const otherMode = (mode) => (mode === 'circular' ? 'linear' : 'circular');
 
-// One drawing switch (the mode buttons call `selectDrawing`), settled.
-const switchDrawing = async (page, drawingId) => {
+// One drawing switch as a user makes it (a tab, or the Linear offer when the project holds no Linear drawing), settled.
+const switchDrawing = async (page, kind) => {
   await settleLive(page);
-  const outcome = await page.evaluate((id) => window.__GBDRAW_APP__.selectDrawing(id), drawingId);
-  expect(outcome, `the switch to ${drawingId}`).toEqual({ status: 'ok' });
-  await expect.poll(() => page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.circularRecordDiscovery.status))
+  await showDrawing(page, { kind });
+  await expect.poll(() => page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.drawingOf('circular').circularRecordDiscovery.status))
     .not.toBe('loading');
   await page.evaluate(async () => { await window.Vue.nextTick(); });
   await settleLive(page);
@@ -187,6 +187,7 @@ const readState = (page) => page.evaluate(async () => {
   })).sort((left, right) => (left.label < right.label ? -1 : left.label > right.label ? 1 : 0));
   return {
     drawing: state.activeDrawing().id,
+    mode: state.activeDrawing().mode,
     features,
     resultCount: app.results.length,
     resultIndex: app.selectedResultIndex,
@@ -294,7 +295,7 @@ export const nextStep = (random, state, kind, { fixture, canUndo }) => {
       if (!others.length) throw new Error(`a Result switch needs two Results; the drawing shows ${state.resultCount}`);
       return { kind, index: random.pick(others) };
     }
-    case 'drawingSwitch': return { kind, drawing: otherMode(state.drawing) };
+    case 'drawingSwitch': return { kind, mode: otherMode(state.mode) };
     case 'reset':
     case 'load':
       return { kind };
@@ -604,7 +605,7 @@ const resetKeepingGenerateSettings = async (page) => {
 const runStep = async (page, step, sessionPath) => {
   switch (step.kind) {
     case 'resultSwitch': await showResult(page, step.index); return [];
-    case 'drawingSwitch': await switchDrawing(page, step.drawing); return [];
+    case 'drawingSwitch': await switchDrawing(page, step.mode); return [];
     // A click on Save Session behind an open dialog has no timeout of its own.
     case 'load': await withinStepTimeout(page, () => saveAndLoad(page, sessionPath)); return [];
     case 'reset': return resetKeepingGenerateSettings(page);
@@ -685,7 +686,7 @@ export const whyNotApplicable = (step, state, { canUndo }) => {
     case 'undo': case 'undoRedo': return step.prepare || canUndo ? '' : 'Undo is at its floor';
     case 'resultSwitch':
       return step.index < state.resultCount && step.index !== state.resultIndex ? '' : `Result ${step.index} is shown or absent`;
-    case 'drawingSwitch': return step.drawing !== state.drawing ? '' : `the ${step.drawing} drawing is shown`;
+    case 'drawingSwitch': return step.mode !== state.mode ? '' : `the ${step.mode} drawing is shown`;
     default: return '';
   }
 };

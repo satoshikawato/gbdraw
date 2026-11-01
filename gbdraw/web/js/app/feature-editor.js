@@ -48,7 +48,7 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
  * @property {import('./feature-editor/rule-actions.js').MoveLegendRecordsPort} moveLegendRecords
- *   The Legend owner's move of a drawing's Legend records (a drawing not shown: the Specific rules file card's Remove).
+ *   The Legend owner's move of a drawing's Legend records (Delete settings' take-back of rule rows).
  * @property {import('./candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
  *   The root's colors of a drawing's Legend rows as they show (OV-282), which the rule owner's commit owns rows by.
  * @property {FeatureSelectionPort | null} [featureSelection]

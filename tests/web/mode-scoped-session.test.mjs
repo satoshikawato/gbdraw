@@ -4,11 +4,17 @@
 // with a retired field are rejected.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { withBootPalettes } from './helpers/boot-palettes.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { SESSION_DRAWINGS_LAYOUT } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
+import { createHash } from 'node:crypto';
 
 globalThis.window = {
   Vue: {
@@ -25,13 +31,20 @@ globalThis.document = {
 const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 50 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
-const { SESSION_VERSION, assertDrawingInputs, installShownDrawing } = sessionConfig;
+const { SESSION_VERSION, assertDrawingInputs, installShownDrawing, getCommittedCanonicalSession } = sessionConfig;
+// A Session 50 drawing's saved unmanaged overrides are checked as Load checks them (PD-OI-009).
+sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const MODES = ['circular', 'linear'];
 const save = async (title) => {
@@ -44,7 +57,10 @@ const loadDialogs = [];
 const load = (session) => importSession({
   target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
 }, { confirmLoadRepairs: async (dialog) => { loadDialogs.push(dialog); return true; } });
+// The Circular and Linear pair a case works on (a one-mode Load makes no drawing of the other mode).
+const addPairDrawings = await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder();
 const resetDrawings = () => {
+  addPairDrawings();
   for (const mode of MODES) {
     Object.assign(modeDrawing(state, mode).form, createDefaultForm());
     Object.assign(modeDrawing(state, mode).adv, createDefaultAdv(mode));
@@ -57,8 +73,8 @@ const sliceKeys = (value, container = '') => Object.entries(value).flatMap(([key
     ? sliceKeys(child, path) : [])];
 });
 
-test('Session 46 saves each drawing as its mode slice and loads it back into that drawing (S1, S6)', async () => {
-  assert.equal(SESSION_VERSION, 50);
+test('Session 50 saves each drawing as its own entry and loads it back into that drawing (S1, S6)', async () => {
+  assert.equal(SESSION_VERSION, SESSION_DRAWINGS_LAYOUT.version);
   resetDrawings();
   installShownDrawing('circular');
   modeDrawing(state, 'circular').adv.label_font_size = 13;
@@ -73,31 +89,34 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   modeDrawing(state, 'linear').dormantLegendEntries.value = [waiting];
   const saved = await save('two drawings');
 
-  assert.equal(saved.version, SESSION_VERSION);
-  assert.equal(saved.renderRequest, null);
+  assert.equal(saved.version, SESSION_DRAWINGS_LAYOUT.version);
+  // Each drawing is read as its one-drawing view, found by its ID.
+  const views = Object.fromEntries(MODES.map((mode) => [mode, savedDrawingView(saved, mode)]));
+  assert.equal(views.circular.renderRequest ?? null, null);
   for (const retired of ['config', 'features']) assert.equal(Object.hasOwn(saved, retired), false, retired);
   for (const retired of ['layoutPreferences', 'canvasPadding', 'pendingPaletteName', 'pendingPaletteColors',
     'linearTypographyLinked']) {
     assert.equal(Object.hasOwn(saved.ui, retired), false, `ui.${retired}`);
   }
-  assert.equal(Object.hasOwn(saved.editorState, 'featureStrokes'), false);
-  assert.deepEqual(Object.keys(saved.modes).sort(), MODES);
-  assert.equal(saved.modes.circular.config.adv.label_font_size, 13);
-  assert.equal(saved.modes.circular.config.form.separate_strands, false);
-  assert.equal(saved.modes.circular.config.adv.gc_content_mode, 'percent');
-  assert.equal(saved.modes.linear.config.adv.label_font_size, 7);
-  assert.equal(saved.modes.linear.config.adv.depth_min, 3);
-  assert.equal(saved.modes.linear.config.form.plot_title, 'Linear only');
-  assert.equal(saved.modes.linear.config.form.separate_strands, createDefaultForm().separate_strands);
+  assert.equal(Object.hasOwn(views.circular.editorState ?? {}, 'featureStrokes'), false);
+  assert.deepEqual(saved.drawings.map(({ id }) => id).sort(), MODES);
+  for (const mode of MODES) assert.deepEqual(Object.keys(views[mode].modes), [mode]);
+  assert.equal(views.circular.modes.circular.config.adv.label_font_size, 13);
+  assert.equal(views.circular.modes.circular.config.form.separate_strands, false);
+  assert.equal(views.circular.modes.circular.config.adv.gc_content_mode, 'percent');
+  assert.equal(views.linear.modes.linear.config.adv.label_font_size, 7);
+  assert.equal(views.linear.modes.linear.config.adv.depth_min, 3);
+  assert.equal(views.linear.modes.linear.config.form.plot_title, 'Linear only');
+  assert.equal(views.linear.modes.linear.config.form.separate_strands, createDefaultForm().separate_strands);
   // The waiting row follows the shown rows of its slice, marked `dormant`.
-  assert.deepEqual(saved.modes.linear.editorState.legend.entries, [{ ...waiting, dormant: true }]);
-  assert.deepEqual(saved.modes.circular.editorState.legend.entries, []);
+  assert.deepEqual(views.linear.modes.linear.editorState.legend.entries, [{ ...waiting, dormant: true }]);
+  assert.deepEqual(views.circular.modes.circular.editorState.legend.entries, []);
   assert.equal(typeof saved.ui.losatExecution, 'object');
   assert.equal(typeof saved.ui.richFeaturePopup, 'boolean');
 
   // S7: a slice holds registry fields only.
   for (const mode of MODES) {
-    const unknown = sliceKeys(saved.modes[mode]).filter(([container, key]) => !MODE_SLICE_CONTAINERS[container]?.has(key));
+    const unknown = sliceKeys(views[mode].modes[mode]).filter(([container, key]) => !MODE_SLICE_CONTAINERS[container]?.has(key));
     assert.deepEqual(unknown, [], `modes.${mode} holds only registry fields`);
   }
 
@@ -117,12 +136,13 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   assert.deepEqual(modeDrawing(state, 'linear').legendEntries.value, []);
   assert.deepEqual(modeDrawing(state, 'circular').dormantLegendEntries.value, []);
 
-  // A slice may omit any field, and the slice of a mode not shown may be
-  // absent: Load fills them with that mode's defaults. (A settings-only
-  // Session keeps the slice of its shown mode.)
-  const partial = structuredClone(saved);
-  delete partial.modes.circular.config.adv.label_font_size;
-  delete partial.modes.linear;
+  // A slice may omit any field, which Load fills with its mode's defaults, and
+  // a Session may hold no drawing of a mode: Load makes none (D-15-120). (A
+  // settings-only Session keeps the slice of its shown mode.)
+  const partial = withSavedDrawingView(saved, 'circular', (view) => {
+    delete view.modes.circular.config.adv.label_font_size;
+  });
+  partial.drawings = partial.drawings.filter(({ id }) => id !== 'linear');
   resetDrawings();
   modeDrawing(state, 'linear').dormantLegendEntries.value = [];
   modeDrawing(state, 'circular').adv.label_font_size = 99;
@@ -131,8 +151,7 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   assert.equal(loadedPartial.status, 'ok', JSON.stringify(loadedPartial.error));
   assert.equal(modeDrawing(state, 'circular').adv.label_font_size, createDefaultAdv('circular').label_font_size);
   assert.equal(modeDrawing(state, 'circular').form.separate_strands, false);
-  assert.equal(modeDrawing(state, 'linear').adv.depth_min, createDefaultAdv('linear').depth_min);
-  assert.equal(modeDrawing(state, 'linear').form.plot_title, '');
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['circular']);
 });
 
 test('a file that is not a gbdraw Session is refused as such before its contents are read', async () => {
@@ -158,7 +177,10 @@ test('a file that is not a gbdraw Session is refused as such before its contents
 // key no writer wrote with one.
 test('Session 45 is refused; a Session 46 drops its retired homes with no row and an unknown key with one (S3, S4)', async () => {
   resetDrawings();
-  const saved = await save('current');
+  // The one-drawing view of a saved drawing is the Session 46 shape this test loads.
+  const current = await save('current');
+  const viewOf = (id) => ({ ...structuredClone(savedDrawingView(current, id)), version: 46 });
+  const saved = viewOf('circular');
   const rows = async (session, label) => {
     const outcome = await load(session);
     assert.equal(outcome.status, 'ok', `${label}: ${JSON.stringify(outcome.error)}`);
@@ -176,8 +198,8 @@ test('Session 45 is refused; a Session 46 drops its retired homes with no row an
   assert.deepEqual(await rows(retiredLegend, 'editorState.legend.entries'), []);
   // A field no slice holds (a flat draft's `modeProfiles`) is dropped with a row (E-OD03).
   const unknownSliceField = structuredClone(saved);
-  unknownSliceField.modes.linear.config.modeProfiles = { activeMode: 'linear' };
-  assert.deepEqual(await rows(unknownSliceField, 'modeProfiles'), ['setting-replaced@modes.linear.config.modeProfiles']);
+  unknownSliceField.modes.circular.config.modeProfiles = { activeMode: 'circular' };
+  assert.deepEqual(await rows(unknownSliceField, 'modeProfiles'), ['setting-replaced@modes.circular.config.modeProfiles']);
   const thirdMode = structuredClone(saved);
   thirdMode.modes.radial = {};
   assert.deepEqual(await rows(thirdMode, 'modes.radial'), ['session-field-dropped@modes.radial']);
@@ -190,16 +212,17 @@ test('named Legend and stroke colors load as their CSS hex values (OV-160)', asy
   resetDrawings();
   installShownDrawing('circular');
   const saved = await save('named colors');
-  const named = structuredClone(saved);
-  const legend = named.modes.circular.editorState.legend;
-  legend.colorOverrides = { CDS: 'SeaShell' };
-  legend.strokeOverrides = {
-    CDS: { strokeColor: 'navy', strokeWidth: 2, originalStrokeColor: 'gray', originalStrokeWidth: 1 }
-  };
-  named.modes.circular.editorState.featureStrokes = {
-    overrides: { feature_1: { strokeColor: 'rebeccapurple', strokeWidth: 3, originalStrokeColor: 'darkgrey' } }
-  };
-  named.editorState.originalSvgStroke = { color: 'gray', width: 1 };
+  const named = withSavedDrawingView(saved, 'circular', (view) => {
+    const legend = view.modes.circular.editorState.legend;
+    legend.colorOverrides = { CDS: 'SeaShell' };
+    legend.strokeOverrides = {
+      CDS: { strokeColor: 'navy', strokeWidth: 2, originalStrokeColor: 'gray', originalStrokeWidth: 1 }
+    };
+    view.modes.circular.editorState.featureStrokes = {
+      overrides: { feature_1: { strokeColor: 'rebeccapurple', strokeWidth: 3, originalStrokeColor: 'darkgrey' } }
+    };
+    view.editorState = { ...view.editorState, originalSvgStroke: { color: 'gray', width: 1 } };
+  });
   const loaded = await load(named);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   const drawing = modeDrawing(state, 'circular');
@@ -210,10 +233,11 @@ test('named Legend and stroke colors load as their CSS hex values (OV-160)', asy
     { strokeColor: '#663399', strokeWidth: 3, originalStrokeColor: '#a9a9a9' });
   assert.equal(state.originalSvgStroke.value.color, '#808080');
 
-  const unknown = structuredClone(saved);
-  unknown.modes.circular.editorState.legend.strokeOverrides = {
-    CDS: { strokeColor: 'notacolor', strokeWidth: 2, originalStrokeColor: 'notacolor' }
-  };
+  const unknown = withSavedDrawingView(saved, 'circular', (view) => {
+    view.modes.circular.editorState.legend.strokeOverrides = {
+      CDS: { strokeColor: 'notacolor', strokeWidth: 2, originalStrokeColor: 'notacolor' }
+    };
+  });
   const loadedUnknown = await load(unknown);
   assert.equal(loadedUnknown.status, 'ok', JSON.stringify(loadedUnknown.error));
   assert.deepEqual({ ...modeDrawing(state, 'circular').legendStrokeOverrides.CDS }, { strokeWidth: 2, originalStrokeColor: null });
@@ -234,9 +258,11 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
 
   resetDrawings();
   installShownDrawing('circular');
-  const current = structuredClone(await save('legend colors'));
-  current.modes.circular.editorState.legend.entries = structuredClone(stored);
-  current.modes.circular.editorState.legend.deletedEntries = [{ caption: 'W', color: 'currentColor', featureIds: [] }];
+  const current = withSavedDrawingView(await save('legend colors'), 'circular', (view) => {
+    const legend = view.modes.circular.editorState.legend;
+    legend.entries = structuredClone(stored);
+    legend.deletedEntries = [{ caption: 'W', color: 'currentColor', featureIds: [] }];
+  });
   alerts.length = 0;
   loadDialogs.length = 0;
   const loaded = await load(current);
@@ -278,7 +304,7 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
   Object.assign(drawing.legendColorOverrides, { 'GC content': '#ff0000', 'GC skew': '#0000ff' });
   Object.assign(drawing.legendStrokeOverrides, { 'GC skew': { strokeColor: '#00aa00', strokeWidth: 2 } });
   const saved = await save('two rows of one name');
-  const legend = saved.modes.circular.editorState.legend;
+  const legend = savedDrawingView(saved, 'circular').modes.circular.editorState.legend;
   assert.deepEqual(legend.entries.map(({ caption, originalCaption }) => [caption, originalCaption]),
     [['GC', 'GC content'], ['GC', 'GC skew']]);
   assert.deepEqual(legend.colorOverrides, { 'GC content': '#ff0000', 'GC skew': '#0000ff' });
@@ -290,14 +316,16 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
   }
   const loaded = await load(saved);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.deepEqual(drawing.legendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
+  // A Load makes new drawing states (B2d-2): read the loaded drawing again.
+  let loadedDrawing = modeDrawing(state, 'circular');
+  assert.notEqual(loadedDrawing, drawing);
+  assert.deepEqual(loadedDrawing.legendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
     [['GC', 'GC content'], ['GC', 'GC skew']]);
-  assert.deepEqual({ ...drawing.legendColorOverrides }, { 'GC content': '#ff0000', 'GC skew': '#0000ff' });
-  assert.deepEqual({ ...drawing.legendStrokeOverrides['GC skew'] }, { strokeColor: '#00aa00', strokeWidth: 2 });
+  assert.deepEqual({ ...loadedDrawing.legendColorOverrides }, { 'GC content': '#ff0000', 'GC skew': '#0000ff' });
+  assert.deepEqual({ ...loadedDrawing.legendStrokeOverrides['GC skew'] }, { strokeColor: '#00aa00', strokeWidth: 2 });
 
   // DESIGN 1a: GC skew renamed Z, then GC content renamed GC skew and colored red.
-  const older = structuredClone(saved);
-  older.version = 46;
+  const older = { ...structuredClone(savedDrawingView(saved, 'circular')), version: 46 };
   older.modes.circular.editorState.legend = {
     ...older.modes.circular.editorState.legend,
     entries: [
@@ -309,26 +337,9 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
   };
   const loadedOlder = await load(older);
   assert.equal(loadedOlder.status, 'ok', JSON.stringify(loadedOlder.error));
-  assert.deepEqual({ ...drawing.legendColorOverrides }, { 'GC content': '#ff0000' });
-  assert.deepEqual(Object.keys(drawing.legendStrokeOverrides), ['GC skew']);
-});
-
-// OV-337: Load leaves a Linear row without a Depth file as the Session binds it
-// (`depth: null`), so Save writes it back unchanged. Load pads Depth rows to
-// the Depth track count only when a row holds a Depth file, as for Circular.
-test('Load and Save keep a Linear row without a Depth file as depth null (OV-337)', async () => {
-  resetDrawings();
-  installShownDrawing('circular');
-  const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
-  assert.equal((await load(gallery)).status, 'ok');
-  const first = await save('gallery round trip');
-  const rows = first.webFiles.bindings.linearSeqs;
-  assert.deepEqual(rows.map((row) => row.depth), [null]);
-  assert.equal(first.modes.linear.config.adv.depth_tracks.length, 1, 'the Linear drawing has a Depth series');
-  assert.equal((await load(first)).status, 'ok');
-  assert.deepEqual(state.linearSeqs.map((seq) => seq.depth), [null]);
-  const second = await save('gallery round trip again');
-  assert.deepEqual(second.webFiles.bindings.linearSeqs.map((row) => row.depth), rows.map((row) => row.depth));
+  loadedDrawing = modeDrawing(state, 'circular');
+  assert.deepEqual({ ...loadedDrawing.legendColorOverrides }, { 'GC content': '#ff0000' });
+  assert.deepEqual(Object.keys(loadedDrawing.legendStrokeOverrides), ['GC skew']);
 });
 
 // A Session does not save the label fit report, so a loaded Result has no
@@ -356,12 +367,14 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   installShownDrawing('circular');
   const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
   assert.equal((await load(gallery)).status, 'ok');
-  const uid = state.linearSeqs[0].uid;
+  addPairDrawings();
+  const uid = modeDrawing(state, 'linear').linearSeqs[0].uid;
   modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, uid);
   modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#2');
   const saved = await save('records off');
-  assert.deepEqual(saved.modes.linear.config.recordsOff, [uid]);
-  assert.deepEqual(saved.modes.circular.config.recordsOff, ['#2']);
+  const configOf = (document, mode) => savedDrawingView(document, mode).modes[mode].config;
+  assert.deepEqual(configOf(saved, 'linear').recordsOff, [uid]);
+  assert.deepEqual(configOf(saved, 'circular').recordsOff, ['#2']);
 
   modeDrawing(state, 'linear').recordsOff.splice(0);
   modeDrawing(state, 'circular').recordsOff.splice(0);
@@ -370,34 +383,35 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], ['#2']);
   assert.deepEqual(modeDrawing(state, 'linear').drawnLinearSeqs.value, []);
 
-  const omitted = structuredClone(saved);
-  delete omitted.modes.linear.config.recordsOff;
-  delete omitted.modes.circular.config.recordsOff;
+  const omitted = withSavedDrawingView(withSavedDrawingView(saved, 'linear', (view) => {
+    delete view.modes.linear.config.recordsOff;
+  }), 'circular', (view) => {
+    delete view.modes.circular.config.recordsOff;
+  });
   assert.equal((await load(omitted)).status, 'ok');
   assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], []);
   assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], []);
   // Review F6: with every record ON a Save writes no list, so the Session keeps its bytes.
   const allOn = await save('records on');
-  assert.equal('recordsOff' in allOn.modes.linear.config, false);
-  assert.equal('recordsOff' in allOn.modes.circular.config, false);
+  assert.equal('recordsOff' in configOf(allOn, 'linear'), false);
+  assert.equal('recordsOff' in configOf(allOn, 'circular'), false);
 
-  const loaded = async (mutate, label, { linear, circular, rows = [] }) => {
-    const session = structuredClone(saved);
-    mutate(session.modes);
+  const loaded = async (mode, edit, label, { linear, circular, rows = [] }) => {
+    const session = withSavedDrawingView(saved, mode, (view) => edit(view.modes[mode].config));
     const result = await load(session);
     assert.equal(result.status, 'ok', label);
     assert.deepEqual(result.repairs.map(({ code, path }) => `${code}@${path}`), rows, label);
     assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], linear, label);
     assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], circular, label);
   };
-  await loaded((modes) => { modes.linear.config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid',
+  await loaded('linear', (config) => { config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid',
     { linear: [], circular: ['#2'] });
-  await loaded((modes) => { modes.linear.config.recordsOff = [uid, uid]; }, 'duplicate key', { linear: [uid], circular: ['#2'] });
-  await loaded((modes) => { modes.circular.config.recordsOff = ['contig_2']; }, 'Circular key is not #N',
+  await loaded('linear', (config) => { config.recordsOff = [uid, uid]; }, 'duplicate key', { linear: [uid], circular: ['#2'] });
+  await loaded('circular', (config) => { config.recordsOff = ['contig_2']; }, 'Circular key is not #N',
     { linear: [uid], circular: [] });
   // Review F8: a list of the wrong shape is listed; every record is drawn.
-  await loaded((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list',
-    { linear: [uid], circular: [], rows: ['setting-replaced@modes.circular.config.recordsOff'] });
+  await loaded('circular', (config) => { config.recordsOff = '#2'; }, 'not a list',
+    { linear: [uid], circular: [], rows: [`setting-replaced@drawings[${saved.drawings.findIndex(({ id }) => id === 'circular')}].config.recordsOff`] });
 });
 
 // Review #992 finding 1: a Session without a slice of a mode (a Gallery
@@ -406,10 +420,9 @@ test('a Session without a mode slice turns every record of that mode ON (record 
   resetDrawings();
   const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`, import.meta.url), 'utf8'));
   assert.equal((await load(gallery('lambda_basic_linear'))).status, 'ok');
-  modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, state.linearSeqs[0].uid);
-  modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#2');
+  modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, modeDrawing(state, 'linear').linearSeqs[0].uid);
   assert.equal((await load(gallery('HmmtDNA_basic_circular'))).status, 'ok');
-  assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], []);
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.mode), ['circular']);
   assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], []);
   await save('circular only, saved again');
 });
@@ -418,9 +431,10 @@ test('a Session without a mode slice turns every record of that mode ON (record 
 // drawings (PD-OI-070, PD-OI-091).
 test('Reset Settings keeps the OFF records of both drawings (record selection)', async () => {
   const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
+  addPairDrawings();
   modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, 'card-b');
   modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#3');
-  resetSettings(state);
+  state.drawingList().forEach((drawing) => resetSettings(state, drawing));
   assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], ['card-b']);
   assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], ['#3']);
   modeDrawing(state, 'linear').recordsOff.splice(0);
@@ -432,13 +446,14 @@ test('Reset Settings keeps the OFF records of both drawings (record selection)',
 // Similarity group names, in both drawings.
 test('Reset Settings removes the saved label table and the dormant Similarity group names of both drawings', async () => {
   const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
+  addPairDrawings();
   const row = { recordId: '*', featureType: '*', qualifier: 'product', valueRegex: '^a$', labelText: 'A' };
   MODES.forEach((mode) => {
     const drawing = modeDrawing(state, mode);
     drawing.canonicalLabelOverrideRows.value = [row];
     drawing.orthogroupDormantOverrides.OG_1 = { name: 'Saved name' };
   });
-  resetSettings(state);
+  state.drawingList().forEach((drawing) => resetSettings(state, drawing));
   MODES.forEach((mode) => {
     const drawing = modeDrawing(state, mode);
     assert.deepEqual(drawing.canonicalLabelOverrideRows.value, [], `${mode} label table`);
@@ -450,8 +465,8 @@ test('Reset Settings removes the saved label table and the dormant Similarity gr
 // hand-edited Session reaches it) fails Generate and Save with NONE_DRAWN.
 test('a Linear drawing with no ON record names the fix', () => {
   const sourceState = withModeDrawings({
-    files: {}, lInputType: { value: 'gb' }, linearSeqs: [{ uid: 'a', gb: {} }, { uid: 'b', gb: {} }]
-  }, { circular: {}, linear: { recordsOff: ['a', 'b'] } });
+    files: {}, lInputType: { value: 'gb' }
+  }, { circular: {}, linear: { recordsOff: ['a', 'b'], linearSeqs: [{ uid: 'a', gb: {} }, { uid: 'b', gb: {} }] } });
   assert.throws(() => assertDrawingInputs(modeDrawing(sourceState, 'linear'), sourceState),
     (error) => error.code === 'RECORD_SELECTION' && error.context.reason === 'NONE_DRAWN');
   modeDrawing(sourceState, 'linear').recordsOff = ['a'];
@@ -479,12 +494,12 @@ test('Session 48 keeps what each file card loaded through Load and Save, and the
     rules: stored.rules, priority: stored.qualifierPriorityRules, whitelist: stored.whitelist,
     blacklist: stored.blacklistText, fileImports: stored.fileImports
   });
-  assert.deepEqual(['d_color', 't_color', 'qualifier_priority', 'whitelist', 'blacklist'].map((key) => Boolean(state.files[key])),
+  assert.deepEqual(['d_color', 't_color', 'qualifier_priority', 'whitelist', 'blacklist'].map((key) => Boolean(state.drawingOf('circular').files[key])),
     [true, true, true, true, true]);
   // Save writes them back as they were loaded.
   const saved = await save('file cards');
   for (const field of ['rules', 'qualifierPriorityRules', 'whitelist', 'blacklistText', 'fileImports']) {
-    assert.deepEqual(saved.modes.circular.config[field], stored[field], field);
+    assert.deepEqual(savedDrawingView(saved, 'circular').modes.circular.config[field], stored[field], field);
   }
   // Remove on each card, as the card's owner takes it back.
   assert.deepEqual(fileImports.withoutImportedRows(drawing.manualSpecificRules, 't_color').map((rule) => [rule.val, rule.color]),
@@ -497,3 +512,829 @@ test('Session 48 keeps what each file card loaded through Load and Save, and the
   const colors = fileImports.withoutImportedDefaultColors(drawing.currentColors.value, drawing.fileImports.d_color, { CDS: '#aaaaaa', tRNA: '#bbbbbb' });
   assert.deepEqual([colors.CDS, colors.tRNA], ['#111111', '#abcdef']);
 });
+
+// B2d-2: Load builds one drawing per drawing of the Session (its 50 document)
+// and commits them at once; the fast path reads 46-49 without Python.
+const fixtureSession = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.gbdraw-session.json.gz`, import.meta.url))));
+const drawingsVector = (name) => JSON.parse(readFileSync(new URL('../fixtures/sessions/drawings-vectors.json', import.meta.url)))
+  .upgrades.find((entry) => entry.name === name);
+// Every message the session-import Worker receives: a file to read, or an ack.
+const workerMessages = () => {
+  const messages = [];
+  const { postMessage } = globalThis.Worker.prototype;
+  globalThis.Worker.prototype.postMessage = function record(message) {
+    messages.push(message);
+    return postMessage.call(this, message);
+  };
+  return { messages, restore: () => { globalThis.Worker.prototype.postMessage = postMessage; } };
+};
+
+test('Load of a two-mode Session 48 makes its drawings in the order and with the shown drawing the fast path names', async () => {
+  const vector = drawingsVector('two-mode-linear-shown.v48');
+  resetDrawings();
+  installShownDrawing('circular');
+  const before = state.drawingList();
+  const worker = workerMessages();
+  let loaded;
+  try {
+    loaded = await load(fixtureSession('two-mode-linear-shown.v48'));
+  } finally {
+    worker.restore();
+  }
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), vector.drawings.map((drawing) => drawing.id));
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.mode), vector.drawings.map((drawing) => drawing.mode));
+  assert.equal(state.activeDrawing().id, vector.activeDrawingId);
+  // Each drawing is a new drawing state, not the one shown before the Load.
+  for (const drawing of state.drawingList()) assert.equal(before.includes(drawing), false, drawing.id);
+  // The Worker read the file and ran nothing else (no Python helper operation).
+  assert.ok(worker.messages.length > 0);
+  for (const message of worker.messages) {
+    assert.deepEqual(Object.keys(message).filter((key) => !['operationId', 'file', 'ack'].includes(key)), [], JSON.stringify(Object.keys(message)));
+  }
+});
+
+test('a Load that fails in its commit leaves the drawings, their order and the shown drawing as they were', async () => {
+  resetDrawings();
+  installShownDrawing('linear');
+  modeDrawing(state, 'linear').adv.label_font_size = 11;
+  const before = state.drawingList();
+  const loaded = await importSession({
+    target: { files: [new Blob([JSON.stringify(fixtureSession('two-mode-linear-shown.v48'))], { type: 'application/json' })], value: 'selected' }
+  }, {
+    confirmLoadRepairs: async () => true,
+    afterLoad: async () => { throw new Error('install failed'); }
+  });
+  assert.equal(loaded.status, 'error');
+  assert.equal(state.drawingList().length, before.length);
+  state.drawingList().forEach((drawing, index) => assert.equal(drawing, before[index], drawing.id));
+  assert.equal(state.activeDrawing().id, 'linear');
+  assert.equal(modeDrawing(state, 'linear').adv.label_font_size, 11);
+});
+
+test('Load reads each drawing\'s saved Result set from its own entry of the 50 document, not from `otherModeResult`', () => {
+  // The Load body after preflight reads the upgraded document's drawings; the
+  // file's location of a set beside the committed one is only a repair path,
+  // which the upgrade gives by drawing ID (`setSources`).
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
+  const body = source.slice(source.indexOf('const importSessionDocument = async'), source.indexOf('export const importSession ='));
+  assert.ok(body.length > 1000);
+  const reads = body.split('\n').filter((line) => /\botherModeResult\b/.test(line) && !/^\s*\/\/|^\s*\*/.test(line));
+  assert.deepEqual(reads.map((line) => line.trim()), []);
+  for (const name of ['otherSetMode', 'otherArtifactSlot', 'opensOtherSet', 'ofMode']) {
+    assert.equal(new RegExp(`\\b${name}\\b`).test(body), false, name);
+  }
+});
+
+test('Load reads each drawing\'s draft from its own part of the file by drawing ID, not from mode-keyed slices', () => {
+  // A Session 46-49 drawing's settings, per-feature edits, editor edits and
+  // `ui` come from its entry of the 50 document; a Session 27-44 split is
+  // keyed by its drawings' IDs. The file's one Linear part (comparisons,
+  // LOSAT caches, group names) is the drawing the file names for it.
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
+  const body = source.slice(source.indexOf('const importSessionDocument = async'), source.indexOf('export const importSession ='));
+  assert.ok(body.length > 1000);
+  for (const name of ['modeSlices', 'modeConfigs', 'modeEditorStates', 'linearDraftConfig', 'circularDraftConfig']) {
+    assert.equal(new RegExp(`\\b${name}\\b`).test(body), false, name);
+  }
+  assert.equal(/draftConfigOf\((?:'linear'|'circular'|mode|generatedMode)\)/.test(body), false, 'draftConfigOf by mode');
+  assert.equal(/legendRekeysOf\((?:mode|generatedMode)\)/.test(body), false, 'legendRekeysOf by mode');
+  assert.equal(/committed\.find\(\(drawing\) => drawing\.mode === 'linear'\)/.test(body), false, 'the Linear drawing by mode');
+});
+
+test('Load reads each Result set\'s request, reset receipt and catalog where the file holds it; each drawing holds its own, by drawing ID', async () => {
+  // tests/utils/two_mode_session.py: a Circular Session 48 with a Linear `otherModeResult`.
+  const session = await evaluatePython('from tests.utils.two_mode_session import two_mode_session\nresult = two_mode_session()');
+  assert.deepEqual([session.version, session.renderRequest.mode, session.otherModeResult.renderRequest.mode], [48, 'circular', 'linear']);
+  // A receipt that binds no plan, in each set: each reads as none, at its own path.
+  session.editorState.alignmentResetReceipt = { schema: 1 };
+  session.otherModeResult.editorState.alignmentResetReceipt = { schema: 1 };
+  // An entry the request reader drops, in the Linear set only.
+  Object.assign(session.otherModeResult.renderRequest.records[0], { bogus: true });
+  // The Load hands its caller the artifact of each drawing it does not show.
+  const stashed = [];
+  const loaded = await importSession({
+    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+  }, {
+    confirmLoadRepairs: async () => true,
+    installLoadedArtifactSlots: (slots) => { stashed.push(...slots.stashed); }
+  });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(loaded.repairs.map(({ code, path }) => `${code} ${path}`), [
+    'setting-entries-dropped otherModeResult.renderRequest.records[0]',
+    'session-field-dropped editorState.alignmentResetReceipt',
+    'session-field-dropped otherModeResult.editorState.alignmentResetReceipt'
+  ]);
+  assert.equal(state.activeDrawing().id, 'circular');
+  const linear = stashed.find((slot) => slot.drawingId === 'linear');
+  assert.ok(linear, JSON.stringify(stashed.map((slot) => slot.drawingId)));
+  // [drawing ID, its request, its features, its receipt]: the shown drawing's, then the kept one's.
+  const held = [
+    ['circular', getCommittedCanonicalSession()?.renderRequest, state.extractedFeatures.value, state.similarityAlignmentResetReceipt.value],
+    ['linear', linear.runtimeState.canonical.committedCanonicalSession.renderRequest, linear.values.extractedFeatures,
+      linear.values.similarityAlignmentResetReceipt]
+  ];
+  for (const [id, request, features, receipt] of held) {
+    const set = id === 'circular' ? session : session.otherModeResult;
+    assert.equal(request.mode, set.renderRequest.mode, id);
+    assert.equal(Object.hasOwn(request.records[0], 'bogus'), false, id);
+    assert.equal(features.length, set.editorState.featureCatalog.items[0].features.length, id);
+    assert.equal(receipt, null, id);
+  }
+  // The readers read one set each; only `storedResultSets` and its writer
+  // name where the file holds a set, and no catalog is passed by position.
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
+  const code = (name) => {
+    const start = source.indexOf(`const ${name} = `);
+    assert.ok(start >= 0, name);
+    return source.slice(start, source.indexOf('\n};\n', start)).split('\n').filter((line) => !/^\s*(\/\/|\*|\/\*\*)/.test(line)).join('\n');
+  };
+  for (const name of ['readResultSetRequest', 'readResultSetResetReceipt', 'readResultSetFeatureCatalog', 'readSessionRequests']) {
+    assert.equal(/\botherModeResult\b/.test(code(name)), false, name);
+  }
+  for (const name of ['otherModeCatalog', 'otherCatalog', 'readSessionResetReceipts', 'readSessionFeatureCatalogs']) {
+    assert.equal(new RegExp(`\\b${name}\\b`).test(source), false, name);
+  }
+});
+
+// Session 50 (D-15-109): the Web reads the drawings document Python writes.
+const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.v50.gbdraw-session.json.gz`, import.meta.url))));
+const loadKeepingSlots = async (session) => {
+  const stashed = [];
+  let opening = null;
+  const loaded = await importSession({
+    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+  }, {
+    confirmLoadRepairs: async () => true,
+    installLoadedArtifactSlots: (slots) => { opening = slots.opening; stashed.push(...slots.stashed); }
+  });
+  return { loaded, stashed, opening };
+};
+// Each drawing's held request and features, by drawing ID: the shown one's from state, any other from its slot.
+const heldSetOf = (id, { stashed, opening }) => {
+  if (id === state.activeDrawing().id && !opening) {
+    return { request: getCommittedCanonicalSession()?.renderRequest ?? null, features: state.extractedFeatures.value };
+  }
+  const slot = [opening, ...stashed].find((entry) => entry?.drawingId === id);
+  return slot
+    ? { request: slot.runtimeState.canonical.committedCanonicalSession.renderRequest, features: slot.values.extractedFeatures }
+    : null;
+};
+const assertLoadedDrawings = (session, outcome) => {
+  assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
+  const ids = session.drawings.map((entry) => entry.id);
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id).slice(0, ids.length), ids);
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.mode).slice(0, ids.length), session.drawings.map((entry) => entry.mode));
+  assert.equal(state.activeDrawing().id, session.ui.activeDrawingId);
+  for (const entry of session.drawings) {
+    const drawing = state.drawingOf(entry.id);
+    if (entry.config?.form?.plot_title !== undefined) assert.equal(drawing.form.plot_title, entry.config.form.plot_title, entry.id);
+    if (!entry.renderRequest || entry.results.length === 0) continue;
+    const held = heldSetOf(entry.id, outcome);
+    assert.ok(held, `${entry.id} holds its Result set`);
+    assert.equal(held.request.mode, entry.mode, entry.id);
+    assert.deepEqual(held.request.records.map((record) => record.recordKey), entry.renderRequest.records.map((record) => record.recordKey), entry.id);
+    assert.equal(held.features.length, entry.editorState.featureCatalog.items[0].features.length, entry.id);
+  }
+};
+
+test('a Python-written Session 50 loads each drawing\'s request, Results and draft by drawing ID', async () => {
+  for (const name of ['drawings-circular-only', 'drawings-circular-linear', 'drawings-linear-pair-losat', 'drawings-per-drawing-cards']) {
+    const session = v49Session(name);
+    // A draft value of its own in each drawing that holds a draft.
+    session.drawings.forEach((entry) => { if (entry.config?.form) entry.config.form.plot_title = `title of ${entry.id}`; });
+    resetDrawings();
+    assertLoadedDrawings(session, await loadKeepingSlots(session));
+  }
+});
+
+test('a Session 50 with two Circular drawings and a Linear one loads all three in tab order and keeps each Result in its own slot', async () => {
+  const session = v49Session('drawings-circular-linear');
+  const circular = session.drawings.find((entry) => entry.id === 'circular');
+  session.drawings.push({ ...structuredClone(circular), id: 'circular-2', name: 'Circular 2' });
+  session.drawings.forEach((entry) => { if (entry.config?.form) entry.config.form.plot_title = `title of ${entry.id}`; });
+  session.ui.activeDrawingId = 'circular-2';
+  resetDrawings();
+  const outcome = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, outcome);
+  // Each drawing that is not shown keeps its Result in its own slot.
+  assert.deepEqual([outcome.opening, ...outcome.stashed].filter(Boolean).map((slot) => slot.drawingId).sort(), ['circular', 'linear']);
+});
+
+test('a Session 50 without its drawings or its resources is refused as no Session (OV-1768)', async () => {
+  for (const field of ['drawings', 'resources']) {
+    const session = v49Session('drawings-circular-only');
+    delete session[field];
+    resetDrawings();
+    const outcome = await load(session);
+    assert.equal(outcome.status, 'error', field);
+    assert.equal(outcome.error.context?.reason, 'SESSION_FORMAT', `${field}: ${JSON.stringify(outcome.error)}`);
+  }
+});
+
+// B2d-3a-2: each drawing of a Session 50 takes its own files, bindings, LOSAT
+// entries and comparison intent by its drawing ID, opened or not.
+// A Circular drawing and two Linear ones, each with files of its own; the
+// Circular drawing's resources are renamed so the two fixtures share none.
+const threeDrawingSession = () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const circularOnly = v49Session('drawings-circular-only');
+  const rename = (value) => JSON.parse(JSON.stringify(value).replaceAll('"record-1-genbank"', '"circular-record-1"'));
+  session.resources['circular-record-1'] = rename(circularOnly.resources['record-1-genbank']);
+  session.drawings.unshift(rename(circularOnly.drawings[0]));
+  const second = session.drawings.find((entry) => entry.id === 'linear-2');
+  second.webFiles.bindings.linearSeqs[0].gb.name = 'R2c-second.gb';
+  return session;
+};
+const filesOfDrawings = () => Object.fromEntries(state.drawingList().map((drawing) => [drawing.id, {
+  c_gb: drawing.files.c_gb?.name ?? null,
+  linearSeqs: drawing.linearSeqs.map((seq) => seq.gb?.name ?? null)
+}]));
+
+test('a Session 50 gives each drawing its own files by drawing ID, the ones it does not open too', async () => {
+  for (const opened of ['linear', 'linear-2', 'circular']) {
+    const session = threeDrawingSession();
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const outcome = await loadKeepingSlots(session);
+    assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
+    const files = filesOfDrawings();
+    assert.equal(files.circular.c_gb, 'cli-web-mito.gb', opened);
+    assert.deepEqual(files.linear.linearSeqs, ['R2c.gb', 'R3c.gb'], opened);
+    assert.deepEqual(files['linear-2'].linearSeqs, ['R2c-second.gb', 'R3c.gb'], opened);
+  }
+});
+
+test('a Session 50 resource that only a drawing it does not open binds keeps its row when it cannot be read', async () => {
+  const session = v49Session('drawings-per-drawing-cards');
+  session.ui.activeDrawingId = 'circular-2';
+  session.resources['resource-0001'] = 5;
+  resetDrawings();
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.ok(loaded.repairs.some((row) => row.code === 'file-entry-dropped' && row.path === 'resources.resource-0001'),
+    JSON.stringify(loaded.repairs));
+});
+
+test('a Session 50 whose Linear drawings hold different LOSAT entries keeps each drawing\'s entries', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const [first, second] = session.drawings;
+  const entry = structuredClone(first.losatCache.entries[0]);
+  second.losatCache.entries = [{ ...entry, key: `${entry.key}-second`, filename: 'second.tsv' }];
+  for (const opened of [first.id, second.id]) {
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const loaded = await load(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual([...state.losatCache.value.keys()].sort(), [entry.key, `${entry.key}-second`].sort(), opened);
+  }
+});
+
+// D-15-120: a Session 50 without a Linear drawing loads without one; the Linear drawing the app
+// held before the Load goes with the drawings the Load replaces.
+test('a Session 50 without a Linear drawing loads no Linear drawing', async () => {
+  const session = v49Session('drawings-circular-only');
+  resetDrawings();
+  modeDrawing(state, 'linear').form.plot_title = 'left over';
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.mode), session.drawings.map((entry) => entry.mode));
+  assert.equal(state.drawingList().some((drawing) => drawing.mode === 'linear'), false);
+});
+
+test('a Session 50 drawing\'s Web-only artifact fields are dropped as a Session 40-49\'s top-level ones are', async () => {
+  const session = v49Session('drawings-circular-linear');
+  const index = session.drawings.findIndex((entry) => entry.id !== session.ui.activeDrawingId);
+  session.drawings[index].features = { ...session.drawings[index].features, extractedFeatures: [] };
+  session.drawings[index].orthogroupState = { ...session.drawings[index].orthogroupState, groups: [{ id: 'g1' }] };
+  resetDrawings();
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const paths = loaded.repairs.map((row) => row.path);
+  assert.ok(paths.includes(`drawings[${index}].features.extractedFeatures`), JSON.stringify(paths));
+  assert.equal(paths.some((path) => path.includes('orthogroupState')), false, JSON.stringify(paths));
+});
+
+// B2d-3a-3a: one per-drawing projection. Every Session 50 drawing, opened
+// or not, is projected by one function from its own one-drawing view.
+test('one function builds the request projection input of every Session 50 drawing, opened or not', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
+  // The projection input names the input slot its drawing binds; one builder writes it.
+  assert.equal(source.match(/\bbindingInputSlot:/g)?.length ?? 0, 1, 'one projection-input builder');
+  assert.match(source, /const drawingProjectionInputOf = /);
+  assert.ok((source.match(/\bdrawingProjectionInputOf\(/g)?.length ?? 0) >= 2, 'the opened drawing and every other drawing call it');
+});
+
+test('a Session 50 drawing Load does not open keeps its dormant Similarity group names', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const [first, second] = session.drawings;
+  second.config.webEdits.orthogroupDormantOverrides = { '["a","b"]': { name: 'Dormant of linear-2' } };
+  first.config.webEdits.orthogroupDormantOverrides = { '["c","d"]': { name: 'Dormant of linear' } };
+  for (const opened of [first.id, second.id]) {
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const loaded = await load(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual({ ...state.drawingOf(second.id).orthogroupDormantOverrides }, second.config.webEdits.orthogroupDormantOverrides, opened);
+    assert.deepEqual({ ...state.drawingOf(first.id).orthogroupDormantOverrides }, first.config.webEdits.orthogroupDormantOverrides, opened);
+  }
+});
+
+// B2d-3a-3a Part 2: session-authority lists a file's Result sets only
+// through `storedResultSets` (the one place that names where a Session
+// 27-49 file holds a set); its readers key the stored request schemas by
+// set path.
+test('session-authority reads `otherModeResult` only in the Result set enumeration owner', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/session-authority.js', import.meta.url), 'utf8');
+  const bodyOf = (name) => {
+    const start = source.indexOf(`export const ${name} = `);
+    assert.ok(start >= 0, name);
+    return source.slice(start, source.indexOf('\n};\n', start));
+  };
+  const owners = ['storedResultSets', 'withStoredResultSet'].map(bodyOf);
+  const outside = owners.reduce((text, body) => text.replace(body, ''), source)
+    .split('\n').filter((line) => !/^\s*(\/\/|\*|\/\*\*)/.test(line))
+    // The field registries name the key; they read no set.
+    .filter((line) => !/^\s*otherModeResult: \{ authority:|positionalArrays:/.test(line));
+  assert.deepEqual(outside.filter((line) => /\botherModeResult\b/.test(line)), []);
+});
+
+// OV-1786: Load restores every Session 50 drawing through its own request
+// projection, so a drawing gets the same settings whichever drawing opens
+// (DESIGN `drawingViewOf`).
+test('a Session 50 drawing gets the same settings whichever drawing Load opens (OV-1786)', async () => {
+  const session = v49Session('drawings-circular-linear');
+  // The Linear drawing has no feature-edit draft: it takes its request's
+  // per-feature edits (OV-220), opened or not.
+  const linear = session.drawings.find((entry) => entry.mode === 'linear');
+  assert.equal(linear.features ?? null, null);
+  linear.renderRequest.diagramOptions.featureOverrides = [{ recordKey: 'record-1', biologicalFeatureId: 'f1234~1',
+    featureVisibility: null, labelVisibility: null, labelText: 'Request label' }];
+  // The drawing's settings (its draft's form and adv), its other settings a
+  // request can carry, and its per-feature edits.
+  const SETTINGS = ['form', 'adv', 'rules', 'unmanagedConfigOverrides',
+    'featureOverrides', 'featureVisibilityManualRules', 'canonicalLabelOverrideRows'];
+  const settingsOf = (id) => {
+    const drawing = state.drawingOf(id);
+    return JSON.parse(JSON.stringify(Object.fromEntries(SETTINGS.map((name) => [name, drawing[name] ?? null]))));
+  };
+  const loads = [];
+  for (const opened of session.drawings.map((entry) => entry.id)) {
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const loaded = await load(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    loads.push(Object.fromEntries(session.drawings.map((entry) => [entry.id, settingsOf(entry.id)])));
+  }
+  const [first, ...rest] = loads;
+  const differs = rest.flatMap((other) => session.drawings.flatMap(({ id }) => SETTINGS.flatMap((name) => {
+    const [a, b] = [first[id][name] ?? {}, other[id][name] ?? {}];
+    return [...new Set([...Object.keys(a), ...Object.keys(b)])]
+      .filter((key) => JSON.stringify(a[key]) !== JSON.stringify(b[key])).map((key) => `${id}.${name}.${key}`);
+  })));
+  assert.deepEqual(differs, []);
+});
+
+// DESIGN §6 (B2-D6): after the Session 46-49 upgrade, a 46-49 file and a 50
+// file are both a Session 50, so no Web reader of a Session compares its
+// version with a threshold of 46 or later (the writer's SESSION_VERSION, a
+// band constant, LAYOUT.version, a literal 46-50), lists such versions, or
+// holds a hand-written Session version of 46 or later. The band of a file is
+// read through the session-authority band predicates, and only the upgrade
+// carries a source version (`sourceFacts`). The sites below read a file's
+// band before any upgrade runs, each for its reason; every other site fails.
+// Thresholds of 44 and below serve the Session 27-44 path until Python
+// converts it (B2d-4) and are not counted.
+const BAND_READERS = {
+  'services/session-authority.js versionHoldsDrawings': 'band predicate: a Session 50 is a list of drawings',
+  'services/session-authority.js versionKeepsModeSlices': 'band predicate: a Session 46 or later keeps mode slices',
+  'services/session-authority.js holdsCaptionLegendRows': 'band predicate: a Session 46 or older keys Legend rows by caption',
+  'services/session-drawings-upgrade.js sessionLegendEditsByRowKey': 'before the upgrade: rekeys a Session 46\'s Legend edits',
+  'services/session-drawings-upgrade.js upgradeRowKeyedModeScopedSession': 'the upgrade: admits 46-49, writes sourceFacts',
+  'services/session-drawings-upgrade.js sessionSourceFactsOf':
+    'the source facts by version (one owner, shared by the 46-49 upgrade and the 27-44 Load)',
+  'services/main-session-comparison-frame.js storesDrawnFrameProteinResults':
+    'Gallery publication, before any conversion: the stored file\'s protein frame (flip: Gallery reads 50)',
+  'services/gallery-session-publication.js validateEnvelope': 'Gallery publication writes the writer\'s version (flip: 50)',
+  'services/gallery-session-publication.js admit': 'Gallery publication admits a stored file by its band (flip: 46-49 via the upgrade)'
+};
+test('no Web reader of a Session compares its version with a Session 46 or later threshold outside the band owner', () => {
+  const root = new URL('../../gbdraw/web/js/', import.meta.url);
+  const sources = readdirSync(root, { recursive: true }).map(String)
+    .filter((name) => name.endsWith('.js') && !name.startsWith('contracts/') && !name.endsWith('.generated.js'))
+    .map((name) => ({ name, source: readFileSync(new URL(name, root), 'utf8') }));
+  const NAMES = String.raw`MODE_SCOPED_SESSION_VERSION|ROW_KEYED_LEGEND_SESSION_VERSION|FILE_IMPORT_ORIGIN_SESSION_VERSION`
+    + String.raw`|DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION|SESSION_VERSION|CURRENT_VERSION|(?:SESSION_DRAWINGS_)?LAYOUT\.version`;
+  const THRESHOLD = String.raw`(?:${NAMES}|4[6-9]|50)\b`;
+  const compare = new RegExp(String.raw`[Vv]ersion\)?\s*(?:[<>]=?|[!=]==)\s*${THRESHOLD}|\b${THRESHOLD}\s*(?:[<>]=?|[!=]==)\s*\S*[Vv]ersion`, 'g');
+  // A version list: an array that names a band constant, or an `includes` list of a literal 46-50.
+  const list = new RegExp(String.raw`\[[^\][]*\b(?:${NAMES})\b[^\][]*\]|\[[^\][]*\b(?:4[6-9]|50)\b[^\][]*\]\s*\.includes\(`, 'g');
+  const handVersion = /\bconst [A-Z_]*SESSION[A-Z_]*VERSION\s*=\s*(4[6-9]|[5-9]\d)\b/g;
+  const declaration = /^(\s*)(?:export\s+)?(?:const|let|function|async\s+function)\s+([A-Za-z_$][\w$]*)/;
+  /** @param {string} line */
+  const indentOf = (line) => line.match(/^\s*/)[0].length;
+  // The declaration a line belongs to: its own at the top level, else the
+  // nearest one whose block (the lines indented deeper than it) holds it.
+  const ownerOf = (lines, index) => {
+    const own = lines[index].match(declaration);
+    if (own && own[1].length === 0) return own[2];
+    for (let at = index - 1; at >= 0; at -= 1) {
+      const found = lines[at].match(declaration);
+      if (found && lines.slice(at + 1, index + 1).every((line) => !line.trim() || indentOf(line) > found[1].length)) return found[2];
+    }
+    return '(module)';
+  };
+  const sites = new Map();
+  for (const { name, source } of sources) {
+    const lines = source.split('\n');
+    const lineOf = (offset) => source.slice(0, offset).split('\n').length - 1;
+    for (const pattern of [compare, list, handVersion]) {
+      for (const match of source.matchAll(pattern)) {
+        const index = lineOf(match.index);
+        if (/^\s*(\/\/|\*|\/\*\*)/.test(lines[index])) continue;
+        const site = `${name} ${ownerOf(lines, index)}`;
+        sites.set(site, [...(sites.get(site) ?? []), `${name}:${index + 1} ${lines[index].trim().slice(0, 120)}`]);
+      }
+    }
+  }
+  const unlisted = [...sites].filter(([site]) => !Object.hasOwn(BAND_READERS, site)).flatMap(([, at]) => at);
+  assert.deepEqual(unlisted, [], 'a version compare outside the band owner: read a band predicate or a sourceFacts fact');
+  assert.deepEqual(Object.keys(BAND_READERS).filter((site) => !sites.has(site)), [], 'a listed site compares no version: remove it');
+});
+
+// OV-1791: a Session 50 Load lists one row per fault in a drawing's stored
+// unmanaged overrides, at the path the file holds (`drawings[i]`), for the
+// opened drawing as for the others.
+test('a Session 50 Load lists each drawing\'s stored override fault once, at its drawings[i] path', async () => {
+  const session = v49Session('drawings-circular-linear');
+  session.ui.activeDrawingId = 'circular';
+  const faulted = session.drawings.flatMap((entry, index) => (entry.config ? [{ entry, index }] : []));
+  assert.ok(faulted.some(({ entry }) => entry.id === 'circular'));
+  faulted.forEach(({ entry }) => { entry.config.unmanagedConfigOverrides = { [`no_such.${entry.id}.key`]: 1 }; });
+  const loaded = await importSession({
+    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+  }, { confirmLoadRepairs: async () => true });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(loaded.repairs.filter((repair) => repair.path.includes('unmanagedConfigOverrides'))
+    .map((repair) => `${repair.code} ${repair.path}`).sort(), faulted
+    .map(({ entry, index }) => `setting-replaced drawings[${index}].config.unmanagedConfigOverrides["no_such.${entry.id}.key"]`).sort());
+});
+
+// Save writes Session 50 (B2d-3, DESIGN §4.4): every used drawing in tab order and the shown one.
+test('Save writes each drawing of a Session 50 as its own entry; a fresh Load restores the drawings, each Result and the shown one', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  const kept = [first.opening, ...first.stashed].filter(Boolean);
+  const saved = await (async () => {
+    const result = await exportSession(null, { readKeptArtifacts: () => kept });
+    assert.equal(result.status, 'saved', result.error?.message);
+    return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  })();
+  assert.equal(saved.version, SESSION_VERSION);
+  for (const retired of ['modes', 'otherModeResult', 'renderRequest', 'results', 'config']) assert.equal(Object.hasOwn(saved, retired), false, retired);
+  assert.equal(Object.hasOwn(saved.ui, 'mode'), false);
+  assert.deepEqual(saved.drawings.map((entry) => entry.id).slice(0, 2), ['linear', 'linear-2']);
+  assert.equal(saved.ui.activeDrawingId, 'linear-2');
+  saved.drawings.slice(0, 2).forEach((entry) => assert.equal(entry.results.length, 1, entry.id));
+  resetDrawings();
+  assertLoadedDrawings(saved, await loadKeepingSlots(saved));
+});
+
+test('Save writes each Session 50 drawing\'s own CLI options, found by drawing ID, the drawing Load does not open too', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const optionsOf = (id) => ({ rawArgs: ['--gbk', `${id}.gb`, '-o', id] });
+  session.drawings.forEach((entry) => { entry.cliOptions = optionsOf(entry.id); });
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  const result = await exportSession('cli-options', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  for (const id of ['linear', 'linear-2']) {
+    assert.deepEqual(saved.drawings.find((entry) => entry.id === id).cliOptions, optionsOf(id), id);
+  }
+});
+
+// A wrap length is one per Linear drawing (Session 50). The Web has no control
+// for it: it lists a length held as a config override under the drawing that
+// holds it, the unopened one's too, and Save keeps it there.
+test('a Session 50 keeps each Linear drawing\'s own wrap length override through Load and Save', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  session.drawings.find((entry) => entry.id === 'linear-2').config.unmanagedConfigOverrides = { 'canvas.linear.wrap_length': 30000 };
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  assert.deepEqual({ ...state.drawingOf('linear-2').unmanagedConfigOverrides }, { 'canvas.linear.wrap_length': 30000 });
+  assert.deepEqual({ ...state.drawingOf('linear').unmanagedConfigOverrides }, {});
+  const result = await exportSession('wrap-length', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const overridesOf = (id) => saved.drawings.find((entry) => entry.id === id).config.unmanagedConfigOverrides ?? {};
+  assert.deepEqual(overridesOf('linear-2'), { 'canvas.linear.wrap_length': 30000 });
+  assert.deepEqual(overridesOf('linear'), {});
+});
+
+// Italic gene names are one setting per drawing (`config.adv.italic_gene_labels`):
+// of two Linear drawings, the one that holds it on keeps it through Load and Save.
+test('a Session 50 keeps each Linear drawing\'s own Italic gene names through Load and Save', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  session.drawings.find((entry) => entry.id === 'linear-2').config.adv.italic_gene_labels = true;
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  assert.equal(state.drawingOf('linear-2').adv.italic_gene_labels, true);
+  assert.equal(state.drawingOf('linear').adv.italic_gene_labels, false);
+  const result = await exportSession('italic-gene-labels', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const italicOf = (id) => saved.drawings.find((entry) => entry.id === id).config.adv.italic_gene_labels;
+  assert.equal(italicOf('linear-2'), true);
+  assert.equal(italicOf('linear'), false);
+});
+
+// The identity colour scale is one setting per drawing (`config.adv.identity_scale`):
+// of two Linear drawings, the one that holds a scale keeps it through Load and Save, and
+// the other keeps no scale.
+test('a Session 50 keeps each Linear drawing\'s own identity colour scale through Load and Save', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  session.drawings.find((entry) => entry.id === 'linear-2').config.adv.identity_scale = [40, 90];
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  assert.deepEqual(state.drawingOf('linear-2').adv.identity_scale, [40, 90]);
+  assert.equal(state.drawingOf('linear').adv.identity_scale, null);
+  const result = await exportSession('identity-scale', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const scaleOf = (id) => saved.drawings.find((entry) => entry.id === id).config.adv.identity_scale;
+  assert.deepEqual(scaleOf('linear-2'), [40, 90]);
+  assert.equal(scaleOf('linear'), null);
+});
+
+test('Save checks each Session 50 drawing it writes with Save\'s checks, not Load\'s: an input type of no type is refused', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  // Load reads such a type as GenBank with a row (OV-594); Save refuses to write one.
+  state.activeDrawing().inputType.value = 'embl';
+  await assert.rejects(
+    exportSession('input-type', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) }),
+    /INPUT_INVALID/
+  );
+});
+
+test('Save writes into each Session 50 drawing the LOSAT entries of its own Linear rows (K-3)', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const first = session.drawings.find((entry) => entry.id === 'linear');
+  const entry = first.losatCache.entries[0];
+  // linear-2 holds other rows: each uid of linear's renamed throughout it, with its own entry.
+  const renamed = (text) => text.replaceAll(entry.queryUid, `${entry.queryUid}-2`).replaceAll(entry.subjectUid, `${entry.subjectUid}-2`);
+  const index = session.drawings.findIndex((candidate) => candidate.id === 'linear-2');
+  session.drawings[index] = JSON.parse(renamed(JSON.stringify(session.drawings[index])));
+  session.drawings[index].losatCache.entries = [JSON.parse(renamed(JSON.stringify({ ...entry, key: `${entry.key}-second`, filename: 'second.tsv' })))];
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, loaded);
+  const result = await exportSession('losat-entries', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const keysOf = (id) => saved.drawings.find((candidate) => candidate.id === id).losatCache.entries.map(({ key }) => key);
+  assert.deepEqual(keysOf('linear'), [entry.key]);
+  assert.deepEqual(keysOf('linear-2'), [`${entry.key}-second`]);
+});
+
+// #1540 (OV-2379): rows the gbdraw 0.14.4 Web engine searched (`runtime.version: null`) for a search the
+// current build gives alike are reused. Load merges both Linear drawings' entries into the one cache with
+// that record, the reuse rule takes each of them, and Save writes each record back into its own drawing.
+test('a Session 50 keeps each Linear drawing\'s 0.14.4 Web LOSAT entries reusable through Load and Save', async () => {
+  const { isReusableLosatEntry } = await import('../../gbdraw/web/js/services/losat-cache.js');
+  const session = v49Session('drawings-linear-pair-losat');
+  const first = session.drawings.find((entry) => entry.id === 'linear');
+  const entry = first.losatCache.entries[0];
+  entry.runtime = { kind: 'losat', source: 'wasm', version: null, program: entry.program };
+  const renamed = (text) => text.replaceAll(entry.queryUid, `${entry.queryUid}-2`).replaceAll(entry.subjectUid, `${entry.subjectUid}-2`);
+  const index = session.drawings.findIndex((candidate) => candidate.id === 'linear-2');
+  session.drawings[index] = JSON.parse(renamed(JSON.stringify(session.drawings[index])));
+  session.drawings[index].losatCache.entries = [JSON.parse(renamed(JSON.stringify({ ...entry, key: `${entry.key}-second`, filename: 'second.tsv' })))];
+  for (const opened of ['linear-2', 'linear']) {
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const loaded = await loadKeepingSlots(session);
+    assertLoadedDrawings(session, loaded);
+    for (const key of [entry.key, `${entry.key}-second`]) {
+      const cached = state.losatCache.value.get(key);
+      assert.deepEqual(cached?.runtime, entry.runtime, `${opened}: ${key}`);
+      assert.equal(isReusableLosatEntry(cached), true, `${opened}: ${key}`);
+    }
+    const result = await exportSession(`losat-runtime-${opened}`, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+    assert.equal(result.status, 'saved', JSON.stringify(result));
+    const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    const runtimesOf = (id) => saved.drawings.find((candidate) => candidate.id === id).losatCache.entries.map(({ runtime }) => runtime);
+    assert.deepEqual(runtimesOf('linear'), [entry.runtime], opened);
+    assert.deepEqual(runtimesOf('linear-2'), [entry.runtime], opened);
+  }
+});
+
+// DESIGN §1, B2-D9: a drawing writes the LOSAT entries its request's inputs
+// name. linear-2 binds linear's rows but has no request (no Generate), so it
+// names none; the shown drawing linear keeps its entry.
+test('Save writes no LOSAT entry into a Session 50 drawing without a request, though it binds the entry\'s rows', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const entry = session.drawings.find((candidate) => candidate.id === 'linear').losatCache.entries[0];
+  const second = session.drawings.find((candidate) => candidate.id === 'linear-2');
+  Object.assign(second, { renderRequest: null, results: [], editorState: { featureCatalog: null } });
+  delete second.runMetadata;
+  session.ui.activeDrawingId = 'linear';
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  assert.deepEqual(state.drawingOf('linear-2').linearSeqs.map(({ uid }) => uid), [entry.queryUid, entry.subjectUid]);
+  const result = await exportSession('losat-no-request', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const keysOf = (id) => saved.drawings.find((candidate) => candidate.id === id).losatCache.entries.map(({ key }) => key);
+  assert.equal(saved.drawings.find((candidate) => candidate.id === 'linear-2').renderRequest, null);
+  assert.deepEqual(keysOf('linear'), [entry.key]);
+  assert.deepEqual(keysOf('linear-2'), []);
+});
+
+// K-3: a Circular conservation entry names no Linear row; only a Circular
+// request whose conservation rings read sequences names it. Neither drawing
+// here has such rings, so neither writes it.
+test('Save writes a Circular conservation LOSAT entry into no drawing whose request has no conservation sequences (K-3)', async () => {
+  const session = v49Session('drawings-circular-linear');
+  const conservation = {
+    schema: 2, kind: 'raw-losat', identityKind: 'nucleotide', program: 'blastn', flow: 'circular-conservation',
+    outfmt: '6', args: ['--task', 'megablast'], queryCanonicalHash: 'a'.repeat(64), subjectCanonicalHash: 'b'.repeat(64),
+    text: 'q\ts\t100.000\t10\t0\t0\t1\t10\t1\t10\t0.0\t20\n', key: 'c'.repeat(64), filename: 'ring.circular_conservation.losatn.tsv', display: true
+  };
+  session.drawings.find((candidate) => candidate.id === 'circular').losatCache.entries = [conservation];
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  assert.deepEqual([...state.losatCache.value.keys()], [conservation.key]);
+  const result = await exportSession('losat-conservation', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  assert.deepEqual(Object.fromEntries(saved.drawings.map(({ id, losatCache }) => [id, losatCache.entries.map(({ key }) => key)])),
+    { circular: [], linear: [] });
+});
+
+// K-3: a ring's query hash is the SHA-256 of the FASTA the Python ring reader
+// (the Worker's) returns; node has no Worker, so the fixture's other ring is
+// hashed here through Python.
+const readRingInPython = async (_operation, { files: [{ bytes }] }) => ({
+  result: JSON.parse(String(await evaluatePython(`
+import base64, os, tempfile
+from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
+with tempfile.NamedTemporaryFile(delete=False) as handle:
+    handle.write(base64.b64decode(payload))
+try:
+    result = read_comparison_sequence_json(handle.name)
+finally:
+    os.unlink(handle.name)
+`, Buffer.from(new Uint8Array(bytes)).toString('base64'))))
+});
+// The Worker helper requests (ring reads) started while `callback` runs.
+const helperRequestsDuring = async (callback) => {
+  const requests = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric: ({ name, operation }) => { if (name === 'diagramHelperRequest') requests.push(operation); }
+  };
+  try {
+    return { value: await callback(), requests };
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__;
+  }
+};
+const ringQueryHash = async (text) => {
+  const { result } = await readRingInPython('', { files: [{ bytes: Buffer.from(text) }] });
+  return createHash('sha256').update(result.fasta, 'utf8').digest('hex');
+};
+// A Session 50 of `synthetic_conservation` (three LOSAT rings and their entries)
+// with a second Circular drawing `circular-2` whose ring 3 reads other bytes
+// (one base changed) and whose entries are rings 1 and 2's and that ring 3's.
+let conservationSaves = 0;
+const twoConservationDrawings = async () => {
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz', import.meta.url))));
+  resetDrawings();
+  const first = await loadKeepingSlots(fixture);
+  assert.equal(first.loaded.status, 'ok', JSON.stringify(first.loaded.error));
+  // Each call saves under its own title, so no repeat-download question cancels it.
+  const result = await exportSession(`conservation-${++conservationSaves}`, { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const session = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const circular = session.drawings.find((entry) => entry.id === 'circular');
+  const entries = circular.losatCache.entries;
+  assert.deepEqual(entries.map(({ key }) => key), fixture.losatCache.entries.map(({ key }) => key));
+  const ringId = circular.webFiles.bindings.c_conservation_fastas[2].resourceId;
+  const ringText = Buffer.from(session.resources[ringId].data, 'base64').toString();
+  const otherText = ringText.replace('\nACGT', '\nTCGT');
+  assert.notEqual(otherText, ringText);
+  session.resources['ring-other'] = { ...session.resources[ringId], name: 'ring-other-comparison-d.fasta', data: Buffer.from(otherText).toString('base64') };
+  const other = { ...entries[2], key: 'e'.repeat(64), filename: 'ring-other.circular_conservation.losatn.tsv', queryCanonicalHash: await ringQueryHash(otherText) };
+  assert.notEqual(other.queryCanonicalHash, entries[2].queryCanonicalHash);
+  const second = JSON.parse(JSON.stringify(circular).replaceAll(`"${ringId}"`, '"ring-other"'));
+  Object.assign(second, { id: 'circular-2', name: 'Circular 2' });
+  second.losatCache.entries = [entries[0], entries[1], other];
+  session.drawings.splice(session.drawings.indexOf(circular) + 1, 0, second);
+  return { session, keys: { ring1: entries[0].key, ring2: entries[1].key, ring3: entries[2].key, other: other.key } };
+};
+const savedEntryKeys = async (title, loaded) => {
+  const result = await exportSession(title, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  return Object.fromEntries(saved.drawings.map(({ id, losatCache }) => [id, losatCache.entries.map(({ key }) => key)]));
+};
+
+// K-3 (D-15-124): Save keeps a conservation entry only in the drawing whose
+// request names it, by the entry's subject and query hashes: after a Load, the
+// pairs of the entries the file wrote into that drawing. Save reads no ring
+// file (OV-1908: the first Save after a Load booted the Worker to hash them).
+test('Save after a Load reads no ring file and writes each Circular drawing its own conservation entries (K-3)', async () => {
+  const { session, keys } = await twoConservationDrawings();
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  const { value: saved, requests } = await helperRequestsDuring(() => savedEntryKeys('two rings', loaded));
+  assert.deepEqual(requests, []);
+  assert.deepEqual(saved.circular, [keys.ring1, keys.ring2, keys.ring3]);
+  assert.deepEqual(saved['circular-2'], [keys.ring1, keys.ring2, keys.other]);
+});
+
+// K-3 (D-15-124): a drawing's entries are its request's. A ring file bound in
+// place of the request's after its Generate (no new Generate) changes nothing
+// Save writes: the request's entry stays, the bound file's is not added.
+test('Save keeps the request\'s conservation entry for a ring whose bound file is another (K-3)', async () => {
+  const { session, keys } = await twoConservationDrawings();
+  const second = session.drawings.find((entry) => entry.id === 'circular-2');
+  // circular-2's request still names `ring-other`; its ring 3 binds circular's ring 3 file.
+  const ringId = session.drawings.find((entry) => entry.id === 'circular').webFiles.bindings.c_conservation_fastas[2].resourceId;
+  for (const field of ['c_conservation_fastas', 'c_conservation_sequence_sources']) {
+    second.webFiles.bindings[field][2] = { ...second.webFiles.bindings[field][2], resourceId: ringId };
+  }
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  const saved = await savedEntryKeys('replaced ring', loaded);
+  assert.deepEqual(saved.circular, [keys.ring1, keys.ring2, keys.ring3]);
+  assert.deepEqual(saved['circular-2'], [keys.ring1, keys.ring2, keys.other]);
+});
+
+// OV-337: Load leaves a Linear row without a Depth file as the Session binds it
+// (`depth: null`), so Save writes it back unchanged. Load pads Depth rows to
+// the Depth track count only when a row holds a Depth file, as for Circular.
+test('Load and Save keep a Linear row without a Depth file as depth null (OV-337)', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const saveKept = async (title, outcome) => {
+    assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
+    const result = await exportSession(title, { readKeptArtifacts: () => [outcome.opening, ...outcome.stashed].filter(Boolean) });
+    assert.equal(result.status, 'saved', result.error?.message);
+    return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  };
+  resetDrawings();
+  const first = await saveKept('round trip', await loadKeepingSlots(session));
+  const linearRows = (document) => savedDrawingView(document, 'linear').webFiles.bindings.linearSeqs;
+  const rows = linearRows(first);
+  assert.deepEqual(rows.map((row) => row.depth), [null, null]);
+  assert.equal(savedDrawingView(first, 'linear').modes.linear.config.adv.depth_tracks.length, 1, 'the Linear drawing has a Depth series');
+  const reloaded = await loadKeepingSlots(first);
+  assert.deepEqual(state.drawingOf('linear').linearSeqs.map((seq) => seq.depth), [null, null]);
+  const second = await saveKept('round trip again', reloaded);
+  assert.deepEqual(linearRows(second).map((row) => row.depth), rows.map((row) => row.depth));
+});
+
+// OV-1811: Save writes the drawings a one-mode Session 50 Load made, and no drawing of the other mode.
+test('Save after a one-mode Session 50 Load writes no drawing of the other mode (R16-8, OV-1811)', () => withBootPalettes(state, async () => {
+  resetDrawings();
+  const first = await loadKeepingSlots(v49Session('drawings-linear-pair-losat'));
+  const result = await exportSession('ov-1811', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  assert.deepEqual(saved.drawings.map((entry) => entry.id), ['linear', 'linear-2']);
+}));
+
+// OV-1811, a Session 48 the move gives one drawing (its Linear part unused): Load makes no Linear
+// drawing (D-15-120), so Save writes the Circular drawing alone.
+test('a Session 48 Load whose Linear part is unused makes no Linear drawing; Save writes the Circular one (R16-8, OV-1811)', () => withBootPalettes(state, async () => {
+  assert.deepEqual(drawingsVector('file-card-imports-circular.v48').drawings.map((drawing) => drawing.mode), ['circular']);
+  resetDrawings();
+  const loaded = await load(fixtureSession('file-card-imports-circular.v48'));
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['circular']);
+  const saved = await save('ov-1811 48');
+  assert.deepEqual(saved.drawings.map((entry) => entry.id), ['circular']);
+}));
+
+// D-15-120: a Load makes only the drawings the Session holds; the bar's offer tab, not the Load,
+// makes a drawing of the other mode.
+test('a one-mode Session 50 Load lists only its own drawings (D-15-120)', () => withBootPalettes(state, async () => {
+  resetDrawings();
+  const loaded = await loadKeepingSlots(v49Session('drawings-linear-pair-losat'));
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['linear', 'linear-2']);
+  assert.deepEqual(state.drawingTabs.value.map((tab) => tab.id), ['linear', 'linear-2']);
+}));

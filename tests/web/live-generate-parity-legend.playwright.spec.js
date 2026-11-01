@@ -13,6 +13,7 @@ const {
 } = require('./helpers/live-generate-parity.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   SINGLE_FIXTURE, open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history,
   FL1_OFF, legendRowColor, FL1_ALPHA, DEPTH_TSV, colorLegendRow, openCanvas, renameRow,
@@ -477,8 +478,7 @@ for (const [mode, addDepth] of DEPTH_ADDERS) {
 // the row. Show Depth is per mode, so the Depth case returns with Depth on.
 const LOCTEST_FIXTURE = 'tests/fixtures/feature_location_search.gb';
 const switchMode = async (page, target) => {
-  await page.getByRole('button', { name: target === 'linear' ? 'Linear' : 'Circular', exact: true }).click();
-  await page.waitForFunction((value) => window.__GBDRAW_APP__?.mode === value, target);
+  await showDrawing(page, { kind: target });
   await settleLive(page);
 };
 const OTHER_MODE_ROWS = [
@@ -1181,7 +1181,7 @@ test('R15-2: a Legend row the editor added in a Session main saved loads, shows,
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
   if (await page.evaluate(() => window.__GBDRAW_APP__.mode) !== 'linear') {
-    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(page, { kind: 'linear' });
   }
   await settleLive(page);
   const manualRow = () => page.evaluate(() => {

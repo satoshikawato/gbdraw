@@ -42,6 +42,7 @@ const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { gunzipSync } = require('node:zlib');
 const { generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { offerTab } = require('./helpers/drawing-bar.cjs');
 
 test.use({ actionTimeout: 20_000, locale: 'ja-JP', viewport: { width: 1280, height: 800 } });
 
@@ -135,6 +136,9 @@ const savedSession = async (page, testInfo, name) => {
     await again.click();
     return pending;
   }, () => pending)]);
+  // The pointer leaves the dialog's button, which lies over the Result: a feature under the pointer takes a hover
+  // style that the figure comparisons would read.
+  await page.mouse.move(0, 0);
   const path = testInfo.outputPath(name);
   await download.saveAs(path);
   const bytes = readFileSync(path);
@@ -143,6 +147,26 @@ const savedSession = async (page, testInfo, name) => {
   // A load makes new random row ids; the zh-Hans save follows a reload.
   return JSON.stringify(session).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '<uuid>');
 };
+
+// A file Session Load fits the Result to the preview (R17-25), so the zoom and pan a Save
+// writes after a Load follow the preview's size in the language shown at that Load.
+const withoutLoadView = (saved) => {
+  const session = JSON.parse(saved);
+  const drop = (value) => {
+    if (Array.isArray(value)) value.forEach(drop);
+    else if (value && typeof value === 'object') {
+      if (value.ui && typeof value.ui === 'object') {
+        delete value.ui.zoom;
+        delete value.ui.canvasPan;
+      }
+      Object.values(value).forEach(drop);
+    }
+  };
+  drop(session);
+  return JSON.stringify(session);
+};
+// The zoom readout beside Fit shows that fitted zoom too.
+const withoutLoadZoom = ({ text, attributes }) => ({ text: text.replace(/\n\d+%\nFit\n/, '\n<fitted zoom>\nFit\n'), attributes });
 
 test('a choice shows the UI in that language at once and changes no Result, History, or Session', async ({ page }, testInfo) => {
   test.setTimeout(420_000);
@@ -180,7 +204,8 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
     .getByRole('button', { name: ja['Go to {section}'].replace('{section}', ja.Labels), exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: ja['Generate Diagram'], exact: true })).toBeVisible();
   // The diagram mode keeps the key 'Linear'; the Record Size Mode option has its own (OV-1387, i18n-catalogs.test.mjs).
-  await expect(page.locator('header .mode-switch')).toContainText(ja.Linear);
+  // The Circular Session holds no Linear drawing, so the bar offers Linear (the offer's label is the same key).
+  await expect(offerTab(page)).toHaveAccessibleName(ja.Linear);
   // No upper-casing or tracking in Japanese.
   expect(await page.locator('header .app-session-label').evaluate((element) => {
     const style = getComputedStyle(element);
@@ -221,13 +246,15 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
     expect(await history(page)).toEqual(japanese);
     expect(await figure(page)).toEqual(english.figure);
     expect(await exportedSvg(page, testInfo, `${tag}.svg`)).toBe(englishSvg);
-    if (tag === 'zh-Hans') expect(await savedSession(page, testInfo, `${tag}.json`)).toBe(englishSession);
+    if (tag === 'zh-Hans') {
+      expect(withoutLoadView(await savedSession(page, testInfo, `${tag}.json`))).toBe(withoutLoadView(englishSession));
+    }
   }
 
-  // English comes back exactly.
+  // English comes back exactly, but for the zoom the Load after the reload fitted.
   await menu(page).selectOption('en');
   await expect.poll(() => pageLanguage(page)).toBe('en');
-  expect(await uiText(page)).toEqual(english.ui);
+  expect(withoutLoadZoom(await uiText(page))).toEqual(withoutLoadZoom(english.ui));
   expect(await figure(page)).toEqual(english.figure);
   expect(await stored(page)).toEqual([[LANGUAGE_KEY, 'en']]);
 
@@ -428,7 +455,7 @@ const railAndFooterFit = (page) => page.evaluate(() => {
     }
     return tops.filter((top, index) => tops.findIndex((other) => Math.abs(other - top) < 3) === index);
   };
-  const wrappedHeaderNames = [...document.querySelectorAll('.mode-switch > button, .app-session-label')]
+  const wrappedHeaderNames = [...document.querySelectorAll('.drawing-bar [role="tab"], .app-session-label')]
     .filter((element) => element.getClientRects().length > 0 && lineTops(element).length > 1)
     .map((element) => element.textContent.trim());
   const separatorsAlone = [...footer.querySelectorAll('a')].flatMap((link) => {
@@ -593,7 +620,7 @@ test('in every language, the link beside the menu opens the feedback form with o
       }), width);
       await expect.poll(() => page.locator('header').evaluate((header, minTitle) => {
         const right = Math.max(...Array.from(header.querySelectorAll('.app-language, a[data-translation-feedback]'), (element) => element.getBoundingClientRect().right));
-        // The Session caption and title button paint inside the Session block, never under the mode switch (OV-1530:
+        // The Session caption and title button paint inside the Session block, never under the language menu (OV-1530:
         // fr at 1280 px). A box clips what it hides: a part counts only up to the right edge of a clipping ancestor.
         const block = header.querySelector('.app-session-actions');
         const clipped = (node, edge) => {
@@ -611,11 +638,11 @@ test('in every language, the link beside the menu opens the feedback form with o
           range.selectNodeContents(node);
           parts.push(...[...range.getClientRects()].filter((rect) => rect.width > 0.5).map((rect) => clipped(node, rect.right)));
         }
-        // The mode switch bounds the block where it follows it on its row (the two-row header puts it first).
+        // The language menu bounds the block where it follows it on its row (the two-row header puts it first).
         const box = block.getBoundingClientRect();
-        const mode = header.querySelector('.mode-switch').getBoundingClientRect();
-        const follows = mode.left > box.left && mode.top < box.bottom && box.top < mode.bottom;
-        const limit = Math.min(box.right, follows ? mode.left : Infinity);
+        const language = header.querySelector('.app-language').getBoundingClientRect();
+        const follows = language.left > box.left && language.top < box.bottom && box.top < language.bottom;
+        const limit = Math.min(box.right, follows ? language.left : Infinity);
         return {
           inside: right <= document.documentElement.clientWidth,
           scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,

@@ -21,11 +21,11 @@ from gbdraw.exceptions import (
 from gbdraw.labels.fit import HorizontalLabelKind
 
 OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg export-png export-pdf evaluateRules embedFonts pdfFonts
-buildProteinLosatCacheKeys convertLosatpPairsToGenomicPayload convertMainSessionComparisonFrame convertRingTablesToSearchFrame convertStoredProteinResultFrames
+buildProteinLosatCacheKeys convertLosatpPairsToGenomicPayload convertRingTablesToSearchFrame convertStoredProteinResultFrames
 extractCdsProteinFasta extractFirstFasta hydrateProteinLosatTsv
 listGffFastaRecords listSequenceRecords promoteLegacyLosatpCache
 readAllSequenceRecords readComparisonSequence readFeatureOverrideTable registerFonts resolveLegacyProteinReferences resolveSimilarityAlignment computeLabelFitRow
-synthesizeColorRules validateConfigOverrides""".split())
+synthesizeColorRules upgradeLegacySession validateConfigOverrides""".split())
 STAGES = frozenset("""unknown initialization resource-staging request-validation helper
 rule-validation render result-admission cleanup export-capture export-conversion font-validation""".split())
 

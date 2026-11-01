@@ -3,6 +3,8 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
@@ -55,7 +57,7 @@ const focusAfterHistoryCapture = async (page, locator) => {
 test('Titles, Record Labels, and Legend expose one responsive control hierarchy', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
 
   const titles = page.getByLabel('Titles and Record Labels', { exact: true });
   const legend = page.getByLabel('Legend settings', { exact: true });
@@ -108,7 +110,7 @@ test('Titles, Record Labels, and Legend expose one responsive control hierarchy'
 test('Linear Accession and Length resolve independent Auto modes from rendered rows', async ({ page }) => {
   test.setTimeout(300000);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByRole('group', { name: 'Linear File actions' })
     .getByRole('button', { name: 'Add sequence', exact: true }).click();
   await page.getByTestId('linear-genbank-1').setInputFiles(genbankPath);
@@ -209,10 +211,10 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
   const savedPath = await saveSession(page, 'linear-label-visibility');
   const saved = JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
-  expect(saved.modes.linear.config.adv.linear_accession_visibility).toBe('auto');
-  expect(saved.modes.linear.config.adv.linear_length_visibility).toBe('show');
-  expect(saved.modes.linear.config.adv).not.toHaveProperty('linear_show_accession');
-  expect(saved.modes.linear.config.adv).not.toHaveProperty('linear_show_length');
+  expect(savedDrawing(saved, 'linear').config.adv.linear_accession_visibility).toBe('auto');
+  expect(savedDrawing(saved, 'linear').config.adv.linear_length_visibility).toBe('show');
+  expect(savedDrawing(saved, 'linear').config.adv).not.toHaveProperty('linear_show_accession');
+  expect(savedDrawing(saved, 'linear').config.adv).not.toHaveProperty('linear_show_length');
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
@@ -260,7 +262,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
 test('Auto disclosure names draft fields and navigates without changing Result or History', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   const titles = page.getByLabel('Titles and Record Labels', { exact: true });
   const layout = page.locator('[data-linear-label-auto-layout]');
   const labels = page.locator('[data-linear-label-auto-labels]');
@@ -334,6 +336,8 @@ test('Auto disclosure names draft fields and navigates without changing Result o
   await focusAfterHistoryCapture(page, length);
   await length.selectOption('auto');
   await page.setViewportSize({ width: 390, height: 844 });
+  // The Generates above showed the Preview pane; at 390 px it is the one pane shown.
+  await showPhonePane(page, 'settings');
   await titles.press('Enter');
   for (const [field, control, key] of [
     ['Accession', accession, 'Enter'], ['Length / Coordinates', length, 'Space']
@@ -372,6 +376,7 @@ test('Auto disclosure names draft fields and navigates without changing Result o
   await expect(layout).toContainText('no rendered row contains multiple records');
   expect(await runDiagram(page)).toEqual({ result: { status: 'ok' }, errorSummary: '', errorDetails: [] });
   // After that Generate the shown Result has Auto's outcome: no future tense.
+  await showPhonePane(page, 'settings');
   await expect(layout).toContainText('Accession and Length / Coordinates: Auto shows these fields throughout the diagram because no rendered row contains multiple records.');
   await expect(labels).toHaveText(await layout.locator('[role="status"]').innerText());
   const beforeNavigation = await snapshot();
@@ -405,10 +410,10 @@ test('independent Linear typography follows linked, imported, and History journe
   const genbank = readFileSync(genbankPath, 'utf8');
 
   await openApp(page);
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
       lastModified: 1
@@ -551,7 +556,7 @@ test('independent Linear typography follows linked, imported, and History journe
 test('a Record Labels style size of zero or less is refused by its setting', async ({ page }) => {
   test.setTimeout(120000);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByTestId('linear-genbank-1').setInputFiles(genbankPath);
   await page.getByLabel('Titles and Record Labels', { exact: true }).press('Enter');
   await page.getByLabel('Subtitle style', { exact: true }).focus();

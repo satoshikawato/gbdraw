@@ -8,13 +8,22 @@ import { gunzipSync } from 'node:zlib';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
+const { pythonDraftSplit } = await import('./helpers/python-evaluator.mjs');
+// Publication's draft split is Python's (the bridge runs `split_draft_into_modes`); each call's context is kept.
+const splitContexts = [];
+const splitDraft = async (draft, context) => {
+  splitContexts.push(context);
+  return pythonDraftSplit(draft, context);
+};
+
 const { resolveLinearComparisonPlan } = await import(
   '../../gbdraw/web/js/services/linear-comparisons.js'
 );
 
 const {
   applyDerivedCachePublicationPolicy,
-  createGallerySessionPublication
+  createGallerySessionPublication,
+  galleryPublicationView
 } = await import('../../gbdraw/web/js/services/gallery-session-publication.js');
 const {
   CANONICAL_REQUEST_SCHEMA,
@@ -25,9 +34,6 @@ const {
   readPublishedRenderRequest,
   projectCanonicalSessionRequest
 } = await import('../../gbdraw/web/js/services/session-request.js');
-const { promoteGallerySessionToCurrent } = await import(
-  '../../gbdraw/web/js/services/gallery-session-migration.js'
-);
 const { FEATURE_CATALOG_SCHEMA } = await import('../../gbdraw/web/js/services/feature-catalog.js');
 const { SESSION_VERSION: CURRENT_SESSION_VERSION } = await import(
   '../../gbdraw/web/js/contracts/schema.generated.js'
@@ -39,13 +45,13 @@ const {
   prepareGallerySessionForPublication,
   validateGalleryPublicationReadiness
 } = createGallerySessionPublication({
-  promoteSession: promoteGallerySessionToCurrent,
   assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
   buildRequest: buildCanonicalRenderRequest,
   buildRequestState: buildCanonicalRequestState,
   readRequest: readPublishedRenderRequest,
   projectRequest: projectCanonicalSessionRequest,
-  resolveComparisonPlan: resolveLinearComparisonPlan
+  resolveComparisonPlan: resolveLinearComparisonPlan,
+  splitDraft
 });
 
 const sessionRoot = 'gbdraw/web/gallery/sessions';
@@ -57,12 +63,14 @@ const sessionNames = examples.map((example) => String(example.session).split('/'
 assert.equal(sessionNames.length, 10);
 assert.equal(new Set(sessionNames).size, 10);
 
+// A Session file as the publication bridge reads it (`tools/publish_gallery_session.mjs`): a Session 50's one
+// drawn drawing as its one-drawing view, an older Session as it is.
 const loadSessionFile = async (path) => {
   const bytes = await readFile(path);
   const decoded = bytes[0] === 0x1f && bytes[1] === 0x8b
     ? gunzipSync(bytes)
     : bytes;
-  return JSON.parse(decoded.toString('utf8'));
+  return galleryPublicationView(JSON.parse(decoded.toString('utf8'))).view;
 };
 const loadSession = (name) => loadSessionFile(`${sessionRoot}/${name}`);
 // The released Session 44 Gallery files (first-parent main fe6861f0), kept to
@@ -72,7 +80,10 @@ const loadReleasedSession = (name) => loadSessionFile(`tests/fixtures/sessions/$
 for (const name of sessionNames) {
   const source = await loadSession(name);
   const committedBefore = JSON.stringify(source.renderRequest);
+  splitContexts.length = 0;
   const result = await prepareGallerySessionForPublication(source);
+  // The draft is split once, by the injected owner, in the committed mode.
+  assert.deepEqual(splitContexts.map(({ committedMode }) => committedMode), [result.session.renderRequest.mode], name);
   assert.equal(result.session.version, CURRENT_SESSION_VERSION, name);
   assert.equal(result.session.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA, name);
   // Publication writes the slice of the Session's mode only; the other mode
@@ -155,32 +166,18 @@ for (const name of sessionNames) {
   assert.throws(() => admitGallerySession(stored), /cannot convert the protein results that Session 47 stored/);
 }
 
-// D-OD08 (5): a historical Session is promoted through the one request
-// reader; one whose request Load would repair is not published.
-{
-  const historical = await loadReleasedSession('lambda_basic_linear.v31-schema1.gbdraw-session.json.gz');
-  assert.equal(admitGallerySession(structuredClone(historical)).renderRequest.schema, 9);
-  historical.renderRequest.diagramOptions.config.canvas.linear.comparison_height = 0;
-  assert.throws(() => admitGallerySession(historical),
-    { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } });
+// Gallery publication admits Sessions 46-50 only; an older Session is refused with the way to convert it.
+for (const name of ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'lambda_basic_linear.v44-schema8.gbdraw-session.json.gz']) {
+  const released = await loadReleasedSession(name);
+  assert.throws(() => admitGallerySession(released),
+    /Gallery publication supports Sessions 46-50; Load a Session 27-44 in the app and save it \(Python converts it at Load\); received /);
 }
 
-const lambda = await loadReleasedSession('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
 const admittedLambda = admitGallerySession(lambda);
 assert.equal(admittedLambda.version, CURRENT_SESSION_VERSION);
 assert.equal(admittedLambda.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA);
 assert.deepEqual(admittedLambda.results, lambda.results);
-assert.equal(lambda.version, 44);
-assert.equal(lambda.editorState.featureCatalog.schema, 4);
-const releasedCurrent = await loadReleasedSession('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz');
-assert.equal(releasedCurrent.version, 44);
-assert.equal(releasedCurrent.renderRequest.schema, 8);
-assert.equal(releasedCurrent.editorState.featureCatalog.schema, 4);
-const admittedReleasedCurrent = admitGallerySession(releasedCurrent);
-// Admission promotes the released schema-8 request to the current writer.
-assert.equal(admittedReleasedCurrent.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
-assert.equal(admittedReleasedCurrent.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA);
-assert.deepEqual(admittedReleasedCurrent.results, releasedCurrent.results);
 const alteredProvenance = structuredClone(lambda);
 alteredProvenance.cliInvocation = {
   ...alteredProvenance.cliInvocation,
@@ -305,7 +302,7 @@ for (const [webShape, equivalent] of [['arrow', true], ['rectangle', false]]) {
 }
 
 const ungeneratedDraft = structuredClone(lambda);
-ungeneratedDraft.config.adv.arrow_shaft_width_ratio = 0.5;
+ungeneratedDraft.modes.linear.config.adv.arrow_shaft_width_ratio = 0.5;
 await assert.rejects(
   prepareGallerySessionForPublication(ungeneratedDraft),
   /shaft_width_ratio/
@@ -313,17 +310,17 @@ await assert.rejects(
 
 for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
   const invalid = structuredClone(lambda);
-  invalid.config.adv[field] = [];
+  invalid.modes.linear.config.adv[field] = [];
   assert.throws(
     () => admitGallerySession(invalid),
-    new RegExp(`config\\.adv.*${field}`)
+    { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } }
   );
 }
 
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 50 or historical versions 31-33\/39-44\/46-49/
+    /Gallery publication supports Sessions 46-50;/
   );
 }
 
@@ -515,18 +512,29 @@ assert.rejects(
     size: Buffer.byteLength(text), lastModified: 0, encoding: 'base64', data: Buffer.from(text, 'utf8').toString('base64') });
   const binding = (resourceId, name) => ({ resourceId, name, type: 'text/tab-separated-values', lastModified: 0 });
   const tableText = (session, ref) => Buffer.from(session.resources[ref.resourceId].data, 'base64').toString('utf8');
+  // The Linear File card rows a Save writes beside the table bindings: one per request record, bound to its
+  // GenBank resource (OV-1819).
+  const linearSeqs = source.renderRequest.records.map((record) => ({
+    uid: record.recordKey,
+    gb: { resourceId: record.source.resourceId, name: `${record.recordKey}.gbk`, type: 'text/plain', lastModified: 0 },
+    gff: null, fasta: null, depth: null, losat_gencode: 1,
+    definition: '', record_subtitle: record.presentation.subtitle || '', file_definition: '', file_subtitle: '',
+    inferred_definition: record.presentation.label,
+    region_record_id: '', region_start: null, region_end: null,
+    region_reverse: Boolean(record.presentation.reverseComplement)
+  }));
   const generatedDefaultColors = 'CDS\t#d3d3d3\nrRNA\t#71ee7d\ntRNA\t#e8b441\ntmRNA\t#ded44e\n'
     + 'skew_high\t#6dded3\nskew_low\t#ad72e3\npairwise_match_min\t#FFE7E7\npairwise_match_max\t#FF7272\n';
   const savedDefaultColors = structuredClone(source);
   savedDefaultColors.resources['resource-0001'] = source.resources['colors-default-colors-file'];
   savedDefaultColors.resources['colors-default-colors-file'] = tsvResource('colors-default-colors-file',
     'colors-default-colors-file-default-colors.tsv', generatedDefaultColors);
-  savedDefaultColors.webFiles.bindings = { schema: 2, c_gb: null, d_color: binding('resource-0001', 'colors-default-colors.tsv') };
+  savedDefaultColors.webFiles.bindings = { schema: 2, c_gb: null, linearSeqs, d_color: binding('resource-0001', 'colors-default-colors.tsv') };
   const sourceColors = source.renderRequest.diagramOptions.colors;
   const importedRules = `${tableText(source, sourceColors.colorTable || sourceColors.colorTableFile)}CDS\tgene\tneoU\t#000000\tRemoved after import\n`;
   const savedRules = structuredClone(source);
   savedRules.resources['resource-0002'] = tsvResource('colors-color-table-file', 'resource-0002-specific-colors.tsv', importedRules);
-  savedRules.webFiles.bindings = { schema: 2, c_gb: null, t_color: binding('resource-0002', 'specific-colors.tsv') };
+  savedRules.webFiles.bindings = { schema: 2, c_gb: null, linearSeqs, t_color: binding('resource-0002', 'specific-colors.tsv') };
   for (const [name, saved] of Object.entries({ savedDefaultColors, savedRules })) {
     const { session, equivalence } = await prepareGallerySessionForPublication(saved);
     assert.deepEqual(equivalence.differences, [], name);
@@ -581,7 +589,7 @@ assert.rejects(
       execFileSync('python', ['-m', 'gbdraw.cli', mode, ...args, '-o', path.join(directory, id),
         '-f', mode === 'circular' ? 'interactive_svg' : 'svg',
         '--session_output', file], { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
-      const source = JSON.parse(await readFile(file, 'utf8'));
+      const source = await loadSessionFile(file);
       const { session, equivalence } = await prepareGallerySessionForPublication(source);
       assert.deepEqual(equivalence.differences, [], id);
       assert.equal((await validateGalleryPublicationReadiness(session)).equivalence.equivalent, true, id);
@@ -625,7 +633,7 @@ assert.rejects(
       '--circular_track_slot', 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08',
       '-o', path.join(directory, 'slots'), '-f', 'interactive_svg', '--session_output', file],
     { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
-    const source = JSON.parse(await readFile(file, 'utf8'));
+    const source = await loadSessionFile(file);
     const { tracks } = source.renderRequest.diagramOptions;
     assert.deepEqual([tracks.circularTrackSlots[1].params.padding_px, tracks.circularTrackSlots[1].params.show_labels,
       tracks.circularTrackSlots[2].params.padding_px, tracks.circularTrackAxisIndex ?? null], ['0', 'false', '1', null]);
@@ -639,7 +647,6 @@ assert.rejects(
       [(rebuilt) => { rebuilt.circularTrackAxisIndex = 1; }, /circularTrackAxisIndex/]
     ]) {
       const tampered = createGallerySessionPublication({
-        promoteSession: promoteGallerySessionToCurrent,
         assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
         buildRequest: (input) => {
           const built = buildCanonicalRenderRequest(input);
@@ -649,7 +656,8 @@ assert.rejects(
         buildRequestState: buildCanonicalRequestState,
         readRequest: readPublishedRenderRequest,
         projectRequest: projectCanonicalSessionRequest,
-        resolveComparisonPlan: resolveLinearComparisonPlan
+        resolveComparisonPlan: resolveLinearComparisonPlan,
+        splitDraft
       });
       await assert.rejects(tampered.prepareGallerySessionForPublication(structuredClone(source)),
         (error) => at.test(String(error?.message)) && error.comparison?.equivalent === false);

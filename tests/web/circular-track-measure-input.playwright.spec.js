@@ -3,6 +3,8 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
+const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const {
   openApp, reveal, answerSessionTitle, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs,
   settleLive
@@ -47,6 +49,8 @@ const load = async (page, file = fixture, canceledRows = null) => {
     !window.__GBDRAW_APP__.sessionImportPending
     && (!accepted || window.__C619_EVENTS__.filter(event => event.name === 'interactiveReady').length > readyBefore)
   ), { readyBefore, accepted });
+  // A phone Load shows the Preview pane; the track controls are in Settings.
+  await showPhonePane(page, 'settings');
 };
 const openPanel = async page => {
   const button = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
@@ -159,6 +163,7 @@ test.beforeEach(async ({ page }) => {
 for (const width of [1440, 390]) {
   test(`saved scalar controls are readable, accessible, and read-only at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 });
+    await showPhonePane(page, 'settings');
     const before = await snapshot(page);
     const workers = await workerCounts(page);
     const button = await openPanel(page);
@@ -368,7 +373,7 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
   expect(await snapshot(page)).toEqual(edited);
   const saved = JSON.parse(gunzipSync(readFileSync(path)));
-  const row = saved.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
+  const row = savedDrawing(saved, 'circular').config.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
   expect(row.width).toEqual({ value: '1.', unit: 'px' });
   const fresh = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
   try {
@@ -379,18 +384,20 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
     await expect(unitControl(fresh, 'gc_content', 'Width')).toHaveValue('px');
     const restored = await snapshot(fresh);
     await testInfo.attach('fresh-result.svg', { body: await fresh.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content), contentType: 'image/svg+xml' });
-    await testInfo.attach('original-result.svg', { body: saved.results[0].content, contentType: 'image/svg+xml' });
+    await testInfo.attach('original-result.svg', { body: shownSavedDrawing(saved).results[0].content, contentType: 'image/svg+xml' });
     expect(restored.config.adv.circular_track_slots).toEqual(edited.config.adv.circular_track_slots);
     expect(restored.request).toEqual(before.request);
     expect(restored.resultHashes).toEqual(before.resultHashes);
     await expectCounts(fresh, 0);
     const rejected = structuredClone(saved);
-    const gcIndex = rejected.modes.circular.config.adv.circular_track_slots.findIndex(slot => slot.id === 'gc_content');
-    rejected.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').width = { value: '1e', unit: 'px' };
+    const gcIndex = savedDrawing(rejected, 'circular').config.adv.circular_track_slots.findIndex(slot => slot.id === 'gc_content');
+    savedDrawing(rejected, 'circular').config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').width = { value: '1e', unit: 'px' };
+    // A Session 49 Load names a drawing's value by its place in `drawings`.
+    const circularIndex = rejected.drawings.findIndex(drawing => drawing.id === 'circular');
     // A Width Load cannot use is listed before Load changes anything (OV-758);
     // after Cancel the notice of the earlier Load stays and the state is unchanged.
     await load(fresh, { name: 'invalid.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(rejected)) }, [
-      `Settings: the value "{"value":"1e","unit":"px"}" (modes.circular.config.adv.circular_track_slots[${gcIndex}].width) cannot be used;`
+      `Settings: the value "{"value":"1e","unit":"px"}" (drawings[${circularIndex}].config.adv.circular_track_slots[${gcIndex}].width) cannot be used;`
         + ' it is left unset.'
     ]);
     expect(await snapshot(fresh)).toEqual(restored);
@@ -592,23 +599,25 @@ for (const continuation of ['disabled', 'inactive biological']) {
     // request stay with Circular; Linear, which has no Result, shows none. The
     // Circular slots are the Circular drawing's (PR-1).
     const circular = await snapshot(page);
-    if (continuation === 'inactive biological') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (continuation === 'inactive biological') await showDrawing(page, { kind: 'linear' });
     const before = await snapshot(page);
     if (continuation === 'inactive biological') {
       expect(before.request).toBeNull();
       expect(before.resultHashes).toEqual([]);
     }
     const saved = await save(page, testInfo, continuation.replaceAll(' ', '-'));
-    expect(saved.document.modes.circular.config.adv.circular_track_slots).toEqual(circular.config.adv.circular_track_slots);
+    expect(savedDrawing(saved.document, 'circular').config.adv.circular_track_slots).toEqual(circular.config.adv.circular_track_slots);
     await freshLoad(browser, testInfo, saved.path, async fresh => {
       const restored = await snapshot(fresh);
       expect(restored.config.adv.circular_track_slots).toEqual(circular.config.adv.circular_track_slots);
       expect(restored.request).toEqual(circular.request);
       expect(restored.resultHashes).toEqual(circular.resultHashes);
       if (continuation === 'inactive biological') {
-        // The saved mode has no Result, so the Session opens on the mode that has one.
-        await expect(fresh.getByRole('button', { name: 'Circular', exact: true }))
-          .toHaveAttribute('aria-pressed', 'true');
+        // The shown Linear drawing has no file, changed setting, edit or Result, so
+        // Save does not write it; with no saved tab after it, Load opens the one before (PD-OI-090
+        // 〔Save と Load〕, scenario rev 6).
+        await expect(fresh.getByRole('tab', { name: 'Circular', exact: true }))
+          .toHaveAttribute('aria-selected', 'true');
       }
       await openPanel(fresh);
       await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('0.12345678901234567');
@@ -624,24 +633,33 @@ test('source-free settings Save and fresh Load retain an inactive disabled scala
       const app = window.__GBDRAW_APP__;
       app.adv.circular_track_slots_enabled = true;
       app.adv.circular_track_slots = slots.filter(row => row.renderer !== 'annotations');
-    }, JSON.parse(readFileSync(fixture, 'utf8')).modes.circular.config.adv.circular_track_slots);
+    }, shownSavedDrawing(JSON.parse(readFileSync(fixture, "utf8"))).config.adv.circular_track_slots);
     await openPanel(page);
     await edit(page, '1e-12');
     await selectUnit(page, 'px');
     await page.evaluate(() => { window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content').enabled = false; });
     await selectUnit(page, 'px', 'features');
-    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    const circular = await snapshot(page);
+    await showDrawing(page, { kind: 'linear' });
     const before = await snapshot(page);
     expect(before.request).toBeNull();
     expect(before.resultHashes).toEqual([]);
     const saved = await save(page, testInfo, 'settings-only', { title: '' });
     expect(saved.document.runMetadata).toBeUndefined();
+    // The untouched Linear drawing shown at Save has no file, changed setting,
+    // edit, or Result, so Save does not write it and Load opens the saved
+    // drawing of the previous tab, the Circular one (PD-OI-090 〔Save と Load〕, R16-8).
+    expect(saved.document.drawings.map(drawing => drawing.id)).toEqual(['circular']);
+    expect(saved.document.ui.activeDrawingId).toBe('circular');
     await freshLoad(browser, testInfo, saved.path, async fresh => {
       const restored = await snapshot(fresh);
-      expect(restored.config).toEqual(before.config);
+      expect(restored.config).toEqual(circular.config);
       expect(restored.request).toBeNull();
       expect(restored.resultHashes).toEqual([]);
-      await fresh.getByRole('button', { name: 'Circular', exact: true }).click();
+      // Load keeps a new Linear drawing at its mode's defaults.
+      await showDrawing(fresh, { kind: 'linear' });
+      expect((await snapshot(fresh)).config).toEqual(before.config);
+      await showDrawing(fresh, { kind: 'circular' });
       await openPanel(fresh);
       await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('1e-12');
       await expect(unitControl(fresh, 'gc_content', 'Width')).toHaveValue('px');
@@ -665,7 +683,7 @@ test('CLI-origin Session continues through numeric edits, Generate, Save and fre
   expect(cli.modes).toBeUndefined();
   await load(page, path);
   const before = await snapshot(page);
-  expect(before.request).toEqual(cli.renderRequest);
+  expect(before.request).toEqual(shownSavedDrawing(cli).renderRequest);
   expect(before.resultHashes).toHaveLength(1);
   const panel = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
   await reveal(panel);
@@ -776,7 +794,7 @@ test('OV-1656: a gap typed as 1px is stored, saved, and shown as 1 after a fresh
   await download.saveAs(path);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
   const saved = JSON.parse(gunzipSync(readFileSync(path)));
-  expect(saved.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').inner_gap_px).toBe('1');
+  expect(savedDrawing(saved, 'circular').config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').inner_gap_px).toBe('1');
   const fresh = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
   try {
     await prepare(fresh);

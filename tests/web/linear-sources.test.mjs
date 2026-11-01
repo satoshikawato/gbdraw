@@ -25,19 +25,23 @@ import {
   buildLosatCachePayload,
   extractLosatFastaFast
 } from '../../gbdraw/web/js/app/run-analysis.js';
+import { createTestInputStore } from './helpers/input-files.mjs';
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView
 } from '../../gbdraw/web/js/services/session-resource-backing.js';
 
+// Source grouping keys on a ref's `sourceId`: one registered object is one source.
+const inputFiles = createTestInputStore();
+const file = (name) => inputFiles.registerFile({ name, size: 0 });
 const hashText = async (value) => createHash('sha256').update(value).digest('hex');
 /** The entry digest owner of run-analysis.js (`getSeqHash`): `hashText` of the entry's FASTA. */
 const digestOf = (getEntry) => async (index) => hashText((await getEntry(index)).fasta);
 
 const sourceRecord = (uid, gb) => ({ uid, gb, gff: null, fasta: null });
-const sourceA = { name: 'a.gb' };
-const sourceB = { name: 'b.gb' };
-const sourceC = { name: 'c.gb' };
+const sourceA = file('a.gb');
+const sourceB = file('b.gb');
+const sourceC = file('c.gb');
 const singleSourceRecords = [
   sourceRecord('a-1', sourceA),
   sourceRecord('b-1', sourceB),
@@ -68,8 +72,8 @@ for (const [index, direction] of [
   );
 }
 
-const duplicateNameA = { name: 'duplicate.gb' };
-const duplicateNameB = { name: 'duplicate.gb' };
+const duplicateNameA = file('duplicate.gb');
+const duplicateNameB = file('duplicate.gb');
 const duplicateNameRecords = [sourceRecord('same-a', duplicateNameA), sourceRecord('same-b', duplicateNameB)];
 assert.deepEqual(
   moveLinearSourceGroup(duplicateNameRecords, 1, -1).map(({ uid }) => uid),
@@ -78,7 +82,7 @@ assert.deepEqual(
 );
 
 const removalRecords = [
-  { ...sourceRecord('a-1', sourceA), region_record_id: 'A1', depth: [{ name: 'a.tsv' }] },
+  { ...sourceRecord('a-1', sourceA), region_record_id: 'A1', depth: [file('a.tsv')] },
   { ...sourceRecord('a-2', sourceA), region_record_id: 'A2', depth: [null] },
   sourceRecord('b-1', sourceB)
 ];
@@ -120,7 +124,7 @@ assert.deepEqual(planLinearSourceRemoval({
 }), { allowed: false, reason: 'missing-source' });
 
 const pairedSource = groupLinearSourceRecords([{
-  uid: 'paired', gb: null, gff: { name: 'paired.gff3' }, fasta: { name: 'paired.fasta' },
+  uid: 'paired', gb: null, gff: file('paired.gff3'), fasta: file('paired.fasta'),
   depth: [], definition: '', record_subtitle: '', file_definition: '', file_subtitle: '',
   region_record_id: '', region_start: null, region_end: null, region_reverse: false
 }])[0];
@@ -142,8 +146,8 @@ const sharedDescriptor = {
 };
 const sessionTable = adoptCurrentSessionResources({ source: sharedDescriptor });
 const sessionRecords = [
-  sourceRecord('session-1', createSessionResourceFileView(sessionTable, 'source')),
-  sourceRecord('session-2', createSessionResourceFileView(sessionTable, 'source')),
+  sourceRecord('session-1', inputFiles.registerFile(createSessionResourceFileView(sessionTable, 'source'))),
+  sourceRecord('session-2', inputFiles.registerFile(createSessionResourceFileView(sessionTable, 'source'))),
   sourceRecord('other', sourceC)
 ];
 assert.deepEqual(groupLinearSourceRecords(sessionRecords).map(({ records }) => records.length), [2, 1]);
@@ -153,8 +157,8 @@ assert.deepEqual(
   'records backed by one Session descriptor move as one source'
 );
 
-const sharedDepth = { name: 'depth.tsv' };
-const sameNamedDepth = { name: 'depth.tsv' };
+const sharedDepth = file('depth.tsv');
+const sameNamedDepth = file('depth.tsv');
 const depthSourceRecords = [
   { ...sourceRecord('depth-1', sourceA), depth: [] },
   { ...sourceRecord('depth-2', sourceA), depth: [] }
@@ -181,16 +185,16 @@ const depthDescriptor = {
   data: '', size: 0, lastModified: 0
 };
 const depthSessionTable = adoptCurrentSessionResources({ depth: depthDescriptor });
-depthSourceRecords[0].depth = [createSessionResourceFileView(depthSessionTable, 'depth')];
-depthSourceRecords[1].depth = [createSessionResourceFileView(depthSessionTable, 'depth')];
+depthSourceRecords[0].depth = [inputFiles.registerFile(createSessionResourceFileView(depthSessionTable, 'depth'))];
+depthSourceRecords[1].depth = [inputFiles.registerFile(createSessionResourceFileView(depthSessionTable, 'depth'))];
 assert.equal(linearSourceDepthStatus(depthSource, 0).state, 'common',
   'views backed by one Session descriptor are one common assignment');
 const distinctDepthSessionTable = adoptCurrentSessionResources({
   first: depthDescriptor,
   second: { ...depthDescriptor }
 });
-depthSourceRecords[0].depth = [createSessionResourceFileView(distinctDepthSessionTable, 'first')];
-depthSourceRecords[1].depth = [createSessionResourceFileView(distinctDepthSessionTable, 'second')];
+depthSourceRecords[0].depth = [inputFiles.registerFile(createSessionResourceFileView(distinctDepthSessionTable, 'first'))];
+depthSourceRecords[1].depth = [inputFiles.registerFile(createSessionResourceFileView(distinctDepthSessionTable, 'second'))];
 assert.equal(linearSourceDepthStatus(depthSource, 0).state, 'mixed',
   'same-named independent Session resources remain mixed');
 
@@ -204,7 +208,7 @@ assert.deepEqual(
   'an explicit move makes legacy interleaved source records contiguous'
 );
 
-const files = [{ name: 'same.gb' }, { name: 'same.gb' }];
+const files = [file('same.gb'), file('same.gb')];
 const sequences = Array.from({ length: 8 }, (_, index) => ({
   uid: `record-${index}`, gb: files[index < 6 ? 0 : 1], gff: null, fasta: null
 }));
@@ -289,8 +293,8 @@ assert.equal(noSelf.batches.reduce((sum, batch) => sum + batch.specs.length, 0),
 // `getDigest`, the owner run-analysis.js holds per File) and is not computed again. A side whose text differs from
 // its entry (renamed records, an added line end) hashes its own text.
 test('a single-record LOSAT side reads its entry digest instead of hashing the FASTA again', async () => {
-  const fileA = { name: 'a.gbk' };
-  const cards = ['a0', 'a1', 'b0'].map((uid) => ({ uid, gb: uid === 'b0' ? { name: 'b.gbk' } : fileA, gff: null, fasta: null }));
+  const fileA = file('a.gbk');
+  const cards = ['a0', 'a1', 'b0'].map((uid) => ({ uid, gb: uid === 'b0' ? file('b.gbk') : fileA, gff: null, fasta: null }));
   const fastaFor = (index) => (index === 2 ? '>b0\nACGT' : `>${cards[index].uid}\nACGT\n`);
   const hashed = [];
   const digests = [];
@@ -315,8 +319,8 @@ test('a single-record LOSAT side reads its entry digest instead of hashing the F
 // Record selection D-07: an OFF record is never a query, and its source's
 // database keeps it, so turning a record ON or OFF changes no other E-value.
 test('the LOSAT plan over the drawn records keeps OFF records in their source database', async () => {
-  const fileA = { name: 'a.gbk' };
-  const fileB = { name: 'b.gbk' };
+  const fileA = file('a.gbk');
+  const fileB = file('b.gbk');
   const cards = [
     { uid: 'a0', gb: fileA }, { uid: 'a1', gb: fileA }, { uid: 'a2', gb: fileA },
     { uid: 'b0', gb: fileB }, { uid: 'b1', gb: fileB }
@@ -359,7 +363,7 @@ test('the LOSAT plan over the drawn records keeps OFF records in their source da
 test('one-file records never search themselves without a request', async () => {
   const planFiles = (packaged) => prepareLosatSourceBatches({
     sequences: [0, 1].map((index) => ({
-      uid: `record-${index}`, gb: packaged ? packaged : { name: `record-${index}.gbk` }, gff: null, fasta: null
+      uid: `record-${index}`, gb: packaged ? packaged : file(`record-${index}.gbk`), gff: null, fasta: null
     })),
     specs: [{ queryIndex: 0, subjectIndex: 1 }],
     getEntry: async (index) => ({ fasta: `>protein-${index}\nMKK\n` }),
@@ -368,7 +372,7 @@ test('one-file records never search themselves without a request', async () => {
     hashText,
     protein: true
   });
-  const oneFile = await planFiles({ name: 'two-records.gbk' });
+  const oneFile = await planFiles(file('two-records.gbk'));
   const twoFiles = await planFiles(null);
   for (const batch of oneFile.batches) {
     assert.deepEqual(batch.query.indexes.filter((index) => batch.subject.indexes.includes(index)), [],
@@ -404,7 +408,7 @@ test('shared LOSAT job plan and nucleotide raw-key vectors', async () => {
   for (const vector of sharedVectors('losat_job_plan_cases.json')) {
     const files = new Map();
     const records = vector.records.map((record) => {
-      if (!files.has(record.source)) files.set(record.source, { name: record.source });
+      if (!files.has(record.source)) files.set(record.source, file(record.source));
       return { uid: record.uid, gb: files.get(record.source), gff: null, fasta: null, losat_gencode: record.gencode };
     });
     // The buildLosatArgs rules of run-analysis.js for one record pair.
@@ -467,7 +471,7 @@ test('shared LOSATP specs and job plan vectors', async () => {
   for (const vector of cases) {
     const files = new Map();
     const sequences = vector.records.map((record) => {
-      if (!files.has(record.source)) files.set(record.source, { name: record.source });
+      if (!files.has(record.source)) files.set(record.source, file(record.source));
       return { uid: record.uid, gb: files.get(record.source), gff: null, fasta: null };
     });
     const resolution = {
@@ -549,14 +553,14 @@ test('a GenBank record without a sequence keeps its place in the LOSAT records',
 // OV-436: two chromosomes of one File were named "Vibrio parahaemolyticus" and
 // "NC_004605.1" because only the first drew a Definition.
 test('every record of a File is named by the File definition plus its accession', () => {
-  const vp = { name: 'vp.gb' };
-  const va = { name: 'va.gb' };
+  const vp = file('vp.gb');
+  const va = file('va.gb');
   const card = (uid, gb, definition, region_record_id) => ({ ...sourceRecord(uid, gb), definition, region_record_id });
   const sequences = [
     card('r1', vp, '<i>Vibrio parahaemolyticus</i>', 'NC_004603.1'),
     card('r2', vp, '', 'NC_004605.1'),
     card('r3', va, '', 'NC_022349.1'),
-    card('r4', { name: 'single.gb' }, '', '')
+    card('r4', file('single.gb'), '', '')
   ];
   const before = JSON.stringify(sequences);
   const labels = [...linearRecordNames(sequences).values()].map(({ label }) => label);
@@ -571,7 +575,7 @@ test('every record of a File is named by the File definition plus its accession'
 });
 
 // The folded File cards: view state keyed by source uid.
-const foldFile = (name) => ({ name });
+const foldFile = (name) => file(name);
 const foldSources = () => {
   const a = foldFile('a.gbk');
   const b = foldFile('b.gbk');

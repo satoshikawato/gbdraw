@@ -20,6 +20,7 @@ import sys
 import pandas as pd
 import pytest
 
+from tests.utils.session_drawing_view import drawing_view
 from gbdraw.analysis import protein_colinearity as pc
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_request_codec import (
@@ -323,7 +324,7 @@ def test_existing_catalog_and_popup_accept_exact_decimal_strings(tmp_path):
     from gbdraw.web_support.feature_catalog import select_feature_catalog_item
 
     source = ROOT / "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz"
-    session = json.loads(gzip.decompress(source.read_bytes()))
+    session = drawing_view(json.loads(gzip.decompress(source.read_bytes())))
     catalog = session["editorState"]["featureCatalog"]
     exact = str(2**54+1)
     catalog["items"][0]["orthogroups"][0]["orthologPathCount"] = exact

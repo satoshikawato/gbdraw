@@ -20,6 +20,7 @@ globalThis.window = {
 };
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const config = await import('../../gbdraw/web/js/services/config.js');
 const request = await import('../../gbdraw/web/js/services/session-request.js');
 const owner = await import('../../gbdraw/web/js/services/setting-application.js');
@@ -61,13 +62,23 @@ const textFile = (name, text) => ({
 const genbank = (ids) => textFile('gt.gb', ids.map(record).join(''));
 const depthText = (id, seed) => Array.from({ length: 40 }, (_, index) => `${id}\t${index + 1}\t${(index * seed) % 17}`).join('\n');
 const depthFile = (id, seed) => textFile(`depth-${seed}.tsv`, depthText(id, seed));
+// A drawing's draft holds the `InputFileRef`s of its Files (`state.inputFiles`);
+// Generate and the live projectors read the Files through `fileOf` (OV-2205).
+const fileRefs = new Map();
+const refOf = (file) => {
+  if (!fileRefs.has(file)) fileRefs.set(file, state.inputFiles.registerFile(file));
+  return fileRefs.get(file);
+};
+const refTree = (value) => (Array.isArray(value) ? value.map(refTree) : value ? refOf(value) : value ?? null);
+const fileOf = state.inputFiles.fileOf;
+const fileTree = (value) => (Array.isArray(value) ? value.map(fileTree) : value ? fileOf(value) : value ?? null);
 const seq = (uid, id) => ({
-  uid, gb: genbank([id]), depth: null, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null,
+  uid, gb: refOf(genbank([id])), depth: null, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null,
   region_reverse: false, definition: '', record_subtitle: '', file_definition: `File ${id}`, file_subtitle: ''
 });
 
-// The draft inputs: the Linear cards and the Circular Depth files.
-const inputs = { linearSeqs: [seq('record-1', 'GT1'), seq('record-2', 'GT2')], circularDepth: null };
+// The draft inputs: the Linear cards and the Circular Depth files, as refs.
+const inputs = { linearSeqs: [seq('record-1', 'GT1'), seq('record-2', 'GT2')], circularDepth: null, fileOf };
 const circularGenbank = genbank(['GT1']);
 const DEPTH_A = depthFile('GT1', 3);
 const DEPTH_B = depthFile('GT1', 5);
@@ -82,24 +93,24 @@ const set = (object, key, value) => {
 const undoAll = () => { while (restore.length) restore.pop()(); };
 
 const draftDepth = (mode) => (mode === 'circular'
-  ? inputs.circularDepth
-  : inputs.linearSeqs.map((card) => card.depth));
+  ? fileTree(inputs.circularDepth)
+  : inputs.linearSeqs.map((card) => fileTree(card.depth)));
 // The files a Generate of `mode` sends now (serializeActiveRenderFiles): the
 // Depth files when the draft draws Depth, else the hidden ones (F1).
 const filesOf = (mode, { hiddenDepth = true } = {}) => {
   const drawing = modeDrawing(state, mode);
   const draws = legendRows.draftDrawsDepth(mode, drawing);
-  const hidden = !draws && hiddenDepth ? { hiddenDepth: mode === 'circular' ? { circular: inputs.circularDepth } : { linear: draftDepth(mode) } } : {};
+  const hidden = !draws && hiddenDepth ? { hiddenDepth: mode === 'circular' ? { circular: draftDepth(mode) } : { linear: draftDepth(mode) } } : {};
   return mode === 'circular'
-    ? { c_gb: circularGenbank, c_depth: draws ? inputs.circularDepth : undefined, linearSeqs: [], ...hidden }
-    : { linearSeqs: inputs.linearSeqs.map((card) => ({ ...card, depth: draws ? card.depth : null })), linearComparisons: [], ...hidden };
+    ? { c_gb: circularGenbank, c_depth: draws ? draftDepth(mode) : undefined, linearSeqs: [], ...hidden }
+    : { linearSeqs: inputs.linearSeqs.map((card) => ({ ...card, gb: fileOf(card.gb), depth: draws ? fileTree(card.depth) : null })), linearComparisons: [], ...hidden };
 };
 // The committed Session a Generate of `mode` builds from that mode's drawing now.
 const generate = (mode, { keepTrackParts = true, hiddenDepth = true } = {}) => {
   const drawing = modeDrawing(state, mode);
   config.installShownDrawing(mode);
-  state.cInputType.value = 'gb';
-  state.lInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
   const filesData = filesOf(mode, { hiddenDepth });
   const comparisonPlanSnapshot = mode === 'linear'
     ? resolveLinearComparisonPlan({
@@ -174,7 +185,7 @@ const circularPlain = () => {
 };
 const circularStack = ({ depthSeries = 2, extra = [] } = {}) => {
   const drawing = circularPlain();
-  set(inputs, 'circularDepth', [DEPTH_A, DEPTH_B].slice(0, depthSeries));
+  set(inputs, 'circularDepth', refTree([DEPTH_A, DEPTH_B].slice(0, depthSeries)));
   set(drawing.form, 'show_depth', true);
   const slots = createDefaultCircularTrackSlots({ showDepth: true, depthTrackCount: depthSeries });
   slots.filter((slot) => slot.renderer === 'depth').forEach((slot, index) => { slot.params = { ...slot.params, track_index: index }; });
@@ -194,9 +205,9 @@ const linearSimple = () => {
 };
 const linearStack = ({ depthSeries = 2 } = {}) => {
   const drawing = linearSimple();
-  inputs.linearSeqs.forEach((card, index) => set(card, 'depth', [DEPTH_A, DEPTH_B].slice(0, depthSeries).map(
+  inputs.linearSeqs.forEach((card, index) => set(card, 'depth', refTree([DEPTH_A, DEPTH_B].slice(0, depthSeries).map(
     (file, series) => depthFile(`GT${index + 1}`, 3 + 2 * series)
-  )));
+  ))));
   set(drawing.form, 'show_depth', true);
   const slots = createDefaultLinearTrackSlots({ showGc: true, showSkew: true, showDepth: true, depthTrackCount: depthSeries });
   slots.filter((slot) => slot.renderer === 'depth').forEach((slot, index) => { slot.params = { ...slot.params, track_index: index }; });
@@ -271,7 +282,7 @@ test('M2: right after a Generate the GT keys write nothing; also after a Load (n
 test('M4: keepTrackParts changes nothing Generate sends, also with hidden Depth files', () => {
   for (const [mode, setup] of [['circular', circularStack], ['linear', linearStack], ['circular', circularPlain]]) {
     setup();
-    if (mode === 'circular') set(inputs, 'circularDepth', [DEPTH_A]);
+    if (mode === 'circular') set(inputs, 'circularDepth', refTree([DEPTH_A]));
     const drawing = modeDrawing(state, mode);
     set(drawing.form, 'show_depth', false);
     for (const row of (mode === 'circular' ? drawing.adv.circular_track_slots : drawing.adv.linear_track_slots) || []) {
@@ -327,13 +338,13 @@ test('N6: a Depth show waits for a new File or one more series, and shows the sa
   const hidden = live(committed, 'circular');
   rowOf(drawing, 'circular', (row) => row.renderer === 'depth').enabled = true;
   set(drawing.form, 'show_depth', true);
-  set(inputs, 'circularDepth', [depthFile('GT1', 3)]);
+  set(inputs, 'circularDepth', refTree([depthFile('GT1', 3)]));
   const waits = live(hidden, 'circular');
   assert.ok(!Object.values(waits.resources).some((descriptor) => descriptor.kind === 'depth-track-file'), 'a new File waits');
   assert.equal(owner.settingApplicationNote('track-visibility', (path) => request.liveSettingNoteApplies(
     waits.renderRequest, path, drawing, inputs, waits.resources)).text,
   owner.SETTING_APPLICATION.find((row) => row.id === 'track-visibility').partialNote);
-  set(inputs, 'circularDepth', [DEPTH_A]);
+  set(inputs, 'circularDepth', refTree([DEPTH_A]));
   const shows = live(hidden, 'circular');
   assert.equal(resourceIdOwnedBy(shows.resources, DEPTH_A, 'depth-track-file'), 'depth-tracks-1-source');
   undoAll();
@@ -711,7 +722,7 @@ test('N17: the shortcut plan with Depth forced, then filtered, equals Generate w
     for (const series of [1, 2]) {
       const drawing = circularPlain();
       set(drawing.form, 'track_type', trackType);
-      set(inputs, 'circularDepth', [DEPTH_A, DEPTH_B].slice(0, series));
+      set(inputs, 'circularDepth', refTree([DEPTH_A, DEPTH_B].slice(0, series)));
       set(drawing.adv, 'depth_tracks', Array.from({ length: series }, (_, index) => ({ label: `Depth ${index + 1}` })));
       const off = generate('circular');
       assert.deepEqual(project(off, 'circular'), [], `${trackType}/${series}: the kept plan filtered is the Generate`);
@@ -763,18 +774,19 @@ test('N19: the placement owners write what the Generate placement wrote', async 
 test('N20 (F1): Generate serializes the hidden Depth files only when the draft draws no Depth, each File read once', async () => {
   let reads = 0;
   const bytes = new TextEncoder().encode(depthText('GT1', 3));
-  const fileLike = { name: 'depth.tsv', type: 'text/plain', lastModified: 0, arrayBuffer: async () => { reads += 1; return bytes.buffer.slice(0); } };
+  const fileLike = { name: 'depth.tsv', type: 'text/plain', size: bytes.byteLength, lastModified: 0, arrayBuffer: async () => { reads += 1; return bytes.buffer.slice(0); } };
   const drawing = circularPlain();
-  const source = { files: { c_depth: [fileLike] }, linearSeqs: [] };
+  // The drawing's Depth files are refs of the project's store (`state.inputFiles`).
+  set(drawing.files, 'c_depth', refTree([fileLike]));
   set(drawing.form, 'show_depth', true);
-  const on = await config.serializeActiveRenderFiles('circular', source, drawing, { comparisonPlan: null, hiddenDepth: true });
+  const on = await config.serializeActiveRenderFiles(state, drawing, { comparisonPlan: null, hiddenDepth: true });
   assert.equal(on.hiddenDepth, undefined, 'a draft that draws Depth sends it as c_depth');
   assert.ok(on.c_depth);
   set(drawing.form, 'show_depth', false);
-  const off = await config.serializeActiveRenderFiles('circular', source, drawing, { comparisonPlan: null, hiddenDepth: true });
+  const off = await config.serializeActiveRenderFiles(state, drawing, { comparisonPlan: null, hiddenDepth: true });
   assert.equal(off.c_depth, null);
   assert.deepEqual(off.hiddenDepth, { circular: on.c_depth });
-  const plain = await config.serializeActiveRenderFiles('circular', source, drawing, { comparisonPlan: null });
+  const plain = await config.serializeActiveRenderFiles(state, drawing, { comparisonPlan: null });
   assert.equal(plain.hiddenDepth, undefined, 'only Generate asks for them');
   assert.equal(reads, 1, 'the File is read once');
   undoAll();
@@ -1222,6 +1234,58 @@ test('(f) (review 3): Use custom stack waits whole while the draft annotation se
   assert.ok(!drawsKind(next.renderRequest, 'dinucleotide_skew'), 'the skew row hide applies');
   assert.ok(ids.includes('tint') && drawsKind(next.renderRequest, 'depth'), `the stack stays otherwise: ${ids}`);
   undoAll();
+});
+
+// DRAWINGS-B: with two Linear drawings, the note predicate and the Legend
+// list's hide drawing read the drawing whose Result is shown
+// (`state.generatedDrawingId`) with its own Linear cards (`liveSettingInputsOf`),
+// never the first drawing of the request's mode.
+test('DRAWINGS-B: the note predicate and the Legend hide drawing read the shown one of two Linear drawings', async () => {
+  const { createDrawingState } = await import('../../gbdraw/web/js/state.js');
+  const first = linearStack({ depthSeries: 1 });
+  const second = createDrawingState('linear-gt-2', 'linear');
+  state.addDrawing(second, 'Linear 2', state.drawingTabs.value.length);
+  const shownBefore = state.generatedDrawingId.value;
+  const activeBefore = state.activeDrawingId.value;
+  try {
+    for (const key of ['linear_track_slots_enabled', 'linear_track_slots', 'linear_track_slots_axis_index', 'depth_tracks', 'nt']) {
+      second.adv[key] = structuredClone(first.adv[key]);
+    }
+    for (const key of ['show_gc', 'show_skew', 'show_depth', 'linear_track_layout']) second.form[key] = first.form[key];
+    second.linearSeqs.splice(0, second.linearSeqs.length, ...inputs.linearSeqs);
+    second.inputType.value = 'gb';
+    config.installShownDrawing(second.id);
+    const filesData = {
+      linearSeqs: inputs.linearSeqs.map((card) => ({ ...card, gb: fileOf(card.gb), depth: fileTree(card.depth) })),
+      linearComparisons: []
+    };
+    const comparisonPlanSnapshot = resolveLinearComparisonPlan({
+      plan: second.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+      losatProgram: second.losatProgram.value, blastpMode: second.losat.blastp.mode
+    });
+    const built = request.buildCanonicalRenderRequest({ state, drawing: second, filesData, comparisonPlanSnapshot, keepTrackParts: true });
+    const committed = { renderRequest: built.renderRequest, resources: built.resources, webFiles: built.webFiles || {} };
+    config.canonicalRenderArtifactOwner.restore({ committedCanonicalSession: committed, activeSessionResourceTable: null });
+    // The first drawing adds a row since that Generate: its own answer waits.
+    set(first.adv, 'linear_track_slots', [...first.adv.linear_track_slots,
+      { id: 'gc_new', renderer: 'dinucleotide_content', enabled: true, params: {} }]);
+    const own = (drawing) => request.liveSettingNoteApplies(committed.renderRequest, K.LSLOTS, drawing,
+      request.liveSettingInputsOf(drawing, fileOf), committed.resources);
+    assert.equal(own(second), true);
+    assert.equal(own(first), false);
+    state.generatedDrawingId.value = second.id;
+    assert.equal(config.committedSettingNotePredicate()(K.LSLOTS), true, 'the shown drawing answers');
+    assert.deepEqual(config.committedTrackHideDrawing(second), request.liveTrackHideDrawing(
+      committed.renderRequest, second, request.liveSettingInputsOf(second, fileOf), committed.resources));
+    state.generatedDrawingId.value = first.id;
+    assert.equal(config.committedSettingNotePredicate()(K.LSLOTS), false, 'showing the first drawing changes the answer');
+  } finally {
+    state.generatedDrawingId.value = shownBefore;
+    config.installShownDrawing(activeBefore);
+    config.canonicalRenderArtifactOwner.restore(null);
+    state.removeDrawing(second.id, { takeSlot: () => null });
+    undoAll();
+  }
 });
 
 // PD-OI-104 scenario revision 6 (D-217, D-219): a hide of a drawn track row

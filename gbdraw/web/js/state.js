@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { WebFontEntry } from './services/font-store.js' */
 /** @import { FileImports, ParsedSpecificRule } from './services/file-imports.js' */
+/** @typedef {import('./services/drawing/inputs.js').LinearSeq} LinearSeq */
 import { msg, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
@@ -18,6 +19,9 @@ import {
   updateActiveLayoutPreference
 } from './services/layout-preferences.js';
 import { createSequenceSourceRegistry } from './services/match-sequences.js';
+import { createInputFileStore } from './services/history-files.js';
+import { INPUTS_SLICE } from './services/drawing/inputs.js';
+import { sessionResourceSource } from './services/session-resource-backing.js';
 import {
   createDefaultLinearComparisonPlan,
   resolveLinearComparisonPlan
@@ -38,18 +42,21 @@ import { createImportedComparisonIntentState } from './services/imported-compari
 import { drawnLinearSequences } from './services/record-draw-selection.js';
 import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
 import { toRaw } from './utils/vue-raw.js';
-import { computed as typedComputed, ref as typedRef } from './utils/reactivity.js';
+import { computed as typedComputed, ref as typedRef, shallowRef as typedShallowRef } from './utils/reactivity.js';
 import { CANVAS_SLICE } from './services/drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './services/drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './services/drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './services/drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './services/drawing/color-rules.js';
 import { PALETTE_SLICE } from './services/drawing/palette.js';
-import { LABEL_TABLES_SLICE } from './services/drawing/label-tables.js';
+import { LABEL_TABLES_SLICE, labelTextEditsData } from './services/drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
 import { PAINT_SLICE } from './services/drawing/paint.js';
 import { SETTINGS_SLICE } from './services/drawing/settings.js';
-import { drawingIdOfMode } from './services/drawing-view.js';
+import { allocateDrawingId, defaultDrawingName } from './services/drawing-view.js';
+import { FEATURE_EDITOR_STATUS_IDLE } from './services/artifact-slot.js';
+/** @import { FeatureEditorStatus } from './services/artifact-slot.js' */
+import { diagnosticError } from './utils/error-normalization.js';
 import {
   DEFAULT_PNG_DPI,
   createDefaultAdv,
@@ -73,7 +80,6 @@ const sessionTitle = ref('');
 const sessionSavePending = ref(false);
 const sessionImportPending = ref(false);
 const semanticFileWatchersSuppressed = ref(false);
-const sessionResourceDiscoveryDeferred = ref(false);
 const sessionImportRollbackInProgress = ref(false);
 
 const results = ref([]);
@@ -126,133 +132,16 @@ const canvasPan = reactive({ x: 0, y: 0 });
 const canvasContainerRef = ref(null);
 
 // App State
+// The drawing a new Session starts with: one Circular drawing (PD-OI-090
+// 〔drawing bar と切り替え〕); the Linear offer tab makes a Linear one.
+const FIRST_DRAWING_ID = allocateDrawingId('circular', []);
 // The shown drawing, by its ID: `installShownDrawing` (services/config.js) is
 // its one writer. The shown mode is the shown drawing's (`drawing.mode`), so
 // nothing writes `mode`.
 /** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
-const activeDrawingId = typedRef(drawingIdOfMode('circular'));
+const activeDrawingId = typedRef(FIRST_DRAWING_ID);
 const mode = typedComputed(() => activeDrawing().mode);
-const cInputType = ref('gb');
-const lInputType = ref('gb');
-const files = reactive({
-  c_gb: null,
-  c_gff: null,
-  c_fasta: null,
-  c_depth: null,
-  c_conservation_blasts: [],
-  c_conservation_blasts_source: null,
-  c_conservation_fastas: [],
-  c_conservation_sequence_sources: [],
-  linearCanonicalComparisons: [],
-  d_color: null,
-  t_color: null,
-  blacklist: null,
-  whitelist: null,
-  qualifier_priority: null
-});
 
-let linearSeqUidCounter = 0;
-
-const generateLinearSeqUid = () => {
-  linearSeqUidCounter += 1;
-  if (globalThis.crypto?.randomUUID) {
-    return `linear-seq-${globalThis.crypto.randomUUID()}`;
-  }
-  return `linear-seq-${Date.now()}-${linearSeqUidCounter}`;
-};
-
-/** @param {unknown} value */
-const normalizeLinearSeqNumber = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-};
-
-/**
- * One linear record slot as `createLinearSeq` builds it. The file fields hold
- * browser `File` objects or null.
- * @typedef {object} LinearSeq
- * @property {string} uid
- * @property {any} gb
- * @property {any} gff
- * @property {any} fasta
- * @property {any} depth
- * @property {number | ''} losat_gencode `v-model.number` writes an empty string when the field is cleared
- * @property {string} definition
- * @property {string} record_subtitle
- * @property {string} file_definition
- * @property {string} file_subtitle
- * @property {string} inferred_definition
- * @property {string} region_record_id
- * @property {unknown} region_start a draft: `createLinearSeq` and the crop control write a number or null,
- *   a Session load stores the saved value as it is; the request projection validates it (R7)
- * @property {unknown} region_end a draft, as `region_start`
- * @property {boolean} region_reverse
- */
-
-/**
- * @param {Partial<LinearSeq> | Record<string, any> | null} [overrides] a slot,
- *   or unvalidated data (a session, an import) that is normalized here
- * @returns {LinearSeq}
- */
-export const createLinearSeq = (overrides = {}) => {
-  const source = overrides && typeof overrides === 'object' && !Array.isArray(overrides) ? overrides : {};
-  const rawUid = String(source.uid ?? '').trim();
-  const rawLosatGencode = Number(source.losat_gencode);
-  return {
-    uid: rawUid || generateLinearSeqUid(),
-    gb: source.gb ?? null,
-    gff: source.gff ?? null,
-    fasta: source.fasta ?? null,
-    depth: source.depth ?? null,
-    losat_gencode: Number.isFinite(rawLosatGencode) && rawLosatGencode > 0 ? rawLosatGencode : 1,
-    definition: String(source.definition ?? ''),
-    record_subtitle: String(source.record_subtitle ?? ''),
-    file_definition: String(source.file_definition ?? ''),
-    file_subtitle: String(source.file_subtitle ?? ''),
-    inferred_definition: String(source.inferred_definition ?? ''),
-    region_record_id: String(source.region_record_id ?? ''),
-    region_start: normalizeLinearSeqNumber(source.region_start),
-    region_end: normalizeLinearSeqNumber(source.region_end),
-    region_reverse: Boolean(source.region_reverse)
-  };
-};
-
-/**
- * @param {readonly (Partial<LinearSeq> | Record<string, unknown> | null)[] | null | undefined} items
- *   slots, or unvalidated data (a session, an import), as `createLinearSeq` takes them
- * @returns {LinearSeq[]}
- */
-export const normalizeLinearSeqList = (items) => {
-  const baseItems = Array.isArray(items) && items.length > 0 ? items : [null];
-  const seenUids = new Set();
-  const normalized = baseItems.map((item) => {
-    const next = createLinearSeq(item);
-    if (!next.uid || seenUids.has(next.uid)) {
-      next.uid = generateLinearSeqUid();
-    }
-    seenUids.add(next.uid);
-    return next;
-  });
-  return normalized;
-};
-
-/** @param {LinearSeq | null | undefined} seq */
-const hasLinearSeqPrimaryInput = (seq) => Boolean(seq?.gb || seq?.gff || seq?.fasta);
-
-/**
- * @param {readonly (Partial<LinearSeq> | Record<string, unknown> | null)[] | null | undefined} items
- * @returns {LinearSeq[]}
- */
-export const collapseEmptyLinearSeqList = (items) => {
-  const previous = normalizeLinearSeqList(items);
-  if (previous.length <= 1) return previous;
-  const collapsed = previous.filter((seq) => hasLinearSeqPrimaryInput(seq));
-  if (collapsed.length === previous.length) return previous;
-  return normalizeLinearSeqList(collapsed);
-};
-
-const linearSeqs = /** @type {LinearSeq[]} */ (reactive(normalizeLinearSeqList([])));
 const selectedAnnotation = ref(null);
 
 export const createDefaultFeatureShapes = () => createDefaultFeatureRenderings();
@@ -301,6 +190,12 @@ const losatThreadingStatus = ref({
   state: 'unknown',
   message: ''
 });
+// The project's input file store: History steps and the input bindings name
+// its files by `InputFileRef` (services/history-files.js). The views of one
+// Session resource share its descriptor, so their refs share a `sourceId`.
+const inputFiles = createInputFileStore({
+  sourceOf: (file) => /** @type {{ descriptor?: object } | null} */ (sessionResourceSource(file))?.descriptor
+});
 const losatCache = ref(new Map());
 const losatDerivedCache = ref(new Map());
 const proteinIdentityManifest = ref({
@@ -329,17 +224,6 @@ const linearReorderNotice = ref('');
 /** @import { FoldedLinearSources } from './services/linear-sources.js' */
 /** @type {FoldedLinearSources} */
 const linearFoldedSources = reactive(new Set());
-const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
-/** @import { CircularRecordDiscovery } from './services/record-discovery.js' */
-/** @type {CircularRecordDiscovery} */
-const circularRecordDiscovery = reactive({
-  status: 'idle',
-  error: '',
-  inputType: '',
-  primaryFile: null,
-  pairedFile: null,
-  canonicalRecordIdentities: []
-});
 
 // The fonts registered in this page (custom fonts D-01, services/font-store.js):
 // frozen entries with their bytes, never saved (D-02) and not in History.
@@ -453,14 +337,18 @@ const selectedFeatures = computed(() => {
     .filter(Boolean);
 });
 const hasFeatureSelection = computed(() => selectedFeatureCount.value > 0);
-const featureEditorStatus = reactive({
-  status: 'idle',
-  generationId: 0,
-  error: null,
-  detailsCacheSize: 0
-});
+// The shown drawing's feature-editor status: a field of its artifact slot, so a drawing switch swaps it
+// with the drawing's `extractedFeatures` (OV-1764). Never saved in a Session.
+const featureEditorStatus = ref(FEATURE_EDITOR_STATUS_IDLE);
+/**
+ * The one writer of the feature-editor status (Generate and Load).
+ * @param {FeatureEditorStatus['status']} status
+ * @param {string | null} [error] The failure, or the warning of a recovered Load (the Editor header's title).
+ */
+const setFeatureEditorStatus = (status, error = null) => {
+  featureEditorStatus.value = Object.freeze({ status, error });
+};
 const featureExtractionPending = ref(false);
-const featureExtractionError = ref(null);
 const featureRecordIds = ref([]); // Record IDs for multi-record files
 const selectedFeatureRecordIdx = ref(0); // Currently selected record index
 const resultGenerationKey = ref(0);
@@ -700,7 +588,10 @@ const showCanvasControls = ref(false);
 
 // Track legend position at generation time (for repositioning without regeneration)
 const generatedLegendPosition = ref('left');
-const generatedMode = ref('circular');
+// The drawing the displayed Result belongs to, by ID (S6): the artifact slot
+// installs write it (`installArtifactSlot`, the History owner set), and Load.
+/** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
+const generatedDrawingId = typedRef(FIRST_DRAWING_ID);
 const generatedMultiRecordCanvas = ref(false);
 const generatedCircularPlotTitlePosition = ref('none');
 
@@ -817,9 +708,10 @@ const listedResults = computed((/** @type {ListedResults | undefined} */ previou
 const featureList = computed(() => {
   void ruleMatchingPending.value;
   const { list, names, metadata } = listedResults.value;
-  const catalogFeatures = resultCatalogFeatures(state, selectedResultIndex.value, list);
+  const drawing = activeDrawing();
+  const catalogFeatures = resultCatalogFeatures(state, drawing.mode, selectedResultIndex.value, list);
   if (catalogFeatures) {
-    return listFeatureRows(catalogFeatures, featureDrawnContext(activeDrawing(), {
+    return listFeatureRows(catalogFeatures, featureDrawnContext(drawing, {
       diagramOptions: { selectedFeaturesSet: metadata?.selectedFeatureTypes }
     }));
   }
@@ -927,10 +819,10 @@ const featureListBottomSpacerPx = computed(
 // The count is the shown drawing's: its `extractedFeatures` switch with it (the artifact slot, OV-1762).
 const featureEditorStatusText = computed(() => {
   const count = extractedFeatures.value.length;
-  if (featureEditorStatus.status === 'pending-summary' || featureExtractionPending.value) {
+  if (featureExtractionPending.value) {
     return count > 0 ? tn(count, '{count} feature updating...', '{count} features updating...', { count: count.toLocaleString('en-US') }) : t('Preparing features...');
   }
-  if (featureEditorStatus.status === 'failed' || featureExtractionError.value) {
+  if (featureEditorStatus.value.status === 'failed') {
     return t('Feature editor unavailable');
   }
   if (count > 0) return tn(count, '{count} feature ready', '{count} features ready', { count: count.toLocaleString('en-US') });
@@ -1020,7 +912,7 @@ const settingsDefaults = (drawingMode) => () => ({
  * @param {DrawingId} id
  * @param {DiagramMode} drawingMode
  */
-const createDrawingState = (id, drawingMode) => {
+export const createDrawingState = (id, drawingMode) => {
   const defaults = settingsDefaults(drawingMode);
   const initial = defaults();
   const form = reactive(initial.form);
@@ -1055,6 +947,11 @@ const createDrawingState = (id, drawingMode) => {
   // (services/record-draw-selection.js).
   /** @type {string[]} */
   const recordsOff = reactive(initial.recordsOff);
+  // The drawing's inputs (DESIGN §2): its input fields, Linear record rows,
+  // input type, and Circular record list and discovery. Its cards, Load, and
+  // History write the fields and rows through the slice's writers.
+  const inputs = INPUTS_SLICE.create();
+  const { linearSeqs } = inputs.view;
   const linearComparisonResolution = typedComputed(() => resolveLinearComparisonPlan({
     plan: linearComparisonPlan,
     sequences: linearSeqs,
@@ -1102,6 +999,8 @@ const createDrawingState = (id, drawingMode) => {
     mode: drawingMode,
     // Settings
     ...settings.view,
+    // Inputs
+    ...inputs.view,
     // Editor edits, slice by slice (services/drawing/): the visibility and
     // color rules, the palette, the label tables, the annotation sets, the
     // Similarity group names and dormant names keyed by member set (D-21), the
@@ -1120,8 +1019,7 @@ const createDrawingState = (id, drawingMode) => {
     ...paint.view,
     // Derived from the members above
     activeLayoutPreferences,
-    // The Linear record cards a Generate draws, in file order (read-only; the
-    // cards are project inputs that both drawings read).
+    // The Linear record cards a Generate draws, in file order (read-only).
     // Frozen: a reader never edits the drawn list (the cards are `linearSeqs`).
     drawnLinearSeqs: typedComputed(() => Object.freeze(drawnLinearSequences(linearSeqs, recordsOff))),
     linearComparisonResolution,
@@ -1137,39 +1035,158 @@ const createDrawingState = (id, drawingMode) => {
     // The handles a slice's writers take.
     slices: Object.freeze({
       visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, palette: palette.handle, labelTables: labelTables.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle,
-      featureEdits: featureEdits.handle, paint: paint.handle, settings: settings.handle })
+      featureEdits: featureEdits.handle, paint: paint.handle, settings: settings.handle, inputs: inputs.handle })
   });
 };
-const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circular');
-/** @typedef {typeof circularDrawing} DrawingState */
 /**
- * Every drawing by ID, in creation order (circular, then linear). Not reactive
- * itself; no writer adds or removes a drawing in A.
- * @type {ReadonlyMap<DrawingId, DrawingState>}
+ * The edits of a drawing that its settings and inputs do not give (R17-6;
+ * the items PD-OI-090 〔作成〕 does not copy): its feature edits and Feature
+ * placements, its paint (feature fills and strokes, Legend edits), its
+ * annotation sets, its label bulk edits, and its group names.
+ * @param {DrawingState} drawing
+ * @returns {readonly unknown[]}
  */
-const drawings = new Map([circularDrawing, createDrawingState(drawingIdOfMode('linear'), 'linear')].map((d) => [d.id, d]));
-/** @returns {readonly DrawingState[]} Every drawing, in creation order. */
-const drawingList = () => [...drawings.values()];
+const editsOf = (drawing) => [
+  FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits),
+  PAINT_SLICE.capture(drawing.slices.paint),
+  ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets),
+  labelTextEditsData(drawing.slices.labelTables),
+  GROUP_NAMES_SLICE.capture(drawing.slices.groupNames)
+];
+/** @param {unknown} value The edits as JSON text (a Set or Map as its entries). */
+const editsText = (value) => JSON.stringify(value, (_key, item) => (
+  item instanceof Set || item instanceof Map ? [...item] : item
+));
+/**
+ * Whether a drawing has edits: those a new drawing of its mode does not have
+ * (R17-6: Delete asks first for a drawing with a Result or edits).
+ * @param {DrawingState} drawing
+ */
+export const drawingHasEdits = (drawing) => (
+  editsText(editsOf(drawing)) !== editsText(editsOf(createDrawingState(drawing.id, drawing.mode)))
+);
+const firstDrawing = createDrawingState(FIRST_DRAWING_ID, 'circular');
+/** @typedef {typeof firstDrawing} DrawingState */
+/**
+ * A drawing tab: the drawing's ID and its name, in tab order.
+ * @typedef {Readonly<{ id: DrawingId, name: string }>} DrawingTab
+ */
+/**
+ * Every drawing by ID: a read-only map that each store write below replaces, in
+ * a shallow ref (a reactive Map would unwrap the members' refs), so a reader
+ * of `drawingOf` or `activeDrawing()` follows a write that replaces a drawing
+ * under its ID (a Load commits new drawing states; OV-1778). `drawingTabs`
+ * holds the order and names, and only the store writers below change either.
+ * @type {import('./utils/reactivity.js').Ref<ReadonlyMap<DrawingId, DrawingState>>}
+ */
+const drawings = typedShallowRef(new Map([[firstDrawing.id, firstDrawing]]));
+/** @param {readonly DrawingTab[]} tabs @returns {readonly DrawingTab[]} */
+const freezeTabs = (tabs) => Object.freeze(tabs.map(({ id, name }) => Object.freeze({ id, name: String(name) })));
+/**
+ * The tab order and names: a frozen list, replaced on each write, so a reader
+ * of `drawingList()` reacts to it.
+ * @type {import('./utils/reactivity.js').Ref<readonly DrawingTab[]>}
+ */
+const drawingTabs = typedRef(freezeTabs([...drawings.value.values()].map((d) => ({ id: d.id, name: defaultDrawingName(d.mode, d.id) }))));
+/** @returns {readonly DrawingState[]} Every drawing, in tab order. */
+const drawingList = () => drawingTabs.value.map((tab) => drawingOf(tab.id));
 /**
  * The one lookup invariant: a drawing ID names a drawing.
  * @param {DrawingId} id
  * @returns {DrawingState}
  */
 const drawingOf = (id) => {
-  const drawing = drawings.get(id);
+  const drawing = drawings.value.get(id);
   if (!drawing) throw new Error(`Unknown drawing: ${id}`);
   return drawing;
 };
 /**
- * The drawing of a diagram mode: until a project holds several drawings of one
- * mode, each mode has one, named by the mode. The one mode lookup; like
- * `drawingOf`, it throws for a value that names no drawing. B replaces each
- * call with `activeDrawing()` or the drawing's `DrawingId`
- * (`tests/web/drawing-slices.test.mjs` caps the calls).
- * @param {ModeProfileName} mode
- * @returns {DrawingState}
+ * A refused store write.
+ * @param {string} operation @param {string} reason @param {Record<string, unknown>} context
  */
-const drawingOfMode = (mode) => drawingOf(drawingIdOfMode(mode));
+const drawingStoreError = (operation, reason, context) => diagnosticError(
+  'INPUT_INVALID', { field: 'drawing', reason, ...context }, { stage: 'drawing-store', operation }
+);
+/** @param {string} operation @param {DrawingId} id */
+const requireDrawingTab = (operation, id) => {
+  const index = drawingTabs.value.findIndex((tab) => tab.id === id);
+  if (index < 0) throw drawingStoreError(operation, 'UNKNOWN_DRAWING', { drawingId: id });
+  return index;
+};
+/**
+ * A drawing's tab (its ID and name): the one reader of a drawing's name for
+ * Save and Run info. An unknown ID is a refused read.
+ * @param {DrawingId} id
+ * @returns {DrawingTab}
+ */
+const drawingTabOf = (id) => drawingTabs.value[requireDrawingTab('drawingTabOf', id)];
+/** @param {number} index @param {number} length */
+const clampTabIndex = (index, length) => Math.max(0, Math.min(length, Math.trunc(Number(index) || 0)));
+/**
+ * Load and a new Session: the drawings and their tabs replace the store. The
+ * caller installs the shown drawing next (`installShownDrawing`).
+ * @param {readonly DrawingState[]} list @param {readonly DrawingTab[]} tabs
+ */
+const replaceDrawings = (list, tabs) => {
+  /** @type {Map<DrawingId, DrawingState>} */
+  const byId = new Map();
+  for (const drawing of list) {
+    if (byId.has(drawing.id)) throw drawingStoreError('replaceDrawings', 'DUPLICATE_DRAWING', { drawingId: drawing.id });
+    byId.set(drawing.id, drawing);
+  }
+  const tabIds = new Set();
+  for (const tab of tabs) {
+    if (tabIds.has(tab.id)) throw drawingStoreError('replaceDrawings', 'DUPLICATE_DRAWING', { drawingId: tab.id });
+    if (!byId.has(tab.id)) throw drawingStoreError('replaceDrawings', 'UNKNOWN_DRAWING', { drawingId: tab.id });
+    tabIds.add(tab.id);
+  }
+  const untabbed = [...byId.keys()].find((id) => !tabIds.has(id));
+  if (untabbed !== undefined || byId.size === 0) {
+    throw drawingStoreError('replaceDrawings', 'UNKNOWN_DRAWING', { drawingId: untabbed ?? '' });
+  }
+  drawings.value = byId;
+  drawingTabs.value = freezeTabs(tabs);
+};
+/** @param {DrawingState} drawing @param {string} name @param {number} index */
+const addDrawing = (drawing, name, index) => {
+  if (drawings.value.has(drawing.id)) throw drawingStoreError('addDrawing', 'DUPLICATE_DRAWING', { drawingId: drawing.id });
+  drawings.value = new Map([...drawings.value, [drawing.id, drawing]]);
+  const tabs = [...drawingTabs.value];
+  tabs.splice(clampTabIndex(index, tabs.length), 0, { id: drawing.id, name });
+  drawingTabs.value = freezeTabs(tabs);
+};
+/**
+ * Removes a drawing that is not shown and not the last one (the caller
+ * switches first through `installShownDrawing`), with its artifact slot,
+ * which it returns for the step that holds the drawing (R16-3).
+ * @param {DrawingId} id
+ * @param {Pick<import('./services/artifact-slot.js').ArtifactSlotStore, 'takeSlot'>} slots
+ * @returns {Readonly<import('./services/artifact-slot.js').ArtifactSlot> | null}
+ */
+const removeDrawing = (id, slots) => {
+  const index = requireDrawingTab('removeDrawing', id);
+  if (drawingTabs.value.length <= 1) throw drawingStoreError('removeDrawing', 'LAST_DRAWING', { drawingId: id });
+  if (id === activeDrawingId.value) throw drawingStoreError('removeDrawing', 'SHOWN_DRAWING', { drawingId: id });
+  const tabs = [...drawingTabs.value];
+  tabs.splice(index, 1);
+  drawings.value = new Map([...drawings.value].filter(([key]) => key !== id));
+  const slot = slots.takeSlot(id);
+  drawingTabs.value = freezeTabs(tabs);
+  return slot;
+};
+/** @param {DrawingId} id @param {number} index */
+const moveDrawing = (id, index) => {
+  const from = requireDrawingTab('moveDrawing', id);
+  const tabs = [...drawingTabs.value];
+  const [tab] = tabs.splice(from, 1);
+  tabs.splice(clampTabIndex(index, tabs.length), 0, tab);
+  drawingTabs.value = freezeTabs(tabs);
+};
+/** @param {DrawingId} id @param {string} name */
+const renameDrawing = (id, name) => {
+  const index = requireDrawingTab('renameDrawing', id);
+  drawingTabs.value = freezeTabs(drawingTabs.value.map((tab, i) => (i === index ? { id, name } : tab)));
+};
 /** @returns {DrawingState} The shown drawing. */
 const activeDrawing = () => drawingOf(activeDrawingId.value);
 
@@ -1184,7 +1201,6 @@ export const state = Object.freeze({
   errorLog,
   sessionTitle,
   semanticFileWatchersSuppressed,
-  sessionResourceDiscoveryDeferred,
   sessionImportRollbackInProgress,
   results,
   selectedResultIndex,
@@ -1212,17 +1228,20 @@ export const state = Object.freeze({
   canvasContainerRef,
   activeDrawingId,
   mode,
+  drawingTabs,
+  drawingTabOf,
   drawingList,
   drawingOf,
-  drawingOfMode,
+  replaceDrawings,
+  addDrawing,
+  removeDrawing,
+  moveDrawing,
+  renameDrawing,
   activeDrawing,
-  cInputType,
-  lInputType,
-  files,
   selectedAnnotation,
-  linearSeqs,
   losatCacheInfo,
   losatThreadingStatus,
+  inputFiles,
   losatCache,
   losatDerivedCache,
   proteinIdentityManifest,
@@ -1242,8 +1261,6 @@ export const state = Object.freeze({
   rightDrawerTab,
   linearReorderNotice,
   linearFoldedSources,
-  circularRecordList,
-  circularRecordDiscovery,
   paletteDefinitions,
   paletteNames,
   paletteInstantPreviewEnabled,
@@ -1273,9 +1290,9 @@ export const state = Object.freeze({
   selectedFeatures,
   hasFeatureSelection,
   featureEditorStatus,
+  setFeatureEditorStatus,
   featureEditorStatusText,
   featureExtractionPending,
-  featureExtractionError,
   featureRecordIds,
   selectedFeatureRecordIdx,
   resultGenerationKey,
@@ -1362,7 +1379,7 @@ export const state = Object.freeze({
   plotTitleUserOffset,
   showCanvasControls,
   generatedLegendPosition,
-  generatedMode,
+  generatedDrawingId,
   generatedMultiRecordCanvas,
   generatedCircularPlotTitlePosition,
   skipCaptureBaseConfig,

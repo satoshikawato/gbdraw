@@ -21,14 +21,17 @@ for (const mode of ['circular', 'linear']) {
     const page = await load(browser, seeds[mode]);
     let fresh;
     const text = 'MODE_RETAINED_LABEL';
+    const temporary = mode === 'circular' ? 'linear' : 'circular';
     try {
+      // Making the other mode's drawing is a project step of its own: make it first, so the Undo below walks the label edit.
+      await switchMode(page, temporary);
+      await switchMode(page, mode);
       await generate(page);
       const generated = await snapshot(page);
       await rename(page, text);
       const edited = await snapshot(page);
       expect(Object.values(edited.labels)).toContain(text);
       expect(edited.mounted).toContain(text);
-      const temporary = mode === 'circular' ? 'linear' : 'circular';
       await switchMode(page, temporary);
       expect.soft(labelIntent(await snapshot(page))).toEqual(noLabelIntent);
       expect((await snapshot(page)).featureCount).toBe(0);
@@ -141,7 +144,7 @@ test('incompatible source replacement reconciles old label intent after a mode r
     expect.soft((await snapshot(page)).labels).toEqual(edited.labels);
     await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('examples/MellatMJNV.gb');
     await expect.poll(() => page.evaluate(async () =>
-      (await import('./js/state.js')).state.circularRecordDiscovery.status)).toBe('ready');
+      (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status)).toBe('ready');
     await generate(page);
     const replaced = await snapshot(page);
     expect(replaced.labels).toEqual({});

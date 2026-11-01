@@ -8,24 +8,31 @@ functions migrate the fields around it.
 from __future__ import annotations
 
 import logging
+import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, NamedTuple, Sequence, cast
+from typing import Any, Literal, Mapping, NamedTuple, Sequence, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_drawings import DraftConfig, session_with_stored_settings_replaced
 from gbdraw.session_io import (
+    CANONICAL_SESSION_MIN_VERSION,
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     FLAT_DRAFT_TOP_LEVEL_FIELDS,
     MODE_SCOPED_SESSION_MIN_VERSION,
     RETIRED_RENDERED_ID_FEATURE_FIELDS,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SessionDraftMigration,
+    _embedded_entry_bytes,
+    _legacy_linear_request_records,
     _project_web_file_binding,
     empty_protein_identity_manifest,
+    get_session_slot,
     has_hash_color_rules,
     migrate_legacy_linear_comparison_draft_for_current_writer,
     migrate_session_flat_draft,
     mode_split_palette_colors,
+    request_less_hash_rules_need_drawn_hashes,
     session_depth_source_widths,
     session_legend_edits_by_row_key,
     session_mode,
@@ -254,8 +261,6 @@ def read_legacy_source_features(
     fallback, the features of the saved SVG (its recovery plan), is not read.
     """
 
-    from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
-
     features = session.get("features")
     config = session.get("config")
     editor_state = session.get("editorState")
@@ -273,7 +278,68 @@ def read_legacy_source_features(
     reads = legacy_source_reads(request) if isinstance(request, Mapping) else None
     if reads is None:
         return None
-    linear = cast(Mapping[str, Any], request).get("mode") == "linear"
+    return _read_sources_again(
+        reads, resource_paths, linear=cast(Mapping[str, Any], request).get("mode") == "linear"
+    )
+
+
+def read_request_less_source_features(
+    session: Mapping[str, Any], temporary_directory: str | Path | None = None
+) -> dict[str, list[dict[str, Any]]] | None:
+    """Read a Session 27-30's Linear sources again for its ``hash`` color rules.
+
+    Such a Session (release 0.13.0) has no request: its Linear cards give the
+    records (``_legacy_linear_request_records``) and embed their GenBank
+    files. Web Load before the Worker route read them again with the cards'
+    crops and orientations (``extractSessionSourceFeatures``), so a rule saved
+    with a drawn hash took its source hash (OV-2043, D-15-152). They are read
+    with the reads of :func:`legacy_source_reads`, in a temporary directory
+    under ``temporary_directory``, only when a rule needs a drawn hash
+    (:func:`gbdraw.session_io.request_less_hash_rules_need_drawn_hashes`), the
+    Session shows Linear and every card is a GenBank one, as the Web read them. None otherwise, or when
+    a source cannot be read; the migration then uses the saved feature
+    metadata.
+    """
+
+    version = session.get("version")
+    ui_value = session.get("ui")
+    ui: Mapping[str, Any] = ui_value if isinstance(ui_value, Mapping) else {}
+    if not (
+        isinstance(version, int)
+        and version < CANONICAL_SESSION_MIN_VERSION
+        and ui.get("mode") == "linear"
+        and (ui.get("lInputType") or "gb") == "gb"
+        and request_less_hash_rules_need_drawn_hashes(session)
+    ):
+        return None
+    reads = legacy_source_reads(
+        {"mode": "linear", "records": _legacy_linear_request_records(session.get("files"))}
+    )
+    if reads is None:
+        return None
+    with tempfile.TemporaryDirectory(dir=temporary_directory) as directory:
+        resource_paths: dict[str, Path] = {}
+        for index, read in enumerate(reads):
+            entry = get_session_slot(session, read.resource_id)
+            data = _embedded_entry_bytes(entry) if isinstance(entry, Mapping) else None
+            if data is None:
+                return None
+            path = Path(directory) / f"seq_{index}.gb"
+            path.write_bytes(data)
+            resource_paths[read.resource_id] = path
+        return _read_sources_again(reads, resource_paths, linear=True)
+
+
+def _read_sources_again(
+    reads: Sequence[LegacySourceRead], resource_paths: Mapping[str, Path], *, linear: bool
+) -> dict[str, list[dict[str, Any]]] | None:
+    """The features of ``reads`` through the diagram Worker's extraction
+    (``extract_features_from_genbank_payload``), each named by its source
+    hash and, for Linear, its input (``fileIdx``). None when a source cannot
+    be read."""
+
+    from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
+
     read_again: dict[str, list[dict[str, Any]]] = {"extractedFeatures": [], "biologicalFeatures": []}
     for input_index, read in enumerate(reads):
         path = resource_paths.get(read.resource_id)
@@ -316,6 +382,44 @@ def read_legacy_source_features(
     return read_again
 
 
+class DraftMigrationRepair(TypedDict):
+    """What a draft migration could not keep as stored, as the Web's Load
+    repair record (``LoadRepair`` in ``web/js/utils/load-repairs.js``) that
+    Web Load reports for the same migration."""
+
+    code: Literal["feature-edit-unmatched", "feature-visibility-narrowed", "hash-selector-unmapped"]
+    path: Literal["features", "features.featureVisibilityOverrides", "config.rules"]
+    effect: Literal["dropped", "changed"]
+    count: int
+
+
+@dataclass
+class DraftMigrationReport:
+    """What the draft migrations of a Session 27-44 tell Web Load: the repairs
+    it lists before the commit, and how many ``hash=`` annotation targets
+    moved to their source feature, which its notice after Load names."""
+
+    repairs: list[DraftMigrationRepair] = field(default_factory=list)
+    moved_annotation_targets: int = 0
+
+
+def session_draft_migration_repairs(migration: SessionDraftMigration) -> tuple[DraftMigrationRepair, ...]:
+    """The Load repairs of the draft migrations that
+    :func:`log_session_draft_migration` reports as warnings."""
+
+    repairs: list[DraftMigrationRepair] = []
+    if migration.dropped_feature_edit_count:
+        repairs.append({"code": "feature-edit-unmatched", "path": "features", "effect": "dropped",
+                        "count": migration.dropped_feature_edit_count})
+    if migration.narrowed_visibility_count:
+        repairs.append({"code": "feature-visibility-narrowed", "path": "features.featureVisibilityOverrides",
+                        "effect": "changed", "count": migration.narrowed_visibility_count})
+    if migration.unmapped_hash_selector_count:
+        repairs.append({"code": "hash-selector-unmapped", "path": "config.rules", "effect": "changed",
+                        "count": migration.unmapped_hash_selector_count})
+    return tuple(repairs)
+
+
 def log_session_draft_migration(migration: SessionDraftMigration, source_version: int) -> None:
     """Report what the draft migrations of a Session 27-44 changed or could not move."""
 
@@ -352,17 +456,39 @@ def log_session_draft_migration(migration: SessionDraftMigration, source_version
         )
 
 
+def _inline_files_at_decoded_size(value: Any) -> Any:
+    """A Session 27-30 ``files`` value whose inline files declare the size of
+    their decoded bytes.
+
+    The Web reader of these versions read an inline file's bytes and ignored
+    its stored ``size`` (OV-1993, D-15-144); the resource it becomes is checked
+    against this size. Bytes that do not decode keep the stored size, and
+    Sessions 31 and later keep their declared sizes.
+    """
+
+    if isinstance(value, list):
+        return [_inline_files_at_decoded_size(item) for item in value]
+    if not isinstance(value, Mapping):
+        return value
+    if "data" in value:
+        data = _embedded_entry_bytes(value)
+        return dict(value) if data is None else {**value, "size": len(data)}
+    return {key: _inline_files_at_decoded_size(item) for key, item in value.items()}
+
+
 def project_session_adjunct_for_current_write(
     session: Mapping[str, Any],
     *,
     source_version: int,
     source_features: Mapping[str, Any] | None = None,
+    report: DraftMigrationReport | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Detach non-canonical state and migrate released Web-owned field names.
 
     ``source_features`` are the Session's sources read again
     (:func:`read_legacy_source_features`) for the rendered-ID edits of a
-    Session without a feature catalog.
+    Session without a feature catalog. What the draft migrations tell Load
+    is added to ``report`` when it is given.
     """
 
     adjunct = {
@@ -392,8 +518,13 @@ def project_session_adjunct_for_current_write(
             else:
                 adjunct.pop(key, None)
         log_session_draft_migration(migration, source_version)
+        if report is not None:
+            report.repairs.extend(session_draft_migration_repairs(migration))
+            report.moved_annotation_targets += migration.migrated_annotation_count
     orthogroup_state = adjunct.get("orthogroupState")
-    if isinstance(orthogroup_state, Mapping):
+    # The alignment target moves into the typed request; with no request it
+    # has nowhere to move, so the drawing keeps it, as Web Load did (D-15-147).
+    if isinstance(orthogroup_state, Mapping) and isinstance(session.get("renderRequest"), Mapping):
         projected_orthogroup_state = dict(orthogroup_state)
         projected_orthogroup_state.pop(
             "selectedOrthogroupAlignmentFeature",
@@ -460,7 +591,11 @@ def project_session_adjunct_for_current_write(
     config = adjunct.get("config")
 
     if isinstance(config, Mapping):
-        source_files = session.get("files")
+        source_files = (
+            session.get("files")
+            if source_version >= CANONICAL_SESSION_MIN_VERSION
+            else _inline_files_at_decoded_size(session.get("files"))
+        )
         has_source_file_inventory = (
             isinstance(source_files, Mapping) and bool(source_files)
         ) or web_file_inventory is not None
@@ -525,6 +660,30 @@ def project_session_adjunct_for_current_write(
     return _split_session_adjunct(adjunct, session, source_version), web_file_inventory
 
 
+# The group name and description edits a Session 27-44 holds in
+# ``orthogroupState`` (the ones Web Load read, OV-1929 d).
+_ORTHOGROUP_STATE_NAME_FIELDS = ("orthogroupNameOverrides", "orthogroupDescriptionOverrides")
+
+
+def _with_group_names_in_web_edits(adjunct: dict[str, Any]) -> dict[str, Any]:
+    """Move the group names a flat draft's ``orthogroupState`` holds into its
+    ``config.webEdits``, which the split gives the Linear drawing (Session 46
+    keeps them there, ``SessionOrthogroupState``); a field the state holds
+    wins over the draft's. A Session without a draft ``config`` has no names.
+    """
+
+    state = adjunct.get("orthogroupState")
+    config = adjunct.get("config")
+    if not isinstance(state, Mapping) or not isinstance(config, Mapping):
+        return adjunct
+    held = {field: state[field] for field in _ORTHOGROUP_STATE_NAME_FIELDS if field in state}
+    if not held:
+        return adjunct
+    web_edits = config.get("webEdits")
+    kept = dict(web_edits) if isinstance(web_edits, Mapping) else {}
+    return {**adjunct, "config": {**config, "webEdits": {**kept, **held}}}
+
+
 def _split_session_adjunct(
     adjunct: dict[str, Any],
     session: Mapping[str, Any],
@@ -545,7 +704,7 @@ def _split_session_adjunct(
     web_files = session.get("webFiles")
     bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else None
     return session_legend_edits_by_row_key(split_draft_into_modes(
-        adjunct,
+        _with_group_names_in_web_edits(adjunct),
         committed_mode=session_mode(session),
         depth_sources=session_depth_source_widths(
             bindings if isinstance(bindings, Mapping) else session.get("files")
@@ -599,9 +758,11 @@ def with_current_artifacts(
 ) -> dict[str, Any]:
     """``fields`` with the LOSAT artifacts of a fresh render or migration.
 
-    The legacy protein IDs that the migration resolved are rewritten first.
-    The derived cache holds ``losat_derived_cache_entries``: a replay passes
-    its Session's own, and a fresh render or migration passes none.
+    The legacy protein IDs that the migration resolved are rewritten first,
+    in ``fields`` and in the derived entries. The derived cache holds
+    ``losat_derived_cache_entries``: a replay and an upgrade of an older
+    Session pass the Session's own (validated by ``CurrentRequestArtifacts``),
+    and a fresh render passes the ones it built, or none.
     """
 
     updated = dict(fields)
@@ -609,6 +770,9 @@ def with_current_artifacts(
         from gbdraw.api.session_compat import rewrite_protein_artifact_references
 
         updated = rewrite_protein_artifact_references(updated, protein_id_map)
+        losat_derived_cache_entries = rewrite_protein_artifact_references(
+            list(losat_derived_cache_entries), protein_id_map
+        )
     for artifact_key in (
         "losatCache",
         "losatDerivedCache",
@@ -641,12 +805,16 @@ def with_current_artifacts(
 
 
 __all__ = [
+    "DraftMigrationRepair",
+    "DraftMigrationReport",
     "LegacySourceRead",
     "legacy_source_reads",
     "log_session_draft_migration",
     "project_session_adjunct_for_current_write",
     "session_with_current_anchor_modes",
     "read_legacy_source_features",
+    "read_request_less_source_features",
     "replace_current_derived_feature_state",
+    "session_draft_migration_repairs",
     "with_current_artifacts",
 ]

@@ -40,6 +40,7 @@ from gbdraw.labels.fit import (
     format_label_fit_report,
 )
 from gbdraw.session import build_session_document
+from tests.utils.session_drawing_view import drawing_view
 from gbdraw.web_support.label_fit import (
     WEB_ROW_SEARCH_SECONDS,
     LabelFitRowSearches,
@@ -299,13 +300,13 @@ def test_a_failure_with_rows_to_compute_is_kept_and_found_through_the_exception_
 
 def _sars_request(overrides: dict[str, object]) -> dict:
     record = SeqIO.read(str(TEST_INPUTS / "SARS-CoV-2.gbk"), "genbank")
-    return build_session_document(
+    return drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
             options=CircularDiagramOptions(config_overrides={"labels.circular.scope": "outer", **overrides}),
             output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
         )
-    ).to_dict()
+    ).to_dict())
 
 
 # Lambda with outer labels at 17 pt and no blacklist: 10 leader pairs cross and no labels overlap, so
@@ -329,13 +330,13 @@ def _crossing_options() -> CircularDiagramOptions:
 
 
 def _crossing_request() -> dict:
-    return build_session_document(
+    return drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(_crossing_record())),),
             options=_crossing_options(),
             output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
         )
-    ).to_dict()
+    ).to_dict())
 
 
 def _web_render(document: dict, tmp_path: Path, searches: LabelFitRowSearches | None = None) -> dict:
@@ -409,7 +410,7 @@ def _mers_request(
         overrides["canvas.circular.track_narrowing"] = False
     if definition_font is not None:
         overrides[DEFINITION_FONT_PATH] = definition_font
-    return build_session_document(
+    return drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
             options=CircularDiagramOptions(
@@ -418,7 +419,7 @@ def _mers_request(
             ),
             output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
         )
-    ).to_dict()
+    ).to_dict())
 
 
 def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_narrows_them(tmp_path) -> None:
@@ -617,13 +618,13 @@ def test_web_rows_computed_after_the_staged_depth_file_is_gone_match_the_rows_wi
 
     record = _crossing_record()
     paths = _write_input_files(tmp_path / "inputs", record)
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
             options=_crossing_options_with_files(paths),
             output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
         )
-    ).to_dict()
+    ).to_dict())
     searches = {name: LabelFitRowSearches() for name in ("kept", "gone")}
     entries = {}
     for name, search in searches.items():
@@ -699,13 +700,13 @@ def test_web_rows_of_two_circular_records_compute_after_their_input_files_are_go
     import shutil
 
     records, paths = _two_records_with_files(tmp_path / "inputs")
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         CircularDiagramRequest(
             records=tuple(RecordInput(source=InMemoryRecordSource(record)) for record in records),
             options=_crossing_options_with_files(paths, extra_overrides=TWO_RECORD_OVERRIDES),
             output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
         )
-    ).to_dict()
+    ).to_dict())
     searches = {name: LabelFitRowSearches() for name in ("kept", "gone")}
     entries = {}
     for name, search in searches.items():
@@ -897,7 +898,7 @@ def test_a_linear_figure_with_region_labels_over_others_opens_the_notice_with_no
         RegionAnnotation("r0", CoordinateSpan(None, 1000, 1100), label="First region with a long label", mark="highlight"),
         RegionAnnotation("r1", CoordinateSpan(None, 1120, 1220), label="Second region with a long label", mark="highlight"),
     )
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         LinearDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
             options=LinearDiagramOptions(
@@ -906,7 +907,7 @@ def test_a_linear_figure_with_region_labels_over_others_opens_the_notice_with_no
             ),
             output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
         )
-    ).to_dict()
+    ).to_dict())
     searches = LabelFitRowSearches()
     response = _web_render(document, tmp_path, searches)
 

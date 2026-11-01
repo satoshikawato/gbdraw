@@ -11,6 +11,9 @@ const generatedSchema = readFileSync(
 const generatedConstant = name => Number(generatedSchema.match(new RegExp(`^export const ${name} = (\\d+);$`, 'm'))[1]);
 const CURRENT_REQUEST_SCHEMA = generatedConstant('CANONICAL_REQUEST_SCHEMA');
 const CURRENT_SESSION_VERSION = generatedConstant('SESSION_VERSION');
+// The newest Session version the app reads (Save writes CURRENT_SESSION_VERSION).
+const NEWEST_READ_SESSION_VERSION = Math.max(...generatedSchema
+  .match(/^export const SUPPORTED_SESSION_VERSIONS = Object\.freeze\(\[([\d, ]+)\]\);$/m)[1].split(',').map(Number));
 const CURRENT_FEATURE_CATALOG_SCHEMA = generatedConstant('FEATURE_CATALOG_SCHEMA');
 
 const DEFAULT_APP_TIMEOUT_MS = 180_000;
@@ -336,6 +339,16 @@ const assertDiagramWorkerIdle = async (page, label = 'Expected the diagram Worke
   return diagnostics.worker;
 };
 
+// A Session 27-44 Load converts through Python (DESIGN 4.3, PD-OI-044 rev 4
+// "May retire"): one `upgradeLegacySession` helper call and no render run.
+const assertLegacyLoadConvertedOnce = async (page, label = 'A Session 27-44 Load makes one Python conversion') => {
+  const activity = await getDiagramWorkerActivity(page);
+  const operations = activity.instances.flatMap((instance) => (instance.helpers || []).map((helper) => helper.operation));
+  expect({ operations, runs: activity.runs }, `${label}:\n${compactJson(activity)}`)
+    .toEqual({ operations: ['upgradeLegacySession'], runs: 0 });
+  return activity;
+};
+
 const assertSessionLoadLeftWorkerIdle = (page) => assertDiagramWorkerIdle(
   page,
   'Loading a saved preview must not initialize the diagram Worker'
@@ -626,15 +639,23 @@ const GENERATE_GLOBALS = ['__GBDRAW_LAST_LOSAT_TELEMETRY__', '_origPairwiseMin',
 // that saved a Session after it booted serves no later case (OV-1001).
 const SESSION_FILE = /session\.json\.gz$/;
 
-// What the restore compares: both drawings' user-owned state, the inputs and
-// Results, the Session files saved, and what a case can leave in the page
-// outside the app.
+// Each drawing's user-owned state, by drawing ID in tab order.
+const snapshotDrawings = async (page) => {
+  const ids = await page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state
+    .drawingList().map((drawing) => drawing.id));
+  const snapshots = [];
+  for (const id of ids) snapshots.push([id, await snapshotUserOwnedState(page, { mode: id })]);
+  return snapshots;
+};
+
+// What the restore compares: the drawings (a new Session has one Circular
+// drawing) and their user-owned state, the inputs and Results, the Session
+// files saved, and what a case can leave in the page outside the app.
 const readWarmFacts = async (page) => ({
   url: page.url(),
   viewport: page.viewportSize(),
   savedSessions: [...warmPages.get(page).savedSessions],
-  circular: (await snapshotUserOwnedState(page, { mode: 'circular' })),
-  linear: (await snapshotUserOwnedState(page, { mode: 'linear' })),
+  drawings: await snapshotDrawings(page),
   page: await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const app = window.__GBDRAW_APP__;
@@ -654,8 +675,9 @@ const readWarmFacts = async (page) => ({
       choicePrompt: Boolean(document.querySelector('[data-choice-prompt]')),
       zoom: app.zoom,
       pan: { ...app.canvasPan },
-      inputs: describe(state.files),
-      linearSources: state.linearSeqs.map(({ gb, gff, fasta, depth }) => describe({ gb, gff, fasta, depth })),
+      inputs: state.drawingList().map((drawing) => (drawing.mode === 'linear'
+        ? drawing.linearSeqs.map(({ gb, gff, fasta, depth }) => describe({ gb, gff, fasta, depth }))
+        : describe(drawing.files))),
       openSections: [...document.querySelectorAll('details[open] > summary')].map((summary) => summary.textContent.trim()),
       globals: Object.fromEntries(Object.keys(window).sort().map((key) => [key, typeof window[key]])),
       testHooks: Object.entries(window.__GBDRAW_TEST_HOOKS__ || {}).map(([name, hook]) => `${name}: ${hook}`).sort(),
@@ -672,9 +694,9 @@ const readWarmBaseline = async (page) => ({
     const config = await import('/gbdraw/web/js/services/config.js');
     return JSON.parse(JSON.stringify({
       shownDrawing: state.activeDrawing().id,
-      drawings: Object.fromEntries(['circular', 'linear'].map((mode) => [mode, {
-        config: config.buildConfigData(state.drawingOf(mode)),
-        ui: config.buildUiStateData(state.drawingOf(mode), { includePreviewNavigation: false })
+      drawings: Object.fromEntries(state.drawingList().map((drawing) => [drawing.id, {
+        config: config.buildConfigData(drawing),
+        ui: config.buildUiStateData(drawing, { includePreviewNavigation: false })
       }])),
       // The test-owned lists an init script starts (`__AUDIT_LIFECYCLE__`).
       testLists: Object.fromEntries(Object.keys(window)
@@ -713,24 +735,33 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
   // drafts and settings (Reset Settings), and the settings of both drawings as
   // the boot read them. The UI part follows the Multi-Record Canvas watcher,
   // which writes layout defaults when the reset turns the canvas back on.
-  await evaluateWithRetainedPromise(page, async (drawings) => {
+  await evaluateWithRetainedPromise(page, async ({ drawings, shownAtBoot }) => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const config = await import('/gbdraw/web/js/services/config.js');
     const app = window.__GBDRAW_APP__;
-    for (let index = state.linearSeqs.length - 1; index >= 0; index -= 1) {
-      for (const field of ['gb', 'gff', 'fasta']) {
-        if (state.linearSeqs[index]?.[field]) await app.setLinearSeqPrimaryFile(index, field, null);
+    // The source setter acts on the shown drawing, so the Linear drawing is
+    // shown while its sources are removed.
+    for (const linear of state.drawingList().filter((drawing) => drawing.mode === 'linear')) {
+      const linearSeqs = linear.linearSeqs;
+      if (!linearSeqs.some((seq) => seq.gb || seq.gff || seq.fasta)) continue;
+      app.selectDrawing(linear.id);
+      for (let index = linearSeqs.length - 1; index >= 0; index -= 1) {
+        for (const field of ['gb', 'gff', 'fasta']) {
+          if (linearSeqs[index]?.[field]) await app.setLinearSeqPrimaryFile(index, field, null);
+        }
       }
+      app.selectDrawing(shownAtBoot);
+      await window.Vue.nextTick();
     }
     await app.resetSettings();
-    for (const [mode, { config: settings }] of Object.entries(drawings)) {
-      config.applyCapturedConfigData(state.drawingOf(mode), settings, { resolveTrackPlacements: false });
+    for (const [drawingId, { config: settings }] of Object.entries(drawings)) {
+      config.applyCapturedConfigData(state.drawingOf(drawingId), settings, { resolveTrackPlacements: false });
     }
     await window.Vue.nextTick();
-    for (const [mode, { ui }] of Object.entries(drawings)) {
-      config.applyUiStateData(state.drawingOf(mode), ui, { restorePreviewNavigation: false });
+    for (const [drawingId, { ui }] of Object.entries(drawings)) {
+      config.applyUiStateData(state.drawingOf(drawingId), ui, { restorePreviewNavigation: false });
     }
-  }, restorePoint.drawings);
+  }, { drawings: restorePoint.drawings, shownAtBoot });
   await settleLive(page);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.captureBaseline('Initial state'));
   await settleLive(page);
@@ -953,6 +984,8 @@ const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', 
 });
 
 module.exports = {
+  NEWEST_READ_SESSION_VERSION,
+  generatedConstant,
   answerChoicePrompt,
   answerSessionTitle,
   expectNoLoadRepairDialog,
@@ -965,6 +998,7 @@ module.exports = {
   assertOperationHealth,
   readErrorSignature,
   assertSessionLoadLeftWorkerIdle,
+  assertLegacyLoadConvertedOnce,
   assertSingleWorkerRun,
   assertWorkerReuseAcrossHelperAndRender,
   diffUserOwnedState,

@@ -26,7 +26,7 @@
 // `config` in the Load's configuration check of a tree older than PR-D,
 // which refuses `canvas.show_labels` there (OV-790): it shows what the rest
 // of that Load does with such a request. From PR-D the check runs it itself.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
@@ -34,7 +34,9 @@ import { File, Blob } from 'node:buffer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { modeDrawing } from './drawing-state.mjs';
+import { savedDrawingView } from './saved-drawing-view.mjs';
 import { callerSession } from './session-caller.mjs';
+import { sessionRollbackPort } from './session-rollback-port.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -79,6 +81,13 @@ globalThis.File = File;
 globalThis.alert = () => {};
 const { installSessionImportWorker } = await import(treeUrl('tests/web/helpers/session-import-node.mjs'));
 installSessionImportWorker();
+// A tree whose Load converts a Session 27-44 through Python's Web entry gets
+// Python's upgrader, as the Worker gives it in the browser.
+if (existsSync(`${TREE}/gbdraw/web/js/services/legacy-session-upgrade.js`)) {
+  const { pythonLegacySessionUpgrader } = await import(treeUrl('tests/web/helpers/python-evaluator.mjs'));
+  const { setLegacySessionUpgrader } = await import(treeUrl('gbdraw/web/js/services/legacy-session-upgrade.js'));
+  setLegacySessionUpgrader(pythonLegacySessionUpgrader());
+}
 
 const sessionConfig = await import(treeUrl('gbdraw/web/js/services/config.js'));
 const { setUnmanagedConfigOverrideValidator, getCommittedCanonicalSession } = sessionConfig;
@@ -101,7 +110,7 @@ print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
 });
 const { transformLegacyResultSvg } = await import(treeUrl('gbdraw/web/js/app/app-setup.js'));
 const { state } = await import(treeUrl('gbdraw/web/js/state.js'));
-const { importSession, exportSession } = callerSession(sessionConfig, state);
+const { importSession, exportSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const readInput = (arg) => {
   if (arg.startsWith('git:')) {
@@ -128,6 +137,10 @@ function canon(value, stack = new Set()) {
   if (typeof value === 'string') return value.length > LONG ? { '#string': sha256(value), length: value.length } : value;
   if (typeof value === 'function' || typeof value === 'symbol') return { '#function': true };
   if (stack.has(value)) return { '#cycle': true };
+  // A ref the state's store knows stands for its file: dump the bytes' digest, not the ref.
+  if (value && typeof value === 'object' && 'fileId' in value && state.inputFiles.has(value.fileId)) {
+    return canon(state.inputFiles.fileOf(value), stack);
+  }
   if (value instanceof Blob || value instanceof File) {
     const entry = { '#file': value.name ?? null, size: value.size, type: value.type || '', sha256: null };
     fileDigests.push([entry, value]);
@@ -167,14 +180,14 @@ const DERIVED_DRAWING_KEYS = new Set([
   'slices', 'id', 'mode'
 ]);
 const DOCUMENT_KEYS = [
-  'mode', 'sessionTitle', 'results', 'selectedResultIndex', 'cInputType', 'lInputType', 'files', 'linearSeqs',
+  'mode', 'sessionTitle', 'results', 'selectedResultIndex', 'cInputType', 'lInputType', 'files',
   'losatCacheInfo', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest', 'legacyProteinRawCandidates',
   'legacyProteinDerivedEvidence', 'orthogroups', 'collinearGroups', 'similarityAlignmentPlan',
   'similarityAlignmentResetReceipt', 'linearRecordTranslations', 'legacySimilarityAlignment', 'selectedOrthogroupId',
   'selectedOrthogroupAlignmentFeature', 'circularRecordList', 'paletteInstantPreviewEnabled', 'losatExecution',
   'richFeaturePopup', 'appliedPaletteName', 'appliedPaletteColors', 'downloadDpi', 'featureCatalog',
   'biologicalFeatures', 'extractedFeatures', 'featureRecordIds', 'selectedFeatureRecordIdx', 'autoLabelReflowEnabled',
-  'generatedLegendPosition', 'generatedMode', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition',
+  'generatedLegendPosition', 'generatedDrawingId', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition',
   'featurePanelTab', 'lastRunInfo', 'zoom', 'canvasPan', 'displayedResultMetadata', 'activeDrawing',
   // What Load reports and the Result artifacts it restores.
   'errorLog', 'comparisonWarnings', 'annotationWarnings', 'featureIdentityNotices', 'originalLegendOrder',
@@ -257,7 +270,9 @@ try {
   if (result?.status === 'saved') {
     const compressed = new Uint8Array(await result.blob.arrayBuffer());
     const raw = isGzip(compressed) ? gunzipSync(compressed) : Buffer.from(compressed);
-    const document = JSON.parse(raw.toString('utf8'));
+    // Save writes a Session 49; the oracle reads the shown drawing as its one-drawing view.
+    const saved49 = JSON.parse(raw.toString('utf8'));
+    const document = savedDrawingView(saved49, saved49.ui.activeDrawingId);
     const request = document.renderRequest;
     const otherRequest = document.otherModeResult?.renderRequest;
     delete document.renderRequest;

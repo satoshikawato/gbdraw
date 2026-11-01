@@ -506,10 +506,11 @@ export const rekeyedRuleRows = (before, after, rendererRows = []) => {
     createRuleLegendCaptions([...before], rendererRows), createRuleLegendCaptions([...after], rendererRows));
 };
 
-// The Legend rows a Remove of rules takes from a drawing not shown, and the
-// rows it re-keys, read from the keys the drawing's Legend stores (OV-1280).
-// Its Result is not mounted, so Python's fills and swatch lines are unknown,
-// and no key is allocated again from the colors its rows list: a Legend
+// The Legend rows a take-back of rules removes from a drawing (Delete
+// settings: rows that name a feature instance of a turned-off record, which
+// no Result draws), and the rows it re-keys, read from the keys the drawing's
+// Legend stores (OV-1280). Python's fills and swatch lines of those rows are
+// not read, and no key is allocated again from the colors its rows list: a Legend
 // recolor, or a type row drawn in a rule's fill with its own line (D-13),
 // would read as a rule row. A rule group's row is its allocated key
 // ("<cap> [<fill>]", or "<cap> [<fill>] (n)") when the drawing lists one,

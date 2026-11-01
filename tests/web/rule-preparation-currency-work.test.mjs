@@ -30,7 +30,7 @@ const setup = () => {
   const drawings = { circular: drawing(), linear: drawing() };
   const state = withModeDrawings({
     mode: ref('circular'), extractedFeatures: ref([]), biologicalFeatures: ref([]), svgResultIdentity: ref('one'),
-    cInputType: ref('gb'), lInputType: ref('gb'), files: {}, linearSeqs: [], results: ref([]), selectedResultIndex: ref(0)
+    linearSeqs: [], results: ref([]), selectedResultIndex: ref(0)
   }, drawings);
   return { drawings, state, preparation: createRulePreparation({ state, evaluate: async () => ({}) }) };
 };
@@ -105,6 +105,20 @@ for (const [name, write] of Object.entries(WRITES)) {
     assert.equal(preparation.isCurrent(shown), true);
   });
 }
+
+// OV-2159 (R16-4, D-15-126): a drawing's Specific rules match on its own
+// inputs. Another drawing's input type, record rows, and cards are not inputs
+// of the shown one, so a failed import's Retry stays while they change.
+test('another drawing\'s input type, record rows, and cards keep the shown drawing\'s snapshot current', () => {
+  const { drawings, preparation } = setup();
+  const shown = preparation.snapshot();
+  drawings.linear.inputType.value = 'gff';
+  drawings.linear.linearSeqs.push({ gb: null, gff: null, fasta: null });
+  drawings.linear.files.d_color = { name: 'colors.tsv' };
+  assert.equal(preparation.isCurrent(shown), true);
+  drawings.circular.files.d_color = { name: 'colors.tsv' };
+  assert.equal(preparation.isCurrent(shown), false);
+});
 
 test('a mode switch reads the inputs of the drawing it shows', () => {
   const { drawings, state, preparation } = setup();

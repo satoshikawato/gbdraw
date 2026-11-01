@@ -6,6 +6,8 @@
 // alignment plan and record translations, and every editor intent.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createHash } from 'node:crypto';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = { Vue: {
@@ -13,24 +15,25 @@ globalThis.window = { Vue: {
   computed: getter => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const { ARTIFACT_SLOT_KEYS, createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
-const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { readFile } = await import('node:fs/promises');
 
-const snapshots = createHistorySnapshotService({ state, fileStore: createHistoryFileStore(), currentResults: () => state.results.value });
+const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value });
 snapshots.setGeneratedArtifactRuntimeOwner({
   capture: () => ({ canonical: canonicalRenderArtifactOwner.capture(), cli: 'circular helper files' }),
   restore: (runtime) => { canonicalRenderArtifactOwner.restore(runtime?.canonical ?? null); }
 });
 
 const SWAPPED = [
-  'results', 'selectedResultIndex', 'featureCatalog', 'extractedFeatures', 'biologicalFeatures',
+  'results', 'selectedResultIndex', 'featureCatalog', 'extractedFeatures', 'featureEditorStatus', 'biologicalFeatures',
   'featureRecordIds', 'orthogroups', 'featureOrthogroupIndex', 'collinearGroups', 'trackSlotResolvedGeometry',
   'annotationWarnings', 'featureIdentityNotices', 'comparisonWarnings', 'labelFitReports', 'inputSummaries', 'lastRunInfo',
   'pairwiseMatchFactors',
-  'editableLabels', 'generatedLegendPosition', 'generatedMode', 'generatedMultiRecordCanvas',
+  'editableLabels', 'generatedLegendPosition', 'generatedMultiRecordCanvas',
   'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors',
   'similarityAlignmentResetReceipt', 'originalLegendColors', 'originalSvgStroke'
 ];
@@ -47,11 +50,13 @@ const KEPT = [
 const memberOf = (key) => (Object.hasOwn(state, key) ? state : state.activeDrawing())[key];
 
 const fillCircularArtifact = async () => {
-  const canonical = JSON.parse(await readFile('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', 'utf8'));
-  adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+  const saved = JSON.parse(await readFile('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', 'utf8'));
+  const canonical = savedDrawingView(saved, saved.ui.activeDrawingId);
+  adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, conservationPairs: new Set(['["s","q"]']) });
   const values = {
     results: [{ name: 'a.svg', content: '<svg id="a"/>' }, { name: 'b.svg', content: '<svg id="b"/>' }],
     selectedResultIndex: 1, featureCatalog: { schema: 5, items: [] }, extractedFeatures: [{ id: 'f1' }],
+    featureEditorStatus: { status: 'failed', error: 'recovery failed' },
     biologicalFeatures: [{ id: 'b1' }], featureRecordIds: ['r1'], orthogroups: [{ id: 'og1' }],
     featureOrthogroupIndex: new Map([['f1', 'og1']]), collinearGroups: [{ id: 'c1' }],
     trackSlotResolvedGeometry: { slots: [] }, annotationWarnings: [{ code: 'w' }],
@@ -59,13 +64,14 @@ const fillCircularArtifact = async () => {
     labelFitReports: [{ resultIndex: 0, resultName: 'a.svg', report: { drawn: true }, rowToken: null }],
     inputSummaries: [{ resultIndex: 0, resultName: 'a.svg', lines: ['Record r1 (a.gb), record 1 of 1, 8 bp: drew 0 features.'], warnings: [] }],
     lastRunInfo: { invocation: { mode: 'circular' } }, pairwiseMatchFactors: { p1: 1.5 },
-    editableLabels: [{ key: 'l1' }], generatedLegendPosition: 'right', generatedMode: 'circular',
+    editableLabels: [{ key: 'l1' }], generatedLegendPosition: 'right',
     generatedMultiRecordCanvas: true, generatedCircularPlotTitlePosition: 'top',
     appliedPaletteName: 'tableau', appliedPaletteColors: { CDS: '#111111' },
     similarityAlignmentResetReceipt: null,
     originalLegendColors: { CDS: '#111111' }, originalSvgStroke: { color: '#000000', width: 1 }
   };
   Object.entries(values).forEach(([key, value]) => { state[key].value = value; });
+  state.generatedDrawingId.value = modeDrawing(state, 'circular').id; // the displayed artifact is Circular's
   const kept = {
     pendingPaletteName: 'pending', pendingPaletteColors: { CDS: '#222222' }, losatCache: new Map([['k', {}]]),
     losatDerivedCache: new Map([['d', {}]]), losatCacheInfo: [{ edgeKey: 'e' }],
@@ -76,7 +82,7 @@ const fillCircularArtifact = async () => {
   };
   Object.entries(kept).forEach(([key, value]) => { memberOf(key).value = value; });
   state.activeDrawing().manualSpecificRules.splice(0, state.activeDrawing().manualSpecificRules.length, { qual: 'product', val: 'x', color: '#333333', cap: 'X' });
-  state.linearSeqs.splice(0, state.linearSeqs.length, { uid: 'seq-1', region_reverse: true });
+  modeDrawing(state, 'linear').linearSeqs.splice(0, modeDrawing(state, 'linear').linearSeqs.length, { uid: 'seq-1', region_reverse: true });
   state.matchSequenceRegistry.register({ origin: 'linear-record', sourceKey: 'k1', recordId: 'R1', sequence: 'ACGT' });
   return { values, kept };
 };
@@ -101,8 +107,9 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   assert.deepEqual(state.results.value, []);
   assert.equal(state.selectedResultIndex.value, 0);
   assert.equal(state.featureCatalog.value, null);
-  assert.equal(state.generatedMode.value, 'linear');
+  assert.equal(state.generatedDrawingId.value, 'linear');
   assert.equal(canonicalRenderArtifactOwner.capture().committedCanonicalSession, null);
+  assert.equal(canonicalRenderArtifactOwner.capture().conservationPairs.size, 0);
   assert.equal(state.matchSequenceRegistry.values().length, 0);
   // An empty slot keeps the applied palette: it has no Result to project.
   assert.equal(state.appliedPaletteName.value, 'tableau');
@@ -110,7 +117,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   // Draft and project state stays.
   Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
   assert.deepEqual(state.activeDrawing().manualSpecificRules, rules);
-  assert.equal(state.linearSeqs[0].region_reverse, true);
+  assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_reverse, true);
 
   // The displayed artifact is the Linear drawing's now (its mode is linear; the test installs it without a switch).
   const linear = snapshots.captureArtifactSlot();
@@ -118,13 +125,16 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   SWAPPED.forEach((key) => assert.strictEqual(state[key].value, values[key], key));
   assert.strictEqual(canonicalRenderArtifactOwner.capture().committedCanonicalSession, committed.committedCanonicalSession);
   assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, committed.activeSessionResourceTable);
+  // D-15-124: the request's conservation hash pairs wait in its slot with it.
+  assert.strictEqual(canonicalRenderArtifactOwner.capture().conservationPairs, committed.conservationPairs);
+  assert.deepEqual([...committed.conservationPairs], ['["s","q"]']);
   assert.strictEqual(state.matchSequenceRegistry.captureTrustedOwner(), registryOwner);
   Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
 
   // The Linear slot captured while empty installs as empty again.
   snapshots.installArtifactSlot(linear, { drawing: modeDrawing(state, 'linear') });
   assert.deepEqual(state.results.value, []);
-  assert.equal(state.generatedMode.value, 'linear');
+  assert.equal(state.generatedDrawingId.value, 'linear');
 });
 
 test('installing a slot of another drawing is refused', async () => {
@@ -186,9 +196,9 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
   const circularResult = { name: 'circular.svg' };
   const kept = createArtifactSlot({ drawing: modeDrawing(state, 'linear'), values: { results: [otherLinearResult, linearResult], selectedResultIndex: 1 } });
   assert.equal(kept.drawingId, 'linear');
-  assert.equal(kept.values.generatedMode, modeDrawing(state, 'linear').mode, 'an unset value is the empty slot\'s of the drawing\'s mode');
+  assert.equal(Object.hasOwn(kept.values, 'generatedMode'), false, 'the slot names its drawing by ID only');
   const slots = createArtifactSlotStore();
-  slots.replaceLoaded(kept);
+  slots.replaceLoaded([kept]);
   /** @param {'circular' | 'linear'} id @param {'circular' | 'linear'} shownId @param {unknown} shown */
   const selected = (id, shownId, shown) => slots.readOfDrawing(id, shownId, () => shown,
     (slot) => slot.values.results[slot.values.selectedResultIndex]);
@@ -203,7 +213,7 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
 // it does not fall back to the drawing's draft palette.
 test('a null applied palette restored in the shown drawing keeps the displayed palette', async () => {
   const { applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
-  const service = createHistorySnapshotService({ state, fileStore: createHistoryFileStore(), currentResults: () => state.results.value, applyUiStateData });
+  const service = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value, applyUiStateData });
   installShownDrawing('circular');
   const drawing = modeDrawing(state, 'circular');
   const draftPalette = drawing.selectedPalette.value;
@@ -246,7 +256,7 @@ test('the slot store keeps a hidden drawing\'s artifact through its named operat
   assert.strictEqual(written.values.results, linearSlot.values.results, 'the other values stay by reference');
   store.writeValues(circular, { appliedPaletteName: 'Vivid' });
   assert.deepEqual(store.kept().map((slot) => slot.drawingId), ['linear', 'circular'], 'an empty slot takes the values');
-  store.replaceLoaded(null);
+  store.replaceLoaded([]);
   assert.deepEqual(store.kept(), []);
   store.restore(before);
   assert.deepEqual(store.kept(), [linearSlot]);
@@ -291,11 +301,92 @@ test('the slot, owner-set and checkpoint captures read the Results through curre
   const written = [{ name: 'shown.svg', content: '<svg id="written"></svg>' }];
   let reads = 0;
   const service = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), currentResults: () => { reads += 1; return written; }
+    state, fileStore: createInputFileStore(), currentResults: () => { reads += 1; return written; }
   });
   assert.equal(service.captureArtifactSlot().values.results, written);
-  assert.equal(service.captureGeneratedArtifactOwnerSet().results, written);
+  assert.equal(service.captureGeneratedArtifactOwnerSet(state.activeDrawing()).results, written);
   const checkpoint = await service.drawingHistory(state.activeDrawingId.value).buildCheckpoint();
   assert.deepEqual(checkpoint.results, [{ name: 'shown.svg', content: '<svg id="written"></svg>' }]);
   assert.equal(reads, 3);
+});
+
+// OV-2210: the project's LOSAT cache-info rows sit in every drawing's owner set,
+// and the transport identity names them by reference. A pass over them that
+// changes no row (another drawing's Linear file change filters its pairs out
+// of an empty list) keeps the array, so the shown drawing's Result keeps its
+// fingerprint and an unchanged Generate there records no step.
+test('a pass over the LOSAT rows that changes none keeps the shown artifact\'s transport identity', async () => {
+  const { writeLosatCacheInfo } = await import('../../gbdraw/web/js/services/config.js');
+  await fillCircularArtifact();
+  state.losatCacheInfo.value = [{ key: 'k', filename: 'pair.tsv', display: true }];
+  snapshots.setGeneratedArtifactIdentity({ schema: 1, algorithm: 'SHA-256', fingerprint: 'b'.repeat(64), retainedBytes: 10 },
+    { results: state.results.value });
+  const fingerprint = () => snapshots.captureGeneratedArtifactHandle(state.activeDrawing()).identity.fingerprint;
+  assert.equal(fingerprint(), 'b'.repeat(64));
+  const rows = state.losatCacheInfo.value;
+  writeLosatCacheInfo(rows.filter((entry) => !entry?.edgeKey));
+  assert.strictEqual(state.losatCacheInfo.value, rows, 'no row changed: the array stays');
+  assert.equal(fingerprint(), 'b'.repeat(64), 'the Result keeps its identity');
+  writeLosatCacheInfo([]);
+  assert.deepEqual(state.losatCacheInfo.value, [], 'a pass that drops a row writes');
+  // OV-2212: the rows are project state, not the drawing's Result.
+  assert.equal(fingerprint(), 'b'.repeat(64), 'changed project rows leave the Result its identity');
+});
+
+// OV-2212: a drawing's transport identity matches only what its Result is: its
+// artifact slot values. Each Generate installs its own project LOSAT and protein
+// values (new objects), so a Generate in another drawing replaces them; the
+// Result's fingerprint covers what of them it drew, and the compact signature
+// covers the alignment plan and record translations by value. So an unchanged
+// Generate after a Generate in another drawing is the same artifact (no step),
+// and a Generate whose Result differs is still a step.
+test('an unchanged Generate in a drawing records no step after a Generate in another drawing', async () => {
+  const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
+  await fillCircularArtifact();
+  installShownDrawing('circular');
+  const histories = Object.fromEntries(['circular', 'linear'].map((id) => [id, createHistoryManager({
+    ...snapshots.drawingHistory(id),
+    captureGeneratedArtifactHandle: () => snapshots.captureGeneratedArtifactHandle(modeDrawing(state, id)),
+    restoreGeneratedArtifactHandle: snapshots.restoreGeneratedArtifactHandle,
+    compareGeneratedArtifactHandles: snapshots.compareGeneratedArtifactHandles
+  })]));
+  const slots = new Map();
+  const baselines = new Set();
+  /** @param {'circular' | 'linear'} id */
+  const show = async (id) => {
+    slots.set(state.generatedDrawingId.value, snapshots.captureArtifactSlot());
+    installShownDrawing(id);
+    snapshots.installArtifactSlot(slots.get(id) ?? null, { drawing: modeDrawing(state, id) });
+    if (!baselines.has(id)) await histories[id].initializeIntentBaseline();
+    baselines.add(id);
+  };
+  /** @param {'circular' | 'linear'} id @param {string} content */
+  const generate = (id, content) => histories[id].runUndoableArtifactReplacement('Generate diagram', () => {
+    const drawing = modeDrawing(state, id);
+    const results = [{ name: `${id}.svg`, content }];
+    snapshots.installGeneratedArtifactOwnerSet({
+      ...snapshots.captureGeneratedArtifactOwnerSet(drawing),
+      results,
+      losatCache: new Map(state.losatCache.value),
+      losatDerivedCache: new Map(state.losatDerivedCache.value),
+      losatCacheInfo: [...state.losatCacheInfo.value],
+      proteinIdentityManifest: { ...state.proteinIdentityManifest.value }
+    }, { drawing, installResults: (next) => { state.results.value = next; } });
+    snapshots.setGeneratedArtifactIdentity({
+      schema: 1, algorithm: 'SHA-256', fingerprint: createHash('sha256').update(content).digest('hex'), retainedBytes: 10
+    }, { results });
+  });
+
+  await show('circular');
+  await generate('circular', '<svg id="c1"/>');
+  assert.equal(histories.circular.getUndoCount(), 1);
+  await show('linear');
+  await generate('linear', '<svg id="l1"/>');
+  assert.equal(histories.linear.getUndoCount(), 1);
+  await show('circular');
+  await generate('circular', '<svg id="c1"/>');
+  assert.equal(histories.circular.getUndoCount(), 1, 'the unchanged Generate is the same artifact');
+  await generate('circular', '<svg id="c2"/>');
+  assert.equal(histories.circular.getUndoCount(), 2, 'a changed Result is a step');
+  assert.equal(histories.linear.getUndoCount(), 1);
 });

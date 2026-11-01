@@ -488,7 +488,7 @@ def test_the_web_request_draws_its_rule_captions_as_written(tmp_path):
     path = tmp_path / "specific-colors.tsv"
     path.write_text("CDS\tgene\t^COX1$\t#ffe700\tComplex IV [#ffe700]\n", encoding="utf-8")
     document = build_session_document(_saved_caption_request(tmp_path, ColorOptions()))
-    payload = document.to_dict()["renderRequest"]
+    payload = document.to_dict()["drawings"][0]["renderRequest"]
     payload["diagramOptions"]["colors"]["colorTableFile"] = {
         "resourceId": "colors-color-table-file",
         "representation": "file",

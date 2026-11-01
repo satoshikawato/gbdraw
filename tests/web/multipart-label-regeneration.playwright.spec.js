@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
 const cases = [
@@ -129,10 +130,7 @@ for (const [name, gene, action] of cases) {
         await (await pending).saveAs(saved);
         await load(saved);
       } else if (action === 'mode') {
-        for (const mode of ['Linear', 'Circular']) {
-          await page.getByRole('button', { name: mode, exact: true }).click();
-          await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode.toLowerCase());
-        }
+        for (const kind of ['linear', 'circular']) await showDrawing(page, { kind });
       } else if (action === 'history') {
         await page.getByRole('button', { name: 'Undo', exact: true }).click();
         await expect.poll(overrides).toEqual({ labels: {}, placements: {} });

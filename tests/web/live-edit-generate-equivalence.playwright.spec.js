@@ -10,6 +10,7 @@ const { readFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, editFeature, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -29,7 +30,7 @@ const MODES = [
     name: LINEAR,
     open: async (page) => {
       await openFresh(page);
-      await page.getByRole('button', { name: 'Linear', exact: true }).click();
+      await showDrawing(page, { kind: 'linear' });
       await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
       await page.evaluate(async (records) => {
         const app = window.__GBDRAW_APP__;

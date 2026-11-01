@@ -4362,6 +4362,10 @@
         "/ui/richFeaturePopup": true,
         "/modes/linear/ui/selectedFeatureRecordIdx": 0
       },
+      "loadExpect": {
+        "/modes/circular/config/adv/plot_title_font_size": 20,
+        "/modes/linear/config/losat/blastp": {"mode": "collinear", "hitLimitsByMode": {"pairwise": {"candidateLimit": null, "orthogroupMemberMaxHits": null}, "orthogroup": {"candidateLimit": null, "orthogroupMemberMaxHits": null}, "collinear": {"candidateLimit": 5, "orthogroupMemberMaxHits": 5}}, "maxHits": 5, "candidateLimit": 7, "orthogroupMembershipMode": "anchor_core_v1", "orthogroupMemberMaxHits": 5, "collinearInferOrthogroups": false, "collinearMinAnchors": 1, "collinearMaxUnitGap": 0, "collinearMaxDiagonalDrift": 0, "collinearMaxConflictsInMergeGap": 1, "collinearMaxParalogLinksPerOrthogroup": 2, "collinearColorMode": "orientation", "collinearUnitMode": "auto", "collinearAnchorMode": "rbh", "collinearMergeOrientation": "strand", "collinearSearchScope": "adjacent"}
+      },
       "expectAbsent": [
         "/config",
         "/features",

@@ -1312,7 +1312,8 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
  * @property {ReadonlyMap<PythonLegendKey, PythonLegendKey>} [legendRekeys] The rule rows whose key that reading
  *   changes (`savedRuleRowRekeys`, F2), old key to new; the other fields are already under the new keys.
  * @property {'circular' | 'linear'} mode
- * @property {number} sessionVersion The version of the Session that saved the edits.
+ * @property {boolean} resultsRecordPythonPaint The Session's Results carry records of Python's paint
+ *   (`SourceFacts`, read from the file's own version: a Session 27-44 Python converted saved none).
  */
 
 /** @param {string} name @param {unknown} left @param {unknown} right */
@@ -1475,10 +1476,6 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
   return recorded;
 };
 
-// The first Session version whose Results carry the records of Python's
-// paint (0.14.0); an older Session's Result shows its edits without them.
-const PAINT_RECORD_SESSION_VERSION = 46;
-
 // The renamed generated rows a Session lists, by their caption: main's writer
 // (Sessions 44 to 46) renamed a row of Python's by rewriting its key and kept
 // Python's caption only as the entry's `originalCaption`. Only a caption no
@@ -1584,8 +1581,9 @@ const nameSavedRuleRows = (svg, edits) => {
 /**
  * The plan a current Session's Results are admitted with at Load: none, or,
  * for each Result the legacy normalization applies to, that normalization;
- * for each Result of a Session older than 46, which saved no records of
- * Python's paint, the records of the edits it shows (`recordSavedEditBases`);
+ * for each Result of a Session that saved no records of Python's paint (a
+ * Session 27-44, `SourceFacts`), the records of the edits it shows
+ * (`recordSavedEditBases`);
  * for each Result the records of Python's key on the rows a Session
  * renamed without one (`recordSavedLegendKeys`); and for each Result whose
  * text shows a color ID while the Session has captioned color rules, the names
@@ -1600,7 +1598,7 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
   const editsShown = edits && [
     edits.featureColorOverrides, edits.featureStrokeOverrides, edits.legendColorOverrides, edits.legendStrokeOverrides
   ].some((overrides) => Object.keys(overrides || {}).length > 0);
-  const needsRecords = Boolean(edits && editsShown && edits.sessionVersion < PAINT_RECORD_SESSION_VERSION);
+  const needsRecords = Boolean(edits && editsShown && !edits.resultsRecordPythonPaint);
   const normalizes = (/** @type {{ content?: unknown }} */ result) => Boolean(legacy?.applies(result?.content));
   const legacyNormalizationCount = results.filter(normalizes).length;
   const renames = edits ? savedLegendRenames(edits) : new Map();

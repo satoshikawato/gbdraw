@@ -41,6 +41,15 @@ const vue = () => globalThis.window?.Vue;
 export const ref = (value) => vue()?.ref?.(value) ?? { value };
 
 /**
+ * A ref whose readers react to a new value only (Vue `shallowRef`): the
+ * value is not made reactive, so a held object keeps its own refs.
+ * @template T
+ * @param {T} value
+ * @returns {Ref<T>}
+ */
+export const shallowRef = (value) => vue()?.shallowRef?.(value) ?? { value };
+
+/**
  * A reactive object over `value` (Vue `reactive`).
  * @template {object} T
  * @param {T} value

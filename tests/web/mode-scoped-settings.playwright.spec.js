@@ -12,6 +12,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./hel
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -22,8 +23,7 @@ const MODE_NAMES = { circular: 'Circular', linear: 'Linear' };
 const depthTsv = (base = 10) => Array.from({ length: 4 }, (_, index) => `FORCEDLBL\t${index * 700 + 1}\t${base + index}`).join('\n');
 
 const switchMode = async (page, mode) => {
-  await page.getByRole('button', { name: MODE_NAMES[mode], exact: true }).click();
-  await page.waitForFunction((value) => window.__GBDRAW_APP__?.mode === value, mode);
+  await showDrawing(page, { kind: mode });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordDiscovery?.status)).not.toBe('loading');
   await settleLive(page);
 };
@@ -98,7 +98,10 @@ const readDrawings = (page, paths) => page.evaluate(async (fieldPaths) => {
     return plain === undefined ? null : JSON.parse(JSON.stringify(plain));
   };
   const pick = (drawing) => Object.fromEntries(Object.entries(fieldPaths).map(([name, path]) => [name, copy(at(drawing, path))]));
-  return { mode: state.mode.value, circular: pick(state.drawingOf('circular')), linear: pick(state.drawingOf('linear')) };
+  // A mode with no drawing yet (a new Session starts with a Circular one) reads as null.
+  const ofKind = (kind) => state.drawingList().find((drawing) => drawing.mode === kind);
+  const read = (kind) => (ofKind(kind) ? pick(ofKind(kind)) : null);
+  return { mode: state.mode.value, circular: read('circular'), linear: read('linear') };
 }, paths);
 
 // One History step that assigns `values` (dotted paths) in the shown mode's drawing.
@@ -166,6 +169,9 @@ const saveAndLoadFresh = async (page, browser, path) => {
 test('OV-82 G5: a round trip through a mode without Depth keeps Circular Show Depth on and records no History step', async ({ page }) => {
   test.setTimeout(180_000);
   await openCircular(page);
+  // Making the Linear drawing is a project step of its own: make it before the round trip is counted.
+  await switchMode(page, 'linear');
+  await switchMode(page, 'circular');
   await setDepthFile(page, 'circular', 0, 'depth.tsv', depthTsv());
   expect((await readDrawings(page, { showDepth: 'form.show_depth' })).circular.showDepth, 'Circular Show Depth after its file').toBe(true);
 
@@ -649,6 +655,9 @@ const sampleSummary = (drawing) => ({
 test('per-mode samples: settings, palette, color rule, annotation set, Depth min, and GC mode stay in their mode', async ({ page }) => {
   test.setTimeout(240_000);
   await openCircular(page);
+  // The sample compares both drawings: make the Linear one (a new Session starts with a Circular drawing only).
+  await switchMode(page, 'linear');
+  await switchMode(page, 'circular');
   const read = async () => {
     const value = await readDrawings(page, SAMPLE_FIELDS);
     return { mode: value.mode, circular: sampleSummary(value.circular), linear: sampleSummary(value.linear) };
@@ -700,6 +709,9 @@ test('per-mode samples: settings, palette, color rule, annotation set, Depth min
 test('H1: Undo and Redo walk the shown drawing\'s steps across an edit, a switch, and an edit in the other mode', async ({ page }) => {
   test.setTimeout(240_000);
   await openCircular(page);
+  // The cases read both drawings from the start: make the Linear one (a new Session starts with a Circular drawing only).
+  await switchMode(page, 'linear');
+  await switchMode(page, 'circular');
   const read = async () => {
     const value = await readDrawings(page, { size: 'adv.label_font_size' });
     return { mode: value.mode, circular: value.circular.size, linear: value.linear.size };
@@ -731,8 +743,8 @@ test('H1: Undo and Redo walk the shown drawing\'s steps across an edit, a switch
   }
 });
 
-// OV-1762: the Editor's feature count is the shown mode's, across a Generate in the other mode and a switch.
-test('OV-1762: the Editor feature count follows the shown mode after a Generate in the other one', async ({ page }) => {
+// OV-1762: the Editor's feature count is the shown drawing's, across a Generate in the other drawing and a switch.
+test('OV-1762: the Editor feature count follows the shown drawing after a Generate in the other one', async ({ page }) => {
   test.setTimeout(240_000);
   await openCircular(page);
   await switchMode(page, 'linear');
@@ -776,6 +788,9 @@ test('OV-1249: Reset Settings keeps a Record Order row for each loaded record', 
 test('H2: Reset Settings is one project step that one Undo restores in both drawings', async ({ page }) => {
   test.setTimeout(240_000);
   await openCircular(page);
+  // The cases read both drawings from the start: make the Linear one (a new Session starts with a Circular drawing only).
+  await switchMode(page, 'linear');
+  await switchMode(page, 'circular');
   const fields = { size: 'adv.label_font_size', width: 'adv.axis_stroke_width' };
   const initial = await readDrawings(page, fields);
   await editStep(page, 'Circular label font size', { 'adv.label_font_size': 13 });

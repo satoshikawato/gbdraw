@@ -11,7 +11,7 @@ import {
   createSessionResourceFileView,
   sessionResourceSource
 } from './session-resource-backing.js';
-import { hasBiologicalSessionInputs, isAdoptedCanonicalSession } from './session-authority.js';
+import { isAdoptedCanonicalSession } from './session-authority.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import {
   collectCanonicalResourceIds,
@@ -20,8 +20,19 @@ import {
 
 /** @import { CanonicalRenderEnvelope } from './session-request.js' */
 /** @import { EncodedFilePayload } from './file-content-cache.js' */
-/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { BoundFileValue, DrawingInputFiles, LinearSeq } from './drawing/inputs.js' */
+/**
+ * What a Session binds of a drawing (`webBindings`): a Circular drawing's input
+ * fields, a Linear drawing's record rows and comparison plan.
+ * @typedef {{
+ *   readonly mode: string, readonly files: Readonly<Partial<DrawingInputFiles>>,
+ *   readonly linearSeqs: readonly Readonly<LinearSeq>[],
+ *   readonly linearComparisonPlan?: { readonly edges?: readonly LinearComparisonEdge[] } | null
+ * }} SessionBindingDrawing
+ */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
+/** @import { InputFileRef, InputFileStore } from './history-files.js' */
 
 /**
  * What the allocator reads of a resource's source: a Session resource
@@ -178,29 +189,40 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
 };
 
 /**
- * One resource table for the committed request and, when the other diagram
- * mode keeps a Result too (E1), that mode's committed request: both are
- * allocated through the same content-deduplicating allocator, so equal bytes
- * share one resource and a positional ID that names different bytes in the
- * two requests gets a new ID; each request's references are rewritten.
- * `state` holds the Files and the Linear records; `drawing` holds the Linear
- * comparison plan, whose uploaded comparison files the Session also binds.
- * @param {Record<string, any>} state
- * @param {Record<string, any> | null} committedRequest
- * @param {Record<string, any>} [drawing]
- * @param {Record<string, any> | null} [otherCommittedRequest]
+ * What Save writes of one drawing: the drawing whose inputs its bindings name
+ * (null: no bindings) and its committed request (null: none).
+ * @typedef {{ drawing: SessionBindingDrawing | null, committed: CanonicalRenderEnvelope | null }} SessionResourceSet
  */
-export const buildSessionResources = async (state, committedRequest, drawing, otherCommittedRequest = null) => {
-  if (
-    committedRequest === null
-      ? hasBiologicalSessionInputs({ ...state?.files, linearSeqs: state?.linearSeqs })
-        || Boolean(state?.results?.value?.length)
-      : (!committedRequest
-        || typeof committedRequest !== 'object'
-        || !committedRequest.renderRequest
-        || !committedRequest.resources)
-  ) {
-    throw new Error('A committed canonical render request is required to save a session.');
+/**
+ * One drawing's request and Web metadata, its resource references rewritten
+ * to the Session's table, and the bindings of its own mode's inputs and the
+ * file cards (a Session 50 drawing's `webFiles`).
+ * @typedef {{
+ *   renderRequest: CanonicalRenderEnvelope['renderRequest'] | null,
+ *   webFiles: CanonicalRenderEnvelope['webFiles']
+ * }} SessionResourceDrawing
+ */
+/**
+ * One resource table for the committed requests and the input bindings of
+ * every drawing Save writes: all are allocated through the same
+ * content-deduplicating allocator, so equal bytes share one resource and a
+ * positional ID that names different bytes in two requests gets a new ID;
+ * each request's references are rewritten. The first set with a request is
+ * the primary one: an adopted table's resources keep their IDs. `state` holds
+ * the store. A Circular drawing binds its input fields, a Linear drawing its
+ * records and comparison plan, whose uploaded comparison files the Session
+ * also binds; every drawing binds its own five card files (R16-4).
+ * @param {Record<string, any>} state
+ * @param {readonly SessionResourceSet[]} sets
+ * @returns {Promise<{ resources: Record<string, RawSessionResourceDescriptor>, written: SessionResourceDrawing[] }>} `written` in the order of `sets`.
+ */
+export const buildSessionDrawingResources = async (state, sets) => {
+  const primary = sets.find((set) => set.committed !== null) ?? null;
+  const committedRequest = primary?.committed ?? null;
+  for (const { committed } of sets) {
+    if (committed !== null && (typeof committed !== 'object' || !committed.renderRequest || !committed.resources)) {
+      throw new Error('A committed canonical render request is required to save a session.');
+    }
   }
 
   /** @type {Record<string, RawSessionResourceDescriptor>} */
@@ -429,15 +451,21 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
     await source.readBytes();
     aliases.set(id, await allocate(source, source.descriptor));
   }
-  /** @type {Map<string, string>} */
-  const otherAliases = new Map();
-  if (otherCommittedRequest) {
-    const reuseOther = isAdoptedCanonicalSession(otherCommittedRequest);
-    const otherTable = otherCommittedRequest.resources === committedRequest?.resources
+  /** @type {Map<SessionResourceSet, Map<string, string>>} */
+  const setAliases = new Map();
+  if (primary) setAliases.set(primary, aliases);
+  for (const set of sets) {
+    const other = set.committed;
+    if (!other || set === primary) continue;
+    /** @type {Map<string, string>} */
+    const otherAliases = new Map();
+    setAliases.set(set, otherAliases);
+    const reuseOther = isAdoptedCanonicalSession(other);
+    const otherTable = other.resources === committedRequest?.resources
       ? committedTable
-      : adoptCurrentSessionResources(otherCommittedRequest.resources || {});
-    for (const id of collectCanonicalResourceIds(otherCommittedRequest.renderRequest)) {
-      if (!Object.hasOwn(otherCommittedRequest.resources, id)) {
+      : adoptCurrentSessionResources(other.resources || {});
+    for (const id of collectCanonicalResourceIds(other.renderRequest)) {
+      if (!Object.hasOwn(other.resources, id)) {
         throw new Error(`Committed render resource is missing: ${id}.`);
       }
       const source = /** @type {SessionResourceSource & { descriptor: RawSessionResourceDescriptor, readBytes: () => Promise<Uint8Array> }} */ (
@@ -455,8 +483,14 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
   const bindSource = async (source, metadata) => bindingForFile(
     metadata, await allocate(source, metadata, source.resourceId)
   );
-  /** @param {FileLike | null | undefined} file */
-  const bindFile = async file => {
+  /** @type {Pick<InputFileStore, 'fileOf'>} */
+  const inputFiles = state.inputFiles;
+  /**
+   * The binding of one input file: a binding names it by ref (`state.inputFiles`).
+   * @param {InputFileRef | null | undefined} ref
+   */
+  const bindFile = async (ref) => {
+    const file = inputFiles.fileOf(ref);
     if (!file) return null;
     const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
     if (Array.isArray(source?.descriptors)) {
@@ -474,24 +508,27 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
   };
 
   /**
-   * @param {FileLike | FileLike[] | null | undefined} value
+   * @param {BoundFileValue} value
    * @returns {Promise<unknown>}
    */
   const bindFileValue = async (value) => {
     if (Array.isArray(value)) {
       return Promise.all(value.map((item) => bindFileValue(item)));
     }
-    return bindFile(value);
+    // `Array.isArray` does not narrow a readonly list out of the union.
+    return bindFile(/** @type {InputFileRef | null | undefined} */ (value));
   };
 
-  const files = state?.files || {};
-  const linearSeqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
-  const linearComparisons = Array.isArray(drawing?.linearComparisonPlan?.edges)
-    ? drawing.linearComparisonPlan.edges
-    : [];
-
-  const bindings = {
-    schema: 2,
+  /** @param {SessionBindingDrawing} drawing Its five card files (R16-4). */
+  const cardBindings = async ({ files }) => ({
+    d_color: await bindFile(files.d_color),
+    t_color: await bindFile(files.t_color),
+    blacklist: await bindFile(files.blacklist),
+    whitelist: await bindFile(files.whitelist),
+    qualifier_priority: await bindFile(files.qualifier_priority)
+  });
+  /** @param {SessionBindingDrawing} drawing The bindings of its mode's inputs. */
+  const circularBindings = async ({ files }) => ({
     c_gb: await bindFile(files.c_gb),
     c_gff: await bindFile(files.c_gff),
     c_fasta: await bindFile(files.c_fasta),
@@ -502,12 +539,10 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
     c_conservation_fastas: await bindFileValue(files.c_conservation_fastas),
     c_conservation_sequence_sources: await bindFileValue(
       files.c_conservation_sequence_sources
-    ),
-    d_color: await bindFile(files.d_color),
-    t_color: await bindFile(files.t_color),
-    blacklist: await bindFile(files.blacklist),
-    whitelist: await bindFile(files.whitelist),
-    qualifier_priority: await bindFile(files.qualifier_priority),
+    )
+  });
+  /** @param {SessionBindingDrawing} drawing */
+  const linearBindings = async ({ linearSeqs, linearComparisonPlan }) => ({
     linearSeqs: await Promise.all(linearSeqs.map(async (sequence) => ({
       uid: String(sequence?.uid || ''),
       gb: await bindFile(sequence?.gb),
@@ -526,33 +561,67 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
       region_reverse: Boolean(sequence?.region_reverse)
     }))),
     linearComparisons: await Promise.all(
-      linearComparisons
+      (linearComparisonPlan?.edges ?? [])
         .filter((/** @type {LinearComparisonEdge} */ comparison) => comparison?.file)
         .map(async (/** @type {LinearComparisonEdge} */ comparison) => ({
           id: String(comparison?.id || ''),
           file: await bindFile(comparison.file)
         }))
     )
+  });
+  /** @param {SessionBindingDrawing} drawing */
+  const bindingsOf = async (drawing) => {
+    // The cards first: a drawing's files are allocated in the order 48 wrote them.
+    const cards = await cardBindings(drawing);
+    return {
+      schema: 2,
+      ...(drawing.mode === 'linear' ? await linearBindings(drawing) : await circularBindings(drawing)),
+      ...cards
+    };
   };
 
-  const identityAliases = [...aliases].every(([source, target]) => source === target);
-  const otherIdentityAliases = [...otherAliases].every(([source, target]) => source === target);
-  const webFiles = rewriteOriginalNameHints(committedRequest?.webFiles, aliases);
+  /** @type {SessionResourceDrawing[]} */
+  const written = [];
+  for (const set of sets) {
+    const setAlias = setAliases.get(set) ?? new Map();
+    const identity = [...setAlias].every(([source, target]) => source === target);
+    const renderRequest = set.committed
+      ? (identity ? set.committed.renderRequest : rewriteResourceRefs(set.committed.renderRequest, setAlias))
+      : null;
+    const webFiles = rewriteOriginalNameHints(set.committed?.webFiles, setAlias);
+    written.push({ renderRequest, webFiles: set.drawing ? { ...webFiles, bindings: await bindingsOf(set.drawing) } : webFiles });
+  }
+  return { resources, written };
+};
 
+/**
+ * `buildSessionDrawingResources` of one committed request, the other mode's
+ * one (E1) and the bindings of `drawings` merged into one set, as the tests of
+ * the allocator read it.
+ * @param {Record<string, any>} state
+ * @param {CanonicalRenderEnvelope | null} committedRequest
+ * @param {readonly SessionBindingDrawing[]} [drawings] `state.drawingList()`
+ * @param {CanonicalRenderEnvelope | null} [otherCommittedRequest]
+ */
+export const buildSessionResources = async (state, committedRequest, drawings = [], otherCommittedRequest = null) => {
+  const built = await buildSessionDrawingResources(state, [
+    { drawing: null, committed: committedRequest },
+    ...(otherCommittedRequest ? [{ drawing: null, committed: otherCommittedRequest }] : []),
+    // Without drawings, the bindings of an empty drawing of each mode.
+    ...(drawings.length ? drawings : /** @type {SessionBindingDrawing[]} */ ([
+      { mode: 'circular', files: {}, linearSeqs: [] }, { mode: 'linear', files: {}, linearSeqs: [] }
+    ])).map((drawing) => ({ drawing, committed: null }))
+  ]);
+  const [top, other] = built.written;
+  // One set of bindings: each mode's own fields, and the card files of the
+  // first drawing (a test's fixture binds them in one drawing).
+  const bindings = Object.assign({}, ...built.written.slice(otherCommittedRequest ? 2 : 1).reverse().map((drawing) => drawing.webFiles.bindings));
   return {
-    renderRequest: identityAliases
-      ? committedRequest?.renderRequest ?? null
-      : rewriteResourceRefs(committedRequest?.renderRequest, aliases),
-    ...(otherCommittedRequest ? {
-      otherRenderRequest: otherIdentityAliases
-        ? otherCommittedRequest.renderRequest
-        : rewriteResourceRefs(otherCommittedRequest.renderRequest, otherAliases)
-    } : {}),
-    resources,
+    renderRequest: top.renderRequest,
+    ...(otherCommittedRequest ? { otherRenderRequest: other.renderRequest } : {}),
+    resources: built.resources,
     webFiles: {
-      ...(otherCommittedRequest
-        ? mergeOtherRequestWebFiles(webFiles, otherCommittedRequest.webFiles, otherAliases)
-        : webFiles),
+      ...(otherCommittedRequest ? mergeOtherRequestWebFiles(top.webFiles, other.webFiles, new Map()) : top.webFiles),
       bindings
     }
   };

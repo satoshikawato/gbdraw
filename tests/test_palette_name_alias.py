@@ -14,6 +14,7 @@ import gbdraw.circular as circular_cli_module
 from gbdraw import FeatureOptions
 from gbdraw.api import ColorOptions
 from gbdraw.io.colors import PALETTE_NAME_ALIASES, packaged_color_palettes, require_palette_name
+from tests.utils.session_drawing_view import session_view
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HUMAN = REPO_ROOT / "gbdraw" / "web" / "tutorial-data" / "human-mitochondrion" / "HmmtDNA.gbk"
@@ -71,7 +72,7 @@ def test_the_former_cli_name_renders_like_the_current_one_and_saves_the_current_
     new = _render(tmp_path, monkeypatch, "new", NEW)
     old = _render(tmp_path, monkeypatch, "old", OLD)
     assert (old / "out.svg").read_bytes() == (new / "out.svg").read_bytes()
-    session = json.loads((old / "out.gbdraw-session.json").read_text(encoding="utf-8"))
+    session = session_view(json.loads((old / "out.gbdraw-session.json").read_text(encoding="utf-8")))
     assert session["renderRequest"]["diagramOptions"]["colors"]["defaultColorsPalette"] == NEW
     # The invocation record keeps the command line as typed.
     assert session["cliInvocation"]["args"][session["cliInvocation"]["args"].index("-p") + 1] == OLD
@@ -98,5 +99,5 @@ def test_a_released_session_that_names_the_former_palette_replays_like_the_curre
         svgs[palette] = (directory / "replay.svg").read_bytes()
     assert svgs[OLD] == svgs[NEW]
     assert svgs[NEW] != svgs["default"]
-    resaved = json.loads((tmp_path / OLD / "resaved.json").read_text(encoding="utf-8"))
+    resaved = session_view(json.loads((tmp_path / OLD / "resaved.json").read_text(encoding="utf-8")))
     assert resaved["renderRequest"]["diagramOptions"]["colors"]["defaultColorsPalette"] == NEW

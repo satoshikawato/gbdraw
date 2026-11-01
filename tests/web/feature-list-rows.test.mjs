@@ -49,12 +49,11 @@ const listOf = (resultIndex, featureOverrides = {}, rules = []) => {
     featureCatalog: { value: catalog },
     results: { value: results },
     selectedResultIndex: { value: resultIndex },
-    generatedMode: { value: 'circular' },
     featureOverrides,
     featureVisibilityManualRules: rules,
     manualSpecificRules: []
   };
-  const catalogFeatures = resultCatalogFeatures(state);
+  const catalogFeatures = resultCatalogFeatures(state, 'circular');
   const list = listFeatureRows(catalogFeatures, featureDrawnContext(state, {
     diagramOptions: { selectedFeaturesSet: ['CDS'] }
   }));
@@ -112,6 +111,7 @@ test('the Features list reads the selected types the displayed Result was drawn 
     computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
   } };
   const { state } = await import('../../gbdraw/web/js/state.js');
+  await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
   const { admitFeatureCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
   const {
     admitCurrentSessionResults,
@@ -128,7 +128,6 @@ test('the Features list reads the selected types the displayed Result was drawn 
     }
   );
   state.featureCatalog.value = catalog;
-  state.generatedMode.value = 'circular';
   state.selectedResultIndex.value = 0;
   const listed = () => state.featureList.value.rows.map((row) => [
     row.biological_feature_id, state.featureListState(row).drawn
@@ -147,4 +146,30 @@ test('the Features list reads the selected types the displayed Result was drawn 
   assert.equal('committedDiagramOptions' in state, false);
   state.results.value = [];
   state.featureCatalog.value = null;
+});
+
+// S6 (D-15-89): the catalog names its records by the mode of the drawing that
+// owns the displayed Result, which the Features list's owner passes; a state
+// with no generated mode still lists a Linear Result's records as "File N:".
+test('the Features list names Linear records by the drawing it lists for, not by a generated mode', async () => {
+  globalThis.window ??= { Vue: {
+    ref: (value) => ({ value }), reactive: (value) => value,
+    computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
+  } };
+  const { state } = await import('../../gbdraw/web/js/state.js');
+  const shownBefore = state.activeDrawingId.value;
+  const generatedBefore = state.generatedDrawingId.value;
+  state.activeDrawingId.value = state.drawingOf('linear').id;
+  state.generatedDrawingId.value = state.activeDrawingId.value;
+  state.featureCatalog.value = { schema: 5, items: [item(0, 'REC1', [['A', 'CDS']], ['A'])] };
+  state.selectedResultIndex.value = 0;
+  state.results.value = [{ name: 'result-0.svg', content: '<svg />' }];
+  try {
+    assert.deepEqual(state.featureList.value.rows.map((row) => row.displayRecordId), ['File 1: REC1']);
+  } finally {
+    state.results.value = [];
+    state.featureCatalog.value = null;
+    state.generatedDrawingId.value = generatedBefore;
+    state.activeDrawingId.value = shownBefore;
+  }
 });

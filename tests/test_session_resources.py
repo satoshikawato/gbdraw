@@ -23,6 +23,7 @@ from gbdraw.api.requests import (
 from gbdraw.session import (
     SessionResourceError,
     _build_session_document_from_resolved_request,
+    _mode_scoped_document_of_request,
     build_session_document,
     load_session_document,
     materialize_session,
@@ -207,22 +208,24 @@ def test_a_request_reference_must_resolve() -> None:
 # table existed (3522c0bc): a table without seed resources must reproduce the
 # single-request writer byte for byte. A codec change that changes a fixture's
 # single-request output updates its digest here; so does a Session version
-# bump (46, 47, 48, 49, 50: only the version field changed) and a change of the packaged
+# bump (46, 47, 48, 49: only the version field changed; this checked document
+# stays at the mode-scoped 49 when the writer moves on to drawings at 50, so 50
+# changes nothing here) and a change of the packaged
 # config a stored full config is completed with (the label style keys, LP-D98;
 # the Linear box default, LP-D106; the Circular track narrowing leaves, PD-OI-078;
 # the Circular definition show leaf, PD-OI-109; the ring colour scheme leaf, PD-OI-110;
 # the italic gene label leaves; the identity colour scale leaves).
 _SINGLE_REQUEST_DIGESTS = {
     "synthetic_conservation.gbdraw-session.json.gz":
-        "c3482b619d379fc1d8e7d736e5d4878109d7e09a075fd465b59969b6e7982773",
+        "fa32977cf53f3ddd83b4956239006aa08beac4a394f09f2fccc9e34002ddc0ad",
     "q-frame-main-web-upload.v42.gbdraw-session.json.gz":
-        "b091af3e0c7540534aa08083cffa711c827c0d806baff3ecc1e11d2a273099e3",
+        "d5a2391e1956fe332c174adf6a884b6dcff25e7ec691198c6406c0e4d08538d5",
     "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz":
-        "2c204fc81c97fb93a07d753a089a325ee2f6d11de4bfaa00e63969b7363bb47e",
+        "73cda40e636e8da09aa223ff305435275217690c3d30276916c71014370d2717",
     "feature-edits-crop-rc.v44.gbdraw-session.json.gz":
-        "45ae4ba56c6048e72b6df8981bd0d27e3d4c653ea6de758170639c0d79fd5609",
+        "47b0d8f091cfc6b882c224e7d87d6a08ea71f928abaab7f7d13ea8f4f79b06e4",
     "selected-feature-annotations.v44.gbdraw-session.json.gz":
-        "ab7d207bf8208a74bc7547031110b70fe897a5b772ba57082bf40f2640189d67",
+        "1602a47e3e285b6e4dc1abcd64f69e3ebc32cf890dc9fff6ed2458e9be3311f8",
 }
 
 
@@ -233,8 +236,10 @@ def test_a_single_request_session_is_byte_identical(fixture: str, tmp_path: Path
             # A file resource stores its modification time.
             os.utime(path, (1_700_000_000, 1_700_000_000))
         request = session_to_request(materialized)
-        document = build_session_document(
+        # The checked mode-scoped Session 48, before the move to drawings.
+        document = _mode_scoped_document_of_request(
             request,
+            resolved=False,
             created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
         ).to_dict()
     text = json.dumps(document, sort_keys=True, separators=(",", ":"))

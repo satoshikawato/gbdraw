@@ -5,6 +5,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { load, generate, switchMode, popup, closeEditor, download, snapshot } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise, reveal } = require('./helpers/app-lifecycle.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const tobacco = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
@@ -12,12 +13,12 @@ const lambda = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.j
 const source = async (file, name) => {
   const session = JSON.parse(await fs.readFile(file, 'utf8'));
   return { name, mimeType: 'text/plain', buffer: Buffer.from(
-    session.resources[session.renderRequest.records[0].source.resourceId].data, 'base64') };
+    session.resources[shownSavedDrawing(session).renderRequest.records[0].source.resourceId].data, 'base64') };
 };
 const upload = async (page, file) => {
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(file);
   await expect.poll(() => page.evaluate(async () =>
-    (await import('./js/state.js')).state.circularRecordDiscovery.status)).not.toBe('loading');
+    (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status)).not.toBe('loading');
 };
 const hide = async page => {
   const target = await popup(page, 1);
@@ -65,7 +66,7 @@ test('V1-V5/V8 individual visibility is reconciled on accepted source replacemen
     const file = testInfo.outputPath('source-B.gbdraw-session.json.gz');
     const bytes = await download(page, 'Save Session', file);
     const savedSession = JSON.parse(gunzipSync(bytes));
-    expect(savedSession.modes[savedSession.ui.mode].features.featureOverrides).toEqual({});
+    expect(shownSavedDrawing(savedSession).features.featureOverrides).toEqual({});
     fresh = await load(browser, file);
     expect((await snapshot(fresh)).featureVisibility).toEqual({});
     await upload(fresh, await source(seed, 'mito-return.gb'));

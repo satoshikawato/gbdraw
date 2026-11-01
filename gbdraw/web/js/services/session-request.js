@@ -153,9 +153,8 @@ import {
 } from '../mode-profiles.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
-  createDefaultLayoutPreferences,
   legendPositionOfMode,
-  updateActiveLayoutPreference
+  requestLayoutPreferences
 } from './layout-preferences.js';
 import {
   requireCurrentCircularMultiRecordSizeMode,
@@ -206,6 +205,7 @@ import {
   createCombinedSessionResourceFileView,
   createSessionResourceFileView,
   validateWebFileBindings,
+  webBindingInputSlot,
   webFileBindingsWithoutDepth
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
@@ -214,6 +214,8 @@ import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
   getResourcePayloadIdentity,
   getResourcePayloadOwner,
+  recordSourceOwnedBy,
+  recordSourceResourceIds,
   resourceIdOwnedBy,
   setResourcePayloadOwner
 } from './resource-payload-owner.js';
@@ -247,6 +249,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { JsonValue } from './json-clone.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
 /** @import { TableRepair } from './file-imports.js' */
+/** @import { InputFileRef, InputFileStore } from './history-files.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
@@ -380,8 +383,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * What the request reads of `state` (state.js), or of the state a Gallery
  * Session's request is rebuilt from (`buildCanonicalRequestState`).
  * @typedef {RequestTableState & {
- *   mode: ExportRef<ModeProfileName>, cInputType: ExportRef<string>, lInputType: ExportRef<string>,
- *   circularRecordList: ExportRef<CircularRequestRecordSetOptions['records']>,
+ *   mode: ExportRef<ModeProfileName>,
  *   losatExecution?: { threadsPerJob?: unknown }
  * }} RequestState
  */
@@ -1450,7 +1452,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     );
     /** @type {RequestDraftRecord[]} */
     const records = (filesData.linearSeqs || []).map((seq, index) => {
-      const source = linearRecordSource(resources, state.lInputType.value, seq, index);
+      const source = linearRecordSource(resources, drawing.inputType.value, seq, index);
       const region = linearRegionPayload(seq);
       const selector = region ? null : linearCardSelector(seq);
       return {
@@ -1509,9 +1511,9 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
       const requestedSelector = String(
         drawing.form.circular_record_selector || savedSelector || ''
       ).trim();
-      const knownRecords = (Array.isArray(state.circularRecordList.value)
-        ? state.circularRecordList.value
-        : []).map((entry) => ({
+      /** @type {CircularRequestRecordSetOptions['records']} */
+      const circularRecordList = drawing.circularRecordList.value;
+      const knownRecords = (Array.isArray(circularRecordList) ? circularRecordList : []).map((entry) => ({
           ...entry,
           recordId: entry?.record_id ?? entry?.recordId
         }));
@@ -1553,7 +1555,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     };
   }
   /** @type {CanonicalRecord['source']} */
-  const source = state.cInputType.value === 'gff'
+  const source = drawing.inputType.value === 'gff'
     ? {
         kind: 'gffFasta',
         gffResourceId: resources.addFile('record-1-gff3', 'gff3', filesData.c_gff),
@@ -1564,7 +1566,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
         resourceId: resources.addFile('record-1-genbank', 'genbank', filesData.c_gb)
       };
   // The drawing is the Circular drawing of `state.js`, which holds every field the record set reads.
-  const recordSet = circularDrawingRecordSet(state.circularRecordList.value, /** @type {CircularRecordDrawing} */ (drawing));
+  const recordSet = circularDrawingRecordSet(drawing.circularRecordList.value, /** @type {CircularRecordDrawing} */ (drawing));
   if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
   const { recordSelectors } = recordSet;
   const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];
@@ -1796,18 +1798,38 @@ const LIVE_WEB_FILES_ROOT = 'webFiles';
 // Web file record, its resources, and the kept track parts of its request.
 const LIVE_SESSION_ROOTS = new Set([LIVE_WEB_FILES_ROOT, 'resources', 'keptTrackParts']);
 /**
- * The draft values outside the drawing that a live projector reads, given by
- * its caller (the request owner never reads `state`): the Linear cards (each
- * with its Depth files) and the Circular Depth files (`files.c_depth`).
- * @typedef {{ readonly linearSeqs: readonly RequestLinearSeq[], readonly circularDepth: RequestFilesData['c_depth'] | null }} LiveSettingInputs
+ * A drawing's Circular Depth files as a live projector reads them
+ * (`DrawingInputFiles.c_depth`, services/drawing/inputs.js): one record's
+ * series, or a record-major matrix, of `InputFileRef`s.
+ * @typedef {InputFileRef | (InputFileRef | null)[] | (InputFileRef | null)[][] | null} LiveSettingCircularDepth
  */
 /**
- * The live projector inputs, read from the project's draft inputs. Every
- * caller builds them here.
- * @param {{ readonly linearSeqs: readonly RequestLinearSeq[], readonly files?: { readonly c_depth?: RequestFilesData['c_depth'] | null } | null }} sources
+ * A drawing's Linear card as a live projector reads it (`LinearSeq`,
+ * services/drawing/inputs.js): its file fields hold `InputFileRef`s.
+ * @typedef {Omit<RequestLinearSeq, 'gb' | 'gff' | 'fasta' | 'depth'>
+ *   & { readonly gb?: InputFileRef | null, readonly gff?: InputFileRef | null, readonly fasta?: InputFileRef | null,
+ *     readonly depth?: DepthFileSlots<InputFileRef> }} LiveSettingCard
+ */
+/**
+ * The draft values a live projector reads, given by its caller (the request
+ * owner never reads `state`): the Linear cards (each with its Depth files)
+ * and the Circular Depth files (`files.c_depth`) of the drawing it projects,
+ * never another drawing's, and the project's file store reader
+ * (`state.inputFiles.fileOf`) that gives the File a ref binds (OV-2205).
+ * @typedef {{ readonly linearSeqs: readonly LiveSettingCard[], readonly circularDepth: LiveSettingCircularDepth,
+ *   readonly fileOf: InputFileStore['fileOf'] }} LiveSettingInputs
+ */
+/**
+ * The live projector inputs of `drawing`: its own Linear cards and Circular
+ * Depth files, read through the project's file store (`fileOf`). Every caller
+ * builds them here.
+ * @param {{ readonly linearSeqs: readonly LiveSettingCard[], readonly files: { readonly c_depth: LiveSettingCircularDepth } }} drawing
+ * @param {InputFileStore['fileOf']} fileOf
  * @returns {LiveSettingInputs}
  */
-export const liveSettingInputsOf = (sources) => ({ linearSeqs: sources.linearSeqs, circularDepth: sources.files?.c_depth ?? null });
+export const liveSettingInputsOf = (drawing, fileOf) => ({
+  linearSeqs: drawing.linearSeqs, circularDepth: drawing.files.c_depth ?? null, fileOf
+});
 /**
  * The committed Session's resources, which name the files each committed
  * record was drawn from.
@@ -1831,22 +1853,23 @@ const configWrites = (path, value) => {
 const configWrite = (key, value) => [['diagramOptions', 'configOverrides', key], value ?? undefined];
 
 /**
- * Whether a draft card still draws a committed record: the committed resource
- * the record's source names holds the card's File (`resourceIdOwnedBy`, by
+ * Whether a draft card still draws a committed record: the card's Files
+ * (`fileOf` of its refs) name the record's source (`recordSourceOwnedBy`, by
  * payload identity; a replaced File does not, whatever its definition says),
  * and the card's Generate selects the same record: the record under the
  * card's key the card's selector (`linearCardSelector`), a split member
  * (F-18) none. A changed selection applies on Generate (G3), and the card's
  * definition follows it.
- * @param {RequestLinearSeq} seq @param {string} cardKey @param {CanonicalRecord} record
- * @param {LiveSettingResources} resources
+ * @param {LiveSettingCard} seq @param {string} cardKey @param {CanonicalRecord} record
+ * @param {LiveSettingResources} resources @param {LiveSettingInputs['fileOf']} fileOf
  */
-const cardDrawsRecord = (seq, cardKey, record, resources) => {
+const cardDrawsRecord = (seq, cardKey, record, resources, fileOf) => {
   const { source } = record;
-  return (source.kind === 'genbank'
-    ? resourceIdOwnedBy(resources, seq.gb, 'genbank') === source.resourceId
-    : resourceIdOwnedBy(resources, seq.gff, 'gff3') === source.gffResourceId
-      && resourceIdOwnedBy(resources, seq.fasta, 'fasta') === source.fastaResourceId)
+  const drawn = source.kind === 'genbank'
+    ? recordSourceOwnedBy(resources, fileOf(seq.gb), null)
+    : recordSourceOwnedBy(resources, fileOf(seq.gff), fileOf(seq.fasta));
+  return drawn !== null && drawn.kind === source.kind
+    && recordSourceResourceIds(drawn).join('\n') === recordSourceResourceIds(source).join('\n')
     && (record.recordKey === cardKey
       ? sameRecordSelector(linearCardSelector(seq), requestRecordSelector(record))
       : linearCardSelector(seq) === null);
@@ -1867,7 +1890,7 @@ const linearRecordCardIndexes = (request, inputs, resources) => {
     (key) => key === recordKey || recordKeyExpansion(recordKey, key) !== null
   ));
   return indexes.every((index, position) => index >= 0 && (position === 0 || index >= indexes[position - 1])
-    && cardDrawsRecord(inputs.linearSeqs[index], cards[index], request.records[position], resources))
+    && cardDrawsRecord(inputs.linearSeqs[index], cards[index], request.records[position], resources, inputs.fileOf))
     ? indexes : null;
 };
 /**
@@ -2007,7 +2030,8 @@ const depthSourcesKept = (depth, request, inputs, resources) => {
     return rows.every((row, record) => {
       const ref = Array.isArray(source) ? source[record] : source;
       const id = ref && typeof ref === 'object' ? /** @type {{ resourceId?: unknown }} */ (ref).resourceId : null;
-      const file = /** @type {object | null | undefined} */ (row[series]);
+      // The draft holds refs of the project's file store; the kept resource owns the File one binds.
+      const file = inputs.fileOf(/** @type {InputFileRef | null | undefined} */ (row[series]));
       return file ? resourceIdOwnedBy(depth.resources, file, 'depth-track-file') === id : !id;
     });
   });
@@ -2833,7 +2857,7 @@ const ALL_GENERATED_TABLES = Object.freeze({
 export const requestLabelProjection = (state, drawing) => {
   const bulk = drawing.labelTextBulkOverrides || {};
   if (Object.keys(bulk).length === 0) return { bulkLabelText: {}, rows: [] };
-  const displayed = resultRenderedFeatures(state);
+  const displayed = resultRenderedFeatures(state, drawing.mode);
   const labelTargets = (state.editableLabels?.value || []).map((entry) => ({
     identityKey: featureIdentityKeyOf(displayed?.get(String(entry?.featureId || '').trim())),
     sourceText: entry?.sourceText
@@ -3964,14 +3988,15 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     // A row is unvalidated: one without a label, null included, gives an empty label (OV-963).
     conservation.labels = conservation.series.map((/** @type {UnvalidatedFields<'label'>} */ row) => String(row?.label || '').trim()).join(',');
   const stateRefs = {
-    mode: projection.mode, cInputType: session?.ui?.cInputType || projection.inputType,
-    lInputType: session?.ui?.lInputType || projection.inputType,
-    circularRecordList,
+    mode: projection.mode,
     paletteDefinitions: { [palette]: {} }, editableLabels: [],
     similarityAlignmentPlan: canonicalLayout.similarityAlignment || null,
     linearRecordTranslations: publicationClone(canonicalLayout.recordTranslations || [])
   };
   const drawingRefs = {
+    // The drawing's input type: its mode's Session 48 field, else the request's.
+    inputType: (projection.mode === 'linear' ? session?.ui?.lInputType : session?.ui?.cInputType) || projection.inputType,
+    circularRecordList,
     currentColors: colorOverridesChanged ? activeColors : config.colors || {},
     selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules || []),
     filterMode: config.filterMode || 'None', manualBlacklist: String(config.blacklistText || ''),
@@ -4376,8 +4401,8 @@ const projectCanonicalRenderInput = ({
   if (state.mode.value === 'circular') {
     webFiles.circularOutputPrefixExplicit = explicitPrefix !== null;
   }
-  const knownCircularRecords = Array.isArray(state.circularRecordList.value)
-    ? state.circularRecordList.value
+  const knownCircularRecords = Array.isArray(drawing.circularRecordList.value)
+    ? drawing.circularRecordList.value
     : [];
   const knownCircularEntries = buildDisambiguatedRecordEntries(
     knownCircularRecords.map((/** @type {{ record_id?: unknown, recordId?: unknown } | null} */ record) => ({
@@ -4578,7 +4603,7 @@ const projectCanonicalRenderInput = ({
   if (Object.keys(resources.resourceOriginalNames).length > 0) {
     webFiles.resourceOriginalNames = { ...resources.resourceOriginalNames };
   }
-  if (state.mode.value === 'circular' && state.cInputType.value === 'gb') {
+  if (state.mode.value === 'circular' && drawing.inputType.value === 'gb') {
     const circularInputOriginalName = normalizeOriginalResourceName(filesData.c_gb?.name);
     if (circularInputOriginalName) webFiles.circularInputOriginalName = circularInputOriginalName;
   }
@@ -5916,7 +5941,8 @@ export const projectCanonicalSessionRequest = ({
   sessionResourceTable = null,
   deferResourceContent = false,
   adoptCanonicalPayloads = false,
-  markCardFileRows = false
+  markCardFileRows = false,
+  bindingInputSlot
 }) => {
   // Every request reaches the projection at the current schema: a stored one
   // through its reader (`readStoredRenderRequest`), a new one from the writer.
@@ -5987,7 +6013,11 @@ export const projectCanonicalSessionRequest = ({
     : {};
   // The checked bindings; the CLI initialization below rebuilds them field by field.
   /** @type {Readonly<Record<string, unknown>> | undefined} */
-  let explicitBindings = validateWebFileBindings(webMetadata, canonicalResources);
+  // A Load passes the input slot of the Session it reads (`c_gb` for a Session 41-48); a committed request
+  // projected again (label reflow, orientation, alignment) holds its own mode's input slot (OV-1814).
+  let explicitBindings = validateWebFileBindings(
+    webMetadata, canonicalResources, bindingInputSlot ?? webBindingInputSlot(true, renderRequest.mode)
+  );
   // A CLI sidecar has no saved Web draft. Its empty writer slots are initial
   // values, not a user's cleared inputs. Keep real original CLI bindings (in
   // particular GFF + FASTA), and initialize absent slots from the typed request.
@@ -6922,17 +6952,7 @@ export const projectCanonicalSessionRequest = ({
   }
   // Legend and plot-title positions are layout preferences, not form fields:
   // the committed request sets the slot of its own mode and grouping.
-  const layoutPreferences = createDefaultLayoutPreferences();
-  updateActiveLayoutPreference(
-    layoutPreferences,
-    renderRequest.mode,
-    renderRequest.mode === 'circular' && grouping === 'grid',
-    {
-      legend: options.output?.legend || 'right',
-      plotTitlePosition: options.output?.plotTitlePosition
-        || (renderRequest.mode === 'linear' ? 'bottom' : 'none')
-    }
-  );
+  const layoutPreferences = requestLayoutPreferences({ mode: renderRequest.mode, grouping, diagramOptions: options });
   return {
     mode: renderRequest.mode,
     inputType,

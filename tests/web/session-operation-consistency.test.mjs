@@ -4,8 +4,9 @@ import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { withDrawings } from './helpers/drawing-state.mjs';
+import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'gbdraw-session-operations-'));
 await cp(join(process.cwd(), 'gbdraw/web/js'), join(root, 'js'), { recursive: true });
@@ -206,7 +207,7 @@ test('Save and Load report an active asynchronous History mutation until settlem
 
 test('Save and Load consult the availability the composition root passes (R13)', async () => {
   const sessionConfig = await load('services/config.js');
-  const { exportSession, importSession } = callerSession(sessionConfig, state);
+  const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
   const calls = [];
   const busyFrom = (operation, call) => (requested) => {
     calls.push(requested);
@@ -269,21 +270,23 @@ test('late source discovery cannot expand the live source set during Session', a
   let expanded = 0;
   const file = {};
   const source = { uid: 'source', gb: file, region_record_id: '' };
+  const linear = { id: 'linear', mode: 'linear', inputType: { value: 'gb' }, linearSeqs: [source] };
   const selector = createLinearRecordSelector({
-    state: { mode: { value: 'linear' }, lInputType: { value: 'gb' },
-      linearSeqs: [source], sessionOperationAvailability },
+    state: withModeDrawings({ mode: { value: 'linear' }, sessionOperationAvailability }, {
+      circular: {}, linear
+    }),
     reactive: value => value, recordReader: () => read.promise,
     onRecordsDiscovered: () => { expanded += 1; }
   });
-  const pending = selector.refresh();
+  const pending = selector.refresh(linear);
   state.sessionSavePending.value = true;
   read.release([{ selector: '#1', recordId: 'first', recordLength: 100 }]);
   assert.deepEqual(await pending, saving);
   assert.equal(expanded, 0);
-  assert.equal(selector.statusFor(source), 'deferred');
+  assert.equal(selector.statusFor(linear, source), 'deferred');
   state.sessionSavePending.value = false;
-  await selector.refresh();
-  assert.equal(selector.statusFor(source), 'ready');
+  await selector.refresh(linear);
+  assert.equal(selector.statusFor(linear, source), 'ready');
   assert.equal(expanded, 1);
 });
 

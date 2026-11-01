@@ -1,5 +1,6 @@
 // @ts-check
 import {
+  CIRCULAR_CONSERVATION_FLOW,
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
@@ -7,6 +8,8 @@ import {
   PROTEIN_IDENTITY_MANIFEST_SCHEMA,
   PROTEIN_LOSAT_CACHE_SCHEMA
 } from '../contracts/schema.generated.js';
+import { DERIVED_RESULT_DESCRIPTION } from '../contracts/derived-result-shape.generated.js';
+import { shapeViolations } from '../utils/contract-shape.js';
 import { LOSAT_WASM_BUILD } from './losat-build.generated.js';
 
 // Membership is tested on unvalidated Session values, hence `ReadonlySet<unknown>`.
@@ -51,6 +54,10 @@ const MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = [
  * A raw cache entry under the key it was found at. `key` is the `cacheKey` given: the caller's `Map` may use any key.
  * @typedef {{ key: unknown, entry: RawLosatCacheEntry }} RawLosatCacheMatch
  */
+
+// The `flow` of a raw entry a Circular conservation ring's search wrote,
+// generated from the CLI's owner: Generate writes it, Save reads it.
+export { CIRCULAR_CONSERVATION_FLOW };
 
 // The runtime identity the Web stores beside each raw entry it searches
 // (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw
@@ -784,10 +791,25 @@ const holdsNoValue = (value) => {
 };
 
 /**
+ * Whether `resource` decodes as the typed result of `mode` by Python's typed codec: the shape Python's
+ * `describe_derived_analysis_results` generates (`contracts/derived-result-shape.generated.js`), so Python's
+ * `_decodes_as_derived_result` and this check are one rule (OV-1926). The shape does not run a class's value checks;
+ * a result that holds no value has none to run.
+ * @param {unknown} mode
+ * @param {unknown} resource
+ * @returns {boolean}
+ */
+const decodesAsDerivedResult = (mode, resource) => {
+  const { roots, types } = DERIVED_RESULT_DESCRIPTION;
+  return typeof mode === 'string' && Object.hasOwn(roots, mode)
+    && shapeViolations(resource, { kind: 'ref', name: roots[mode] }, types, 'result').length === 0;
+};
+
+/**
  * Whether a derived entry is the result of zero-hit searches, which names no protein (OV-1127): its mode computes a
- * result, its identity (if present) is current, every pair is a zero-hit pair, its typed result (if present) is the
- * mode's, and every other member holds no value: the typed result and the members of the form written before it
- * (`orthogroups: []`) are empty. The Python twin is `_is_zero_hit_result` in `gbdraw/analysis/protein_artifacts.py`;
+ * result, its identity (if present) is current, every pair is a zero-hit pair, its typed result (if present) decodes
+ * as the mode's, and every other member holds no value: the typed result and the members of the form written before
+ * it (`orthogroups: []`) are empty. The Python twin is `_is_zero_hit_result` in `gbdraw/analysis/protein_artifacts.py`;
  * `tests/fixtures/session_admission_vectors.json` pins both.
  * @param {LosatDerivedCacheEntry} entry A derived entry that `isLosatDerivedCacheEntry` accepted.
  * @returns {boolean}
@@ -848,11 +870,12 @@ const isZeroHitDerivedResult = (entry) => {
     ) return false;
   }
 
-  if (Object.hasOwn(payload, result.member) && !isDerivedAnalysisResult(mode, payload[result.member])) return false;
+  if (Object.hasOwn(payload, result.member) && !isPlainObject(payload[result.member])) return false;
+  // The decode runs last, on a result that holds no value, so it walks no member.
   return Object.entries(payload).every(([key, value]) => (
     ['identity', 'provenance', 'pairs'].includes(key)
     || holdsNoValue(key === result.member && isPlainObject(value) ? value.value : value)
-  ));
+  )) && (!Object.hasOwn(payload, result.member) || decodesAsDerivedResult(mode, payload[result.member]));
 };
 
 /**

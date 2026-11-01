@@ -84,6 +84,14 @@ SCENARIO_IDS = verified_scenario_ids(
 )
 
 
+def _active_drawing(session: dict) -> dict:
+    """The drawing a Session opens: the ``drawings[]`` entry named by ``ui.activeDrawingId``."""
+
+    active_id = session.get("ui", {}).get("activeDrawingId")
+    matches = [d for d in session.get("drawings", []) if d.get("id") == active_id]
+    return matches[0] if len(matches) == 1 else {}
+
+
 def run_scenario(
     scenario_id: str,
     *,
@@ -427,9 +435,10 @@ def _validate_interactive_handoff_tutorial(
         session.get("format") != "gbdraw-session"
         or session.get("version") != CURRENT_SESSION_VERSION
         or session.get("createdAt") != "2026-08-04T00:00:00+00:00"
-        or session.get("renderRequest", {}).get("schema")
+        or _active_drawing(session).get("renderRequest", {}).get("schema")
         != CANONICAL_REQUEST_SCHEMA
-        or session.get("renderRequest", {}).get("mode") != "circular"
+        or _active_drawing(session).get("mode") != "circular"
+        or _active_drawing(session).get("renderRequest", {}).get("mode") != "circular"
     ):
         raise RecipeContractError("T-PY-08 wrote a non-current session payload.")
     if (
@@ -1161,9 +1170,10 @@ def _validate_typed_request_session_howto(
         payload.get("format") != "gbdraw-session"
         or payload.get("version") != CURRENT_SESSION_VERSION
         or payload.get("createdAt") != "2026-08-03T00:00:00+00:00"
-        or payload.get("renderRequest", {}).get("schema")
+        or _active_drawing(payload).get("renderRequest", {}).get("schema")
         != CANONICAL_REQUEST_SCHEMA
-        or payload.get("renderRequest", {}).get("mode") != "circular"
+        or _active_drawing(payload).get("mode") != "circular"
+        or _active_drawing(payload).get("renderRequest", {}).get("mode") != "circular"
     ):
         raise RecipeContractError("H-PY-05 wrote a non-current session payload.")
     if load_session_document(session_output).mode != "circular":

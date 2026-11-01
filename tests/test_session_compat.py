@@ -48,11 +48,14 @@ from gbdraw.api.session_compat import (
     rewrite_protein_artifact_references,
 )
 from gbdraw.exceptions import ValidationError
+from tests.utils.session_drawing_view import build_mode_scoped_session_document, build_mode_scoped_session_json, drawing_view, session_view
 from gbdraw.session import (
     SessionConversionError,
     SessionDocument,
     SessionDrawingSpec,
+    SessionVersionError,
     build_session_document,
+    drawings_document_from_legacy,
     load_session_document,
     materialize_session,
     render_session,
@@ -115,6 +118,13 @@ _RELEASE_0_13_0_RECORD_X = (
     1015.6834700590497,
     687.4823049181628,
     907.333293702691,
+)
+# Session 48 of the released v0.14.0 Web app with both modes used, Linear shown.
+_TWO_MODE_V48_SESSION = (
+    Path(__file__).parent
+    / "fixtures"
+    / "sessions"
+    / "two-mode-linear-shown.v48.gbdraw-session.json.gz"
 )
 _SYNTHETIC_CONSERVATION_SESSION = (
     Path(__file__).parent
@@ -294,7 +304,7 @@ def test_released_legacy_alignment_session_promotes_to_current_typed_state(
         save_session_document(current_path, request)
 
     current = load_session_document(current_path)
-    payload = current.to_dict()
+    payload = drawing_view(current.to_dict(), mode="linear")
     serialized = json.dumps(payload)
     assert current.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
@@ -354,7 +364,7 @@ def test_released_legacy_alignment_cli_writes_current_typed_sidecar(
 
     assert output_prefix.with_suffix(".svg").is_file()
     saved = load_session_document(sidecar_path)
-    payload = saved.to_dict()
+    payload = drawing_view(saved.to_dict(), mode="linear")
     serialized = json.dumps(payload)
     assert saved.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
@@ -430,7 +440,7 @@ def test_release_0_13_0_session_replays_its_reverse_complemented_alignment(
 
     saved = load_session_document(tmp_path / "replay.gbdraw-session.json")
     with materialize_session(saved, output_directory=tmp_path) as materialized:
-        replayed = session_to_request(materialized)
+        replayed = session_to_request(materialized, drawing="linear")
     with materialize_session(
         load_session_document(_VERSION_39_SESSION), output_directory=tmp_path
     ) as materialized:
@@ -529,9 +539,9 @@ def _released_canonical_session(
     version: int,
     request_schema: int,
 ) -> dict[str, object]:
-    data = build_session_document(
+    data = build_mode_scoped_session_document(
         _linear_request(tmp_path, output_prefix=f"released-v{version}")
-    ).to_dict()
+    )
     data["version"] = version
     payload = data["renderRequest"]
     assert isinstance(payload, dict)
@@ -767,7 +777,7 @@ def test_feature_analysis_ids_fail_closed_across_protein_request_artifacts(
             RecordInput(source=InMemoryRecordSource(second), record_key="record-2"),
         ),
     )
-    session = build_session_document(base_request).to_dict()
+    session = build_mode_scoped_session_document(base_request)
     session["version"] = 33
     feature_analysis_id = f"f_{'a' * 64}"
     value = (
@@ -806,7 +816,8 @@ def test_session_adaptation_scans_each_protein_artifact_string_once(
             RecordInput(source=InMemoryRecordSource(second), record_key="record-2"),
         ),
     )
-    session = build_session_document(base_request).to_dict()
+    # A Session 33 holds the one-request layout of 46-48, not the drawings of 49.
+    session = build_mode_scoped_session_document(base_request)
     session["version"] = 33
     # Each string holds both prefixes and matches neither pattern.
     texts = [f"p_f_{index}" for index in range(20)]
@@ -932,7 +943,7 @@ def test_released_session_versions_write_current_reloadable_sidecars(
     assert output_prefix.with_suffix(".svg").is_file()
     saved = load_session_document(sidecar_path)
     assert saved.version == CURRENT_SESSION_VERSION
-    assert saved.to_dict()["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert drawing_view(saved.to_dict(), mode="linear")["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
 
     replay_directory = tmp_path / "replay"
     with materialize_session(saved, output_directory=replay_directory) as materialized:
@@ -965,7 +976,7 @@ def test_supported_v32_session_replays_through_compatibility_adapter(
         "mode": "orthogroup",
         "payload": {"groups": []},
     }
-    data = build_session_document(_linear_request(tmp_path)).to_dict()
+    data = build_mode_scoped_session_document(_linear_request(tmp_path))
     data["version"] = 32
     data["losatCache"] = {"entries": [legacy_raw]}
     data["losatDerivedCache"] = {"entries": [legacy_derived]}
@@ -1047,12 +1058,15 @@ def test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders(
 
     assert output_prefix.with_suffix(".svg").is_file()
     saved = load_session_document(sidecar_path)
-    payload = saved.to_dict()
+    # The drawings that the move lists: the Linear one, and a Circular one only
+    # when its settings differ from the defaults.
+    views = {drawing["mode"]: drawing_view(saved.to_dict(), drawing["id"]) for drawing in saved.to_dict()["drawings"]}
+    payload = views["linear"]
     assert saved.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert "config" not in payload
-    for mode in ("circular", "linear"):
-        adv = payload["modes"][mode]["config"]["adv"]
+    for mode, view in views.items():
+        adv = view["modes"][mode]["config"]["adv"]
         assert "depth_tick_interval" not in adv
         assert all("tick_interval" not in track for track in adv["depth_tracks"])
     assert (
@@ -1126,13 +1140,24 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
             source_version=39,
         )
     )
+    # The projection of a Session 39 splits its flat draft into both modes'
+    # slices (Session 48's layout). A Session 49 drawing holds its own mode's
+    # slice and input type only, so the Linear replay takes the Linear ones;
+    # the dormant comparison lives in that slice's plan and in the Web file
+    # inventory.
+    linear_state = {
+        **adjunct,
+        "modes": {"linear": adjunct["modes"]["linear"]},
+        "ui": {key: value for key, value in adjunct["ui"].items() if key != "cInputType"},
+    }
 
     with materialize_session(source_document, output_directory=tmp_path) as materialized:
         rewritten = build_session_document(
-            drawings=[SessionDrawingSpec(session_to_request(materialized), state=adjunct)],
+            drawings=[SessionDrawingSpec(session_to_request(materialized), state=linear_state)],
             web_file_inventory=web_file_inventory,
         ).to_dict()
 
+    rewritten = drawing_view(rewritten, mode="linear")
     assert rewritten["modes"]["linear"]["config"]["linearComparisonPlan"]["edges"] == [
         {
             "id": "dormant-v39-upload",
@@ -1160,8 +1185,11 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
 def test_current_typed_replay_retains_web_only_conservation_fastas(
     tmp_path: Path,
 ) -> None:
-    source_document = load_session_document(_SYNTHETIC_CONSERVATION_SESSION)
-    source_payload = source_document.to_dict()
+    # The CLI re-save upgrades first and replays each drawing's own view.
+    source_document = upgrade_session_document(
+        load_session_document(_SYNTHETIC_CONSERVATION_SESSION), temporary_directory=tmp_path
+    ).document
+    source_payload = drawing_view(source_document.to_dict(), mode="circular")
     source_web_files = source_payload["webFiles"]
     source_resources = source_payload["resources"]
     source_ids = source_web_files["conservationLosatFastaSources"]
@@ -1181,10 +1209,11 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
 
     with materialize_session(source_document, output_directory=tmp_path) as materialized:
         rewritten = build_session_document(
-            drawings=[SessionDrawingSpec(session_to_request(materialized), state=adjunct)],
+            drawings=[SessionDrawingSpec(session_to_request(materialized, drawing="circular"), state=adjunct)],
             web_file_inventory=web_file_inventory,
         ).to_dict()
 
+    rewritten = drawing_view(rewritten, mode="circular")
     rewritten_web_files = rewritten["webFiles"]
     rewritten_resources = rewritten["resources"]
     assert rewritten["editorState"]["featureCatalog"]["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
@@ -1232,7 +1261,7 @@ def test_released_schema_v2_fixture_sidecar_collision_is_atomic(
 
 def test_session_adapter_reads_only_drawings_of_validated_sessions(tmp_path: Path) -> None:
     request = _linear_request(tmp_path)
-    data: Any = build_session_document(request).to_dict()
+    data: Any = build_mode_scoped_session_document(request)
 
     with pytest.raises(ValidationError, match="drawing of a loaded SessionDocument"):
         adapt_session_request(request, data)
@@ -1344,20 +1373,21 @@ def test_released_noncanonical_linear_cli_replay_promotes_current_sidecar(
 
     assert output_prefix.with_suffix(".svg").is_file()
     saved = load_session_document(sidecar_path)
-    payload = saved.to_dict()
+    views = {drawing["mode"]: drawing_view(saved.to_dict(), drawing["id"]) for drawing in saved.to_dict()["drawings"]}
+    payload = views["linear"]
     assert saved.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert "config" not in payload
-    for mode in ("circular", "linear"):
-        adv = payload["modes"][mode]["config"]["adv"]
+    for mode, view in views.items():
+        adv = view["modes"][mode]["config"]["adv"]
         assert "depth_tick_interval" not in adv
         assert adv["depth_large_tick_interval"] == 10
         assert adv["depth_tracks"] == [{"large_tick_interval": 5}]
-        assert payload["modes"][mode]["config"]["form"] == {"prefix": "legacy"}
+        assert view["modes"][mode]["config"]["form"] == {"prefix": "legacy"}
     blastp = payload["modes"]["linear"]["config"]["losat"]["blastp"]
     assert blastp["collinearMaxUnitGap"] == 2
     assert "collinearMaxGeneGap" not in blastp
-    assert "losat" not in payload["modes"]["circular"]["config"]
+    assert "losat" not in views.get("circular", {"modes": {"circular": {"config": {}}}})["modes"]["circular"]["config"]
 
     rerendered_prefix = tmp_path / "legacy-rerender"
     linear_main(
@@ -1491,15 +1521,15 @@ def test_session_44_placement_drafts_survive_the_cli_sidecar(
         "biologicalFeatureId": "fbe3a7c0c",
         "placement": {"kind": "main"},
     }
-    # A lane keeps only its own mode's slice; Main reaches both.
-    other = "linear" if mode == "circular" else "circular"
-    modes = saved.to_dict()["modes"]
-    assert modes[mode]["config"]["featurePlacementOverrides"] == {
+    # A lane keeps only its own mode's slice. The other mode's slice holds only
+    # the Main row, which its mode settings do not make a drawing (PD-OI-090).
+    document = saved.to_dict()
+    assert [drawing["mode"] for drawing in document["drawings"]] == [mode]
+    assert drawing_view(document, mode=mode)["modes"][mode]["config"]["featurePlacementOverrides"] == {
         key("f406d90f1"): lane,
         key("fbe3a7c0c"): main_row,
     }
-    assert modes[other]["config"]["featurePlacementOverrides"] == {key("fbe3a7c0c"): main_row}
-    assert saved.to_dict()["renderRequest"]["diagramOptions"]["featurePlacements"] == [
+    assert drawing_view(document, mode=mode)["renderRequest"]["diagramOptions"]["featurePlacements"] == [
         lane,
         main_row,
     ]
@@ -1536,7 +1566,7 @@ def _python_session_with_renamed_ids(tmp_path: Path) -> dict[str, Any]:
         ),
         output=RenderOutputRequest(output_prefix="stored"),
     )
-    session = build_session_document(request).to_dict()
+    session = build_mode_scoped_session_document(request)
     _rename_resource(session, "record-1-genbank", "genbank-1")
     return session
 
@@ -1562,10 +1592,12 @@ def _gallery_session(_tmp_path: Path) -> dict[str, Any]:
 def test_cli_resave_keeps_the_ids_and_names_of_unchanged_resources(
     tmp_path: Path, make_session: Any
 ) -> None:
-    source = make_session(tmp_path)
+    written = make_session(tmp_path)
+    # The Web writes a Session 49 (one drawing); the Python helper builds the 48 view.
+    source = session_view(written)
     assert source["renderRequest"]["mode"] == "circular"
     source_path = tmp_path / "source.gbdraw-session.json"
-    source_path.write_text(json.dumps(source), encoding="utf-8")
+    source_path.write_text(json.dumps(written), encoding="utf-8")
     sidecar = tmp_path / "resaved.gbdraw-session.json"
 
     circular_main(
@@ -1577,7 +1609,7 @@ def test_cli_resave_keeps_the_ids_and_names_of_unchanged_resources(
         ]
     )
 
-    saved = load_session_document(sidecar).to_dict()
+    saved = drawing_view(load_session_document(sidecar).to_dict())
     # Every input's bytes are unchanged, so every resource keeps its ID,
     # file name and metadata, and the request names the same resources.
     assert saved["resources"] == source["resources"]
@@ -1602,8 +1634,7 @@ _MAIN_FEATURE_EDIT_VECTORS = {
 def test_rendered_id_feature_edits_migrate_to_the_vectors_shared_with_the_web_reader(
     case: dict[str, Any],
 ) -> None:
-    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
-    # migrateSessionFeatureEdits.
+    # Only Python runs these vectors (the Web twin was removed).
     source = json.loads(json.dumps(case["input"]))
 
     migration = migrate_session_feature_edits(
@@ -1756,8 +1787,89 @@ def test_a_schema_2_linear_card_with_two_records_keys_its_edits_by_record(tmp_pa
 
     upgraded = upgrade_session_document(session, temporary_directory=tmp_path).document.to_dict()
 
-    assert list(upgraded["modes"]["linear"]["features"]["featureOverrides"]) == [
+    assert list(drawing_view(upgraded, mode="linear")["modes"]["linear"]["features"]["featureOverrides"]) == [
         json.dumps([f"{card}:2", "f8d05c32c"], separators=(",", ":"))
+    ]
+
+
+def test_upgrade_keeps_the_group_names_a_session_39_held_in_orthogroup_state(
+    tmp_path: Path,
+) -> None:
+    # A Session 27-44 holds its group names in ``orthogroupState`` (as Web
+    # Load read them, OV-1929 d); Session 46 keeps them in the Linear
+    # drawing's ``config.webEdits``, so the upgrade moves them there.
+    session = json.loads(gzip.decompress(_VERSION_39_SESSION.read_bytes()))
+    session["orthogroupState"]["orthogroupNameOverrides"] = {"og_1": "renamed"}
+    session["orthogroupState"]["orthogroupDescriptionOverrides"] = {"og_2": "about"}
+    assert session["config"]["webEdits"]["orthogroupNameOverrides"] == {}
+
+    upgraded = upgrade_session_document(session, temporary_directory=tmp_path).document.to_dict()
+
+    linear = next(entry for entry in upgraded["drawings"] if entry["id"] == "linear")
+    assert linear["config"]["webEdits"]["orthogroupNameOverrides"] == {"og_1": "renamed"}
+    assert linear["config"]["webEdits"]["orthogroupDescriptionOverrides"] == {"og_2": "about"}
+
+
+def test_upgrade_keeps_the_current_derived_losat_entries_a_session_39_held(
+    tmp_path: Path,
+) -> None:
+    # OV-1966 (D-15-146): the old Web Load kept a Session 27-44's current
+    # derived LOSATP entries (the newest 16; the Web reader caps them), so
+    # Python's conversion keeps every one the replay's validation admits.
+    session = json.loads(gzip.decompress(_VERSION_39_SESSION.read_bytes()))
+    [derived] = session["losatDerivedCache"]["entries"]
+    assert derived["schema"] == 3 and derived["idEncoding"] == "runtime-handle-v1"
+    session["losatDerivedCache"]["entries"] = [
+        derived,
+        *({**derived, "key": f"{derived['key']}-{index}"} for index in range(16)),
+    ]
+
+    upgraded = upgrade_session_document(session, temporary_directory=tmp_path).document.to_dict()
+
+    linear = next(entry for entry in upgraded["drawings"] if entry["id"] == "linear")
+    assert linear["losatDerivedCache"]["entries"] == session["losatDerivedCache"]["entries"]
+
+
+def test_a_request_less_session_30_keeps_its_alignment_target_in_its_drawings(
+    tmp_path: Path,
+) -> None:
+    # OV-2006 (D-15-147): with no request, the target has no typed request
+    # to move into; the old Web Load kept it ("og_1"), so the drawings keep it
+    # in ``orthogroupState``. A Session with a request still moves it.
+    session = json.loads(gzip.decompress(_RELEASE_0_13_0_SESSION.read_bytes()))
+    assert "renderRequest" not in session
+    assert session["orthogroupState"]["selectedOrthogroupAlignmentFeature"] == "og_1"
+
+    converted = drawings_document_from_legacy(session, temporary_directory=tmp_path).document
+
+    assert {
+        drawing["id"]: drawing["orthogroupState"].get("selectedOrthogroupAlignmentFeature")
+        for drawing in converted["drawings"]
+    } == {"linear": "og_1", "circular": "og_1"}
+
+
+def test_kept_derived_losat_entries_take_the_rewritten_protein_ids() -> None:
+    # A legacy protein ID the migration resolved is rewritten in the derived
+    # entries the drawing keeps, as in every other artifact (D-15-146).
+    entry = {
+        "schema": 3,
+        "kind": "derived-losatp-payload",
+        "idEncoding": "runtime-handle-v1",
+        "key": "derived-key",
+        "mode": "orthogroup",
+        "payload": {"members": ["p_r_0_1"]},
+    }
+
+    state = session_migration.with_current_artifacts(
+        {},
+        losat_cache_entries=(),
+        protein_identity_manifest=None,
+        losat_derived_cache_entries=(entry,),
+        protein_id_map={"p_r_0_1": "handle-1"},
+    )
+
+    assert state["losatDerivedCache"]["entries"] == [
+        {**entry, "payload": {"members": ["handle-1"]}}
     ]
 
 
@@ -1814,9 +1926,9 @@ def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
     # The edits become identity drafts in the slice of the Session diagram's
     # mode (R1-3), as the Web app moves them on Load; shared edits reach both.
     expected = case["expected"]["features"]
-    mode = saved.to_dict()["renderRequest"]["mode"]
-    other = "linear" if mode == "circular" else "circular"
-    modes = saved.to_dict()["modes"]
+    document = saved.to_dict()
+    [mode] = [drawing["mode"] for drawing in document["drawings"] if drawing.get("renderRequest")]
+    modes = {drawing["mode"]: drawing_view(document, drawing["id"])["modes"][drawing["mode"]] for drawing in document["drawings"]}
     assert modes[mode]["features"]["featureOverrides"] == {
         json.dumps([row["recordKey"], row["biologicalFeatureId"]], separators=(",", ":")): {
             field: value for field, value in row.items() if field != "scope"
@@ -1825,9 +1937,14 @@ def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
     }
     assert modes[mode]["features"]["featureOverrides"]
     assert modes[mode]["features"]["featureColorOverrides"] == expected["featureColorOverrides"]
-    assert {"featureOverrides", "featureColorOverrides"}.isdisjoint(modes[other].get("features", {}))
+    # The other mode is a drawing only when its settings differ from the defaults.
+    for other_mode, other_slice in modes.items():
+        if other_mode != mode:
+            assert {"featureOverrides", "featureColorOverrides"}.isdisjoint(other_slice.get("features", {}))
     for shared in ("featureVisibilityManualRules", "labelOverrideRows", "labelTextBulkOverrides"):
-        assert modes[mode]["features"][shared] == modes[other]["features"][shared] == expected[shared]
+        assert all(
+            slice_["features"][shared] == expected[shared] for slice_ in modes.values()
+        )
     narrowed = case["expected"]["narrowedVisibilityCount"]
     assert [
         record.getMessage()
@@ -1868,8 +1985,9 @@ def test_session_33_rendered_id_feature_edits_survive_the_cli_sidecar(
         ]
     )
 
-    saved = load_session_document(sidecar).to_dict()
-    mode = saved["renderRequest"]["mode"]
+    document = load_session_document(sidecar).to_dict()
+    [mode] = [drawing["mode"] for drawing in document["drawings"] if drawing.get("renderRequest")]
+    saved = drawing_view(document, mode=mode)
     expected = case["expected"]["features"]["featureOverrides"]
     assert expected and case["expected"]["droppedCount"] == 0
     assert saved["modes"][mode]["features"]["featureOverrides"] == {
@@ -1901,8 +2019,7 @@ _MAIN_ANNOTATION_TARGET_VECTOR = next(
 def test_hash_annotation_targets_migrate_to_the_vectors_shared_with_the_web_reader(
     case: dict[str, Any],
 ) -> None:
-    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
-    # migrateSessionAnnotationTargets.
+    # Python alone migrates annotation targets at Load; the Web reads the result.
     source = json.loads(json.dumps(case["input"]))
 
     migration = migrate_session_annotation_targets(
@@ -1960,8 +2077,14 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
     )
 
     assert (tmp_path / "replay.svg").is_file()
-    saved = load_session_document(sidecar).to_dict()
-    assert saved["version"] == CURRENT_SESSION_VERSION
+    document = load_session_document(sidecar).to_dict()
+    assert document["version"] == CURRENT_SESSION_VERSION
+    saved = {
+        "modes": {
+            drawing["mode"]: drawing_view(document, drawing["id"])["modes"][drawing["mode"]]
+            for drawing in document["drawings"]
+        }
+    }
     # The draft names the certain feature by its source identity, as the Web
     # app moves it on Load; the other two targets stay as saved. Each target is
     # bound to a Linear record, so the annotations stay in the Linear slice,
@@ -1977,7 +2100,7 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
     # The request is the one that drew the saved figure. As after a Web Load,
     # it keeps the hash= targets until the next Generate sends the draft.
     assert (
-        saved["renderRequest"]["diagramOptions"]["annotations"]
+        drawing_view(document, mode="linear")["renderRequest"]["diagramOptions"]["annotations"]
         == source["renderRequest"]["diagramOptions"]["annotations"]
     )
     assert [
@@ -2003,8 +2126,7 @@ _HASH_RULE_VECTORS = json.loads(
     ids=[case["name"] for case in _HASH_RULE_VECTORS["selectorCases"]],
 )
 def test_hash_selector_values_read_the_vectors_shared_with_the_web_reader(case: dict[str, Any]) -> None:
-    # One mapper serves the Session draft and the CLI replay of a request;
-    # tests/web/feature-edit-migration.test.mjs checks sourceHashSelectorValue.
+    # One mapper serves the Session draft and the CLI replay of a request.
     drawn = [tuple(feature) for feature in _HASH_RULE_VECTORS["drawnFeatures"]]
 
     value, source_count = source_hash_selector_value(case["value"], drawn)
@@ -2016,8 +2138,7 @@ def test_hash_selector_values_read_the_vectors_shared_with_the_web_reader(case: 
     "case", _HASH_RULE_VECTORS["cases"], ids=[case["name"] for case in _HASH_RULE_VECTORS["cases"]]
 )
 def test_hash_rules_migrate_to_the_vectors_shared_with_the_web_reader(case: dict[str, Any]) -> None:
-    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
-    # migrateSessionHashRules.
+    # Python alone migrates hash rules at Load; the Web reads the result.
     source = json.loads(json.dumps(case["input"]))
 
     migration = migrate_session_hash_rules(
@@ -2087,15 +2208,14 @@ def test_session_44_request_tables_name_drawn_hash_rows_by_source_hash(tmp_path:
     assert adapted.migration_report.warnings == ()
 
 
-def test_session_30_rendered_id_color_rule_is_reported_in_the_cli_sidecar(
+def test_session_30_rendered_id_color_rule_is_named_in_the_cli_sidecar(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     # Release 0.13.0 wrote a "This feature only" color rule with the rendered
     # ID of the reverse-complemented TESTB_0006 (f2869b912_record_2,
-    # hash-color-rule-linear-rc.provenance.json). Web Load reads the sources
-    # again and names it by its source hash fbc76b20f (OV-416). The CLI does not
-    # read the sources of a Session before 31 again, so the written Session
-    # keeps the rule as saved and the replay reports it.
+    # hash-color-rule-linear-rc.provenance.json). The conversion reads the
+    # cards' sources again, as Web Load does, so the written Session names it
+    # by its source hash fbc76b20f (OV-416, OV-2043) and nothing is reported.
     fixture = Path(__file__).parent / "fixtures" / "sessions" / "hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"
     source = json.loads(gzip.decompress(fixture.read_bytes()))
     sidecar = tmp_path / "replay.gbdraw-session.json"
@@ -2110,9 +2230,9 @@ def test_session_30_rendered_id_color_rule_is_reported_in_the_cli_sidecar(
         ]
     )
 
-    saved = load_session_document(sidecar).to_dict()
-    assert saved["modes"]["linear"]["config"]["rules"] == source["config"]["rules"]
-    assert _UNMAPPED_HASH_WARNING.format(count=1, version=30) in caplog.messages
+    saved = drawing_view(load_session_document(sidecar).to_dict(), mode="linear")
+    assert saved["modes"]["linear"]["config"]["rules"] == [{**source["config"]["rules"][0], "val": "fbc76b20f"}]
+    assert _UNMAPPED_HASH_WARNING.format(count=1, version=30) not in caplog.messages
 
 
 def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path) -> None:
@@ -2212,7 +2332,7 @@ def test_session_47_protein_results_of_a_reversed_record_move_to_the_search_fram
     saved = load_session_document(resaved)
     assert saved.version == CURRENT_SESSION_VERSION == 50
     with materialize_session(saved, output_directory=tmp_path) as materialized:
-        written = session_to_request(materialized)
+        written = session_to_request(materialized, drawing="linear")
         assert _protein_results(written.options) == _protein_results(converted.options)
     # The re-save is read as F: no second conversion, the same drawing.
     assert _replay(resaved, tmp_path, "resaved") == expected
@@ -2283,7 +2403,7 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
     saved = load_session_document(resaved)
     assert saved.version == CURRENT_SESSION_VERSION == 50
     with materialize_session(saved, output_directory=tmp_path) as materialized:
-        [written] = session_to_request(materialized).options.linear_comparisons
+        [written] = session_to_request(materialized, drawing="linear").options.linear_comparisons
         assert not written.drawn_feature_ids
         assert list(written.matches["sstart"]) == list(converted.matches["sstart"])
     # The re-save is read as F: no second conversion, the same drawing.
@@ -2479,3 +2599,73 @@ def test_an_upgrade_of_a_session_40_refuses_a_result_matching_neither_frame(tmp_
     )
     with pytest.raises(SessionConversionError, match="matches neither strand"):
         upgrade_session_document(data, temporary_directory=tmp_path)
+
+
+def test_two_mode_session_48_moves_to_drawings_with_no_saved_value_lost() -> None:
+    from gbdraw.session_drawings import drawings_document_from_mode_scoped
+    from gbdraw.session_io import WEB_BINDING_CARD_SLOTS, WEB_BINDING_MODE_SLOTS
+
+    with gzip.open(_TWO_MODE_V48_SESSION, "rt", encoding="utf-8") as handle:
+        source = json.load(handle)
+    document, facts = drawings_document_from_mode_scoped(source)
+    SessionDocument(document)
+
+    linear, circular = document["drawings"]
+    # Linear was shown at Save; Circular is kept because its genome binding
+    # and its settings are used, although Session 48 kept no Circular Result.
+    assert [(drawing["id"], drawing["name"], drawing["mode"]) for drawing in (linear, circular)] == [
+        ("linear", "Linear", "linear"),
+        ("circular", "Circular", "circular"),
+    ]
+    assert document["ui"]["activeDrawingId"] == "linear"
+    assert facts == {"cardRowsAreFileRows": False, "proteinResultsInDrawnFrame": False}
+    assert linear["renderRequest"] == source["renderRequest"]
+    assert linear["results"] == source["results"]
+    assert circular["renderRequest"] is None and circular["results"] == []
+    for drawing in (linear, circular):
+        mode_slice = source["modes"][drawing["mode"]]
+        assert drawing["config"] == mode_slice["config"]
+        assert drawing["features"] == mode_slice["features"]
+        for key, value in mode_slice["editorState"]["legend"].items():
+            assert drawing["editorState"]["legend"][key] == value
+        assert drawing["editorState"]["featureStrokes"] == mode_slice["editorState"]["featureStrokes"]
+        assert {key: drawing["ui"][key] for key in mode_slice["ui"]} == mode_slice["ui"]
+        # Each drawing keeps the LOSAT entry; its next Generate prunes it.
+        assert drawing["losatCache"] == source["losatCache"]
+        assert len(drawing["losatCache"]["entries"]) == 1
+    assert circular["config"]["fileImports"] == {"d_color": {
+        "CDS": {"color": "#123456", "handColor": None}, "tRNA": {"color": "#654321", "handColor": None},
+    }}
+    bindings = source["webFiles"]["bindings"]
+    for drawing in (linear, circular):
+        slots = {"schema"} | WEB_BINDING_CARD_SLOTS | WEB_BINDING_MODE_SLOTS[drawing["mode"]]
+        assert drawing["webFiles"]["bindings"] == {key: value for key, value in bindings.items() if key in slots}
+    assert set(linear["webFiles"]["bindings"]) | set(circular["webFiles"]["bindings"]) == set(bindings)
+    assert linear["webFiles"]["linearRecordMetadata"] == source["webFiles"]["linearRecordMetadata"]
+    assert document["webFiles"] == {"resourceOriginalNames": source["webFiles"]["resourceOriginalNames"]}
+    assert document["resources"] == source["resources"]
+    assert document["ui"]["losatExecution"] == source["ui"]["losatExecution"]
+
+
+def test_two_mode_session_48_linear_drawing_replays_as_the_old_session(tmp_path: Path) -> None:
+    # OIC-030: the first drawing renders as the old Session replays.
+    upgraded = upgrade_session_document(_TWO_MODE_V48_SESSION, temporary_directory=tmp_path).document
+    assert upgraded.version == CURRENT_SESSION_VERSION
+    with materialize_session(_TWO_MODE_V48_SESSION, output_directory=tmp_path / "v48") as materialized:
+        old = render_session(materialized)
+    with materialize_session(upgraded, output_directory=tmp_path / "v49") as materialized:
+        new = render_session(materialized, drawing="linear")
+    assert len(old.output_paths) == len(new.output_paths) == 1
+    assert new.output_paths[0].read_text(encoding="utf-8") == old.output_paths[0].read_text(encoding="utf-8")
+
+
+def test_upgrade_to_session_49_moves_a_session_47_after_its_current_upgrade(tmp_path: Path) -> None:
+    source = Path(__file__).parent / "fixtures" / "sessions" / "cli-linear-blacklist-file.v47.gbdraw-session.json.gz"
+    current = upgrade_session_document(source, temporary_directory=tmp_path).document
+    assert current.version == CURRENT_SESSION_VERSION
+    upgraded = upgrade_session_document(source, temporary_directory=tmp_path).document
+    data = upgraded.to_dict()
+    assert data["version"] == CURRENT_SESSION_VERSION
+    assert [drawing["id"] for drawing in data["drawings"]] == ["linear"]
+    assert data["drawings"][0]["renderRequest"] == drawing_view(current.to_dict())["renderRequest"]
+    assert upgrade_session_document(upgraded).document.to_dict() == data

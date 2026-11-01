@@ -31,6 +31,7 @@ from typing import (
     Sequence,
     TextIO,
     TypedDict,
+    TypeGuard,
     cast,
 )
 
@@ -112,21 +113,31 @@ CURRENT_SESSION_VERSION = 50
 # the protein results of a reverse-complemented Linear record in its search
 # frame (OV-1145) and what each file card's file put into a slice, for Remove
 # on the card (OV-1280); version 49 adds each Circular slice's
-# ``adv.show_definition`` (PD-OI-109); version 50 adds each Linear slice's
-# ``form.linear_wrap_length`` and the config leaf ``canvas.linear.wrap_length``
-# (a record drawn over several rows).
+# ``adv.show_definition`` (PD-OI-109); version 50 lists the drawings of a
+# project (below) and adds each Linear drawing's ``form.linear_wrap_length``
+# and the config leaf ``canvas.linear.wrap_length`` (a record drawn over
+# several rows).
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
 MODE_SCOPED_SESSION_MIN_VERSION = 46
 ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
 # From version 48 a Session without a Web draft (CLI, Python API) holds each
 # table only as its file card's file: the Web reads every row as that file's.
 FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION = 48
+# From version 50 a Session lists its drawings in ``drawings``
+# (gbdraw.session_drawings owns the layout).
+DRAWINGS_SESSION_MIN_VERSION = 50
+# The newest mode-scoped (46-49) layout: a Session 46-49 moves from it to
+# drawings, and Python's writers build a new document in it before that move
+# (gbdraw.session_drawings.drawings_document_from_mode_scoped).
+MODE_SCOPED_SESSION_MAX_VERSION = DRAWINGS_SESSION_MIN_VERSION - 1
+# Every mode-scoped (``modes``) version, read without Python.
+MODE_SCOPED_SESSION_VERSIONS = frozenset(range(MODE_SCOPED_SESSION_MIN_VERSION, MODE_SCOPED_SESSION_MAX_VERSION + 1))
 # From version 41 the record display and feature placement drafts of a flat draft are checked.
 DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, *range(MODE_SCOPED_SESSION_MIN_VERSION, CURRENT_SESSION_VERSION + 1)}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, DRAWINGS_SESSION_MIN_VERSION} | MODE_SCOPED_SESSION_VERSIONS
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
@@ -138,7 +149,8 @@ CURRENT_FEATURE_CATALOG_SCHEMA = 5
 # The catalog schema each current-authority Session version writes.
 FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
     44: 4,
-    **{v: CURRENT_FEATURE_CATALOG_SCHEMA for v in range(MODE_SCOPED_SESSION_MIN_VERSION, CURRENT_SESSION_VERSION + 1)},
+    **{version: CURRENT_FEATURE_CATALOG_SCHEMA for version in MODE_SCOPED_SESSION_VERSIONS},
+    DRAWINGS_SESSION_MIN_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
 }
 # The fields of a record display draft row (Session 41+), the two that Session
 # 44 added, and the fields of its anchor intent.
@@ -162,6 +174,18 @@ OTHER_MODE_RESULT_UI_FIELDS = keys_of(SessionOtherModeUi)
 OTHER_MODE_RESULT_EDITOR_FIELDS = keys_of(SessionOtherModeEditorState)
 OTHER_MODE_RESULT_LEGEND_FIELDS = keys_of(SessionOtherModeLegend)
 OTHER_MODE_RESULT_RUN_METADATA_FIELDS = keys_of(SessionRunMetadata)
+# Web file binding slots (``webFiles.bindings``, schema 2): the five file
+# cards, which every drawing binds, and the slots of each diagram mode's inputs.
+WEB_BINDING_CARD_SLOTS = frozenset({"d_color", "t_color", "blacklist", "whitelist", "qualifier_priority"})
+WEB_BINDING_MODE_SLOTS: Mapping[str, frozenset[str]] = {
+    "circular": frozenset({
+        "c_gb", "c_gff", "c_fasta", "c_depth", "c_conservation_blasts",
+        "c_conservation_blasts_source", "c_conservation_fastas", "c_conservation_sequence_sources",
+    }),
+    "linear": frozenset({"linearSeqs", "linearComparisons"}),
+}
+# The slot that holds a mode's main input; schema 2 bindings always hold it.
+WEB_BINDING_INPUT_SLOT: Mapping[str, str] = {"circular": "c_gb", "linear": "linearSeqs"}
 # The Web reader names an unusable ``otherModeResult`` as a Session field error.
 _OTHER_MODE_RESULT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
@@ -200,6 +224,26 @@ _SLOT_PART_RE = re.compile(rf"([^\[\]]+)|\[({ASCII_NONNEGATIVE_INTEGER_PATTERN})
 # A Circular source record ``#N`` (N from 1, ASCII digits as the Web reads it,
 # OV-611): a record display draft's selector and a slice's OFF record key.
 _SOURCE_RECORD_SELECTOR = re.compile(r"#[1-9][0-9]*")
+
+
+@dataclass(frozen=True)
+class SessionAdmission:
+    """The admission checks of :func:`validate_session` that a reading runs.
+
+    The CLI runs them all (:data:`CLI_SESSION_ADMISSION`). Web Load of a
+    Session 27-44 reads the file with the Web's own readers first, which
+    repair or drop the parts they refuse, and Python then converts what they
+    kept (:data:`WEB_READ_SESSION_ADMISSION`, D-15-131): it does not check
+    again that Results hold their feature catalog (a Result without one is
+    set aside) or that protein LOSAT caches resolve through the manifest.
+    """
+
+    feature_catalog: bool
+    losat_manifest: bool
+
+
+CLI_SESSION_ADMISSION = SessionAdmission(feature_catalog=True, losat_manifest=True)
+WEB_READ_SESSION_ADMISSION = SessionAdmission(feature_catalog=False, losat_manifest=False)
 
 
 @dataclass(frozen=True)
@@ -625,7 +669,7 @@ def load_session(path: str | Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValidationError("Session JSON must be an object.")
     payload = expand_session_feature_catalog(payload)
-    _validate_document(payload)
+    _validate_document(payload, CLI_SESSION_ADMISSION)
     return payload
 
 
@@ -661,8 +705,12 @@ def _read_session_text(path: str | Path) -> str:
     return session_path.read_text(encoding="utf-8")
 
 
-def validate_session(session: Mapping[str, Any]) -> None:
-    """Validate the conservative session envelope used by the CLI."""
+def validate_session(
+    session: Mapping[str, Any],
+    admission: SessionAdmission = CLI_SESSION_ADMISSION,
+) -> None:
+    """Validate the conservative session envelope used by the CLI, with the
+    checks of ``admission``."""
 
     if not isinstance(session, Mapping):
         raise ValidationError("Session JSON must be an object.")
@@ -671,13 +719,29 @@ def validate_session(session: Mapping[str, Any]) -> None:
     version = session.get("version")
     if not isinstance(version, int):
         raise ValidationError("Session version is required and must be an integer.")
-    if version > CURRENT_SESSION_VERSION:
+    if version > max(SUPPORTED_SESSION_VERSIONS):
         raise ValidationError(
             f"Session version {version} is newer than this gbdraw supports "
             f"({CURRENT_SESSION_VERSION})."
         )
     if version not in SUPPORTED_SESSION_VERSIONS:
         raise ValidationError(f"Unsupported session version: {version}.")
+    if version >= DRAWINGS_SESSION_MIN_VERSION:
+        from .session_drawings import checked_drawing_views
+
+        for view in checked_drawing_views(session):
+            _validate_document_body(view, version, admission)
+        return
+    _validate_document_body(session, version, admission)
+
+
+def _validate_document_body(
+    session: Mapping[str, Any],
+    version: int,
+    admission: SessionAdmission,
+) -> None:
+    """Validate a Session 27-49, or one Session 50 drawing seen as one."""
+
     if "otherModeResult" in session and version < MODE_SCOPED_SESSION_MIN_VERSION:
         raise ValidationError(
             f"Session version {version} cannot contain otherModeResult.", diagnostic=_OTHER_MODE_RESULT_INVALID
@@ -686,7 +750,9 @@ def validate_session(session: Mapping[str, Any]) -> None:
         render_request = session.get("renderRequest")
         resources = session.get("resources")
         settings_only = is_settings_only_session(session)
-        if not settings_only:
+        # A Session 50 drawing not generated yet has no request and no Results.
+        undrawn = version >= DRAWINGS_SESSION_MIN_VERSION and render_request is None
+        if not settings_only and not undrawn:
             if not isinstance(render_request, Mapping):
                 raise ValidationError(
                     f"Session version {version} requires a canonical renderRequest object."
@@ -718,13 +784,15 @@ def validate_session(session: Mapping[str, Any]) -> None:
             raise ValidationError("Session files are required for CLI regeneration.")
     _validate_web_file_bindings(session)
     if version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION:
-        validate_current_session_artifacts(session)
+        validate_current_session_artifacts(session, admission)
     if version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         _validate_current_top_level_fields(session)
         _validate_mode_scoped_fields(session, version)
         _validate_current_retired_active_config_paths(session, version)
         _validate_current_comparison_authority(session, version)
-        _validate_current_feature_catalog_authority(session, version)
+        _validate_current_feature_payloads(session, version)
+        if admission.feature_catalog:
+            _validate_current_feature_catalog_authority(session, version)
         _validate_alignment_reset_receipt(session)
         _validate_other_mode_result(session, version)
     if version >= MODE_SCOPED_SESSION_MIN_VERSION:
@@ -736,10 +804,8 @@ def validate_session(session: Mapping[str, Any]) -> None:
 
 
 def _is_web_draft_version(version: object, *older: int) -> bool:
-    """Whether ``version`` is one of ``older`` or a mode-scoped version (46 to the current one)."""
-    return isinstance(version, int) and (
-        version in older or MODE_SCOPED_SESSION_MIN_VERSION <= version <= CURRENT_SESSION_VERSION
-    )
+    """Whether ``version`` is one of ``older`` or a mode-scoped (``modes``) version."""
+    return not isinstance(version, bool) and (version in older or version in MODE_SCOPED_SESSION_VERSIONS)
 
 
 def is_settings_only_session(session: Mapping[str, Any]) -> bool:
@@ -804,10 +870,22 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (not _is_web_draft_version(session.get("version"), 41, 42, 44) or "c_gb" not in bindings):
+    version = session.get("version")
+    drawing = version == DRAWINGS_SESSION_MIN_VERSION
+    if current and not (drawing or _is_web_draft_version(version, 41, 42, 44)):
         raise ValidationError(
-            f"Web binding schema 2 requires session 41, 42, 44, or {MODE_SCOPED_SESSION_MIN_VERSION}-"
-            f"{CURRENT_SESSION_VERSION} and c_gb."
+            f"Web binding schema 2 requires session 41, 42, 44, or {MODE_SCOPED_SESSION_MIN_VERSION} and later.",
+            diagnostic=_SESSION_FIELDS_INVALID,
+        )
+    # A drawings-layout drawing (its one-drawing view names its mode in
+    # ``ui.mode``) binds its own mode's inputs; Sessions 41 to the last
+    # mode-scoped version bind both modes' and c_gb.
+    mode = session["ui"]["mode"] if drawing else "circular"
+    other_slots = frozenset().union(*(slots for key, slots in WEB_BINDING_MODE_SLOTS.items() if key != mode))
+    if current and (WEB_BINDING_INPUT_SLOT[mode] not in bindings or (drawing and other_slots & set(bindings))):
+        raise ValidationError(
+            f"Web binding schema 2 requires {WEB_BINDING_INPUT_SLOT[mode]}"
+            + (" and no other mode's input." if drawing else ".")
         )
     resources = session.get("resources", {})
 
@@ -866,14 +944,9 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
         else:
             leaf(binding)
 
-    slots = {
-        "c_gb", "c_gff", "c_fasta", "c_depth", "c_conservation_blasts",
-        "c_conservation_fastas", "c_conservation_sequence_sources", "d_color",
-        "t_color", "blacklist", "whitelist", "qualifier_priority",
-    }
-    if current and set(bindings) - slots - {
-        "schema", "c_conservation_blasts_source", "linearSeqs", "linearComparisons",
-    }:
+    # Every slot that holds one file binding or a list of them.
+    slots = (WEB_BINDING_MODE_SLOTS["circular"] | WEB_BINDING_CARD_SLOTS) - {"c_conservation_blasts_source"}
+    if current and set(bindings) - {"schema"} - WEB_BINDING_CARD_SLOTS - frozenset().union(*WEB_BINDING_MODE_SLOTS.values()):
         raise ValidationError("Unknown Web binding inventory field.")
     for slot in slots:
         value(bindings.get(slot), slot == "c_gb")
@@ -1519,6 +1592,7 @@ def _validate_other_mode_result(session: Mapping[str, Any], version: int) -> Non
     ):
         raise ValidationError("Session otherModeResult requires a committed request of the other mode.", diagnostic=_OTHER_MODE_RESULT_INVALID)
     view = other_mode_result_view(session)
+    _validate_current_feature_payloads(view, version)
     _validate_current_feature_catalog_authority(view, version)
     if not other.get("results"):
         raise ValidationError("Session otherModeResult requires a Result.", diagnostic=_OTHER_MODE_RESULT_INVALID)
@@ -1618,13 +1692,12 @@ def _validate_other_mode_run_metadata(run_metadata: Any, results: list[Any]) -> 
             raise ValidationError("runMetadata.featureIdentityNotices contains an invalid notice.", diagnostic=_OTHER_MODE_RESULT_INVALID)
 
 
-def _validate_current_feature_catalog_authority(
+def _validate_current_feature_payloads(
     session: Mapping[str, Any],
     version: int,
 ) -> None:
-    """Require the version-owned catalog and reject duplicated payloads."""
-
-    catalog_schema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.get(version, 3)
+    """Reject the derived feature payloads a current Session never stores, and
+    require its results array."""
 
     features = session.get("features")
     if isinstance(features, Mapping):
@@ -1647,10 +1720,19 @@ def _validate_current_feature_catalog_authority(
         raise ValidationError(
             "Session orthogroupState must be an object when present."
         )
-
-    results = session.get("results")
-    if "results" not in session or not isinstance(results, list):
+    if not isinstance(session.get("results"), list):
         raise ValidationError(f"Session version {version} requires a results array.")
+
+
+def _validate_current_feature_catalog_authority(
+    session: Mapping[str, Any],
+    version: int,
+) -> None:
+    """Require the version-owned catalog of the Results, each a named plain SVG."""
+
+    catalog_schema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.get(version, 3)
+    results = session.get("results")
+    assert isinstance(results, list)
     editor_state = session.get("editorState")
     if (
         not isinstance(editor_state, Mapping)
@@ -1784,8 +1866,12 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
     return "invalid"
 
 
-def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
-    """Validate current cache, manifest, and legacy artifact boundaries."""
+def validate_current_session_artifacts(
+    session: Mapping[str, Any],
+    admission: SessionAdmission = CLI_SESSION_ADMISSION,
+) -> None:
+    """Validate current cache, manifest, and legacy artifact boundaries; the
+    manifest resolution of protein caches only with ``admission.losat_manifest``."""
 
     session_version = session.get("version")
     for _, config in _session_draft_configs(session):
@@ -1845,28 +1931,29 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     )
     if manifest is not None and validated_manifest is None:
         raise ValidationError("Invalid proteinIdentityManifest schema-2 artifact.")
-    if protein_entries and manifest is None:
-        raise ValidationError(
-            "Current protein LOSATP cache entries require proteinIdentityManifest."
-        )
-    if protein_entries:
-        assert validated_manifest is not None
-        for index, entry in enumerate(protein_entries):
-            if not _protein_raw_entry_matches_manifest(entry, validated_manifest):
-                raise ValidationError(
-                    "Protein LOSATP cache entry does not resolve through the manifest: "
-                    f"losatCache.entries[{index}]."
-                )
-    if derived_entries:
-        try:
-            validate_current_derived_protein_artifacts(
-                derived_entries,
-                validated_manifest,
-            )
-        except ValidationError as exc:
+    if admission.losat_manifest:
+        if protein_entries and manifest is None:
             raise ValidationError(
-                "Current derived LOSATP cache contains unresolved protein references."
-            ) from exc
+                "Current protein LOSATP cache entries require proteinIdentityManifest."
+            )
+        if protein_entries:
+            assert validated_manifest is not None
+            for index, entry in enumerate(protein_entries):
+                if not _protein_raw_entry_matches_manifest(entry, validated_manifest):
+                    raise ValidationError(
+                        "Protein LOSATP cache entry does not resolve through the manifest: "
+                        f"losatCache.entries[{index}]."
+                    )
+        if derived_entries:
+            try:
+                validate_current_derived_protein_artifacts(
+                    derived_entries,
+                    validated_manifest,
+                )
+            except ValidationError as exc:
+                raise ValidationError(
+                    "Current derived LOSATP cache contains unresolved protein references."
+                ) from exc
 
     legacy_artifacts = session.get("legacyArtifacts")
     if legacy_artifacts is None:
@@ -2146,8 +2233,7 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
     ``record_idx`` its record in that input. Identities are the renderer's:
     the record key, ``<recordKey>:<n>`` for each record of an ALL input with
     several records, and the source hash, ``~<source index>`` when the record
-    has it twice. The twin of ``legacyIndex`` in the Web
-    ``feature-edit-migration.js``.
+    has it twice.
     """
 
     fields = legacy if isinstance(legacy, Mapping) else {}
@@ -2296,8 +2382,7 @@ def _catalog_drawn_features(catalog: object, mode: object) -> list[_IndexedFeatu
 
     A catalog row's rendered ID (``svgId``) carries the feature's hash in its
     drawn (cropped, reverse-complemented) record. The record position is the
-    rendered ID's or the row's place in its item's records. The twin of
-    ``catalogDrawnFeatures`` in the Web ``feature-edit-migration.js``.
+    rendered ID's or the row's place in its item's records.
     """
 
     drawn: list[_IndexedFeature] = []
@@ -2352,8 +2437,7 @@ def source_hash_selector_value(
     Linear record suffix ``_record_<n>``, which no matcher reads (OV-416): such
     a value means what it meant and stays as saved. The
     Session draft (:func:`migrate_session_hash_rules`) and the CLI replay of a
-    request (``gbdraw.api.session_compat``) read with it; the twin of
-    ``sourceHashSelectorValue`` in the Web ``feature-edit-migration.js``.
+    request (``gbdraw.api.session_compat``) read with it.
     """
 
     anchored, stable_id, record_ordinal, source_index = _hash_selector_parts(value)
@@ -2391,27 +2475,35 @@ def _legacy_linear_request_records(files: object) -> list[dict[str, Any]]:
     """The request records of the Linear cards of a Session before 31.
 
     Such a Session (release 0.13.0) has no request: each card gives its record
-    key, crop, and orientation, as the hash readers read them. The twin of
-    ``legacyLinearRequestRecords`` in the Web ``feature-edit-migration.js``.
+    key, crop, and orientation, as the hash readers read them. For the source
+    read of
+    :func:`gbdraw.session_migration.read_request_less_source_features`, which
+    the Web does not run, a card also gives its GenBank ``source`` (named by
+    its slot path) and its record ``selector``.
     """
 
     linear_seqs = files.get("linearSeqs") if isinstance(files, Mapping) else None
     records: list[dict[str, Any]] = []
-    for seq in _mapping_list(linear_seqs):
+    for index, seq in enumerate(_mapping_list(linear_seqs)):
         start = _nonnegative_integer(seq.get("region_start"))
         end = _nonnegative_integer(seq.get("region_end"))
         cropped = start is not None or end is not None
         reverse = bool(seq.get("region_reverse"))
+        record_id = _js_text(seq.get("region_record_id")).strip()
         records.append(
             {
                 "recordKey": _js_text(seq.get("uid")),
-                "cardinality": (
-                    "exactly_one" if cropped or _js_text(seq.get("region_record_id")) else "all"
-                ),
+                "cardinality": "exactly_one" if cropped or record_id else "all",
                 "region": (
                     {"start": start, "end": end, "reverseComplement": reverse} if cropped else None
                 ),
                 "presentation": {"reverseComplement": not cropped and reverse},
+                "source": (
+                    {"kind": "genbank", "resourceId": f"files.linearSeqs[{index}].gb"}
+                    if isinstance(seq.get("gb"), Mapping)
+                    else None
+                ),
+                "selector": {"kind": "recordId", "value": record_id} if record_id else None,
             }
         )
     return records
@@ -2421,8 +2513,6 @@ def _hash_frame_changed(record: Mapping[str, Any]) -> bool:
     """Whether a request record is drawn cropped or reverse-complemented, so
     the drawn hashes of its features differ from their source hashes (a
     rotation or a region that only selects a record changes no hash).
-
-    The twin of ``hashFrameChanged`` in the Web ``feature-edit-migration.js``.
     """
 
     region = record.get("region")
@@ -2439,12 +2529,44 @@ def _hash_frame_changed(record: Mapping[str, Any]) -> bool:
 
 def has_hash_color_rules(rules: object) -> bool:
     """Whether specific color rules (``qual`` and ``val``) hold a ``hash`` rule.
-
-    The twin of ``hasHashColorRules`` in the Web ``feature-edit-migration.js``.
     """
 
     return isinstance(rules, list) and any(
         isinstance(rule, Mapping) and _js_text(rule.get("qual")).lower() == "hash" for rule in rules
+    )
+
+
+def _drawn_hashes_unknown(records: object, features: object) -> bool:
+    """Whether ``features`` cannot name what a ``hash`` value of a request
+    record in ``records`` drew: a record is drawn cropped or
+    reverse-complemented and no feature carries its drawn hash (they are not
+    the sources read again)."""
+
+    return any(_hash_frame_changed(record) for record in _mapping_list(records)) and not any(
+        isinstance(feature.get("drawn_selector") or feature.get("drawnSelector"), Mapping)
+        for feature in _mapping_list(features)
+    )
+
+
+def request_less_hash_rules_need_drawn_hashes(session: Mapping[str, Any]) -> bool:
+    """Whether the ``hash`` color rules of a Session without a request and
+    without a saved catalog need its sources read again: one of its Linear
+    cards is drawn cropped or reverse-complemented and its saved feature
+    metadata holds no drawn hashes, so :func:`migrate_session_hash_rules`
+    would count a value it cannot name as unmapped."""
+
+    editor_state = session.get("editorState")
+    config = session.get("config")
+    features = session.get("features")
+    return (
+        session.get("renderRequest") is None
+        and not (isinstance(editor_state, Mapping) and isinstance(editor_state.get("featureCatalog"), Mapping))
+        and isinstance(config, Mapping)
+        and has_hash_color_rules(config.get("rules"))
+        and _drawn_hashes_unknown(
+            _legacy_linear_request_records(session.get("files")),
+            _legacy_draft_features({}, features if isinstance(features, Mapping) else {}),
+        )
     )
 
 
@@ -2479,8 +2601,7 @@ def migrate_session_hash_rules(
     request record in ``records`` is drawn cropped or reverse-complemented but
     ``legacy`` holds no drawn hashes (its features are not the sources read
     again). Every other value is kept as saved. A list without a change is
-    returned as saved. The twin of ``migrateSessionHashRules`` in the Web
-    ``feature-edit-migration.js``.
+    returned as saved.
     """
 
     if not has_hash_color_rules(rules):
@@ -2491,12 +2612,8 @@ def migrate_session_hash_rules(
         drawn_hashes_unknown = False
     else:
         drawn = _drawn_features_of_index(_legacy_feature_index(legacy, mode))
-        legacy_features = legacy.get("features") if isinstance(legacy, Mapping) else None
-        drawn_hashes_unknown = any(
-            _hash_frame_changed(record) for record in _mapping_list(records)
-        ) and not any(
-            isinstance(feature.get("drawn_selector") or feature.get("drawnSelector"), Mapping)
-            for feature in _mapping_list(legacy_features)
+        drawn_hashes_unknown = _drawn_hashes_unknown(
+            records, legacy.get("features") if isinstance(legacy, Mapping) else None
         )
     unmapped_count = 0
     changed = False
@@ -2535,9 +2652,7 @@ def migrate_session_feature_edits(
     When a label map is migrated the saved label table (``labelOverrideRows``)
     is cleared, as it was built from those maps.
 
-    This is the twin of ``migrateSessionFeatureEdits`` in the Web
-    ``feature-edit-migration.js``;
-    ``tests/fixtures/feature-edit-migration-vectors.json`` pins both. Without
+    ``tests/fixtures/feature-edit-migration-vectors.json`` pins it. Without
     a catalog or ``legacy`` every edit is dropped.
     """
 
@@ -2685,8 +2800,6 @@ def _js_truthy(value: object) -> bool:
 
 def _drawn_transformed(record: Mapping[str, Any]) -> bool:
     """Whether a request record is drawn cropped, reverse-complemented, or rotated.
-
-    The twin of ``drawnTransformed`` in the Web ``feature-edit-migration.js``.
     """
 
     presentation = record.get("presentation")
@@ -2739,9 +2852,7 @@ def migrate_session_annotation_targets(
     ``envelope`` and ``circularPath`` it has. Every other target stays as
     saved; when none moves, ``annotation_sets`` is returned as is.
 
-    This is the twin of ``migrateSessionAnnotationTargets`` in the Web
-    ``feature-edit-migration.js`` (R-7);
-    ``tests/fixtures/annotation-target-migration-vectors.json`` pins both.
+    R-7; ``tests/fixtures/annotation-target-migration-vectors.json`` pins it.
     Without a catalog nothing moves, as in the Web app, which reads no sources
     again for these targets.
     """
@@ -3372,7 +3483,7 @@ def _js_key_order(record: Mapping[Any, Any]) -> list[Any]:
 def _session_46_legend_rows(legend: Mapping[str, Any]) -> tuple[dict[str, str], set[str]]:
     """The rows a Session 46 Legend's edits reach, by the caption each shows,
     and the keys of the renamed rows; the twin of ``session46LegendRows`` in
-    the Web ``services/mode-scoped-migration.js``.
+    the Web ``services/session-drawings-upgrade.js``.
 
     As Session 46 Load read the rows (an entry with a caption and a usable
     color, the first of each caption in its list) and as its compile found
@@ -3439,7 +3550,7 @@ def legend_edits_by_row_key(legend: Mapping[str, Any]) -> tuple[dict[str, Any], 
     ``None`` when dropped). Other fields are kept as they are.
 
     The twin of ``legendEditsByRowKey`` in the Web
-    ``services/mode-scoped-migration.js``;
+    ``services/session-drawings-upgrade.js``;
     ``tests/fixtures/sessions/legend-row-key-vectors.json`` pins both.
     """
 
@@ -3547,9 +3658,8 @@ def split_draft_into_modes(
     ``webFiles.bindings``, else in the legacy ``files``. The draft's own mode
     (``_profile_active_mode``) holds the flat values of the mode-profile fields.
 
-    This is the twin of ``splitDraftIntoModes`` in the Web
-    ``services/mode-scoped-migration.js``;
-    ``tests/fixtures/sessions/mode-split-vectors.json`` pins both.
+    The Web Load and Gallery publication run this split; Python alone owns it.
+    ``tests/fixtures/sessions/mode-split-vectors.json`` pins it.
     """
 
     committed = _diagram_mode(committed_mode)
@@ -4116,6 +4226,25 @@ class SessionDraftMigration:
     unmapped_hash_selector_count: int = 0
 
 
+def _legacy_draft_features(read_again: Mapping[str, Any], saved_features: Mapping[str, Any]) -> list[Any]:
+    """The features that name a catalog-less Session's edits and ``hash``
+    rules: the first non-empty of the sources read again and the saved
+    feature metadata."""
+
+    return next(
+        (
+            candidates
+            for candidates in (
+                read_again.get("extractedFeatures"),
+                saved_features.get("biologicalFeatures"),
+                saved_features.get("extractedFeatures"),
+            )
+            if isinstance(candidates, list) and candidates
+        ),
+        [],
+    )
+
+
 def migrate_session_flat_draft(
     session: Mapping[str, Any], *, source_features: Mapping[str, Any] | None = None
 ) -> SessionDraftMigration:
@@ -4128,8 +4257,10 @@ def migrate_session_flat_draft(
     then per-feature edits (``migrate_session_feature_edits``) through the
     saved catalog or, without one, through the request records and the first
     non-empty of ``source_features["extractedFeatures"]`` (the sources read
-    again, see :func:`gbdraw.session_migration.read_legacy_source_features`)
-    and the saved feature metadata, then the ``hash`` color rules of a Session
+    again, see :func:`gbdraw.session_migration.read_legacy_source_features`
+    and, for a Session before 31,
+    :func:`gbdraw.session_migration.read_request_less_source_features`) and
+    the saved feature metadata, then the ``hash`` color rules of a Session
     44 or older through the same catalog or sources
     (``migrate_session_hash_rules``), then the ``hash=`` annotation targets of
     a Session 40-44 (``migrate_session_annotation_targets``). A Session 40-44
@@ -4158,18 +4289,7 @@ def migrate_session_flat_draft(
     saved_features = features if isinstance(features, Mapping) else {}
     legacy = None if has_catalog else {
         "records": _promoted_request_records(request),
-        "features": next(
-            (
-                candidates
-                for candidates in (
-                    read_again.get("extractedFeatures"),
-                    saved_features.get("biologicalFeatures"),
-                    saved_features.get("extractedFeatures"),
-                )
-                if isinstance(candidates, list) and candidates
-            ),
-            [],
-        ),
+        "features": _legacy_draft_features(read_again, saved_features),
         "biologicalFeatures": read_again.get("biologicalFeatures") or [],
     }
     if isinstance(features, Mapping):
@@ -4454,6 +4574,17 @@ def _validated_protein_identity_manifest(
         return None
 
 
+def _protein_manifest_holders(
+    session: MutableMapping[str, object],
+) -> list[MutableMapping[str, object]]:
+    """Return the mappings that hold a manifest: each drawing of a 50, else the payload."""
+
+    drawings = session.get("drawings")
+    if isinstance(drawings, list):
+        return [drawing for drawing in drawings if isinstance(drawing, MutableMapping)]
+    return [session]
+
+
 def seal_protein_identity_manifest(session: MutableMapping[str, object]) -> None:
     """Replace the payload's ``proteinIdentityManifest`` by its checked proof.
 
@@ -4461,30 +4592,36 @@ def seal_protein_identity_manifest(session: MutableMapping[str, object]) -> None
     proof. Only a proof of plain JSON data replaces the value: a manifest that
     fails, or one that holds other Python values, stays as it is, so
     ``validate_session`` checks and reports it as it does for a raw payload.
+    A Session 50 holds a manifest in each drawing: each is sealed.
     """
 
-    manifest = session.get("proteinIdentityManifest")
-    if not isinstance(manifest, Mapping):
-        return
     from .analysis.protein_colinearity import validate_protein_identity_manifest
 
-    try:
-        proof = validate_protein_identity_manifest(manifest)
-    except Exception:
-        # validate_session reports the failure itself.
-        return
-    if is_json_exact_protein_identity_manifest(proof):
-        session["proteinIdentityManifest"] = proof
+    for holder in _protein_manifest_holders(session):
+        manifest = holder.get("proteinIdentityManifest")
+        if not isinstance(manifest, Mapping):
+            continue
+        try:
+            proof = validate_protein_identity_manifest(manifest)
+        except Exception:
+            # validate_session reports the failure itself.
+            continue
+        if is_json_exact_protein_identity_manifest(proof):
+            holder["proteinIdentityManifest"] = proof
 
 
 def thaw_protein_identity_manifest(session: MutableMapping[str, object]) -> None:
-    """Replace a proof in the payload by a plain, mutable copy."""
+    """Replace each proof in the payload by a plain, mutable copy.
+
+    A Session 50 holds a manifest in each drawing: each is thawed.
+    """
 
     from .analysis.protein_colinearity import ProteinIdentityManifest
 
-    manifest = session.get("proteinIdentityManifest")
-    if isinstance(manifest, ProteinIdentityManifest):
-        session["proteinIdentityManifest"] = manifest.to_dict()
+    for holder in _protein_manifest_holders(session):
+        manifest = holder.get("proteinIdentityManifest")
+        if isinstance(manifest, ProteinIdentityManifest):
+            holder["proteinIdentityManifest"] = manifest.to_dict()
 
 
 def _protein_raw_entry_matches_manifest(
@@ -4873,6 +5010,22 @@ def _stable_migrated_comparison_id(
     )
 
 
+def _legacy_cli_protein_mode(config: Mapping[str, Any]) -> str:
+    """The last ``--protein_blastp_mode`` of a legacy draft's ``cliOptions.rawArgs``, else ``none``."""
+
+    cli_options = config.get("cliOptions")
+    raw_args = cli_options.get("rawArgs") if isinstance(cli_options, Mapping) else None
+    args = [str(arg) for arg in raw_args] if isinstance(raw_args, list) else []
+    names = ("--protein_blastp_mode", "--protein-blastp-mode")
+    values = [
+        value
+        for index, token in enumerate(args)
+        if token.split("=", 1)[0] in names
+        and (value := _option_value(args[index:index + 2], *names)) is not None
+    ]
+    return (values[-1] if values else "none").strip().lower()
+
+
 def _migrate_legacy_linear_comparison_draft(
     config: Mapping[str, Any],
     files: Mapping[str, Any],
@@ -4960,8 +5113,18 @@ def _migrate_legacy_linear_comparison_draft(
         return migrated_config, migrated_files
 
     if not force_web_draft:
+        # A CLI-only draft gains no synthetic Web comparison (No comparison).
+        # Its own protein comparison is stated as the adjacent LOSATP plan: a
+        # legacy CLI writer selected LOSATP exactly when the last
+        # --protein_blastp_mode was not ``none``, and compared adjacent records.
         migrated_config.pop("linearRecordLayout", None)
         migrated_config.pop("linearComparisonPlan", None)
+        if _legacy_cli_protein_mode(migrated_config) != "none":
+            migrated_config["linearComparisonPlan"] = {
+                "mode": "adjacent",
+                "defaultSource": "losat",
+                "edges": [],
+            }
         migrated_files["linearComparisons"] = []
         return migrated_config, migrated_files
 
@@ -5200,7 +5363,34 @@ def migrate_legacy_linear_comparison_draft_for_current_writer(
     )
 
 
-def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:
+class _SessionResourceDescriptorRequired(TypedDict):
+    size: int
+    # Base64 text, or the encoded depth payload under ``DEPTH_FILE_ENCODING``.
+    data: str | Mapping[str, object]
+
+
+class SessionResourceDescriptor(_SessionResourceDescriptorRequired, total=False):
+    """One entry of a Session's ``resources``: embedded bytes and their file metadata."""
+
+    kind: str
+    name: str
+    type: str
+    lastModified: int
+    encoding: str
+    checksum: str | None
+
+
+def is_session_resource_descriptor(value: Mapping[str, object]) -> TypeGuard[SessionResourceDescriptor]:
+    """Whether ``value`` has the required fields of a resource descriptor.
+
+    Its bytes are checked against them where they are read
+    (:func:`_embedded_resource_bytes`).
+    """
+
+    return isinstance(value.get("size"), int) and isinstance(value.get("data"), (str, Mapping))
+
+
+def _embedded_entry_bytes(entry: Mapping[str, object]) -> bytes | None:
     encoding = entry.get("encoding")
     data = entry.get("data")
     if encoding != DEPTH_FILE_ENCODING and isinstance(data, str):
@@ -5216,7 +5406,7 @@ def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:
     return None
 
 
-def _embedded_resource_bytes(entry: Mapping[str, Any]) -> bytes:
+def _embedded_resource_bytes(entry: Mapping[str, object]) -> bytes:
     """The bytes of a resource descriptor, checked against its size and checksum.
 
     The one check of a declared ``checksum``: the SHA-256 hex digest of the
@@ -5289,7 +5479,9 @@ def _attach_current_web_file_bindings(
             raise ValidationError("Canonical resource IDs must be unique non-empty strings.")
     table = SessionResourceTable(resources)
 
-    def allocate_file(entry: Mapping[str, Any], preferred_id: str, metadata: Mapping[str, Any]) -> dict[str, Any]:
+    def allocate_file(entry: Mapping[str, object], preferred_id: str, metadata: Mapping[str, Any]) -> dict[str, Any]:
+        if not is_session_resource_descriptor(entry):
+            raise ValidationError("Invalid embedded resource bytes or byte size.")
         return {
             "resourceId": table.bind(entry, preferred_id=preferred_id),
             "name": str(metadata.get("name", "file")),
@@ -5478,7 +5670,7 @@ def build_session_json(
         ):
             from .session import _validate_document
 
-            _validate_document(context.source_session)
+            _validate_document(context.source_session, CLI_SESSION_ADMISSION)
             source_composite = _project_web_file_binding(
                 context.source_session["resources"], explicit, schema=source_bindings["schema"],
             )
@@ -5487,7 +5679,8 @@ def build_session_json(
         payload = {}
 
     payload["format"] = SESSION_FORMAT
-    payload["version"] = CURRENT_SESSION_VERSION
+    # The payload is built in the mode-scoped layout and moved to drawings last.
+    payload["version"] = MODE_SCOPED_SESSION_MAX_VERSION
     payload["createdAt"] = generated_at.isoformat()
     if context.output_prefix:
         payload["title"] = Path(str(context.output_prefix)).name
@@ -5495,12 +5688,19 @@ def build_session_json(
         payload.setdefault("title", "gbdraw")
 
     if source_version is not None and source_version < MODE_SCOPED_SESSION_MIN_VERSION:
-        from .session_migration import log_session_draft_migration
+        from .session_migration import (
+            log_session_draft_migration,
+            read_request_less_source_features,
+        )
 
-        # The migrations read the version of the Session they migrate.
-        migration = migrate_session_flat_draft({**payload, "version": source_version})
+        # The migrations read the version of the Session they migrate; the
+        # hash rules of a Session 27-30 read its sources again (OV-2043).
+        source = {**payload, "version": source_version}
+        migration = migrate_session_flat_draft(
+            source, source_features=read_request_less_source_features(source)
+        )
         log_session_draft_migration(migration, source_version)
-        payload = {**migration.session, "version": CURRENT_SESSION_VERSION}
+        payload = {**migration.session, "version": MODE_SCOPED_SESSION_MAX_VERSION}
     config = payload.get("config")
     if not isinstance(config, dict):
         config = dict(config) if isinstance(config, Mapping) else {}
@@ -5563,21 +5763,13 @@ def build_session_json(
         "generatedBy": "gbdraw",
     }
     if canonical_request is not None:
-        from .session import (
-            _build_session_document_from_resolved_request,
-            build_session_document,
-        )
+        from .session import _mode_scoped_document_of_request
 
-        build_document = (
-            _build_session_document_from_resolved_request
-            if _canonical_request_is_resolved
-            else build_session_document
-        )
-        canonical_document = build_document(
+        canonical = _mode_scoped_document_of_request(
             canonical_request,
+            resolved=_canonical_request_is_resolved,
             created_at=generated_at,
-        )
-        canonical = canonical_document.to_dict()
+        ).to_dict()
         payload["renderRequest"] = canonical["renderRequest"]
         payload["resources"] = canonical["resources"]
     else:
@@ -5620,8 +5812,13 @@ def build_session_json(
         legacy_protein_raw_candidates=legacy_protein_raw_candidates,
         legacy_protein_derived_evidence=legacy_protein_derived_evidence,
     )
-    validate_session(payload)
-    return payload
+    # One check, of the Session 50 returned (OV-1815): the mode-scoped payload
+    # is this builder's own and moves unchecked.
+    from .session_drawings import drawings_document_from_mode_scoped
+
+    drawings, _source_facts = drawings_document_from_mode_scoped(payload)
+    validate_session(drawings)
+    return dict(drawings)
 
 
 def write_session_json(
@@ -7319,6 +7516,7 @@ __all__ = [
     "PROTEIN_IDENTITY_MANIFEST_SCHEMA",
     "PROTEIN_LOSAT_CACHE_SCHEMA",
     "FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION",
+    "MODE_SCOPED_SESSION_MAX_VERSION",
     "MODE_SCOPED_SESSION_MIN_VERSION",
     "ROW_KEYED_LEGEND_SESSION_MIN_VERSION",
     "SESSION_FORMAT",
@@ -7344,6 +7542,7 @@ __all__ = [
     "migrate_session_draft_values",
     "migrate_session_annotation_targets",
     "migrate_session_hash_rules",
+    "request_less_hash_rules_need_drawn_hashes",
     "migrate_session_feature_edits",
     "migrate_legacy_repeat_feature_shape_args",
     "normalize_current_session_artifacts",

@@ -32,6 +32,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from gbdraw.session_io import (  # noqa: E402
     CURRENT_SESSION_VERSION,
+    DRAWINGS_SESSION_MIN_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     SessionFileBinding,
@@ -42,6 +43,14 @@ from gbdraw.session_io import (  # noqa: E402
     validate_session,
     write_session_json,
 )
+from gbdraw.session import _keep_resources  # noqa: E402
+from gbdraw.session_drawings import (  # noqa: E402
+    _drawing_view,
+    replace_session_drawings,
+    write_session_drawings,
+)
+from gbdraw.session_contract import GALLERY_SESSION_DRAWN_DRAWINGS  # noqa: E402
+from gbdraw.session_resources import drawing_resource_ids  # noqa: E402
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA  # noqa: E402
 from gbdraw.tracks.circular import (  # noqa: E402
     CircularTrackSlot,
@@ -241,10 +250,11 @@ def _run_publication_bridge(
             "Missing Gallery publication bridge: "
             f"{SESSION_PUBLICATION_BRIDGE.relative_to(REPO_ROOT)}"
         )
+    # The bridge runs Python's draft split with this interpreter.
     subprocess.run(
         [node, str(SESSION_PUBLICATION_BRIDGE), command, *(str(path) for path in paths)],
         cwd=REPO_ROOT,
-        env=dict(env),
+        env={**env, "PYTHON": sys.executable},
         check=True,
     )
 
@@ -719,6 +729,9 @@ def _validate_staged_gallery_session(
     )
 
     validate_session(session)
+    # A staged Session is a Session 50 that shows one drawing: read its drawn
+    # drawing as the one-drawing view (this checks the Gallery rule).
+    session, _drawing_id = _gallery_view(session)
     expected_session_version = CURRENT_SESSION_VERSION
     expected_request_schema = CANONICAL_REQUEST_SCHEMA
     if session.get("version") != expected_session_version:
@@ -735,16 +748,6 @@ def _validate_staged_gallery_session(
             f"{session_path.name} has no canonical schema-"
             f"{expected_request_schema} render request"
         )
-    modes = session.get("modes")
-    # Session 46 keeps the Linear draft in its Linear slice.
-    linear = modes.get("linear") if isinstance(modes, Mapping) else None
-    config = linear.get("config") if isinstance(linear, Mapping) else session.get("config")
-    if isinstance(config, Mapping) and "linearRecordLayout" in config:
-        plan = config.get("linearComparisonPlan")
-        if not isinstance(plan, Mapping):
-            raise ValueError(
-                f"{session_path.name} has a Web Linear draft without linearComparisonPlan"
-            )
     # A Gallery Session stores its protein comparison results, so the first
     # Generate after Load reuses them (perf-014x D-17 / docs-restructure D-20:
     # the regenerated Vibrio Session must store the finished protein comparison
@@ -1169,14 +1172,66 @@ def _write_session_file(session_path: Path, session: Mapping[str, Any], *, compr
     )
 
 
+def _gallery_view(document: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """The one-drawing view a refresh reads and edits, and the ID of its drawing.
+
+    A Gallery Session shows one drawing: a Session 50's only drawing with a
+    committed render (``GALLERY_SESSION_DRAWN_DRAWINGS`` in
+    gbdraw/session_contract.py, which ``galleryPublicationView`` reads
+    generated). A Session 46-49 is its own view (ID ``None``).
+    """
+
+    drawings = document.get("drawings")
+    if not isinstance(drawings, list):
+        return document, None
+    drawn = [drawing for drawing in drawings if drawing.get("renderRequest") is not None]
+    if len(drawn) != GALLERY_SESSION_DRAWN_DRAWINGS:
+        raise ValueError(
+            f"A Gallery Session shows {GALLERY_SESSION_DRAWN_DRAWINGS} drawn drawing; this one has {len(drawn)}."
+        )
+    return _drawing_view(document, drawn[0]), str(drawn[0]["id"])
+
+
+def _gallery_document(
+    document: dict[str, Any], view: dict[str, Any], drawing_id: str | None
+) -> dict[str, Any]:
+    """``document`` with the drawing of :func:`_gallery_view` replaced by ``view``.
+
+    A resource that no drawing names any more (a stored comparison an edit
+    replaced) is left out, as Session 50 requires.
+    """
+
+    if drawing_id is None:
+        return view
+    others = [_drawing_view(document, drawing) for drawing in document["drawings"] if drawing["id"] != drawing_id]
+    _keep_resources(view, set().union(*(drawing_resource_ids(fields) for fields in (view, *others))))
+    return replace_session_drawings(document, {drawing_id: view})
+
+
+def _one_drawing_document(session: Mapping[str, Any]) -> Mapping[str, Any]:
+    """A document the Session readers take: a Session 50 drawing's one-drawing
+    view (:func:`_gallery_view`) as the Session 50 of that one drawing, with
+    the resources it names; any other document as it is."""
+
+    if "drawings" in session or int(session["version"]) < DRAWINGS_SESSION_MIN_VERSION:
+        return session
+    view = dict(session)
+    _keep_resources(view, drawing_resource_ids(view))
+    return write_session_drawings([view])
+
+
 def _edit_staged_session(
     session_path: Path, edit: Callable[[dict[str, Any]], int]
 ) -> None:
-    """Rewrite a staged Session file in its own encoding when ``edit`` changes it."""
+    """Rewrite a staged Session file in its own encoding when ``edit`` changes
+    the view of its drawing (:func:`_gallery_view`)."""
 
-    session, compressed = _read_session_file(session_path)
+    document, compressed = _read_session_file(session_path)
+    session, drawing_id = _gallery_view(document)
     if edit(session):
-        _write_session_file(session_path, session, compressed=compressed)
+        _write_session_file(
+            session_path, _gallery_document(document, session, drawing_id), compressed=compressed
+        )
 
 
 def _keep_created_at(tracked_path: Path, staged_path: Path) -> None:
@@ -1256,13 +1311,15 @@ def _declared_command_session(
         env=dict(env),
         check=True,
     )
-    session, compressed = _read_session_file(session_path)
-    invocation = session["cliInvocation"]
-    invocation["args"] = [
-        args[output_index] if arg == staged_output else arg
-        for arg in invocation["args"]
-    ]
-    _write_session_file(session_path, session, compressed=compressed)
+    def edit(session: dict[str, Any]) -> int:
+        invocation = session["cliInvocation"]
+        invocation["args"] = [
+            args[output_index] if arg == staged_output else arg
+            for arg in invocation["args"]
+        ]
+        return 1
+
+    _edit_staged_session(session_path, edit)
 
 
 # The request comparisons that hold a computed protein result. Next to a
@@ -1386,7 +1443,7 @@ def _resolved_protein_comparisons(
         for entry in (session.get("losatCache") or {}).get("entries") or []
     }
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-resolve-") as output_dir:
-        with materialize_session(session, output_directory=output_dir) as materialized:
+        with materialize_session(_one_drawing_document(session), output_directory=output_dir) as materialized:
             typed = session_to_request(materialized)
             rendered = render_session(materialized)
             metadata = getattr(rendered, "linear_metadata", None)
@@ -1419,7 +1476,8 @@ def _store_resolved_protein_comparisons(session_path: Path) -> None:
     the same.
     """
 
-    session = load_session(session_path)
+    document = load_session(session_path)
+    session, drawing_id = _gallery_view(document)
     try:
         resolved = _resolved_protein_comparisons(session)
     except ValueError as exc:
@@ -1430,7 +1488,7 @@ def _store_resolved_protein_comparisons(session_path: Path) -> None:
     session["renderRequest"]["comparisons"] = comparisons
     for resource_id in _referenced_resource_ids(comparisons):
         session["resources"].setdefault(resource_id, dict(descriptors[resource_id]))
-    write_session_json(session_path, session)
+    write_session_json(session_path, _gallery_document(document, session, drawing_id))
 
 
 def _resource_bytes(session: Mapping[str, Any], resource_id: str) -> bytes:
@@ -1521,7 +1579,7 @@ def check_stored_protein_results(session_names: tuple[str, ...] | None = None) -
 
     stale = 0
     for session_path in _refresh_session_paths(session_names):
-        differences = stored_protein_result_differences(load_session(session_path))
+        differences = stored_protein_result_differences(_gallery_view(load_session(session_path))[0])
         for difference in differences:
             print(f"{session_path.name}: {difference}")
         stale += bool(differences)
@@ -1536,7 +1594,7 @@ def _assert_declared_figure(declared_path: Path, published_path: Path) -> None:
     """
 
     declared, published = (
-        [result.get("content") for result in load_session(path).get("results") or []]
+        [result.get("content") for result in _gallery_view(load_session(path))[0].get("results") or []]
         for path in (declared_path, published_path)
     )
     if not declared or declared != published:
@@ -1552,7 +1610,8 @@ def _refresh_one_session(
     declared_command: bool = False,
 ) -> None:
     gallery_id = _gallery_id(session_path)
-    session = load_session(session_path)
+    document = load_session(session_path)
+    session, drawing_id = _gallery_view(document)
     mode = session_mode(session)
     if mode not in {"circular", "linear"}:
         raise RuntimeError(f"Could not determine gallery session mode: {session_path}")
@@ -1572,8 +1631,8 @@ def _refresh_one_session(
             publication_input_path = (
                 staging_root / f"canonicalized-{session_path.name}"
             )
-            write_session_json(publication_input_path, session)
-        del session
+            write_session_json(publication_input_path, _gallery_document(document, session, drawing_id))
+        del session, document
         gc.collect()
         _run_publication_bridge(
             "prepare",
@@ -1612,7 +1671,7 @@ def _refresh_one_session(
         if _is_test_input_session(session_path):
             # A CLI re-save stores the protein results it computed (OV-1068);
             # a test input keeps the pipelines its specs run on Generate.
-            pipelines = load_session(prepared_path)["renderRequest"]["comparisons"]
+            pipelines = _gallery_view(load_session(prepared_path))[0]["renderRequest"]["comparisons"]
             _edit_staged_session(replayed_path, lambda staged: _with_comparisons(pipelines, staged))
         _run_publication_bridge(
             "finalize",

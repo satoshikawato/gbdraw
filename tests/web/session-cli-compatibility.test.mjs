@@ -1,5 +1,5 @@
 import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -13,6 +13,8 @@ import { createHash } from 'node:crypto';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
 
 globalThis.window = {
   Vue: {
@@ -37,6 +39,10 @@ globalThis.File = class File extends Blob {
 globalThis.alert = () => {};
 
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
@@ -54,7 +60,8 @@ const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/s
 const { validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { getSessionResourceSource, readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
@@ -90,9 +97,9 @@ const cases = [
 const fileRecordKeys = request => [...new Set(request.records.map(
   record => record.recordKey.replace(/:[1-9]\d*$/, '')
 ))];
-const load = bytes => importSession({ target: {
+const load = (bytes, ports = {}) => importSession({ target: {
   files: [new File([bytes], 'current.json', { type: 'application/json' })], value: 'selected'
-} }, { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow });
+} }, { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow, ...ports });
 const DEFAULT_PLAN = { mode: 'none', defaultSource: 'losat', edges: [] };
 // B15: a read-only CLI comparison (-b) is not a Web draft. The replacement draft
 // is the Web default (No comparison), so Replace with current controls
@@ -101,7 +108,7 @@ const DEFAULT_PLAN = { mode: 'none', defaultSource: 'losat', edges: [] };
 const assertNoReplacementDraft = () => {
   assert.deepEqual(state.activeDrawing().linearComparisonPlan, DEFAULT_PLAN);
   const draft = resolveLinearComparisonPlan({
-    plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+    plan: state.activeDrawing().linearComparisonPlan, sequences: modeDrawing(state, 'linear').linearSeqs, layout: [],
     losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
   });
   assert.equal(draft.valid && draft.hasComparisonIntent, false);
@@ -122,30 +129,34 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         const bytes = gunzipSync(await readFile(file));
         const session = JSON.parse(bytes);
         assert.equal(session.version, SESSION_VERSION);
-        assert.equal(session.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
+        // The CLI writes one drawing, the one it drew (Session 49).
+        const view = savedDrawingView(session, session.ui.activeDrawingId);
+        assert.equal(view.ui.mode, mode);
+        assert.equal(view.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
         assert.equal(Object.hasOwn(session, 'config'), false);
-        assert.equal(session.webFiles.bindings.schema, 2);
+        assert.equal(view.webFiles.bindings.schema, 2);
         const result = await load(bytes);
         assert.equal(result.status, 'ok', result.error?.stack);
         assert.equal(state.mode.value, mode);
-        assert.equal((mode === 'circular' ? state.cInputType : state.lInputType).value, label === 'gff' ? 'gff' : 'gb');
+        assert.equal(modeDrawing(state, mode).inputType.value, label === 'gff' ? 'gff' : 'gb');
+        assert.deepEqual(state.drawingList().map(drawing => drawing.mode), [mode], 'the Load makes no drawing of the other mode (D-15-120)');
         assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
-        assert.deepEqual(getCommittedCanonicalRenderRequest(), session.renderRequest);
+        assert.deepEqual(getCommittedCanonicalRenderRequest(), view.renderRequest);
         assert.ok(state.results.value.length > 0);
         if (label === 'single') assert.equal(state.activeDrawing().form.labels_mode, 'out');
-        assert.equal(session.renderRequest.diagramOptions.output.legend, legend);
+        assert.equal(view.renderRequest.diagramOptions.output.legend, legend);
         assert.equal(state.activeDrawing().form.legend, legend);
         if (mode === 'linear') {
-          assert.deepEqual(state.linearSeqs.map(seq => seq.uid), fileRecordKeys(session.renderRequest));
+          assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map(seq => seq.uid), fileRecordKeys(view.renderRequest));
           // B13: without -b the CLI commits only a disabled protein pipeline
           // (mode `none`, no pairs). The Web draft has no comparison, so the
           // request Generate builds has no comparison and starts no LOSAT run.
-          assert.ok(session.renderRequest.comparisons.every(item => (
+          assert.ok(view.renderRequest.comparisons.every(item => (
             item.kind === 'generatedProteinComparison' && item.mode === 'none' && item.pairs.length === 0
           )));
           assert.deepEqual(state.activeDrawing().linearComparisonPlan, { mode: 'none', defaultSource: 'losat', edges: [] });
           assert.notEqual(state.activeDrawing().losatProgram.value, 'blastp');
-          const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
+          const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
           const comparisonPlanSnapshot = resolveLinearComparisonPlan({
             plan: state.activeDrawing().linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
             losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
@@ -154,10 +165,10 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           const candidate = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot });
           assert.deepEqual(candidate.renderRequest.comparisons, []);
         }
-        const projectedFiles = mode === 'linear' ? state.linearSeqs.map(seq => seq.gb)
-          : label === 'gff' ? [] : [state.files.c_gb];
-        const sources = projectedFiles.filter(Boolean).flatMap(file => {
-          const source = getSessionResourceSource(file);
+        const projectedFiles = mode === 'linear' ? modeDrawing(state, 'linear').linearSeqs.map(seq => seq.gb)
+          : label === 'gff' ? [] : [modeDrawing(state, 'circular').files.c_gb];
+        const sources = projectedFiles.filter(Boolean).flatMap(ref => {
+          const source = getSessionResourceSource(state.inputFiles.fileOf(ref));
           return source.descriptors || [source];
         });
         assert.equal(sources.length, sourcePaths.length);
@@ -166,16 +177,17 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.ok(session.resources[source.resourceId]);
         }
         if (label === 'gff') {
-          assert.equal(hash(await readFileBytes(state.files.c_gff)), hash(await readFile(args[1])));
-          assert.equal(hash(await readFileBytes(state.files.c_fasta)), hash(await readFile(args[3])));
+          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(modeDrawing(state, 'circular').files.c_gff))), hash(await readFile(args[1])));
+          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(modeDrawing(state, 'circular').files.c_fasta))), hash(await readFile(args[3])));
         }
         // A draft in its retired home outside `modes` is dropped with no row
         // (A7f, E-OD03: the slice fills its place); Save still refuses it.
         const before = getCommittedCanonicalRenderRequest();
+        // Save checks each drawing's one-drawing view.
         const retiredSession = { ...session, config: { adv: { label_font_size: 99 } } };
-        assert.throws(() => validateSessionAuthorityInventory(retiredSession, session.version),
+        assert.throws(() => validateSessionAuthorityInventory({ ...view, config: retiredSession.config }, session.version),
           (error) => error?.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS');
-        assert.doesNotThrow(() => validateSessionAuthorityInventory(session, session.version));
+        assert.doesNotThrow(() => validateSessionAuthorityInventory(view, session.version));
         const retired = await load(JSON.stringify(retiredSession));
         assert.equal(retired.status, 'ok', retired.error?.stack);
         assert.deepEqual(retired.repairs, []);
@@ -203,7 +215,7 @@ await test('a main v42 CLI Linear BLAST sidecar keeps a read-only comparison wit
   const result = await load(bytes);
   assert.equal(result.status, 'ok', result.error?.stack);
   assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
-  assert.deepEqual(state.linearSeqs.map(seq => seq.uid), ['record-1', 'record-2']);
+  assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map(seq => seq.uid), ['record-1', 'record-2']);
   assert.deepEqual(fileRecordKeys(getCommittedCanonicalRenderRequest()), ['record-1', 'record-2']);
   assertNoReplacementDraft();
 });
@@ -225,14 +237,15 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     });
     const bytes = gunzipSync(await readFile(file));
     const session = JSON.parse(bytes);
-    assert.deepEqual(session.renderRequest.records.map(record => record.recordKey), ['record-1:1', 'record-1:2']);
-    assert.equal(session.webFiles.bindings.linearSeqs.length, 1);
+    const view = savedDrawingView(session, 'linear');
+    assert.deepEqual(view.renderRequest.records.map(record => record.recordKey), ['record-1:1', 'record-1:2']);
+    assert.equal(view.webFiles.bindings.linearSeqs.length, 1);
     const result = await load(bytes);
     assert.equal(result.status, 'ok', result.error?.stack);
     assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
     assertNoReplacementDraft();
     // The candidate Generate builds after Inherit (run-analysis.js: empty plan, committed comparison).
-    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
+    const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
     const candidate = buildCanonicalRenderRequest({
       state,
       drawing: state.activeDrawing(),
@@ -248,18 +261,19 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     assert.deepEqual([records[comparison.queryRecordIndex].recordKey, records[comparison.subjectRecordIndex].recordKey],
       ['record-1:1', 'record-1:2']);
     assert.deepEqual(records.map(record => [record.cardinality, record.selector]),
-      session.renderRequest.records.map(record => ['exactly_one', record.selector]));
-    assert.deepEqual(state.linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', 'R2c'], ['record-1:2', 'R3c']]);
-    const [first, second] = state.linearSeqs.map(seq => getSessionResourceSource(seq.gb));
+      view.renderRequest.records.map(record => ['exactly_one', record.selector]));
+    assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', 'R2c'], ['record-1:2', 'R3c']]);
+    const [first, second] = modeDrawing(state, 'linear').linearSeqs.map(seq => getSessionResourceSource(state.inputFiles.fileOf(seq.gb)));
     assert.equal(first.resourceId, second.resourceId);
     assert.equal(hash(Buffer.from(first.descriptor.data, 'base64')),
       hash(await readFile(path.join(root, 'tests/fixtures/web_comparison_shared_block.gb'))));
     // A CLI Session that stored a copy of each drawn record has no selectors;
     // each row takes the `#n` of its expanded recordKey.
-    const copies = { ...session, renderRequest: { ...session.renderRequest,
-      records: session.renderRequest.records.map(record => ({ ...record, selector: null })) } };
+    const copies = withSavedDrawingView(session, 'linear', (drawingView) => {
+      drawingView.renderRequest.records = drawingView.renderRequest.records.map(record => ({ ...record, selector: null }));
+    });
     assert.equal((await load(JSON.stringify(copies))).status, 'ok');
-    assert.deepEqual(state.linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', '#1'], ['record-1:2', '#2']]);
+    assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', '#1'], ['record-1:2', '#2']]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -282,13 +296,13 @@ await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew'
     // OV-1068: the CLI stores the results it computed as the Web Save does.
     const stored = [['precomputedProteinComparison', undefined], ['orthogroupResult', undefined],
       ['generatedProteinComparison', 'none']];
-    assert.deepEqual(session.renderRequest.comparisons.map(item => [item.kind, item.mode]), stored);
+    assert.deepEqual(savedDrawingView(session, 'linear').renderRequest.comparisons.map(item => [item.kind, item.mode]), stored);
     const result = await load(bytes);
     assert.equal(result.status, 'ok', result.error?.stack);
     assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
     assert.deepEqual(state.activeDrawing().linearComparisonPlan, { ...DEFAULT_PLAN, mode: 'adjacent' });
     assert.equal(state.activeDrawing().losatProgram.value, 'blastp');
-    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
+    const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
     // ... so the first Generate after Load reuses them instead of converting again.
     const blastp = state.activeDrawing().losat.blastp;
     assert.equal(canReuseResolvedProteinArtifacts({
@@ -319,7 +333,7 @@ from tests.utils.cli_session_cross_surface import resave_python
 resave_python(Path(${JSON.stringify(path.join(directory, 'protein.gbdraw-session.json'))}), Path(${JSON.stringify(resaved)}))
 `], { cwd: root, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000 });
     const resavedSession = JSON.parse(await readFile(resaved, 'utf8'));
-    assert.equal(resavedSession.cliInvocation, undefined);
+    assert.equal(savedDrawingView(resavedSession, 'linear').cliInvocation, undefined);
     assert.equal((await load(await readFile(resaved))).status, 'ok');
     assert.deepEqual(state.activeDrawing().linearComparisonPlan, { ...DEFAULT_PLAN, mode: 'adjacent' });
     assert.equal(state.activeDrawing().losatProgram.value, 'blastp');
@@ -353,7 +367,7 @@ request = LinearDiagramRequest(
 )
 save_session_document(Path(${JSON.stringify(file)}), request)
 `], { cwd: root, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000 });
-    const session = JSON.parse(await readFile(file, 'utf8'));
+    const session = savedDrawingView(JSON.parse(await readFile(file, 'utf8')), 'linear');
     assert.equal(session.cliInvocation, undefined);
     const pairs = [{ queryRecordIndex: 0, subjectRecordIndex: 1 }];
     assert.deepEqual(session.renderRequest.comparisons.map(item => [item.kind, item.mode, item.pairs]),
@@ -363,7 +377,7 @@ save_session_document(Path(${JSON.stringify(file)}), request)
     const drawing = state.activeDrawing();
     assert.equal(drawing.importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
     assert.deepEqual(drawing.linearComparisonPlan, DEFAULT_PLAN);
-    const filesData = await serializeActiveRenderFiles('linear', state, drawing);
+    const filesData = await serializeActiveRenderFiles(state, drawing);
     assert.equal(filesData.linearSeqs.length, 3);
     const candidate = buildCanonicalRenderRequest({ state, drawing,
       filesData: { ...filesData, linearCanonicalComparisons: [] },
@@ -389,7 +403,7 @@ await test('a 0.13.0 CLI Linear protein sidecar keeps the adjacent LOSATP plan i
   const loadDraft = async (document) => {
     const result = await load(JSON.stringify(document));
     assert.equal(result.status, 'ok', result.error?.stack);
-    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
+    const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
       losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
@@ -551,7 +565,7 @@ await test('a main v33 Web Session with Scale Interval 0 loads into the current 
   assert.equal(result.status, 'ok', result.error?.stack);
   assert.equal(state.mode.value, 'circular');
   assert.equal(state.activeDrawing().adv.scale_interval, 0);
-  const filesData = await serializeActiveRenderFiles('circular', state, state.activeDrawing());
+  const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
   const candidate = buildCanonicalRenderRequest({
     state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot: null
   });
@@ -565,18 +579,22 @@ await test('a main v33 Web Session with Scale Interval 0 loads into the current 
 // Sessions that store a Scale Interval of 0 or less (main fe6861f0 CLI and typed API,
 // main b05a6bb8 Web; scale-interval.provenance.json) load, and Load Feature Edits TSV
 // reads against their committed request.
+// D-15-136 (A): Python promotes a schema-2 request (Session 33) and reads its
+// interval <= 0 as automatic (D-04), so the committed request holds none; the
+// figure is the same. Every case still pins that no positive interval is committed.
 await test('a Session with a Scale Interval of 0 or less loads and reads a Feature Edits TSV', async () => {
-  for (const [name, stored] of [
-    ['scale-interval-zero-circular-cli.v44', (request) => request.diagramOptions.config.objects.scale.interval],
-    ['scale-interval-negative-linear-api.v44', (request) => request.diagramOptions.configOverrides['objects.scale.interval']],
-    // Load rebuilds a schema 2 request from the loaded fields (current path, literal 0).
-    ['scale-interval-zero-circular-web.v33', (request) => request.diagramOptions.configOverrides['objects.scale.interval']]
+  for (const [name, stored, absentWhenPromoted] of [
+    ['scale-interval-zero-circular-cli.v44', (request) => request.diagramOptions.config.objects.scale.interval, false],
+    ['scale-interval-negative-linear-api.v44', (request) => request.diagramOptions.configOverrides['objects.scale.interval'], false],
+    // A promoted schema 2 request: automatic (absent) or the literal value.
+    ['scale-interval-zero-circular-web.v33', (request) => request.diagramOptions.configOverrides?.['objects.scale.interval'], true]
   ]) {
     const fixture = path.join(root, `tests/fixtures/sessions/${name}.gbdraw-session.json.gz`);
     const result = await load(gunzipSync(await readFile(fixture)));
     assert.equal(result.status, 'ok', `${name}: ${JSON.stringify(result.error?.context ?? result.error)}`);
     const committed = getCommittedCanonicalRenderRequest();
-    assert.ok(stored(committed) <= 0, name);
+    const interval = stored(committed);
+    assert.ok((absentWhenPromoted && interval === undefined) || interval <= 0, `${name}: ${interval}`);
     const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-scale-interval-'));
     try {
       await writeFile(path.join(directory, 'request.json'), JSON.stringify(committed));
@@ -637,9 +655,10 @@ const CARD_ROWS = {
   '--qualifier_priority': drawing => cardRows(drawing.manualPriorityRules, 'qualifier_priority')
 };
 const CARD_MARKS = { '-t': 't_color', '-d': '#123456', '--label_whitelist': 'whitelist', '--qualifier_priority': 'qualifier_priority' };
-// A Session of the request and resources the Web renders.
+// A Session of the request and resources the Web renders, in the one-request
+// shape of Session 48, which Python still reads.
 const renderedSession = async ({ renderRequest, resources }) => JSON.stringify({
-  format: 'gbdraw-session', version: SESSION_VERSION, createdAt: '2026-10-09T00:00:00.000Z', renderRequest,
+  format: 'gbdraw-session', version: 48, createdAt: '2026-10-09T00:00:00.000Z', renderRequest,
   resources: Object.fromEntries(await Promise.all(Object.entries(resources).map(async ([id, descriptor]) => {
     if (typeof descriptor.data === 'string') return [id, descriptor];
     const bytes = await readFileBytes(getResourcePayloadOwner(descriptor));
@@ -652,7 +671,7 @@ const renderedSession = async ({ renderRequest, resources }) => JSON.stringify({
 // read-only CLI comparison (-b) as Inherit saved comparison does.
 const nextGenerate = async () => {
   const drawing = state.activeDrawing();
-  const filesData = await serializeActiveRenderFiles(state.mode.value, state, drawing);
+  const filesData = await serializeActiveRenderFiles(state, drawing);
   const inherit = drawing.importedComparisonIntent.disposition === 'PRESERVED_READ_ONLY';
   const candidate = buildCanonicalRenderRequest({ state, drawing,
     filesData: inherit ? { ...filesData, linearCanonicalComparisons: [] } : filesData,
@@ -678,12 +697,13 @@ await test('a CLI Session keeps its track narrowing settings through Load and th
     });
     const bytes = gunzipSync(await readFile(file));
     const session = JSON.parse(bytes);
-    const circular = session.renderRequest.diagramOptions.config.canvas.circular;
+    const view = savedDrawingView(session, session.ui.activeDrawingId);
+    const circular = view.renderRequest.diagramOptions.config.canvas.circular;
     assert.equal(circular.track_narrowing, false);
     assert.equal(circular.track_narrowing_min_px, 44);
     const result = await load(bytes);
     assert.equal(result.status, 'ok', result.error?.stack);
-    assert.deepEqual(getCommittedCanonicalRenderRequest(), session.renderRequest);
+    assert.deepEqual(getCommittedCanonicalRenderRequest(), view.renderRequest);
     const candidate = await nextGenerate();
     const options = candidate.renderRequest.diagramOptions;
     const sent = (leaf) => options.configOverrides?.[`canvas.circular.${leaf}`] ?? options.config?.canvas?.circular?.[leaf];
@@ -739,8 +759,10 @@ await test('only a Result without composition metadata takes the legacy composit
     const early = gunzipSync(await readFile('tests/fixtures/sessions/cli-linear-tables.v40-early.gbdraw-session.json.gz'));
     assert.equal(early.toString().includes('data-gbdraw-composition-schema='), false);
     // The fake DOM serializes the parsed text unchanged; the Playwright
-    // OV-273 case checks the composition the transform writes.
-    assert.deepEqual(await admission(early), { plan: ['MUTATING'], parses: 1, normalized: 1 });
+    // OV-273 case checks the composition the transform writes. The Session
+    // 40's stored figure is admitted with its catalog as written (`EMPTY`, no
+    // parse, OV-1932) before Load admits the committed set (`MUTATING`).
+    assert.deepEqual(await admission(early), { plan: ['EMPTY', 'MUTATING'], parses: 1, normalized: 1 });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -751,8 +773,10 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
   try {
     const checks = [];
     for (const entry of crossSurface('prepare', directory)) {
+      // A session-sourced case is the next test's.
+      if (!entry.args) continue;
       const first = checks.length;
-      const sources = { 'CLI Session': entry.cli_session, 'CLI re-save': entry.cli_resave, 'Python re-save': entry.python_resave };
+      const sources = { 'CLI Session': entry.cli_session, 'CLI re-save': entry.cli_resave, 'Python re-save': entry.python_resaves[entry.mode] };
       for (const [source, file] of Object.entries(sources)) {
         const result = await load(await readFile(file));
         assert.equal(result.status, 'ok', `${entry.id}, ${source}: ${result.error?.stack}`);
@@ -791,6 +815,10 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
         assert.equal(saved.status, 'saved', saved.error?.message);
         const webSave = path.join(directory, entry.id, 'web-save.json');
         await writeFile(webSave, gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
+        // Every drawing states its catalog, `null` for the drawing not generated yet (OV-1813).
+        const webSaved = JSON.parse(await readFile(webSave, 'utf8'));
+        assert.deepEqual(webSaved.drawings.map(item => [item.id, item.results.length > 0, item.editorState.featureCatalog === null]),
+          webSaved.drawings.map(item => [item.id, item.results.length > 0, item.results.length === 0]));
         checks.push({ label: `${entry.id}: Web save, CLI`, session: webSave, via: 'cli' },
           { label: `${entry.id}: Web save, Python`, session: webSave, via: 'python' });
         assert.equal((await load(await readFile(webSave))).status, 'ok');
@@ -798,12 +826,84 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
         await writeFile(resaved, await renderedSession(await nextGenerate()));
         checks.push({ label: `${entry.id}: Web save, Web Generate`, session: resaved, via: 'python' });
       }
-      checks.slice(first).forEach(item => Object.assign(item, { mode: entry.mode, expected: entry.svg }));
+      checks.slice(first).forEach(item => Object.assign(item, { mode: entry.mode, expected: entry.svgs[entry.mode] }));
     }
     const checksFile = path.join(directory, 'checks.json');
     await writeFile(checksFile, JSON.stringify(checks));
     const failed = crossSurface('check', checksFile).filter(item => !item.equal);
     assert.deepEqual(failed, []);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// D-15-81 flip: a Session 49 of several drawings. Load shows the drawing the
+// file opens (`ui.activeDrawingId`), Generate and the CLI re-saves draw it as
+// the CLI did (`gbdraw render --drawing ID`), and a Web Save keeps each
+// drawing's own LOSAT entries.
+await test('every drawing of a Session 49 draws the CLI figure after a Web Load, Generate, and Save', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-drawings-'));
+  try {
+    const checks = [];
+    const entriesOf = (session) => Object.fromEntries(session.drawings.map(
+      drawing => [drawing.id, (drawing.losatCache?.entries ?? []).map(item => item.key)]));
+    for (const entry of crossSurface('prepare', directory)) {
+      if (entry.args) continue;
+      const stored = JSON.parse(await readFile(entry.cli_session, 'utf8'));
+      for (const drawingId of entry.drawings) {
+        const expected = entry.svgs[drawingId];
+        const session = structuredClone(stored);
+        session.ui.activeDrawingId = drawingId;
+        // The app keeps the Result sets of the drawings Load does not show (`installLoadedArtifactSlots`) and
+        // gives them to Save (`readKeptArtifacts`); the shown drawing's is the committed one here.
+        let slots = { opening: null, stashed: [] };
+        const loaded = await load(Buffer.from(JSON.stringify(session)), { installLoadedArtifactSlots: (loadedSlots) => { slots = loadedSlots; } });
+        assert.equal(loaded.status, 'ok', `${entry.id}, ${drawingId}: ${loaded.error?.stack}`);
+        assert.equal(state.activeDrawing().id, drawingId, `${entry.id}: Load shows the drawing the file opens`);
+        assert.equal(slots.opening, null, `${entry.id}, ${drawingId}: the shown drawing's Result set is the committed one`);
+        const generated = path.join(directory, entry.id, `${drawingId} Generate.json`);
+        await writeFile(generated, await renderedSession(await nextGenerate()));
+        const saved = await exportSession(`${entry.id}-${drawingId}`, { readKeptArtifacts: () => slots.stashed });
+        assert.equal(saved.status, 'saved', saved.error?.message);
+        const webSave = path.join(directory, entry.id, `${drawingId} web-save.json`);
+        await writeFile(webSave, gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
+        // A Web Save writes into each drawing the entries its request's inputs name (DESIGN §1): each drawing keeps
+        // its request, and gets every entry of the file whose two rows its request names, so a drawing whose request
+        // names another drawing's rows gets that drawing's entries too (OV-1884).
+        const savedSession = JSON.parse(await readFile(webSave, 'utf8'));
+        const storedEntries = stored.drawings.flatMap(drawing => drawing.losatCache?.entries ?? []);
+        const requestOf = (session, id) => session.drawings.find(drawing => drawing.id === id)?.renderRequest ?? null;
+        const expectedEntries = Object.fromEntries(savedSession.drawings.map(({ id }) => {
+          const rows = new Set(requestOf(stored, id)?.records.map(record => record.recordKey) ?? []);
+          return [id, [...new Set(storedEntries.filter(item => rows.has(item.queryUid) && rows.has(item.subjectUid))
+            .map(item => item.key))].sort()];
+        }));
+        assert.deepEqual(Object.fromEntries(Object.entries(entriesOf(savedSession)).map(([id, keys]) => [id, [...keys].sort()])),
+          expectedEntries, `${entry.id}, ${drawingId}: a Web Save writes each drawing the LOSAT entries its request names`);
+        for (const { id } of savedSession.drawings) {
+          assert.equal(requestOf(savedSession, id) !== null, requestOf(stored, id) !== null,
+            `${entry.id}, ${drawingId}: ${id} keeps its request, and a drawing the file does not hold has none`);
+        }
+        for (const { id } of stored.drawings) {
+          assert.ok(savedSession.drawings.some(drawing => drawing.id === id), `${entry.id}, ${drawingId}: ${id} is written`);
+        }
+        const mode = state.mode.value;
+        const first = checks.length;
+        // A Generate of a drawing with LOSAT entries runs LOSAT in the browser; this test has no runner, so its
+        // request draws no comparison and only the Save cells compare.
+        if (!Object.values(entriesOf(stored)).some(keys => keys.length)) {
+          checks.push({ label: `${entry.id}/${drawingId}: Generate`, session: generated, via: 'python' });
+        }
+        checks.push(
+          { label: `${entry.id}/${drawingId}: Web save, CLI`, session: webSave, via: 'cli', drawing: drawingId },
+          { label: `${entry.id}/${drawingId}: Web save, Python`, session: webSave, via: 'python', drawing: drawingId }
+        );
+        checks.slice(first).forEach(item => Object.assign(item, { mode, expected }));
+      }
+    }
+    const checksFile = path.join(directory, 'checks.json');
+    await writeFile(checksFile, JSON.stringify(checks));
+    assert.deepEqual(crossSurface('check', checksFile).filter(item => !item.equal), []);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

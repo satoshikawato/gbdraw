@@ -1,3 +1,4 @@
+import { modeDrawing } from './helpers/drawing-state.mjs';
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -5,6 +6,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { LOSAT_WASM_BUILD } from '../../gbdraw/web/js/services/losat-build.generated.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 
 globalThis.window = {
   location: { href: 'https://audit.invalid/' },
@@ -241,7 +243,7 @@ const {
   installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
-const { createHistoryFileStore } = await import(
+const { createInputFileStore } = await import(
   '../../gbdraw/web/js/services/history-files.js'
 );
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
@@ -255,16 +257,22 @@ const {
 const {
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
-const { normalizeLinearSeqList, state } = await import('../../gbdraw/web/js/state.js');
+const { createDrawingState, state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+const { registerInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+// A binding holds refs of the project's file store, as the app's writers bind them.
+const bound = (value) => registerInputFileTree(state.inputFiles, value);
+const BOUND_FIELDS = ['c_gb', 'c_gff', 'c_fasta', 'c_depth', 'c_conservation_blasts', 'c_conservation_fastas', 'c_conservation_sequence_sources'];
+const boundFiles = (fields) => Object.fromEntries(Object.entries(fields)
+  .map(([key, value]) => [key, BOUND_FIELDS.includes(key) ? bound(value) : value]));
 const {
   readComparisonSequence, readComparisonSequenceDigest, readOncePerFile
 } = await import('../../gbdraw/web/js/services/record-discovery.js');
 
 const artifactSnapshots = createHistorySnapshotService({
   state,
-  fileStore: createHistoryFileStore(),
+  fileStore: createInputFileStore(),
   nextTick: window.Vue.nextTick,
-  normalizeLinearSeqList,
   buildUiStateData,
   applyUiStateData,
   buildFeatureStateData,
@@ -461,9 +469,8 @@ const committedFeatureState = () => structuredClone({
   featureColorOverrides: state.activeDrawing().featureColorOverrides,
   featureStrokeOverrides: state.activeDrawing().featureStrokeOverrides,
   legendEntries: state.activeDrawing().legendEntries.value,
-  featureEditorStatus: state.featureEditorStatus,
+  featureEditorStatus: state.featureEditorStatus.value,
   featureExtractionPending: state.featureExtractionPending.value,
-  featureExtractionError: state.featureExtractionError.value,
   featureRecordIds: state.featureRecordIds.value,
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   orthogroups: state.orthogroups.value,
@@ -649,19 +656,19 @@ test('a rerender admits the Results it draws again under their kept names (OV-13
 /** @param {AuditFile} primary @param {AuditInactiveFile} inactive */
 const installSimpleCircularInput = (primary, inactive) => {
   installShownDrawing('circular');
-  state.cInputType.value = 'gb';
-  state.files.c_gb = primary;
-  state.files.c_gff = null;
-  state.files.c_fasta = null;
-  state.files.c_depth = inactive;
-  state.files.c_conservation_blasts = [];
-  state.files.c_conservation_fastas = [];
-  state.files.c_conservation_sequence_sources = [];
-  state.files.d_color = inactive;
-  state.files.t_color = inactive;
-  state.files.blacklist = inactive;
-  state.files.whitelist = inactive;
-  state.files.qualifier_priority = inactive;
+  modeDrawing(state, 'circular').inputType.value = 'gb';
+  modeDrawing(state, 'circular').files.c_gb = bound(primary);
+  modeDrawing(state, 'circular').files.c_gff = bound(null);
+  modeDrawing(state, 'circular').files.c_fasta = bound(null);
+  modeDrawing(state, 'circular').files.c_depth = bound(inactive);
+  modeDrawing(state, 'circular').files.c_conservation_blasts = bound([]);
+  modeDrawing(state, 'circular').files.c_conservation_fastas = bound([]);
+  modeDrawing(state, 'circular').files.c_conservation_sequence_sources = bound([]);
+  modeDrawing(state, 'circular').files.d_color = inactive;
+  modeDrawing(state, 'circular').files.t_color = inactive;
+  modeDrawing(state, 'circular').files.blacklist = inactive;
+  modeDrawing(state, 'circular').files.whitelist = inactive;
+  modeDrawing(state, 'circular').files.qualifier_priority = inactive;
   state.activeDrawing().form.prefix = 'audit-simple';
   state.activeDrawing().form.show_depth = false;
   state.activeDrawing().form.multi_record_canvas = false;
@@ -669,20 +676,20 @@ const installSimpleCircularInput = (primary, inactive) => {
   state.activeDrawing().circularConservation.enabled = false;
   state.activeDrawing().circularConservation.source = 'upload';
   state.activeDrawing().annotationSets.splice(0);
-  state.circularRecordList.value = [{ selector: '#1', record_id: 'audit' }];
-  Object.assign(state.circularRecordDiscovery, {
+  modeDrawing(state, 'circular').circularRecordList.value = [{ selector: '#1', record_id: 'audit' }];
+  Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
     status: 'ready',
     error: '',
     inputType: 'gb',
-    primaryFile: primary,
+    primaryFile: bound(primary),
     pairedFile: null
   });
-  state.linearSeqs.splice(0, state.linearSeqs.length, {
+  state.drawingOf('linear').linearSeqs.splice(0, state.drawingOf('linear').linearSeqs.length, {
     uid: 'inactive-linear-row',
-    gb: inactive,
+    gb: bound(inactive),
     gff: null,
     fasta: null,
-    depth: inactive,
+    depth: bound(inactive),
     blast: null,
     losat_gencode: 1,
     losat_filename: '',
@@ -810,9 +817,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     },
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => {
       assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
-      return serializeActiveRenderFiles(state.mode.value, state, drawing);
+      return serializeActiveRenderFiles(state, drawing);
     },
-    canonicalSessionVersion: SESSION_VERSION,
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failArtifactAdoption) {
@@ -921,7 +927,14 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const replay = JSON.parse(replayEntry.text);
   assert.equal(replay.format, 'gbdraw-session');
   assert.equal(replay.version, SESSION_VERSION);
-  assert.equal(replay.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
+  // The exact replay is a Session 49 of the drawn drawing alone, by its ID and name (OV-1806).
+  const drawn = state.activeDrawing();
+  const drawnTab = state.drawingTabs.value.find((tab) => tab.id === drawn.id);
+  assert.deepEqual(replay.drawings.map(({ id, name }) => ({ id, name })), [{ id: drawn.id, name: drawnTab.name }]);
+  assert.equal(replay.ui.activeDrawingId, drawn.id);
+  const replayView = savedDrawingView(replay, drawn.id);
+  assert.equal(replayView.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
+  assert.equal(Object.hasOwn(replay, 'renderRequest'), false);
   assert.ok(Object.keys(replay.resources).length > 0);
 
   const firstRunPayload = workerMessages.find(({ type }) => type === 'run').payload;
@@ -1244,12 +1257,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(workerMessages.filter(({ type }) => type === 'feature-extraction').length, 0);
 
   state.activeDrawing().form.multi_record_canvas = true;
-  state.circularRecordList.value = [{ selector: '#1', record_id: 'audit' }];
-  Object.assign(state.circularRecordDiscovery, {
+  modeDrawing(state, 'circular').circularRecordList.value = [{ selector: '#1', record_id: 'audit' }];
+  Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
     status: 'ready',
     error: '',
     inputType: 'gb',
-    primaryFile: primary,
+    primaryFile: bound(primary),
     pairedFile: null
   });
   const readyResult = result('ready.svg', 'ready');
@@ -1307,14 +1320,14 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.deepEqual(await olderFailure, { status: 'stale' });
   assert.equal(state.errorLog.value, laterAlert);
 
-  Object.assign(state.circularRecordDiscovery, {
+  Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
     status: 'idle',
     error: '',
     inputType: '',
     primaryFile: null,
     pairedFile: null
   });
-  state.files.c_gb = fallbackPrimary;
+  modeDrawing(state, 'circular').files.c_gb = bound(fallbackPrimary);
   const workerRunCountBeforeDiscoveryFailure = workerMessages
     .filter(({ type }) => type === 'run')
     .length;
@@ -1345,7 +1358,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
 
   state.activeDrawing().form.multi_record_canvas = false;
   state.activeDrawing().form.show_depth = false;
-  state.files.c_depth = [[inactive]];
+  modeDrawing(state, 'circular').files.c_depth = bound([[inactive]]);
   state.activeDrawing().adv.circular_track_slots_enabled = true;
   state.activeDrawing().adv.circular_track_slots = [{
     id: 'custom-depth',
@@ -1354,7 +1367,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     side: 'inside',
     params: { track_index: 0 }
   }];
-  Object.assign(state.circularRecordDiscovery, {
+  Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
     status: 'idle',
     error: '',
     inputType: '',
@@ -1380,13 +1393,13 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       }
     });
   }));
-  state.circularRecordList.value = [];
-  state.files.c_gb = coalescedPrimary;
-  Object.assign(state.circularRecordDiscovery, {
+  modeDrawing(state, 'circular').circularRecordList.value = [];
+  modeDrawing(state, 'circular').files.c_gb = bound(coalescedPrimary);
+  Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
     status: 'loading',
     error: '',
     inputType: 'gb',
-    primaryFile: coalescedPrimary,
+    primaryFile: bound(coalescedPrimary),
     pairedFile: null,
     canonicalRecordIdentities: [{
       selector: '#1',
@@ -1394,15 +1407,15 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       recordKey: 'record-1'
     }]
   });
-  const firstCoalescedDiscovery = runner.refreshCircularRecordOrder();
-  const secondCoalescedDiscovery = runner.refreshCircularRecordOrder();
+  const firstCoalescedDiscovery = runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
+  const secondCoalescedDiscovery = runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
   assert.equal(firstCoalescedDiscovery, secondCoalescedDiscovery);
   await Promise.resolve();
   releaseCoalescedDiscovery();
   await Promise.all([firstCoalescedDiscovery, secondCoalescedDiscovery]);
-  assert.equal(state.circularRecordList.value[0].recordKey, 'record-1');
+  assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].recordKey, 'record-1');
   const identities = [{ selector: '#1', record_id: 'audit', recordKey: 'record-1' }];
-  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
+  assert.deepEqual(modeDrawing(state, 'circular').circularRecordDiscovery.canonicalRecordIdentities, identities);
 
   // IN-05 (OIPC-C06): an inactive Circular source keeps its records and the
   // Multi-Record Canvas order through a mode round trip without rereading them.
@@ -1412,62 +1425,62 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     { selector: '#1', row: 3 }
   );
   const circularStateBeforeRoundTrip = structuredClone({
-    records: state.circularRecordList.value,
+    records: modeDrawing(state, 'circular').circularRecordList.value,
     positions: state.activeDrawing().adv.multi_record_positions,
-    discovery: { ...state.circularRecordDiscovery }
+    discovery: { ...modeDrawing(state, 'circular').circularRecordDiscovery }
   });
   const helperRequestsBeforeRoundTrip = workerMessages.filter(({ type }) => type === 'helper').length;
   installShownDrawing('linear');
-  await runner.refreshCircularRecordOrder();
-  await runner.refreshCircularRecordOrder({ automatic: true });
+  await runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
+  await runner.refreshCircularRecordOrder({ automatic: true }, state.activeDrawing());
   installShownDrawing('circular');
-  await runner.refreshCircularRecordOrder({ automatic: true });
+  await runner.refreshCircularRecordOrder({ automatic: true }, state.activeDrawing());
   assert.deepEqual(structuredClone({
-    records: state.circularRecordList.value,
+    records: modeDrawing(state, 'circular').circularRecordList.value,
     positions: state.activeDrawing().adv.multi_record_positions,
-    discovery: { ...state.circularRecordDiscovery }
+    discovery: { ...modeDrawing(state, 'circular').circularRecordDiscovery }
   }), circularStateBeforeRoundTrip);
   assert.equal(
     workerMessages.filter(({ type }) => type === 'helper').length,
     helperRequestsBeforeRoundTrip
   );
-  assert.equal(state.circularRecordList.value[0].recordKey, 'record-1');
-  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
+  assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].recordKey, 'record-1');
+  assert.deepEqual(modeDrawing(state, 'circular').circularRecordDiscovery.canonicalRecordIdentities, identities);
 
   // Equal biological names on a different source cannot inherit the retired key,
   // even if replacement/removal happens while Circular is inactive.
   installShownDrawing('linear');
-  state.files.c_gb = new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb');
-  await runner.refreshCircularRecordOrder();
+  modeDrawing(state, 'circular').files.c_gb = bound(new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb'));
+  await runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
   installShownDrawing('circular');
-  await runner.refreshCircularRecordOrder({ automatic: true });
-  assert.equal(state.circularRecordList.value[0].record_id, 'audit');
-  assert.equal(state.circularRecordList.value[0].recordKey, undefined);
-  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
+  await runner.refreshCircularRecordOrder({ automatic: true }, state.activeDrawing());
+  assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].record_id, 'audit');
+  assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].recordKey, undefined);
+  assert.deepEqual(modeDrawing(state, 'circular').circularRecordDiscovery.canonicalRecordIdentities, []);
   installShownDrawing('linear');
-  state.files.c_gb = null;
-  await runner.refreshCircularRecordOrder();
-  assert.equal(state.circularRecordList.value[0].record_id, 'audit');
+  modeDrawing(state, 'circular').files.c_gb = bound(null);
+  await runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
+  assert.equal(modeDrawing(state, 'circular').circularRecordList.value[0].record_id, 'audit');
   installShownDrawing('circular');
-  await runner.refreshCircularRecordOrder({ automatic: true });
-  assert.deepEqual(state.circularRecordList.value, []);
+  await runner.refreshCircularRecordOrder({ automatic: true }, state.activeDrawing());
+  assert.deepEqual(modeDrawing(state, 'circular').circularRecordList.value, []);
   assert.deepEqual(state.activeDrawing().adv.multi_record_positions, []);
-  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
-  state.files.c_gb = fallbackPrimary;
+  assert.deepEqual(modeDrawing(state, 'circular').circularRecordDiscovery.canonicalRecordIdentities, []);
+  modeDrawing(state, 'circular').files.c_gb = bound(fallbackPrimary);
 
   state.activeDrawing().form.multi_record_canvas = true;
-  state.files.c_depth = null;
+  modeDrawing(state, 'circular').files.c_depth = bound(null);
   state.activeDrawing().adv.circular_track_slots_enabled = false;
   state.activeDrawing().adv.circular_track_slots = [];
-  state.circularRecordList.value = [];
-  Object.assign(state.circularRecordDiscovery, {
+  modeDrawing(state, 'circular').circularRecordList.value = [];
+  Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
     status: 'idle',
     error: '',
     inputType: '',
     primaryFile: null,
     pairedFile: null
   });
-  state.files.c_gb = fallbackPrimary;
+  modeDrawing(state, 'circular').files.c_gb = bound(fallbackPrimary);
   let releaseDiscovery;
   workerHelperResponses.push(new Promise((resolve) => {
     releaseDiscovery = () => resolve({
@@ -1497,13 +1510,13 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
 
   state.activeDrawing().form.multi_record_canvas = true;
-  state.files.c_gb = stalePrimary;
+  modeDrawing(state, 'circular').files.c_gb = bound(stalePrimary);
   state.activeDrawing().adv.multi_record_positions.splice(
     0,
     state.activeDrawing().adv.multi_record_positions.length,
     { selector: '#1', row: 2 }
   );
-  state.circularRecordList.value = [{
+  modeDrawing(state, 'circular').circularRecordList.value = [{
     selector: '#1',
     record_id: 'preserved-record',
     record_length: 123
@@ -1517,20 +1530,20 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       error: { name: 'Error', message: 'injected restored-file reparse failure' }
     });
   }));
-  const staleDiscovery = runner.refreshCircularRecordOrder();
+  const staleDiscovery = runner.refreshCircularRecordOrder(undefined, state.activeDrawing());
   await Promise.resolve();
   const discoveryStateBeforeRollback = {
-    records: structuredClone(state.circularRecordList.value),
+    records: structuredClone(modeDrawing(state, 'circular').circularRecordList.value),
     positions: structuredClone(state.activeDrawing().adv.multi_record_positions),
-    discovery: { ...state.circularRecordDiscovery }
+    discovery: { ...modeDrawing(state, 'circular').circularRecordDiscovery }
   };
   state.semanticFileWatchersSuppressed.value = true;
-  await runner.refreshCircularRecordOrder({ suppress: true });
+  await runner.refreshCircularRecordOrder({ suppress: true }, state.activeDrawing());
   releaseStaleDiscovery();
   await staleDiscovery;
-  assert.deepEqual(state.circularRecordList.value, discoveryStateBeforeRollback.records);
+  assert.deepEqual(modeDrawing(state, 'circular').circularRecordList.value, discoveryStateBeforeRollback.records);
   assert.deepEqual(state.activeDrawing().adv.multi_record_positions, discoveryStateBeforeRollback.positions);
-  assert.deepEqual(state.circularRecordDiscovery, discoveryStateBeforeRollback.discovery);
+  assert.deepEqual(modeDrawing(state, 'circular').circularRecordDiscovery, discoveryStateBeforeRollback.discovery);
   state.semanticFileWatchersSuppressed.value = false;
 });
 
@@ -1642,7 +1655,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   }
 
   installShownDrawing('circular');
-  state.cInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
   state.activeDrawing().form.prefix = 'lazy-circular';
   state.activeDrawing().form.show_depth = false;
   state.activeDrawing().form.multi_record_canvas = false;
@@ -1676,16 +1689,16 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       losat_gencode: 1
     }))
   );
-  state.files.c_gb = referenceView;
-  state.files.c_gff = null;
-  state.files.c_fasta = null;
-  state.files.c_depth = null;
-  state.files.c_conservation_blasts = [];
-  state.files.c_conservation_fastas = comparisonViews;
-  state.files.c_conservation_sequence_sources = [];
+  modeDrawing(state, 'circular').files.c_gb = bound(referenceView);
+  modeDrawing(state, 'circular').files.c_gff = bound(null);
+  modeDrawing(state, 'circular').files.c_fasta = bound(null);
+  modeDrawing(state, 'circular').files.c_depth = bound(null);
+  modeDrawing(state, 'circular').files.c_conservation_blasts = bound([]);
+  modeDrawing(state, 'circular').files.c_conservation_fastas = bound(comparisonViews);
+  modeDrawing(state, 'circular').files.c_conservation_sequence_sources = bound([]);
   state.activeDrawing().annotationSets.splice(0);
-  state.circularRecordList.value = [];
-  Object.assign(state.circularRecordDiscovery, {
+  modeDrawing(state, 'circular').circularRecordList.value = [];
+  Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
     status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
   });
 
@@ -1734,8 +1747,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows,
-    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
-    canonicalSessionVersion: SESSION_VERSION,
+    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
@@ -1864,7 +1876,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const bomReference = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOMA', 'BOMB'].map((id, index) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', `        1 ${['acgtacgt', 'ccccgggg'][index]}`, '//'
     ].join('\n')).join('\n') + '\n'], 'bom-reference.gb');
-    state.files.c_gb = bomReference;
+    modeDrawing(state, 'circular').files.c_gb = bound(bomReference);
     const helpersBeforeBomReference = workerMessages.filter(({ type }) => type === 'helper').length;
     // The record list of the new reference, then the subject database.
     workerHelperResponses.push(
@@ -1891,20 +1903,20 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // The new subject searched once; the Linear section below counts its own searches.
     assert.equal(losatCalls, 1);
     losatCalls = 0;
-    state.files.c_gb = referenceView;
+    modeDrawing(state, 'circular').files.c_gb = bound(referenceView);
 
     const invalidFile = Object.freeze({
       name: 'missing.gb', type: 'text/plain', size: 0, lastModified: 0
     });
-    state.files.c_gb = invalidFile;
-    state.circularRecordList.value = [
+    modeDrawing(state, 'circular').files.c_gb = bound(invalidFile);
+    modeDrawing(state, 'circular').circularRecordList.value = [
       { selector: '#1', record_id: 'missing', record_length: 1 }
     ];
-    Object.assign(state.circularRecordDiscovery, {
+    Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
       status: 'ready',
       error: '',
       inputType: 'gb',
-      primaryFile: invalidFile,
+      primaryFile: bound(invalidFile),
       pairedFile: null
     });
     assert.equal((await runner.runAnalysis()).status, 'error');
@@ -1945,7 +1957,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const middleView = createSessionResourceFileView(linearTable, 'middle');
     const thirdView = createSessionResourceFileView(linearTable, 'third');
     installShownDrawing('linear');
-    state.lInputType.value = 'gb';
+    modeDrawing(state, 'linear').inputType.value = 'gb';
     state.activeDrawing().form.prefix = 'lazy-linear';
     state.activeDrawing().form.show_depth = false;
     state.activeDrawing().form.linear_track_layout = 'middle';
@@ -1954,9 +1966,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().adv.comparison_height = null;
     state.activeDrawing().linearRecordLayoutEnabled.value = false;
     state.activeDrawing().linearRecordRows.splice(0);
-    state.linearSeqs.splice(0, state.linearSeqs.length, {
+    state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, {
       uid: 'multi',
-      gb: multiView,
+      gb: bound(multiView),
       gff: null,
       fasta: null,
       depth: null,
@@ -1971,7 +1983,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_reverse: true
     }, {
       uid: 'middle',
-      gb: middleView,
+      gb: bound(middleView),
       gff: null,
       fasta: null,
       depth: null,
@@ -1986,7 +1998,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_reverse: false
     }, {
       uid: 'third',
-      gb: thirdView,
+      gb: bound(thirdView),
       gff: null,
       fasta: null,
       depth: null,
@@ -2015,7 +2027,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       losatFilename: 'alpha.gbk',
       losatFilenameActive: true
     });
-    state.files.linearCanonicalComparisons = [];
+    modeDrawing(state, 'linear').files.linearCanonicalComparisons = [];
     state.activeDrawing().losatProgram.value = 'blastn';
     state.activeDrawing().losat.blastn.task = 'megablast';
     state.losatExecution.executionMode = 'serial';
@@ -2023,12 +2035,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
 
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan,
-      sequences: state.linearSeqs,
+      sequences: state.activeDrawing().linearSeqs,
       layout: [],
       losatProgram: state.activeDrawing().losatProgram.value,
       blastpMode: state.activeDrawing().losat.blastp.mode
     });
-    state.linearSeqs.find(({uid})=>uid==='middle').region_reverse=true;
+    state.activeDrawing().linearSeqs.find(({uid})=>uid==='middle').region_reverse=true;
     recordDisplayRows.value = [{ scope: 'linear', sourceUid: 'middle',
       key: JSON.stringify(['middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
       reverse: true, cropped: false, detectedTopology: 'linear' }];
@@ -2069,7 +2081,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const projectedRun = workerMessages.findLast(({ type }) => type === 'run').payload.request;
     assert.equal(projectedRun.records.find(({ recordKey }) => recordKey === 'middle')
       .presentation.reverseComplement, true);
-    assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
+    assert.equal(state.activeDrawing().linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     recordDisplayRows.value = [];
     assert.equal(
       resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount').length,
@@ -2154,7 +2166,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount'),
       []
     );
-    assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
+    assert.equal(state.activeDrawing().linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     failLateArtifactAdoption = false;
     state.activeDrawing().losat.blastn.task = 'megablast';
     assert.equal(state.errorLog.value?.code, 'UNKNOWN');
@@ -2195,7 +2207,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       proteinBlastpMaxHits: 5,
       proteinBlastpCandidateLimit: null
     };
-    state.files.linearCanonicalComparisons = [{
+    modeDrawing(state, 'linear').files.linearCanonicalComparisons = [{
       kind: 'precomputedProteinComparison',
       edgeKey: 'multi->third',
       ordinal: 0,
@@ -2224,7 +2236,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     };
     const warmComparisonPlan = resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan,
-      sequences: state.linearSeqs,
+      sequences: state.activeDrawing().linearSeqs,
       layout: [],
       losatProgram: state.activeDrawing().losatProgram.value,
       blastpMode: state.activeDrawing().losat.blastp.mode
@@ -2243,7 +2255,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // paralog links per group. The committed result was drawn with 3, so it is reused and the
     // request records 3.
     const pairwiseCommittedRequest = committedRenderRequest;
-    const pairwiseCanonicalComparisons = state.files.linearCanonicalComparisons;
+    const pairwiseCanonicalComparisons = modeDrawing(state, 'linear').files.linearCanonicalComparisons;
     const groupSettings = {
       proteinBlastpCandidateLimit: null,
       orthogroupMembershipMode: state.activeDrawing().losat.blastp.orthogroupMembershipMode,
@@ -2255,7 +2267,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().losat.blastp.mode = 'orthogroup';
     state.activeDrawing().losat.blastp.orthogroupMemberMaxHits = null;
     state.activeDrawing().losat.blastp.collinearMaxParalogLinksPerOrthogroup = 3;
-    state.files.linearCanonicalComparisons = [{
+    modeDrawing(state, 'linear').files.linearCanonicalComparisons = [{
       kind: 'orthogroupResult',
       encoding: 'canonicalJson',
       file: new AuditFile(['{"schema":3,"kind":"orthogroupResult","value":{}}\n'], 'groups.json')
@@ -2273,7 +2285,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.deepEqual(
       await runner.runAnalysis(resolveLinearComparisonPlan({
         plan: state.activeDrawing().linearComparisonPlan,
-        sequences: state.linearSeqs,
+        sequences: state.activeDrawing().linearSeqs,
         layout: [],
         losatProgram: state.activeDrawing().losatProgram.value,
         blastpMode: state.activeDrawing().losat.blastp.mode
@@ -2291,7 +2303,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().linearComparisonPlan.mode = 'selected';
     state.activeDrawing().losat.blastp.mode = 'pairwise';
     state.activeDrawing().losat.blastp.collinearMaxParalogLinksPerOrthogroup = 2;
-    state.files.linearCanonicalComparisons = pairwiseCanonicalComparisons;
+    modeDrawing(state, 'linear').files.linearCanonicalComparisons = pairwiseCanonicalComparisons;
     committedRenderRequest = pairwiseCommittedRequest;
     committedRenderRequest = {
       ...committedRenderRequest,
@@ -2342,7 +2354,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       await runner.runCommittedCanonicalCandidate({
         canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:alignmentPlan,translations:alignmentTranslations,orientations:alignmentOrientations}),
         label:'Align Similarity Group',
-        commitIntent:()=>alignmentOrientations.forEach(({recordKey,reverseComplement})=>{state.linearSeqs.find(s=>s.uid===recordKey).region_reverse=reverseComplement;})
+        commitIntent:()=>alignmentOrientations.forEach(({recordKey,reverseComplement})=>{state.activeDrawing().linearSeqs.find(s=>s.uid===recordKey).region_reverse=reverseComplement;})
       }),
       { status: 'ok' },
       JSON.stringify(state.errorLog.value)
@@ -2360,7 +2372,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ]));
     assert.equal(alignedOrientation.middle, true);
     assert.equal(
-      state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse,
+      state.activeDrawing().linearSeqs.find(({ uid }) => uid === 'middle').region_reverse,
       true,
       'successful admission must install the materialized base orientation'
     );
@@ -2409,12 +2421,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       `        1 ${bases[index % 4].repeat(4)}${bases[(index + 1) % 4].repeat(4)}`,
       '//'
     ].join('\n')).join('\n') + '\n'], 'thirteen.gb');
-    state.linearSeqs.splice(0, state.linearSeqs.length, ...[...recordIds, 'REC1'].map((id, index) => ({
-      uid: `card-${index + 1}`, gb: thirteenFile, gff: null, fasta: null, depth: null, blast: null,
+    state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, ...[...recordIds, 'REC1'].map((id, index) => ({
+      uid: `card-${index + 1}`, gb: bound(thirteenFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
       region_start: null, region_end: null, region_reverse: false
     })));
-    state.files.linearCanonicalComparisons = [];
+    modeDrawing(state, 'linear').files.linearCanonicalComparisons = [];
     state.similarityAlignmentPlan.value = null;
     state.linearRecordTranslations.value = [];
     state.losatCacheInfo.value = [];
@@ -2425,7 +2437,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().linearComparisonPlan.edges.splice(0);
     const thirteenPlan = resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan,
-      sequences: state.linearSeqs,
+      sequences: state.activeDrawing().linearSeqs,
       layout: [],
       losatProgram: 'blastn',
       blastpMode: state.activeDrawing().losat.blastp.mode
@@ -2465,9 +2477,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // GenBank bytes. It stages the record source under the resource id and token the Worker
     // holds, so Python reads the records that Generate parsed; and it leaves the staging cache
     // as it was, so the next Generate sends nothing either.
-    state.linearSeqs.splice(2);
+    state.activeDrawing().linearSeqs.splice(2);
     const twoPlan = resolveLinearComparisonPlan({
-      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
       losatProgram: 'blastn', blastpMode: state.activeDrawing().losat.blastp.mode
     });
     const twoResult = result('two-cards.svg', 'two-cards');
@@ -2477,7 +2489,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const drawnToken = drawnRun.resourceManifest.find(({ resourceId }) => resourceId === 'record-1-genbank').cacheToken;
     state.activeDrawing().losatProgram.value = 'blastp';
     state.activeDrawing().losat.blastp.mode = 'pairwise';
-    state.files.linearCanonicalComparisons = [];
+    modeDrawing(state, 'linear').files.linearCanonicalComparisons = [];
     const helpersBeforeProteins = workerMessages.length;
     workerHelperResponses.splice(0);
     ['REC1', 'REC2'].forEach((recordId) => workerHelperResponses.push({ ok: true, result: {
@@ -2487,7 +2499,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     } }));
     // The Generate stops after the extractions: these replies carry no protein identity manifest.
     assert.equal((await runner.runAnalysis(resolveLinearComparisonPlan({
-      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
       losatProgram: 'blastp', blastpMode: 'pairwise'
     }))).status, 'error');
     const extractions = workerMessages.slice(helpersBeforeProteins)
@@ -2513,13 +2525,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const uploadFile = new AuditFile([['UP1', 'UP2', 'UP3'].map((id) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
     ].join('\n')).join('\n') + '\n'], 'upload.gb', { lastModified: 7 });
-    state.linearSeqs.splice(0, state.linearSeqs.length, ...['UP1', 'UP2', 'UP3'].map((id, index) => ({
-      uid: `upload-${index + 1}`, gb: uploadFile, gff: null, fasta: null, depth: null, blast: null,
+    state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, ...['UP1', 'UP2', 'UP3'].map((id, index) => ({
+      uid: `upload-${index + 1}`, gb: bound(uploadFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
       region_start: null, region_end: null, region_reverse: false
     })));
     const uploadPlan = (losatProgram) => resolveLinearComparisonPlan({
-      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
       losatProgram, blastpMode: 'pairwise'
     });
     state.activeDrawing().losatProgram.value = 'blastp';
@@ -2571,8 +2583,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const insertedFile = new AuditFile([
       'LOCUS       NEW1 8 bp DNA\nORIGIN\n        1 ggggcccc\n//\n'
     ], 'inserted.gb', { lastModified: 9 });
-    state.linearSeqs.unshift({
-      uid: 'inserted-1', gb: insertedFile, gff: null, fasta: null, depth: null, blast: null,
+    state.activeDrawing().linearSeqs.unshift({
+      uid: 'inserted-1', gb: bound(insertedFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: 'NEW1',
       region_start: null, region_end: null, region_reverse: false
     });
@@ -2602,14 +2614,14 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       .filter(({ resourceId }) => resourceId.startsWith('record-'))
       .reduce((total, { bytes }) => total + bytes.byteLength, 0);
     assert.equal(recordBytesSent, insertedFile.size);
-    state.linearSeqs.splice(2);
+    state.activeDrawing().linearSeqs.splice(2);
 
     // A file that starts with a UTF-8 byte order mark: the record list leaves the file to the Python reader,
     // and the LOSAT FASTA does too.
     const bomFile = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOM1', 'BOM2'].map((id) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
     ].join('\n')).join('\n') + '\n'], 'bom.gb');
-    state.linearSeqs.forEach((seq, index) => Object.assign(seq, { gb: bomFile, region_record_id: `BOM${index + 1}` }));
+    state.activeDrawing().linearSeqs.forEach((seq, index) => Object.assign(seq, { gb: bound(bomFile), region_record_id: `BOM${index + 1}` }));
     ['BOM1', 'BOM2'].forEach((id) => workerHelperResponses.push({ ok: true, result: {
       fasta: `>${id}\nACGTACGT\n`, record_id: id, record_length: 8
     } }));
@@ -2628,9 +2640,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // GFF3 resource as the record's GFF3 file and the FASTA resource as its FASTA file, in that order.
     const gffFile = new AuditFile(['##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n'], 'pair.gff');
     const pairedFasta = new AuditFile(['>G1\nATGAAATAA\n'], 'pair.fasta');
-    state.lInputType.value = 'gff';
+    modeDrawing(state, 'linear').inputType.value = 'gff';
     state.activeDrawing().losatProgram.value = 'blastn';
-    state.linearSeqs.forEach((seq) => Object.assign(seq, { gb: null, gff: gffFile, fasta: pairedFasta, region_record_id: 'G1' }));
+    state.activeDrawing().linearSeqs.forEach((seq) => Object.assign(seq, { gb: null, gff: bound(gffFile), fasta: bound(pairedFasta), region_record_id: 'G1' }));
     const pairResult = result('gff-pair.svg', 'gff-pair');
     workerResponses.push(response(pairResult, validCatalog(pairResult.name)));
     assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
@@ -2644,7 +2656,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       runtime_binding_hash: `rt-${index}`, display_binding_hash: `dp-${index}`, identity_manifest: null
     } }));
     assert.equal((await runner.runAnalysis(resolveLinearComparisonPlan({
-      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
       losatProgram: 'blastp', blastpMode: 'pairwise'
     }))).status, 'error');
     const pairExtractions = workerMessages.slice(helpersBeforePair)
@@ -2670,8 +2682,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       '##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\nG2\t.\tCDS\t1\t9\t.\t+\t0\tID=c2\n'
     ], 'named.gff');
     const extraFasta = new AuditFile(['>X\nCCCCCCCCC\n>G1\nATGAAATAA\n>G2\nATGGGGTAA\n'], 'extra.fasta');
-    state.linearSeqs.forEach((seq, index) => Object.assign(seq, {
-      gff: namedGff, fasta: extraFasta, region_record_id: `#${index + 1}`
+    state.activeDrawing().linearSeqs.forEach((seq, index) => Object.assign(seq, {
+      gff: bound(namedGff), fasta: bound(extraFasta), region_record_id: `#${index + 1}`
     }));
     let searched = [];
     globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
@@ -2686,12 +2698,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // entry X has no GFF3 feature draws G1, so LOSAT searches G1 (OV-1681).
     const g1Gff = new AuditFile(['##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n'], 'g1-only.gff');
     const xFirstFasta = new AuditFile(['>X\nCCCCCCCCC\n>G1\nATGAAATAA\n'], 'x-first.fasta');
-    Object.assign(state.linearSeqs[0], { gff: g1Gff, fasta: xFirstFasta, region_record_id: '' });
+    Object.assign(state.activeDrawing().linearSeqs[0], { gff: bound(g1Gff), fasta: bound(xFirstFasta), region_record_id: '' });
     const autoResult = result('gff-auto.svg', 'gff-auto');
     workerResponses.push(response(autoResult, validCatalog(autoResult.name)));
     assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
     assert.deepEqual([...new Set(searched.map((fasta) => fasta.split('\n')[0]))].sort(), ['>G1', '>G2']);
-    state.lInputType.value = 'gb';
+    modeDrawing(state, 'linear').inputType.value = 'gb';
   } finally {
     state.similarityAlignmentPlan.value = null;
     state.linearRecordTranslations.value = [];
@@ -2744,17 +2756,16 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
     label: 'query', color: '#4e79a7', losat_gencode: 1
   });
   drawing.annotationSets.splice(0);
-  Object.assign(state.files, {
+  Object.assign(modeDrawing(state, 'circular').files, boundFiles({
     c_depth: null, c_conservation_blasts: [], c_conservation_fastas: [queryFile],
     c_conservation_sequence_sources: []
-  });
+  }));
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows: { value: [] },
-    serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state.mode.value, state, active),
+    serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state, active),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
-    canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
     getCommittedCanonicalSession: () => null,
     prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
@@ -2799,16 +2810,16 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
         role, new AuditFile([Buffer.from(data, 'base64')], `ring-subject-${index}-${role}`)
       ]));
       const gff = Boolean(files.fasta);
-      state.cInputType.value = gff ? 'gff' : 'gb';
-      Object.assign(state.files, {
+      modeDrawing(state, 'circular').inputType.value = gff ? 'gff' : 'gb';
+      Object.assign(modeDrawing(state, 'circular').files, boundFiles({
         c_gb: gff ? null : files.source, c_gff: gff ? files.source : null, c_fasta: gff ? files.fasta : null
-      });
-      state.circularRecordList.value = testCase.recordList.map(({ id, length }, recordIndex) => ({
+      }));
+      modeDrawing(state, 'circular').circularRecordList.value = testCase.recordList.map(({ id, length }, recordIndex) => ({
         selector: `#${recordIndex + 1}`, record_id: id, record_length: length
       }));
-      Object.assign(state.circularRecordDiscovery, {
+      Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
         status: 'ready', error: '', inputType: gff ? 'gff' : 'gb',
-        primaryFile: files.source, pairedFile: gff ? files.fasta : null
+        primaryFile: bound(files.source), pairedFile: bound(gff ? files.fasta : null)
       });
       Object.assign(drawing.form, {
         circular_record_selector: webState.selector, multi_record_canvas: webState.multi,
@@ -2878,7 +2889,7 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
       circular_record_selector: '', multi_record_canvas: false, circular_region_start: null, circular_region_end: null
     });
     drawing.circularConservation.enabled = false;
-    state.files.c_conservation_fastas = [];
+    modeDrawing(state, 'circular').files.c_conservation_fastas = bound([]);
     if (previousLosatExecutor === undefined) {
       delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
     } else {
@@ -2898,7 +2909,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const staleCanonical = new AuditInactiveFile(['unused canonical'], 'stale-canonical.tsv');
 
   installShownDrawing('linear');
-  state.lInputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
   state.activeDrawing().form.prefix = 'linear-none';
   state.activeDrawing().form.show_depth = true;
   state.activeDrawing().form.multi_record_canvas = false;
@@ -2914,13 +2925,13 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   }];
   state.activeDrawing().linearRecordLayoutEnabled.value = false;
   state.activeDrawing().linearRecordRows.splice(0);
-  state.linearSeqs.splice(0, state.linearSeqs.length,
+  state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length,
     {
       uid: 'linear-none-first',
-      gb: first,
+      gb: bound(first),
       gff: null,
       fasta: null,
-      depth,
+      depth: bound(depth),
       blast: dormantUpload,
       losat_gencode: 1,
       definition: '',
@@ -2932,7 +2943,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     },
     {
       uid: 'linear-none-second',
-      gb: second,
+      gb: bound(second),
       gff: null,
       fasta: null,
       depth: null,
@@ -3004,7 +3015,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   state.losatCache.value = dormantRawCache;
   state.losatDerivedCache.value = dormantDerivedCache;
   state.losatCacheInfo.value = [{ key: 'dormant-display-cache' }];
-  state.files.linearCanonicalComparisons = [{
+  modeDrawing(state, 'linear').files.linearCanonicalComparisons = [{
     kind: 'precomputed',
     edgeKey: 'linear-none-first->linear-none-second',
     queryIndex: 0,
@@ -3041,7 +3052,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
 
   const comparisonPlanSnapshot = resolveLinearComparisonPlan({
     plan: state.activeDrawing().linearComparisonPlan,
-    sequences: state.linearSeqs,
+    sequences: state.activeDrawing().linearSeqs,
     layout: [],
     losatProgram: state.activeDrawing().losatProgram.value,
     blastpMode: state.activeDrawing().losat.blastp.mode
@@ -3074,10 +3085,9 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       serializeCalls += 1;
       serializedSnapshot = snapshot;
       serializedRecordCatalog = recordCatalog;
-      return serializeActiveRenderFiles(state.mode.value, state, drawing, snapshot);
+      return serializeActiveRenderFiles(state, drawing, snapshot);
     },
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
-    canonicalSessionVersion: SESSION_VERSION,
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => {
@@ -3212,7 +3222,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   });
   const committedResults = state.results.value;
   const workerRunsBeforeCancel = workerMessages.filter(({ type }) => type === 'run').length;
-  const priorOrientations = state.linearSeqs.map(({ uid, region_reverse }) => ({
+  const priorOrientations = state.activeDrawing().linearSeqs.map(({ uid, region_reverse }) => ({
     recordKey: uid, reverseComplement: Boolean(region_reverse)
   }));
   const canceledRun = runner.runAnalysis(comparisonPlanSnapshot);
@@ -3222,7 +3232,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   await runner.cancelRunAnalysis();
   releaseRecordCatalog({ catalog: preparedRecordCatalog, error: '' });
   assert.deepEqual(await canceledRun, { status: 'canceled' });
-  assert.deepEqual(state.linearSeqs.map(({ uid, region_reverse }) => ({
+  assert.deepEqual(state.activeDrawing().linearSeqs.map(({ uid, region_reverse }) => ({
     recordKey: uid, reverseComplement: Boolean(region_reverse)
   })), priorOrientations);
   assert.equal(state.results.value, committedResults);
@@ -3270,7 +3280,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.deepEqual(state.results.value, [newestResult]);
   releaseSupersededCatalog({ catalog: preparedRecordCatalog, error: '' });
   assert.deepEqual(await supersededRun, { status: 'stale' });
-  assert.deepEqual(state.linearSeqs.map(({ uid, region_reverse }) => ({
+  assert.deepEqual(state.activeDrawing().linearSeqs.map(({ uid, region_reverse }) => ({
     recordKey: uid, reverseComplement: Boolean(region_reverse)
   })), priorOrientations);
   assert.deepEqual(state.results.value, [newestResult]);
@@ -3449,8 +3459,7 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
       waits.task += 1;
       return afterTask();
     },
-    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
-    canonicalSessionVersion: SESSION_VERSION,
+    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
@@ -3521,7 +3530,7 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
   const genbank = new AuditFile(['LOCUS rowheight\nORIGIN\n        1 acgtacgt\n//\n'], 'row-height.gb');
   const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `row-height-depth-${n}.tsv`);
   installShownDrawing('linear');
-  state.lInputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
   const drawing = state.activeDrawing();
   drawing.form.prefix = 'row-height';
   drawing.form.show_depth = true;
@@ -3531,12 +3540,12 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
   drawing.linearComparisonPlan.mode = 'none';
   drawing.linearComparisonPlan.edges.splice(0);
   drawing.annotationSets.splice(0);
-  state.linearSeqs.splice(0, state.linearSeqs.length, {
+  state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, {
     uid: 'row-height',
-    gb: genbank,
+    gb: bound(genbank),
     gff: null,
     fasta: null,
-    depth: [depthFile(1), depthFile(2)],
+    depth: bound([depthFile(1), depthFile(2)]),
     blast: null,
     losat_gencode: 1,
     definition: '',
@@ -3567,10 +3576,9 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
     ...generatedArtifactHandleOptions,
     state,
     serializeCanonicalFiles: (snapshot, recordCatalog, activeDrawing) => (
-      serializeActiveRenderFiles(state.mode.value, state, activeDrawing, snapshot)
+      serializeActiveRenderFiles(state, activeDrawing, snapshot)
     ),
     prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
-    canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => '',
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
@@ -3601,7 +3609,7 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
 test('Circular Generate gives a Depth series without settings its default color', async () => {
   const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `circular-series-${n}.tsv`);
   installShownDrawing('circular');
-  state.cInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
   const drawing = state.activeDrawing();
   drawing.form.prefix = 'circular-series';
   drawing.form.show_depth = true;
@@ -3609,7 +3617,7 @@ test('Circular Generate gives a Depth series without settings its default color'
   drawing.annotationSets.splice(0);
   drawing.circularConservation.enabled = false;
   drawing.circularConservation.series.splice(0);
-  Object.assign(state.files, {
+  Object.assign(modeDrawing(state, 'circular').files, boundFiles({
     c_gb: new AuditFile(['LOCUS circularseries\nORIGIN\n        1 acgtacgt\n//\n'], 'circular-series.gb'),
     c_gff: null,
     c_fasta: null,
@@ -3617,9 +3625,9 @@ test('Circular Generate gives a Depth series without settings its default color'
     c_conservation_blasts: [],
     c_conservation_fastas: [],
     c_conservation_sequence_sources: []
-  });
-  state.circularRecordList.value = [];
-  Object.assign(state.circularRecordDiscovery, {
+  }));
+  modeDrawing(state, 'circular').circularRecordList.value = [];
+  Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, {
     status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
   });
   const depthRow = (id, trackIndex) => ({ id, renderer: 'depth', enabled: true, side: 'inside', params: { track_index: trackIndex } });
@@ -3638,9 +3646,8 @@ test('Circular Generate gives a Depth series without settings its default color'
     recordDisplayRows: { value: [] },
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => (
-      serializeActiveRenderFiles(state.mode.value, state, activeDrawing)
+      serializeActiveRenderFiles(state, activeDrawing)
     ),
-    canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => '',
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
@@ -3663,4 +3670,44 @@ test('Circular Generate gives a Depth series without settings its default color'
     [drawing.adv.depth_tracks.map((track) => track.color), request.diagramOptions.depthTracks.map((track) => track.color)],
     [['#AA0000', '#E45756'], ['#AA0000', '#E45756']]
   );
+});
+
+// The Circular record refresh reads into the drawing its caller gives
+// (Generate: the drawing it pinned), not the drawing named by the mode, and
+// shares an in-flight read only with calls for the same drawing.
+test('the Circular record refresh writes the drawing it reads and keys its read by drawing ID', async () => {
+  installShownDrawing('circular');
+  const named = state.activeDrawing();
+  const second = createDrawingState('circular-2', 'circular');
+  state.addDrawing(second, 'Circular 2', 2);
+  try {
+    installShownDrawing(second.id);
+    modeDrawing(state, 'circular').inputType.value = 'gb';
+    second.files.c_gb = bound(new AuditFile(['LOCUS refresh 10 bp DNA circular\n//\n'], 'refresh-owner.gb'));
+    second.circularRecordList.value = [];
+    Object.assign(second.circularRecordDiscovery, {
+      status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null, canonicalRecordIdentities: []
+    });
+    named.adv.multi_record_positions.splice(0, named.adv.multi_record_positions.length);
+    const runner = createRunAnalysis({ ...generatedArtifactHandleOptions, state, resetPreviewViewport: () => {} });
+    const reply = { ok: true, result: { records: [{ selector: '#1', record_id: 'refresh', record_length: 10 }] } };
+    workerHelperResponses.splice(0, workerHelperResponses.length, reply);
+    await runner.refreshCircularRecordOrder({}, second);
+    assert.deepEqual(
+      [second.adv.multi_record_positions.map((position) => position.selector), named.adv.multi_record_positions],
+      [['#1'], []]
+    );
+
+    let release;
+    workerHelperResponses.splice(0, workerHelperResponses.length, new Promise((resolve) => { release = () => resolve(reply); }), reply);
+    second.circularRecordDiscovery.status = 'idle';
+    const pinned = runner.refreshCircularRecordOrder({}, second);
+    assert.equal(runner.refreshCircularRecordOrder({ automatic: true }, second), pinned, 'a call for the same drawing shares the read');
+    assert.notEqual(runner.refreshCircularRecordOrder({}, named), pinned, 'another drawing of the mode reads on its own');
+    release();
+    await pinned;
+  } finally {
+    installShownDrawing('circular');
+    state.removeDrawing(second.id, { takeSlot: () => null });
+  }
 });

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -45,7 +46,8 @@ const {
   validateCurrentWriterActiveConfig
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { importSession } = callerSession(sessionConfig, state);
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const { floatSettingsSection, returnSettingsSection } = await import('../../gbdraw/web/js/services/settings-pane-state.js');
 const {
   buildCanonicalRenderRequest,
@@ -64,19 +66,16 @@ const {
 const { createLegendCanvasActions } = await import(
   '../../gbdraw/web/js/app/legend-layout/canvas-actions.js'
 );
-const { createSessionImportRollbackState } = await import(
+const { createSessionImportRollbackState, transformLegacyResultSvg } = await import(
   '../../gbdraw/web/js/app/app-setup.js'
-);
-const { runRecordDiscoveryWatcher } = await import(
-  '../../gbdraw/web/js/app/watchers.js'
 );
 
 const compactActiveIntentSnapshot = () => ({
   modeAndInput: {
     mode: state.mode.value,
     inputType: state.mode.value === 'circular'
-      ? state.cInputType.value
-      : state.lInputType.value
+      ? modeDrawing(state, 'circular').inputType.value
+      : modeDrawing(state, 'linear').inputType.value
   },
   palette: {
     selected: state.activeDrawing().selectedPalette.value,
@@ -377,14 +376,14 @@ const divergentSession = JSON.parse(await readFile(
   'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json',
   'utf8'
 ));
-// The Linear drawing's draft is its Session 46 slice.
-const divergentSlice = divergentSession.modes.linear;
+// The Linear drawing's draft is the one drawing of the Session 50.
+const divergentSlice = divergentSession.drawings[0];
 divergentSlice.ui ||= {};
 // This test isolates comparison draft behavior from the unreleased schema-1 Gallery plan.
-divergentSession.renderRequest.layout.similarityAlignment = null;
+divergentSession.drawings[0].renderRequest.layout.similarityAlignment = null;
 // The Reset evidence of an Align binds that plan, so it goes with it.
-if (divergentSession.editorState) divergentSession.editorState.alignmentResetReceipt = null;
-const committedComparisonCount = divergentSession.renderRequest.comparisons.length;
+if (divergentSlice.editorState) divergentSlice.editorState.alignmentResetReceipt = null;
+const committedComparisonCount = divergentSession.drawings[0].renderRequest.comparisons.length;
 assert.ok(committedComparisonCount > 0);
 divergentSlice.config.linearComparisonPlan = {
   mode: 'none',
@@ -445,13 +444,13 @@ const dormantComparisonDraft = structuredClone({
       divergentSlice.config.losat.blastp.collinearColorMode
   }
 });
-divergentSession.renderRequest.diagramOptions.output.legend = 'right';
-divergentSession.ui.generatedLegendPosition = 'right';
+divergentSession.drawings[0].renderRequest.diagramOptions.output.legend = 'right';
+divergentSlice.ui.generatedLegendPosition = 'right';
 // The Linear slot of the layout (the slice holds its own mode's slot).
 divergentSlice.ui.layoutPreferences = { legend: 'bottom', plotTitlePosition: 'bottom' };
 divergentSession.ui.paletteInstantPreviewEnabled = false;
-divergentSession.ui.appliedPaletteName = 'orchid';
-divergentSession.ui.appliedPaletteColors = { CDS: '#123456' };
+divergentSlice.ui.appliedPaletteName = 'orchid';
+divergentSlice.ui.appliedPaletteColors = { CDS: '#123456' };
 divergentSlice.ui.pendingPaletteName = 'mint';
 divergentSlice.ui.pendingPaletteColors = { CDS: '#abcdef' };
 const importEvent = {
@@ -537,7 +536,7 @@ const legacyLayoutFields = [
 ];
 const withoutStoredLayoutPreferences = () => {
   const payload = structuredClone(divergentSession);
-  delete payload.modes.linear.ui.layoutPreferences;
+  delete payload.drawings[0].ui.layoutPreferences;
   legacyLayoutFields.forEach((field) => delete payload.ui[field]);
   return payload;
 };
@@ -552,7 +551,7 @@ const importPayload = async (payload, options = {}) => importSession({
 // (PD-OI-009, before the Font setting) loads it into the setting, so no
 // preserved override names a path the GUI manages (custom-fonts PR-2).
 const preservedFontSession = structuredClone(divergentSession);
-const preservedFontSlice = preservedFontSession.modes.linear;
+const preservedFontSlice = preservedFontSession.drawings[0];
 preservedFontSlice.config ||= {};
 preservedFontSlice.config.adv ||= {};
 delete preservedFontSlice.config.adv.font_family;
@@ -563,14 +562,14 @@ assert.equal(modeDrawing(state, 'linear').adv.font_family, "'DejaVu Serif', seri
 assert.deepEqual({ ...modeDrawing(state, 'linear').unmanagedConfigOverrides }, {});
 
 const decisionRequiredSession = structuredClone(divergentSession);
-decisionRequiredSession.renderRequest.comparisons = [{
+decisionRequiredSession.drawings[0].renderRequest.comparisons = [{
   kind: 'nucleotideBlast',
   resourceId: 'missing-comparison-resource',
   queryRecordIndex: 0,
   subjectRecordIndex: 1
 }];
-decisionRequiredSession.losatCache = { entries: [] };
-decisionRequiredSession.losatDerivedCache = { entries: [] };
+decisionRequiredSession.drawings[0].losatCache = { entries: [] };
+decisionRequiredSession.drawings[0].losatDerivedCache = { entries: [] };
 const decisionRequiredDialogs = [];
 const decisionRequiredImport = await importPayload(decisionRequiredSession, {
   confirmLoadRepairs: async ({ items }) => { decisionRequiredDialogs.push(items); return true; }
@@ -583,7 +582,7 @@ assert.equal(
 // Load lists the comparison that names a resource the Session lacks (OV-951)
 // and asks once; the drawing still records that a decision is required.
 assert.deepEqual(decisionRequiredImport.repairs.map(({ code, path, effect }) => [code, path, effect]), [
-  ['request-reference-dropped', 'renderRequest.comparisons[0]', 'dropped']
+  ['request-reference-dropped', 'drawings[0].renderRequest.comparisons[0]', 'dropped']
 ]);
 assert.equal(decisionRequiredDialogs.length, 1);
 assert.equal(decisionRequiredImport.comparisonDisposition, 'DECISION_REQUIRED');
@@ -593,8 +592,8 @@ assert.deepEqual(state.activeDrawing().importedComparisonIntent, {
   message: 'The saved comparison is missing a required resource.',
   hasCommittedComparison: true
 });
-assert.equal(state.results.value.length, divergentSession.results.length);
-assert.deepEqual(state.files.linearCanonicalComparisons, []);
+assert.equal(state.results.value.length, divergentSession.drawings[0].results.length);
+assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, []);
 
 for (const savedPlan of [{
   mode: 'adjacent',
@@ -615,7 +614,7 @@ for (const savedPlan of [{
   }]
 }]) {
   const savedPlanSession = structuredClone(divergentSession);
-  savedPlanSession.modes.linear.config.linearComparisonPlan = structuredClone(savedPlan);
+  savedPlanSession.drawings[0].config.linearComparisonPlan = structuredClone(savedPlan);
   const savedPlanImport = await importPayload(savedPlanSession);
   assert.equal(savedPlanImport.status, 'ok');
   assert.deepEqual(state.activeDrawing().linearComparisonPlan, {
@@ -650,8 +649,8 @@ assert.equal(state.generatedLegendPosition.value, 'right');
 assert.equal(state.activeDrawing().layoutPreferences.linear.legend, 'right');
 
 const partialLayoutSession = withoutStoredLayoutPreferences();
-partialLayoutSession.modes.linear.ui.layoutPreferences = { legend: 'top' };
-partialLayoutSession.ui.generatedLegendPosition = 'right';
+partialLayoutSession.drawings[0].ui.layoutPreferences = { legend: 'top' };
+partialLayoutSession.drawings[0].ui.generatedLegendPosition = 'right';
 const partialLayoutImport = await importPayload(partialLayoutSession);
 assert.equal(partialLayoutImport.status, 'ok');
 assert.equal(state.activeDrawing().form.legend, 'top');
@@ -677,11 +676,11 @@ const activeIntentSession = JSON.parse(await readFile(
   'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
   'utf8'
 ));
-const activeFeature = activeIntentSession.editorState.featureCatalog.items[0].features[0];
+const activeFeature = activeIntentSession.drawings[0].editorState.featureCatalog.items[0].features[0];
 const activeFeatureId = activeFeature.svgId;
 // The Circular drawing's draft is its Session 46 slice; per-feature edits are
 // keyed by the feature's source identity (R2).
-const activeSlice = activeIntentSession.modes.circular;
+const activeSlice = activeIntentSession.drawings[0];
 activeSlice.ui ||= {};
 const activeFeatureIdentity = JSON.stringify([activeFeature.recordKey, activeFeature.biologicalFeatureId]);
 Object.assign(activeSlice.config.form, {
@@ -736,8 +735,8 @@ Object.assign(activeSlice.config, {
   linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
 });
 activeIntentSession.ui.paletteInstantPreviewEnabled = false;
-activeIntentSession.ui.appliedPaletteName = 'default';
-activeIntentSession.ui.appliedPaletteColors = { CDS: '#e8b441', tRNA: '#71ee7d' };
+activeSlice.ui.appliedPaletteName = 'default';
+activeSlice.ui.appliedPaletteColors = { CDS: '#e8b441', tRNA: '#71ee7d' };
 activeSlice.ui.pendingPaletteName = 'orange';
 activeSlice.ui.pendingPaletteColors = { CDS: '#123456', tRNA: '#abcdef' };
 activeSlice.ui.selectedFeatureRecordIdx = 0;
@@ -763,7 +762,9 @@ activeSlice.features = {
   labelOverrideRows: [],
   labelTextBulkOverrides: {}
 };
+// The drawing's editor state also holds its Feature catalog: keep it.
 activeSlice.editorState = {
+  ...activeSlice.editorState,
   legend: {
     entries: [],
     deletedEntries: [],
@@ -779,9 +780,9 @@ activeSlice.editorState = {
     }
   }
 };
-activeIntentSession.editorState = {
-  ...activeIntentSession.editorState,
-  legend: { originalOrder: [], originalColors: {} },
+activeSlice.editorState = {
+  ...activeSlice.editorState,
+  legend: { ...activeSlice.editorState.legend, originalOrder: [], originalColors: {} },
   originalSvgStroke: { color: '#000000', width: 1 }
 };
 
@@ -863,12 +864,12 @@ assert.equal(
   activeIntentImport.error?.message || 'active-intent session import failed'
 );
 assert.deepEqual(activeIntentDialogs, [[
-  'Track stack: the Depth row "disabled-draft" (modes.circular.config.adv.circular_track_slots) names a Depth series its'
+  'Track stack: the Depth row "disabled-draft" (drawings[0].config.adv.circular_track_slots) names a Depth series its'
     + ' drawing does not have; the row is turned off and no longer names that series.'
 ]]);
 const afterSessionLoadIntent = compactActiveIntentSnapshot();
 const immediatelyBeforeGenerateIntent = compactActiveIntentSnapshot();
-const activeFiles = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
+const activeFiles = await serializeActiveRenderFiles(state, state.activeDrawing());
 const firstGeneratedCanonical = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData: activeFiles });
 const firstGeneratedProjection = projectCanonicalSessionRequest(firstGeneratedCanonical);
 
@@ -927,7 +928,7 @@ assert.deepEqual(
 // row says the default is used, the rest of the slice loads as saved, and the
 // Results stay. (A failed Load keeps the state; see `failedImport` below.)
 const invalidActiveConfigSession = structuredClone(activeIntentSession);
-invalidActiveConfigSession.modes.circular.config.form = 'spreadout';
+invalidActiveConfigSession.drawings[0].config.form = 'spreadout';
 const invalidActiveConfigEvent = {
   target: {
     files: [new Blob([JSON.stringify(invalidActiveConfigSession)], { type: 'application/json' })],
@@ -941,9 +942,9 @@ const invalidActiveConfigImport = await importSession(invalidActiveConfigEvent, 
 });
 assert.equal(invalidActiveConfigImport.status, 'ok', JSON.stringify(invalidActiveConfigImport.error));
 assert.deepEqual(invalidActiveConfigImport.repairs.map(({ code, path, effect }) => [code, path, effect]), [
-  ['setting-replaced', 'modes.circular.config.form', 'defaulted'],
+  ['setting-replaced', 'drawings[0].config.form', 'defaulted'],
   // The off Depth row of the slice, as in the Load above (B45).
-  ['depth-row-disabled', 'modes.circular.config.adv.circular_track_slots', 'changed']
+  ['depth-row-disabled', 'drawings[0].config.adv.circular_track_slots', 'changed']
 ]);
 assert.equal(invalidActiveConfigDialogs.length, 1);
 // The stored form's edits are not loaded (the committed request's form is
@@ -1004,7 +1005,7 @@ assert.equal(state.activeDrawing().form.show_scale, false);
 assert.equal(state.activeDrawing().adv.axis_stroke_width, 9);
 assert.equal(state.activeDrawing().adv.label_font_size, 29);
 assert.equal(state.activeDrawing().adv.feature_width_circular, 23);
-const legacyActiveFiles = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
+const legacyActiveFiles = await serializeActiveRenderFiles(state, state.activeDrawing());
 const legacyGeneratedCanonical = buildCanonicalRenderRequest({
   state,
   drawing: state.activeDrawing(),
@@ -1049,6 +1050,51 @@ assert.equal(canvasOnImport.status, 'legacy');
 assert.equal(modeDrawing(state, 'circular').form.multi_record_canvas, true);
 assert.deepEqual({ ...modeDrawing(state, 'circular').layoutPreferences.circular.multi }, { legend: 'right', plotTitlePosition: 'top' });
 alerts.length = 0;
+
+// OV-1788 (D-15-112): a legacy configuration Load that fails part-way, after
+// it installed the settings, changes no drawing: it applies to a copy of the
+// shown drawing that it commits, and the rollback puts the drawing back.
+{
+  const shown = state.activeDrawing();
+  const settingsOf = (drawing) => JSON.parse(JSON.stringify({ form: drawing.form, adv: drawing.adv }));
+  const before = settingsOf(shown);
+  const instantPreview = state.paletteInstantPreviewEnabled;
+  const instantPreviewValue = instantPreview.value;
+  // The ref's own accessor, if it has one, comes back after the throw.
+  const ownAccessor = Object.getOwnPropertyDescriptor(instantPreview, 'value');
+  const restoreAccessor = () => {
+    if (ownAccessor) Object.defineProperty(instantPreview, 'value', ownAccessor);
+    else delete instantPreview.value;
+  };
+  // The apply writes Instant Preview after the settings; the write throws once.
+  Object.defineProperty(instantPreview, 'value', {
+    configurable: true,
+    get: () => instantPreviewValue,
+    set: () => {
+      restoreAccessor();
+      throw new Error('OV-1788 injected apply failure');
+    }
+  });
+  const quietError = console.error;
+  console.error = () => {};
+  let failedLegacy;
+  try {
+    failedLegacy = await importPayload({
+      form: { plot_title: 'OV-1788 part-way' },
+      adv: { axis_stroke_width: 7 },
+      paletteInstantPreviewEnabled: !instantPreviewValue
+    });
+  } finally {
+    console.error = quietError;
+    restoreAccessor();
+  }
+  assert.equal(failedLegacy.status, 'error');
+  assert.equal(state.activeDrawing(), shown, 'the rollback shows the drawing it showed');
+  assert.deepEqual(settingsOf(state.activeDrawing()), before, 'OV-1788: form and adv as before the failed Load');
+  assert.equal(instantPreview.value, instantPreviewValue);
+  state.errorLog.value = null;
+  alerts.length = 0;
+}
 
 installShownDrawing('circular');
 state.activeDrawing().form.multi_record_canvas = false;
@@ -1101,13 +1147,7 @@ state.clickedLabel.value = clickedLabel;
 // The popup of a settings section is a popup of the Result too: a failed load leaves it open where it was.
 floatSettingsSection(state, 'titles', { x: 31, y: 32, maxHeight: 0 });
 state.featureExtractionPending.value = true;
-state.featureExtractionError.value = { summary: 'keep extraction error' };
-Object.assign(state.featureEditorStatus, {
-  status: 'summary-ready',
-  generationId: 'keep-generation',
-  error: null,
-  detailsCacheSize: 2
-});
+state.setFeatureEditorStatus('failed', 'keep extraction error');
 state.matchSequenceRegistry.reset([{
   key: 'keep-sequence',
   recordId: 'KEEP.1',
@@ -1117,16 +1157,17 @@ state.matchSequenceRegistry.reset([{
   recordIndex: 0,
   sourceIndex: null
 }]);
-state.circularRecordList.value = [{
+const circularDrawing = modeDrawing(state, 'circular');
+circularDrawing.circularRecordList.value = [{
   selector: '#1',
   record_id: 'KEEP.1',
   record_length: 8
 }];
-Object.assign(state.circularRecordDiscovery, {
+Object.assign(circularDrawing.circularRecordDiscovery, {
   status: 'ready',
   error: '',
   inputType: 'gb',
-  primaryFile: state.files.c_gb,
+  primaryFile: circularDrawing.files.c_gb,
   pairedFile: null
 });
 const diagramElement = { id: 'keep-diagram-element' };
@@ -1152,7 +1193,6 @@ state.plotTitleAutoTransform.value = { x: 17, y: 18 };
 state.featureListScrollTop.value = 144;
 state.semanticFileWatchersSuppressed.value = true;
 
-const depthTrackUiCounts = { circular: 2 };
 const keptDepthSeries = (label, color) => ({
   label, color, height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null
 });
@@ -1164,14 +1204,32 @@ const selectedPairwiseBlockOrthogroupId = { value: 'keep-orthogroup' };
 const stashedLinearArtifact = Object.freeze({ drawingId: 'linear' });
 const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const artifactSlots = createArtifactSlotStore();
-artifactSlots.replaceLoaded(stashedLinearArtifact);
-const displayedArtifact = Object.freeze({ drawingId: 'circular' });
+artifactSlots.replaceLoaded([stashedLinearArtifact]);
+// The displayed artifact through the app's own port (the History snapshot
+// service's slot capture and install), so the rollback gives the shown
+// Result's artifact values (its feature-editor status among them) back.
+const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const artifactPort = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value });
+const capturedArtifacts = [];
 const installedArtifacts = [];
+// OV-1769: the History router's members as the Load found them come back.
+const historyMembersBefore = Object.freeze({ histories: [] });
+const restoredHistoryMembers = [];
 const sessionImportRollbackState = createSessionImportRollbackState({
   artifactSlots,
-  captureDisplayedArtifact: () => displayedArtifact,
-  installDisplayedArtifact: (slot) => installedArtifacts.push(slot),
-  depthTrackUiCounts,
+  captureHistoryMembers: () => historyMembersBefore,
+  replaceHistoryMembers: () => {},
+  restoreHistoryMembers: (members) => restoredHistoryMembers.push(members),
+  captureDisplayedArtifact: () => {
+    const slot = artifactPort.captureArtifactSlot();
+    capturedArtifacts.push(slot);
+    return slot;
+  },
+  installDisplayedArtifact: (slot) => {
+    installedArtifacts.push(slot);
+    artifactPort.installArtifactSlot(slot, { drawing: state.drawingOf(slot.drawingId) });
+  },
   featureListScrollTop: state.featureListScrollTop,
   featureListScrollRef,
   selectedPairwiseBlockOrthogroupId
@@ -1223,11 +1281,10 @@ const rollbackState = () => ({
   clickedLabel: state.clickedLabel.value,
   settingsPopup: structuredClone(state.settingsPopup.value),
   featureExtractionPending: state.featureExtractionPending.value,
-  featureExtractionError: state.featureExtractionError.value,
-  featureEditorStatus: structuredClone(state.featureEditorStatus),
+  featureEditorStatus: structuredClone(state.featureEditorStatus.value),
   matchSequenceSources: structuredClone(state.matchSequenceRegistry.values()),
-  circularRecordList: structuredClone(state.circularRecordList.value),
-  circularRecordDiscovery: { ...state.circularRecordDiscovery },
+  circularRecordList: structuredClone(circularDrawing.circularRecordList.value),
+  circularRecordDiscovery: { ...circularDrawing.circularRecordDiscovery },
   diagramElements: [...state.diagramElements.value],
   diagramElementIds: [...state.diagramElementIds.value],
   diagramElementOriginalTransforms: [...state.diagramElementOriginalTransforms.value],
@@ -1243,45 +1300,11 @@ const rollbackState = () => ({
   plotTitleDragging: state.plotTitleDragging.value,
   plotTitleDragStart: { ...state.plotTitleDragStart },
   plotTitleAutoTransform: structuredClone(state.plotTitleAutoTransform.value),
-  circularDepthTrackUiCount: depthTrackUiCounts.circular,
   featureListScrollTop: state.featureListScrollTop.value,
   featureListElementScrollTop: featureListScrollRef.value.scrollTop,
   selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value
 });
 
-const recordDiscoveryDerivedState = {
-  multiRecordPositions: [{ selector: 'KEEP.1', row: 2 }],
-  circularRecords: ['KEEP.1'],
-  linearSelectorCache: ['KEEP.1']
-};
-const expectedRecordDiscoveryDerivedState = structuredClone(
-  recordDiscoveryDerivedState
-);
-state.sessionImportRollbackInProgress.value = true;
-let guardedRecordDiscoveryResult;
-let recordDiscoveryGeneration = 0;
-try {
-  guardedRecordDiscoveryResult = await runRecordDiscoveryWatcher({
-    rollbackInProgress: state.sessionImportRollbackInProgress,
-    semanticWatchersSuppressed: state.semanticFileWatchersSuppressed,
-    refresh: async ({ suppress }) => {
-      recordDiscoveryGeneration += 1;
-      if (suppress) return;
-      recordDiscoveryDerivedState.multiRecordPositions = [];
-      recordDiscoveryDerivedState.circularRecords = [];
-      recordDiscoveryDerivedState.linearSelectorCache = [];
-      throw new Error('injected restored-file reparse failure');
-    }
-  });
-} finally {
-  state.sessionImportRollbackInProgress.value = false;
-}
-assert.equal(guardedRecordDiscoveryResult, false);
-assert.equal(recordDiscoveryGeneration, 1);
-assert.deepEqual(
-  recordDiscoveryDerivedState,
-  expectedRecordDiscoveryDerivedState
-);
 // F-1 (R11): the rollback installs the captured state as it was, so unset
 // slot sides, lane directions, and axis indexes stay unset and the Result's
 // named stroke color stays named.
@@ -1294,6 +1317,9 @@ state.activeDrawing().adv.linear_track_slots_axis_index = null;
 state.originalSvgStroke.value = { color: 'gray', width: 1 };
 // Not the default, which Reset Settings would also give.
 state.richFeaturePopup.value = false;
+// OV-1770: the shown Result's groups, which the Load clears, come back.
+state.orthogroups.value = [{ id: 'keep-orthogroup', members: [] }];
+state.selectedOrthogroupId.value = 'keep-orthogroup';
 const stateBeforeFailedImport = rollbackState();
 
 const malformedCompositionSvg = {
@@ -1327,8 +1353,7 @@ try {
       afterLoad: async () => {
         // The pane closes its popup while the load shows no Result.
         returnSettingsSection(state);
-        artifactSlots.replaceLoaded(null);
-        depthTrackUiCounts.circular = 5;
+        artifactSlots.replaceLoaded([]);
         state.featureListScrollTop.value = 0;
         featureListScrollRef.value.scrollTop = 0;
         selectedPairwiseBlockOrthogroupId.value = '';
@@ -1358,12 +1383,68 @@ assert.equal(failedImport.status, 'error');
 assert.equal(failedImport.error.code, 'INPUT_INVALID');
 assert.deepEqual(failedImport.error.context, {field:'schema',reason:'JSON_FORMAT'});
 assert.deepEqual(rollbackState(), stateBeforeFailedImport);
+assert.deepEqual(restoredHistoryMembers, [historyMembersBefore]);
+assert.strictEqual(restoredHistoryMembers[0], historyMembersBefore);
 assert.deepEqual(artifactSlots.kept(), [stashedLinearArtifact]);
 assert.strictEqual(artifactSlots.kept()[0], stashedLinearArtifact);
-assert.deepEqual(installedArtifacts, [displayedArtifact]);
+assert.equal(capturedArtifacts.length, 1);
+assert.deepEqual(installedArtifacts, capturedArtifacts);
 assert.equal(alerts.length, 0);
 assert.deepEqual(state.errorLog.value, failedImport.error);
 assert.equal(failedImportEvent.target.value, '');
+
+// A Session 50 Load that fails after its commit gives back the same: the
+// drawings (the same objects), the shown Result, the feature-editor status,
+// the groups and the History members. The Load commits new drawings
+// (`commitLoadedDrawings`), so the rollback's own copy of the status adds
+// nothing to what the displayed-artifact port gives back.
+const { gunzipSync } = await import('node:zlib');
+const session49 = JSON.parse(gunzipSync(await readFile(
+  'tests/fixtures/sessions/drawings-circular-only.v50.gbdraw-session.json.gz'
+)).toString('utf8'));
+const drawingsBefore49 = state.drawingList();
+const tabsBefore49 = state.drawingTabs.value;
+const shownResultBefore49 = state.results.value[state.selectedResultIndex.value];
+const statusBefore49 = state.featureEditorStatus.value;
+state.errorLog.value = null;
+const stateBefore49WithoutAlert = rollbackState();
+console.error = () => {};
+let failed49;
+try {
+  failed49 = await importSession(
+    { target: { files: [new Blob([JSON.stringify(session49)], { type: 'application/json' })], value: 'selected' } },
+    {
+      rollbackState: sessionImportRollbackState,
+      transformLegacyResultSvg,
+      confirmLoadRepairs: async () => true,
+      afterLoad: async () => {
+        // The Load committed its drawings; the shown Result's status changed.
+        assert.notStrictEqual(state.drawingList()[0], drawingsBefore49[0]);
+        state.setFeatureEditorStatus('ready');
+        const originalSvgContainer = state.svgContainer.value;
+        state.svgContainer.value = malformedCompositionContainer;
+        try {
+          legendCanvasActions.captureBaseConfig();
+        } finally {
+          state.svgContainer.value = originalSvgContainer;
+        }
+      }
+    }
+  );
+} finally {
+  console.error = originalConsoleError;
+}
+assert.equal(failed49.status, 'error', JSON.stringify(failed49.error));
+assert.deepEqual(failed49.error.context, { field: 'schema', reason: 'JSON_FORMAT' });
+assert.equal(capturedArtifacts.length, 2);
+assert.deepEqual(state.drawingList(), drawingsBefore49);
+state.drawingList().forEach((drawing, index) => assert.strictEqual(drawing, drawingsBefore49[index]));
+assert.deepEqual(state.drawingTabs.value, tabsBefore49);
+assert.strictEqual(state.results.value[state.selectedResultIndex.value], shownResultBefore49);
+assert.strictEqual(state.featureEditorStatus.value, statusBefore49);
+assert.deepEqual(restoredHistoryMembers, [historyMembersBefore, historyMembersBefore]);
+assert.deepEqual(rollbackState(), stateBefore49WithoutAlert);
+assert.deepEqual(state.errorLog.value, failed49.error);
 
 
 // A late failed Session read cannot replace a notification from a later action.
@@ -1394,7 +1475,7 @@ assert.deepEqual(rollbackState(),beforeLateRead);
 
 // The same sole Session owner keeps a late Save error from replacing a newer alert.
 const sessionConfig2 = await import('../../gbdraw/web/js/services/config.js');
-const { exportSession } = callerSession(sessionConfig2, state);
+const { exportSession } = callerSession(sessionConfig2, state, await sessionRollbackPort(state));
 let failLateSave;
 const lateSave = exportSession('late save', { beforeExport: () => new Promise((_, reject) => {
   failLateSave = reject;

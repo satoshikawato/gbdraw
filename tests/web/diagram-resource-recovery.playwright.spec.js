@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const { createHash } = require('node:crypto');
 const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { snapshot, download } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const gffPath = 'gbdraw/web/tutorial-data/lambda-gff3/NC_001416.gff3';
 const fastaPath = 'gbdraw/web/tutorial-data/lambda-gff3/NC_001416.fna';
@@ -97,7 +98,7 @@ for (const mode of ['linear', 'circular']) {
       });
     };
     await openApp(page);
-    if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
     const suffix = mode === 'linear' ? '' : ' File';
     await page.getByLabel(`GFF3${suffix}`, { exact: true }).setInputFiles(gffPath);
@@ -152,7 +153,7 @@ test('W1/W2/W4/W8/W9: retained M23 recovery succeeds once and resource ownership
         sha256: createHash('sha256').update([...files, mismatch][i]).digest('hex') })), null, 2));
     await openApp(page);
     expect((await inspect()).workers).toEqual([]);
-    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(page, { kind: 'linear' });
     await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
     await page.getByLabel('GFF3', { exact: true }).setInputFiles(gffPath);
     const fasta = page.getByLabel('FASTA', { exact: true });

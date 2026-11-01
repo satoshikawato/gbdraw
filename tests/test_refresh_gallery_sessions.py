@@ -11,6 +11,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import sys
+from typing import Any
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -26,6 +27,7 @@ from gbdraw.session_io import (
     load_session,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from tests.utils.session_drawing_view import drawing_view, drawings_document_of_view, session_view
 import tools.prepare_interactive_gallery_assets as gallery_assets_module
 import tools.refresh_gallery_sessions as refresh_gallery_sessions_module
 from tools.prepare_interactive_gallery_assets import (
@@ -61,7 +63,7 @@ from tools.refresh_gallery_sessions import (
     _session_path,
     _validate_current_session_catalog_structure,
     _validate_gallery_session_inventory,
-    _validate_staged_gallery_session,
+    _validate_staged_gallery_session as _validate_staged_gallery_session_49,
     stored_protein_result_differences,
 )
 
@@ -327,7 +329,7 @@ def test_gallery_protein_results_equal_a_rebuild_from_the_raw_cache(
     trip change the drawing.
     """
 
-    session = load_session(session_path)
+    session = session_view(load_session(session_path))
     assert stored_protein_result_differences(session) == []
 
 
@@ -432,7 +434,7 @@ def test_vibrio_gallery_session_stores_resolved_comparisons_and_raw_cache(
     """
 
     path = _session_path("vibrio-harveyi-group-collinear")
-    session = load_cached_gallery_session(path)
+    session = session_view(load_cached_gallery_session(path))
 
     request = session["renderRequest"]
     assert request["schema"] in BUNDLED_REQUEST_SCHEMAS
@@ -530,7 +532,7 @@ def test_gallery_session_record_sources_are_the_declared_input_files(
     resource names resources that no declared input has, or repeats one.
     """
 
-    session = load_cached_gallery_session(_GALLERY_ROOT / str(entry["session"]))
+    session = session_view(load_cached_gallery_session(_GALLERY_ROOT / str(entry["session"])))
     names = _record_source_original_names(session)
 
     assert names
@@ -559,7 +561,7 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
 
     assert len(paths) == 11
     for path in paths:
-        session = load_cached_gallery_session(path)
+        session = session_view(load_cached_gallery_session(path))
         assert session["version"] in BUNDLED_SESSION_VERSIONS, path
         assert session["renderRequest"]["schema"] in BUNDLED_REQUEST_SCHEMAS, path
         assert (
@@ -588,11 +590,19 @@ def test_bundled_gallery_sources_match_current_session_results(
     for example in EXAMPLES:
         if not example.sync_result_svg:
             continue
-        session = load_cached_gallery_session(example.session_path)
+        session = session_view(load_cached_gallery_session(example.session_path))
         assert (
             example.source_svg_path.read_text(encoding="utf-8")
             == _session_result_svg(session, example)
         ), example.id
+
+
+def _validate_staged_gallery_session(session_path: Path, session: dict[str, object], **kwargs: Any) -> None:
+    """The tool's validator on a staged Session 49: a one-drawing view is written as one by the production writer."""
+
+    if session.get("version") == CURRENT_SESSION_VERSION:
+        session = drawings_document_of_view({"createdAt": "2026-01-02T00:00:00Z", **session})
+    _validate_staged_gallery_session_49(session_path, session, **kwargs)
 
 
 def _staged_geometry_session(
@@ -946,7 +956,7 @@ def test_refresh_leaves_a_test_input_pipeline_unresolved(
     def pipelines(path: Path) -> list[tuple[str, object]]:
         return [
             (item["kind"], item.get("mode"))
-            for item in load_session(path)["renderRequest"]["comparisons"]
+            for item in _published_drawing(path)["renderRequest"]["comparisons"]
         ]
 
     before = pipelines(source)
@@ -968,7 +978,7 @@ def test_refresh_records_resolved_track_geometry(
 
     _refresh_one_session(source, destination_path=destination)
 
-    refreshed = load_session(destination)
+    refreshed = _published_drawing(destination)
     assert refreshed["version"] == CURRENT_SESSION_VERSION
     assert refreshed["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert refreshed["renderRequest"]["output"]["interactiveMetadataPolicy"] == "auto"
@@ -1056,7 +1066,7 @@ def test_declared_command_gallery_sessions_store_their_input_files_unchanged(
         hashlib.sha256(path.read_bytes()).hexdigest(): path.name
         for path in _declared_input_files(example)
     }
-    session = load_cached_gallery_session(example.session_path)
+    session = session_view(load_cached_gallery_session(example.session_path))
     resource_ids = {
         record["source"][field]
         for record in session["renderRequest"]["records"]
@@ -1156,7 +1166,7 @@ def test_declared_command_refresh_keeps_one_file_as_one_resource(
     )
     refresh_gallery_sessions_module._assert_declared_figure(declared, destination)
 
-    session = load_session(destination)
+    session = _published_drawing(destination)
     assert session["cliInvocation"]["args"] == shlex.split(command)[2:]
     assert _stored_output_prefixes(session) == ("declared", "declared")
     # The Session stores the collinear result its command computed, with the
@@ -1238,7 +1248,7 @@ def test_declared_circular_command_refresh_keeps_one_file_as_one_resource(
     )
     refresh_gallery_sessions_module._assert_declared_figure(declared, destination)
 
-    session = load_session(destination)
+    session = _published_drawing(destination)
     assert session["cliInvocation"]["args"] == argv[2:]
     assert _stored_output_prefixes(session) == ("declared", "declared")
     assert [
@@ -1256,30 +1266,22 @@ def test_declared_circular_command_refresh_keeps_one_file_as_one_resource(
     ] == ["record-1-genbank"]
 
 
-def test_linear_schema5_publication_preserves_materialized_cardinality_round_trip(
-    tmp_path: Path,
+def test_gallery_refresh_refuses_a_session_27_44(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
+    # Gallery publication admits Sessions 46-50; Python converts a Session
+    # 27-44 when the app loads it.
     source = tmp_path / "source.gbdraw-session.json"
     destination = tmp_path / "refreshed.gbdraw-session.json"
     source.write_bytes(
         (Path(__file__).parent / "fixtures/sessions/lambda_basic_linear.v40-schema5.json").read_bytes()
     )
-    committed = load_session(source)
 
-    assert committed["renderRequest"]["schema"] == 5
-    assert all(
-        "cardinality" not in record
-        for record in committed["renderRequest"]["records"]
-    )
+    with pytest.raises(subprocess.CalledProcessError):
+        _refresh_one_session(source, destination_path=destination)
 
-    _refresh_one_session(source, destination_path=destination)
-
-    refreshed = load_session(destination)
-    assert refreshed["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
-    assert [
-        record["cardinality"]
-        for record in refreshed["renderRequest"]["records"]
-    ] == ["exactly_one"]
+    assert "Gallery publication supports Sessions 46-50" in capfd.readouterr().err
+    assert not destination.exists()
 
 
 def test_staged_gallery_validator_accepts_current_artifact_schemas(
@@ -1425,7 +1427,7 @@ def test_prepare_gallery_assets_preserves_existing_source_svgs() -> None:
     assert "example.source_svg_path.write_text(migrated" in source
     assert "_validate_source_feature_ids(example, session, migrated)" in source
     assert "def _sync_session_result_svg(" in source
-    assert "write_session_json(example.session_path, session)" in source
+    assert "_gallery_document(document, session, _gallery_view(document)[1])" in source
     assert "_sync_session_result_svg(example, session, source)" in source
     assert "_write_gallery_svg(example, session, source)" in source
     assert 'entry["tutorial"] = f"./tutorials/{example.id}.json"' in source
@@ -1438,6 +1440,8 @@ def test_gallery_result_sync_updates_track_geometry_result_name(
     example = EXAMPLES[0]
     session = {
         "title": "out",
+        "resources": {},
+        "renderRequest": {"mode": "circular"},
         "results": [{"name": "out", "content": "<svg id='old'/>"}],
         "runMetadata": {
             "trackSlotGeometry": {
@@ -2027,7 +2031,7 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
     load_cached_svg_root: Callable[[Path], ET.Element],
 ) -> None:
     example = next(item for item in EXAMPLES if item.id == example_id)
-    session = load_cached_gallery_session(example.session_path)
+    session = session_view(load_cached_gallery_session(example.session_path))
     root = load_cached_svg_root(example.gallery_svg_path)
     metadata = next(
         element
@@ -2174,6 +2178,14 @@ def test_refresh_rewrites_retired_flags_in_the_recorded_cli_invocation(
     assert args[binding["argIndex"]] == "A.gb"
 
 
+def _published_drawing(path: Path) -> dict[str, Any]:
+    """The drawing a refreshed Session shows, as its one-drawing view: a
+    Session 49 holds one drawing; a tracked Session 46-48 is its own view."""
+
+    document = load_session(path)
+    return drawing_view(document) if "drawings" in document else document
+
+
 def _stored_output_prefixes(session: dict[str, object]) -> tuple[object, object]:
     """The Output Prefix as the form field of the Result's mode slice and the
     render request store it."""
@@ -2216,7 +2228,7 @@ def test_stored_session_refresh_publishes_gallery_id_and_input_file_names(
 
     _refresh_one_session(staged, destination_path=destination)
 
-    session = load_session(destination)
+    session = _published_drawing(destination)
     assert _stored_output_prefixes(session) == (gallery_id, gallery_id)
     args = session["cliInvocation"]["args"]
     assert _recorded_output(args) == gallery_id
@@ -2474,3 +2486,31 @@ def test_gallery_session_refresh_keeps_the_session_created_at(
     assert refreshed["createdAt"] == original["createdAt"]
     assert refreshed["title"] == "new"
     assert tracked.read_bytes() == first_run
+
+
+def test_staged_gallery_validator_requires_one_drawn_drawing(tmp_path: Path) -> None:
+    """The staged Session is checked against the one-drawn-drawing rule the Web reads from the generator."""
+
+    from gbdraw.session_drawings import _drawings_document
+
+    view = {"createdAt": "2026-01-02T00:00:00Z", **_staged_geometry_session(mode="linear", records=None)}
+    two_drawn = _drawings_document(
+        [view, view], ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=0, project_views=[view, view]
+    )
+
+    with pytest.raises(ValueError, match="shows 1 drawn drawing; this one has 2"):
+        _validate_staged_gallery_session_49(tmp_path / "two-drawn.gbdraw-session.json", two_drawn)
+
+
+def test_staged_gallery_validator_requires_the_linear_comparison_plan_through_validate_session(
+    tmp_path: Path,
+) -> None:
+    """A staged Linear draft without ``linearComparisonPlan`` is refused by the Session validator itself."""
+
+    session = _staged_geometry_session(mode="linear", records=None)
+    session["modes"] = {"linear": {"config": {"linearRecordLayout": {}}}}
+
+    from gbdraw.exceptions import ValidationError
+
+    with pytest.raises(ValidationError, match="Current Web comparison draft requires config.linearComparisonPlan"):
+        _validate_staged_gallery_session(tmp_path / "no-plan.gbdraw-session.json", session)

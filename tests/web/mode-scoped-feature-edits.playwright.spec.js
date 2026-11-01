@@ -11,6 +11,8 @@ const { basename } = require('node:path');
 const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openFresh, loadSessionFile, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 
 const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
 const LAMBDA = 'tests/test_inputs/NC_001416.gb';
@@ -30,8 +32,7 @@ const committed = (page, id) => page.evaluate(async (featureId) => {
 }, id);
 
 const switchMode = async (page, mode) => {
-  await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
-  await page.waitForFunction((expected) => window.__GBDRAW_APP__?.mode === expected, mode);
+  await showDrawing(page, { kind: mode });
   await settle(page);
 };
 
@@ -186,15 +187,15 @@ for (const [mode, otherMode] of [['circular', 'linear'], ['linear', 'circular']]
       expect(await page.evaluate((strokeKey) => window.__GBDRAW_APP__.extractedFeatures
         .some((item) => item.stable_override_key === strokeKey), key)).toBe(false);
       expect(await strokeOf(page, key)).toEqual({ override: null, drawn: false });
-      // A stroke of each mode: the Session keeps each in its mode's slice.
+      // A stroke of each mode: the Session keeps each in its drawing.
       const otherKey = await strokeFirstCds(page);
       await settle(page);
       expect(otherKey).not.toBe(key);
       const bytes = await download(page, 'Save Session', testInfo.outputPath(`${mode}-stroke.gbdraw-session.json`), { title: '' });
       const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
-      expect(saved.modes[mode].editorState.featureStrokes.overrides[key]).toMatchObject(STROKE);
-      expect(saved.modes[otherMode].editorState.featureStrokes.overrides[otherKey]).toMatchObject(STROKE);
-      expect(saved.modes[otherMode].editorState.featureStrokes.overrides[key]).toBeUndefined();
+      expect(savedDrawing(saved, mode).editorState.featureStrokes.overrides[key]).toMatchObject(STROKE);
+      expect(savedDrawing(saved, otherMode).editorState.featureStrokes.overrides[otherKey]).toMatchObject(STROKE);
+      expect(savedDrawing(saved, otherMode).editorState.featureStrokes.overrides[key]).toBeUndefined();
       expect(await strokesAfterSessionRoundTrip(page, browser, testInfo, [otherKey], `${mode}-stroke-loaded`))
         .toEqual({ [otherKey]: STROKE });
 

@@ -44,14 +44,13 @@ from gbdraw.api import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_drawings import (
-    _merged_shared,
-    _result_set,
     _view,
     replace_session_drawings,
     write_session_drawings,
 )
-from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.session_io import CURRENT_SESSION_VERSION, MODE_SCOPED_SESSION_MAX_VERSION
 from gbdraw.web_support.request_render import render_canonical_web_request
+from tests.utils.session_drawing_view import drawing_view
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GENBANK = REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk"
@@ -80,7 +79,7 @@ def _linear_result_state(request: LinearDiagramRequest, tmp_path: Path) -> dict:
     document = build_session_document(request)
     with materialize_session(document, output_directory=tmp_path / "web") as materialized:
         web = render_canonical_web_request(
-            document.to_dict()["renderRequest"],
+            drawing_view(document.to_dict(), mode="linear")["renderRequest"],
             resource_paths=materialized.resource_paths,
             output_directory=tmp_path / "web-output",
         )
@@ -300,9 +299,11 @@ def test_build_session_document_writes_two_drawings(tmp_path: Path) -> None:
     document = _two_drawing_session(tmp_path, active_drawing="Linear")
 
     data = document.to_dict()
-    assert data["renderRequest"]["mode"] == "circular"
-    assert data["otherModeResult"]["renderRequest"]["mode"] == "linear"
-    assert data["ui"] == {"mode": "linear"}
+    # The drawings keep the given order; ``active_drawing`` only names the one that opens.
+    assert [drawing["id"] for drawing in data["drawings"]] == ["circular", "linear"]
+    assert drawing_view(data, "circular")["renderRequest"]["mode"] == "circular"
+    assert drawing_view(data, "linear")["renderRequest"]["mode"] == "linear"
+    assert data["ui"] == {"activeDrawingId": "linear"}
     assert document.active_drawing_id == "linear"
 
     path = tmp_path / "two.gbdraw-session.json"
@@ -317,25 +318,39 @@ def test_build_session_document_writes_two_drawings(tmp_path: Path) -> None:
     assert load_session_document(path).drawings == document.drawings
 
 
-def test_the_current_layout_rejects_drawings_it_cannot_hold(tmp_path: Path) -> None:
+def test_build_session_document_admits_what_session_49_holds() -> None:
     circular, linear = _requests()
-    linear_state = _linear_result_state(linear, tmp_path)
+    document = build_session_document(
+        drawings=[
+            circular,
+            circular,
+            SessionDrawingSpec(mode="linear"),
+            SessionDrawingSpec(linear, state={"cliOptions": {"x": 1}}),
+        ],
+        active_drawing="Linear 2",
+    )
 
-    with pytest.raises(SessionFormatError, match="one drawing of each mode"):
-        build_session_document(drawings=[circular, circular])
-    with pytest.raises(SessionFormatError, match="only with its Result"):
-        build_session_document(drawings=[circular, linear])
+    data = document.to_dict()
+    assert [(drawing["id"], drawing["name"]) for drawing in data["drawings"]] == [
+        ("circular", "Circular"),
+        ("circular-2", "Circular 2"),
+        ("linear", "Linear"),
+        ("linear-2", "Linear 2"),
+    ]
+    assert data["drawings"][2]["renderRequest"] is None
+    # A drawing field belongs to its drawing; another drawing does not share it.
+    assert data["drawings"][3]["cliOptions"] == {"x": 1}
+    assert "cliOptions" not in data["drawings"][0]
+    assert data["ui"] == {"activeDrawingId": "linear-2"}
+
+
+def test_build_session_document_refuses_drawings_it_cannot_name() -> None:
+    circular, linear = _requests()
+
     with pytest.raises(SessionFormatError, match="names each drawing by its mode"):
         build_session_document(drawings=[SessionDrawingSpec(circular, id="circular-2")])
     with pytest.raises(SessionFormatError, match="names each drawing by its mode"):
         build_session_document(drawings=[SessionDrawingSpec(circular, name="Overview")])
-    with pytest.raises(SessionFormatError, match="share cliOptions"):
-        build_session_document(
-            drawings=[
-                circular,
-                SessionDrawingSpec(linear, state={**linear_state, "cliOptions": {"x": 1}}),
-            ]
-        )
     with pytest.raises(SessionFormatError, match="does not match"):
         build_session_document(drawings=[SessionDrawingSpec(circular, mode="linear")])
     with pytest.raises(SessionFormatError, match="needs a mode"):
@@ -348,29 +363,66 @@ def test_the_current_layout_rejects_drawings_it_cannot_hold(tmp_path: Path) -> N
         build_session_document(circular, active_drawing="linear")
 
 
-def test_two_drawings_share_one_set_of_losat_artifacts() -> None:
-    def view(mode: str, entries: list, manifest: dict | None = None) -> dict:
+def test_a_drawing_state_cannot_hold_another_modes_slice() -> None:
+    """Session 49 retired the shared ``modes`` key: another mode's slice is
+    refused, neither dropped nor turned into a drawing of that mode."""
+
+    circular, _linear = _requests()
+    other = {"linear": {"config": {"form": {"align_center": True}}}}
+
+    with pytest.raises(ValidationError, match=r"modes\.linear"):
+        build_session_document(drawings=[SessionDrawingSpec(circular, state={"modes": other})])
+    with pytest.raises(ValidationError, match=r"modes\.linear"):
+        build_session_document(
+            drawings=[SessionDrawingSpec(circular, state={"modes": {"circular": {}, **other}})]
+        )
+
+
+@pytest.mark.parametrize(
+    ("web_files", "field"),
+    [
+        ({"bindings": {"schema": 2, "linearSeqs": []}}, r"webFiles\.bindings\.linearSeqs"),
+        ({"linearRecordMetadata": []}, r"webFiles\.linearRecordMetadata"),
+    ],
+)
+def test_a_drawing_state_cannot_hold_another_modes_web_files(web_files: dict, field: str) -> None:
+    """Another mode's Web file bindings and request metadata are refused by
+    name, as its ``modes`` slice is, never dropped silently (D-15-125)."""
+
+    circular, _linear = _requests()
+
+    with pytest.raises(ValidationError, match=field):
+        build_session_document(drawings=[SessionDrawingSpec(circular, state={"webFiles": web_files})])
+
+
+@pytest.mark.parametrize(("mode", "own", "other"), [("circular", "cInputType", "lInputType"), ("linear", "lInputType", "cInputType")])
+def test_a_drawing_state_cannot_hold_another_modes_input_type(mode: str, own: str, other: str) -> None:
+    """OV-1889: another mode's input type in ``ui`` is refused by name; the
+    drawing's own is its ``ui.inputType``."""
+
+    request = dict(zip(("circular", "linear"), _requests()))[mode]
+
+    with pytest.raises(ValidationError, match=rf"ui\.{other}\b"):
+        build_session_document(drawings=[SessionDrawingSpec(request, state={"ui": {own: "gff", other: "gb"}})])
+    document = build_session_document(drawings=[SessionDrawingSpec(request, state={"ui": {own: "gff"}})])
+    assert document.to_dict()["drawings"][0]["ui"]["inputType"] == "gff"
+
+
+def test_each_drawing_keeps_its_own_losat_artifacts() -> None:
+    def view(mode: str, entries: list) -> dict:
         return {
             "renderRequest": {"mode": mode},
             "results": [{"name": mode, "content": "<svg/>"}],
             "losatCache": {"entries": entries},
-            "proteinIdentityManifest": manifest or {"schema": 2, "proteinSets": {}},
         }
 
-    manifest = {"schema": 2, "proteinSets": {"p": {}}}
     data = write_session_drawings(
-        [view("circular", [{"key": "ring"}]), view("linear", [{"key": "ring"}, {"key": "protein"}], manifest)]
+        [view("circular", [{"key": "ring"}]), view("linear", [{"key": "ring"}, {"key": "protein"}])]
     )
-    assert data["losatCache"]["entries"] == [{"key": "ring"}, {"key": "protein"}]
-    assert data["proteinIdentityManifest"] == manifest
-    assert data["otherModeResult"]["renderRequest"] == {"mode": "linear"}
-    with pytest.raises(ValidationError, match="one protein identity manifest"):
-        write_session_drawings(
-            [
-                view("circular", [], {"schema": 2, "proteinSets": {"q": {}}}),
-                view("linear", [], manifest),
-            ]
-        )
+    assert [drawing["losatCache"]["entries"] for drawing in data["drawings"]] == [
+        [{"key": "ring"}],
+        [{"key": "ring"}, {"key": "protein"}],
+    ]
 
 
 def test_each_drawing_gives_its_own_mode_slice(tmp_path: Path) -> None:
@@ -386,21 +438,15 @@ def test_each_drawing_gives_its_own_mode_slice(tmp_path: Path) -> None:
             ),
         ]
     )
-    assert document.to_dict()["modes"] == {"circular": circular_slice, "linear": linear_slice}
-
-    def view(mode: str, slices: dict) -> dict:
-        return {"renderRequest": {"mode": mode}, "results": [{"name": mode}], "modes": slices}
-
-    data = write_session_drawings(
-        [view("circular", {"circular": circular_slice}), view("linear", {"linear": linear_slice})]
-    )
-    # A replaced drawing gives its own slice; the other drawing keeps its slice.
-    changed = {"config": {"adv": {"axis_stroke_width": 3}}}
-    replaced = replace_session_drawings(
-        {**data, "version": CURRENT_SESSION_VERSION},
-        {"circular": view("circular", {"circular": changed, "linear": {}})},
-    )
-    assert replaced["modes"] == {"circular": changed, "linear": linear_slice}
+    data = document.to_dict()
+    assert drawing_view(data, "circular")["modes"] == {"circular": circular_slice}
+    assert drawing_view(data, "linear")["modes"] == {"linear": linear_slice}
+    # A Session 46-49 moves to drawings before it is saved again.
+    with pytest.raises(ValidationError, match="Only a Session 50"):
+        replace_session_drawings(
+            {**data, "version": MODE_SCOPED_SESSION_MAX_VERSION},
+            {"circular": drawing_view(data, "circular")},
+        )
 
 
 def test_upgrade_returns_a_current_document_unchanged() -> None:
@@ -423,10 +469,11 @@ def test_upgrade_keeps_a_settings_only_session_settings_only() -> None:
 
     assert upgrade.warnings == ()
     assert upgraded.version == CURRENT_SESSION_VERSION
-    assert upgraded.drawings == (SessionDrawing("circular", "Circular", "circular", False),)
-    # The flat draft is split into the mode slices; Circular keeps its values.
+    assert SessionDrawing("circular", "Circular", "circular", False) in upgraded.drawings
+    assert not any(drawing.has_canonical_request for drawing in upgraded.drawings)
+    # The flat draft is split into the mode settings; Circular keeps its values.
     assert "config" not in upgraded.to_dict()
-    form = upgraded.to_dict()["modes"]["circular"]["config"]["form"]
+    form = drawing_view(upgraded.to_dict(), "circular")["modes"]["circular"]["config"]["form"]
     assert form and all(source["config"]["form"][key] == value for key, value in form.items())
 
 
@@ -441,7 +488,7 @@ def test_upgrade_names_and_logs_each_result_it_drops(
     with caplog.at_level(logging.WARNING, logger="gbdraw.session"):
         upgrade = upgrade_session_document(source, temporary_directory=tmp_path)
 
-    assert upgrade.document.to_dict()["results"] == []
+    assert drawing_view(upgrade.document.to_dict(), mode="linear")["results"] == []
     assert upgrade.warnings == (
         f"Upgrading Session 33 to {CURRENT_SESSION_VERSION} dropped the linear drawing's "
         "2 Result(s) 'out.svg', 'second.svg': Session 33 saved no feature catalog "
@@ -466,9 +513,9 @@ def test_upgrade_without_results_to_drop_warns_nothing(
     assert not caplog.records
 
 
-def _render_svgs(document: SessionDocument, directory: Path) -> list[bytes]:
+def _render_svgs(document: SessionDocument, directory: Path, drawing: str | None = None) -> list[bytes]:
     with materialize_session(document, output_directory=directory) as materialized:
-        result = render_session(materialized)
+        result = render_session(materialized, drawing=drawing)
     return [path.read_bytes() for path in result.output_paths]
 
 
@@ -514,29 +561,33 @@ def test_an_upgraded_session_renders_its_drawing_as_before(fixture: str, tmp_pat
     upgraded = upgrade.document
 
     assert source.version < upgraded.version == CURRENT_SESSION_VERSION
-    assert upgraded.drawings == source.drawings
+    # The move also lists the other mode as an undrawn drawing when its settings
+    # differ from the defaults (PD-OI-090), as the Web's Load does.
+    assert set(source.drawings) <= set(upgraded.drawings)
+    assert not any(drawing.has_canonical_request for drawing in set(upgraded.drawings) - set(source.drawings))
     catalog = source.to_dict().get("editorState", {}).get("featureCatalog")
     # Sessions 31-39 saved no catalog: their Results wait for the next render,
     # and the upgrade names each one it drops.
     source_results = source.to_dict()["results"]
     expected_results = source_results if catalog else []
-    assert upgraded.to_dict()["results"] == expected_results
+    [source_drawing] = source.drawings
+    assert drawing_view(upgraded.to_dict(), source_drawing.id)["results"] == expected_results
     if catalog or not source_results:
         assert upgrade.warnings == ()
     else:
         (warning,) = upgrade.warnings
         assert all(repr(result["name"]) in warning for result in source_results)
-    assert _render_svgs(upgraded, tmp_path / "upgraded") == _render_svgs(source, tmp_path / "source")
+    assert _render_svgs(upgraded, tmp_path / "upgraded", source_drawing.id) == _render_svgs(source, tmp_path / "source")
 
 
 def test_an_upgraded_v33_label_override_with_empty_text_renders_as_before(tmp_path: Path) -> None:
     source = load_session_document(SESSION_FIXTURES / "feature-edits-circular.v33.gbdraw-session.json.gz")
     upgraded = upgrade_session_document(source).document
 
-    assert _render_svgs(upgraded, tmp_path / "upgraded") == _render_svgs(source, tmp_path / "source")
+    assert _render_svgs(upgraded, tmp_path / "upgraded", "circular") == _render_svgs(source, tmp_path / "source")
 
 
-def test_a_result_set_keeps_the_key_order_of_its_source() -> None:
+def test_a_view_keeps_the_key_order_of_its_source() -> None:
     """OV-598: the keys follow the Session they were read from, not a set's iteration order.
 
     A set of strings iterates in an order that depends on ``PYTHONHASHSEED``;
@@ -553,39 +604,7 @@ def test_a_result_set_keeps_the_key_order_of_its_source() -> None:
             "editorState": {**{key: None for key in order[1]}, "legend": {}},
             "ui": {key: 0 for key in order[2]},
         }
-        result_set = _result_set(source)
-        assert [key for key in result_set if key in fields] == order[0]
-        assert [key for key in result_set["editorState"] if key in editor] == order[1]
-        assert list(result_set["ui"]) == order[2]
         view = _view({}, source)
         assert [key for key in view if key in fields] == order[0]
         assert [key for key in view["editorState"] if key in editor] == order[1]
         assert list(view["ui"]) == order[2]
-
-
-def _legacy_envelopes(states: list[str], evidence: int) -> dict[str, object]:
-    return {
-        "proteinRawCandidates": {
-            "schema": 1,
-            "entries": [{"key": f"candidate-{index}", "state": state} for index, state in enumerate(states)],
-        },
-        "proteinDerivedEvidence": {
-            "schema": 1,
-            "entries": [{"key": f"evidence-{index}"} for index in range(evidence)],
-        },
-    }
-
-
-@pytest.mark.parametrize("linear_first", [True, False])
-def test_the_linear_view_owns_the_written_legacy_protein_artifacts(linear_first: bool) -> None:
-    linear = {"renderRequest": {"mode": "linear"}, "legacyArtifacts": _legacy_envelopes(["pending"] * 9, 8)}
-    circular = {"renderRequest": {"mode": "circular"}, "legacyArtifacts": _legacy_envelopes(["pending"] * 34, 8)}
-    views = [linear, circular] if linear_first else [circular, linear]
-
-    assert _merged_shared(views)["legacyArtifacts"] == linear["legacyArtifacts"]
-
-
-def test_a_linear_view_without_legacy_protein_artifacts_writes_none() -> None:
-    circular = {"renderRequest": {"mode": "circular"}, "legacyArtifacts": _legacy_envelopes(["pending"] * 34, 8)}
-
-    assert "legacyArtifacts" not in _merged_shared([circular, {"renderRequest": {"mode": "linear"}}])

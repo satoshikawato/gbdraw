@@ -1303,7 +1303,16 @@ export const createSimilarityAlignmentActions = ({
   clearCandidatePreview = null,
   onError = null
 }) => {
-  const drawnLinearCards = () => drawnLinearSequences(state.linearSeqs, state.drawingOfMode('linear').recordsOff);
+  // The cards of the shown Linear drawing, and those it draws; none when
+  // another drawing is shown. Resolved at each read.
+  const shownLinearCards = () => {
+    const drawing = state.activeDrawing();
+    return drawing.mode === 'linear' ? drawing.linearSeqs : [];
+  };
+  const drawnLinearCards = () => {
+    const drawing = state.activeDrawing();
+    return drawing.mode === 'linear' ? drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff) : [];
+  };
   if (
     !state
     || typeof getOrthogroupById !== 'function'
@@ -1753,7 +1762,7 @@ export const createSimilarityAlignmentActions = ({
     const catalog = state.featureCatalog?.value;
     return {
       records: recordNames({ recordKeys: (request?.records || []).map((/** @type {CommittedRecord} */ { recordKey }) => recordKey),
-        request, linearSeqs: state.linearSeqs, catalog }),
+        request, linearSeqs: shownLinearCards(), catalog }),
       factsOf: catalogNameIndex(catalog).featureOf
     };
   });
@@ -1867,7 +1876,7 @@ export const createSimilarityAlignmentActions = ({
 
   const activePlanInspector = computed(() => {
     try {
-      return inspectActivePlan(state.similarityAlignmentPlan?.value, { linearSeqs: state.linearSeqs,
+      return inspectActivePlan(state.similarityAlignmentPlan?.value, { linearSeqs: shownLinearCards(),
         catalog: state.featureCatalog?.value, request: currentRequest() });
     } catch (_error) {
       return null;
@@ -1993,7 +2002,7 @@ export const createSimilarityAlignmentActions = ({
       try { return [[anchorKey(anchorFromSource(member, 'Alignment member')), member]]; } catch (_error) { return []; }
     }));
     recordLabels = recordNames({ recordKeys: request.records.map(({ recordKey }) => recordKey),
-      request: canonicalRequest, linearSeqs: state.linearSeqs, catalog: state.featureCatalog?.value });
+      request: canonicalRequest, linearSeqs: shownLinearCards(), catalog: state.featureCatalog?.value });
   };
 
   /** @param {unknown} reason */
