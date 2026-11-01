@@ -94,10 +94,12 @@ write-up of a release.
 - Fixed: a threaded LOSAT search in the Web app could stop with "memory access
   out of bounds" and run the whole pair again (the console said "running the
   pair again"), or fail after the third stop. In Chromium a copy into memory
-  that another LOSAT thread had just grown could trap; the Web app now checks
-  each such copy and first brings the thread's view of the memory up to date.
+  that another LOSAT thread had just grown could trap; the LOSAT build now brings
+  the thread's view of the memory up to date before memory copies and atomic
+  instructions, which on ARM64 Linux and Android also covers stores (as LOSAT
+  states it), and each thread updates its view when it starts.
 - Changed: the Web app's LOSAT engine is the LOSAT development commit
-  `dde737f18` (version 0.2.0 before its release; it was a build of LOSAT
+  `f62da7f6b` (version 0.2.0 before its release; it was a build of LOSAT
   0.1.0). Its searches give the rows of the `losat` command of that commit;
   LOSATN with task `blastn` gives different E-values and hits than before.
   Task `dc-megablast` now runs dc-megablast (the old engine ran `blastn` for
