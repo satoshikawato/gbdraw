@@ -4,6 +4,7 @@ import { webcrypto } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { LOSAT_WASM_BUILD } from '../../gbdraw/web/js/services/losat-build.generated.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 
@@ -1731,7 +1732,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       outfmt: '6',
       args: ['--task', 'megablast'],
       queryCanonicalHash,
-      subjectCanonicalHash
+      subjectCanonicalHash,
+      runtime: { kind: 'losat', source: 'wasm', version: LOSAT_WASM_BUILD.version, program: 'blastn' }
     }]);
   }
   state.losatCache.value = new Map(cacheEntries);
@@ -2054,7 +2056,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const searchedEntries = Array.from(state.losatCache.value.entries());
     assert.ok(searchedEntries.length > 0);
     for (const [key, entry] of searchedEntries) {
-      assert.deepEqual(entry.runtime, { kind: 'losat', source: 'wasm', version: null, program: 'blastn' });
+      assert.deepEqual(entry.runtime, { kind: 'losat', source: 'wasm', version: LOSAT_WASM_BUILD.version, program: 'blastn' });
       const { runtime: _runtime, ...withoutRuntime } = entry;
       assert.equal(key, await sha256Text(JSON.stringify(buildLosatCachePayload(withoutRuntime))));
       assert.equal(key, await sha256Text(JSON.stringify(buildLosatCachePayload(entry))));
@@ -2062,13 +2064,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.deepEqual(state.lastRunInfo.value.losatRuntimes, [{
       program: 'blastn',
       kind: 'losat',
-      version: null,
+      version: LOSAT_WASM_BUILD.version,
       source: 'wasm',
       path: null,
-      text: 'blastn: LOSAT, version not recorded (wasm)',
-      textParts: [{
-        text: '{program}: {name}, version not recorded ({origin})', params: { program: 'blastn', name: 'LOSAT', origin: 'wasm' }
-      }]
+      text: `blastn: LOSAT ${LOSAT_WASM_BUILD.version} (wasm)`,
+      textParts: [{ text: `blastn: LOSAT ${LOSAT_WASM_BUILD.version} (wasm)`, verbatim: true }]
     }]);
     // Generated LOSATN rows stay in the search frame; the Python planner
     // projects the reversed record (PD-OI-073), so no Web conversion runs.

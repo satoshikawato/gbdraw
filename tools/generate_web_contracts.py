@@ -93,6 +93,8 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
     ("FRESH_PROTEIN_COMPARISON_DEFAULTS", "gbdraw.session_request_codec", "describe_fresh_protein_comparison"),
     # The Auto organism name rule's data; the Web fast path runs its steps (R4).
     ("ORGANISM_NAME_RULE", "gbdraw.core.record_metadata", "organism_name_rule_data"),
+    # The raw-cache args keep one spelling; the LOSAT Wasm reads the runtime spelling.
+    ("LOSAT_SEARCH_FLAGS", "gbdraw.comparisons.losat_runtime", "losat_search_flags"),
 )
 # (Web name, Python module, dataclass, field): the values of a field typed as a
 # string Literal (typing.get_args, in the owner's order) and the field's

@@ -1103,6 +1103,38 @@ test('Save writes into each Session 50 drawing the LOSAT entries of its own Line
   assert.deepEqual(keysOf('linear-2'), [`${entry.key}-second`]);
 });
 
+// #1540 (OV-2379): rows the gbdraw 0.14.4 Web engine searched (`runtime.version: null`) for a search the
+// current build gives alike are reused. Load merges both Linear drawings' entries into the one cache with
+// that record, the reuse rule takes each of them, and Save writes each record back into its own drawing.
+test('a Session 50 keeps each Linear drawing\'s 0.14.4 Web LOSAT entries reusable through Load and Save', async () => {
+  const { isReusableLosatEntry } = await import('../../gbdraw/web/js/services/losat-cache.js');
+  const session = v49Session('drawings-linear-pair-losat');
+  const first = session.drawings.find((entry) => entry.id === 'linear');
+  const entry = first.losatCache.entries[0];
+  entry.runtime = { kind: 'losat', source: 'wasm', version: null, program: entry.program };
+  const renamed = (text) => text.replaceAll(entry.queryUid, `${entry.queryUid}-2`).replaceAll(entry.subjectUid, `${entry.subjectUid}-2`);
+  const index = session.drawings.findIndex((candidate) => candidate.id === 'linear-2');
+  session.drawings[index] = JSON.parse(renamed(JSON.stringify(session.drawings[index])));
+  session.drawings[index].losatCache.entries = [JSON.parse(renamed(JSON.stringify({ ...entry, key: `${entry.key}-second`, filename: 'second.tsv' })))];
+  for (const opened of ['linear-2', 'linear']) {
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const loaded = await loadKeepingSlots(session);
+    assertLoadedDrawings(session, loaded);
+    for (const key of [entry.key, `${entry.key}-second`]) {
+      const cached = state.losatCache.value.get(key);
+      assert.deepEqual(cached?.runtime, entry.runtime, `${opened}: ${key}`);
+      assert.equal(isReusableLosatEntry(cached), true, `${opened}: ${key}`);
+    }
+    const result = await exportSession(`losat-runtime-${opened}`, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+    assert.equal(result.status, 'saved', JSON.stringify(result));
+    const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    const runtimesOf = (id) => saved.drawings.find((candidate) => candidate.id === id).losatCache.entries.map(({ runtime }) => runtime);
+    assert.deepEqual(runtimesOf('linear'), [entry.runtime], opened);
+    assert.deepEqual(runtimesOf('linear-2'), [entry.runtime], opened);
+  }
+});
+
 // DESIGN §1, B2-D9: a drawing writes the LOSAT entries its request's inputs
 // name. linear-2 binds linear's rows but has no request (no Generate), so it
 // names none; the shown drawing linear keeps its entry.

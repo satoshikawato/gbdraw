@@ -170,6 +170,7 @@ import {
   losatEdgeFilename,
   validateDerivedProteinReferences,
   webLosatRuntimeRecord,
+  isReusableLosatEntry,
   writtenLegacyProteinArtifacts,
   CIRCULAR_CONSERVATION_FLOW
 } from '../services/losat-cache.js';
@@ -553,6 +554,7 @@ const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) =>
 
   for (const [key, entry] of cacheMap.entries()) {
     if (classifyRawLosatCacheEntry(entry) !== 'nucleotide-current') continue;
+    if (!isReusableLosatEntry(entry)) continue;
     if ((entry.searchContext ?? null) !== (metadata.searchContext ?? null)) continue;
     if (String(entry.queryCanonicalHash || '') !== expectedQuery) continue;
     if (String(entry.subjectCanonicalHash || '') !== expectedSubject) continue;
@@ -4577,12 +4579,12 @@ export const createRunAnalysis = ({
             );
             /** @type {Record<string, any> | null} */
             let convertedPayload = null;
+            // A payload converted from rows this Generate searched again (another LOSAT build searched the cached
+            // ones) is converted again: its key names the raw keys, not the rows.
             if (useDerivedProteinPayloadCache) {
-              convertedPayload = getLosatDerivedCacheEntry(
-                derivedCacheMap,
-                derivedCacheKey,
-                workingProteinIdentityManifest
-              );
+              convertedPayload = losatTiming.cacheMisses === 0
+                ? getLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, workingProteinIdentityManifest)
+                : null;
               if (convertedPayload) {
                 convertedPayload = {
                   ...convertedPayload,

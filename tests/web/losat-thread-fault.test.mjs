@@ -153,7 +153,7 @@ const setupPage = async (t, { trappedAttempts = Infinity, trap = true } = {}) =>
 const job = { pairIndex: 0, program: 'blastp', querySequenceKey: 'q', subjectSequenceKey: 's' };
 const options = {
   totalThreadBudget: 2, concurrency: 1, threadsPerJob: 2,
-  // Large enough for Auto mode to choose threaded execution.
+  // The FASTA text of the two sequence keys.
   sequences: { q: '>q\n' + 'M'.repeat(300000), s: '>s\n' + 'M'.repeat(300000) }
 };
 
@@ -223,4 +223,51 @@ test('explicit threaded LOSAT without cross-origin isolation reports a recognize
   assert.equal(workers.length, 0, 'no LOSAT job is dispatched');
   assert.deepEqual(await owner.runLosatPairsParallel([], { ...options, executionMode: 'threaded' }), [],
     'a fully cached rerun dispatches nothing and succeeds');
+});
+
+// D-51 (OV-2376): Auto runs every LOSAT program on the threaded engine wherever threading is available, LOSATN
+// and TLOSATX too (they keep one thread per job); the serial engine runs only when threading is unavailable or
+// after the trap retries.
+test('automatic LOSAT runs a small LOSATN workload on the threaded engine when the page is isolated', async (t) => {
+  const { owner, workers } = await setupPage(t, { trappedAttempts: 0 });
+  const nucleotideJob = { pairIndex: 0, program: 'blastn', querySequenceKey: 'q', subjectSequenceKey: 's', extraArgs: ['--task', 'megablast'] };
+  const result = await settleWithin(
+    owner.runLosatPairsParallel([nucleotideJob], { ...options, sequences: { q: '>q\nACGT', s: '>s\nACGT' } }),
+    5000,
+    'automatic LOSATN run'
+  );
+  assert.deepEqual(result, [{ ...nucleotideJob, text: 'q\ts\t100\n' }]);
+  assert.deepEqual(workers.map((worker) => worker.threaded), [true]);
+  assert.equal(workers[0].messages.find((message) => message.type === 'run').threadsPerJob, 1);
+});
+
+// D-51 (OV-2376): the serial engine (LOSAT web ABI v1) has no task dc-megablast. Every way to the serial engine
+// stops before its first search with a named diagnostic; none dispatches a serial job.
+for (const [label, executionMode, isolated, trappedAttempts, threadedWorkers] of [
+  ['Serial execution', 'serial', true, 0, 0],
+  ['Auto without cross-origin isolation', 'auto', false, 0, 0],
+  ['Auto after the threaded trap retries', 'auto', true, Infinity, 3]
+]) {
+  test(`task dc-megablast stops before any serial search: ${label}`, async (t) => {
+    const { owner, workers } = await setupPage(t, { trappedAttempts });
+    globalThis.crossOriginIsolated = isolated;
+    const dcJob = { pairIndex: 0, program: 'blastn', querySequenceKey: 'q', subjectSequenceKey: 's', extraArgs: ['--task', 'dc-megablast'] };
+    await assert.rejects(
+      settleWithin(owner.runLosatPairsParallel([dcJob], { ...options, executionMode }), 5000, label),
+      (error) => error.code === 'COMPARISON_INPUT' && error.stage === 'losat'
+        && error.context.reason === 'LOSAT_TASK_THREADED'
+    );
+    assert.deepEqual(workers.map((worker) => worker.threaded), Array.from({ length: threadedWorkers }, () => true));
+  });
+}
+
+test('the dc-megablast refusal names the task and threaded execution', async () => {
+  const { diagnosticError, normalizeUserFacingError } = await import(new URL('js/utils/error-normalization.js', webRoot).href);
+  const model = normalizeUserFacingError(
+    diagnosticError('COMPARISON_INPUT', { reason: 'LOSAT_TASK_THREADED' }, { stage: 'losat' }),
+    { operation: 'generate' }
+  );
+  assert.equal(model.code, 'COMPARISON_INPUT');
+  assert.match(model.summary, /dc-megablast/);
+  assert.match(model.summary, /Threaded/);
 });

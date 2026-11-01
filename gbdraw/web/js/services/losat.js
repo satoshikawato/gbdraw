@@ -2,6 +2,7 @@
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
 import { resolveLosatThreadPlan } from './losat-thread-plan.js';
+import { losatSearchTask } from './losat-cache.js';
 import {
   compileLosatWasm,
   hasDirectLosatApi,
@@ -11,7 +12,6 @@ import {
 
 const DEFAULT_WASM_PATH = './wasm/losat/losat.wasm';
 const DEFAULT_THREADED_WASM_PATH = LOSAT_THREADED_WASM_URL || './wasm/losat/losat-threaded.wasm';
-const DEFAULT_THREADED_MIN_FASTA_CHARS = 500000;
 // Chromium can trap a thread's memory.copy or memory.fill right after another
 // thread grows the shared memory; compileLosatWasm guards those operations
 // (services/losat-shared-memory-guard.js). A trap the guard does not cover, or
@@ -19,6 +19,9 @@ const DEFAULT_THREADED_MIN_FASTA_CHARS = 500000;
 // a trapped job runs again, up to this many times, before the run fails.
 const THREADED_TRAP_RETRY_LIMIT = 2;
 const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
+// The LOSATN tasks of the serial engine (losat.wasm, LOSAT web ABI v1: src/web_api.rs parse_blastn_args).
+// dc-megablast runs only on the threaded engine (OV-2376).
+const SERIAL_LOSATN_TASKS = new Set(['megablast', 'blastn']);
 
 /** @typedef {NonNullable<ReturnType<typeof normalizeUserFacingError>>} UserFacingDiagnostic */
 
@@ -31,6 +34,7 @@ const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
  * @property {string} [subjectSequenceKey]
  * @property {number} [pairIndex]
  * @property {string} [cacheKey]
+ * @property {string[]} [extraArgs] the search options, in the raw-cache spelling
  */
 
 /** @typedef {LosatJob & { text: string }} LosatJobResult */
@@ -332,35 +336,6 @@ const normalizeExecutionMode = (value) => {
 };
 
 /**
- * @param {LosatJob} job
- * @param {Map<string, string>} sequenceStore
- */
-const getThreadedFastaCharCount = (job, sequenceStore) => {
-  let total = 0;
-  try {
-    total += resolveJobSequence(sequenceStore, job.querySequenceKey, 'query').length;
-    total += resolveJobSequence(sequenceStore, job.subjectSequenceKey, 'subject').length;
-  } catch {
-    return 0;
-  }
-  return total;
-};
-
-/**
- * @param {LosatJob[]} jobs
- * @param {Map<string, string>} sequenceStore
- * @param {number} threadsPerJob
- */
-const shouldUseThreadedLosat = (jobs, sequenceStore, threadsPerJob) => {
-  if (!Array.isArray(jobs) || jobs.length === 0 || threadsPerJob <= 1) return false;
-  if (jobs.length === 1) {
-    return getThreadedFastaCharCount(jobs[0], sequenceStore) >= DEFAULT_THREADED_MIN_FASTA_CHARS;
-  }
-  const totalChars = jobs.reduce((sum, job) => sum + getThreadedFastaCharCount(job, sequenceStore), 0);
-  return totalChars >= DEFAULT_THREADED_MIN_FASTA_CHARS * 2;
-};
-
-/**
  * @param {string} state
  * @param {string} message
  * @param {Record<string, any>} [details]
@@ -381,18 +356,28 @@ const notifyRuntimeStatus = (callback, status) => {
 };
 
 /**
+ * The threaded pool's plan: LOSATP takes the requested threads per job; LOSATN and TLOSATX run one thread per
+ * job (the Settings panel shows them fixed at 1).
  * @param {LosatJob[]} jobs
  * @param {LosatRunOptions} options
- * @param {Map<string, string>} sequenceStore
  */
-const buildThreadedRuntimePlan = (jobs, options, sequenceStore) => {
-  const plan = resolveLosatThreadPlan({
-    jobCount: jobs.length,
-    totalThreadBudget: options.totalThreadBudget,
-    threadsPerJob: jobs.every((job) => job.program === 'blastp') ? options.threadsPerJob : 1,
-    parallelWorkers: options.concurrency
-  });
-  return { ...plan, useful: shouldUseThreadedLosat(jobs, sequenceStore, plan.threadsPerJob) };
+const buildThreadedRuntimePlan = (jobs, options) => resolveLosatThreadPlan({
+  jobCount: jobs.length,
+  totalThreadBudget: options.totalThreadBudget,
+  threadsPerJob: jobs.every((job) => job.program === 'blastp') ? options.threadsPerJob : 1,
+  parallelWorkers: options.concurrency
+});
+
+/**
+ * Stop before the serial engine's first search when a job needs a task it does not have (dc-megablast, OV-2376).
+ * Serial execution, Auto without threading, and Auto after the threaded trap retries all reach it.
+ * @param {LosatJob[]} jobs
+ */
+const requireSerialLosatTasks = (jobs) => {
+  const tasks = jobs.filter((job) => job.program === 'blastn').map((job) => losatSearchTask(job.extraArgs));
+  if (tasks.some((task) => task !== null && !SERIAL_LOSATN_TASKS.has(task))) {
+    throw diagnosticError('COMPARISON_INPUT', { reason: 'LOSAT_TASK_THREADED' }, { stage: 'losat' });
+  }
 };
 
 /** @param {LosatJob} job */
@@ -982,7 +967,6 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
   throwIfAborted(options.signal);
 
   const executionMode = normalizeExecutionMode(options.executionMode);
-  const sequenceStore = normalizeSequenceStore(options.sequences);
   const serialPlan = resolveLosatThreadPlan({
     jobCount: jobList.length, totalThreadBudget: options.totalThreadBudget,
     parallelWorkers: options.concurrency, threadsPerJob: 1
@@ -990,13 +974,14 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
   let threadedFallbackReason = '';
 
   if (executionMode !== 'serial') {
-    const plan = buildThreadedRuntimePlan(jobList, options, sequenceStore);
+    const plan = buildThreadedRuntimePlan(jobList, options);
     const support = await getLosatThreadingSupport({
       threadedWasmPath: options.threadedWasmPath || DEFAULT_THREADED_WASM_PATH
     });
     throwIfAborted(options.signal);
 
-    if (support.state === 'available' && (executionMode === 'threaded' || plan.useful)) {
+    // Auto runs threaded wherever threading is available (D-51), as Threaded does.
+    if (support.state === 'available') {
       notifyRuntimeStatus(
         options.onRuntimeStatus,
         buildRuntimeStatus(
@@ -1042,9 +1027,7 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
       // Only uncached jobs reach dispatch, so a fully cached rerun still succeeds.
       throw diagnosticError('LOSAT_THREADING_UNAVAILABLE', { reason: support.reason || 'THREADED_WASM' }, { stage: 'losat' });
     } else {
-      threadedFallbackReason = support.state === 'available'
-        ? 'Current LOSAT workload is below the threaded auto threshold.'
-        : support.message || 'Threaded LOSAT is unavailable.';
+      threadedFallbackReason = support.message || 'Threaded LOSAT is unavailable.';
     }
 
     if (threadedFallbackReason) {
@@ -1064,6 +1047,7 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
     );
   }
 
+  requireSerialLosatTasks(jobList);
   try {
     return await runLosatPairsWithWorkers(jobList, options);
   } catch (error) {

@@ -27,7 +27,11 @@ gbdraw is installed. Browser security policy still applies. Threaded LOSAT
 also requires a cross-origin-isolated page. Select **Serial** under
 **Execution** when that capability is unavailable; the **Threaded** choice then
 reads **Threaded (unavailable here)**, and Generate with uncached LOSAT jobs
-reports `LOSAT_THREADING_UNAVAILABLE` at the `losat` stage. Where threaded execution is
+reports `LOSAT_THREADING_UNAVAILABLE` at the `losat` stage. **Auto** runs threaded
+LOSAT wherever the page allows it, for every LOSAT program, and serial LOSAT on a page
+without it or after a threaded job keeps failing. LOSATN task `dc-megablast` runs only
+threaded: with **Serial**, or wherever **Auto** runs serial LOSAT, Generate stops before
+the search and says so. Where threaded execution is
 available, **Safe** is the conservative **Total threads** choice.
 
 A saved session embeds input resources and should be protected like those
@@ -1747,7 +1751,8 @@ saved Session and saved analysis files of that Result. Both downloads refer to t
 successful Result, even when controls hold a newer draft. An unavailable Source
 recipe includes a reason; it does not silently omit unsupported settings.
 **Search runtime** lists the program and runtime of each displayed LOSAT
-result: the browser WASM (`wasm`; its version is not recorded) or the kind,
+result: the browser Wasm (`wasm`) with the LOSAT build that searched it (a result
+that gbdraw 0.14.4 or earlier searched reads `version not recorded`), or the kind,
 version, source, and path that a CLI Session recorded. A result saved before
 runtimes were recorded shows `runtime not recorded`.
 Source recipe reads each track-slot token back with the CLI split rules, so a

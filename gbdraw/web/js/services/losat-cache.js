@@ -10,6 +10,7 @@ import {
 } from '../contracts/schema.generated.js';
 import { DERIVED_RESULT_DESCRIPTION } from '../contracts/derived-result-shape.generated.js';
 import { shapeViolations } from '../utils/contract-shape.js';
+import { LOSAT_WASM_BUILD } from './losat-build.generated.js';
 
 // Membership is tested on unvalidated Session values, hence `ReadonlySet<unknown>`.
 /** @type {ReadonlySet<unknown>} */
@@ -60,15 +61,43 @@ export { CIRCULAR_CONSERVATION_FLOW };
 
 // The runtime identity the Web stores beside each raw entry it searches
 // (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw
-// key. The shipped WASM has no build manifest, so its version is not recorded
-// (null), as for a CLI runtime whose version probe fails.
+// key. Its version is the shipped Wasm's build (gbdraw/web/wasm/losat/losat-build.json).
 /** @param {unknown} program */
 export const webLosatRuntimeRecord = (program) => ({
   kind: 'losat',
   source: 'wasm',
-  version: null,
+  version: LOSAT_WASM_BUILD.version,
   program: String(program || '')
 });
+
+/**
+ * The LOSATN task a search's options name (`--task`, the raw-cache spelling; Generate always writes it), or null.
+ * @param {unknown} args
+ * @returns {string | null}
+ */
+export const losatSearchTask = (args) => {
+  const words = Array.isArray(args) ? args.map(String) : [];
+  const index = words.indexOf('--task');
+  return index >= 0 && index + 1 < words.length ? words[index + 1] : null;
+};
+
+/**
+ * Whether Generate may reuse a raw entry's rows, by the runtime that searched them. A CLI search and this LOSAT
+ * Wasm build are always reused. Rows of the Wasm of gbdraw 0.14.4 and earlier (`version: null`) and rows with no
+ * runtime record (Sessions before version 44, promoted legacy protein caches) are reused only for the searches
+ * that Wasm gives the same rows as this build: LOSATP, and LOSATN task megablast (#1540's engine parity). Its
+ * LOSATN task blastn gave other E-values and hits, its task dc-megablast ran blastn (OV-2377), and its TLOSATX
+ * rows came in another order, so those are searched again once. So are rows of any other Wasm build.
+ * @param {unknown} entry
+ * @returns {boolean}
+ */
+export const isReusableLosatEntry = (entry) => {
+  if (!isPlainObject(entry)) return false;
+  const runtime = isPlainObject(entry.runtime) ? entry.runtime : null;
+  if (runtime !== null && (runtime.source !== 'wasm' || runtime.version === LOSAT_WASM_BUILD.version)) return true;
+  if (runtime !== null && runtime.version !== null) return false;
+  return entry.program === 'blastp' || (entry.program === 'blastn' && losatSearchTask(entry.args) === 'megablast');
+};
 
 // Default raw LOSAT TSV name of a Linear edge; the CLI port is
 // gbdraw.comparisons.linear_losat.losat_edge_filename
@@ -971,6 +1000,7 @@ export const getCurrentRawLosatCacheEntry = (
 ) => {
   if (!(cacheMap instanceof Map) || !cacheKey) return null;
   const entry = cacheMap.get(cacheKey);
+  if (!isReusableLosatEntry(entry)) return null;
   if ((entry?.searchContext ?? null) !== (metadata.searchContext ?? null)) return null;
   const classification = classifyRawLosatCacheEntry(entry);
   if (classification === 'protein-current') {

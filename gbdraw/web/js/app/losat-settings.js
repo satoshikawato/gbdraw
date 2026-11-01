@@ -176,15 +176,15 @@ export const createLosatSettings = ({ state }) => {
     losatThreadPlan.value.pairWorkers
   ));
 
-  // The shown name of the mode Auto resolves to (UI text, compared nowhere).
+  // The shown name of the mode Auto resolves to (UI text, compared nowhere): threaded wherever this browser can
+  // run it (D-51), serial when it cannot or the last run fell back.
   const losatEffectiveExecutionMode = computed(() => {
     const raw = String(losatExecution.executionMode || 'auto').trim().toLowerCase();
     if (raw === 'serial') return t('serial');
     if (raw === 'threaded') return t('threaded');
     const threadingState = String(state?.losatThreadingStatus?.value?.state || '').trim().toLowerCase();
     if (threadingState && threadingState !== 'available' && threadingState !== 'running') return t('serial');
-    if (losatMaxPairWorkers.value > 1 || losatEffectiveThreadsPerJob.value > 1) return t('threaded if useful');
-    return t('serial');
+    return losatThreadingPrecondition().state === 'available' ? t('threaded') : t('serial');
   });
 
   // Threaded stays strict (PD-OI-018); the option says when this browser

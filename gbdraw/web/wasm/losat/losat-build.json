@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/satoshikawato/LOSAT",
+  "commit": "dde737f188dc29b6a291e633df7f4db82b90348e",
+  "commitDate": "2026-10-31T14:11:11+00:00",
+  "cargoVersion": "0.2.0",
+  "version": "0.2.0+dde737f188dc",
+  "toolchain": {
+    "rustc": "rustc 1.92.0 (ded5c06cf 2025-12-08)\nbinary: rustc\ncommit-hash: ded5c06cf21d2b93bffd5d884aa6e96934ee4234\ncommit-date: 2025-12-08\nhost: x86_64-unknown-linux-gnu\nrelease: 1.92.0\nLLVM version: 21.1.3",
+    "cargo": "cargo 1.92.0 (344c4567c 2025-10-21)"
+  },
+  "files": {
+    "losat.wasm": {
+      "sha256": "7c154abc37b3bdab2493855a890e6cdc8f5f7432fa88aee67ebf03b42fae85a2",
+      "size": 7261437,
+      "target": "wasm32-wasip1",
+      "shape": "serial reactor, direct losat_web_* API (_initialize)",
+      "command": "cargo build --release --locked --target wasm32-wasip1 --lib --no-default-features",
+      "rustflags": [
+        "-C",
+        "target-feature=+simd128"
+      ]
+    },
+    "losat-threaded.wasm": {
+      "sha256": "0a2eef6f057ffc00cbc59bd56e2e0bc3e00c921f47cc3a6843e705becbf4c55a",
+      "size": 12741988,
+      "target": "wasm32-wasip1-threads",
+      "shape": "threaded command (_start, wasi_thread_start; imports env.memory, wasi.thread-spawn)",
+      "command": "cargo build --release --locked --target wasm32-wasip1-threads --bin losat --features wasm-threads",
+      "rustflags": [
+        "-C",
+        "target-feature=+simd128",
+        "-C",
+        "link-arg=--max-memory=4294901760"
+      ],
+      "memory": {
+        "initial": 43,
+        "maximum": 65535
+      }
+    }
+  }
+}

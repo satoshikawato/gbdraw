@@ -442,6 +442,15 @@ export const ORGANISM_NAME_RULE = Object.freeze({
   })
 });
 
+// gbdraw/comparisons/losat_runtime.py: losat_search_flags()
+export const LOSAT_SEARCH_FLAGS = Object.freeze({
+  "--task": '-task',
+  "--query-gencode": '-query_gencode',
+  "--db-gencode": '-db_gencode',
+  "--max-hsps-per-subject": '-max_hsps',
+  "--max-target-seqs": '-max_target_seqs'
+});
+
 // gbdraw/analysis/protein_colinearity.py: OrthogroupMember.role
 /** @type {Readonly<{ values: readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[], default: 'anchor' }>} */
 export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({

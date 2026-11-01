@@ -51,7 +51,8 @@ exported rows (`--conservation_blast`).
 The web app can run all three LOSAT program families. The web app offers the
 LOSATN task `dc-megablast`; a native runtime that does not list that task (the
 released LOSAT 0.1.0) stops before searching. Threaded browser search requires cross-origin
-isolation.
+isolation. In the browser, `dc-megablast` runs only with threaded LOSAT; **Serial**
+execution, or a page without cross-origin isolation, stops before searching.
 
 For Linear browser searches, the three **LOSAT Mode** buttons select
 **LOSATN**, **LOSATP**, or **TLOSATX**. When LOSATP is active, the **LOSATP
