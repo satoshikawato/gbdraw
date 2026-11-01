@@ -652,8 +652,8 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         metavar='KEY=VALUE',
         default=None,
         help=(
-            'Align the records at the first drawn base of the feature this exact '
-            'selector names in each record, for example gene=dnaA or locus_tag=b0001 '
+            'Align the records at the start as drawn (its 5\' base when it reads rightward, '
+            'else its 3\' base) of the feature this exact selector names in each record, for example gene=dnaA or locus_tag=b0001 '
             '(the feature_selector form of the placement and override tables). The first '
             'record that has the feature keeps its place; a record without it keeps its '
             'place and is reported. Wins over --align_center for the records it moves '

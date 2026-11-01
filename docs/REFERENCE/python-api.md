@@ -92,6 +92,19 @@ Each `DepthTrackOptions` represents one logical series. `source` is one path or 
 
 `CircularOptions.comparison_rings` is the current field name. The `conservation` constructor and attribute alias remains available for compatible code, but passing both names is an error.
 
+`CircularOptions.origin_feature` (default `None`) takes a `"key=value"` feature
+selector, such as `"gene=psbA"`, and rotates each record so that the feature's
+start as drawn (its 5' base when it reads clockwise as drawn, else its 3' base)
+sits at 12 o'clock, like the CLI `--origin_feature`
+(see [Rotate a record to a feature](command-line.md#rotate-a-record-to-a-feature)
+for the rules). The typed `CircularDiagramOptions.origin_feature` accepts the
+same string or a `FeatureSelector`. The planner writes the start into each
+matched record's `RecordDisplayOptions.start_coordinate` and clears the
+option, so the planned request, and a Session saved from it, carries the start.
+`encode_canonical_request()` refuses an unplanned request that still sets it.
+It cannot be combined with a `start_coordinate` of its own, a crop, or a record
+drawn linear, and it refuses a feature without one strand and exact parts.
+
 ## Linear options
 
 `LinearOptions.tracks` defaults to an empty `LinearTrackOptions`; `comparisons` defaults to `LinearComparisonOptions()`. Linear title position accepts `None`, `center`, `top`, or `bottom`.

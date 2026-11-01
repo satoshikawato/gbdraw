@@ -286,6 +286,19 @@ def _get_args(
         help='Keep the full species/strain center label when a circular plot title is shown (default: False).',
         action='store_true')
     parser.add_argument(
+        '--origin_feature',
+        metavar='KEY=VALUE',
+        default=None,
+        help=(
+            'Rotate each record so that the feature this exact selector names starts at 12 o\'clock, '
+            'for example gene=dnaA or locus_tag=b0001 (the feature_selector form of the placement and '
+            'override tables): its start as drawn (its 5\' base when it reads clockwise, else its 3\' '
+            'base) becomes the display start. A record without '
+            'the feature keeps its start and is reported. Cannot be combined with '
+            '--display_start_coordinate or a crop (default: off).'
+        ),
+    )
+    parser.add_argument(
         '--center_reserved_radius',
         help='Override the center-label reserved radius for circular track packing (in px; must be >= 0).',
         type=argparse_float)
@@ -1431,6 +1444,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         bitscore=bitscore,
         identity=identity,
         alignment_length=alignment_length,
+        origin_feature=args.origin_feature,
     )
     request_records = record_manifest.records
 
