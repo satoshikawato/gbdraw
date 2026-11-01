@@ -110,6 +110,12 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   several rows read `Track rows 3 and 4`, and `Auto (subject (auto))` reads
   `Auto (subject)`. The sentences in the **Labels do not fit** dialog's notes and
   reasons are still in English.
+- **Web app: Reset Settings and a Result not shown.** After **Reset Settings**, the
+  other mode's Result and the other Results of a batch now show what **Generate
+  Diagram** draws when you display them: features and labels hidden when they were
+  generated return, an edited label text returns to its own text, and after a
+  Session load the Legend rows of removed color rules leave. Before, these stayed
+  until the next Generate.
 
 ## Changed behavior
 
@@ -290,10 +296,6 @@ file. See
 - A Similarity group member popup and the Similarity alignment panel still show
   the coordinates of a CDS across the origin as `1..` the record length. The
   drawing is correct; only this text is wrong.
-- After **Reset Settings** on one diagram mode, the other mode's Result keeps its
-  hidden features, hidden labels, and edited label text, and after a Session load
-  the Legend rows of its removed color rules, until the next **Generate Diagram**.
-  Since 0.14.3 at least.
 - Edits made on a Linear File card that draws every record of its file, in a
   Session saved by gbdraw 0.13.0, do not follow its records after the first
   **Generate Diagram** splits the card into one card per record.
@@ -306,9 +308,6 @@ file. See
 - After you delete a Legend row, giving another color rule that row's name, or a
   new color to a rule of that name, can place the returning row last in the Legend
   until the next **Generate Diagram**. 0.14.3 does the same.
-- On a Circular diagram, a label whose edited text is too long for its arc can
-  be drawn outside the arc without its leader line until the next **Generate
-  Diagram**. 0.14.4 does the same.
 
 Carried from 0.14.1:
 
