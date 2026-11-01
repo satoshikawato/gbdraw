@@ -463,6 +463,9 @@ export const createRecordDisplayControls = ({
   // Generate, so a row whose orientation changed since then is stale.
   /** @param {readonly RecordOrientationDecision[]} decisions @param {string} label @returns {RecordOrientationWrite} */
   const writeDecidedOrientations = (decisions, label) => {
+    // The button acts on the shown drawing, whose last Generate it read.
+    const drawing = state.activeDrawing();
+    if (drawing.mode !== 'linear') return { status: 'stale' };
     refreshCommittedRows();
     const rowsByKey = new Map(committedRows.filter((row) => row.scope === 'linear').map((row) => [row.recordKey, row]));
     const drawnChanged = (/** @type {CommittedDisplayRow} */ row) => {
@@ -477,7 +480,6 @@ export const createRecordDisplayControls = ({
     });
     if (!changes.length) return { status: 'unchanged' };
     runUndoable(label, () => {
-      const drawing = state.drawingOfMode('linear');
       settleDrafts(drawing);
       changes.forEach(({ row, reverseComplement }) => {
         const draft = draftOf(drawing, row);
