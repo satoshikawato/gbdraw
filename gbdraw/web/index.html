@@ -3307,7 +3307,7 @@
                                         <div class="linear-primary-label">{{ t('Performance') }}</div>
                                         <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                             <div>
-                                                <span class="linear-primary-label mb-1">{{ t('Execution') }} <help-tip id="help-comparison-execution" :text="t('Auto chooses threaded LOSAT only when browser support and workload allow it.')"></help-tip></span>
+                                                <span class="linear-primary-label mb-1">{{ t('Execution') }} <help-tip id="help-comparison-execution" :text="t('Auto runs threaded LOSAT when this browser supports it, and serial LOSAT otherwise. LOSATN task dc-megablast needs threaded LOSAT.')"></help-tip></span>
                                                 <select v-model="losatExecution.executionMode" :aria-label="t('LOSAT execution')" aria-describedby="help-comparison-execution" data-comparison-focus="losat-execution" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                     <option value="auto">{{ t('Auto ({mode})', { mode: losatEffectiveExecutionMode }) }}</option>
                                                     <option value="serial">{{ t('Serial') }}</option>

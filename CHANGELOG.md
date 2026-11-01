@@ -49,6 +49,21 @@ write-up of a release.
   pair again"), or fail after the third stop. In Chromium a copy into memory
   that another LOSAT thread had just grown could trap; the Web app now checks
   each such copy and first brings the thread's view of the memory up to date.
+- Changed: the Web app's LOSAT engine is the LOSAT development commit
+  `dde737f18` (version 0.2.0 before its release; it was a build of LOSAT
+  0.1.0). Its searches give the rows of the `losat` command of that commit;
+  LOSATN with task `blastn` gives different E-values and hits than before.
+  Task `dc-megablast` now runs dc-megablast (the old engine ran `blastn` for
+  it) on threaded execution: the default, and **Auto** on a cross-origin
+  isolated page. **Serial**, or a page without isolation, stops before the
+  search with a message that `dc-megablast` needs threaded LOSAT. **Auto** now
+  runs LOSATN and TLOSATX on threaded execution too, wherever the page allows
+  it. Run Info names the engine's version. Saved LOSATP and LOSATN `megablast`
+  searches of an earlier Web app are reused, because this engine gives the
+  same rows; its saved LOSATN `blastn` and `dc-megablast` searches and TLOSATX
+  searches run again once at the next **Generate Diagram**. Searches saved by
+  the command line are reused as before.
+  `gbdraw/web/wasm/losat/losat-build.json` records the build.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

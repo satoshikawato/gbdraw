@@ -22,8 +22,10 @@ WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 FIXTURE_ROOT = WEB_ROOT / "tutorial-data"
 OUTPUT_ROOT = FIXTURE_ROOT / "lambda-de3-comparison"
 WASM_PATH = WEB_ROOT / "wasm" / "losat" / "losat.wasm"
-RUNTIME_VERSION = "0.1.0"
-RUNTIME_SHA256 = "1c597c9e366785051af698cb69f315bec10ac6c55e7a3b9c2e9325dbbd46f312"
+# The shipped serial file's build (tools/record_losat_wasm_build.py) and the runtime each frozen output was
+# qualified with (its derivation in the tutorial fixture manifest).
+BUILD_MANIFEST_PATH = WASM_PATH.with_name("losat-build.json")
+FIXTURE_MANIFEST_PATH = FIXTURE_ROOT / "manifest.json"
 QUERY_ID = "NC_001416.1"
 SUBJECT_ID = "NC_042057.1"
 OUTFMT6_COLUMN_COUNT = 12
@@ -230,10 +232,25 @@ class _Handler(SimpleHTTPRequestHandler):
         return
 
 
-def _check_runtime() -> None:
-    payload = WASM_PATH.read_bytes()
-    if _sha256(payload) != RUNTIME_SHA256 or RUNTIME_VERSION.encode("ascii") not in payload:
-        raise ValueError("pinned browser LOSAT runtime changed")
+def _check_runtime(*, evidence: bool = True) -> None:
+    """The serial file must be the recorded build and, unless the evidence is being rewritten, the runtime that
+    qualified the frozen outputs."""
+
+    build = json.loads(BUILD_MANIFEST_PATH.read_text(encoding="utf-8"))
+    shipped = build["files"][WASM_PATH.name]
+    if _sha256(WASM_PATH.read_bytes()) != shipped["sha256"]:
+        raise ValueError(f"{WASM_PATH.name} does not match {BUILD_MANIFEST_PATH.name}")
+    if not evidence:
+        return
+    fixtures = json.loads(FIXTURE_MANIFEST_PATH.read_text(encoding="utf-8"))["files"]
+    for spec in PROGRAMS:
+        derivation = fixtures[f"lambda-de3-{spec.name}"]["derivation"]
+        if derivation["toolSha256"] != shipped["sha256"]:
+            raise ValueError(
+                f"frozen {spec.name} evidence was qualified with browser LOSAT {derivation['toolVersion']} "
+                f"(sha256 {derivation['toolSha256']}); the shipped file is LOSAT {build['version']} "
+                f"(sha256 {shipped['sha256']}); qualify it again with --write"
+            )
 
 
 def _run_browser(runs: int) -> tuple[dict[str, list[bytes]], dict[str, list[float]]]:
@@ -306,7 +323,7 @@ def _check() -> dict[str, dict[str, Any]]:
 def _qualify(*, runs: int, write: bool) -> dict[str, dict[str, Any]]:
     if runs < 2:
         raise ValueError("qualification requires at least two serial runs")
-    _check_runtime()
+    _check_runtime(evidence=not write)
     outputs, timings = _run_browser(runs)
     summaries: dict[str, dict[str, Any]] = {}
     for spec in PROGRAMS:

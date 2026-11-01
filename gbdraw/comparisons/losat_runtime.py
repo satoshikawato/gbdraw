@@ -90,6 +90,16 @@ LOSAT_OPTION_FLAGS: Mapping[str, LosatOptionFlags] = MappingProxyType(
 )
 
 
+def losat_search_flags() -> dict[str, str]:
+    """The runtime spelling of each raw-cache option word.
+
+    The Web keeps the cache spelling in its args and spells them for its LOSAT
+    Wasm with this table (generated into ``js/contracts/schema.generated.js``).
+    """
+
+    return {flags.cache: flags.search for flags in LOSAT_OPTION_FLAGS.values()}
+
+
 @dataclass(frozen=True)
 class LosatProgram:
     """One comparison program as data."""
@@ -779,6 +789,7 @@ __all__ = [
     "losat_cache_args",
     "losat_program",
     "losat_runtime_record",
+    "losat_search_flags",
     "losat_task_values",
     "require_losat_task_support",
     "resolve_losat_runtime",

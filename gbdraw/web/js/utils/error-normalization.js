@@ -88,6 +88,8 @@ const REASONS = Object.freeze({
   // A Selected plan with a LOSATP mode that compares every adjacent pair.
   SELECTED_PAIRS_NEED_PAIRWISE: 'Similarity groups and Collinear blocks compare every adjacent pair with LOSAT, so they do not run on pairs set one by one in Selected pairs. Choose Run LOSAT for all adjacent pairs, or choose Pairwise matches.',
   LOSAT_TASK: 'Choose a LOSATN task that the selected LOSAT runtime supports.',
+  // The serial LOSAT engine has no task dc-megablast (services/losat.js, OV-2376).
+  LOSAT_TASK_THREADED: 'LOSATN task dc-megablast runs only with threaded LOSAT. Select Threaded or Auto under Execution in a browser where Threaded is available, or choose task megablast or blastn.',
   // The LOSATP converter named another derived identity than Generate looked up (run-analysis.js).
   DERIVED_KEY_MISMATCH: 'The converted LOSATP comparison does not match the settings it was looked up with. If Retry fails the same way, save the Session and report the problem.',
   RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for comparison rings.',
