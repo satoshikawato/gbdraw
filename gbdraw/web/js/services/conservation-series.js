@@ -1,4 +1,5 @@
 // @ts-check
+import { CONSERVATION_TEN_COLORS } from '../conservation-colors.generated.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
@@ -22,22 +23,9 @@ import { resolveColorToHex } from '../utils/color-utils.js';
 
 export const CONSERVATION_SLOT_MANAGER = 'circular_conservation';
 
-// The colour of a row without one, by position, repeating: the values the earlier
-// rounding blend gave, kept when the colour conversion moved to truncation (OV-2393).
-// They are the colours of Python's `ten` scheme (`CONSERVATION_COLOR_SCHEMES` in
-// gbdraw/analysis/conservation.py) in another order, a twin that predates this list.
-const CONSERVATION_SERIES_COLORS = [
-  '#6e91b7',
-  '#f4a251',
-  '#77b26f',
-  '#e67577',
-  '#8fc4c0',
-  '#f0d369',
-  '#be92b2',
-  '#ffafb7',
-  '#ae8e7c',
-  '#c6bebb'
-];
+// The colour of a row without one, by position, repeating: the colours of
+// Python's `ten` ring scheme, in the order the Web has always given them.
+const CONSERVATION_SERIES_COLORS = [0, 1, 5, 3, 2, 7, 6, 9, 8, 4].map((index) => CONSERVATION_TEN_COLORS[index]);
 
 /**
  * @template T

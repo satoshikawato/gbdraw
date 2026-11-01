@@ -23,6 +23,11 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
   join(tempRoot, 'services', 'conservation-series.js')
 );
+// conservation-series.js reads the generated ring colours.
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'conservation-colors.generated.js'),
+  join(tempRoot, 'conservation-colors.generated.js')
+);
 // The slice editors and svg-serialization resolve a drawing's ID by its mode.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempRoot, 'services', 'drawing-view.js'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');

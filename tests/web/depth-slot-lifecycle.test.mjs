@@ -20,6 +20,11 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
   join(tempRoot, 'services', 'conservation-series.js')
 );
+// conservation-series.js reads the generated ring colours.
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'conservation-colors.generated.js'),
+  join(tempRoot, 'conservation-colors.generated.js')
+);
 // linear-track-slots.js reads the current option values, which read the
 // Linear label visibilities and the comparison settings.
 for (const leaf of ['current-option-values.js', 'linear-label-visibility.js', 'losat-normalization.js']) {
