@@ -5986,7 +5986,7 @@
 
                             <div class="bg-blue-50 text-blue-800 p-2.5 rounded-lg border border-blue-100 leading-relaxed">
                                 <strong class="flex items-center gap-1 mb-1"><i class="ph ph-lock-key" aria-hidden="true"></i> {{ t('Privacy & Security') }}</strong>
-                                <i18n-text :text="t('This tool runs {where} using WebAssembly (Pyodide).')"><template #where><strong>{{ t('entirely in your browser') }}</strong></template></i18n-text>{{ sentenceSeparator() + t('Uploaded genomic data is processed locally and never leaves your device.') }}
+                                <strong>{{ t('This tool runs entirely in your browser.') }}</strong>{{ sentenceSeparator() + t('It uses WebAssembly (Pyodide).') + sentenceSeparator() + t('Uploaded genomic data is processed locally and never leaves your device.') }}
                             </div>
                             <div v-if="hostedBuild.googleAnalytics" class="bg-amber-50 text-amber-900 p-2.5 rounded-lg border border-amber-200 leading-relaxed">
                                 <strong class="flex items-center gap-1 mb-1"><i class="ph ph-chart-line" aria-hidden="true"></i> {{ t('Hosted Site Analytics') }}</strong>
@@ -7498,7 +7498,7 @@
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-users" aria-hidden="true"></i>
-                                    <span>{{ t('All {count} labels reading "{text}"', { count: labelTextScopeDialog.matchingCount, text: labelTextScopeDialog.sourceText }) }}</span>
+                                    <span>{{ tn(labelTextScopeDialog.matchingCount, 'The label reading "{text}"', 'All {count} labels reading "{text}"', { text: labelTextScopeDialog.sourceText }) }}</span>
                                 </button>
                             </div>
 
@@ -7604,7 +7604,7 @@
                                 </button>
 
                                 <p v-if="featureStyleScopeDialog.matchingRule || featureStyleScopeDialog.siblingCount > 0 || featureStyleScopeLabelOptions.displayLabel || featureStyleScopeLabelOptions.annotationLabel"
-                                   class="choice-group-label">{{ t('All features with the same') }}</p>
+                                   class="choice-group-label">{{ t('All features that share:') }}</p>
 
                                 <button v-if="featureStyleScopeDialog.matchingRule"
                                         @click="handleFeatureStyleScopeChoice('rule')"
@@ -7701,7 +7701,7 @@
                                         data-history-managed
                                         class="choice-option" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-users-three" aria-hidden="true"></i>
-                                    <span>{{ t('All {count} "{name}" features', { count: legendRenameDialog.siblingCount + 1, name: shownLegendName(legendRenameDialog.sourceKey) }) }}</span>
+                                    <span>{{ tn(legendRenameDialog.siblingCount + 1, 'The "{name}" feature', 'All {count} "{name}" features', { name: shownLegendName(legendRenameDialog.sourceKey) }) }}</span>
                                 </button>
                             </div>
 

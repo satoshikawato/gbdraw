@@ -22,7 +22,7 @@ import {
   textAliasStatus,
   orthogroupIdStatus
 } from '../services/feature-identity.js';
-import { msg, t, tm, tmx, tn } from '../utils/i18n.js';
+import { msg, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 
 /** @import { AliasSource, FeatureIdentity } from '../services/feature-identity.js' */
 /** @import { FeatureLike } from '../services/feature-utils.js' */
@@ -304,11 +304,12 @@ const normalizeMatchKind = (value, element = null) => {
  * @param {PopupRow[]} rows
  * @param {string} id The English row label (a `msg` key).
  * @param {unknown} value
+ * @param {string} [label] The shown label, when the key of `id` has another meaning.
  */
-const addRow = (rows, id, value) => {
+const addRow = (rows, id, value, label = tm(id)) => {
   const text = normalizeText(value);
   if (!text) return;
-  rows.push({ id, label: tm(id), value: text });
+  rows.push({ id, label, value: text });
 };
 
 /**
@@ -2383,12 +2384,10 @@ const formatPairwiseMatchHoverRows = ({
   addFirst(msg('Query'), queryInterval);
   addFirst(msg('Subject'), subjectInterval);
   if (matchKind === 'collinear') {
-    addFirst(
-      groupScope === 'adjacent_local'
-        ? msg('Collinear groups')
-        : msg('Similarity groups'),
-      String(blockOrthogroupCount ?? '')
-    );
+    const groups = String(blockOrthogroupCount ?? '');
+    // A count of groups, not the LOSATP mode of that name: a locale may word the two apart.
+    if (groupScope === 'adjacent_local') addFirst(msg('Collinear groups'), groups);
+    else addRow(rows, 'Similarity groups', groups, tx('number of groups in a block', 'Similarity groups'));
   } else {
     addFirst(msg('Similarity group'), orthogroupId);
   }

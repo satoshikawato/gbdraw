@@ -279,12 +279,24 @@ const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
 // placement names (`keptInsideTracks`, `slotTrack`; gbdraw/diagrams/circular/radial_layout.py
 // `SWITCHED_TRACK_IDS`), and the remedy: one sentence that names the control that turns it
 // off and the setting that narrows it, with the number of choices it offers.
-/** @typedef {{ name: string, remedy: string, options: number }} SwitchedTrack */
+/** @typedef {{ remedy: string, options: number }} SwitchedTrack */
 /** @type {Readonly<Record<string, SwitchedTrack>>} */
 const SWITCHED_TRACKS = Object.freeze({
-  gc_content: { name: 'GC content', remedy: 'Select Hide GC Content, or reduce GC Content Width (with Custom Track Slots on, the row width).', options: 2 },
-  gc_skew: { name: 'GC skew', remedy: 'Select Hide GC Skew, or reduce GC Skew Width (with Custom Track Slots on, the row width).', options: 2 },
-  ticks: { name: 'the scale', remedy: 'Clear Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row).', options: 1 }
+  gc_content: { remedy: 'Select Hide GC Content, or reduce GC Content Width (with Custom Track Slots on, the row width).', options: 2 },
+  gc_skew: { remedy: 'Select Hide GC Skew, or reduce GC Skew Width (with Custom Track Slots on, the row width).', options: 2 },
+  ticks: { remedy: 'Clear Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row).', options: 1 }
+});
+// The room kept for the tracks inside a failed row, one whole sentence per set of switched tracks,
+// by their `SWITCHED_TRACKS` keys in that table's order (a sentence is never built from track names).
+/** @type {Readonly<Record<string, string>>} */
+const KEPT_INSIDE_AMONG = Object.freeze({
+  gc_content: 'Room kept below it for the tracks inside it, among them GC content: {px} px.',
+  gc_skew: 'Room kept below it for the tracks inside it, among them GC skew: {px} px.',
+  ticks: 'Room kept below it for the tracks inside it, among them the scale: {px} px.',
+  'gc_content,gc_skew': 'Room kept below it for the tracks inside it, among them GC content and GC skew: {px} px.',
+  'gc_content,ticks': 'Room kept below it for the tracks inside it, among them GC content and the scale: {px} px.',
+  'gc_skew,ticks': 'Room kept below it for the tracks inside it, among them GC skew and the scale: {px} px.',
+  'gc_content,gc_skew,ticks': 'Room kept below it for the tracks inside it, among them GC content, GC skew, and the scale: {px} px.'
 });
 // The sentences of a summary other than the table rows above: each is one part
 // (`ErrorTextPart`) and a catalog key; `{name}` takes the part's value.
@@ -296,14 +308,12 @@ const PHRASES = Object.freeze({
   field: 'Field: {field}.', band: 'Available band: {inner}–{outer} px.',
   sessionTooNew: 'Session version {version} is newer than this gbdraw supports ({latest}).',
   sessionUnsupported: 'Unsupported session version: {version}. This gbdraw reads Session versions {versions}.',
-  keptBelow: 'Below it, {px} px are kept for the tracks inside it.',
-  keptBelowAmong: 'Below it, {px} px are kept for the tracks inside it, among them {tracks}.',
+  keptBelow: 'Room kept below it for the tracks inside it: {px} px.',
   // OV-1389 review item 6: each remedy is a whole sentence of `SWITCHED_TRACKS`, after one of these.
   makeRoom: 'To make room, do the following.', makeRoomAny: 'To make room, do one of the following.',
   // OV-2179: the room the labels not placed need (CAPACITY-STOP), the largest of each side, as Python sends it.
   outerLabelRoom: 'Outer labels need about {ratio} times the room around the map.',
   innerLabelRoom: 'Inner labels need about {ratio} times the room around the map.',
-  and: '{first} and {second}',
   position: 'At character {position}.', requiredColumns: 'Required columns: {count}.', loadedRecords: 'Loaded records: {count}.',
   exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
   schema: 'Load a supported Session file or recreate it with the current writer.',
@@ -375,12 +385,6 @@ const capParts = (parts, limit) => {
   const cut = renderErrorText(parts).slice(0, limit);
   return cut ? [{ text: cut, verbatim: true }] : [];
 };
-/**
- * Joins parts with `and` as English does: "A and B and C".
- * @param {ErrorTextPart[]} items at least one
- * @returns {ErrorTextPart}
- */
-const andPart = (items) => items.reduce((first, second) => ({ text: PHRASES.and, params: { first, second } }));
 // A rendered feature ID (gbdraw/svg/ids.py) and an INSDC or GFF3 feature type.
 const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
 const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
@@ -744,9 +748,10 @@ const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, 
 const trackRoomParts = ({ keptInsidePx, keptInsideTracks, slotTrack }) => {
   const kept = keptInsidePx !== undefined && keptInsideTracks ? keptInsideTracks.split(',') : [];
   /** @type {ErrorTextPart[]} */
-  const parts = keptInsidePx === undefined ? [] : [kept.length
-    ? { text: PHRASES.keptBelowAmong, params: { px: keptInsidePx, tracks: andPart(kept.map((track) => ({ text: SWITCHED_TRACKS[track].name }))) } }
-    : { text: PHRASES.keptBelow, params: { px: keptInsidePx } }];
+  const parts = keptInsidePx === undefined ? [] : [{
+    text: kept.length ? KEPT_INSIDE_AMONG[Object.keys(SWITCHED_TRACKS).filter((track) => kept.includes(track)).join(',')] : PHRASES.keptBelow,
+    params: { px: keptInsidePx }
+  }];
   const tracks = [...new Set([...(slotTrack ? [slotTrack] : []), ...kept])].map((track) => SWITCHED_TRACKS[track]);
   if (!tracks.length) return parts;
   const options = tracks.reduce((count, track) => count + track.options, 0);

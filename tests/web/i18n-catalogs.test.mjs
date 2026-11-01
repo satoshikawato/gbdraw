@@ -21,6 +21,7 @@ import {
   uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
 import { memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { detectedTopologyNote } from '../../gbdraw/web/js/services/record-display-model.js';
 import { CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, catalogStatus } from '../../tools/i18n/catalogs.mjs';
 import {
   PLACEHOLDER, VOID_TAGS, WEB_ROOT as webRoot, compiledHtml, elementEnd, extractCalls, sourceCalls, sourceFiles, sourceKeys, webPath
@@ -904,6 +905,11 @@ test('no mustache or shown attribute of index.html has a bare English literal as
   assert.deepEqual(found, []);
 });
 
+test('the record row names the topology its file declares through one key per value', () => {
+  assert.deepEqual(['circular', 'linear', 'unknown', undefined].map(detectedTopologyNote),
+    ['(file: circular)', '(file: linear)', '(file: unknown)', '(file: unknown)']);
+});
+
 // The sentences of the Source recipe name no mode: the recipe is of one diagram.
 test('the record topology a file declares and the option values of an error are whole keys that name what the UI shows', async () => {
   const keys = [...(await sourceKeys()).keys.keys()];
@@ -925,4 +931,39 @@ test('the record topology a file declares and the option values of an error are 
     /^vs$/, /^Not moved \(/, /^skipped$/, /\{name\} \(\{path\}\)/
   ];
   assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
+});
+
+// A sentence reads whole in each case: no fragment takes its place, and a count is a tn() pair.
+test('sentences with a count or a qualifier are whole keys, and none is built from a translated fragment', async () => {
+  const { keys } = await sourceKeys();
+  const pairOf = (key) => keys.get(key)?.plural;
+  for (const [one, other] of [
+    ['The label reading "{text}"', 'All {count} labels reading "{text}"'],
+    ['The "{name}" feature', 'All {count} "{name}" features'],
+    ['one more', '{count} more'],
+    ['and one more', 'and {count} more'],
+    ['Running LOSAT: {completed}/{total} source job complete', 'Running LOSAT: {completed}/{total} source jobs complete'],
+    ['Running {program} comparisons for the circular diagram: {completed}/{total} job complete', 'Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete'],
+    ['Importing it removes the annotation set.', 'Importing it removes the {count} annotation sets.'],
+    ['The chosen feature already points left.', 'The {count} chosen features already point left.'],
+    ['The chosen feature already points right.', 'The {count} chosen features already point right.'],
+    ['Reverses {records} so the chosen feature points left.', 'Reverses {records} so the {count} chosen features point left.'],
+    ['Reverses {records} so the chosen feature points right.', 'Reverses {records} so the {count} chosen features point right.']
+  ]) assert.deepEqual(pairOf(other), { one, other }, other);
+  for (const key of [
+    'The Source recipe references a browser-generated file: {files}. Use "Download reproducibility files" to save it next to the uploaded inputs before running the command in a terminal.',
+    'The Source recipe references browser-generated files: {files}. Use "Download reproducibility files" to save them next to the uploaded inputs before running the command in a terminal.',
+    'Exact replay references {files}, which is included in "Download reproducibility files".',
+    'Exact replay references {files}, which are included in "Download reproducibility files".',
+    'This tool runs entirely in your browser.', 'It uses WebAssembly (Pyodide).',
+    '{feature} where a qualifier matches “{pattern}”', 'Any feature where a qualifier matches “{pattern}”',
+    'All features that share:',
+    'Room kept below it for the tracks inside it: {px} px.',
+    'Room kept below it for the tracks inside it, among them GC content, GC skew, and the scale: {px} px.',
+    'number of groups in a block\u0004Similarity groups'
+  ]) assert.ok(keys.has(key), key);
+  for (const key of [
+    '{first} and {second}', 'the scale', 'a qualifier', 'entirely in your browser', 'This tool runs {where} using WebAssembly (Pyodide).', 'All features with the same'
+  ]) assert.ok(!keys.has(key), key);
+  assert.deepEqual([...keys.keys()].filter((key) => /file\(s\)/.test(key)), []);
 });

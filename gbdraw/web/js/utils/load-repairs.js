@@ -133,7 +133,7 @@ export const loadRepair = (repair) => ({
  */
 const cappedList = (items) => {
   const head = items.slice(0, 5).map(String);
-  return listText(items.length > 5 ? [...head, t('{count} more', { count: items.length - 5 })] : head);
+  return listText(items.length > 5 ? [...head, tn(items.length - 5, 'one more', '{count} more')] : head);
 };
 /** @param {readonly LoadRepair[]} repairs */
 const total = (repairs) => repairs.reduce((sum, repair) => sum + (repair.count ?? 1), 0);
@@ -338,7 +338,7 @@ export const describeLoadRepairs = (repairs) => {
       return ofCode.length ? describe(ofCode) : [];
     });
   const items = lines.length > LINE_LIMIT
-    ? [...lines.slice(0, LINE_LIMIT - 1), t('and {count} more', { count: lines.length - (LINE_LIMIT - 1) })]
+    ? [...lines.slice(0, LINE_LIMIT - 1), tn(lines.length - (LINE_LIMIT - 1), 'and one more', 'and {count} more')]
     : lines;
   return {
     title: t('Load this file?'),

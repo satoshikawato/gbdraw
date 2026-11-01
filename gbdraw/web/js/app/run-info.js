@@ -247,7 +247,8 @@ const helperFileList = (files) => {
     .filter(Boolean)));
   if (names.length === 0) return { text: msg('generated helper files') };
   if (names.length <= 3) return { text: names.join(', '), verbatim: true };
-  return { text: msg('{names}, and {count} more'), params: { names: names.slice(0, 3).join(', '), count: names.length - 3 } };
+  const rest = names.length - 3;
+  return { text: rest === 1 ? msg('{names}, and one more') : msg('{names}, and {count} more'), params: { names: names.slice(0, 3).join(', '), count: rest } };
 };
 
 /** @param {unknown} selector */
@@ -2300,7 +2301,9 @@ export const buildRunInfo = ({
   } else if (sourceHelpers.length > 0) {
     level = hasLosatHelpers ? 'session-recommended' : 'requires-helper-files';
     noteParts.push({
-      text: msg('The Source recipe references browser-generated file(s): {files}. Use "Download reproducibility files" to save those file(s) next to the uploaded inputs before running the command in a terminal.'),
+      text: sourceHelpers.length === 1
+        ? msg('The Source recipe references a browser-generated file: {files}. Use "Download reproducibility files" to save it next to the uploaded inputs before running the command in a terminal.')
+        : msg('The Source recipe references browser-generated files: {files}. Use "Download reproducibility files" to save them next to the uploaded inputs before running the command in a terminal.'),
       params: { files: helperFileList(sourceHelpers) }
     });
     noteParts.push({
@@ -2319,7 +2322,9 @@ export const buildRunInfo = ({
   }
   if (exact && exact.helperFiles.length > 0) {
     noteParts.push({
-      text: msg('Exact replay references {files}, which is included in "Download reproducibility files".'),
+      text: exact.helperFiles.length === 1
+        ? msg('Exact replay references {files}, which is included in "Download reproducibility files".')
+        : msg('Exact replay references {files}, which are included in "Download reproducibility files".'),
       params: { files: helperFileList(exact.helperFiles) }
     });
   }

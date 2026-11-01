@@ -145,10 +145,14 @@ const colorRuleText = (rule) => {
   const qualifier = text(rule?.qual);
   const pattern = text(rule?.val);
   if (!qualifier && !pattern) return feature ? t('{feature} color rule', { feature }) : t('Any feature color rule');
-  const params = { qualifier: qualifier || t('a qualifier'), pattern };
+  if (!qualifier) {
+    return feature
+      ? t('{feature} where a qualifier matches “{pattern}”', { feature, pattern })
+      : t('Any feature where a qualifier matches “{pattern}”', { pattern });
+  }
   return feature
-    ? t('{feature} where {qualifier} matches “{pattern}”', { feature, ...params })
-    : t('Any feature where {qualifier} matches “{pattern}”', params);
+    ? t('{feature} where {qualifier} matches “{pattern}”', { feature, qualifier, pattern })
+    : t('Any feature where {qualifier} matches “{pattern}”', { qualifier, pattern });
 };
 
 // OV-1272: a track row names its plot; it lists no features, and its Color

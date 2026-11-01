@@ -363,7 +363,7 @@ test('Linear comparison preparation, real search counts, cache reuse, and no-com
   expectRenderStages(search);
   expect(search.statuses.map(entry => entry.value)).toEqual(expect.arrayContaining([
     'Preparing comparisons...', 'Preparing LOSAT jobs...',
-    'Running LOSAT: 0/1 source jobs complete', 'Running LOSAT: 1/1 source jobs complete',
+    'Running LOSAT: 0/1 source job complete', 'Running LOSAT: 1/1 source job complete',
     'Preparing nucleotide comparison results...'
   ]));
 

@@ -2248,13 +2248,13 @@ export const createSimilarityAlignmentActions = ({
       // The direction is part of each whole sentence: a bare "right" or "left" is no key.
       effect = intent.mode === 'left'
         ? tn(eligible.length, 'Reverses {records} so the chosen feature points left.',
-          'Reverses {records} so all {count} chosen features point left.', { records: reversedText })
+          'Reverses {records} so the {count} chosen features point left.', { records: reversedText })
         : tn(eligible.length, 'Reverses {records} so the chosen feature points right.',
-          'Reverses {records} so all {count} chosen features point right.', { records: reversedText });
+          'Reverses {records} so the {count} chosen features point right.', { records: reversedText });
     } else if (sameAfter) {
       effect = joinSentences(t('No record is reversed.'), sameAfter === 'left'
-        ? tn(eligible.length, 'The chosen feature already points left.', 'All {count} chosen features already point left.')
-        : tn(eligible.length, 'The chosen feature already points right.', 'All {count} chosen features already point right.'));
+        ? tn(eligible.length, 'The chosen feature already points left.', 'The {count} chosen features already point left.')
+        : tn(eligible.length, 'The chosen feature already points right.', 'The {count} chosen features already point right.'));
     } else {
       effect = joinSentences(t('No record is reversed.'),
         tn(eligible.length, '{count} chosen feature keeps its current direction.', '{count} chosen features keep their current directions.'));

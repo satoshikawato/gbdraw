@@ -1933,7 +1933,7 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await dialog.getByRole('radio', { name: 'All right', exact: true }).check();
   await expect(unknown).toContainText('no known direction; it is never guessed');
   await expect(missing).toContainText('No usable candidate');
-  await expect(dialog.locator('#alignment-direction-scope')).toContainText('all 2 chosen features point right');
+  await expect(dialog.locator('#alignment-direction-scope')).toContainText('the 2 chosen features point right');
   const initial = await artifactSnapshot(page);
   const preview = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview);
   expect(preview.records.filter(r => r.beforeReverseComplement !== r.afterReverseComplement).map(r => r.recordKey)).toEqual(['record-1']);
