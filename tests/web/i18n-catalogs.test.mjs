@@ -616,7 +616,7 @@ test('OV-1477: track, mode, control and setting names are not placeholders insid
   assert.deepEqual(keys.filter((key) => inserted.some((pattern) => pattern.test(key))), []);
   for (const key of [
     'Hide GC content?', 'Keep GC skew', 'Hidden: Hide GC Content is on.', 'No Circular Result yet. Configure settings and click Generate.',
-    'Choosing {setting} removes the lane for {count} feature you placed manually.', 'This change removes the lane for {count} features you placed manually.'
+    'Choosing "{setting}" removes the lane for {count} feature you placed manually.', 'This change removes the lane for {count} features you placed manually.'
   ]) assert.ok(keys.includes(key), key);
 });
 

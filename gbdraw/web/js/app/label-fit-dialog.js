@@ -21,6 +21,7 @@
 // OV-2180).
 import { LABEL_CAPACITY_REMEDY_WORDS, labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { msg } from '../utils/i18n.js';
 
 /**
  * @import {
@@ -217,7 +218,7 @@ export const createLabelFitDialog = ({
   };
 
   const applyRow = withHistory(
-    () => `Fit labels: ${rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind))?.title || ''}`,
+    () => msg('Fit labels'),
     () => {
       const row = rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind));
       if (!row || !labelFitRowOffered(row.status) || !row.values) return false;

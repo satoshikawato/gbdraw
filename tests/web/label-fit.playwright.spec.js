@@ -111,7 +111,7 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
   await expect(page.getByLabel('Resolve Overlaps', { exact: true })).toBeChecked();
 
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Fit labels: separate overlapping features');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Fit labels');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   expect(await labelSettings(page)).toEqual(before.settings);
 });

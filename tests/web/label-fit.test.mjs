@@ -304,7 +304,7 @@ test('while Apply writes, the dialog is busy and Escape (its Cancel) does nothin
   assert.equal(await escapes[0], undefined);
   assert.equal(escapes[1], true, 'the Escape during Apply left the dialog open');
   // One step, the row's settings, one Generate: the Escape during Apply wrote and closed nothing.
-  assert.deepEqual(steps, ['Fit labels: smaller font']);
+  assert.deepEqual(steps, ['Fit labels']);
   assert.equal(writes.length, 1);
   assert.equal(generates.length, 1);
   // The dialog is the shared choice dialog bound to the choice in progress: aria-busy,
@@ -355,7 +355,7 @@ test('Apply writes the chosen row as one History step, closes, and Generates; Ca
   assert.equal(dialog.labelFitDialog.show, true);
   assert.equal(dialog.labelFitDialog.selectedKind, 'smaller_font');
   await dialog.resolveLabelFitChoice('apply');
-  assert.deepEqual(steps, ['Fit labels: smaller font']);
+  assert.deepEqual(steps, ['Fit labels']);
   assert.deepEqual(writes, [{ values: { [Y_OFFSET]: 1.2 }, trackOptions: {}, mode: 'circular' }]);
   assert.equal(generates.length, 1);
   assert.equal(dialog.labelFitDialog.show, false);
@@ -378,7 +378,7 @@ test('a row that leaves crossing leaders is offered after the rows that fit, and
   // The only offered row is preselected.
   assert.equal(dialog.labelFitDialog.selectedKind, 'separate_features');
   await dialog.resolveLabelFitChoice('apply');
-  assert.deepEqual(steps, ['Fit labels: separate features']);
+  assert.deepEqual(steps, ['Fit labels']);
   assert.deepEqual(writes, [{ values: { 'canvas.resolve_overlaps': true }, trackOptions: {}, mode: 'circular' }]);
   assert.equal(generates.length, 1);
 

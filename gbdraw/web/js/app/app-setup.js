@@ -1833,7 +1833,7 @@ export const createAppSetup = () => {
   const resetUnmanagedConfigOverride = (path) => {
     const drawing = state.activeDrawing();
     return history.runUndoable(
-      `Reset preserved setting ${path}`,
+      msg('Reset preserved setting'),
       () => {
         if (!Object.prototype.hasOwnProperty.call(drawing.unmanagedConfigOverrides, path)) {
           return false;
@@ -4881,9 +4881,8 @@ export const createAppSetup = () => {
   const updateClickedFeatureLabelTextWithHistory = undoableAction(msg('Change label text'), updateClickedFeatureLabelText);
   const handleLabelTextScopeChoiceWithHistory = undoableAction(msg('Change label text'), handleLabelTextScopeChoice);
   // The Label Not Shown choice answers the label edit whose step is open: one step, under that step's name.
-  // The label stays an unmarked literal (its Undo title stays English): a
-  // registered test reads it from this line (feature-label-visual-unit.test.mjs).
-  const handleHiddenLabelTextChoiceWithHistory = undoableAction('Change label visibility', handleHiddenLabelTextChoice, { joinsOpenStep: true });
+  // A registered test reads the label from this line (feature-label-visual-unit.test.mjs).
+  const handleHiddenLabelTextChoiceWithHistory = undoableAction(msg('Change label visibility'), handleHiddenLabelTextChoice, { joinsOpenStep: true });
   const requestLabelTextChangeByFeatureIdWithHistory = undoableAction(
     msg('Change label text'),
     requestLabelTextChangeByFeatureId
@@ -5071,9 +5070,19 @@ export const createAppSetup = () => {
     return runAnalysis();
   };
 
-  /** @param {DrawingState} drawing @param {unknown} action */
+  // The buttons that choose what happens to a saved comparison, the History
+  // step of the choice, and the line that names the chosen one. English names
+  // it as the Session stores it (INHERIT, REPLACE, CLEAR; PD-OI-106 keeps the
+  // English text); another language names it by its button.
+  /** @type {Readonly<Record<string, string>>} */
+  const importedComparisonActionLabels = Object.freeze({
+    [IMPORTED_COMPARISON_ACTIONS.INHERIT]: msg('Inherit saved comparison'),
+    [IMPORTED_COMPARISON_ACTIONS.REPLACE]: msg('Replace with current controls'),
+    [IMPORTED_COMPARISON_ACTIONS.CLEAR]: msg('Clear comparison')
+  });
+  /** @param {DrawingState} drawing @param {string} action */
   const chooseImportedComparisonAction = (drawing, action) => history.runUndoable(
-    `${String(action || '').toLowerCase()} imported comparison`,
+    importedComparisonActionLabels[action],
     () => {
       const outcome = resolveImportedComparisonAction({
         intent: drawing.importedComparisonIntent,
@@ -5115,16 +5124,6 @@ export const createAppSetup = () => {
   const importedComparisonNeedsResolution = computed(() => (
     state.activeDrawing().importedComparisonIntent.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
   ));
-  // The buttons that choose what happens to a saved comparison, and the line
-  // that names the chosen one. English names it as the Session stores it
-  // (INHERIT, REPLACE, CLEAR; PD-OI-106 keeps the English text); another
-  // language names it by its button.
-  /** @type {Readonly<Record<string, string>>} */
-  const importedComparisonActionLabels = Object.freeze({
-    [IMPORTED_COMPARISON_ACTIONS.INHERIT]: msg('Inherit saved comparison'),
-    [IMPORTED_COMPARISON_ACTIONS.REPLACE]: msg('Replace with current controls'),
-    [IMPORTED_COMPARISON_ACTIONS.CLEAR]: msg('Clear comparison')
-  });
   const importedComparisonActionText = computed(() => {
     /** @type {string | null} */
     const action = state.activeDrawing().importedComparisonIntent.action;

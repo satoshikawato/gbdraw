@@ -124,6 +124,11 @@ write-up of a release.
   asks.
 - Fixed: a Depth row you turned off now stays in the stack, off, when its last file goes and when a
   file is added again, in Circular and Linear; before, it left and came back on.
+- Fixed: Web UI text left in English in other languages: the Undo and Redo tooltips of preserved settings,
+  imported comparisons, and the Labels do not fit dialog; Auto values such as `above`, `ignored`, and
+  `endpoints only`; and the row titles and setting names in the Labels do not fit dialog.
+- Changed: the Undo and Redo tooltips and the dialogs that name a control or track row read as whole sentences in
+  more languages; English now quotes the control in the lane warning and says `Track rows 3 and 4`.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

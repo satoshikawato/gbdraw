@@ -71,7 +71,7 @@ test('Circular custom stack Reset and row moves ask before dropping a lane place
     // Preset Reset: the dialog asks before the stack changes; Cancel keeps it.
     const tuckin = page.getByRole('button', { name: 'Reset to Tuckin', exact: true });
     await tuckin.click();
-    await expect(dialog(page)).toContainText('Choosing Reset to Tuckin removes the lane for 1 feature you placed manually.');
+    await expect(dialog(page)).toContainText('Choosing "Reset to Tuckin" removes the lane for 1 feature you placed manually.');
     await expect(resetButton(page)).toBeFocused();
     expect(await layoutState(page, key)).toEqual(placed);
     await page.screenshot({ path: testInfo.outputPath('preset-reset-dialog.png') });
@@ -82,7 +82,7 @@ test('Circular custom stack Reset and row moves ask before dropping a lane place
 
     // Row reorder: Reset applies the move and removes the row as one step.
     await runRowAction(stackRow(page, 'circular'), 'Move outside Axis');
-    await expect(dialog(page)).toContainText('Choosing Move outside Axis removes the lane for 1 feature you placed manually.');
+    await expect(dialog(page)).toContainText('Choosing "Move outside Axis" removes the lane for 1 feature you placed manually.');
     expect(await layoutState(page, key)).toEqual(placed);
     // Keep current layout returns focus to the row's Row actions.
     await cancelButton(page).click();
@@ -125,7 +125,7 @@ test('Linear Use custom stack asks before dropping a Linear lane, and Circular S
 
     // Use custom stack: Cancel keeps the checkbox off; Reset is one step.
     await custom.click();
-    await expect(dialog(page)).toContainText('Changing Use custom stack to On removes the lane for 1 feature you placed manually.');
+    await expect(dialog(page)).toContainText('Changing "Use custom stack" to "On" removes the lane for 1 feature you placed manually.');
     await expect(custom).not.toBeChecked();
     expect(await layoutState(page, key)).toEqual(placed);
     await page.keyboard.press('Escape');
@@ -1092,7 +1092,7 @@ for (const mode of ['circular', 'linear']) {
       await settleLive(page);
       const start = await stackState(page, mode);
       const [cov, mark] = [rowNumber(start, 'cov'), rowNumber(start, 'mark')];
-      const title = `Remove the Depth file and turn off Track row ${cov} and Track row ${mark}?`;
+      const title = `Remove the Depth file and turn off Track rows ${cov} and ${mark}?`;
       await removeDepthFile(page, mode);
       await expect(page.locator('[data-choice-prompt]').getByRole('heading', { name: title, exact: true })).toBeVisible();
       const text = await promptText(page);
@@ -1359,7 +1359,7 @@ test('rev 7: Linear File removal losing two series asks once, with the union of 
     const start = await stackState(page, 'linear');
     await exerciseAsk(page, 'linear', {
       trigger: () => fileCardRemove(page),
-      title: `Remove the File and turn off Track row ${rowNumber(start, 'mark0')} and Track row ${rowNumber(start, 'mark1')}?`,
+      title: `Remove the File and turn off Track rows ${rowNumber(start, 'mark0')} and ${rowNumber(start, 'mark1')}?`,
       expectAfter: (after) => {
         expect(after.rows).toEqual(expect.arrayContaining(['mark0:false', 'mark1:false']));
         expect(depthRowsOf(after)).toEqual([]);

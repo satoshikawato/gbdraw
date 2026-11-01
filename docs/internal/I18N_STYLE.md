@@ -118,6 +118,17 @@ nothing states that they are reviewed.
   language-dependent separator: a space in English and in `ko`, `es`,
   `fr`, `pt`, `id`, `vi` and `th`, none after 。 in `ja` and `zh-*` (D-18). Do
   not add a trailing space to a value.
+- `Undo {action}` and `Redo {action}` insert the label of a History step. Many
+  of these labels are also buttons, so they stay verb phrases; do not reword a
+  label to suit the template. The template must read with a verb phrase: a label
+  colon (`es`, `pt`, `id`, `vi`, `th` {verb}: {action}; `fr` {verb} : {action}),
+  「」 in `ja` (「{action}」を元に戻す, §2.4), or verb plus phrase where the
+  language needs no particle between them (`zh-*`, and `ko`, whose labels are
+  noun phrases).
+- `Track row {rows}` and `Track rows {rows}` are the one noun phrase that a
+  sentence inserts as an object (Turn off {rows}): it carries the article the
+  sentence needs (`es` la fila de pista {rows}, `fr` les lignes de piste
+  {rows}), and in a language with letter case it starts in lower case.
 - Quotes follow the English: a `{name}` that the English key quotes is quoted
   in the target language's quotes (`ja` 「」, `zh-Hans` “ ”, `zh-Hant` 「」,
   `ko` ‘ ’, `es` and `pt` “ ”, `fr` « », `id` straight double
@@ -249,6 +260,11 @@ nothing states that they are reviewed.
   tick_intervalではなくlarge_tick_intervalを使用してください。 After a locator
   label use the full-width colon with no space: 設定：{path}。 行：{n}。
 - User-typed names take 「」: 「{name}」に統合.
+- A History step's label in `Undo {action}` and `Redo {action}` takes 「」, so
+  that two を do not follow each other: 「ファイルを削除」を元に戻す,
+  「GC含量を非表示」をやり直す (Owner 2026-11-01; the one exception to "quotes
+  follow the English", §1.3). A step label that cites a control inside it uses
+  『』 for that name: ペアを『配列比較なし』に設定.
 
 ### 2.5 Length
 
@@ -794,7 +810,9 @@ differ, take the word Microsoft uses in both markets or the RAE form
   articles and adjectives agree with that noun (el registro {record}, la
   pista {track}, el archivo “{file}”); never make a word agree with the
   placeholder itself ({name} is hidden → El elemento {name} está oculto). A
-  placeholder as subject takes a third-person singular verb.
+  placeholder as subject takes a third-person singular verb. A placeholder
+  holding a translated phrase ({action}, {reason}) follows a colon:
+  Deshacer: {action}.
 - {count} precedes the noun; the noun and every word agreeing with it follow
   the number. tn takes the `one` string only when Intl.PluralRules('es')
   returns one, which is the count 1 alone; 0 and 1.5 take the plural (0
@@ -1131,7 +1149,8 @@ entry is the endonym **Français**; the menu label itself is Langue.
   configuração {setting} (when {setting} is a setting's label; a {setting} that
   can be a button name or Esta alteração opens the sentence bare; at a sentence
   start: A configuração {setting} …), o valor
-  {value}, a trilha {track}. Never put o, a,
+  {value}, a trilha {track}. A placeholder holding a translated phrase
+  ({action}, {reason}) follows a colon: Desfazer: {action}. Never put o, a,
   do, da, no, na, ao or à straight before such a placeholder: Mesclar em
   “{name}”, not no {name}. A user-typed name the English quotes is “{name}”.
 - `Intl.PluralRules('pt')` selects `one` for 0 and 1: write `one` in
@@ -1306,7 +1325,8 @@ Menu entry **Bahasa Indonesia**, menu label Bahasa (PD-OI-106).
 ### 9.5 Placeholders and counts
 
 - No inflection or agreement: a placeholder sits like a noun, after its class
-  noun (record {record}, file "{file}").
+  noun (record {record}, file "{file}"). A placeholder holding a translated
+  verb phrase ({action}) follows a colon: Urungkan: {action}.
 - The count precedes an unchanged noun ({count} record, {count} pasangan gen):
   no reduplication after a number ({count} fitur-fitur), no English plural, no
   classifier (buah); {current} dari {count}, {drawn}/{total}.

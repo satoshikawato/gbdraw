@@ -82,8 +82,8 @@ export const featureSlotEdits = (changeTrackLayout, actions) => /** @type {Actio
  * @property {'circular' | 'linear'} mode The stack's mode.
  * @property {ReadonlySet<string>} hiding The slot ids of the rows the change removes or turns off.
  * @property {ReadonlySet<string>} [alsoOff] The slot ids of rows that turn off with the rows that reach them.
- * @property {(rows: readonly string[], turnedOff: ReadonlySet<string>) => TrackHideQuestionText} question The texts,
- *   from the names and the slot ids of the rows the choice turns off.
+ * @property {(rows: readonly number[], turnedOff: ReadonlySet<string>) => TrackHideQuestionText} question The texts,
+ *   from the row numbers and the slot ids of the rows the choice turns off.
  * @property {boolean} [asksAlone] Whether it asks also when no row reaches them (default: it does not).
  * @property {string} label The History step of the chosen change.
  * @property {() => boolean} unchanged Whether the draft is still as asked when the answer comes, beyond the stack's rows.
@@ -92,6 +92,14 @@ export const featureSlotEdits = (changeTrackLayout, actions) => /** @type {Actio
  */
 /** @param {number} index A row's index in its stack. */
 const trackRowName = (index) => t('Track row {row}', { row: index + 1 });
+/**
+ * The rows a sentence acts on, by their numbers: one phrase, so that a language
+ * gives it the article or case the sentence needs.
+ * @param {readonly number[]} numbers
+ */
+export const trackRowsText = (numbers) => tn(numbers.length, 'Track row {rows}', 'Track rows {rows}', {
+  rows: listText(numbers.map(String))
+});
 /**
  * PD-OI-104 scenario revisions 6 and 7: a change that removes or turns off
  * stack rows that other rows start at or extend to (`overlayRowsReaching`)
@@ -117,7 +125,7 @@ export const askTrackHide = ({ askChoice, runUndoable }, { rows, mode, hiding, a
     return now.length === stack.length && now.every((row, index) => row === stack[index])
       && reachingNow.length === reachingIds.size && reachingNow.every((index) => reachingIds.has(String(now[index].id)));
   };
-  const own = question(stack.flatMap((row, index) => (ids.has(String(row.id)) ? [trackRowName(index)] : [])), ids);
+  const own = question(stack.flatMap((row, index) => (ids.has(String(row.id)) ? [index + 1] : [])), ids);
   const reach = reaching.length === 0 ? '' : tn(reaching.length,
     'This row starts at or extends to a track that this change removes or turns off. It is turned off too, as it cannot be drawn without that track.',
     'These rows start at or extend to a track that this change removes or turns off. They are turned off too, as they cannot be drawn without that track.');
@@ -155,9 +163,9 @@ export const askingTrackRowSwitch = ({ askChoice, runUndoable, busy, rows, mode 
     rows,
     mode,
     hiding: new Set([String(slot?.id)]),
-    question: (names) => {
-      const row = trackRowName(rows().indexOf(/** @type {Row} */ (slot)));
-      return { title: t('Turn off {row}?', { row }), action: t('Turn off {rows}', { rows: listText([row, ...names]) }), keep: t('Cancel') };
+    question: (numbers) => {
+      const number = rows().indexOf(/** @type {Row} */ (slot)) + 1;
+      return { title: t('Turn off {row}?', { row: trackRowsText([number]) }), action: t('Turn off {rows}', { rows: trackRowsText([number, ...numbers]) }), keep: t('Cancel') };
     },
     label: msg('Turn off track rows'),
     unchanged: drawn,
@@ -186,8 +194,8 @@ export const askingTrackRowRemoval = ({ askChoice, runUndoable, busy, rows, mode
     rows,
     mode,
     hiding: new Set([String(row.id)]),
-    question: (names) => {
-      const texts = { row: trackRowName(Number(index)), rows: listText(names) };
+    question: (numbers) => {
+      const texts = { row: trackRowsText([Number(index) + 1]), rows: trackRowsText(numbers) };
       return { title: t('Remove {row} and turn off {rows}?', texts), action: t('Remove {row} and turn off {rows}', texts), keep: t('Cancel') };
     },
     label: msg('Remove track row'),
@@ -242,11 +250,11 @@ export const askTrackSourceRemoval = ({ askChoice, runUndoable, busy, rows, mode
     mode,
     hiding: new Set([...loss.leaving, ...alsoOff]),
     alsoOff,
-    question: (names, turnedOff) => {
+    question: (numbers, turnedOff) => {
       const staying = stack.flatMap((row, index) => (alsoOff.has(String(row.id)) ? [trackRowItem(index, row.id)] : []));
       const emptySeries = loss.emptySeries(turnedOff);
       return {
-        ...trackSourceRemovalTexts(kind, { rows: listText(names), series: series + 1 }),
+        ...trackSourceRemovalTexts(kind, { rows: trackRowsText(numbers), series: series + 1 }),
         description: joinSentences(...[
           emptySeries.length === 0 ? '' : tn(emptySeries.length,
             'Depth series {series} stays empty, and Generate will ask for a file or its removal.',

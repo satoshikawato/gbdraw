@@ -8786,9 +8786,9 @@
                                    :checked="labelFitDialog.selectedKind === row.kind" :disabled="!row.offered"
                                    @change="labelFitDialog.selectedKind = row.kind">
                             <span class="min-w-0 flex-1">
-                                <span class="block font-semibold first-letter:uppercase" :class="row.offered ? 'text-slate-800' : ''">{{ row.title }}</span>
+                                <span class="block font-semibold first-letter:uppercase" :class="row.offered ? 'text-slate-800' : ''">{{ tm(row.title) }}</span>
                                 <span v-if="row.offered" class="block text-xs text-slate-600">
-                                    <template v-for="(setting, index) in row.settings" :key="setting.name">{{ index ? ', ' : '' }}{{ setting.name }} {{ setting.value }}{{ setting.unit ? ` ${setting.unit}` : '' }}</template>
+                                    <template v-for="(setting, index) in row.settings" :key="setting.name">{{ index ? ', ' : '' }}{{ tm(setting.name) }} {{ typeof setting.value === 'string' ? tm(setting.value) : setting.value }}{{ setting.unit ? ` ${setting.unit}` : '' }}</template>
                                     <template v-if="row.canvasSize"> · {{ Math.round(row.canvasSize.width) }} × {{ Math.round(row.canvasSize.height) }} px</template>
                                     <span v-if="row.note" class="block text-amber-800" data-label-fit-note>{{ row.note }}</span>
                                 </span>
@@ -8915,8 +8915,8 @@
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
             <h2 id="placement-layout-change-title" class="text-base font-bold text-slate-800">{{ t('Reset Feature placements?') }}</h2>
             <p id="placement-layout-change-description" class="mt-2 mb-4 text-sm leading-relaxed text-slate-600">
-                {{ featurePlacementActions.layoutChange.value ? tn(featurePlacementActions.layoutChange.count, 'Changing {setting} to {value} removes the lane for {count} feature you placed manually.', 'Changing {setting} to {value} removes the lane for {count} features you placed manually.', { setting: featurePlacementActions.layoutChange.setting, value: featurePlacementActions.layoutChange.value })
-                : featurePlacementActions.layoutChange.setting ? tn(featurePlacementActions.layoutChange.count, 'Choosing {setting} removes the lane for {count} feature you placed manually.', 'Choosing {setting} removes the lane for {count} features you placed manually.', { setting: featurePlacementActions.layoutChange.setting })
+                {{ featurePlacementActions.layoutChange.value ? tn(featurePlacementActions.layoutChange.count, 'Changing "{setting}" to "{value}" removes the lane for {count} feature you placed manually.', 'Changing "{setting}" to "{value}" removes the lane for {count} features you placed manually.', { setting: featurePlacementActions.layoutChange.setting, value: featurePlacementActions.layoutChange.value })
+                : featurePlacementActions.layoutChange.setting ? tn(featurePlacementActions.layoutChange.count, 'Choosing "{setting}" removes the lane for {count} feature you placed manually.', 'Choosing "{setting}" removes the lane for {count} features you placed manually.', { setting: featurePlacementActions.layoutChange.setting })
                 : tn(featurePlacementActions.layoutChange.count, 'This change removes the lane for {count} feature you placed manually.', 'This change removes the lane for {count} features you placed manually.') }}
             </p>
             <div class="flex flex-col gap-2">

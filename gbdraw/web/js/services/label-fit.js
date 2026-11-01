@@ -9,6 +9,9 @@
 // than the map has: the ways to make room (CAPACITY-STOP), which Python names
 // by id while the Web names its controls, and the room such labels need
 // (CAPACITY-STOP, CAPACITY-WARN), which Python sends as values (OV-2179).
+// A row's title and the names and option words of its settings are English
+// catalog keys: `tools/generate_web_contracts.py` lists them from Python for
+// the catalogs (`tools/i18n/source-keys.mjs`), and the dialog shows them with `tm()`.
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg, tn } from '../utils/i18n.js';
 /** @import { CanonicalCircularTrackOptions } from '../contracts/request.generated.js' */
