@@ -39,7 +39,7 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   reads and upgrades instead of being refused.
 - **Real-world GenBank, EMBL, and GFF3 files.** These inputs crashed, were
   skipped, or were misread; they now read or stop with a named error:
-  - A Geneious LOCUS line with spaces in the name (`LOCUS       Contig 1 edited
+  - A LOCUS line with spaces in the name (`LOCUS       Contig 1 edited
     by me  3000 bp`) reads; each run of spaces in the name becomes `_`.
   - An EMBL flat file reads as EMBL. The Web file pickers accept `.embl` and
     `.emb`.
@@ -100,7 +100,8 @@ packages, and [Installation](./INSTALL.md) explains each install route.
 - **Web app LOSAT engine.** The engine is the LOSAT development commit
   `dde737f18` (version 0.2.0 before its release; it was a build of LOSAT 0.1.0),
   not a LOSAT release. Its searches give the rows of the `losat` command of that
-  commit. LOSATP gives the same rows as before in 26-38 % of the serial time.
+  commit. LOSATP gives the same rows as before; on the Vibrio check its serial
+  searches took 26-38 % of the old engine's time.
   LOSATN with task `blastn` gives different E-values and hits than before (on the
   lambda x DE3 check, 21 rows instead of 19); task `megablast` and TLOSATX give
   the same rows.
@@ -118,7 +119,7 @@ packages, and [Installation](./INSTALL.md) explains each install route.
     reused. A search saved by an earlier Web app is reused for LOSATP and LOSATN
     task `megablast`, which both engines give alike, and runs again once at the
     next **Generate Diagram** for LOSATN `blastn`, `dc-megablast`, and TLOSATX.
-    Every Gallery example holds only LOSATP rows, so none searches again.
+    No Gallery example searches again.
   - `gbdraw/web/wasm/losat/losat-build.json` records the build.
 - **Tobacco chloroplast tutorial and Gallery entry** use `-t builtin:plastid`
   (Web: **Plastid gene classes** in **Preset scheme**) instead of a downloaded

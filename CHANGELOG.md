@@ -90,7 +90,7 @@ write-up of a release.
   table reads `db_xref`, GFF3 `Dbxref`, and `note`, so it colors Bakta's default
   GenBank output, which the old Bakta preset did not (OV-2358).
 - Fixed: more real-world input reads, or fails with a named error. Read now: a
-  Geneious LOCUS line with spaces in the name, EMBL flat files (`.embl`, `.emb`
+  LOCUS line with spaces in the name, EMBL flat files (`.embl`, `.emb`
   in the Web file pickers), qualifier lines indented with tabs, lowercase GFF3
   feature types such as `cds`, and GFF3 attributes with a space after `;`. A
   `CONTIG` record without sequence and a `--gbk` file without a record now stop
