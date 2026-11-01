@@ -118,11 +118,25 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   through. The Align button of the similarity group drawer, English in every
   language until now, is translated too. All translations are still LLM drafts.
 - **Web app: Reset Settings and a Result not shown.** After **Reset Settings**, the
-  other mode's Result and the other Results of a batch now show what **Generate
-  Diagram** draws when you display them: features and labels hidden when they were
+  other mode's Result and the other Results of a batch now show the reset feature
+  and label edits when you display them: features and labels hidden when they were
   generated return, an edited label text returns to its own text, and after a
   Session load the Legend rows of removed color rules leave. Before, these stayed
-  until the next Generate.
+  until the next Generate. This redraws that Result once, with **Auto Reflow** on
+  or off, when it was drawn with such an edit, even where the redraw changes
+  nothing, as for a label text on a feature whose label it does not draw. A failed
+  redraw reports its failure and does not run again at the next display. These stay
+  until the next redraw of that Result or **Generate Diagram**:
+  - a Result whose redraw failed (a later color edit on it can also correct it);
+  - the label texts and **Label visibility** a Result was drawn with, when **Reset
+    Settings**, Save, and Load pass before it is shown again (it still draws the
+    features it lacks);
+  - the same, on a Result not shown when those edits left and returned by an Undo
+    of a later **Generate Diagram**.
+
+  Settings marked **Applies on Generate** still wait for **Generate Diagram**.
+- **Web app: text typed in the Features list.** Text typed in a label input of the
+  Features list and not yet committed stays when a redraw finishes.
 
 ## Changed behavior
 
@@ -303,6 +317,24 @@ file. See
 - A Similarity group member popup and the Similarity alignment panel still show
   the coordinates of a CDS across the origin as `1..` the record length. The
   drawing is correct; only this text is wrong.
+- With **Auto Reflow** off, on Circular and Linear diagrams, a label text edit leaves
+  the label where it is drawn: for a text that **Generate Diagram** places away from
+  its feature with a leader line, the label stays without the leader, and a label
+  drawn with a leader keeps it for a text that fits, until the next placement of the
+  labels or **Generate Diagram**. An Undo of a Generate returns such a label too, also
+  when **Auto Reflow** is on by then. 0.14.4 does the same.
+- An Undo or a Redo back to **Label visibility** On draws no label on a figure that
+  lacks it, until the next redraw or **Generate Diagram**.
+- With **Auto Reflow** on, an Undo or a Redo of a feature hide or of **Label
+  visibility** Off changes the figure only when the redraw it starts finishes, not
+  at once. 0.14.4 does the same.
+- With **Auto Reflow** on, on a Linear diagram, after you drag the Legend and then
+  edit a label text, the Undo that should return the Legend does nothing and uses up
+  its step, so the Legend stays where you dragged it. 0.14.4 does the same.
+- After you stroke a color rule's Legend row, delete the row, press **Generate
+  Diagram**, give its feature another Legend name, and press **Restore**, the next
+  **Generate Diagram** fails with "The generated result could not be accepted". 0.14.4
+  does the same.
 - Edits made on a Linear File card that draws every record of its file, in a
   Session saved by gbdraw 0.13.0, do not follow its records after the first
   **Generate Diagram** splits the card into one card per record.

@@ -74,7 +74,8 @@ export const ALLOWLIST_WALK_KINDS = Object.freeze({
   'mode switch back to a Result': 'drawingSwitch',
   'Session Load': 'load',
   'Legend rename onto a deleted row (Restore and merge)': 'legendRename',
-  'Reset Settings': 'reset'
+  'Reset Settings': 'reset',
+  'Result display after Reset Settings': 'resultSwitch'
 });
 
 // The confirmed mismatches of a step kind (multi-drawing-project FINDINGS.md),
@@ -103,10 +104,27 @@ const CAPTIONS = ['Walk caption', 'transfer RNA', 'Renamed group', 'CDS'];
 const ADDED_CAPTIONS = ['Walk group', 'Added row'];
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// The Auto Reflow state the labels shown after a step were placed under. The walk
-// Generates after every step, so an Undo returns the Result of the step before it
-// as it was; any other step's labels are placed, or left, under its own state.
-export const labelsPlacedUnder = (kind, stepReflow, placedBefore) => (kind === 'undo' ? placedBefore : stepReflow);
+// The labels a step shows from a text edit made with Auto Reflow off that neither a
+// reflow nor a Generate has placed, or null: the edited feature, and the text when
+// the edit reached every label with it. The walk Generates after every step, so an
+// Undo right after that edit returns its Result, and each further Undo returns the
+// Result the step before it showed. Every other step and label answers for the
+// current state.
+/**
+ * @param {{ kind: string, feature?: string, text?: string }} step
+ * @param {boolean} stepReflow
+ * @param {string[]} notes
+ * @param {{ unplaced: { id: string, text: string | null } | null } | undefined} previous
+ * @returns {{ id: string, text: string | null } | null}
+ */
+export const unplacedLabels = (step, stepReflow, notes, previous) => {
+  if (step.kind === 'undo') return previous?.unplaced ?? null;
+  if (step.kind !== 'labelText' || stepReflow) return null;
+  return {
+    id: String(step.feature).split(', feature ')[1],
+    text: notes.includes('label text scope all') ? String(step.text) : null
+  };
+};
 
 // The fixture opened with both drawings holding a Result; the floor of the
 // other drawing's History is where its opening ends.
@@ -619,7 +637,7 @@ const bindLabels = (page, key) => evaluateWithRetainedPromise(page, async (targe
  * @typedef {{ seed: number, title: string, fixture: string, reflow: boolean, steps: RecordedStep[], shrink?: object }} WalkRecord
  */
 /** @typedef {{ phase: string, drawing: string, slices: string[] }} IsolationChange */
-/** @typedef {{ index: number, kind: string, differences: string[], isolation: IsolationChange[] }} StepResult */
+/** @typedef {{ index: number, kind: string, unplaced: { id: string, text: string | null } | null, differences: string[], isolation: IsolationChange[] }} StepResult */
 /**
  * Where the steps of a run come from: the walk draws them, a replay reads
  * them. Each returns null when the step cannot apply in `state`.
@@ -714,7 +732,6 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
   const results = [];
   /** @type {Record<string, number>} */
   const floors = await openFixture(page, fixture, reflow);
-  let placedWithAutoReflow = reflow;
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(fixture.results === 'batch' ? 2 : 1);
   for (const [offset, { kind, popup, reflow: stepReflow }] of planned.entries()) {
     const index = offset + 1;
@@ -750,10 +767,10 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
     const isolation = BARRIER_KINDS.includes(record.step.kind) ? [] : isolationChanges('the step', before, afterStep,
       Object.keys(before.drawings).filter((drawingId) => record.step.kind === 'drawingSwitch' || drawingId !== before.active));
     if (record.step.kind === 'load') for (const drawingId of Object.keys(floors)) delete floors[drawingId];
-    placedWithAutoReflow = labelsPlacedUnder(record.step.kind, stepReflow, placedWithAutoReflow);
+    const unplaced = unplacedLabels(record.step, stepReflow, record.notes, results.at(-1));
     let differences = [];
     try {
-      await expectLiveEqualsGenerate(page, { label: `step ${index} (${record.step.kind})`, placedWithAutoReflow });
+      await expectLiveEqualsGenerate(page, { label: `step ${index} (${record.step.kind})`, unplaced });
     } catch (error) {
       // expectLiveEqualsGenerate fails with the unexpected differences as `actual`.
       if (!Array.isArray(error?.matcherResult?.actual)) {
@@ -766,7 +783,7 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
     const afterGenerate = await sliceHashes(page);
     isolation.push(...isolationChanges('Generate', afterStep, afterGenerate,
       Object.keys(afterStep.drawings).filter((drawingId) => drawingId !== afterStep.active)));
-    results.push({ index, kind: record.step.kind, differences, isolation });
+    results.push({ index, kind: record.step.kind, unplaced, differences, isolation });
   }
   return { records, results };
 };

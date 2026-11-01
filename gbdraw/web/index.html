@@ -8323,8 +8323,9 @@
                                         <label class="flex-1 min-w-0 flex items-center gap-1 text-[10px] text-slate-500">
                                             <span class="shrink-0">{{ t('Label') }}</span>
                                             <input type="text" data-history-managed
-                                                   :value="getEditableLabelByFeatureId(featureListState(feat).renderedId).text"
-                                                   @change="requestLabelTextChangeByFeatureId(featureListState(feat).renderedId, $event.target.value)"
+                                                   :value="getEditableLabelByFeatureId(featureListState(feat).renderedId).draftText"
+                                                   @input="getEditableLabelByFeatureId(featureListState(feat).renderedId).draftText = $event.target.value"
+                                                   @change="commitListLabelDraft(featureListState(feat).renderedId, $event.target.value)"
                                                    :disabled="!semanticMutationAvailable"
                                                    :aria-label="t('Label of {name}', { name: feat.product || feat.gene || feat.locus_tag || feat.type })"
                                                    class="flex-1 min-w-0 text-xs border border-slate-200 rounded px-2 py-1 bg-white">

@@ -141,10 +141,28 @@ write-up of a release.
   `endpoints only`; and the row titles and setting names in the Labels do not fit dialog.
 - Changed: the Undo and Redo tooltips and the dialogs that name a control or track row read as whole sentences in
   more languages; English now quotes the control in the lane warning and says `Track rows 3 and 4`.
-- Fixed: after **Reset Settings**, the other mode's Result and the other Results of a batch show
-  what **Generate Diagram** draws when displayed, instead of keeping the hidden features and labels,
-  the edited label text, and after a Session load the Legend rows of removed color rules until the
-  next Generate.
+- Fixed: after **Reset Settings**, the other mode's Result and the other Results of a batch show the
+  reset feature and label edits when displayed, instead of keeping the hidden features and labels, the
+  edited label text, and after a Session load the Legend rows of removed color rules until the next
+  Generate. The display redraws once when the Result was drawn with such an edit, even where the redraw
+  changes nothing. A failed redraw does not run again at the next display. A Result whose redraw failed
+  stays until its next redraw, a later color edit on it, or Generate; until the next redraw or Generate stay the label texts and **Label visibility** a Result was drawn
+  with when Reset, Save, and Load pass before it is shown, or when an Undo of a later Generate returns
+  it unshown. **Applies on Generate** settings still wait for Generate.
+- Fixed: text typed in a Features list label input stays when a redraw finishes.
+- Known issue: with **Auto Reflow** off, Circular and Linear, a label text that Generate places away from
+  its feature with a leader stays without the leader, and a label with a leader keeps it for a text that
+  fits, until the next placement or Generate, also when an Undo of a Generate returns it with **Auto Reflow**
+  on (OV-2410).
+- Known issue: an Undo or Redo back to **Label visibility** On draws no label on a figure that lacks it,
+  until the next redraw or Generate (OV-2413).
+- Known issue: with **Auto Reflow** on, an Undo or Redo of a feature hide or of **Label visibility** Off
+  changes the figure only when its redraw finishes, not at once (OV-2436).
+- Known issue: with **Auto Reflow** on, on a Linear diagram, after a Legend drag and a label text edit, the
+  Undo that should return the Legend does nothing and uses up its step (OV-2437).
+- Known issue: after a color rule's stroked Legend row is deleted, a Generate, another Legend name for its
+  feature, and **Restore**, the next **Generate Diagram** fails with "The generated result could not be
+  accepted" (OV-2412).
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

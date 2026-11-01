@@ -4,7 +4,7 @@
 // a browser.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { labelsPlacedUnder, nextStep, whyNotApplicable } from './helpers/live-random-walk.mjs';
+import { nextStep, unplacedLabels, whyNotApplicable } from './helpers/live-random-walk.mjs';
 import { createRandom } from './helpers/live-random-walk-plan.mjs';
 
 const LEGEND_ROW_KINDS = ['stroke', 'legendRename', 'legendColor', 'legendDelete'];
@@ -66,12 +66,19 @@ test('a replay refuses a restoring step when no row is deleted', () => {
     'its prepare step: no deleted Legend row');
 });
 
-// An Undo of the walk's Generate returns the Result as the step before left it,
-// whatever Auto Reflow says now; a run of Undos keeps the state of that step.
-test('the labels after an Undo were placed under the state of the step before it', () => {
-  assert.equal(labelsPlacedUnder('labelText', false, true), false);
-  assert.equal(labelsPlacedUnder('undo', true, false), false);
-  assert.equal(labelsPlacedUnder('undo', true, labelsPlacedUnder('undo', true, false)), false);
-  assert.equal(labelsPlacedUnder('undoRedo', true, false), true);
-  assert.equal(labelsPlacedUnder('fill', true, false), true);
+// Only a label text edit made with Auto Reflow off, and the Undos right after it,
+// show labels nothing has placed, and only that edit's; every other step answers
+// for the current state.
+test('a step shows unplaced labels only from a text edit with Auto Reflow off and the Undos after it', () => {
+  const step = { kind: 'labelText', feature: 'record 1, feature f5aa08bf5', text: 'x' };
+  const edited = { id: 'f5aa08bf5', text: null };
+  assert.deepEqual(unplacedLabels(step, false, [], undefined), edited);
+  assert.deepEqual(unplacedLabels(step, false, ['label text scope single'], undefined), edited);
+  assert.deepEqual(unplacedLabels(step, false, ['label text scope all'], undefined), { id: 'f5aa08bf5', text: 'x' });
+  assert.equal(unplacedLabels(step, true, [], undefined), null);
+  assert.deepEqual(unplacedLabels({ kind: 'undo' }, true, [], { unplaced: edited }), edited);
+  assert.equal(unplacedLabels({ kind: 'undo' }, true, [], { unplaced: null }), null);
+  assert.equal(unplacedLabels({ kind: 'undo' }, true, [], undefined), null);
+  assert.equal(unplacedLabels({ kind: 'undoRedo' }, true, [], { unplaced: edited }), null);
+  assert.equal(unplacedLabels({ kind: 'fill' }, true, [], { unplaced: edited }), null);
 });
