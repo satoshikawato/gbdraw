@@ -18,7 +18,7 @@ const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const {
-  open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
+  open, openBothDrawings, otherMode, switchDrawing, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
   legendRowColor, FL1_ALPHA, renameRow, legendRowStrokeColor, editorLegendRows, switchPalette, deleteLegendRow,
   BATCH_0004_OFF, renameLegendRow, resetSettings, displayWhileSaveHeld, saveWhileDisplaying, loadFeatureEdits
 } = require('./helpers/live-generate-parity-steps.cjs');
@@ -780,6 +780,186 @@ for (const { domain, edit, undoRedo, sameDrawing, resetShowsDrawn } of RESET_CAS
     expect(listed, 'the Legend list after Reset Settings').toEqual(await legendList(page));
   });
 }
+
+// OV-2293: Reset Settings while the other drawing is shown. Generate drew the
+// edit into this drawing's Result, so its bytes lack what the reset draft draws:
+// the arrival asks for the rerender a shown Reset asks for. The settings that
+// apply on Generate are written back, so the comparison covers what the Reset
+// shows live.
+const LABEL_SETTINGS = Object.freeze([
+  ['circular', 'form', 'labels_mode'], ['circular', 'form', 'multi_record_canvas'], ['circular', 'adv', 'circular_grouping_intent'],
+  ['linear', 'form', 'show_labels_linear']
+]);
+const resetKeepingLabelSettings = async (page) => {
+  const kept = await page.evaluate(async (settings) => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return settings.map(([drawingMode, group, name]) => [drawingMode, group, name, window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name]]);
+  }, LABEL_SETTINGS);
+  await resetSettings(page);
+  await page.evaluate(async (values) => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    values.forEach(([drawingMode, group, name, value]) => { window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name] = value; });
+  }, kept);
+};
+const resetFromOtherDrawing = async (page, mode) => {
+  await switchDrawing(page, otherMode(mode));
+  await resetKeepingLabelSettings(page);
+  await switchDrawing(page, mode);
+};
+const OTHER_DRAWING_RESET_EDITS = {
+  'a hidden label': (page) => popupEdit(page, 'FL2', { labelVisibility: 'off' }),
+  'a hidden feature': (page) => popupEdit(page, 'FL2', { visibility: 'off' }),
+  'an edited label text': (page) => popupEdit(page, 'FL1', { labelText: 'walk label' }),
+  'a visibility rule': (page) => addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^FL2$', action: 'off' })
+};
+for (const mode of ['linear', 'circular']) {
+  for (const [name, edit] of Object.entries(OTHER_DRAWING_RESET_EDITS)) {
+    test(`Reset Settings from the other drawing after ${name} and a Generate shows what Generate draws (${mode})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await openBothDrawings(page, { mode, results: 'single', reflow: 'off' });
+      const drawn = await semanticSnapshot(page);
+      await edit(page);
+      await generate(page);
+      expect(await semanticSnapshot(page), 'Generate draws the edit').not.toEqual(drawn);
+      await resetFromOtherDrawing(page, mode);
+      await expectLiveEqualsGenerate(page, { label: `Reset Settings from the other drawing after ${name}` });
+    });
+    test(`Reset Settings from the other drawing after ${name} that no Generate drew shows what Generate draws (${mode})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await openBothDrawings(page, { mode, results: 'single', reflow: 'off' });
+      await edit(page);
+      await resetFromOtherDrawing(page, mode);
+      await expectLiveEqualsGenerate(page, { label: `Reset Settings from the other drawing after ${name}, not generated` });
+    });
+  }
+}
+
+// The shown Result itself, and another Result of the same drawing.
+for (const [name, edit] of Object.entries(OTHER_DRAWING_RESET_EDITS)) {
+  test(`Reset Settings on the Result that Generate drew after ${name} shows what Generate draws`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await edit(page);
+    await generate(page);
+    await resetKeepingLabelSettings(page);
+    await expectLiveEqualsGenerate(page, { label: `Reset Settings on the Result that Generate drew after ${name}` });
+  });
+}
+for (const [name, change] of Object.entries({
+  'a hidden label': { labelVisibility: 'off' },
+  'a hidden feature': { visibility: 'off' },
+  'an edited label text': { labelText: 'walk label' }
+})) {
+  test(`Reset Settings while another batch Result is shown after ${name} and a Generate shows what Generate draws`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+    await showResult(page, 1);
+    await popupEdit(page, { biological_feature_id: 'f5aa08bf5', record_idx: 1 }, change);
+    await generate(page);
+    await showResult(page, 0);
+    await resetKeepingLabelSettings(page);
+    await showResult(page, 1);
+    await expectLiveEqualsGenerate(page, { label: `Reset Settings on another batch Result after ${name}` });
+  });
+}
+
+test('Undo of Reset Settings from the other drawing shows what Generate draws, and Redo shows the reset', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openBothDrawings(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await popupEdit(page, 'FL2', { visibility: 'off' });
+  await generate(page);
+  await resetFromOtherDrawing(page, 'linear');
+  const reset = await semanticSnapshot(page);
+  expect(Object.keys(reset.features), 'the rerender draws the feature').toContain('f841fb8a8');
+  await history(page, 'undo');
+  await settleLive(page);
+  expect(Object.keys((await semanticSnapshot(page)).features), 'Undo hides it again').not.toContain('f841fb8a8');
+  await history(page, 'redo');
+  await settleLive(page);
+  expect(Object.keys((await semanticSnapshot(page)).features), 'Redo draws it again').toContain('f841fb8a8');
+});
+
+// OV-2326: a Result restored by a Load and not displayed is taken as drawn with
+// what its drawing holds at the Load: a switch alone asks for no rerender, and
+// a Reset from the other drawing asks for it.
+const loadedWithLinearShown = async (page, browser, testInfo) => {
+  await openBothDrawings(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await addColorRule(page, FL1_ALPHA);
+  await popupEdit(page, 'FL2', { visibility: 'off' });
+  await generate(page);
+  await switchDrawing(page, 'linear');
+  const saved = testInfo.outputPath('reset-after-load.gbdraw-session.json');
+  await download(page, 'Save Session', saved, { title: '' });
+  return load(browser, saved);
+};
+test('a switch to a Result a Load restored asks for no rerender', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  const loaded = await loadedWithLinearShown(page, browser, testInfo);
+  const rerenderRequests = () => loaded.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.labelReflowForceRequestSeq.value);
+  const before = await rerenderRequests();
+  await switchDrawing(loaded, 'circular');
+  expect(await rerenderRequests()).toBe(before);
+  await loaded.context().close();
+});
+test('Reset Settings from the other drawing after a Load shows the removed color rule and hidden feature as Generate draws', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  const loaded = await loadedWithLinearShown(page, browser, testInfo);
+  await resetKeepingLabelSettings(loaded);
+  await switchDrawing(loaded, 'circular');
+  await expectLiveEqualsGenerate(loaded, { label: 'Reset Settings from the other drawing after a Load' });
+  await loaded.context().close();
+});
+
+// OV-2410: Generate draws this label outside its arc with a leader for a text
+// that does not fit, and inside it without one for a text that does. The label
+// text edit places the label only with Auto Reflow on, as documented; with it
+// off the label keeps its place until a reflow or Generate, also through an Undo
+// of the Generate with Auto Reflow turned on meanwhile.
+const LEADER_FEATURE = { biological_feature_id: 'f5aa08bf5', record_idx: 1 };
+const LEADER_TEXT = 'alpha protein, edited live';
+const openLeaderCase = async (page, reflow) => {
+  await open(page, { mode: 'circular', results: 'batch', reflow });
+  await showResult(page, LEADER_FEATURE.record_idx);
+};
+const leaderDifferences = ({ tolerated }) => tolerated.map(({ kind, id, attribute, live, generated }) => ({ kind, id, attribute, live, generated }));
+const LEADER_AWAITS_REFLOW = [{ kind: 'leader', id: 'f5aa08bf5', attribute: 'drawn', live: false, generated: true }];
+const setAutoReflow = (page, enabled) => page.evaluate((value) => { window.__GBDRAW_APP__.autoLabelReflowEnabled = value; }, enabled);
+const undoGenerate = async (page) => {
+  await generate(page);
+  await showResult(page, LEADER_FEATURE.record_idx);
+  await history(page, 'undo');
+};
+test('a label text edit that moves the label outside its arc draws its leader with Auto Reflow on', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openLeaderCase(page, 'on');
+  await popupEdit(page, LEADER_FEATURE, { labelText: LEADER_TEXT });
+  await expectLiveEqualsGenerate(page, { allowed: [], label: 'the edit with Auto Reflow on' });
+  await undoGenerate(page);
+  await expectLiveEqualsGenerate(page, { allowed: [], label: 'the Undo of the Generate with Auto Reflow on' });
+});
+test('a label text edit with Auto Reflow off leaves only its leader to the next placement', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openLeaderCase(page, 'off');
+  await popupEdit(page, LEADER_FEATURE, { labelText: LEADER_TEXT });
+  expect(leaderDifferences(await expectLiveEqualsGenerate(page, { label: 'the edit with Auto Reflow off' }))).toEqual(LEADER_AWAITS_REFLOW);
+});
+test('an Undo of a Generate keeps the placement of the labels it returns when Auto Reflow was turned on meanwhile', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openLeaderCase(page, 'off');
+  await popupEdit(page, LEADER_FEATURE, { labelText: LEADER_TEXT });
+  await generate(page);
+  await showResult(page, LEADER_FEATURE.record_idx);
+  await setAutoReflow(page, true);
+  await history(page, 'undo');
+  expect(leaderDifferences(await expectLiveEqualsGenerate(page, { label: 'the Undo with Auto Reflow on', placedWithAutoReflow: false })))
+    .toEqual(LEADER_AWAITS_REFLOW);
+});
+test('a label text that fits its arc draws no leader live or from Generate, Auto Reflow off', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openLeaderCase(page, 'off');
+  await popupEdit(page, LEADER_FEATURE, { labelText: 'x' });
+  await expectLiveEqualsGenerate(page, { allowed: [], label: 'a text that fits' });
+});
 
 // A Reset that changes the palette: the palette watcher shows the default
 // palette's fills, and Reset projects the other domains.

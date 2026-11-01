@@ -129,6 +129,10 @@ write-up of a release.
   `endpoints only`; and the row titles and setting names in the Labels do not fit dialog.
 - Changed: the Undo and Redo tooltips and the dialogs that name a control or track row read as whole sentences in
   more languages; English now quotes the control in the lane warning and says `Track rows 3 and 4`.
+- Fixed: after **Reset Settings**, the other mode's Result and the other Results of a batch show
+  what **Generate Diagram** draws when displayed, instead of keeping the hidden features and labels,
+  the edited label text, and after a Session load the Legend rows of removed color rules until the
+  next Generate.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

@@ -28,7 +28,7 @@
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
-import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
+import { createResultPaintRecord, drawnLabelIntentGone, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
@@ -3559,11 +3559,15 @@ export const createAppSetup = () => {
       // OV-1280: a Result a mode switch shows again, whose drawing changed its
       // rules while it was not shown (a file card's Remove, an Undo or Redo
       // there), is drawn again when its Legend cannot show them, as after a
-      // History restore of the rules.
-      const arrival = arrivalShownRules;
-      arrivalShownRules = null;
-      if (context.bindingOptions.modeArrival && arrival?.rules && arrival.identity === context.resultIdentity) {
-        featureActions.followRestoredSpecificRules(arrival.rules);
+      // History restore of the rules. OV-2293: any Result displayed is drawn
+      // again when its bytes hold a label edit its drawing no longer holds (a
+      // Reset Settings while it was not shown). The rerender draws new Results
+      // from the current intent, so this does not repeat.
+      const display = displayAsks;
+      displayAsks = null;
+      if (display?.identity === context.resultIdentity) {
+        if (context.bindingOptions.modeArrival && display.rules) featureActions.followRestoredSpecificRules(display.rules);
+        if (display.labelIntentGone) featureActions.requestAutomaticRerender();
       }
       // D-36: a label rerender pays the redraw its drawing owes when, as its
       // Result is ready, no later rerender runs and its figure shows the
@@ -4256,7 +4260,11 @@ export const createAppSetup = () => {
     // reached only the mounted Result).
     resultPaintRecord.commit(identities, context.resultIdentity, current, {
       restored: context.phase === 'session-load' || Boolean(context.bindingOptions.trustedRestore),
-      drawn
+      drawn,
+      drawingStateOf: (identity) => {
+        const holder = state.drawingList().find(({ id }) => resultIdentitiesOf(id).includes(identity));
+        return holder ? currentEditorProjectionState(holder) : current;
+      }
     });
     [...departedResultIntent.keys()].forEach((identity) => {
       if (!identities.includes(identity)) departedResultIntent.delete(identity);
@@ -4404,11 +4412,13 @@ export const createAppSetup = () => {
   // whose intent changed since it was last shown; each paint domain it shows
   // returns to Python's values where no operation sets it (OV-144).
   const LEGEND_STRUCTURE_DOMAINS = LIVE_EDIT_DOMAINS.legendStructure;
-  // OV-1280: the rule table the Result a mode switch shows again was last
-  // shown with (`resultPaintRecord`), read once it is ready (`afterReady`);
-  // null rules: unknown (a restored Result).
-  /** @type {{ identity: string, rules: SpecificColorRule[] | null } | null} */
-  let arrivalShownRules = null;
+  // What a displayed Result asks of the rerender, read once it is ready
+  // (`afterReady`): `rules`, the rule table it was last shown with, or the one
+  // it was drawn with when that is unknown (a restored Result), for OV-1280;
+  // `labelIntentGone`, whether its bytes were drawn with a label edit its
+  // drawing no longer holds (OV-2293).
+  /** @type {{ identity: string, rules: SpecificColorRule[] | null, labelIntentGone: boolean } | null} */
+  let displayAsks = null;
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
   // binder's label step.
@@ -4420,7 +4430,7 @@ export const createAppSetup = () => {
   const projectEditorIntentOnDisplay = async (drawing, context, resultLegendOrder) => {
     const identity = context.resultIdentity;
     const current = currentEditorProjectionState(drawing);
-    arrivalShownRules = null;
+    displayAsks = null;
     const departedIntent = departedResultIntent.get(identity);
     departedResultIntent.delete(identity);
     if (departedIntent !== undefined && departedIntent === displayedIntentSignature(drawing)) {
@@ -4433,7 +4443,12 @@ export const createAppSetup = () => {
       return;
     }
     const previous = resultPaintRecord.display(identity, current);
-    if (context.bindingOptions.modeArrival) arrivalShownRules = { identity, rules: paintRuleTable(previous) };
+    const drawn = resultPaintRecord.drawn(identity) ?? current;
+    displayAsks = {
+      identity,
+      rules: paintRuleTable(previous) ?? paintRuleTable(drawn),
+      labelIntentGone: drawnLabelIntentGone(drawn.labels, current.labels)
+    };
     const colors = !sameColors(previous.colors, current.colors);
     const visibility = previous.visibility !== current.visibility;
     const strokes = previous.strokes !== current.strokes;
@@ -4455,10 +4470,13 @@ export const createAppSetup = () => {
       // The palette, rules, and visibility prepare their matches when their
       // intent changed (`colors`, `visibility`); then one compile of the
       // domains the Result shows.
-      let prepared = await projectMountedEditorIntent({ colors, visibility, show: false });
+      // OV-2293: a Result whose bytes were drawn with other visibility asks for
+      // the rerender when they lack a feature.
+      const preparation = { colors, visibility, rerender: drawn.visibility !== current.visibility, show: false };
+      let prepared = await projectMountedEditorIntent(preparation);
       // Declined with nothing blocking (the rules changed meanwhile): prepared
       // once more here, so the display still compiles once (R14-3).
-      if (prepared === false && !displayBlocked()) prepared = await projectMountedEditorIntent({ colors, visibility, show: false });
+      if (prepared === false && !displayBlocked()) prepared = await projectMountedEditorIntent(preparation);
       declined = prepared === false;
       domains = [...domains, ...(prepared || []), ...(strokes ? STROKE_DOMAINS : [])];
       operations = compileDisplayedResultOperations(drawing, context.resultIndex, { replayDefaultLegendOrder, domains });
