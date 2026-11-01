@@ -2704,7 +2704,7 @@ export default Object.freeze({
   "generated helper files": "ไฟล์เสริมที่สร้างขึ้น",
   "group representative": "ตัวแทนกลุ่ม",
   "hypothetical, unknown": "hypothetical, unknown",
-  "ignored": "ถูกละเว้น",
+  "ignored": "ละเว้นไว้",
   "inner gap": "ช่องว่างด้านใน",
   "installing packages": "กำลังติดตั้งแพ็กเกจ",
   "just after the feature": "ถัดจากฟีเจอร์ทันที",

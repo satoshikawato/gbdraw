@@ -2785,7 +2785,7 @@ export default Object.freeze({
   "size scaling\u0004Linear": "Proporcional",
   "size-specific setting \"{setting}\" cannot be expressed by the current CLI.": "a CLI atual não consegue expressar a configuração específica de tamanho “{setting}”.",
   "skipped": "ignorado",
-  "smaller definition font": "fonte de definição menor",
+  "smaller definition font": "fonte menor da definição",
   "smaller font": "fonte menor",
   "source kind \"{kind}\" has no CLI recipe.": "o tipo de origem “{kind}” não tem receita para a CLI.",
   "source replaced.": "a origem foi substituída.",
