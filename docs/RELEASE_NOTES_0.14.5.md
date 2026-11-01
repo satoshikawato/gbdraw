@@ -272,6 +272,9 @@ file. See
 - After you delete a Legend row, giving another color rule that row's name, or a
   new color to a rule of that name, can place the returning row last in the Legend
   until the next **Generate Diagram**. 0.14.3 does the same.
+- On a Circular diagram, a label whose edited text is too long for its arc can
+  be drawn outside the arc without its leader line until the next **Generate
+  Diagram**. 0.14.4 does the same.
 
 Carried from 0.14.1:
 
