@@ -61,6 +61,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   READ_ALL_SEQUENCE_RECORDS: 'readAllSequenceRecords',
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
   READ_FEATURE_OVERRIDE_TABLE: 'readFeatureOverrideTable',
+  RESOLVE_FEATURE_ANCHOR: 'resolveFeatureAnchor',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
   RESOLVE_SIMILARITY_ALIGNMENT: 'resolveSimilarityAlignment',
   SYNTHESIZE_COLOR_RULES: 'synthesizeColorRules',
@@ -89,6 +90,7 @@ export const DIAGRAM_HELPER_OPERATION_NAMES = Object.freeze(
  */
 const STAGED_HELPER_REFERENCES = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.RESOLVE_FEATURE_ANCHOR]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION]: (payload) => payload.canonicalRequest,

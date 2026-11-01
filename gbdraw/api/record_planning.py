@@ -885,7 +885,7 @@ def _match_feature_starts(
                 f"{option} {text} matches {sum(map(len, by_start.values()))} features at "
                 f"different starts in {name}: {candidates}. Use a selector that names one "
                 "feature, such as locus_tag=<tag>.",
-                diagnostic={"code": "INPUT_INVALID"},
+                diagnostic={"code": "INPUT_INVALID", "field": option, "reason": "SELECTOR_AMBIGUOUS"},
             )
         if not by_start:
             logger.warning(
@@ -901,7 +901,7 @@ def _match_feature_starts(
     if all(start is None for start in starts):
         raise ValidationError(
             f"{option} {text} matched no feature in any record.",
-            diagnostic={"code": "INPUT_INVALID"},
+            diagnostic={"code": "INPUT_INVALID", "field": option, "reason": "SELECTOR_NO_MATCH"},
         )
     return tuple(starts)
 
@@ -926,7 +926,7 @@ def project_anchor_feature_starts(
         raise ValidationError(
             f"anchor_feature {_selector_text(selector)} cannot align records that share a row; "
             "give each record its own row.",
-            diagnostic={"code": "INPUT_INVALID"},
+            diagnostic={"code": "INPUT_INVALID", "field": "anchor_feature", "reason": "ANCHOR_SHARED_ROW"},
         )
 
     def drawn_start(

@@ -2562,9 +2562,52 @@ def plan_request(request: DiagramRequest) -> DiagramRequestPlan:
 
 
 def resolve_request(request: DiagramRequest) -> DiagramRequest:
-    """Resolve an unresolved typed request to an exact-one projection."""
+    """Resolve an unresolved typed request to an exact-one projection.
 
-    return plan_request(request).request
+    A Linear ``anchor_feature`` resolves to the record translations it was
+    drawn with (:func:`resolved_plan_request`).
+    """
+
+    return resolved_plan_request(plan_request(request))
+
+
+def resolved_plan_request(plan: DiagramRequestPlan) -> DiagramRequest:
+    """The request ``plan`` resolves to, as :func:`resolve_request` and every Session writer store it.
+
+    A Linear ``anchor_feature`` is resolved when the figure is laid out, so
+    such a plan is built once (:func:`with_anchor_feature_translations`).
+    """
+
+    if isinstance(plan, LinearRequestPlan) and plan.request.options.anchor_feature is not None:
+        return build_request_plan_diagram(plan).request
+    return plan.request
+
+
+def with_anchor_feature_translations(
+    request: LinearDiagramRequest,
+    metadata: LinearDiagramMetadata,
+) -> LinearDiagramRequest:
+    """``request`` with its ``anchor_feature`` replaced by the record translations its drawing used.
+
+    The one owner of what an anchored figure stores: every record's
+    translation as ``_final_record_translations`` applied it (the records the
+    anchor moved, and every other record's own translation), without the
+    option, so a Session replays the figure without aligning again and the
+    Web's Align at feature writes the same values. ``metadata`` is the build
+    result of ``request``'s plan. Returns ``request`` itself when it sets no
+    anchor.
+    """
+
+    if request.options.anchor_feature is None:
+        return request
+    return replace(
+        request,
+        options=replace(request.options, anchor_feature=None),
+        layout=replace(
+            request.layout if request.layout is not None else LinearMultiRecordOptions(),
+            record_translations=metadata.record_translations,
+        ),
+    )
 
 
 def _source_protein_mode(
@@ -3101,6 +3144,7 @@ def _build_request_plan_diagram(
             )
         drawing = linear_build.drawing
         linear_metadata = linear_build.metadata
+        request = with_anchor_feature_translations(plan.request, linear_metadata)
         with _request_render_diagnostic_phase("comparisonPreparation"):
             protein_entries = (
                 tuple(linear_artifacts.cache.session_entries())
@@ -3557,5 +3601,7 @@ __all__ = [
     "render_request",
     "render_prepared_request",
     "resolve_request",
+    "resolved_plan_request",
     "resolve_similarity_alignment_plan",
+    "with_anchor_feature_translations",
 ]

@@ -198,6 +198,36 @@ def test_a_session_stores_the_decided_reverse_flags_and_replays_the_figure(tmp_p
 
 
 @pytest.mark.linear
+def test_a_session_stores_the_results_of_auto_orient_and_anchor_feature_and_replays_the_figure(tmp_path: Path) -> None:
+    import re
+
+    from gbdraw.session_io import load_session
+
+    subject, table = _reversed_subject_inputs(tmp_path)
+    session = tmp_path / "both.gbdraw-session.json"
+    anchor = ("--anchor_feature", "product=innexin")
+    drawn = _render(tmp_path, "both", subject, table, "--auto_orient", *anchor, "--session_output", str(session))
+    stored = load_session(session)["renderRequest"]
+    # Neither option is stored; their results are: the Reverse complement flags and the record translations.
+    assert "autoOrient" not in stored["diagramOptions"] and "anchorFeature" not in stored["diagramOptions"]
+    assert [record["presentation"]["reverseComplement"] for record in stored["records"]] == [False, True]
+    assert drawn == _render(
+        tmp_path, "explicit", subject, table, "--reverse_complement", "0", "--reverse_complement", "1", *anchor
+    )
+    shifts = [float(value) for value in re.findall(r'data-record-translation-x="([-0-9.e]+)"', drawn)]
+    assert [entry["x"] for entry in stored["layout"]["recordTranslations"]] == shifts
+    assert shifts[0] == 0.0 and shifts[1] != 0.0
+    completed = subprocess.run(
+        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear",
+         "--session", str(session), "-f", "svg", "-o", str(tmp_path / "replay")],
+        capture_output=True, text=True, check=False,
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert (tmp_path / "replay.svg").read_text(encoding="utf-8") == drawn
+
+
+@pytest.mark.linear
 def test_the_plan_request_keeps_the_flags_and_not_the_option() -> None:
     request = LinearDiagramRequest(
         records=(RecordInput(GenBankInputSource(_QUERY)), RecordInput(GenBankInputSource(_SUBJECT))),

@@ -713,6 +713,8 @@ def _encode_canonical_request(
     if isinstance(request, LinearDiagramRequest):
         if request.output.resolve_prefix_from_first_record:
             unresolved_reasons.append("record-derived output prefix")
+        if request.options.anchor_feature is not None:
+            unresolved_reasons.append("anchor_feature record placement")
         if request.options.comparison_table_file is not None:
             unresolved_reasons.append("Linear comparison table")
         if isinstance(request.similarity_alignment, SimilarityAlignmentReference):
@@ -1593,6 +1595,25 @@ def _decode_similarity_alignment_plan(
     )
 
 
+class EncodedRecordTranslation(TypedDict):
+    """One ``renderRequest.layout.recordTranslations`` entry as a request stores it."""
+
+    recordKey: str
+    x: float
+    y: float
+
+
+def encode_record_translations(
+    translations: SequenceABC[LinearRecordTranslation],
+) -> list[EncodedRecordTranslation]:
+    """The stored form of Linear record translations (the request layout, and the Web's Align at feature reply)."""
+
+    return [
+        {"recordKey": translation.record_key, "x": translation.x, "y": translation.y}
+        for translation in translations
+    ]
+
+
 def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
     if isinstance(request, CircularBatchRequest):
         return {}
@@ -1606,14 +1627,7 @@ def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
                 if request.layout.multi_record_positions is not None
                 else None
             ),
-            "recordTranslations": [
-                {
-                    "recordKey": translation.record_key,
-                    "x": translation.x,
-                    "y": translation.y,
-                }
-                for translation in request.layout.record_translations
-            ],
+            "recordTranslations": encode_record_translations(request.layout.record_translations),
             # encode_canonical_request rejects an unresolved reference first.
             "similarityAlignment": _encode_similarity_alignment_plan(
                 cast("SimilarityAlignmentPlan | None", request.similarity_alignment)
@@ -1772,23 +1786,10 @@ def _decode_linear_layout(
 
 # The planner consumes it: a Session stores what the figure drew with
 # (origin_feature: the record display starts it resolves to; auto_orient: the
-# reverse flags of the records it reverses).
-_PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults", "origin_feature", "auto_orient"})
-# Options a Session does not store yet: a request that sets one is refused.
-_UNSTORED_FIELDS = frozenset({"anchor_feature"})
+# reverse flags of the records it reverses; anchor_feature: the record
+# translations it resolves to, with_anchor_feature_translations).
+_PLANNER_ONLY_FIELDS = frozenset({"wrap_defaults", "origin_feature", "auto_orient", "anchor_feature"})
 
-
-def require_storable_diagram_options(
-    options: CircularDiagramOptions | LinearDiagramOptions,
-) -> None:
-    """Refuse options that a Session does not store yet, before anything renders."""
-
-    defaults = _DEFAULT_CIRCULAR_OPTIONS if isinstance(options, CircularDiagramOptions) else _DEFAULT_LINEAR_OPTIONS
-    for item in fields(options):
-        if item.name in _UNSTORED_FIELDS and getattr(options, item.name) != getattr(defaults, item.name):
-            raise CanonicalRequestEncodingError(
-                f"A Session does not store {item.name} yet; save the Session without it."
-            )
 _PLACEMENT_INPUT_FIELDS = frozenset({
     "feature_placements", "feature_placement_table", "feature_placement_table_file",
     "feature_overrides", "feature_override_table", "feature_override_table_file",
@@ -1801,7 +1802,6 @@ def _encode_diagram_options(
     record_count: int,
     resources: RequestResources,
 ) -> dict[str, Any]:
-    require_storable_diagram_options(options)
     default_options: CircularDiagramOptions | LinearDiagramOptions
     if isinstance(options, CircularDiagramOptions):
         default_options = _DEFAULT_CIRCULAR_OPTIONS
@@ -1843,8 +1843,6 @@ def _encode_diagram_options(
             or name in _PLACEMENT_INPUT_FIELDS
             or name in _PLANNER_ONLY_FIELDS
         ):
-            continue
-        if name in _UNSTORED_FIELDS:
             continue
         if name == "conservation_search_results":
             assert isinstance(options, CircularDiagramOptions)
@@ -1942,7 +1940,6 @@ def _decode_diagram_options(
         and item.name not in _RING_SEARCH_FIELDS
         and item.name not in _TABLE_PATH_FIELDS
         and item.name not in _PLANNER_ONLY_FIELDS
-        and item.name not in _UNSTORED_FIELDS
     }
     unknown = set(payload) - set(known)
     if unknown:
@@ -5654,7 +5651,7 @@ def describe_canonical_request() -> dict[str, Any]:
     # stores every depth input as depthTracks).
     unwritten = (
         _COMPARISON_FIELDS | _PLACEMENT_INPUT_FIELDS | _RING_SEARCH_FIELDS | _DEPTH_COMPATIBILITY_FIELDS
-        | _TABLE_PATH_FIELDS | _PLANNER_ONLY_FIELDS | _UNSTORED_FIELDS
+        | _TABLE_PATH_FIELDS | _PLANNER_ONLY_FIELDS
     )
 
     def option(name: str, hint: object, mode: Literal["circular", "linear"]) -> Shape:
@@ -5888,6 +5885,7 @@ __all__ = [
     "CanonicalRequestEncodingError",
     "CanonicalRequestResource",
     "EncodedCanonicalRequest",
+    "EncodedRecordTranslation",
     "decode_canonical_typed_resource",
     "decode_canonical_request",
     "describe_canonical_request",
@@ -5896,9 +5894,9 @@ __all__ = [
     "encode_canonical_table",
     "encode_canonical_typed_resource",
     "encode_canonical_request",
+    "encode_record_translations",
     "migrate_flat_config_overrides",
     "migrate_legacy_full_config",
-    "require_storable_diagram_options",
     "with_automatic_scale_interval",
     "with_stored_font_sizes_as_auto",
 ]

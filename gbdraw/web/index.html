@@ -3547,6 +3547,23 @@
                                         <input type="number" min="0" step="1" v-model.number="linearRecordGap" :aria-label="t('Linear record gap')" class="form-input mt-1 min-w-0 px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </label>
                                 </div>
+                                <div class="min-w-0 space-y-1.5 border-t border-slate-200 pt-2" data-feature-anchor>
+                                    <span class="linear-primary-label mb-1"><label for="linear-anchor-feature-selector">{{ t('Align at feature') }}</label> <help-tip id="help-linear-anchor-feature" :text="t('Move each record so that the named feature starts at the same x position as in the first record that has it. Type a KEY=VALUE selector, such as gene=COX1 or locus_tag=<tag>. Records without the feature keep their place. Apply writes the record positions once; later changes do not align again.')"></help-tip></span>
+                                    <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-1">
+                                        <input type="text" id="linear-anchor-feature-selector" v-model.trim="featureAnchorSelector" data-history-ignore aria-describedby="help-linear-anchor-feature" class="form-input min-w-0 px-2 py-1.5 text-xs" placeholder="gene=COX1" :disabled="!semanticMutationAvailable || featureAnchorBusy" data-testid="linear-anchor-feature-selector">
+                                        <button type="button" data-history-managed class="btn btn-secondary px-2 py-1 text-xs" @click="resolveFeatureAnchor" :disabled="!svgContent || !featureAnchorSelector || !semanticMutationAvailable || featureAnchorBusy" data-testid="linear-anchor-feature-resolve">{{ t('Align at feature…') }}</button>
+                                    </div>
+                                    <div v-if="featureAnchorPreview" class="min-w-0 space-y-1 rounded border border-blue-200 bg-blue-50 px-2 py-1.5 text-[10px] text-blue-900" data-testid="linear-anchor-feature-preview">
+                                        <ul class="space-y-0.5"><li v-for="line in featureAnchorPreviewLines" :key="line">{{ line }}</li></ul>
+                                        <p v-if="featureAnchorPreview.clearsAlignment">{{ t('Apply clears the active similarity alignment.') }}</p>
+                                        <div class="grid grid-cols-2 gap-1">
+                                            <button type="button" data-history-managed class="btn btn-primary px-1 py-0.5 text-[10px]" @click="applyFeatureAnchor" :disabled="featureAnchorBusy || !semanticMutationAvailable" data-testid="linear-anchor-feature-apply">{{ t('Apply') }}</button>
+                                            <button type="button" data-history-managed class="btn btn-secondary px-1 py-0.5 text-[10px]" @click="cancelFeatureAnchor" :disabled="featureAnchorBusy">{{ t('Cancel') }}</button>
+                                        </div>
+                                    </div>
+                                    <p v-if="featureAnchorError" role="alert" class="text-[10px] text-red-700" data-testid="linear-anchor-feature-error">{{ errorText(featureAnchorError.summaryParts) }}</p>
+                                    <p v-if="featureAnchorNotice" role="status" aria-live="polite" class="text-[10px] text-slate-600" data-testid="linear-anchor-feature-notice">{{ featureAnchorNotice }}</p>
+                                </div>
                             </section>
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">

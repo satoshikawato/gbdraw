@@ -3501,6 +3501,11 @@ def assemble_linear_diagram(
         replace(placement, x=placement.x + float(canvas_config.horizontal_offset))
         for placement in alignment_placements
     ))
+    # The translation each record was drawn with, by record key: what a Session
+    # stores for an anchor_feature figure (LinearDiagramMetadata.record_translations).
+    setattr(canvas, "_gbdraw_record_translations", tuple(
+        (str(key), x, y) for key, (x, y) in zip(record_keys, final_translations, strict=True)
+    ))
     setattr(canvas, "_gbdraw_linear_source_content_bounds", source_primary_bounds)
     setattr(canvas, "_gbdraw_linear_composition_plan", composition_plan)
     setattr(canvas, "_gbdraw_comparison_record_id_warnings", comparison_record_id_warnings)

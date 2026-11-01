@@ -765,16 +765,17 @@ inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.
 [Automatic Linear
 orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation)
-is resolved by the planner: the resolved request holds the reverse-complement
-flag of each record the rule reversed and no `auto_orient` option, so a Session
-saved with `--auto_orient` stores the flags. A typed Linear request that still
-has `auto_orient=True` is not encoded (`CanonicalRequestEncodingError`; resolve
-it first), and a canonical request with `autoOrient` is rejected as an unknown
-field.
-A typed Linear request with `anchor_feature` set is not encoded
-(`CanonicalRequestEncodingError`), and a canonical request with
-`anchorFeature` is rejected as an unknown field: no Session stores the
-[feature anchor](command-line.md#record-selection-and-layout) yet.
+and a [feature anchor](command-line.md#record-selection-and-layout) are
+planner-only options: a Session stores their results, not the options.
+`resolve_request()`, and every Session writer, writes the Reverse complement
+flag of each record the orientation rule reversed, and draws an anchor request
+once to write each record's translation into
+`renderRequest.layout.recordTranslations`, replacing the translations it held.
+A Session saved with `--auto_orient` or `--anchor_feature` therefore draws the
+same figure when it is loaded, without the options. A typed Linear request that
+still sets `auto_orient=True` or `anchor_feature` is not encoded
+(`CanonicalRequestEncodingError`; resolve it first), and a canonical request
+with `autoOrient` or `anchorFeature` is rejected as an unknown field.
 
 ## Similarity alignment in requests and Sessions
 
