@@ -3486,6 +3486,7 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
             "stroke": "none",
             "width": 0,
             "min_value": 0,
+            "max_value": 100,
         },
         "Inverted": {
             "type": "gradient",
@@ -3494,6 +3495,7 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
             "stroke": "none",
             "width": 0,
             "min_value": 0,
+            "max_value": 100,
         },
     }
 
@@ -3549,6 +3551,7 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
             "stroke": "none",
             "width": 0,
             "min_value": 20,
+            "max_value": 100,
         },
     }
 
@@ -3633,6 +3636,7 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
             "stroke": "none",
             "width": 0,
             "min_value": 20,
+            "max_value": 100,
         },
     }
 

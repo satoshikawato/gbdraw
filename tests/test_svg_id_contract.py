@@ -122,6 +122,7 @@ def _linear_legend_svg() -> str:
             "stroke": "none",
             "width": 0,
             "min_value": 0,
+            "max_value": 100,
         },
     }
     configurator = LegendDrawingConfigurator(

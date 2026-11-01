@@ -41,6 +41,7 @@ TARGET = REPO_ROOT / "tests" / "fixtures" / "legend_layout_vectors.json"
 GALLERY_SESSIONS = REPO_ROOT / "gbdraw" / "web" / "gallery" / "sessions"
 sys.path.insert(0, str(REPO_ROOT))
 
+from gbdraw.comparisons.identity_scale import identity_color_domain  # noqa: E402
 from gbdraw.configurators.legend import (  # noqa: E402
     _circular_legend_local_bounds,
     _linear_legend_local_bounds,
@@ -359,7 +360,11 @@ def _table(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "type": row["type"], "fill": "#000000", "stroke": row["stroke"], "width": row["strokeWidth"],
         }
         if row["type"] in {"gradient", "ring"}:
-            properties.update({"min_value": row.get("minValue", 0), "min_color": "#000000", "max_color": "#ffffff"})
+            minimum = row.get("minValue", 0)
+            properties.update({
+                "min_value": minimum, "max_value": identity_color_domain(minimum, None).maximum,
+                "min_color": "#000000", "max_color": "#ffffff",
+            })
         if row["type"] == "ring":
             properties.update({"track_index": index + 1, "fill": "#000000" if row["swatch"] else None})
         table[row["key"]] = properties

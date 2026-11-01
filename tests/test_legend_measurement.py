@@ -56,6 +56,7 @@ def _legend_table() -> dict[str, dict[str, object]]:
             "stroke": "none",
             "width": 0,
             "min_value": 70,
+            "max_value": 100,
         },
     }
 
@@ -75,6 +76,7 @@ def _circular_legend_table() -> dict[str, dict[str, object]]:
             "min_color": "#f0f1f5",
             "max_color": "#8b9cc1",
             "min_value": 70,
+            "max_value": 100,
         },
     }
 
@@ -137,6 +139,7 @@ def test_circular_legend_measurement_carries_the_render_layout() -> None:
                 "stroke": "none",
                 "width": 0,
                 "min_value": 70,
+                "max_value": 100,
             },
         },
         {
@@ -147,6 +150,7 @@ def test_circular_legend_measurement_carries_the_render_layout() -> None:
                 "stroke": "none",
                 "width": 0,
                 "min_value": 70,
+                "max_value": 100,
             },
             "Inverted": {
                 "type": "gradient",
@@ -155,6 +159,7 @@ def test_circular_legend_measurement_carries_the_render_layout() -> None:
                 "stroke": "none",
                 "width": 0,
                 "min_value": 70,
+                "max_value": 100,
             },
         },
         _legend_table(),
@@ -240,6 +245,7 @@ def test_single_gradient_title_wider_than_its_bar_stays_inside_the_legend(
             "stroke": "none",
             "width": 0,
             "min_value": 70,
+            "max_value": 100,
         },
     }
     profile = LinearRenderProfile(cfg)

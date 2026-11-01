@@ -790,20 +790,45 @@ state.adv.identity_scale = [40, 90];
 const scaledRequest = buildCanonicalRenderRequestRaw({ state, filesData });
 assert.deepEqual(scaledRequest.renderRequest.diagramOptions.configOverrides['objects.conservation.identity_scale'], [40, 90]);
 assert.deepEqual(projectCanonicalSessionRequest(scaledRequest).config.adv.identity_scale, [40, 90]);
-// R7: the pair is sent as typed (Python judges range and order, tests/fixtures/option_domain_vectors.json),
-// and anything that is not two finite numbers is refused with the leaf path.
-state.adv.identity_scale = [90, 40];
-assert.deepEqual(
-  buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.diagramOptions.configOverrides['objects.conservation.identity_scale'],
-  [90, 40]
+// R7: the pair is sent as typed, so each shared identity-scale vector of the mode
+// (tests/fixtures/option_domain_vectors.json) reaches Python, which judges range and
+// order, as exactly its request leaf. Anything that is not two finite numbers is
+// refused with the mode's leaf path, and the refusal reaches the user as that
+// field's error. Checked here for Circular and below for Linear.
+const { normalizeUserFacingError: normalizeIdentityScaleError } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'utils', 'error-normalization.js'))
 );
-for (const value of [Number.NaN, 7, '1e-50x', [5], [Number.NaN, 100], ['x', 100], [null, 100], [40, 90, 100]]) {
-  state.adv.identity_scale = value;
-  assert.throws(() => buildCanonicalRenderRequestRaw({ state, filesData }),
-    { code: 'INPUT_INVALID', context: { configPath: 'objects.conservation.identity_scale', reason: 'FINITE' } },
-    `identity_scale=${JSON.stringify(value)}`);
-}
-state.adv.identity_scale = null;
+const optionDomainVectors = JSON.parse(
+  await readFile(join(repoRoot, 'tests', 'fixtures', 'option_domain_vectors.json'), 'utf8')
+);
+const identityScaleVectors = [...optionDomainVectors.invalid, ...optionDomainVectors.accepted]
+  .filter((vector) => vector.id.startsWith('identity-scale-'));
+const assertIdentityScaleProjection = (build, mode) => {
+  const configPath = mode === 'linear' ? 'objects.blast_match.identity_scale' : 'objects.conservation.identity_scale';
+  const overrides = () => build().renderRequest.diagramOptions.configOverrides;
+  const ofMode = identityScaleVectors.filter((vector) => vector.modes.includes(mode));
+  assert.equal(ofMode.length, 3, `${mode} identity-scale vectors`);
+  for (const vector of ofMode) {
+    const leaf = vector.request.configOverrides[configPath];
+    assert.ok(Array.isArray(leaf), `${vector.id} names the ${mode} leaf`);
+    state.adv.identity_scale = [...leaf];
+    assert.deepEqual(overrides()[configPath], leaf, `${vector.id}-${mode}`);
+  }
+  for (const value of [Number.NaN, 7, '1e-50x', [5], [Number.NaN, 100], ['x', 100], [null, 100], [40, 90, 100]]) {
+    const label = `${mode}.identity_scale=${JSON.stringify(value)}`;
+    state.adv.identity_scale = value;
+    assert.throws(build, (error) => {
+      const model = normalizeIdentityScaleError(error);
+      assert.deepEqual([model.code, model.context.configPath, model.context.reason],
+        ['INPUT_INVALID', configPath, 'FINITE'], label);
+      assert.equal(model.summary, `An input value is invalid. Setting: ${configPath}. Use a finite number.`, label);
+      return true;
+    }, label);
+  }
+  state.adv.identity_scale = null;
+  assert.equal(Object.hasOwn(overrides(), configPath), false, `${mode} leaves no scale unstated`);
+};
+assertIdentityScaleProjection(() => buildCanonicalRenderRequestRaw({ state, filesData }), 'circular');
 // PD-OI-109: Show Definition (Circular only). A shown definition is left out of the
 // request, as an earlier writer left it; a hidden one is `false`, and both project back.
 assert.ok(managedConfigOverridePathsForMode('circular').includes('objects.definition.circular.show'));
@@ -2275,6 +2300,9 @@ const materializedCanonical = buildCanonicalRenderRequest({
   filesData: materializedFilesData,
   comparisonPlanSnapshot: materializedSnapshot
 });
+assertIdentityScaleProjection(() => buildCanonicalRenderRequestRaw({
+  state, filesData: materializedFilesData, comparisonPlanSnapshot: materializedSnapshot
+}), 'linear');
 assert.deepEqual(
   materializedCanonical.renderRequest.records.map((record) => record.selector),
   [

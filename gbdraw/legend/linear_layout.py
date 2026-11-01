@@ -138,7 +138,7 @@ def _build_gradient_layout(
     min_label_text = gradient_label_text(
         gradient_entries[0][1].get("min_value", 0)
     )
-    max_label_text = gradient_label_text(gradient_entries[0][1].get("max_value", 100))
+    max_label_text = gradient_label_text(gradient_entries[0][1]["max_value"])
     # The scale labels share one line box, whatever their digits.
     scale_label_height = drawn_text_box("100%", font_family, font_size)[1]
     if len(gradient_entries) > 1:
