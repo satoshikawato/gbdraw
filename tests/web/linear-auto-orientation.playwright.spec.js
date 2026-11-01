@@ -26,6 +26,17 @@ const mirroredTable = () => {
     });
   return { subject, table: `${rows.join('\n')}\n` };
 };
+// The table as tblastx wrote it: MelaMJNV's hits are mostly forward in its source frame.
+const forwardTable = () => readFileSync(path.join(examples, 'MjeNMV.MelaMJNV.tblastx.out'), 'utf8');
+const useTable = (page, blast, name) => page.evaluate(async ({ blast, name }) => {
+  const app = window.__GBDRAW_APP__;
+  app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length, {
+    id: 'auto-orient-edge', queryUid: app.linearSeqs[0].uid, subjectUid: app.linearSeqs[1].uid,
+    included: true, fileActive: true, losatFilenameActive: false, source: 'upload',
+    file: new File([blast], name, { type: 'text/plain' }), losatFilename: ''
+  });
+  await window.Vue.nextTick();
+}, { blast, name });
 
 const reverseFlags = (page) => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.region_reverse));
 // The orientation the last Generate drew: the records of its committed request.
@@ -39,7 +50,7 @@ test('Orient records from comparisons checks the reversed record as one Undo ste
   test.setTimeout(420_000);
   await openFresh(page);
   const { subject, table } = mirroredTable();
-  await page.evaluate(async ({ first, second, blast }) => {
+  await page.evaluate(async ({ first, second }) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
     await window.Vue.nextTick();
@@ -48,14 +59,10 @@ test('Orient records from comparisons checks the reversed record as one Undo ste
     app.setLinearSeqPrimaryFile(1, 'gb', new File([second], 'MelaMJNV.gb', { type: 'text/plain' }));
     app.linearComparisonPlan.mode = 'adjacent';
     app.linearComparisonPlan.defaultSource = 'upload';
-    app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length, {
-      id: 'auto-orient-edge', queryUid: app.linearSeqs[0].uid, subjectUid: app.linearSeqs[1].uid,
-      included: true, fileActive: true, losatFilenameActive: false, source: 'upload',
-      file: new File([blast], 'MjeNMV.MelaMJNV.mirrored.tsv', { type: 'text/plain' }), losatFilename: ''
-    });
     app.form.show_labels_linear = 'none';
     await window.Vue.nextTick();
-  }, { first: readFileSync(path.join(examples, 'MjeNMV.gb'), 'utf8'), second: subject, blast: table });
+  }, { first: readFileSync(path.join(examples, 'MjeNMV.gb'), 'utf8'), second: subject });
+  await useTable(page, table, 'MjeNMV.MelaMJNV.mirrored.tsv');
   await settle(page);
 
   const button = page.getByTestId('linear-auto-orientation-button');
@@ -90,8 +97,15 @@ test('Orient records from comparisons checks the reversed record as one Undo ste
 
   await generateAndWaitForResult(page);
   expect(await drawnReverseFlags(page)).toEqual([false, true]);
-  // Drawn as reversed, the comparisons now keep every record as it is.
+  // Drawn as reversed, the comparisons give every record its current orientation.
   await button.click();
-  await expect(status).toContainText('keep every record in its current orientation');
+  await expect(status).toContainText('give every record its current orientation');
   expect(await reverseFlags(page)).toEqual([false, true]);
+
+  // With hits mostly forward in its source frame, a press unchecks the record it reversed.
+  await useTable(page, forwardTable(), 'MjeNMV.MelaMJNV.tblastx.out');
+  await generateAndWaitForResult(page);
+  await button.click();
+  await expect(status).toContainText('Set Reverse complement from the comparisons');
+  expect(await reverseFlags(page)).toEqual([false, false]);
 });

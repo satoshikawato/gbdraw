@@ -99,16 +99,24 @@ def test_the_helper_decides_what_the_cli_planner_draws(tmp_path: Path) -> None:
 
 
 @pytest.mark.linear
-def test_mostly_forward_hits_and_an_explicit_reverse_keep_the_orientation(tmp_path: Path) -> None:
+def test_the_helper_decides_every_record_from_the_comparisons(tmp_path: Path) -> None:
     forward = _request(_TABLE)
     payload, paths = _committed(forward, tmp_path / "forward")
     assert [record["reverseComplement"] for record in decide_auto_orientation(
         payload, paths, str(tmp_path / "out"))["records"]] == [False, False] == _planner_flags(forward)
-    # An explicit reverse wins: the record stays reversed, though its hits are forward.
+    # A checked Reverse complement the comparisons contradict is decided again:
+    # the helper's answer is the planner's on the request with the flags cleared.
     explicit = _request(_TABLE, subject_reversed=True)
     payload, paths = _committed(explicit, tmp_path / "explicit")
     assert [record["reverseComplement"] for record in decide_auto_orientation(
-        payload, paths, str(tmp_path / "out"))["records"]] == [False, True] == _planner_flags(explicit)
+        payload, paths, str(tmp_path / "out"))["records"]] == [False, False] == _planner_flags(forward)
+    # On the command line an explicit reverse still wins.
+    assert _planner_flags(explicit) == [False, True]
+    # A record reversed by the rule and drawn so stays reversed while its hits are mostly reverse.
+    mirrored = _reverse_hits_table(tmp_path)
+    payload, paths = _committed(_request(mirrored, subject_reversed=True), tmp_path / "drawn-reversed")
+    assert [record["reverseComplement"] for record in decide_auto_orientation(
+        payload, paths, str(tmp_path / "out"))["records"]] == [False, True] == _planner_flags(_request(mirrored))
 
 
 @pytest.mark.linear
