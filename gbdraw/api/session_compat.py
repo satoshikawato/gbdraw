@@ -76,6 +76,7 @@ from .request_render import (
     _request_losatp_job_specs,
     plan_request,
     render_prepared_request,
+    resolved_plan_request,
 )
 from .requests import (
     CircularBatchRequest,
@@ -1744,10 +1745,12 @@ def resolve_session_write_request(request: DiagramRequest) -> DiagramRequest:
     A table still read with the drawn-frame IDs of a Session up to 40 moves
     to the search frame first, as an upgrade moves it, so the written table
     holds source and view IDs (OV-1183). A row matching neither frame raises.
+    The request resolves as :func:`resolve_request` resolves it, so a Linear
+    ``anchor_feature`` is stored as the record translations it draws with.
     """
 
     plan = plan_request(request)
-    resolved = plan.request
+    resolved = resolved_plan_request(plan)
     if not isinstance(resolved, LinearDiagramRequest) or not any(
         comparison.drawn_feature_ids for comparison in resolved.options.linear_comparisons or ()
     ):

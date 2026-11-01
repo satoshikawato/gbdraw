@@ -227,6 +227,29 @@ def test_a_session_stores_the_translations_the_anchor_resolves_to(tmp_path: Path
 
 
 @pytest.mark.linear
+def test_the_python_session_writers_store_the_translations_the_anchor_resolves_to(tmp_path: Path) -> None:
+    from gbdraw.session import (
+        build_session_document,
+        load_session_document,
+        materialize_session,
+        save_session_document,
+        session_to_request,
+    )
+
+    request = _request(anchor_feature=_COX1)
+    drawn = _svg(request)
+    built = build_session_document(request).to_dict()
+    path = tmp_path / "saved.gbdraw-session.json"
+    save_session_document(path, request)
+    assert _stored_layout(path) == built["renderRequest"]["layout"]
+    assert [entry["x"] for entry in _stored_layout(path)["recordTranslations"]] == _record_shifts(drawn)
+    with materialize_session(load_session_document(path), output_directory=tmp_path / "out") as materialized:
+        replayed = session_to_request(materialized)
+        assert isinstance(replayed, LinearDiagramRequest) and replayed.options.anchor_feature is None
+        assert _svg(replayed) == drawn
+
+
+@pytest.mark.linear
 @pytest.mark.parametrize("config_overrides", [None, {"canvas.linear.align_center": True}])
 def test_the_resolved_request_draws_the_anchored_figure(config_overrides: dict[str, object] | None) -> None:
     from gbdraw.api import resolve_request

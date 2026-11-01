@@ -2564,12 +2564,20 @@ def plan_request(request: DiagramRequest) -> DiagramRequestPlan:
 def resolve_request(request: DiagramRequest) -> DiagramRequest:
     """Resolve an unresolved typed request to an exact-one projection.
 
-    A Linear ``anchor_feature`` is resolved when the figure is laid out, so
-    such a request is built once and resolves to the record translations it
-    was drawn with (:func:`with_anchor_feature_translations`).
+    A Linear ``anchor_feature`` resolves to the record translations it was
+    drawn with (:func:`resolved_plan_request`).
     """
 
-    plan = plan_request(request)
+    return resolved_plan_request(plan_request(request))
+
+
+def resolved_plan_request(plan: DiagramRequestPlan) -> DiagramRequest:
+    """The request ``plan`` resolves to, as :func:`resolve_request` and every Session writer store it.
+
+    A Linear ``anchor_feature`` is resolved when the figure is laid out, so
+    such a plan is built once (:func:`with_anchor_feature_translations`).
+    """
+
     if isinstance(plan, LinearRequestPlan) and plan.request.options.anchor_feature is not None:
         return build_request_plan_diagram(plan).request
     return plan.request
@@ -3593,6 +3601,7 @@ __all__ = [
     "render_request",
     "render_prepared_request",
     "resolve_request",
+    "resolved_plan_request",
     "resolve_similarity_alignment_plan",
     "with_anchor_feature_translations",
 ]
