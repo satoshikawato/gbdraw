@@ -159,7 +159,7 @@ run('species circular: a Species change is live and equals a Generate', TOBACCO,
 for (const [mode, file] of [['circular', TOBACCO], ['linear', LAMBDA]]) {
   run(`dinucleotide-window ${mode}: a Window change is live and equals a Generate`, file, async (page) => {
     if (mode === 'linear') {
-      const gc = page.locator('input[aria-describedby="help-linear-show-gc-content"]');
+      const gc = page.locator('input[aria-describedby~="help-linear-show-gc-content"]');
       await reveal(gc);
       if (!(await gc.isChecked())) await gc.click();
       await generateNow(page);
