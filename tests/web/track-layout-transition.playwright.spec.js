@@ -624,7 +624,7 @@ for (const mode of ['circular', 'linear']) {
       const start = await stackState(page, mode);
       const button = async () => {
         const section = await openDepthSources(page, mode);
-        return section.getByRole('button', { name: mode === 'circular' ? 'Remove' : 'Remove series', exact: true }).first();
+        return section.getByRole('button', { name: 'Remove series', exact: true }).first();
       };
       await exerciseAsk(page, mode, {
         trigger: async () => (await button()).click(),
@@ -967,7 +967,7 @@ const REACH_UNDO_ROUTES = {
   'Depth file removal': (page, mode) => removeDepthFile(page, mode),
   'Depth series removal': async (page, mode) => {
     const section = await openDepthSources(page, mode);
-    await section.getByRole('button', { name: mode === 'circular' ? 'Remove' : 'Remove series', exact: true }).first().click();
+    await section.getByRole('button', { name: 'Remove series', exact: true }).first().click();
   },
   'row removal': async (page, mode) => {
     await openStack(page, mode);
@@ -1175,7 +1175,7 @@ for (const mode of ['circular', 'linear']) {
       }, mode);
       await addReachRow(page, { id: 'mark', anchor: seriesRow, setId: setIdOf(mode), mode });
       const section = await openDepthSources(page, mode);
-      await section.getByRole('button', { name: mode === 'circular' ? 'Remove' : 'Remove series', exact: true }).first().click();
+      await section.getByRole('button', { name: 'Remove series', exact: true }).first().click();
       await expect(page.locator('[data-choice-prompt]')).toBeVisible();
       expect(await promptText(page)).not.toContain('stays empty');
       await page.locator('[data-choice-prompt]').getByRole('button', { name: 'Cancel', exact: true }).click();
