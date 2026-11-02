@@ -81,9 +81,11 @@ const auditPage = (page) => page.evaluate(() => {
     if (description && !description.hidden) problems.push('description is in the reading order');
     if (description && tip.contains(description)) problems.push('description inside the tip wrapper');
     if (tip.closest('label')) problems.push('inside label');
+    // A timing clock's line holds its wrapper (`data-timing-clock`).
+    const line = tip.parentElement.matches('[data-timing-clock]') ? tip.parentElement.parentElement : tip.parentElement;
     // A tip needs the thing it explains on its line: a bare question mark on a
     // line of its own explains nothing.
-    if (tip.parentElement.children.length === 1 && !text(tip.parentElement.textContent)) problems.push('alone on its line');
+    if (line.children.length === 1 && !text(line.textContent)) problems.push('alone on its line');
     if (tip.parentElement.closest('button, [role="button"]:not(summary)')) problems.push('inside a button');
     // A heading or summary computes its name from content, so one that holds a
     // tip keeps its visible name only through aria-label.
@@ -91,9 +93,14 @@ const auditPage = (page) => page.evaluate(() => {
     if (named && !text(named.getAttribute('aria-label'))) problems.push('changes a heading or summary name');
     // The nearest ancestor holding another interactive element is the tip's
     // field; when that field holds exactly one form control, the control is
-    // the one the tip explains.
+    // the one the tip explains. In a field caption other tips are not the
+    // field: a caption with a timing clock and a label help tip leads to the
+    // control both explain. The tips of a section heading or summary explain
+    // their section.
+    const fieldCaption = !line.closest('summary, h1, h2, h3, h4, h5, h6');
     const others = (element) => Array.from(element.querySelectorAll(`${CONTROLS}, button`))
-      .filter((candidate) => candidate !== button && visible(candidate));
+      .filter((candidate) => candidate !== button && visible(candidate)
+        && !(fieldCaption && candidate.matches('.help-tip > button')));
     let field = tip.parentElement;
     while (field && others(field).length === 0) field = field.parentElement;
     const interactive = field ? others(field) : [];
@@ -324,9 +331,11 @@ const windowTip = async (page) => {
   const section = page.locator('details').filter({ has: page.locator('summary[aria-label="Dinucleotide content/skew"]') });
   if (await section.getAttribute('open') === null) await section.locator(':scope > summary').press('Enter');
   const input = section.getByRole('spinbutton', { name: 'Window', exact: true });
-  const descriptionId = await input.getAttribute('aria-describedby', { timeout: 30_000 });
-  expect(descriptionId).toBeTruthy();
-  return { section, input, button: page.locator(`.help-tip > button[aria-describedby="${descriptionId}"]`) };
+  // The field references its label help tip and its timing clock.
+  const descriptionIds = (await input.getAttribute('aria-describedby', { timeout: 30_000 }) || '').split(/\s+/).filter(Boolean);
+  expect(descriptionIds.length).toBeGreaterThan(0);
+  const labelTips = descriptionIds.map((id) => `:not([data-timing-clock]) > .help-tip > button[aria-describedby="${id}"]`);
+  return { section, input, button: page.locator(labelTips.join(', ')) };
 };
 
 // A file zone hides its label until a file is chosen, so its help tip sits

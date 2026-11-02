@@ -166,7 +166,8 @@ export const GbdrawLoader = {
 // aria-describedby. The description is a hidden element teleported to <body>,
 // so the text around the tip stays its visible label and screen readers do
 // not read the tip text twice. Mouse hover and keyboard focus show the
-// tooltip, a click or tap toggles it, and Escape or blur closes it. Place
+// tooltip, a click or tap toggles it, and Escape or blur closes it; an
+// Escape with the tooltip closed reaches the dialog around the tip. Place
 // tips outside <label> so they never change the accessible name of a label or
 // its control. The default slot replaces the question mark (the layout warning
 // beside the compact Generate button shows a warning mark).
@@ -231,11 +232,18 @@ export const HelpTip = {
       keyboardFocus.value = false;
       pinned.value = false;
     };
+    // Escape closes an open tooltip and goes no further; with the tooltip
+    // closed it reaches the dialog or popup that holds the tip.
+    const onEscape = (/** @type {KeyboardEvent} */ event) => {
+      if (!visible.value) return;
+      event.stopPropagation();
+      close();
+    };
     const toggle = () => { pinned.value = !pinned.value; };
     const readName = () => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); };
     onMounted(readName);
     watch(uiLocale, () => nextTick(readName));
-    return { descriptionId, name, visible, style, trigger, tooltip, onEnter, onLeave, onFocus, close, toggle };
+    return { descriptionId, name, visible, style, trigger, tooltip, onEnter, onLeave, onFocus, close, onEscape, toggle };
   }
 };
 
