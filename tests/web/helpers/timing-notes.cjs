@@ -4,8 +4,8 @@
 // change that applies at once shows no mark.
 const CLOCK = '.apply-note .help-tip-trigger';
 
-/** The clocks inside `scope`. @param {import('@playwright/test').Locator} scope */
-const clocksIn = (scope) => scope.locator(CLOCK);
+/** The clocks inside `scope`, which may be a note itself. @param {import('@playwright/test').Locator} scope */
+const clocksIn = (scope) => scope.locator(`:scope${CLOCK}, ${CLOCK}`);
 
 /**
  * The notes of the clocks inside `scope`, in document order: the text of each

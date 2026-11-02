@@ -788,7 +788,8 @@ test('with a single-canvas Result, the Multi-Record layout rows say Applies on G
     for (const id of ['legend', 'plot-title']) await expect.poll(() => positionNotes(id)).toBe(0);
     await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
     const note = page.locator('[data-setting="multi-record-layout"] [data-applies-on-generate="multi-record-layout"]');
-    await expect(clocksIn(note)).toHaveAccessibleName('Applies on Generate');
+    // The Layout card may be closed: read the clock's name from its attribute.
+    await expect(clocksIn(note)).toHaveAttribute('aria-label', 'Applies on Generate');
     for (const id of ['legend', 'plot-title']) await expect.poll(() => positionNotes(id)).toBe(1);
   } finally {
     await page.context().close();

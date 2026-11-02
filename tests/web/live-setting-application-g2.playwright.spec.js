@@ -270,7 +270,7 @@ run('annotation-style waits: an item with a Legend label says Applies on Generat
   await reveal(rows.nth(5));
   // plastome_tint: lsc_tint (row 5) has no Legend label, irb_tint (row 6) has one.
   await expect(noteOf(scopeOf(4).first())).toHaveCount(0);
-  await expect(noteOf(scopeOf(5).first())).toHaveAccessibleName('Applies on Generate');
+  await expect(noteOf(scopeOf(5).first())).toHaveAttribute('aria-label', 'Applies on Generate');
   const before = await facts(page);
   await commitColor(page.locator('input[aria-label="Annotation fill color"]').nth(5), '#ff0000');
   await expectWaits(page, before);
@@ -283,7 +283,7 @@ run('track-geometry waits: a features row Height says Applies on Generate and ke
   const features = slots.find((slot) => slot.renderer === 'features');
   const other = slots.find((slot) => slot.renderer !== 'features' && slot.renderer !== 'depth');
   expect(features, 'the stack has a features row').toBeTruthy();
-  await expect(noteOf(slotScope(page, features.id))).toHaveAccessibleName('Applies on Generate');
+  await expect(noteOf(slotScope(page, features.id))).toHaveAttribute('aria-label', 'Applies on Generate');
   if (other) await expect(noteOf(slotScope(page, other.id))).toHaveCount(0);
   const before = await facts(page);
   const current = parseFloat(features.height);
@@ -299,7 +299,7 @@ run('record-names waits: a record name in a card whose File was replaced keeps t
   await reveal(card.locator('input[type="file"]').first());
   await card.locator('input[type="file"]').first().setInputFiles(file);
   await settleLive(page);
-  await expect(noteOf(card.locator('[data-setting="record-names"]'))).toHaveAccessibleName('Applies on Generate');
+  await expect(noteOf(card.locator('[data-setting="record-names"]'))).toHaveAttribute('aria-label', 'Applies on Generate');
   const before = await facts(page);
   await commitValue(page.locator('input[aria-label="Definition for sequence 1"]'), 'G2 replaced name');
   await expectWaits(page, before);
