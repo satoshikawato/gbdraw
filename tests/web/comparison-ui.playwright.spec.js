@@ -222,6 +222,8 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
 
   await expect(comparisonSettings(page)).toHaveCount(1);
   await expect(comparisonSettings(page)).not.toHaveAttribute('open', '');
+  // With no comparison chosen there is nothing to set, so the Settings section is hidden.
+  await expect(comparisonSettings(page)).toBeHidden();
   await expect(page.getByRole('button', { name: 'Generate Diagram' })).toHaveCount(1);
 
   const order = await page.evaluate(() => {
