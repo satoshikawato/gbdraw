@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `109`
+- Contract revision: `110`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -4027,6 +4027,45 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime and tests
     that implement it are in the same pull request, and the Review is
     `REQUIRED`.
+- Revision 110 changes: `PD-OI-037` is replaced for scenario revision `3`
+  (concern `web.edit-application-feedback`, the same outcome
+  `A / OPERATION-FEEDBACK-WITHOUT-DERIVED-STATUS`) and `PD-OI-108` gains
+  scenario revision `3` (concern `web.gallery-tutorial-discoverability`).
+  Applies on Generate is shown as a clock icon whose tooltip holds the note,
+  the long qualified timing notes included, and a setting that applies at once
+  carries no mark. The Preview without a Result shows one box with
+  [Open Gallery example] above [Learn with tutorials ↗] in place of the
+  "Learn with tutorials" card and the separate example button. `OIC-024`
+  cites scenario revision `3`.
+  - The Product Decision Owner `satoshikawato` adopted a copy revision of the
+    Web UI on `2026-11-02` (「基本これでいきましょう。v0.14.5でこうする。判断が要る点は質問して」,
+    campaign `ui-copy-diet-20261102`), then chose among the options a Claude
+    Code session offered: 「時計アイコン＋ツールチップ (Recommended)」 for the
+    timing notes (D-02), and for the empty Preview 「Dにしましょう」 (D-07), D
+    being the Owner's own variant 「案 Cのボタンを垂直に重ねるのは？案D」.
+  - The session showed both receipts in full, with the Rationale and the
+    Accepted residual risk marked as drafted by the session, and the Owner
+    answered 「この全文で承認 (Recommended)」 to each (D-08, D-09,
+    `2026-11-02`). The receipts below reproduce the approved texts; where the
+    dialog abbreviated a part as the same as scenario revision `2`, that part
+    is written out from scenario revision `2` word for word.
+  - New receipt SHA-256: `PD-OI-037` scenario revision `3`
+    `9bb072c11628f4200f2e5a7c0b0f13879e506843abd59f193e973e4ec14eb7f7`;
+    `PD-OI-108` scenario revision `3`
+    `32b2103dd3c8a7b4a6a0b47ed8628ca8c298cb921fe4888b92dcb15c45b8225b`.
+  - `PD-OI-037` scenario revision `3` replaces scenario revision `2`; what
+    scenario revision `2` retired stays retired. `PD-OI-066`'s "accurate Live
+    edit and Applies on Generate notes (OIC-024)" is read through `OIC-024` as
+    revised: a setting that applies at once carries no mark.
+  - `PD-OI-108` scenario revision `3` supersedes scenario revision `2` only in
+    the part of the Choice it names and in its May retire; every other term of
+    scenario revisions `1` and `2` stays in force.
+  - `gbdraw/web/CLAUDE.md` R1 ("say so beside the control") is not changed:
+    the icon, its tooltip, and its accessible name say so (D-10).
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -5589,31 +5628,45 @@ Decision date: 2026-10-04
 ### PD-OI-037: Operation feedback without derived application status
 
 - Concern key: `web.edit-application-feedback`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-037`, scenario revision `1` (`A / DERIVED-APPLICATION-STATUS`).
+- Scenario revision: `3`
+- Supersedes: `PD-OI-037`, scenario revision `2`
+  (`A / OPERATION-FEEDBACK-WITHOUT-DERIVED-STATUS`, the same outcome), which
+  superseded scenario revision `1` (`A / DERIVED-APPLICATION-STATUS`). What
+  scenario revision `2` retired stays retired.
 - Status: `ACCEPTED`
 - Selected outcome: `A / OPERATION-FEEDBACK-WITHOUT-DERIVED-STATUS`
 - Normative outcome: exactly the receipt below.
-- Decision source: the receipt text approved by `satoshikawato` on
-  `2026-09-29` (GUI remediation S00 decision 4) supplies the Rationale and
-  the Accepted residual risk. The Owner's confirmed requirement supplies the
-  Choice, Must preserve, and May retire: remove the always-on Pending display
-  and the named always-on explanations, and keep Processing/Canceling, real
-  errors, and recovery. This serialization adds no other terms. It is not a
-  new decision store or a `BD-###` record.
+- Decision source: the receipt approved in full by `satoshikawato` on
+  `2026-11-02` (Revision 110 entry above, D-08). The receipt and JSON below
+  reproduce it without translation or additional terms.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `9bb072c11628f4200f2e5a7c0b0f13879e506843abd59f193e973e4ec14eb7f7`.
 - Acceptance contracts: `OIC-005`, `OIC-013`, `OIC-014`, `OIC-024`.
+
+```text
+PRODUCT_DECISION
+Concern: web.edit-application-feedback
+Scenario revision: 3
+Choice: A / OPERATION-FEEDBACK-WITHOUT-DERIVED-STATUS。次の Generate で反映される設定には「Applies on Generate」の文字の代わりに時計アイコンを付け、その文はアイコンのツールチップに出す。一部だけがすぐ反映される設定（Layout、Depth、Custom Track Slots など）の例外つきの長い文もそのツールチップに移す。「Live edit」の表示は出さない（印のない設定はすぐ反映される）。
+Rationale: 設定の横の常時の文を減らし、設定欄を短く読みやすくする。
+Must preserve: Applies on Generate と Apply required の分類表示（時計アイコン。その文はポインタ・キーボード・タップのどれでも開け、支援技術には「Applies on Generate」と名乗る）、live edit適用中/失敗の通知、Generateボタン内のProcessing/Canceling、実際のerrorとrecovery、canonical即時commitと必要時自動rerender、reviewのlocal draft、atomic Generate、失敗/Cancel/stale時の旧ResultとHistory、Undo/Redo、SessionのResult/draft分離、Exportの現在Result出力を維持する。
+May retire: 「Live edit」の文字表示。「Applies on Generate」の常時の文字表示と、例外つき注記の常時表示（どちらもツールチップへ移す）。製品の適用タイミング・保存・復旧・編集機能は退役しない。
+Accepted residual risk: アイコンを開かない利用者は、すぐ反映される部分と Generate で反映される部分の例外を見ない。印のない設定がすぐ反映されることは画面に書かれない。help-tip を開かない利用者は Generate/Save/Lock の事前説明を見ない。
+Owner: satoshikawato
+Decision date: 2026-11-02
+```
 
 ```json
 {
   "concern": "web.edit-application-feedback",
-  "scenarioRevision": 2,
-  "choice": "A / OPERATION-FEEDBACK-WITHOUT-DERIVED-STATUS",
-  "rationale": "派生 status と常時説明が操作応答を損ない（Result 後の比較切替 約 1.3 s）、画面を圧迫するため削除・help-tip 化する。",
-  "mustPreserve": "操作単位のLive edit、Applies on Generate、Apply requiredの分類表示、live edit適用中/失敗の通知、Generateボタン内のProcessing/Canceling、実際のerrorとrecovery、canonical即時commitと必要時自動rerender、reviewのlocal draft、atomic Generate、失敗/Cancel/stale時の旧ResultとHistory、Undo/Redo、SessionのResult/draft分離、Exportの現在Result出力を維持する。",
-  "mayRetire": "Result上とGenerate上の常時Pending/Applied/Unknown/Invalid/Not generated表示とその派生計算、生成intentの比較基準と更新処理、Generate recalculates placement…、Supported color…、Save stores…の常時説明を退役する。製品の適用タイミング・保存・復旧・編集機能は退役しない。",
-  "acceptedResidualRisk": "help-tip を開かない利用者は Generate/Save/Lock の事前説明を見ない。実 error・Processing/Canceling・recovery は保持する。",
+  "scenarioRevision": 3,
+  "choice": "A / OPERATION-FEEDBACK-WITHOUT-DERIVED-STATUS。次の Generate で反映される設定には「Applies on Generate」の文字の代わりに時計アイコンを付け、その文はアイコンのツールチップに出す。一部だけがすぐ反映される設定（Layout、Depth、Custom Track Slots など）の例外つきの長い文もそのツールチップに移す。「Live edit」の表示は出さない（印のない設定はすぐ反映される）。",
+  "rationale": "設定の横の常時の文を減らし、設定欄を短く読みやすくする。",
+  "mustPreserve": "Applies on Generate と Apply required の分類表示（時計アイコン。その文はポインタ・キーボード・タップのどれでも開け、支援技術には「Applies on Generate」と名乗る）、live edit適用中/失敗の通知、Generateボタン内のProcessing/Canceling、実際のerrorとrecovery、canonical即時commitと必要時自動rerender、reviewのlocal draft、atomic Generate、失敗/Cancel/stale時の旧ResultとHistory、Undo/Redo、SessionのResult/draft分離、Exportの現在Result出力を維持する。",
+  "mayRetire": "「Live edit」の文字表示。「Applies on Generate」の常時の文字表示と、例外つき注記の常時表示（どちらもツールチップへ移す）。製品の適用タイミング・保存・復旧・編集機能は退役しない。",
+  "acceptedResidualRisk": "アイコンを開かない利用者は、すぐ反映される部分と Generate で反映される部分の例外を見ない。印のない設定がすぐ反映されることは画面に書かれない。help-tip を開かない利用者は Generate/Save/Lock の事前説明を見ない。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-29"
+  "decisionDate": "2026-11-02"
 }
 ```
 
@@ -10439,18 +10492,24 @@ Decision date: 2026-10-25
 ### PD-OI-108: Tutorials of the Interactive Gallery from the app
 
 - Concern key: `web.gallery-tutorial-discoverability`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-108`, scenario revision `1`. Scenario revision `2`
+- Scenario revision: `3`
+- Supersedes: `PD-OI-108`, scenario revision `2`, in the part of its Choice
+  and the items that the scenario revision `3` receipt names (Revision {REV}
+  entry above); every other term of scenario revisions `1` and `2` stays in
+  force. Scenario revision `2` superseded `PD-OI-108`, scenario revision `1`. Scenario revision `2`
   retires the sentence of the scenario revision `1` Accepted residual risk
   that its May retire names; the Owner replies of `2026-10-27` quoted in the
   Revision 95 entry above approve it. Every term of scenario revision `1`
   that its May retire does not name stays in force.
 - Status: `ACCEPTED`
-- Selected outcome: `A3 + B1` (scenario revision `1`) and `A3 + B1` with Q6
-  `B` (scenario revision `2`)
+- Selected outcome: `A3 + B1` (scenario revision `1`), `A3 + B1` with Q6
+  `B` (scenario revision `2`), and box D for the Preview without a Result
+  (scenario revision `3`)
 - Normative outcome: exactly the approved scenario revision `1` and `2`
   `PRODUCT_DECISION` receipts and their nine-field JSON representations
-  below, scenario revision `2` replacing the term its May retire names.
+  below, scenario revision `2` replacing the term its May retire names, and
+  the scenario revision `3` receipt below replacing the part of the Choice and
+  the items it names.
 - Decision source (scenario revision `1`): the Owner replies of `2026-10-27` quoted in the Revision 94
   entry above (TL-D01 to TL-D05). The receipt and JSON below reproduce all nine
   fields of the approved receipt without translation or additional terms. The
@@ -10464,6 +10523,12 @@ Decision date: 2026-10-25
   co-change); this record supplies no runtime acceptance evidence.
 - Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `8677ecb36f753f6983de3ae1f7e690a7cc6148a1562d02b8ce0889eaad48b273`.
+- Decision source (scenario revision `3`): the receipt approved in full by
+  `satoshikawato` on `2026-11-02` (Revision 110 entry above, D-09). The
+  runtime, tests, and documentation that implement it merge with it (static
+  Product Contract co-change).
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `32b2103dd3c8a7b4a6a0b47ed8628ca8c298cb921fe4888b92dcb15c45b8225b`.
 
 ```text
 PRODUCT_DECISION
@@ -10519,6 +10584,36 @@ Decision date: 2026-10-27
   "acceptedResidualRisk": "Gallery とチュートリアルは英語のまま。ヘッダーが狭いと tagline が隠れる（今の仕組み）。スマホ幅では Result が設定の下にあり、通知はスクロールしないと見えない（DRAWINGS-B で読み込み後に Preview を先に出すようになる）。ヘッダーや空の画面が写る Gallery と docs のキャプチャは、撮り直すまで古い見た目のまま。769〜800 px では、日本語・韓国語・ベトナム語・タイ語で Session 名が dev より最大 6 px 縮む。769〜800 px で dev でもヘッダーがはみ出している 5 言語（英・西・仏・葡・インドネシア語）では、はみ出しが 10 px 増える。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-27"
+}
+```
+
+Scenario revision `3` receipt (approved by `satoshikawato` on `2026-11-02`;
+D-09 of the Revision 110 entry above):
+
+```text
+PRODUCT_DECISION
+Concern: web.gallery-tutorial-discoverability
+Scenario revision: 3
+Choice: scenario revision 2 の Choice のうち「Result が無い画面に「Learn with tutorials」カード」を次に置き換える。Result が無い画面に見出しのない 1 つのボックス（チュートリアルカードの見た目）を置き、[Open Gallery example]（副ボタン。今の「Load an example」と同じ例の選択を開く）の下に [Learn with tutorials ↗]（アクセント色で塗る。Interactive Gallery を新しいタブで開く）を同じ幅で重ねる。ボックスの幅は長い方のボタンに合わせる。Choice のほかは rev 2 のまま。
+Rationale: Result が無い画面の 2 つの入口を 1 つのボックスにまとめる（Owner 2026-11-02「中央の「Open Gallery example」と「Learn with tutorials」は1個のボックス内に配置した方がいい」）。
+Must preserve: Load example の動き（置き換えの確認、Session の読み込み、Fit）。「Session loaded」通知の文と閉じ方。フッターの Interactive Gallery リンク。自分の Session やファイルを読み込んだときは何も出ないこと。読み込んだ例はリンクを開いても残ること。
+May retire: Result が無い画面の「Load an example」ボタンとその説明「Opens a finished Gallery example as a Session.」、「Learn with tutorials」カードの見出しと説明文、「Open the Interactive Gallery」リンク。
+Accepted residual risk: Gallery とチュートリアルは英語のまま。ヘッダーが狭いと tagline が隠れる（今の仕組み）。スマホ幅では Result が設定の下にあり、通知はスクロールしないと見えない（DRAWINGS-B で読み込み後に Preview を先に出すようになる）。ヘッダーや空の画面が写る Gallery と docs のキャプチャは、撮り直すまで古い見た目のまま。769〜800 px では、日本語・韓国語・ベトナム語・タイ語で Session 名が dev より最大 6 px 縮む。769〜800 px で dev でもヘッダーがはみ出している 5 言語（英・西・仏・葡・インドネシア語）では、はみ出しが 10 px 増える。空の画面に、2 つのボタンが何をするかの説明文は出ない。
+Owner: satoshikawato
+Decision date: 2026-11-02
+```
+
+```json
+{
+  "concern": "web.gallery-tutorial-discoverability",
+  "scenarioRevision": 3,
+  "choice": "scenario revision 2 の Choice のうち「Result が無い画面に「Learn with tutorials」カード」を次に置き換える。Result が無い画面に見出しのない 1 つのボックス（チュートリアルカードの見た目）を置き、[Open Gallery example]（副ボタン。今の「Load an example」と同じ例の選択を開く）の下に [Learn with tutorials ↗]（アクセント色で塗る。Interactive Gallery を新しいタブで開く）を同じ幅で重ねる。ボックスの幅は長い方のボタンに合わせる。Choice のほかは rev 2 のまま。",
+  "rationale": "Result が無い画面の 2 つの入口を 1 つのボックスにまとめる（Owner 2026-11-02「中央の「Open Gallery example」と「Learn with tutorials」は1個のボックス内に配置した方がいい」）。",
+  "mustPreserve": "Load example の動き（置き換えの確認、Session の読み込み、Fit）。「Session loaded」通知の文と閉じ方。フッターの Interactive Gallery リンク。自分の Session やファイルを読み込んだときは何も出ないこと。読み込んだ例はリンクを開いても残ること。",
+  "mayRetire": "Result が無い画面の「Load an example」ボタンとその説明「Opens a finished Gallery example as a Session.」、「Learn with tutorials」カードの見出しと説明文、「Open the Interactive Gallery」リンク。",
+  "acceptedResidualRisk": "Gallery とチュートリアルは英語のまま。ヘッダーが狭いと tagline が隠れる（今の仕組み）。スマホ幅では Result が設定の下にあり、通知はスクロールしないと見えない（DRAWINGS-B で読み込み後に Preview を先に出すようになる）。ヘッダーや空の画面が写る Gallery と docs のキャプチャは、撮り直すまで古い見た目のまま。769〜800 px では、日本語・韓国語・ベトナム語・タイ語で Session 名が dev より最大 6 px 縮む。769〜800 px で dev でもヘッダーがはみ出している 5 言語（英・西・仏・葡・インドネシア語）では、はみ出しが 10 px 増える。空の画面に、2 つのボタンが何をするかの説明文は出ない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-02"
 }
 ```
 
@@ -10759,7 +10854,7 @@ Decision date: 2026-11-02
 | `OIC-021` | Feature-popup record rotation uses the explicit popup target and source coordinates, changes only one effectively circular record through a target-only atomic transaction, preserves pending edits and the prior artifact on every no-op path, round-trips the absolute transform, and reuses compatible LOSAT evidence without additional executor jobs. |
 | `OIC-022` | `PD-OI-036`: independent fresh/reset Auto, explicit Show/Hide, diagram-wide resolution excluding dormant rows, saved Session/Result and Undo/Redo remain supported; Layout and Labels disclose the effective Auto result, affected fields, reason, scope, next Generate effect, and route to Record Labels. |
 | `OIC-023` | `PD-OI-024`: only Web fresh/reset selects Lock ON; explicit OFF, saved values and supported omission meanings, saved Result on Load, CLI/Python defaults, accepted anchors, D2-P and D3-A remain supported. ON/OFF and Generate application are always explained in Linear Layout. |
-| `OIC-024` | `PD-OI-037` revision 2: operation-level Live edit, Applies on Generate, and Apply required remain truthful, including Palette Instant Preview and Alignment review. No always-on derived Pending/Applied status or its computation remains. Live applying/error, Processing/Canceling, real errors, and recovery are shown when they occur, with no status-only Worker, genome-byte read/hash, canonical request projection, generated-table build, or SVG/checkpoint clone. |
+| `OIC-024` | `PD-OI-037` revision 3: operation-level Applies on Generate (a clock icon whose tooltip holds the note, the qualified timing notes included) and Apply required remain truthful, and a setting that applies at once carries no mark, including Palette Instant Preview and Alignment review. No always-on derived Pending/Applied status or its computation remains. Live applying/error, Processing/Canceling, real errors, and recovery are shown when they occur, with no status-only Worker, genome-byte read/hash, canonical request projection, generated-table build, or SVG/checkpoint clone. |
 | `OIC-025` | `PD-OI-038`: one SVG and Editor retain live commit/rerender, all tabs, availability, History/Session/Export, camera, keyboard, visibility-only Close/Escape, selected tab and Result recovery. At 390×844/740 the canvas uses the available full width and at least 200 px height; content scroll, reachable header/Close/toolbar, short-viewport/soft-keyboard access, and wide side drawer remain required. Pointer/keyboard/browser verification is required; duplicated Preview/SVG/editor is not accepted. |
 | `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. At every width the review is docked in the Result, closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then reopens an Editor that was open on the same tab; the review cannot be dragged. During the review the feature popup is hidden, a click on the figure neither opens, switches nor closes it, search Open switches its target, and it returns when the review ends. The figure is fitted when the review opens and the earlier zoom and pan return when it ends; a Session saved during the review and the History of its Apply keep the earlier zoom and pan. While the review shows the figure it fitted, the figure is fitted again, as by the Fit button and without a History step, whenever the width or height of its room changes; a zoom and pan changed by hand stay while the room does not change, and outside a review a change of the room keeps the zoom and pan. Browser verification must show presentation changes leave draft and Result unchanged. |
 | `OIC-027` | `PD-OI-066` scenario revision `2`: a live-edited Result, including after Session load and export, agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element when no pending Applies on Generate value changes those elements; otherwise it agrees with a Generate of the committed Session plus the applied live values. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
