@@ -82,7 +82,7 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         dialog = page.get_by_role('dialog', name='Feature details: ribosomal protein S16', exact=True)
         expect(dialog).to_be_visible()
         # The header stays fixed while the Edit body scrolls: bring the Layout group
-        # (its heading and Feature placement with "Applies on Generate") under the header.
+        # (its heading and Feature placement with its clock icon) under the header.
         layout = dialog.locator('[data-feature-popup-group="layout"]')
         expect(layout).to_have_count(1)
         expect(layout.get_by_role('heading', name='Layout', exact=True)).to_be_visible()

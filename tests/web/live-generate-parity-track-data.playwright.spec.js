@@ -1368,7 +1368,7 @@ test('GT B10 (OV-2237): on a Result loaded without a request a hide waits for Ge
     const before = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[window.__GBDRAW_APP__.selectedResultIndex].content);
     const listed = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
     await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('[data-applies-on-generate="track-visibility"]')]
-      .map((note) => note.textContent.trim())), 'the toggles say Applies on Generate').toContain('Applies on Generate');
+      .map((note) => note.querySelector('.help-tip-trigger').getAttribute('aria-label'))), 'the toggles say Applies on Generate').toContain('Applies on Generate');
     const box = await page.evaluate(() => (window.__GBDRAW_APP__.mode === 'linear' ? 'Show GC Content' : 'Hide GC Content'));
     await clickTrackCheckbox(page, box);
     await settleLive(page);

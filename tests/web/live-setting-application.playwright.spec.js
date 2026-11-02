@@ -7,6 +7,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
+const { clocksIn, clockNotes } = require('./helpers/timing-notes.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot } = require('./helpers/live-generate-parity.cjs');
 const { open, addColorRule, addVisibilityRule } = require('./helpers/live-generate-parity-steps.cjs');
 
@@ -783,12 +784,12 @@ test('with a single-canvas Result, the Multi-Record layout rows say Applies on G
   try {
     await generateNow(page);
     const positionNote = /the position applies on Generate after the Multi-Record Canvas change/;
-    for (const id of ['legend', 'plot-title']) await expect(page.locator(`[data-setting="${id}"]`).getByText(positionNote)).toHaveCount(0);
+    const positionNotes = (id) => clockNotes(page.locator(`[data-setting="${id}"]`)).then((notes) => notes.filter((text) => positionNote.test(text)).length);
+    for (const id of ['legend', 'plot-title']) await expect.poll(() => positionNotes(id)).toBe(0);
     await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
-    const note = page.locator('[data-setting="multi-record-layout"] > span').first();
-    await expect(note).toHaveText(/Applies on Generate/);
-    await expect(note).toHaveAttribute('data-applies-on-generate', 'multi-record-layout');
-    for (const id of ['legend', 'plot-title']) await expect(page.locator(`[data-setting="${id}"]`).getByText(positionNote)).toHaveCount(1);
+    const note = page.locator('[data-setting="multi-record-layout"] [data-applies-on-generate="multi-record-layout"]');
+    await expect(clocksIn(note)).toHaveAccessibleName('Applies on Generate');
+    for (const id of ['legend', 'plot-title']) await expect.poll(() => positionNotes(id)).toBe(1);
   } finally {
     await page.context().close();
   }
@@ -908,7 +909,7 @@ test('lambda: Lock Definition Column redraws the Linear Result without Generate 
     expect(after.reflowError).toBeNull();
     expect(after.content).not.toBe(before.content);
     expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(steps + 1);
-    await expect(page.locator('[data-setting="definition-column"] > span.apply-note')).toHaveText(/Live edit/);
+    await expect(clocksIn(page.locator('[data-setting="definition-column"]'))).toHaveCount(0);
     await expectLiveEqualsGenerate(page, { label: 'Linear Lock Definition Column' });
   } finally {
     await page.context().close();

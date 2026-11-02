@@ -15,11 +15,11 @@ import { detectedTopologyNote } from './services/record-display-model.js';
 import { specificRuleHasQualifier } from './services/specific-color-rules.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsShortText, settingsView } from './services/settings-sections.js';
-import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
+import { SETTING_NOTE_APPLIES, settingApplicationNote, settingClassNote, settingClockLabel } from './services/setting-application.js';
 import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { TranslationParams } from './utils/i18n.js' */
-/** @import { SettingApplicationId } from './services/setting-application.js' */
+/** @import { SettingApplicationClass, SettingApplicationId } from './services/setting-application.js' */
 /** @import { LiveSettingItem } from './services/session-request.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
@@ -317,23 +317,37 @@ export const SettingsSectionTitle = {
 };
 
 // The timing note of a `SETTING_APPLICATION` row (services/setting-application.js),
-// placed inside that row's `data-setting` scope: "Applies on Generate" with
-// `data-applies-on-generate="<key>"`, "Live edit" for a live block inside a
-// Generate scope, or the row's own qualified note as a hint line. A live
-// setting row the shown Result cannot draw says "Applies on Generate"
-// (the injected `SETTING_NOTE_APPLIES` predicate of the committed request,
-// made once per render). An `item` (an annotation item, a Linear row) states
-// that one item's value.
+// placed inside that row's `data-setting` scope, in the heading or label of
+// the setting it marks (PD-OI-037 rev 3). A change that applies on Generate,
+// wholly or in part, shows a clock icon: a `HelpTip` named "Applies on
+// Generate" whose tooltip and description are the note, inside a wrapper with
+// `data-applies-on-generate="<key>"` for a Generate row. A change that
+// applies at once shows nothing; an export-only row shows its note as a line.
+// A live setting row the shown Result cannot draw applies on Generate (the
+// injected `SETTING_NOTE_APPLIES` predicate of the committed request, made
+// once per render). An `item` (an annotation item, a Linear row) states that
+// one item's value; `application` replaces the row's class where it follows
+// state (Palette Instant Preview); `id` names the description, which a
+// control may reference through aria-describedby.
 export const SettingNote = {
-  props: { setting: { type: String, required: true }, item: { type: Object, default: null } },
-  /** @param {{ setting: SettingApplicationId, item: LiveSettingItem | null }} props */
+  components: { HelpTip },
+  props: {
+    setting: { type: String, required: true },
+    item: { type: Object, default: null },
+    application: { type: String, default: null },
+    id: { type: String, default: null }
+  },
+  /** @param {{ setting: SettingApplicationId, item: LiveSettingItem | null, application: SettingApplicationClass | null, id: string | null }} props */
   setup: (props) => {
     const appliesFor = /** @type {(item: LiveSettingItem | null) => (requestPath: string) => boolean} */ (inject(SETTING_NOTE_APPLIES, () => () => true));
-    return { note: computed(() => settingApplicationNote(props.setting, appliesFor(props.item))) };
+    return {
+      note: computed(() => (props.application ? settingClassNote(props.application) : settingApplicationNote(props.setting, appliesFor(props.item)))),
+      label: computed(settingClockLabel)
+    };
   },
-  template: `<span v-if="note.text" :class="note.qualified ? 'ui-hint block' : 'apply-note'"
-    :data-applies-on-generate="note.application === 'generate' ? setting : null"><i v-if="note.application === 'generate'"
-    class="ph ph-clock" aria-hidden="true"></i> {{ note.text }}</span>`
+  template: `<span v-if="note.display === 'clock'" class="apply-note"
+    :data-applies-on-generate="note.application === 'generate' ? setting : null"><help-tip :id="id" :text="note.text" :label="label"><i
+    class="ph ph-clock" aria-hidden="true"></i></help-tip></span><span v-else-if="note.display === 'hint'" :id="id" class="ui-hint block">{{ note.text }}</span>`
 };
 
 // `v-settings-section="'<key>'"` on the element of a settings section: it

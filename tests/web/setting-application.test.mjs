@@ -275,12 +275,16 @@ test('every row renders its note or its class text', () => {
   for (const row of SETTING_APPLICATION) {
     const note = settingApplicationNote(row.id);
     assert.equal(note.application, row.application, row.id);
-    assert.equal(note.qualified, Boolean(row.note), row.id);
     if (row.note) {
       assert.equal(note.text, row.note, row.id);
     } else {
-      assert.equal(note.text, { generate: 'Applies on Generate', live: 'Live edit', apply: '', export: '' }[row.application], row.id);
+      assert.equal(note.text, { generate: 'Applies on Generate', live: '', apply: '', export: '' }[row.application], row.id);
     }
+    // PD-OI-037 rev 3: a clock for a change that waits for Generate wholly or
+    // in part (a live row's note names its Generate part), no mark for one
+    // that applies at once, a line for an export-only row.
+    const display = row.application === 'live' ? (row.note ? 'clock' : 'none') : { generate: 'clock', apply: 'none', export: 'hint' }[row.application];
+    assert.equal(note.display, display, row.id);
     assert.equal(settingApplicationSentence(row.id), row.application === 'generate' ? 'Changes apply on Generate.' : '', row.id);
   }
   assert.throws(() => settingApplicationNote('no-such-setting'), /no-such-setting/);
@@ -291,12 +295,13 @@ test('every row renders its note or its class text', () => {
   assert.ok(component, 'components.js defines SettingNote');
   // A live setting row says Applies on Generate while the committed request
   // cannot draw one of its request paths (review F2 of #1145).
-  assert.match(component[1], /const appliesFor = .*\(inject\(SETTING_NOTE_APPLIES, \(\) => \(\) => true\)\);\n\s*return \{ note: computed\(\(\) => settingApplicationNote\(props\.setting, appliesFor\(props\.item\)\)\) \};/);
+  assert.match(component[1], /const appliesFor = .*\(inject\(SETTING_NOTE_APPLIES, \(\) => \(\) => true\)\);/);
+  assert.match(component[1], /note: computed\(\(\) => \(props\.application \? settingClassNote\(props\.application\) : settingApplicationNote\(props\.setting, appliesFor\(props\.item\)\)\)\)/);
   // The app setup provides the predicate of the committed request.
   const setup = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'app', 'app-setup.js'), 'utf8');
   assert.match(setup, /provide\(SETTING_NOTE_APPLIES, committedSettingNotePredicate\);/);
   assert.match(component[1], /:data-applies-on-generate="note\.application === 'generate' \? setting : null"/);
-  assert.match(component[1], /\{\{ note\.text \}\}/);
+  assert.match(component[1], /<help-tip :id="id" :text="note\.text" :label="label">/);
 });
 
 test('the GC, skew and Depth toggles are live, and the waits name Generate (OV-1036, PD-OI-104 rev 5)', () => {
@@ -306,7 +311,7 @@ test('the GC, skew and Depth toggles are live, and the waits name Generate (OV-1
   for (const toggle of toggles) assert.equal(scopeOf(toggle).attributes.get('data-setting'), 'track-visibility', describe(toggle));
   const note = settingApplicationNote('track-visibility');
   assert.equal(note.application, 'live');
-  assert.equal(note.text, 'Live edit');
+  assert.equal(note.display, 'none');
   assert.match(SETTING_APPLICATION.find((row) => row.id === 'track-visibility').partialNote, /^Live edit\. Showing a track applies on Generate if the Result did not draw it when its Session was loaded/);
 });
 
@@ -328,6 +333,7 @@ test('adding a Depth file or series shows and removing the last Depth file or it
 test('Feature Visibility notes that leaving a feature out of protein search applies on Generate', () => {
   const note = settingApplicationNote('feature-visibility');
   assert.equal(note.application, 'live');
+  assert.equal(note.display, 'clock');
   assert.match(note.text, /at once.*leaving a feature out of protein search applies on Generate/);
 });
 

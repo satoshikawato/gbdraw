@@ -3984,7 +3984,7 @@ export const createAppSetup = () => {
       }
     }
   });
-  // UJ-06 (Owner 2026-10-08): Load an example shows only where this origin
+  // UJ-06 (Owner 2026-10-08): Open Gallery example shows only where this origin
   // serves the Gallery catalog (gbdraw.app, not the pip GUI), and its chooser
   // lists every catalog example. The choice closes the chooser, asks the UJ-09
   // question, and loads the Session through the Load Session path. The catalog

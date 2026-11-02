@@ -622,7 +622,7 @@ test('every Vue loading place shows the loader: black, white on the Generate but
     await expect.poll(loaders).toEqual([
       expect.objectContaining({ place: 'Save Session', color: black, ariaHidden: 'true' }),
       expect.objectContaining({ place: 'Load example', color: black }),
-      expect.objectContaining({ place: 'Load an example', color: black })
+      expect.objectContaining({ place: 'Open Gallery example', color: black })
     ]);
     await set({ sessionSavePending: false, exampleSessionPending: false, processing: true, generationCancelRequested: true });
     await expect.poll(loaders).toEqual([

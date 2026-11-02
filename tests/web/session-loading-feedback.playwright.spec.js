@@ -490,7 +490,7 @@ test('Load Session asks before it replaces work changed since the last Save or L
 });
 
 // UJ-06 (Owner 2026-10-08): where this origin serves the Gallery catalog
-// (gbdraw.app), the empty state's Load an example lists every catalog entry and
+// (gbdraw.app), the empty state's Open Gallery example lists every catalog entry and
 // loads the chosen one's Session through the Load Session path and its UJ-09
 // question. Without the catalog (the pip GUI) the button is absent.
 const galleryCatalog = JSON.parse(readFileSync(
@@ -507,7 +507,7 @@ const blockExternalRequests = async (page) => {
   return external;
 };
 const exampleControls = (page) => ({
-  example: page.getByRole('button', { name: 'Load an example', exact: true }),
+  example: page.getByRole('button', { name: 'Open Gallery example', exact: true }),
   header: page.locator('header.app-header').getByRole('button', { name: 'Load example', exact: true }),
   chooser: page.getByRole('dialog', { name: 'Choose an example', exact: true }),
   confirm: page.getByRole('dialog', { name: 'Replace the current work?', exact: true })
@@ -538,7 +538,7 @@ const acceptLoadedSession = async (page, title) => {
   };
 };
 
-test('Load an example lists every Gallery example and loads the chosen Circular or Linear .gz Session', async ({ page }) => {
+test('Open Gallery example lists every Gallery example and loads the chosen Circular or Linear .gz Session', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   const external = await blockExternalRequests(page);
@@ -586,7 +586,7 @@ test('Load an example lists every Gallery example and loads the chosen Circular 
   expect(external).toEqual([]);
 });
 
-test('Load an example is absent where this origin serves no Gallery catalog', async ({ page }) => {
+test('Open Gallery example is absent where this origin serves no Gallery catalog', async ({ page }) => {
   test.setTimeout(180_000);
   let catalogRequested;
   const catalogRead = new Promise((resolve) => { catalogRequested = resolve; });
@@ -599,11 +599,12 @@ test('Load an example is absent where this origin serves no Gallery catalog', as
   await catalogRead;
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
   expect(diagnostics.pageErrors).toEqual([]);
-  await expect(page.getByText('No Circular Result yet. Configure settings and click Generate.')).toBeVisible();
+  // PD-OI-108 rev 3: the empty Preview has no sentence; only its icon stays.
+  await expect(page.locator('main .ph-dna')).toBeVisible();
   await expect(exampleControls(page).example).toHaveCount(0);
   await expect(exampleControls(page).header).toHaveCount(0);
-  // #1383 (PD-OI-108): the header still opens gbdraw.app's Gallery; the card
-  // about the examples' tutorials goes with the examples.
+  // #1383 (PD-OI-108 rev 3): the header still opens gbdraw.app's Gallery; the box
+  // with the example button and the tutorials button goes with the examples.
   await expect(page.locator('[data-gallery-link]')).toHaveAttribute('href', 'https://gbdraw.app/gallery/');
   await expect(page.locator('[data-tutorial-card]')).toHaveCount(0);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorDisplay)).toBeFalsy();
@@ -627,7 +628,7 @@ test('a loaded example links to its Gallery tutorial, and a Session from a file 
   await openApp(page);
   await expectNewTab(page.locator('[data-gallery-link]'), 'https://gbdraw.app/gallery/');
   await expectNewTab(
-    page.locator('[data-tutorial-card]').getByRole('link', { name: 'Open the Interactive Gallery', exact: true }),
+    page.locator('[data-tutorial-card]').getByRole('link', { name: 'Learn with tutorials', exact: true }),
     'https://gbdraw.app/gallery/'
   );
   const { example, chooser } = exampleControls(page);
@@ -786,7 +787,7 @@ test('the header Load example stays after an example loads and loads another', a
   await expect(header).toBeVisible();
 });
 
-test('the example chooser cancels with focus back on Load an example and keeps the UJ-09 question', async ({ page }) => {
+test('the example chooser cancels with focus back on Open Gallery example and keeps the UJ-09 question', async ({ page }) => {
   test.setTimeout(180_000);
   await openApp(page);
   const { example, chooser, confirm } = exampleControls(page);
