@@ -108,8 +108,12 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   ran it again with other rows, replaced the ring's Track row: a width or other
   edit on the row was lost, the next Generate drew it under another id
   (`conservation_x_2`), and a row that anchors to it stopped the next Generate
-  with an error. The row now stays, with its id and its edits. If you reorder,
-  remove, or add a ring while that Generate runs, it replaces the rows as before.
+  with an error. The row now stays, with its id and its edits.
+- **Web app: the ring controls during a Generate (OV-2446).** During a
+  **Generate Diagram**, a reorder of the comparison rings by keyboard could draw
+  a ring's search under another ring's name. **Move series outward**,
+  **Move series inward**, **Remove series**, and **Add Seq** are now disabled
+  while a Generate runs.
 - **Web app: text left in English or hard to read in other languages.** The Undo
   and Redo tooltips of preserved settings, imported comparisons, and the
   **Labels do not fit** dialog, Auto values such as `above` and `ignored`, and

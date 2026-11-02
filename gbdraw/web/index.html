@@ -3924,10 +3924,11 @@
                                             <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" :aria-label="t('Comparison gencode {n}', { n: row.index + 1 })" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6" :disabled="!semanticMutationAvailable">
                                         </div>
                                     </div>
+                                    <!-- While a Generate runs, the ring controls (these and Add Seq) are disabled: the overlay stops the pointer, not the keyboard (OV-2446). -->
                                     <div class="flex items-center gap-0.5">
-                                        <button :aria-label="t('Move series outward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!semanticMutationAvailable || (!canMoveCircularConservationSeries(row.index, -1))" :title="t('Move series outward')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
-                                        <button :aria-label="t('Move series inward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!semanticMutationAvailable || (!canMoveCircularConservationSeries(row.index, 1))" :title="t('Move series inward')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
-                                        <button :aria-label="t('Remove series')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" :title="t('Remove series')" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Move series outward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, -1))" :title="t('Move series outward')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Move series inward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, 1))" :title="t('Move series inward')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Remove series')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" :title="t('Remove series')" :disabled="!semanticMutationAvailable || processing"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                     </div>
                                 </div>
                                 <input
@@ -3938,8 +3939,8 @@
                                     accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
                                     @change="addCircularConservationComparisonFile"
                                     class="hidden"
-                                 :disabled="!semanticMutationAvailable">
-                                <button v-if="circularConservation.source === 'losat'" type="button" data-history-ignore class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker" :disabled="!semanticMutationAvailable">
+                                 :disabled="!semanticMutationAvailable || processing">
+                                <button v-if="circularConservation.source === 'losat'" type="button" data-history-ignore class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker" :disabled="!semanticMutationAvailable || processing">
                                     <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add Seq') }}
                                 </button>
                             </div>

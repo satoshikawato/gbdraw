@@ -94,8 +94,11 @@ write-up of a release.
 - Fixed: Web app: with **Use custom stack** on, the Generate that ran a ring's
   LOSAT search replaced its Track row: the row lost its edits, the next Generate
   drew it under another id, and a row anchored to it stopped that Generate with
-  an error. The row now keeps its id and edits; when the rings change while that Generate runs, it replaces
-  the rows as before (OV-2442).
+  an error. The row now keeps its id and edits (OV-2442).
+- Fixed: Web app: during a **Generate Diagram**, a reorder of the comparison
+  rings by keyboard could draw a ring's search under another ring's name.
+  **Move series outward**, **Move series inward**, **Remove series**, and
+  **Add Seq** are now disabled while a Generate runs (OV-2446).
 - Fixed: a threaded LOSAT search in the Web app could stop with "memory access
   out of bounds" and run the whole pair again (the console said "running the
   pair again"), or fail after the third stop. In Chromium a copy into memory

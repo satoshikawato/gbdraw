@@ -5372,7 +5372,8 @@ export const createRunAnalysis = ({
         // target-only renders and Similarity alignment use it without LOSATP.
         adoptCanonicalRenderArtifacts(canonical, {
           adoptOwnedRequest: true,
-          // The ring controls stay enabled during a Generate, so the draft's rings may have changed since the searches.
+          // The ring controls are disabled during a Generate (index.html), but a change from outside them may still have
+          // changed the draft's rings since the searches.
           builtFromDraft: requestRingKeys !== null && requestRingKeys === ringKeysOfSeries(drawing.circularConservation.series)
         });
       }
