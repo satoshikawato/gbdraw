@@ -2663,7 +2663,7 @@ export default Object.freeze({
   "a generated helper file has no file name.": "um arquivo auxiliar gerado não tem nome de arquivo.",
   "a generated helper has no trustworthy visible filename.": "um arquivo auxiliar gerado não tem um nome de arquivo visível confiável.",
   "a placement names a feature identity that no table row can carry.": "um posicionamento indica uma identificação de feature que nenhuma linha da tabela consegue conter.",
-  "a resolved similarity alignment has no current CLI projection.": "um alinhamento por similaridade já resolvido não pode ser expresso na CLI atual.",
+  "a resolved similarity alignment has no current CLI projection.": "um alinhamento por similaridade já determinado não pode ser expresso na CLI atual.",
   "a track slot contains text (\",\", \":\", \"@\", or \" #\") that the CLI slot grammar cannot carry.": "um slot de trilha contém texto (“,”, “:”, “@” ou “ #”) que a gramática de slots da CLI não consegue conter.",
   "above": "acima",
   "all labels outside": "todos os rótulos do lado de fora",
