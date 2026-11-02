@@ -1053,8 +1053,8 @@ test('exclusive modes, reference Custom, Select and Skip are local with zero Wor
   // An unknown-strand anchor still moves its record; only its direction stays (PD-OI-027).
   const unknown=f.actions.directionPreview.value.records.find(r=>r.exclusion==='unknown_strand');
   assert.match(unknown.exclusionLabel,/^Direction unchanged: /);
-  assert.match(f.actions.directionPreview.value.effect,/1 record keeps its direction/);
-  assert.match(f.actions.directionPreview.value.effect,/1 record unchanged/);
+  // Each count line is its own sentence in the joined effect, never run together.
+  assert.match(f.actions.directionPreview.value.effect,/\. 1 record unchanged\. 1 record keeps its direction\.$/);
 });
 test('Apply and both Reset scopes own one History transaction and consume receipt',async()=>{
   for(const scope of ['positions','positions-and-directions']){
