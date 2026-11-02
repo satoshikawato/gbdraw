@@ -227,9 +227,13 @@ const checkpointSvgBytes = (checkpoint) => (
  *   draws, so that restoring it needs no automatic rerender (D-24 (OV-731)).
  * @typedef {{ enabled: boolean, value: unknown }} ReplacementIntentCheckpoint
  *   The intent a replacement step also restores (`value` is the caller's own capture).
+ * @typedef {{ name?: string, value?: string, checked?: boolean, color?: string }} HistoryStepDetail
+ *   What the History list shows of a step beside its label (PD-OI-112): the name of the control the
+ *   step changed, as shown when the step ended, and the value it set: a text, a checkbox's state,
+ *   or a color. A step without `name` is shown by its label.
  * @typedef {{
  *   type: 'intent', label: string, changes: HistoryIntentChange[], byteSize: number, fileIds: Set<string>, sequence?: number,
- *   session?: IntentEntry
+ *   session?: IntentEntry, detail?: HistoryStepDetail
  * }} IntentEntry
  * @typedef {{
  *   type: 'checkpoint', label: string, before: CheckpointRecord, after: CheckpointRecord, byteSize: number,
@@ -271,6 +275,7 @@ const checkpointSvgBytes = (checkpoint) => (
  *   source?: string,
  *   owner?: unknown,
  *   joinsOpenStep?: boolean,
+ *   detail?: () => HistoryStepDetail | null,
  *   captureIntentCheckpoint?: IntentCheckpointHooks['capture'] | null,
  *   restoreIntentCheckpoint?: IntentCheckpointHooks['restore'] | null,
  *   compareIntentCheckpoints?(before: unknown, after: unknown): boolean,
@@ -285,6 +290,7 @@ const checkpointSvgBytes = (checkpoint) => (
  *   `before()` as the before side is captured, and `change`, whether the step's own change shows
  *   as its state draws it, so that the after side is drawn when the before side is. `takeEntry`:
  *   the router's project step takes the step's entry (or `null`) in place of this History's Undo stack.
+ *   `detail`: read as an intent step that the call opened ends, while it keeps the label it opened with.
  */
 /**
  * @template [R=unknown]
@@ -314,13 +320,15 @@ const checkpointSvgBytes = (checkpoint) => (
  *   beforeIntentCheckpoint?: any,
  *   beforeIntent?: HistoryIntent | null,
  *   takeEntry?: HistoryStepBase['takeEntry'],
- *   sessionMark?: SessionMark | null
+ *   sessionMark?: SessionMark | null,
+ *   describe?: { label: string, read: () => HistoryStepDetail | null } | null
  * }} HistoryTransaction
  *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
  *   `committedAt`: the intent generation at which a commit closed it. `actions`: the `runUndoable`
  *   calls that ran on it, each with the step name it started with. `serial`: an intent step's
  *   number, in the order the steps began (`intentStepSerial`). `sessionMark`: the router's Session
- *   values as the step opened (`stepOpened`).
+ *   values as the step opened (`stepOpened`). `describe`: the reader of the step's detail, for the
+ *   label the step opened with.
  * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
  *   One changed leaf of an intent; `path[0]` is the domain.
  * @typedef {(path: readonly string[], value: unknown) => unknown} IntentEditedPart
@@ -391,10 +399,10 @@ const checkpointSvgBytes = (checkpoint) => (
  *   still as its step left it (OV-1655). The whole value by default.
  * @property {() => SessionMark | null} [stepOpened]
  *   The router's Session values as a step opens here; the step carries them to its end.
- * @property {(entry: HistoryEntry | null, label: string, mark: SessionMark | null) => IntentEntry | null} [stepEnded]
+ * @property {(entry: HistoryEntry | null, label: string, mark: SessionMark | null, detail: HistoryStepDetail | null) => IntentEntry | null} [stepEnded]
  *   The router hears each step that ends on this History's Undo stack, with
- *   its entry or `null` when it changed nothing here (D-15-51, R15-23), and
- *   the Session values it opened with; it answers the Session-level values
+ *   its entry or `null` when it changed nothing here (D-15-51, R15-23), the
+ *   Session values it opened with, and its detail; it answers the Session-level values
  *   the entry's step also changed (D-15-53).
  * @property {(part: IntentEntry, direction: 'undo' | 'redo') => unknown} [applySessionPart]
  *   Restores an entry's `session` part, where still as its step left it.
@@ -862,13 +870,13 @@ export const createHistoryManager = ({
   // new entry clears Redo.
   /**
    * @param {HistoryEntry | null} entry
-   * @param {{ label: string, takeEntry?: HistoryStepBase['takeEntry'], sessionMark?: SessionMark | null }} step
+   * @param {{ label: string, takeEntry?: HistoryStepBase['takeEntry'], sessionMark?: SessionMark | null, detail?: HistoryStepDetail | null }} step
    */
   const endStep = (entry, step) => {
     if (step.takeEntry) {
       step.takeEntry(entry);
     } else {
-      const session = stepEnded(entry, step.label, step.sessionMark ?? null);
+      const session = stepEnded(entry, step.label, step.sessionMark ?? null, step.detail ?? null);
       if (entry && session) entry.session = session;
     }
     if (!entry) return;
@@ -997,7 +1005,8 @@ export const createHistoryManager = ({
       deferAdapterCommit: ownedByAction,
       serial,
       takeEntry: options.takeEntry,
-      sessionMark: stepOpened()
+      sessionMark: stepOpened(),
+      describe: options.detail ? { label, read: options.detail } : null
     };
     activeTransaction = tx;
     touchTransaction();
@@ -1061,7 +1070,7 @@ export const createHistoryManager = ({
 
   /**
    * The bookkeeping of every intent step.
-   * @param {Pick<HistoryTransaction, 'label' | 'before' | 'beforeSignature' | 'beforeFileIds' | 'takeEntry' | 'sessionMark'>} from
+   * @param {Pick<HistoryTransaction, 'label' | 'before' | 'beforeSignature' | 'beforeFileIds' | 'takeEntry' | 'sessionMark' | 'describe'>} from
    *   The transaction, or the last recorded intent when an action records its remainder.
    * @param {Awaited<ReturnType<typeof captureIntent>>} afterRecord
    * @param {{ label?: string }} options
@@ -1070,7 +1079,11 @@ export const createHistoryManager = ({
     setCurrentIntent(afterRecord);
 
     const entry = buildPatchEntry(from, afterRecord, options);
-    endStep(entry, { label: entry?.label ?? from.label, takeEntry: from.takeEntry, sessionMark: from.sessionMark });
+    const label = entry?.label ?? from.label;
+    // A step an action names otherwise loses the detail it opened with.
+    const detail = from.describe?.label === label ? from.describe.read() : null;
+    if (entry && detail) entry.detail = detail;
+    endStep(entry, { label, takeEntry: from.takeEntry, sessionMark: from.sessionMark, detail });
     if (!entry) {
       emitHistoryDiagnostic({ type: 'commit', scope: 'intent', label: from.label, created: false });
       releaseUnreferencedFiles();
@@ -1180,8 +1193,8 @@ export const createHistoryManager = ({
    * One undoable step around `fn`, committed when `fn` ends.
    * @param {string} label
    * @param {() => unknown} fn
-   * @param {{ joinsOpenStep?: boolean, owner?: unknown, source?: string, label?: string }} [options]
-   *   `joinsOpenStep`: the call is part of the action that runs on the open step.
+   * @param {{ joinsOpenStep?: boolean, owner?: unknown, source?: string, label?: string, detail?: HistoryStepBase['detail'] }} [options]
+   *   `joinsOpenStep`: the call is part of the action that runs on the open step. `detail`: of a step the call opens.
    */
   const runUndoable = async (label, fn, options = {}) => {
     const sessionBusy = mutationAvailability();
@@ -2029,6 +2042,9 @@ export const createHistoryManager = ({
   });
   /** @param {'undo' | 'redo'} stack */
   const topSequence = (stack) => topEntry(stack === 'undo' ? undoStack : redoStack)?.sequence ?? null;
+  // The entries of a stack, its top last.
+  /** @param {'undo' | 'redo'} stack @returns {readonly HistoryEntry[]} */
+  const stackEntries = (stack) => [...(stack === 'undo' ? undoStack : redoStack)];
   const dropRedo = () => {
     if (redoStack.length === 0) return;
     clearRedo();
@@ -2091,6 +2107,7 @@ export const createHistoryManager = ({
     applyProjectPart,
     restoreWith,
     topSequence,
+    stackEntries,
     lostStepAfter: (/** @type {number} */ sequence) => droppedThrough > sequence,
     dropRedo,
     settleBeforeTraversal,
@@ -2119,10 +2136,17 @@ export const createHistoryManager = ({
  * @typedef {{ drawingId: string, entry: IntentEntry | CheckpointEntry }} ProjectPart
  * @typedef {{
  *   type: 'project', label: string, sequence: number, parts: ProjectPart[], session: IntentEntry | null,
- *   byteSize: number, fileIds: Set<string>
+ *   byteSize: number, fileIds: Set<string>, detail: HistoryStepDetail | null
  * }} ProjectEntry
  *   A step of the project stream: its part in each drawing it changed (Reset
  *   all drawings) and the Session-level values it changed (R15-23).
+ * @typedef {{ sequence: number, label: string, detail: HistoryStepDetail | null }} HistoryTimelineStep
+ *   A step as the History list shows it: its identity (`sequence`), its label, and its detail.
+ * @typedef {{ undo: HistoryTimelineStep[], redo: HistoryTimelineStep[], start: { label: string, trimmed: boolean } }} HistoryTimeline
+ *   The shown drawing's steps and the project steps (PD-OI-112): `undo` in the order Undo takes
+ *   them (the first is the current state), `redo` in the order Redo takes them, and the state
+ *   before them all: the label of the last baseline, `trimmed` once the step limit or the byte
+ *   budget dropped a step after it.
  * @typedef {object} SessionHistoryPorts
  *   The capture and restore of the Session-level values, which no drawing owns.
  * @property {() => HistoryIntent} buildIntent Synchronous: a step's end reads it.
@@ -2211,13 +2235,19 @@ export const createHistoryRouter = ({
   // The Session-level values as the last step left them.
   let sessionCurrent = sessionRecord();
 
+  // The newest project step the limit or the budget dropped from Undo, as a
+  // drawing's History keeps its own (OV-1169).
+  let projectDroppedThrough = -1;
+  const dropOldestProject = () => {
+    projectDroppedThrough = Math.max(projectDroppedThrough, projectUndo.shift()?.sequence ?? -1);
+  };
   /** @param {ProjectEntry} entry */
   const pushProject = (entry) => {
     projectUndo.push(entry);
     projectRedo.length = 0;
     every().forEach((manager) => manager.dropRedo());
     // The step-count window drops silently (OV-1365).
-    while (projectUndo.length > maxActions) projectUndo.shift();
+    while (projectUndo.length > maxActions) dropOldestProject();
     budget.enforce(entry);
     touchProject();
   };
@@ -2237,23 +2267,30 @@ export const createHistoryRouter = ({
   };
   // The project step of a step's end: its parts and the Session-level values
   // it changed; none when it has neither.
-  /** @param {string} label @param {number} stamp @param {ProjectPart[]} parts @param {IntentEntry | null} session */
-  const recordProjectStep = (label, stamp, parts, session) => {
+  /**
+   * @param {string} label @param {number} stamp @param {ProjectPart[]} parts @param {IntentEntry | null} session
+   * @param {HistoryStepDetail | null} [detail]
+   */
+  const recordProjectStep = (label, stamp, parts, session, detail = null) => {
     if (!session && parts.length === 0) return;
     /** @type {Set<string>} */
     const fileIds = new Set();
     parts.forEach(({ entry }) => entry.fileIds.forEach((id) => fileIds.add(id)));
     pushProject({
-      type: 'project', label, sequence: stamp, parts, session, fileIds,
+      type: 'project', label, sequence: stamp, parts, session, fileIds, detail,
       byteSize: parts.reduce((bytes, { entry }) => bytes + entry.byteSize, session?.byteSize ?? 0)
     });
   };
-  /** @param {HistoryEntry | null} entry @param {string} label @param {SessionMark | null} mark @returns {IntentEntry | null} */
-  const stepEnded = (entry, label, mark) => {
+  /**
+   * @param {HistoryEntry | null} entry @param {string} label @param {SessionMark | null} mark
+   * @param {HistoryStepDetail | null} detail
+   * @returns {IntentEntry | null}
+   */
+  const stepEnded = (entry, label, mark, detail) => {
     const stamp = ++sequence;
     const session = sessionStep(label, entry ? null : mark);
     if (!entry) {
-      recordProjectStep(label, stamp, [], session);
+      recordProjectStep(label, stamp, [], session, detail);
       return null;
     }
     entry.sequence = stamp;
@@ -2296,7 +2333,7 @@ export const createHistoryRouter = ({
       return ids;
     },
     dropOldestStep: (kept) => {
-      if (projectUndo.length > 0 && projectUndo[0] !== kept) { projectUndo.shift(); touchProject(); return 'undo'; }
+      if (projectUndo.length > 0 && projectUndo[0] !== kept) { dropOldestProject(); touchProject(); return 'undo'; }
       const keptRedo = projectRedo.filter((entry) => entry === kept);
       if (keptRedo.length === projectRedo.length) return null;
       projectRedo.splice(0, projectRedo.length, ...keptRedo);
@@ -2358,27 +2395,48 @@ export const createHistoryRouter = ({
       projectTraversals.value -= 1;
     }
   };
-  /** @param {'undo' | 'redo'} direction */
-  const traverseShown = async (direction) => {
+  // PD-OI-090: of the shown drawing's next step (`own`, its sequence) and
+  // the project's, Undo takes the newer and Redo the older.
+  /** @param {'undo' | 'redo'} direction @param {number | null} own @param {ProjectEntry | undefined} project */
+  const projectGoesFirst = (direction, own, project) => project !== undefined && (
+    own === null || !(direction === 'undo' ? own > project.sequence : own < project.sequence));
+  /**
+   * @param {'undo' | 'redo'} direction
+   * @param {number | null} [expected] the sequence of the step to take: another step next is not taken.
+   */
+  const traverseShown = async (direction, expected = null) => {
     const shown = managerOf(activeDrawingId());
     const busy = await shown.settleBeforeTraversal();
     if (busy) return busy;
-    const stack = direction === 'undo' ? projectUndo : projectRedo;
-    const project = stack[stack.length - 1];
-    const own = shown.topSequence(direction);
-    const ownFirst = (/** @type {number} */ ownSequence) => (
-      direction === 'undo' ? ownSequence > project.sequence : ownSequence < project.sequence);
-    if (!project || (own !== null && ownFirst(own))) return direction === 'undo' ? shown.undo() : shown.redo();
+    const project = nextProjectStep(direction);
+    if (expected !== null && (project?.sequence ?? shown.topSequence(direction)) !== expected) return false;
+    if (!project) return direction === 'undo' ? shown.undo() : shown.redo();
     return traverseProject(project, direction);
   };
   /** @param {'undo' | 'redo'} direction The project step that Undo or Redo takes next, if any. */
   const nextProjectStep = (direction) => {
     const stack = direction === 'undo' ? projectUndo : projectRedo;
     const project = stack[stack.length - 1];
-    if (!project) return null;
-    const own = managerOf(activeDrawingId()).topSequence(direction);
-    if (own === null) return project;
-    return (direction === 'undo' ? own > project.sequence : own < project.sequence) ? null : project;
+    return projectGoesFirst(direction, managerOf(activeDrawingId()).topSequence(direction), project) ? project : null;
+  };
+  /** @param {HistoryEntry | ProjectEntry} entry @returns {HistoryTimelineStep} */
+  const timelineStep = (entry) => ({
+    sequence: entry.sequence ?? -1,
+    label: entry.label,
+    detail: entry.type === 'intent' || entry.type === 'project' ? entry.detail ?? null : null
+  });
+  // The steps Undo (or Redo) takes, in the order it takes them.
+  /** @param {'undo' | 'redo'} direction */
+  const stepsInOrder = (direction) => {
+    const own = [...managerOf(activeDrawingId()).stackEntries(direction)].reverse();
+    const project = [...(direction === 'undo' ? projectUndo : projectRedo)].reverse();
+    /** @type {HistoryTimelineStep[]} */
+    const steps = [];
+    while (own.length > 0 || project.length > 0) {
+      const [entry] = projectGoesFirst(direction, own[0]?.sequence ?? null, project[0]) ? project.splice(0, 1) : own.splice(0, 1);
+      steps.push(timelineStep(entry));
+    }
+    return steps;
   };
   const shownIdle = () => {
     const shown = managerOf(activeDrawingId());
@@ -2389,11 +2447,15 @@ export const createHistoryRouter = ({
     .flatMap((entry) => entry.parts.filter((part) => part.drawingId === drawingId).map((part) => part.entry));
   /** @type {{ undo: ProjectEntry | null, redo: ProjectEntry | null }} */
   let projectSavePoint = { undo: null, redo: null };
-  const resetProjectStream = () => {
+  // The state before every kept step: the label of the last baseline and the sequence it was set at.
+  let baseline = { label: '', sequence };
+  /** @param {string} label */
+  const resetProjectStream = (label) => {
     projectUndo.length = 0;
     projectRedo.length = 0;
     sessionCurrent = sessionRecord();
     projectSavePoint = { undo: null, redo: null };
+    baseline = { label, sequence };
     touchProject();
   };
 
@@ -2413,7 +2475,7 @@ export const createHistoryRouter = ({
     captureBaseline: async (/** @type {string} */ label = 'Baseline') => {
       await managerOf(activeDrawingId()).captureBaseline(label);
       for (const manager of others()) await manager.initializeIntentBaseline(label);
-      resetProjectStream();
+      resetProjectStream(label);
     },
     initializeIntentBaseline: async (
       /** @type {string} */ label = 'Intent baseline',
@@ -2422,8 +2484,44 @@ export const createHistoryRouter = ({
       for (const manager of every()) {
         if (!await manager.initializeIntentBaseline(label, options)) return false;
       }
-      resetProjectStream();
+      resetProjectStream(label);
       return true;
+    },
+    /** @returns {HistoryTimeline} */
+    timeline: () => ({
+      undo: stepsInOrder('undo'),
+      redo: stepsInOrder('redo'),
+      start: {
+        label: baseline.label,
+        trimmed: managerOf(activeDrawingId()).lostStepAfter(baseline.sequence) || projectDroppedThrough > baseline.sequence
+      }
+    }),
+    // PD-OI-112: a pick in the History list walks Undo or Redo one step at a
+    // time to the state right after the step `target` (its sequence; `null`:
+    // the state before every kept step). Each step is the one planned after
+    // the open step settled: a step recorded meanwhile stops the walk, as does
+    // a step not taken (with its own warning). The walk is one traversal, so a
+    // drawing switch waits for all of it.
+    travelTo: async (/** @type {number | null} */ target) => {
+      projectTraversals.value += 1;
+      try {
+        const busy = await managerOf(activeDrawingId()).settleBeforeTraversal();
+        if (busy) return busy;
+        const undo = stepsInOrder('undo');
+        const redo = stepsInOrder('redo');
+        const back = target === null ? undo.length : undo.findIndex((step) => step.sequence === target);
+        const forward = redo.findIndex((step) => step.sequence === target) + 1;
+        if (back < 0 && forward === 0) return false;
+        /** @type {'undo' | 'redo'} */
+        const direction = back >= 0 ? 'undo' : 'redo';
+        for (const step of back >= 0 ? undo.slice(0, back) : redo.slice(0, forward)) {
+          const result = await traverseShown(direction, step.sequence);
+          if (result !== true) return result;
+        }
+        return true;
+      } finally {
+        projectTraversals.value -= 1;
+      }
     },
     // D-15-51: an action that changes every drawing (Reset all drawings) is
     // one project step. `fn` runs in this task as the shown drawing's

@@ -598,3 +598,64 @@ test('Undo of a ring change in a LOSAT-cache replay restores its rows and Genera
   await expect.poll(() => replayState(page), { message: 'Undo Add Seq' }).toEqual(loaded);
   expect(await generate(page)).toBe(baseline);
 });
+
+// PD-OI-112: the History list. A changed control's row shows its name and the
+// value it set, newest first; a pick walks Undo or Redo to its row, and the
+// list stays open until Escape or a press outside it. In the two-row header
+// its toggle is the first of the file buttons.
+test('the History list names each step and a pick walks to its row', async ({ page }) => {
+  test.setTimeout(240_000);
+  await preparePage(page);
+  await loadSession(page, seed);
+  const toggle = page.getByRole('button', { name: 'History', exact: true });
+  await expect(toggle).toBeDisabled();
+  const title = await page.locator('.app-session-button').innerText();
+
+  const position = await reveal(page.getByLabel('Legend position', { exact: true }));
+  const positionText = await position.locator('option').nth(1).innerText();
+  await position.selectOption({ index: 1 });
+  await expectHistory(page, 1, 0, 'Change setting');
+  const strands = await reveal(page.getByLabel('Separate Strands', { exact: true }).first());
+  const strandsOn = !await strands.isChecked();
+  await strands.click();
+  await expectHistory(page, 2, 0, 'Change setting');
+  await page.locator('.app-session-button').click();
+  const rename = page.locator('[data-choice-prompt]').getByRole('dialog', { name: 'Rename Session', exact: true });
+  await rename.getByRole('textbox', { name: 'Session title', exact: true }).fill('Walk title');
+  await rename.getByRole('textbox', { name: 'Session title', exact: true }).press('Enter');
+  await expectHistory(page, 3, 0, 'Rename Session');
+  await expect(page.getByRole('button', { name: 'Undo', exact: true })).toHaveAttribute('title', 'Undo Rename Session');
+
+  await toggle.click();
+  const list = page.locator('#history-step-list');
+  const rows = list.locator('.history-list-row');
+  const shown = () => rows.evaluateAll((buttons) => buttons.map((button) => [
+    button.querySelector('.history-list-name').textContent, button.querySelector('.history-list-value').textContent, button.dataset.place
+  ]));
+  expect(await shown()).toEqual([
+    ['Rename Session', 'Walk title', 'current'], ['Separate Strands', strandsOn ? 'On' : 'Off', 'done'],
+    ['Legend position', positionText, 'done'], ['Loaded session', '', 'start']
+  ]);
+  await expect(list.locator('[aria-current="step"]')).toBeFocused();
+
+  await rows.filter({ hasText: 'Legend position' }).click();
+  await expectHistory(page, 1, 2, 'Change setting');
+  await expect(list).toBeVisible();
+  expect((await shown()).map((row) => row[2])).toEqual(['undone', 'undone', 'current', 'start']);
+  await expect(page.locator('.app-session-button')).toHaveText(title);
+  await expect(strands).toBeChecked({ checked: !strandsOn });
+  await expect(position).toHaveValue(await position.locator('option').nth(1).getAttribute('value'));
+
+  await page.keyboard.press('Escape');
+  await expect(list).toHaveCount(0);
+  await expect(toggle).toBeFocused();
+  await toggle.click();
+  await rows.filter({ hasText: 'Rename Session' }).click();
+  await expectHistory(page, 3, 0, 'Rename Session');
+  await page.locator('.app-brand').click();
+  await expect(list).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.app-file-actions [data-history-list-toggle]')).toBeVisible();
+  await expect(page.locator('.app-history-actions [data-history-list-toggle]')).toBeHidden();
+});
