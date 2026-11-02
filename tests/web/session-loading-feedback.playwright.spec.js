@@ -718,16 +718,17 @@ test('the header gives way by icons, never by narrowing the Session title', asyn
   expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
 
   // Vietnamese at 1024 px: the cap and the icons still narrowed the title and
-  // wrapped the mode names until the toolbar's groups closed up.
+  // wrapped the mode names until the toolbar's groups closed up. PD-OI-112: the
+  // History button takes 34 px of the header, so these widths add 34 px.
   await page.locator('[data-ui-language]').selectOption('vi');
-  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.setViewportSize({ width: 1058, height: 768 });
   await expect.poll(fitOf).toEqual([true, true, false]);
   await expect(header.locator('.app-toolbar')).toHaveCSS('column-gap', '4px');
   expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
 
   // TL-D06: where the icons and the closed-up gaps still narrow the title, its
   // "Session" caption hides, so the title takes that width.
-  await page.setViewportSize({ width: 900, height: 768 });
+  await page.setViewportSize({ width: 934, height: 768 });
   await expect.poll(fitOf).toEqual([true, true, true]);
   await expect(header.locator('.app-session-label')).toBeHidden();
   await expect(header.locator('.app-toolbar')).toHaveCSS('column-gap', '2px');
