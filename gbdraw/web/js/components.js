@@ -15,11 +15,12 @@ import { detectedTopologyNote } from './services/record-display-model.js';
 import { specificRuleHasQualifier } from './services/specific-color-rules.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsShortText, settingsView } from './services/settings-sections.js';
-import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
+import { SETTING_NOTE_APPLIES, settingApplicationNote, settingClassNote, settingClockLabel } from './services/setting-application.js';
 import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { TranslationParams } from './utils/i18n.js' */
-/** @import { SettingApplicationId } from './services/setting-application.js' */
+/** @import { SettingApplicationClass, SettingApplicationId } from './services/setting-application.js' */
+/** @import { Ref } from './utils/reactivity.js' */
 /** @import { LiveSettingItem } from './services/session-request.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
@@ -183,6 +184,7 @@ export const HelpTip = {
     const visible = computed(() => hovered.value || keyboardFocus.value || pinned.value);
     const style = reactive({ top: '0px', left: '0px' });
     const trigger = ref(null);
+    const tooltip = /** @type {Ref<HTMLElement | null>} */ (ref(null));
     const position = () => {
       if (!trigger.value) return;
       const rect = trigger.value.getBoundingClientRect();
@@ -205,9 +207,11 @@ export const HelpTip = {
         left = viewportWidth - halfWidth - 10;
       }
 
-      // Prevent overflow at the top (if too close to top edge, show below)
-      // Considering header and browser frame, if y < 60px, show below
-      if (rect.top < 60) {
+      // Prevent overflow at the top: show below when the icon is within 60 px
+      // of it (header and browser frame) or the shown tooltip would not fit
+      // above (OV-2449: a long timing note).
+      const height = tooltip.value ? tooltip.value.offsetHeight : 0;
+      if (rect.top < 60 || rect.top - gap - height < 8) {
         top = rect.bottom + gap;
         transform = 'translate(-50%, 0)'; // transform for below display
       }
@@ -216,7 +220,8 @@ export const HelpTip = {
       style.left = `${left}px`;
       style.transform = transform;
     };
-    watch(visible, (/** @type {boolean} */ open) => { if (open) position(); });
+    // Again once the tooltip is shown, with its height.
+    watch(visible, (/** @type {boolean} */ open) => { if (open) { position(); void nextTick(position); } });
     // A touch tap also reports pointerenter; only a hovering pointer shows it.
     const onEnter = (/** @type {PointerEvent} */ event) => { hovered.value = event.pointerType !== 'touch'; };
     const onLeave = () => { hovered.value = false; };
@@ -230,7 +235,7 @@ export const HelpTip = {
     const readName = () => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); };
     onMounted(readName);
     watch(uiLocale, () => nextTick(readName));
-    return { descriptionId, name, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
+    return { descriptionId, name, visible, style, trigger, tooltip, onEnter, onLeave, onFocus, close, toggle };
   }
 };
 
@@ -317,23 +322,41 @@ export const SettingsSectionTitle = {
 };
 
 // The timing note of a `SETTING_APPLICATION` row (services/setting-application.js),
-// placed inside that row's `data-setting` scope: "Applies on Generate" with
-// `data-applies-on-generate="<key>"`, "Live edit" for a live block inside a
-// Generate scope, or the row's own qualified note as a hint line. A live
-// setting row the shown Result cannot draw says "Applies on Generate"
-// (the injected `SETTING_NOTE_APPLIES` predicate of the committed request,
-// made once per render). An `item` (an annotation item, a Linear row) states
-// that one item's value.
+// placed inside that row's `data-setting` scope, in the heading or label of
+// the setting it marks (PD-OI-037 rev 3). A change that applies on Generate,
+// wholly or in part, shows a clock icon: a `HelpTip` named "Applies on
+// Generate" whose tooltip and description are the note, inside a wrapper
+// marked `data-timing-clock`, with `data-applies-on-generate="<key>"` for a
+// Generate row. A change that
+// applies at once shows nothing; an export-only row shows its note as a line.
+// A live setting row the shown Result cannot draw applies on Generate (the
+// injected `SETTING_NOTE_APPLIES` predicate of the committed request, made
+// once per render). An `item` (an annotation item, a Linear row) states that
+// one item's value; `application` replaces the row's class where it follows
+// state (Palette Instant Preview); `id` names the description, which the
+// one control of a field references through aria-describedby. While the note
+// shows nothing, `id` names an empty hidden span, so that reference keeps its
+// target.
 export const SettingNote = {
-  props: { setting: { type: String, required: true }, item: { type: Object, default: null } },
-  /** @param {{ setting: SettingApplicationId, item: LiveSettingItem | null }} props */
+  components: { HelpTip },
+  props: {
+    setting: { type: String, required: true },
+    item: { type: Object, default: null },
+    application: { type: String, default: null },
+    id: { type: String, default: null }
+  },
+  /** @param {{ setting: SettingApplicationId, item: LiveSettingItem | null, application: SettingApplicationClass | null, id: string | null }} props */
   setup: (props) => {
     const appliesFor = /** @type {(item: LiveSettingItem | null) => (requestPath: string) => boolean} */ (inject(SETTING_NOTE_APPLIES, () => () => true));
-    return { note: computed(() => settingApplicationNote(props.setting, appliesFor(props.item))) };
+    return {
+      note: computed(() => (props.application ? settingClassNote(props.application) : settingApplicationNote(props.setting, appliesFor(props.item)))),
+      label: computed(settingClockLabel)
+    };
   },
-  template: `<span v-if="note.text" :class="note.qualified ? 'ui-hint block' : 'apply-note'"
-    :data-applies-on-generate="note.application === 'generate' ? setting : null"><i v-if="note.application === 'generate'"
-    class="ph ph-clock" aria-hidden="true"></i> {{ note.text }}</span>`
+  template: `<span v-if="note.display === 'clock'" class="apply-note" data-timing-clock
+    :data-applies-on-generate="note.application === 'generate' ? setting : null"><help-tip :id="id" :text="note.text" :label="label"><i
+    class="ph ph-clock" aria-hidden="true"></i></help-tip></span><span v-else-if="note.display === 'hint'" :id="id" class="ui-hint block">{{ note.text }}</span><span
+    v-else-if="id" :id="id" hidden></span>`
 };
 
 // `v-settings-section="'<key>'"` on the element of a settings section: it

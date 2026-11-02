@@ -628,7 +628,7 @@ test('OV-1477: track, mode, control and setting names are not placeholders insid
   const inserted = [/\{track\}/, /\{control\}/, /No \{mode\} Result/, /^\{setting\} removes/, /\{mode\} track/, /\{topology\}/];
   assert.deepEqual(keys.filter((key) => inserted.some((pattern) => pattern.test(key))), []);
   for (const key of [
-    'Hide GC content?', 'Keep GC skew', 'Hidden: Hide GC Content is on.', 'No Circular Result yet. Configure settings and click Generate.',
+    'Hide GC content?', 'Keep GC skew', 'Hidden: Hide GC Content is on.',
     'Choosing "{setting}" removes the lane for {count} feature you placed manually.', 'This change removes the lane for {count} features you placed manually.'
   ]) assert.ok(keys.includes(key), key);
 });
@@ -838,15 +838,16 @@ test('OV-1415: the words a declined label table names as changed are a key, show
   assert.match(source, /\{ inputs: tm\(RULE_INPUT_CHANGE_WORDS\) \}/);
 });
 
-// OV-1690: the record list sentence ends inside its key, so a locale writes its
-// own punctuation, and the next sentence follows the locale's separator.
-test('OV-1690: the record list sentence is one key, joined to the next with the sentence separator', () => {
+// OV-1690: the record list status is one key, so a locale writes its own
+// separator; its timing is the clock of the Input Genomes row (PD-OI-037 rev 3),
+// not a sentence joined to it.
+test('OV-1690: the record list status is one key, followed by the timing clock', () => {
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const start = html.indexOf('<p id="record-list-description"');
   const block = html.slice(start, html.indexOf('</p>', start));
-  assert.match(block, /<i18n-text :text="t\('\{file\}: \{records\}\.'\)">/);
-  assert.match(block, /sentenceSeparator\(\) \+ settingApplicationSentence\('inputs'\)/);
-  assert.doesNotMatch(block, /<\/span>\.|<\/strong>:/);
+  assert.match(block, /<i18n-text :text="t\('\{file\} · \{records\}'\)">/);
+  assert.match(block, /<\/i18n-text> <span data-setting="inputs"><setting-note setting="inputs"><\/setting-note><\/span>/);
+  assert.doesNotMatch(block, /<\/span>\.|<\/strong>:|settingApplicationSentence/);
 });
 
 // A literal with words as a branch of a shown expression is English in every

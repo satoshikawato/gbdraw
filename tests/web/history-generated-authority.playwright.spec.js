@@ -155,9 +155,10 @@ test('Live palette and its History keep the scale draft out of the committed req
     await noDerivedStatus(page);
     await page.locator('summary[aria-label="Colors"]').press('Enter');
     const paletteHelp=page.locator('[data-palette-application-help]');
-    await expect(paletteHelp).toContainText('Live edit');
+    // PD-OI-037 rev 3: a live palette shows no mark; a waiting one shows the clock.
+    await expect(paletteHelp).toHaveCount(0);
     await page.getByText('Palette instant preview',{exact:true}).click();
-    await expect(paletteHelp).toContainText('Applies on Generate');
+    await expect(paletteHelp.locator('.help-tip-trigger')).toHaveAccessibleName('Applies on Generate');
     const applied=await page.evaluate(()=>window.__GBDRAW_APP__.currentResults()[0].content);
     const next=await page.evaluate(()=>window.__GBDRAW_APP__.paletteNames.find(name=>name!==window.__GBDRAW_APP__.selectedPalette));
     const paletteSelect=page.getByRole('combobox',{name:'Palette',exact:true});
@@ -173,7 +174,7 @@ test('Live palette and its History keep the scale draft out of the committed req
     await expect(paletteDialog).toHaveCount(0);
     await expect(paletteSelect).toHaveValue(next);
     expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount+1);
-    await expect(page.locator('[data-default-color-application-help]')).toContainText('Applies on Generate');
+    await expect(page.locator('[data-default-color-application-help] .help-tip-trigger')).toHaveAccessibleName('Applies on Generate');
     await noDerivedStatus(page);
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.currentResults()[0].content)).toBe(applied);
     await page.evaluate(async()=>{
@@ -182,8 +183,8 @@ test('Live palette and its History keep the scale draft out of the committed req
     });
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.currentResults()[0].content)).toBe(applied);
     await page.getByText('Palette instant preview',{exact:true}).click();
-    await expect(paletteHelp).toContainText('Live edit');
-    await expect(page.locator('[data-default-color-application-help]')).toContainText('Live edit');
+    await expect(paletteHelp).toHaveCount(0);
+    await expect(page.locator('[data-default-color-application-help]')).toHaveCount(0);
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.currentResults()[0].content)).not.toBe(applied);
     await noDerivedStatus(page);
   } finally { await page.context().close(); }
@@ -966,7 +967,8 @@ test('Undo and Redo are busy during Generate and leave the committed request unc
   try {
     await generate(page);
     const labels = page.locator('#circular-label-mode');
-    await page.locator('summary[aria-label="Labels"]').click();
+    // Enter opens the card; a click at the summary's centre lands on its tips.
+    await page.locator('summary[aria-label="Labels"]').press('Enter');
     for (const value of ['none', 'both']) {
       await labels.focus();
       await labels.selectOption(value);

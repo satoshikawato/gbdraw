@@ -357,7 +357,7 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     assert "bin/*/*" in build_support.get_excluded_package_data_patterns(include_browser_wheel=False)
 
     # UJ-06 (Owner 2026-10-08): the local GUI ships no Gallery catalog or
-    # Session, so its empty state shows no Load an example.
+    # Session, so its empty state shows no Open Gallery example.
     assert [pattern for pattern in package_data_patterns if "web/gallery" in pattern] == [
         "web/gallery/palettes/palettes.json"
     ]

@@ -222,6 +222,18 @@ test('an upload with 25 records opens its list; search, sort, bulk OFF, and the 
   }
 });
 
+// The list opens on its search field, not on the timing clock of its status
+// line, and Escape closes it from there.
+test('Choose records opens on its search field and Escape closes it', async ({ page }) => {
+  await openLinear(page);
+  await uploadLinear(page, 'pair.gb', genbank(['A1', 'A2']));
+  await page.locator('[data-linear-source-card]').first().locator('[data-record-list-open]').click();
+  const list = page.locator('[data-record-list-dialog]');
+  await expect(list.getByLabel('Search record IDs', { exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(list).toHaveCount(0);
+});
+
 test('D-06 Remove File deletes one of two Files, and clears the only File', async ({ page }) => {
   test.setTimeout(180_000);
   await openLinear(page);

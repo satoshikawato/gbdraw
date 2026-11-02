@@ -1,10 +1,11 @@
-// OV-1036, OV-1038 (R1, PD-OI-037 rev 2 / OIC-024): the timing notes that
+// OV-1036, OV-1038 (R1, PD-OI-037 rev 3 / OIC-024): the timing notes that
 // `SETTING_APPLICATION` renders. tests/web/setting-application.test.mjs checks
 // that every settings control sits in a row's scope; this checks the rendered
 // notes the user sees.
 const { test, expect } = require('@playwright/test');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 const { load, seeds } = require('./helpers/mode-transition.cjs');
+const { clocksIn, clockNotes } = require('./helpers/timing-notes.cjs');
 
 
 const openLayout = async (page) => {
@@ -22,14 +23,18 @@ test('the Layout card says its settings apply on Generate, the track toggles are
     await page.locator(`button.app-mode-button[aria-label="${mode === 'linear' ? 'Linear' : 'Circular'}"]`).click();
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
     const layout = await openLayout(page);
-    await expect(layout.locator(':scope > details > [data-applies-on-generate="layout"]')).toHaveText('Applies on Generate');
+    // The clock sits in the section's heading, named Applies on Generate.
+    const layoutNote = layout.locator(':scope > details > summary [data-applies-on-generate="layout"]');
+    await expect(clocksIn(layoutNote)).toHaveAccessibleName('Applies on Generate');
+    await expect.poll(() => clockNotes(layoutNote)).toEqual(['Applies on Generate']);
     const visibility = layout.locator('[data-setting="track-visibility"]');
     await expect(visibility).toHaveCount(1);
-    await expect(visibility.locator('.apply-note').first()).toHaveText('Live edit');
+    await expect(clocksIn(visibility)).toHaveCount(0);
     await expect(visibility.locator('[data-applies-on-generate="track-visibility"]')).toHaveCount(0);
     await expect(visibility.locator('label')).toHaveText(toggles.map((name) => new RegExp(name)));
-    await expect(layout.locator('[data-setting="track-slots"] [data-applies-on-generate="track-slots"]').first())
-      .toHaveText(/Applies on Generate, except turning a GC content, GC skew or Depth row on or off/);
+    // The long note is the clock's tooltip and description, on the Custom Track Slots heading.
+    await expect.poll(() => clockNotes(layout.locator('[data-setting="track-slots"] [data-applies-on-generate="track-slots"]').first()))
+      .toEqual([expect.stringMatching(/^Applies on Generate, except turning a GC content, GC skew or Depth row on or off/)]);
   }
 });
 
@@ -59,7 +64,7 @@ test('the selection toolbar placement select has the note of the popup Feature p
     await expect(toolbar.locator('[aria-label="Selected feature count"]')).toContainText('2 selected');
     const placement = toolbar.locator('[data-setting="feature-placement"]');
     await expect(placement.locator('select[aria-label="Selected feature placements"]')).toBeVisible();
-    await expect(placement.locator('[data-applies-on-generate="feature-placement"]')).toHaveText('Applies on Generate');
+    await expect(clocksIn(placement.locator('[data-applies-on-generate="feature-placement"]'))).toHaveAccessibleName('Applies on Generate');
   } finally {
     await page.context().close();
   }

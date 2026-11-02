@@ -431,7 +431,9 @@ const NAME_OF = (element) => {
 
 // UI-04, TK-16 (R12): a stack row's controls and help tips carry the slot id,
 // so no two controls in one Custom Track Slots panel share a name, and every
-// help tip on the page is named after the label it explains. loadMode opens
+// help tip on the page is named after the label it explains. A timing clock
+// (`SettingNote`, marked `data-timing-clock`; PD-OI-037 rev 3) is a help tip
+// of another kind: it is named "Applies on Generate" and describes its note. loadMode opens
 // every <details>, so every Row actions menu is open here: an item is named
 // within its menu, and the menu (its toggle and its group) names the row.
 for (const mode of ['circular', 'linear']) {
@@ -451,14 +453,24 @@ for (const mode of ['circular', 'linear']) {
       };
       const controls = Array.from(panel?.querySelectorAll('input:not([type="file"]), select, textarea, button, summary') || [])
         .filter(visible).map(inContext);
-      const tips = Array.from(document.querySelectorAll('.help-tip > button')).filter(visible).map(name);
-      return { controls, tips };
+      const tips = Array.from(document.querySelectorAll('.help-tip > button'))
+        .filter((button) => visible(button) && !button.closest('[data-timing-clock]')).map(name);
+      const clocks = Array.from(document.querySelectorAll('[data-timing-clock] .help-tip > button')).filter(visible)
+        .map((button) => ({
+          name: name(button),
+          description: (button.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean)
+            .map((id) => document.getElementById(id)?.textContent.trim() || '').join(' ').trim()
+        }));
+      return { controls, tips, clocks };
     }, { mode, nameOf: NAME_OF.toString() });
     expect(names.controls.length).toBeGreaterThan(30);
     const repeated = names.controls.filter((name, index) => names.controls.indexOf(name) !== index);
     expect([...new Set(repeated)], 'names repeated inside one Custom Track Slots panel').toEqual([]);
     expect(names.tips.length).toBeGreaterThan(60);
     expect(names.tips.filter((name) => !/^Help: \S/.test(name)), 'help tips not named after a label').toEqual([]);
+    expect(names.clocks.length, 'the open sections show timing clocks').toBeGreaterThan(0);
+    expect(names.clocks.filter((clock) => clock.name !== 'Applies on Generate' || !clock.description),
+      'timing clocks not named Applies on Generate or without their note').toEqual([]);
     await expect(page.getByRole('button', { name: 'Help: Window', exact: true })).toHaveCount(1);
   });
 }

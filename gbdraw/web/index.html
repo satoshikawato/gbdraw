@@ -273,6 +273,8 @@
 
         input, select, textarea, button { font-family: inherit; }
         .help-tip { margin-left: 0.25rem; }
+        /* A timing note's clock (SettingNote): the pill is the tip's holder. */
+        .apply-note > .help-tip { margin-left: 0; }
         [v-cloak] { display: none !important; }
         #app-boot-splash {
             position: fixed;
@@ -1713,12 +1715,12 @@
             .history-list-row { min-height: 2.5rem; }
         }
         .app-notice-link { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.75rem; margin-top: 0.375rem; font-weight: 500; }
+        /* The empty Preview's box: its two actions stacked at the width of the longer one. */
         .tutorial-card {
-            margin-top: 1.5rem; max-width: 30rem; padding: 1rem 1.25rem; border: 1px solid #bfdbfe; border-radius: 0.75rem;
-            background-color: var(--ui-accent-soft); color: #1e3a8a; text-align: left;
+            display: grid; gap: 0.5rem; width: max-content; max-width: 100%; margin-top: 0.5rem; padding: 0.875rem 1rem;
+            border: 1px solid #bfdbfe; border-radius: 0.75rem; background-color: var(--ui-accent-soft);
         }
-        .tutorial-card-title { display: flex; align-items: center; gap: 0.5rem; font-size: 1rem; font-weight: 700; }
-        .tutorial-card-text { margin: 0.25rem 0 0.75rem; font-size: 0.8125rem; line-height: 1.45; color: #1e40af; }
+        .tutorial-card > .btn, .tutorial-card > .app-gallery-link { justify-content: center; height: 2.25rem; padding: 0 0.875rem; font-size: 0.8125rem; }
         .example-tutorial-link {
             display: inline-flex; flex: none; align-items: center; gap: 0.25rem; padding: 0.5rem 0.75rem;
             font-size: 0.75rem; font-weight: 600; color: #1d4ed8; white-space: nowrap;
@@ -2435,8 +2437,7 @@
             <div id="settings-sections" class="settings-scroll flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-2">
 
                 <div v-settings-section="'input-genomes'" data-setting="inputs" class="card">
-                    <div tabindex="-1" class="card-header min-w-0"><settings-section-title section="input-genomes"></settings-section-title></div>
-                    <p class="mb-2"><setting-note setting="inputs"></setting-note></p>
+                    <div tabindex="-1" class="card-header min-w-0"><settings-section-title section="input-genomes"></settings-section-title> <setting-note setting="inputs"></setting-note></div>
 
                     <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">{{ t('Record rotation, feature placement, or tolerance has changes pending Generate. This notice covers record display only; the Result keeps its applied settings.') }}</p>
                     <div v-if="mode === 'circular'" class="space-y-4">
@@ -2507,9 +2508,8 @@
                                 <p v-if="!circularSingleRecordPresentationEnabled" id="circular-record-presentation-reason" class="ui-hint">{{ form.multi_record_canvas ? t('Available when Multi-Record Canvas is off and one record is selected.') : t('Available when one record is selected.') }}</p>
                                 <div class="grid grid-cols-1 gap-2">
                                     <div data-setting="record-names" class="grid grid-cols-1 gap-2">
-                                    <setting-note setting="record-names" class="justify-self-start"></setting-note>
                                     <div>
-                                        <span class="input-label text-[10px]">{{ t('Record label') }} <help-tip id="help-circular-record-label" :text="t('Overrides the inferred organism line for this Circular record. Leave empty to keep inference.')"></help-tip></span>
+                                        <span class="input-label text-[10px]">{{ t('Record label') }} <setting-note setting="record-names"></setting-note> <help-tip id="help-circular-record-label" :text="t('Overrides the inferred organism line for this Circular record. Leave empty to keep inference.')"></help-tip></span>
                                         <input
                                             type="text"
                                             v-model="form.circular_record_label"
@@ -2560,10 +2560,10 @@
                             <summary :aria-label="t('Depth TSV tracks')">
                                 <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                 {{ t('Depth TSV tracks') }}
+                                <setting-note setting="depth-sources"></setting-note>
                                 <help-tip :text="t('A tab-separated read-depth table drawn as a track. With several records, one file is used for the same series of every record; a loaded Session keeps each record\'s Depth TSV as saved, empty ones included.')"></help-tip>
                                 <span v-if="hasCircularDepthFiles" class="ml-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(files.c_depth) }}</span>
                             </summary>
-                            <setting-note setting="depth-sources" class="pt-1"></setting-note>
                             <p v-if="circularRecordDiscoveryState.records.length > 1" class="ui-hint pt-1">{{ t('Each file is used for every record.') }}</p>
                             <div v-if="!hasCircularDepthFiles" class="pt-1">
                                 <file-uploader
@@ -2857,8 +2857,8 @@
                                     class="min-w-0 text-[10px]"
                                 >
                                     <span class="min-w-0">{{ linearSourceDepthSummary(source) }}</span>
+                                    <setting-note setting="depth-sources"></setting-note>
                                 </summary>
-                                <setting-note setting="depth-sources" class="pt-1"></setting-note>
                                 <div class="min-w-0 space-y-1.5 pt-1">
                                     <div
                                         v-for="track in linearSourceDepthRows(source)"
@@ -2985,12 +2985,12 @@
                                     <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
 
                             <details v-if="source.records.length > 1" data-setting="depth-sources" class="rounded border border-slate-200 bg-white/70 p-2">
-                                <summary>
+                                <summary :aria-label="t('Per-record Depth TSV')">
                                     <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                     {{ t('Per-record Depth TSV') }}
+                                    <setting-note setting="depth-sources"></setting-note>
                                     <span v-if="hasLinearDepthFiles(seq)" class="ml-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(seq.depth) }}</span>
                                 </summary>
-                                <setting-note setting="depth-sources" class="pt-1"></setting-note>
                                 <div class="space-y-1.5 pt-1">
                                     <div class="space-y-1.5">
                                         <div v-for="track in linearDepthTrackRows()" :key="`${seq.uid}-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
@@ -3078,8 +3078,8 @@
                             <summary role="button" :aria-label="t('Depth track settings')" class="linear-primary-label">
                                 <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                 {{ t('Depth track settings') }}
+                                <setting-note setting="depth-sources"></setting-note>
                             </summary>
-                            <setting-note setting="depth-sources" class="pt-1"></setting-note>
                             <p class="ui-hint pt-1">{{ t('These settings are shared by the same numbered series across every File and record.') }}</p>
                             <div class="space-y-2 pt-2">
                                 <div class="rounded border border-slate-200 bg-white/80 p-2 space-y-2">
@@ -3223,9 +3223,8 @@
                                 </div>
                             </div>
                         </details>
-                        <section data-linear-comparison-card v-settings-section="'comparison'" data-setting="comparison" class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-heading">
-                            <div id="linear-comparison-heading" tabindex="-1" class="flex min-w-0 items-center gap-2 text-base font-bold text-slate-700 [&>i]:text-lg [&>i]:text-blue-600"><settings-section-title section="comparison"></settings-section-title></div>
-                            <setting-note setting="comparison"></setting-note>
+                        <section data-linear-comparison-card v-settings-section="'comparison'" data-setting="comparison" class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-title">
+                            <div id="linear-comparison-heading" tabindex="-1" class="flex min-w-0 items-center gap-2"><div id="linear-comparison-title" class="flex min-w-0 items-center gap-2 text-base font-bold text-slate-700 [&>i]:text-lg [&>i]:text-blue-600"><settings-section-title section="comparison"></settings-section-title></div><setting-note setting="comparison"></setting-note></div>
                             <div
                                 v-if="importedComparisonNeedsResolution"
                                 data-imported-comparison-resolution
@@ -3440,10 +3439,9 @@
                                                 </select>
                                             </div>
                                             <div data-setting="comparison-height">
-                                                <label class="linear-primary-label mb-1">{{ t('Match height') }}</label>
-                                                <setting-note setting="comparison-height"></setting-note>
+                                                <span class="linear-primary-label mb-1">{{ t('Match height') }} <setting-note id="comparison-height-timing" setting="comparison-height"></setting-note></span>
                                                 <auto-value-field :visible="autoValueVisible(adv.comparison_height, 'pairwiseMatchHeight')" :text="autoValueText('pairwiseMatchHeight')">
-                                                    <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" :aria-label="t('Comparison match height')" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" :aria-label="t('Comparison match height')" aria-describedby="comparison-height-timing" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                                 <p v-if="comparisonHeightValidationError" class="mt-1 text-[10px] text-red-600">{{ comparisonHeightValidationError }}</p>
                                             </div>
@@ -3651,14 +3649,12 @@
                         <div v-if="mode === 'circular'" data-setting="species-strain" class="space-y-2">
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div data-setting="species">
-                                    <setting-note setting="species"></setting-note>
-                                    <span class="input-label"><label for="circular-species">{{ t('Species') }}</label> <help-tip id="help-species" :text="t('Species name used in the circular center label when no custom plot title is set.')"></help-tip></span>
+                                    <span class="input-label"><label for="circular-species">{{ t('Species') }}</label> <setting-note setting="species"></setting-note> <help-tip id="help-species" :text="t('Species name used in the circular center label when no custom plot title is set.')"></help-tip></span>
                                     <input id="circular-species" type="text" v-model="form.species" aria-describedby="help-species" class="form-input" :placeholder="t('e.g., {example}', { example: 'Escherichia coli' })" :disabled="!semanticMutationAvailable">
                                     <markup-preview :text="form.species"></markup-preview>
                                 </div>
                                 <div>
-                                    <setting-note setting="species-strain"></setting-note>
-                                    <span class="input-label">{{ t('Strain') }} <help-tip id="help-strain" :text="t('Strain or isolate name used in the circular center label.')"></help-tip></span>
+                                    <span class="input-label">{{ t('Strain') }} <setting-note setting="species-strain"></setting-note> <help-tip id="help-strain" :text="t('Strain or isolate name used in the circular center label.')"></help-tip></span>
                                     <input type="text" v-model="form.strain" :aria-label="t('Strain')" aria-describedby="help-strain" class="form-input" :placeholder="t('e.g., {example}', { example: 'K-12' })" :disabled="!semanticMutationAvailable">
                                 </div>
                             </div>
@@ -3677,8 +3673,7 @@
 
                 <div v-if="mode === 'linear'" data-linear-advanced-comparison v-settings-section="'advanced-comparison'" data-setting="advanced-comparison" class="card">
                     <details data-linear-comparison-disclosure="advanced">
-                        <summary role="button" :aria-label="t('Advanced comparison and layout')"><settings-section-title section="advanced-comparison"></settings-section-title></summary>
-                        <setting-note setting="advanced-comparison" class="mt-2"></setting-note>
+                        <summary role="button" :aria-label="t('Advanced comparison and layout')"><settings-section-title section="advanced-comparison"></settings-section-title> <setting-note setting="advanced-comparison"></setting-note></summary>
                         <div class="mt-2 min-w-0 space-y-4 border-t border-slate-200 pt-3">
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('record-layout')" class="min-w-0 space-y-2">
                                 <div class="linear-primary-label">{{ t('Record Layout') }}</div>
@@ -3771,8 +3766,7 @@
 
                 <div v-settings-section="'region-annotations'" data-setting="region-annotations" class="card">
                     <details>
-                        <summary :aria-label="t('Region Annotations')"><settings-section-title section="region-annotations"></settings-section-title> <help-tip :text="t('Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement.')"></help-tip></summary>
-                        <setting-note setting="region-annotations" class="mt-2"></setting-note>
+                        <summary :aria-label="t('Region Annotations')"><settings-section-title section="region-annotations"></settings-section-title> <setting-note setting="region-annotations"></setting-note> <help-tip :text="t('Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement.')"></help-tip></summary>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex flex-wrap gap-1">
                                 <button type="button" class="btn btn-secondary text-[10px] flex-auto px-2" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add set') }}</button>
@@ -3791,7 +3785,7 @@
                                 </div>
                                 <input :value="set.legendLabel" @input="setAnnotationSetLegendLabel(set, $event.target.value)" :aria-label="t('Set legend label')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Set legend label (optional)')" :disabled="!semanticMutationAvailable">
                                 <div v-for="item in set.annotations" :key="item.id" data-annotation-row class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
-                                    <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1.15fr)_1.5rem_1.5rem] items-center gap-1" :class="{ '!grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1.5rem_1.5rem]': item.target.kind === 'featureIdentity' }">
+                                    <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1.15fr)_auto_1.5rem] items-center gap-1" :class="{ '!grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_1.5rem]': item.target.kind === 'featureIdentity' }">
                                         <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" :aria-label="t('Annotation id')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Name')" :disabled="!semanticMutationAvailable">
                                         <template v-if="item.target.kind === 'coordinateSpan'">
                                             <input type="number" min="1" :value="item.target.start" @input="setAnnotationField(set, item, 'start', $event.target.value)" :aria-label="t('Annotation start (1-based)')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Start')" :disabled="!semanticMutationAvailable">
@@ -3802,9 +3796,9 @@
                                             <input :value="item.target.selectors[0].value" @input="setAnnotationField(set, item, 'selectorValue', $event.target.value)" @change="$event.target.value = $event.target.value.trim()" :aria-label="t('Annotation qualifier value')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Value')" :disabled="!semanticMutationAvailable">
                                         </template>
                                         <p v-else class="min-w-0 truncate text-[10px] text-slate-600" data-annotation-feature-identity :title="annotationFeatureCaption(item)">{{ annotationFeatureCaption(item) }}</p>
-                                        <div data-setting="annotation-style" class="contents">
+                                        <div data-setting="annotation-style" class="flex items-center gap-0.5">
                                         <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-6 w-6 p-0" :title="t('Fill color')" :aria-label="t('Annotation fill color')" :disabled="!semanticMutationAvailable">
-                                        <setting-note setting="annotation-style" :item="{ setId: set.id, itemId: item.id }" class="col-span-full row-start-2 justify-self-start"></setting-note>
+                                        <setting-note setting="annotation-style" :item="{ setId: set.id, itemId: item.id }"></setting-note>
                                         </div>
                                         <button :aria-label="t('Delete annotation')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" :title="t('Delete annotation')" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                     </div>
@@ -3865,8 +3859,7 @@
 
                 <div v-if="mode === 'circular'" v-settings-section="'pairwise-comparisons'" data-setting="pairwise-comparisons" class="card">
                     <details>
-                        <summary :aria-label="t('Pairwise Comparisons')"><settings-section-title section="pairwise-comparisons"></settings-section-title> <help-tip :text="t('Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits.')"></help-tip></summary>
-                        <setting-note setting="pairwise-comparisons" class="mt-2"></setting-note>
+                        <summary :aria-label="t('Pairwise Comparisons')"><settings-section-title section="pairwise-comparisons"></settings-section-title> <setting-note setting="pairwise-comparisons"></setting-note> <help-tip :text="t('Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits.')"></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable || processing"> {{ t('Run LOSAT') }}</label>
@@ -4032,11 +4025,10 @@
                     <div class="flex items-start gap-2">
                         <i class="ph ph-shield-check mt-0.5 text-blue-600" aria-hidden="true"></i>
                         <div class="min-w-0 flex-1">
-                            <div class="text-xs font-bold text-slate-700">{{ t('Preserved session settings') }}</div>
+                            <div class="text-xs font-bold text-slate-700">{{ t('Preserved session settings') }} <setting-note setting="preserved-settings"></setting-note></div>
                             <p class="ui-hint mt-0.5">
                                 {{ t('These validated settings are not editable in the Web UI. They remain active until reset.') }}
                             </p>
-                            <setting-note setting="preserved-settings" class="mt-1"></setting-note>
                         </div>
                     </div>
                     <div class="mt-2 max-h-40 space-y-1.5 overflow-y-auto pr-1">
@@ -4066,8 +4058,7 @@
                 </div>
                 <div v-settings-section="'layout'" data-setting="layout" class="card">
                     <details :open="mode === 'linear'">
-                        <summary :aria-label="t('Layout')"><settings-section-title section="layout"></settings-section-title> <help-tip :text="t('Control track placement and layout-related options.')"></help-tip></summary>
-                        <setting-note setting="layout" class="mt-2"></setting-note>
+                        <summary :aria-label="t('Layout')"><settings-section-title section="layout"></settings-section-title> <setting-note setting="layout"></setting-note> <help-tip :text="t('Control track placement and layout-related options.')"></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <template v-if="mode === 'linear'">
                                 <div class="text-[11px] text-slate-600 space-y-1" data-linear-label-auto-layout>
@@ -4115,8 +4106,8 @@
                                             <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox" :aria-label="t('Lock Definition Column')" aria-describedby="linear-definition-lock-help" :disabled="!semanticMutationAvailable">
                                             <span>{{ t('Lock Definition Column') }}</span>
                                         </label>
-                                        <help-tip id="linear-definition-lock-help" :text="t('ON aligns Linear definitions in a common left column. OFF centers them in a common column width and follows row offsets, including center or similarity alignment.') + ' ' + settingApplicationSentence('definition-column')"></help-tip>
                                         <setting-note setting="definition-column"></setting-note>
+                                        <help-tip id="linear-definition-lock-help" :text="t('ON aligns Linear definitions in a common left column. OFF centers them in a common column width and follows row offsets, including center or similarity alignment.') + ' ' + settingApplicationSentence('definition-column')"></help-tip>
                                     </div>
                                     <div class="flex items-center text-xs">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -4131,6 +4122,7 @@
                                                 <input type="checkbox" :checked="form.show_gc" @change="setTrackShown('show_gc', $event.target.checked)" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" aria-describedby="help-linear-show-gc-content" class="form-checkbox">
                                                 <span>{{ t('Show GC Content') }}</span>
                                             </label>
+                                            <setting-note setting="track-visibility"></setting-note>
                                             <help-tip id="help-linear-show-gc-content" :text="t('Simple mode only. Display a GC content track; use Reset to copy it into the custom stack.')"></help-tip>
                                         </div>
                                         <div class="flex items-center text-xs">
@@ -4151,7 +4143,6 @@
                                             </label>
                                             <help-tip id="help-linear-show-depth" :text="t('Simple mode only. Display depth coverage tracks from uploaded TSV files; use Reset to copy them into the custom stack.')"></help-tip>
                                         </div>
-                                        <setting-note setting="track-visibility"></setting-note>
                                     </div>
                                 </div>
                                 <div data-setting="track-slots" class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
@@ -4171,9 +4162,9 @@
                                                     <i class="ph" :class="linearTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'" aria-hidden="true"></i>
                                                     <span class="truncate">{{ t('Custom Track Slots') }}</span>
                                                 </button>
+                                                <setting-note id="linear-custom-track-slots-timing" setting="track-slots"></setting-note>
                                                 <help-tip id="help-linear-custom-track-slots" :label="t('Help: Custom Track Slots')" :text="t('Edit the explicit linear track stack. Opening or closing this panel does not enable or alter the stack. Arrows reorder within the current side; Row actions move rows across the boundary.')"></help-tip>
                                             </div>
-                                            <setting-note id="linear-custom-track-slots-timing" setting="track-slots"></setting-note>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" :title="t('Use the saved custom stack for rendering. Disabling it preserves the stack for later use.')">
@@ -4256,7 +4247,7 @@
                                                     </div>
                                                     <div class="track-slot-geometry-grid">
                                                         <div class="track-slot-field" data-setting="track-geometry">
-                                                            <span class="track-slot-field-label">h <help-tip :id="`help-linear-slot-height-${entry.index}`" :text="entry.slot.renderer === 'features' ? t('Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.') : t('Linear track height in pixels (px optional; positive). Leave blank for the automatic height.')"></help-tip></span>
+                                                            <span class="track-slot-field-label">h <setting-note setting="track-geometry" :item="{ slotId: entry.slot.id }"></setting-note> <help-tip :id="`help-linear-slot-height-${entry.index}`" :text="entry.slot.renderer === 'features' ? t('Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.') : t('Linear track height in pixels (px optional; positive). Leave blank for the automatic height.')"></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'height')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'height') }}</span>
                                                                 <input
@@ -4270,7 +4261,6 @@
                                                                 >
                                                                 <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'height')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'height') }}</span>
                                                             </div>
-                                                            <setting-note setting="track-geometry" :item="{ slotId: entry.slot.id }" class="mt-0.5 max-w-full whitespace-normal"></setting-note>
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">{{ t('spacing') }} <help-tip :id="`help-linear-slot-spacing-${entry.index}`" :text="entry.slot.renderer === 'features' ? t('Clearance between the reserved feature band and its adjacent outer track, in pixels (px optional; nonnegative). Leave blank for the automatic record-specific value.') : t('Linear vertical spacing after the track, in pixels (px optional; nonnegative). Leave blank for the automatic spacing.')"></help-tip></span>
@@ -4484,10 +4474,13 @@
                                         <span>{{ t('Multi-Record Canvas') }}</span>
                                     </label>
                                     <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :title="t('Suppress the GC content track.')">
-                                            <input type="checkbox" :checked="form.suppress_gc" @change="setCircularGcSuppressed($event.target.checked, $event)" class="form-checkbox" :aria-label="t('Hide GC Content')" :disabled="!semanticMutationAvailable">
-                                            <span>{{ t('Hide GC Content') }}</span>
-                                        </label>
+                                        <div class="flex items-center gap-2">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :title="t('Suppress the GC content track.')">
+                                                <input type="checkbox" :checked="form.suppress_gc" @change="setCircularGcSuppressed($event.target.checked, $event)" class="form-checkbox" :aria-label="t('Hide GC Content')" :disabled="!semanticMutationAvailable">
+                                                <span>{{ t('Hide GC Content') }}</span>
+                                            </label>
+                                            <setting-note setting="track-visibility"></setting-note>
+                                        </div>
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :title="t('Suppress the GC skew track.')">
                                             <input type="checkbox" :checked="form.suppress_skew" @change="setCircularSkewSuppressed($event.target.checked, $event)" class="form-checkbox" :aria-label="t('Hide GC Skew')" :disabled="!semanticMutationAvailable">
                                             <span>{{ t('Hide GC Skew') }}</span>
@@ -4500,7 +4493,6 @@
                                             <input type="checkbox" :checked="form.show_depth" @change="setTrackShown('show_depth', $event.target.checked)" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled || !canShowDepthTrack)" class="form-checkbox">
                                             <span>{{ t('Show Depth') }}</span>
                                         </label>
-                                        <setting-note setting="track-visibility"></setting-note>
                                     </div>
                                 </div>
 
@@ -4521,9 +4513,9 @@
                                                     <i class="ph" :class="circularTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'" aria-hidden="true"></i>
                                                     <span class="truncate">{{ t('Custom Track Slots') }}</span>
                                                 </button>
+                                                <setting-note id="circular-custom-track-slots-timing" setting="track-slots"></setting-note>
                                                 <help-tip id="help-circular-custom-track-slots" :label="t('Help: Custom Track Slots')" :text="t('Edit the explicit circular stack. Opening or closing this panel does not enable or alter the stack. Rows above Axis render outside and rows below Axis render inside.')"></help-tip>
                                             </div>
-                                            <setting-note id="circular-custom-track-slots-timing" setting="track-slots"></setting-note>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" :title="t('Use the saved custom stack for rendering. Disabling it preserves the stack for later use.')">
@@ -4563,8 +4555,7 @@
                                         </div>
                                         <div class="grid grid-cols-2 gap-1.5 rounded border border-slate-200 bg-white/70 p-1.5">
                                             <div data-setting="track-geometry">
-                                                <setting-note setting="track-geometry"></setting-note>
-                                                <span class="input-label text-[10px]">{{ t('Center Reserved Radius') }} <help-tip id="help-circular-center-reserved-radius" :text="t('Override the center-label reserved radius in px. Lower values let inside tracks move closer to the center, where they may overlap the label.')"></help-tip></span>
+                                                <span class="input-label text-[10px]">{{ t('Center Reserved Radius') }} <setting-note setting="track-geometry"></setting-note> <help-tip id="help-circular-center-reserved-radius" :text="t('Override the center-label reserved radius in px. Lower values let inside tracks move closer to the center, where they may overlap the label.')"></help-tip></span>
                                                 <input type="number" min="0" step="1" v-model.number="adv.center_reserved_radius" :aria-label="t('Center Reserved Radius')" aria-describedby="help-circular-center-reserved-radius" class="form-input form-input-compact" :placeholder="t('Auto')" :disabled="!semanticMutationAvailable">
                                             </div>
                                         </div>
@@ -4849,9 +4840,8 @@
                                 </div>
 
                                 <div v-if="form.multi_record_canvas" data-capture="multi-record-canvas-controls" data-setting="multi-record-layout" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
-                                    <setting-note setting="multi-record-layout" class="col-span-2"></setting-note>
                                     <div>
-                                        <span class="input-label text-[10px] mb-1">{{ t('Record Size Mode') }} <help-tip id="help-circular-record-size-mode" :text="t('Scale circles by record length on multi-record canvas.')"></help-tip></span>
+                                        <span class="input-label text-[10px] mb-1">{{ t('Record Size Mode') }} <setting-note setting="multi-record-layout"></setting-note> <help-tip id="help-circular-record-size-mode" :text="t('Scale circles by record length on multi-record canvas.')"></help-tip></span>
                                         <select v-model="adv.multi_record_size_mode" class="form-input py-1 text-xs" :aria-label="t('Record Size Mode')" aria-describedby="help-circular-record-size-mode" :disabled="!semanticMutationAvailable">
                                             <option value="auto">{{ t('Auto (Default)') }}</option>
                                             <option value="linear">{{ tx('size scaling', 'Linear') }}</option>
@@ -4923,8 +4913,7 @@
 
                 <div v-settings-section="'font'" data-setting="font" class="card">
                     <details>
-                        <summary :aria-label="t('Font')"><settings-section-title section="font"></settings-section-title> <help-tip id="help-font-family" :text="t('The font of all diagram text: labels, titles, legend, and scale.')"></help-tip></summary>
-                        <setting-note setting="font" class="mt-2"></setting-note>
+                        <summary :aria-label="t('Font')"><settings-section-title section="font"></settings-section-title> <setting-note setting="font"></setting-note> <help-tip id="help-font-family" :text="t('The font of all diagram text: labels, titles, legend, and scale.')"></help-tip></summary>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <label class="block">
                                 <span class="input-label text-[10px] mb-1">{{ t('Font') }}</span>
@@ -4956,16 +4945,15 @@
                 <teleport to="#settings-popup" defer :disabled="settingsPane.floating !== 'titles'">
                 <div v-settings-section="'titles'" data-setting="titles" class="card">
                     <details>
-                        <summary :aria-label="t('Titles and Record Labels')"><settings-section-title section="titles"></settings-section-title> <help-tip :text="t('Adjust the plot title and record-label text.')"></help-tip></summary>
-                        <setting-note setting="titles" class="mt-2"></setting-note>
+                        <summary :aria-label="t('Titles and Record Labels')"><settings-section-title section="titles"></settings-section-title> <setting-note setting="titles"></setting-note> <help-tip :text="t('Adjust the plot title and record-label text.')"></help-tip></summary>
                         <div class="mt-2 space-y-4 pt-2 border-t border-slate-200">
                             <section aria-labelledby="plot-title-settings-heading" class="space-y-2">
                                 <h4 id="plot-title-settings-heading" class="group-heading">{{ t('Plot Title') }}</h4>
                                 <div data-setting="plot-title" class="space-y-2">
-                                <setting-note setting="plot-title"></setting-note>
                                 <div>
                                     <span class="input-label text-[10px] mb-1">
                                         {{ t('Text') }}
+                                        <setting-note setting="plot-title"></setting-note>
                                         <help-tip id="help-title-text" :text="mode === 'circular'
                                             ? t('Optional circular plot title used when the title position is Top or Bottom. Leave blank to use the default species + strain title.')
                                             : t('Global title shown once for the whole linear plot.')"></help-tip>
@@ -5010,8 +4998,7 @@
                                     <help-tip id="help-record-labels-show-definition" :text="t('Circular only. Off draws no center definition for any record (name, strain, replicon, accession, length, GC), and the inside tracks keep no room for it. The plot title is kept.')"></help-tip>
                                 </div>
                                 <div data-setting="definition-text">
-                                    <setting-note setting="definition-text"></setting-note>
-                                    <span class="input-label text-[10px] mb-0">{{ t('Default font size') }} <help-tip id="help-title-default-font-size" :text="t('Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear).')"></help-tip></span>
+                                    <span class="input-label text-[10px] mb-0">{{ t('Default font size') }} <setting-note setting="definition-text"></setting-note> <help-tip id="help-title-default-font-size" :text="t('Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.def_font_size, 'definitionFontSize')" :text="autoValueText('definitionFontSize')">
                                         <input type="number" :value="optionalNumberInputValue(adv.def_font_size)" @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)" class="form-input form-input-compact auto-value-input" :aria-label="t('Default font size')" aria-describedby="help-title-default-font-size" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
@@ -5033,8 +5020,7 @@
                                             </select>
                                         </div>
                                         <details class="mt-1" :data-definition-line-style="row.key" data-setting="definition-text">
-                                            <summary :aria-label="t('{label} style', { label: row.label })" class="text-[10px]">{{ t('Style') }}<span v-if="isDefinitionLineStyleMuted(row)" class="ui-hint" :title="t('Its style applies when the line is shown.')">{{ ' ' }}{{ t('(line hidden)') }}</span></summary>
-                                            <setting-note setting="definition-text"></setting-note>
+                                            <summary :aria-label="t('{label} style', { label: row.label })" class="text-[10px]">{{ t('Style') }}<span v-if="isDefinitionLineStyleMuted(row)" class="ui-hint" :title="t('Its style applies when the line is shown.')">{{ ' ' }}{{ t('(line hidden)') }}</span> <setting-note setting="definition-text"></setting-note></summary>
                                             <div class="grid grid-cols-[4rem_auto_minmax(0,1fr)] items-end gap-1.5 pt-1.5">
                                                 <label class="input-label !block text-[9px]">{{ t('Size') }}
                                                     <input type="number" min="0.1" step="0.5" :value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" :placeholder="t('Default')" :aria-label="t('{label} font size', { label: row.label })" :disabled="!semanticMutationAvailable">
@@ -5066,9 +5052,8 @@
 
                 <div v-settings-section="'legend'" data-setting="legend" class="card">
                     <details>
-                        <summary :aria-label="t('Legend settings')"><settings-section-title section="legend"></settings-section-title> · {{ legendPositionLabel(form.legend) }} <help-tip :text="t('Adjust legend position and typography.')"></help-tip></summary>
+                        <summary :aria-label="t('Legend settings')"><settings-section-title section="legend"></settings-section-title> · {{ legendPositionLabel(form.legend) }} <setting-note setting="legend"></setting-note> <help-tip :text="t('Adjust legend position and typography.')"></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <setting-note setting="legend"></setting-note>
                             <div>
                                 <span class="input-label text-[10px] mb-1"><label for="legend-position">{{ t('Position') }}</label> <help-tip id="help-legend-position" :text="t('Position of the legend. \'None\' hides the legend.')"></help-tip></span>
                                 <select id="legend-position" v-model="form.legend" class="form-input text-xs py-1" :aria-label="t('Legend position')" aria-describedby="help-legend-position" :disabled="!semanticMutationAvailable">
@@ -5142,14 +5127,14 @@
                                 </div>
                                 <div class="mb-1 flex items-center justify-between gap-2">
                                     <span class="input-label text-[10px] !mb-0">{{ t('Palette') }}</span>
-                                    <span data-palette-application-help class="apply-note">{{ settingApplicationText(paletteInstantPreviewEnabled ? 'live' : 'generate') }}</span>
+                                    <setting-note data-palette-application-help setting="colors" :application="paletteInstantPreviewEnabled ? 'live' : 'generate'"></setting-note>
                                 </div>
                                 <select :value="selectedPalette" @change="requestPaletteChange($event)" :aria-label="t('Palette')" class="form-input form-input-compact mb-2" :disabled="!semanticMutationAvailable">
                                     <option v-for="p in paletteNames" :value="p">{{ p }}</option>
                                 </select>
                                 <div class="mb-1 flex items-center justify-between gap-2">
                                     <span class="input-label text-[10px] !mb-0">{{ t('Colors in this figure or changed') }}</span>
-                                    <span data-default-color-application-help class="apply-note">{{ settingApplicationText(hasPendingPaletteDraft ? 'generate' : 'live') }}</span>
+                                    <setting-note data-default-color-application-help setting="colors" :application="hasPendingPaletteDraft ? 'generate' : 'live'"></setting-note>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
                                     <div v-for="feat in defaultColorGroups.primary" :key="feat" class="min-w-0 self-end">
@@ -5252,8 +5237,7 @@
 
                 <div v-settings-section="'features'" data-setting="features" class="card">
                     <details>
-                        <summary :aria-label="t('Features')"><settings-section-title section="features"></settings-section-title> <help-tip :text="t('Choose each feature type\'s rendering. Underlay removes it from feature lanes and labels, then highlights each feature\'s span across the full thickness of the feature track, behind foreground features.')"></help-tip></summary>
-                        <setting-note setting="features" class="mt-2"></setting-note>
+                        <summary :aria-label="t('Features')"><settings-section-title section="features"></settings-section-title> <setting-note setting="features"></setting-note> <help-tip :text="t('Choose each feature type\'s rendering. Underlay removes it from feature lanes and labels, then highlights each feature\'s span across the full thickness of the feature track, behind foreground features.')"></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
                                 <span class="input-label">{{ t('Feature Types') }} <help-tip id="help-feature-feature-types" :text="t('Select which feature types to draw.')"></help-tip></span>
@@ -5321,7 +5305,7 @@
 
                             <div data-setting="feature-visibility">
                                 <div class="flex items-center justify-between gap-2 mb-1.5">
-                                    <span class="input-label mb-0">{{ t('Feature Visibility') }} <help-tip id="help-feature-feature-visibility" :text="t('Rules are evaluated from top to bottom. Off hides the feature and leaves it out of protein search; Leave out of protein search keeps its visibility and leaves it out of protein search.')"></help-tip></span>
+                                    <span class="input-label mb-0">{{ t('Feature Visibility') }} <setting-note setting="feature-visibility"></setting-note> <help-tip id="help-feature-feature-visibility" :text="t('Rules are evaluated from top to bottom. Off hides the feature and leaves it out of protein search; Leave out of protein search keeps its visibility and leaves it out of protein search.')"></help-tip></span>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="featureVisibilityRules.length > 0"
@@ -5337,7 +5321,6 @@
                                         </button>
                                     </div>
                                 </div>
-                                <setting-note setting="feature-visibility" class="mb-1.5"></setting-note>
                                 <datalist id="feature-visibility-qualifier-options">
                                     <option v-for="value in featureVisibilityQualifierSuggestions" :key="`fv-qual-${value}`" :value="value"></option>
                                 </datalist>
@@ -5423,10 +5406,9 @@
                                         </auto-value-field>
                                     </div>
                                     <div data-setting="stroke" class="space-y-2">
-                                        <setting-note setting="stroke"></setting-note>
                                         <div class="grid grid-cols-2 gap-1.5">
                                             <div>
-                                                <span class="input-label text-[10px]">{{ t('Block Stroke Color') }} <help-tip id="help-feature-block-stroke-color" :text="t('Use Auto for the configured default, None for no outline, or Color for an explicit value.')"></help-tip></span>
+                                                <span class="input-label text-[10px]">{{ t('Block Stroke Color') }} <setting-note setting="stroke"></setting-note> <help-tip id="help-feature-block-stroke-color" :text="t('Use Auto for the configured default, None for no outline, or Color for an explicit value.')"></help-tip></span>
                                                 <color-value-control
                                                     v-model="adv.block_stroke_color"
                                                     fallback="#000000"
@@ -5467,8 +5449,7 @@
 
                 <div v-settings-section="'labels'" data-setting="labels" class="card">
                     <details>
-                        <summary :aria-label="t('Labels')"><settings-section-title section="labels"></settings-section-title> <help-tip :text="t('Control label visibility, filtering, text settings, and circular label geometry.')"></help-tip></summary>
-                        <setting-note setting="labels" class="mt-2"></setting-note>
+                        <summary :aria-label="t('Labels')"><settings-section-title section="labels"></settings-section-title> <setting-note setting="labels"></setting-note> <help-tip :text="t('Control label visibility, filtering, text settings, and circular label geometry.')"></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
                                 <span class="input-label text-[10px] mb-1"><label for="linear-show-labels">{{ t('Show Labels') }}</label> <help-tip id="help-label-show-labels" :text="t('Display feature labels on the map. \'First Record Only\' shows labels only for the first record. \'Top Similarity Group Record\' requires LOSATP similarity-group or collinear mode.')"></help-tip></span>
@@ -5718,8 +5699,7 @@
                 <teleport v-if="mode === 'linear'" to="#settings-popup" defer :disabled="settingsPane.floating !== 'linear-axis'">
                 <div v-settings-section="'linear-axis'" data-setting="axis-scale" class="card">
                     <details>
-                        <summary :aria-label="t('Axis & Scale')"><settings-section-title section="linear-axis"></settings-section-title> <help-tip :text="t('Adjust axis stroke settings plus the linear scale bar or ruler style.')"></help-tip></summary>
-                        <setting-note setting="axis-scale" class="mt-2"></setting-note>
+                        <summary :aria-label="t('Axis & Scale')"><settings-section-title section="linear-axis"></settings-section-title> <setting-note setting="axis-scale"></setting-note> <help-tip :text="t('Adjust axis stroke settings plus the linear scale bar or ruler style.')"></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -5860,8 +5840,7 @@
                 <teleport v-if="mode === 'circular'" to="#settings-popup" defer :disabled="settingsPane.floating !== 'circular-axis'">
                 <div v-settings-section="'circular-axis'" data-setting="axis-scale" class="card">
                     <details>
-                        <summary :aria-label="t('Axis & Scale')"><settings-section-title section="circular-axis"></settings-section-title> <help-tip :text="t('Adjust axis stroke settings and the circular scale interval.')"></help-tip></summary>
-                        <setting-note setting="axis-scale" class="mt-2"></setting-note>
+                        <summary :aria-label="t('Axis & Scale')"><settings-section-title section="circular-axis"></settings-section-title> <setting-note setting="axis-scale"></setting-note> <help-tip :text="t('Adjust axis stroke settings and the circular scale interval.')"></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
                                 <label
@@ -5931,13 +5910,11 @@
                 <teleport to="#settings-popup" defer :disabled="settingsPane.floating !== 'dinucleotide'">
                 <div v-settings-section="'dinucleotide'" data-setting="dinucleotide" class="card">
                     <details>
-                        <summary :aria-label="t('Dinucleotide content/skew')"><settings-section-title section="dinucleotide"></settings-section-title> <help-tip :text="t('Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing.')"></help-tip></summary>
-                        <setting-note setting="dinucleotide" class="mt-2"></setting-note>
+                        <summary :aria-label="t('Dinucleotide content/skew')"><settings-section-title section="dinucleotide"></settings-section-title> <setting-note setting="dinucleotide"></setting-note> <help-tip :text="t('Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing.')"></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
                                 <div data-setting="dinucleotide-window">
-                                    <setting-note setting="dinucleotide-window"></setting-note>
-                                    <span class="input-label text-[10px]">{{ t('Window') }} <help-tip id="help-gc-window" :text="t('Window size for GC content/skew. Default: 1 kb (<1 Mb), 10 kb (<10 Mb), 100 kb (>=10 Mb).')"></help-tip></span>
+                                    <span class="input-label text-[10px]">{{ t('Window') }} <setting-note setting="dinucleotide-window"></setting-note> <help-tip id="help-gc-window" :text="t('Window size for GC content/skew. Default: 1 kb (<1 Mb), 10 kb (<10 Mb), 100 kb (>=10 Mb).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.window_size, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
                                         <input type="number" min="1" step="1" v-model.number="adv.window_size" :aria-label="t('Window')" aria-describedby="help-gc-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
@@ -6452,11 +6429,11 @@
                                 {{ t('{count} selected', { count: selectedFeatureCount }) }}
                             </span>
                             <span data-setting="feature-placement" class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1">
-                                    <select data-history-managed :aria-label="t('Selected feature placements')" :disabled="!semanticMutationAvailable" value="" @change="featurePlacementActions.setPlacement(selectedFeatures, $event.target.value); $event.target.value = ''" class="rounded border p-1 text-xs">
+                                    <select data-history-managed :aria-label="t('Selected feature placements')" aria-describedby="selected-feature-placement-timing" :disabled="!semanticMutationAvailable" value="" @change="featurePlacementActions.setPlacement(selectedFeatures, $event.target.value); $event.target.value = ''" class="rounded border p-1 text-xs">
                                     <option value="" disabled>{{ t('Placement…') }}</option>
                                     <option v-for="choice in featurePlacementActions.choices(selectedFeatures)" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
                                 </select>
-                                <setting-note setting="feature-placement"></setting-note>
+                                <setting-note id="selected-feature-placement-timing" setting="feature-placement"></setting-note>
                             </span>
 
                             <button type="button"
@@ -6683,7 +6660,7 @@
                         <div class="feature-popup-body custom-scrollbar" data-nodrag="true">
                         <div v-if="!richFeaturePopup || clickedFeature.activeTab === 'edit'" class="space-y-3">
                         <section aria-labelledby="feature-popup-appearance-heading" data-feature-popup-group="appearance" data-setting="feature-appearance">
-                            <h3 id="feature-popup-appearance-heading" class="feature-popup-heading">{{ t('Appearance') }} <span class="ui-hint font-normal normal-case tracking-normal" data-feature-popup-live-marker>{{ settingApplicationNote('feature-appearance').text }}</span></h3>
+                            <h3 id="feature-popup-appearance-heading" class="feature-popup-heading">{{ t('Appearance') }}</h3>
                             <div class="feature-popup-grid">
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">{{ t('Fill Color') }}</label>
@@ -6920,11 +6897,11 @@
                         </section>
                         <section aria-labelledby="feature-popup-layout-heading" class="border-t border-slate-100 pt-3" data-feature-popup-group="layout" data-nodrag="true">
                             <h3 id="feature-popup-layout-heading" class="feature-popup-heading">{{ t('Layout') }}</h3>
-                            <label data-setting="feature-placement" class="block text-xs font-medium text-slate-500 mb-2">{{ t('Feature placement') }} <setting-note setting="feature-placement"></setting-note>
-                                <select data-history-managed :aria-label="t('Feature placement')" :disabled="!semanticMutationAvailable" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="mt-1 block max-w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700">
+                            <div data-setting="feature-placement" class="block text-xs font-medium text-slate-500 mb-2"><span>{{ t('Feature placement') }} <setting-note id="feature-popup-placement-timing" setting="feature-placement"></setting-note></span>
+                                <select data-history-managed :aria-label="t('Feature placement')" aria-describedby="feature-popup-placement-timing" :disabled="!semanticMutationAvailable" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="mt-1 block max-w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700">
                                     <option v-for="choice in featurePlacementActions.choices([clickedFeature.feat])" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
                                 </select>
-                            </label>
+                            </div>
                             <button v-if="clickedFeature?.feat" type="button" id="feature-record-actions-toggle" @click="toggleRecordActions"
                                     :aria-expanded="recordActionsExpanded"
                                     aria-controls="feature-record-actions"
@@ -7223,26 +7200,26 @@
                                     <section v-if="previewItemView.draft" class="space-y-2 border-t border-slate-100 pt-3">
                                         <h3 class="feature-popup-heading">{{ t('Definition text') }}</h3>
                                         <div :data-setting="previewItemView.draft.fields.name.setting" class="text-xs text-slate-600">
-                                            <label for="preview-record-name">{{ previewItemView.draft.nameLabel }}</label> <setting-note :setting="previewItemView.draft.fields.name.setting"></setting-note>
-                                            <input id="preview-record-name" type="text" :value="previewItemView.draft.name"
+                                            <label for="preview-record-name">{{ previewItemView.draft.nameLabel }}</label> <setting-note id="preview-record-name-timing" :setting="previewItemView.draft.fields.name.setting"></setting-note>
+                                            <input id="preview-record-name" type="text" aria-describedby="preview-record-name-timing" :value="previewItemView.draft.name"
                                                    @change="setPreviewRecordField(previewItemView, 'name', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
                                         </div>
                                         <div :data-setting="previewItemView.draft.fields.subtitle.setting" class="text-xs text-slate-600">
-                                            <label for="preview-record-subtitle">{{ previewItemView.draft.subtitleLabel }}</label> <setting-note :setting="previewItemView.draft.fields.subtitle.setting"></setting-note>
-                                            <input id="preview-record-subtitle" type="text" :value="previewItemView.draft.subtitle"
+                                            <label for="preview-record-subtitle">{{ previewItemView.draft.subtitleLabel }}</label> <setting-note id="preview-record-subtitle-timing" :setting="previewItemView.draft.fields.subtitle.setting"></setting-note>
+                                            <input id="preview-record-subtitle" type="text" aria-describedby="preview-record-subtitle-timing" :value="previewItemView.draft.subtitle"
                                                    @change="setPreviewRecordField(previewItemView, 'subtitle', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
                                         </div>
                                         <div :data-setting="previewItemView.draft.fields.reverse.setting" class="flex items-center gap-2 text-xs text-slate-700">
-                                            <label class="flex items-center gap-2"><input type="checkbox" :checked="previewItemView.draft.reverse"
+                                            <label class="flex items-center gap-2"><input type="checkbox" :checked="previewItemView.draft.reverse" aria-describedby="preview-record-reverse-timing"
                                                    @change="setPreviewRecordField(previewItemView, 'reverse', $event.target.checked)"
                                                    :disabled="!semanticMutationAvailable || !previewItemView.draft.reverseAvailable"
-                                                   class="form-checkbox"> {{ t('Reverse complement') }}</label> <setting-note :setting="previewItemView.draft.fields.reverse.setting"></setting-note>
+                                                   class="form-checkbox"> {{ t('Reverse complement') }}</label> <setting-note id="preview-record-reverse-timing" :setting="previewItemView.draft.fields.reverse.setting"></setting-note>
                                         </div>
                                     </section>
                                     <div v-if="previewItemView.draft" class="match-actions">
@@ -8257,7 +8234,7 @@
                     <div v-show="rightDrawerTab === 'legend'" id="right-drawer-panel-legend" class="flex-1 min-h-0 flex flex-col">
                         <!-- The toolbar wraps when its two Reset buttons do not fit beside the sort buttons; Reset strokes then keeps the right edge (OV-1520). -->
                         <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0 flex flex-wrap items-center gap-1" data-legend-tab-toolbar data-setting="legend-editor">
-                            <help-tip id="legend-tab-help" :label="t('About the Legend tab')" :text="settingApplicationNote('legend-editor').text + ' ' + t('To reorder, drag a row by its grip, or focus the grip and press the Up or Down arrow.')"></help-tip>
+                            <help-tip id="legend-tab-help" :label="t('About the Legend tab')" :text="settingApplicationHelp('legend-editor') + ' ' + t('To reorder, drag a row by its grip, or focus the grip and press the Up or Down arrow.')"></help-tip>
                             <button :aria-label="t('Sort A-Z')" @click="sortLegendEntries('asc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" :title="t('Sort A-Z')" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-sort-ascending" aria-hidden="true"></i>
                             </button>
@@ -8340,7 +8317,7 @@
                     <div v-if="isFeatureDrawerMounted" id="right-drawer-panel-features" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
                             <div class="flex items-center justify-between gap-2">
-                                <p class="text-xs font-semibold text-slate-600 flex items-center gap-1" data-setting="features-editor"><span>{{ t('Features ({count})', { count: filteredFeatures.length }) }}</span><help-tip id="features-tab-help" :label="t('About the Features tab')" :text="settingApplicationNote('features-editor').text + ' ' + t('Select a row to edit its label or open its details.')"></help-tip></p>
+                                <p class="text-xs font-semibold text-slate-600 flex items-center gap-1" data-setting="features-editor"><span>{{ t('Features ({count})', { count: filteredFeatures.length }) }}</span><help-tip id="features-tab-help" :label="t('About the Features tab')" :text="settingApplicationHelp('features-editor') + ' ' + t('Select a row to edit its label or open its details.')"></help-tip></p>
                                 <span class="text-[10px] text-slate-500 truncate" :title="featureEditorStatus.error || featureEditorStatusText">{{ featureEditorStatusText }}</span>
                             </div>
                         </div>
@@ -8745,22 +8722,16 @@
                 </div>
             </div>
 
-            <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
+            <div v-else data-empty-preview class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
                 <i class="ph ph-dna text-6xl mb-4 text-slate-200" aria-hidden="true"></i>
-                <p class="font-medium text-slate-400">{{ mode === 'linear' ? t('No Linear Result yet. Configure settings and click Generate.') : t('No Circular Result yet. Configure settings and click Generate.') }}</p>
-                <template v-if="galleryExamples.length">
+                <!-- #1383 (PD-OI-108 rev 3): a Gallery example in the app, above the tutorials behind the examples. -->
+                <div v-if="galleryExamples.length" data-tutorial-card class="tutorial-card">
                     <button type="button" data-history-managed @click="openExampleChooser" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending"
-                            class="btn btn-secondary btn-sm mt-4" aria-haspopup="dialog" aria-describedby="example-session-help">
-                        <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> {{ t('Load an example') }}
+                            class="btn btn-secondary" aria-haspopup="dialog">
+                        <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> {{ t('Open Gallery example') }}
                     </button>
-                    <p id="example-session-help" class="ui-hint mt-2">{{ t('Opens a finished Gallery example as a Session.') }}</p>
-                    <!-- #1383 (PD-OI-108): the tutorials behind the examples. -->
-                    <div data-tutorial-card class="tutorial-card">
-                        <p class="tutorial-card-title"><i class="ph ph-graduation-cap" aria-hidden="true"></i> {{ t('Learn with tutorials') }}</p>
-                        <p class="tutorial-card-text">{{ t('Every Interactive Gallery example has a step-by-step tutorial that draws it from its input files.') }}</p>
-                        <a :href="INTERACTIVE_GALLERY_URL" target="_blank" rel="noopener noreferrer" class="app-gallery-link">{{ t('Open the Interactive Gallery') }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>
-                    </div>
-                </template>
+                    <a :href="INTERACTIVE_GALLERY_URL" target="_blank" rel="noopener noreferrer" class="app-gallery-link"><i class="ph ph-graduation-cap" aria-hidden="true"></i> {{ t('Learn with tutorials') }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>
+                </div>
             </div>
         </div>
     </main>
@@ -8859,9 +8830,7 @@
                 <h2 id="linear-source-removal-title" class="break-all text-base font-bold text-slate-800">{{ t('Remove {name}?', { name: linearSourceRemovalTargetName }) }}</h2>
                 <p id="linear-source-removal-description" class="mt-2 text-sm leading-relaxed text-slate-600">
                     {{ tn(linearSourceRemovalTarget?.records?.length || 0, 'It contains {count} record.', 'It contains {count} records.') }}
-                </p>
-                <p v-if="linearSourceRemovalTarget?.records?.some((record) => hasLinearDepthFiles(record.sequence))" data-setting="depth-sources" class="mt-2">
-                    <setting-note setting="depth-sources"></setting-note>
+                    <span v-if="linearSourceRemovalTarget?.records?.some((record) => hasLinearDepthFiles(record.sequence))" data-setting="depth-sources"><setting-note setting="depth-sources"></setting-note></span>
                 </p>
                 <p v-if="!linearSourceRemovalTarget" class="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
                     {{ t('This File is no longer available. Cancel and try again.') }}
@@ -8979,11 +8948,11 @@
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
             <h2 id="record-list-title" class="text-base font-bold text-slate-800">{{ t('Choose records') }}</h2>
             <p id="record-list-description" class="mt-1 text-sm leading-relaxed text-slate-600">
-                <i18n-text :text="t('{file}: {records}.')"><template #file><strong class="break-all text-slate-800">{{ recordSelection.recordListView.value.name }}</strong></template><template #records><span data-record-list-count>{{ tn(recordSelection.recordListView.value.total, '{drawn} of {count} record drawn', '{drawn} of {count} records drawn', { drawn: recordSelection.recordListView.value.drawn }) }}</span></template></i18n-text>{{ sentenceSeparator() + settingApplicationSentence('inputs') }}
+                <i18n-text :text="t('{file} · {records}')"><template #file><strong class="break-all text-slate-800">{{ recordSelection.recordListView.value.name }}</strong></template><template #records><span data-record-list-count>{{ tn(recordSelection.recordListView.value.total, '{drawn} of {count} record drawn', '{drawn} of {count} records drawn', { drawn: recordSelection.recordListView.value.drawn }) }}</span></template></i18n-text> <span data-setting="inputs"><setting-note setting="inputs"></setting-note></span>
             </p>
             <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <label class="text-xs font-semibold text-slate-600">{{ t('Search record IDs') }}
-                    <input type="search" data-history-ignore data-record-list-search
+                    <input type="search" data-history-ignore data-record-list-search data-dialog-initial-focus
                            :value="recordSelection.recordList.query" @input="recordSelection.setRecordListQuery($event.target.value)"
                            class="form-input mt-1 px-2 py-1 text-xs font-normal">
                 </label>
@@ -9248,20 +9217,20 @@
   <div class="min-w-0 space-y-2" :data-linear-record-names="seq.uid">
     <div data-setting="record-names">
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>{{ t('Organism / strain (optional)') }} <setting-note setting="record-names"></setting-note></span>
+        <span>{{ t('Organism / strain (optional)') }} <setting-note :id="`linear-definition-timing-${seq.uid}`" setting="record-names"></setting-note></span>
         <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
         <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="$emit('reset-definition', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>
-      <input type="text" v-model="seq.definition" :aria-label="t('Definition for sequence {n}', { n: idx + 1 })" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || t('e.g., {example}', { example: 'Escherichia coli O157:H7 Sakai' })" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
+      <input type="text" v-model="seq.definition" :aria-label="t('Definition for sequence {n}', { n: idx + 1 })" :aria-describedby="`linear-definition-timing-${seq.uid}`" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || t('e.g., {example}', { example: 'Escherichia coli O157:H7 Sakai' })" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
       <markup-preview :text="seq.definition || resolveLinearRecordEffectiveDefinition(seq, source)"></markup-preview>
     </div>
     <div data-setting="inputs">
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>{{ t('Subtitle / title (optional)') }} <setting-note setting="inputs"></setting-note></span>
+        <span>{{ t('Subtitle / title (optional)') }} <setting-note :id="`linear-subtitle-timing-${seq.uid}`" setting="inputs"></setting-note></span>
         <span v-if="!seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
         <button v-if="seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" type="button" @click="$emit('reset-subtitle', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>
-      <input type="text" v-model="seq.record_subtitle" :aria-label="t('Subtitle / title for sequence {n}', { n: idx + 1 })" :placeholder="getLinearSourceDefaultSubtitle(source) || t('e.g., Neomycin biosynthetic gene cluster')" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
+      <input type="text" v-model="seq.record_subtitle" :aria-label="t('Subtitle / title for sequence {n}', { n: idx + 1 })" :aria-describedby="`linear-subtitle-timing-${seq.uid}`" :placeholder="getLinearSourceDefaultSubtitle(source) || t('e.g., Neomycin biosynthetic gene cluster')" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
     </div>
   </div>
 </script>
@@ -9362,7 +9331,7 @@
         </button>
         <Teleport to="body">
             <span :id="descriptionId" hidden>{{ text }}</span>
-            <div v-if="visible" :style="style" role="tooltip" aria-hidden="true" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-left leading-relaxed">
+            <div v-if="visible" ref="tooltip" :style="style" role="tooltip" aria-hidden="true" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-left leading-relaxed">
                  {{ text }}
             </div>
         </Teleport>
