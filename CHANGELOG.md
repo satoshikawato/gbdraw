@@ -91,24 +91,35 @@ write-up of a release.
   and Collinear blocks do, instead of failing with "Ordered BLAST/protein comparison
   inputs are ambiguous". `-b/--blast` on such a layout is still refused; the
   message now says to list the tables in `--comparisons_table` (OV-2371).
+- Fixed: Web app: with **Use custom stack** on, the Generate that ran a ring's
+  LOSAT search replaced its Track row: the row lost its edits, the next Generate
+  drew it under another id, and a row anchored to it stopped that Generate with
+  an error. The row now keeps its id and edits (OV-2442).
 - Fixed: a threaded LOSAT search in the Web app could stop with "memory access
   out of bounds" and run the whole pair again (the console said "running the
   pair again"), or fail after the third stop. In Chromium a copy into memory
-  that another LOSAT thread had just grown could trap; the Web app now checks
-  each such copy and first brings the thread's view of the memory up to date.
+  that another LOSAT thread had just grown could trap; the LOSAT build now brings
+  the thread's view of the memory up to date before memory copies and atomic
+  instructions, which on ARM64 Linux and Android also covers stores (as LOSAT
+  states it), and each thread updates its view when it starts. Android was not
+  measured.
 - Changed: the Web app's LOSAT engine is the LOSAT development commit
-  `dde737f18` (version 0.2.0 before its release; it was a build of LOSAT
-  0.1.0). Its searches give the rows of the `losat` command of that commit;
-  LOSATN with task `blastn` gives different E-values and hits than before.
+  `f62da7f6b` (version 0.2.0 before its release; it was a build of LOSAT
+  0.1.0). Its searches give the rows of the `losat` command of that commit.
+  Against 0.14.4: LOSATP gives the same rows (Vibrio check,
+  three MjeNMV and LvMJNV pairs); LOSATN `megablast` gives other rows on some
+  pairs (MjeNMV x MelaMJNV 531 rows instead of 538); LOSATN `blastn` gives
+  different E-values and hits (lambda x DE3 21 rows instead of 19); TLOSATX gives
+  the same rows in another order on the checks measured.
   Task `dc-megablast` now runs dc-megablast (the old engine ran `blastn` for
   it) on threaded execution: the default, and **Auto** on a cross-origin
   isolated page. **Serial**, or a page without isolation, stops before the
   search with a message that `dc-megablast` needs threaded LOSAT. **Auto** now
   runs LOSATN and TLOSATX on threaded execution too, wherever the page allows
-  it. Run Info names the engine's version. Saved LOSATP and LOSATN `megablast`
-  searches of an earlier Web app are reused, because this engine gives the
-  same rows; its saved LOSATN `blastn` and `dc-megablast` searches and TLOSATX
-  searches run again once at the next **Generate Diagram**. Searches saved by
+  it. Run Info names the engine's version. A LOSATP search saved by an earlier Web
+  app is reused, because this engine gives the same rows on those checks; its saved LOSATN
+  searches of any task and TLOSATX searches run again once at the next
+  **Generate Diagram**. Searches saved by
   the command line are reused as before.
   `gbdraw/web/wasm/losat/losat-build.json` records the build.
 - Added: built-in specific-color tables. `-t/--table` and
@@ -169,6 +180,12 @@ write-up of a release.
   rule or another Legend name for its feature (for a row with no color rule, only when its whole row was renamed first and this rename applies to the whole row), and **Restore**, the next
   **Generate Diagram** fails with "The generated result could not be accepted", on Circular and Linear
   diagrams; a row without a stroke does not fail (OV-2412).
+- Known issue: Web app: with **Use custom stack** on, **Add Seq** after a ring search returns every ring to
+  its sequence file and replaces the ring rows: their edits are lost, and a row anchored to one of them stops
+  each **Generate Diagram** with an error on `anchor_slot` until its anchor is chosen again (OV-2443).
+- Known issue: Web app: after the comparison rings are reordered, or one is removed and another added, a record
+  rotation before the next **Generate Diagram** returns the rings of the last Generate and drops the change
+  with no message, and the next Generate can draw a ring's rows under another ring's name (OV-2444).
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

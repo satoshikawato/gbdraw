@@ -421,6 +421,55 @@ test('managed Conservation removal rebases the Axis only when the row is before 
   });
 });
 
+// OV-2442: a Generate that adopts a LOSAT result replaces each ring's source file. The row keeps its id and its edits.
+test('a managed Conservation row keeps its id and edits when its ring gets another source file', () => {
+  const ring = { ...conservationSlot(), width: '9px' };
+  const state = createState({
+    slots: [featureSlot(), ring, gcSlot()],
+    conservationEnabled: true,
+    conservationFiles: [{ name: 'pair.tsv', size: 1, lastModified: 0 }]
+  });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  const drawing = state.drawingOfMode('circular');
+  const adopted = editor.keepCircularConservationRowsThrough(drawing, () => {
+    state.files.c_conservation_blasts = [{ name: 'pair.tsv', size: 99, lastModified: 0 }];
+    return true;
+  });
+  assert.equal(adopted, true);
+  editor.syncCircularConservationSlots();
+  const [row] = state.adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation');
+  assert.equal(row.id, 'conservation_pair');
+  assert.equal(row.width, '9px');
+  assert.equal(row.params.series_key, 'pair.tsv|99|0|0');
+  assert.equal(state.adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation').length, 1);
+});
+
+test('a ring whose key does not change keeps its row parameters object', () => {
+  const state = createState({
+    slots: [featureSlot(), conservationSlot(), gcSlot()],
+    conservationEnabled: true,
+    conservationFiles: [{ name: 'pair.tsv', size: 1, lastModified: 0 }]
+  });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  const row = state.adv.circular_track_slots.find((slot) => slot.id === 'conservation_pair');
+  const { params } = row;
+  editor.keepCircularConservationRowsThrough(state.drawingOfMode('circular'), () => false);
+  assert.strictEqual(row.params, params);
+});
+
+test('a change of the ring count moves no managed Conservation row', () => {
+  const state = createState({
+    slots: [featureSlot(), conservationSlot(), gcSlot()],
+    conservationEnabled: true,
+    conservationFiles: [{ name: 'pair.tsv', size: 1, lastModified: 0 }]
+  });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  editor.keepCircularConservationRowsThrough(state.drawingOfMode('circular'), () => {
+    state.files.c_conservation_blasts = [];
+  });
+  assert.equal(state.adv.circular_track_slots.find((slot) => slot.id === 'conservation_pair').params.series_key, 'pair.tsv|1|0|0');
+});
+
 test('Circular measure action updates only the owned scalar and preserves slot identity', () => {
   const state = createState();
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });

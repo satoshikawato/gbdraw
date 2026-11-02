@@ -10,9 +10,11 @@ copies the two artifacts into ``gbdraw/web/wasm/losat/``, writes the build
 manifest ``losat-build.json`` beside them (LOSAT commit, build commands,
 toolchain, each file's sha256 and size), and writes the build identity the Web
 app records with each search into ``gbdraw/web/js/services/losat-build.generated.js``.
+The threaded file goes through LOSAT's shared-memory guard on the way: cargo's
+output is not guarded, and the Web app does not guard a module itself.
 
 ``--check`` fails when a Wasm file or the generated module does not match the
-manifest.
+manifest, or when the threaded file does not carry a current guard record.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ import json
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TypedDict
 
@@ -37,6 +40,10 @@ MANIFEST_PATH = WASM_DIR / "losat-build.json"
 MODULE_PATH = REPO_ROOT / "gbdraw" / "web" / "js" / "services" / "losat-build.generated.js"
 REPOSITORY = "https://github.com/satoshikawato/LOSAT"
 MANIFEST_SCHEMA = 1
+GUARDED_ARTIFACT = "losat-threaded.wasm"
+GUARD_TOOL = "tests/wasi_shared_memory.js"  # in LOSAT's crate
+GUARD_SECTION = "losat.shared_memory_guard"
+MINIMUM_GUARD_VERSION = 3  # version 3 guards memory.grow and atomic instructions as well as memory.copy and memory.fill
 
 
 class ArtifactSpec(TypedDict):
@@ -72,6 +79,15 @@ class MemoryPages(TypedDict):
     maximum: int
 
 
+class SharedMemoryGuard(TypedDict):
+    version: int
+    fill: int
+    copy: int
+    grow: int
+    atomic: int
+    atomic_helpers: int
+
+
 class _FileRecordRequired(TypedDict):
     sha256: str
     size: int
@@ -83,6 +99,7 @@ class _FileRecordRequired(TypedDict):
 
 class FileRecord(_FileRecordRequired, total=False):
     memory: MemoryPages
+    sharedMemoryGuard: SharedMemoryGuard
 
 
 class BuildManifest(TypedDict):
@@ -124,8 +141,8 @@ def _limits(data: bytes, offset: int) -> tuple[int, int | None, int]:
     return initial, maximum, offset
 
 
-def imported_memory_pages(wasm: bytes) -> MemoryPages | None:
-    """The page limits of the memory a Wasm module imports, or None when it imports none."""
+def _sections(wasm: bytes) -> Iterator[tuple[int, int, int]]:
+    """Each section of a Wasm module: its id and where its body starts and ends."""
 
     if wasm[:8] != b"\0asm\x01\0\0\0":
         raise ValueError("not a Wasm module")
@@ -134,6 +151,53 @@ def imported_memory_pages(wasm: bytes) -> MemoryPages | None:
         section_id = wasm[offset]
         size, body = _leb128(wasm, offset + 1)
         offset = body + size
+        yield section_id, body, offset
+
+
+def shared_memory_guard(wasm: bytes) -> SharedMemoryGuard | None:
+    """The record LOSAT's guard writes into a module it guarded, or None when there is no readable one."""
+
+    for section_id, body, end in _sections(wasm):
+        if section_id != 0:
+            continue
+        length, cursor = _leb128(wasm, body)
+        if wasm[cursor : cursor + length] != GUARD_SECTION.encode():
+            continue
+        try:
+            record = json.loads(wasm[cursor + length : end])
+        except ValueError:
+            return None
+        fields = SharedMemoryGuard.__annotations__
+        if not isinstance(record, dict) or not all(type(record.get(field)) is int for field in fields):
+            return None
+        return SharedMemoryGuard(
+            version=record["version"],
+            fill=record["fill"],
+            copy=record["copy"],
+            grow=record["grow"],
+            atomic=record["atomic"],
+            atomic_helpers=record["atomic_helpers"],
+        )
+    return None
+
+
+def guard_problem(wasm: bytes) -> str | None:
+    """Why a threaded module must not ship as it is, or None when its guard record is current."""
+
+    guard = shared_memory_guard(wasm)
+    if guard is None:
+        return "has no shared-memory guard record"
+    if guard["version"] < MINIMUM_GUARD_VERSION:
+        return f"guard version {guard['version']} is older than {MINIMUM_GUARD_VERSION}"
+    if guard["fill"] + guard["copy"] + guard["grow"] + guard["atomic"] == 0:
+        return "guard record guards nothing"
+    return None
+
+
+def imported_memory_pages(wasm: bytes) -> MemoryPages | None:
+    """The page limits of the memory a Wasm module imports, or None when it imports none."""
+
+    for section_id, body, _end in _sections(wasm):
         if section_id != 2:
             continue
         count, cursor = _leb128(wasm, body)
@@ -198,20 +262,30 @@ def record(losat_src: Path, target_dir: Path) -> BuildManifest:
     for name, spec in ARTIFACTS.items():
         built = target_dir / spec["target"] / "release" / spec["built"]
         destination = WASM_DIR / name
-        shutil.copyfile(built, destination)
+        command = ["cargo", "build", "--release", "--locked", "--target", spec["target"], *spec["cargo_args"]]
+        if name == GUARDED_ARTIFACT:
+            _run(["node", GUARD_TOOL, "guard", str(built), str(destination)], crate)
+            command += ["&&", "node", GUARD_TOOL, "guard", spec["built"], name]
+        else:
+            shutil.copyfile(built, destination)
         files[name] = {
             "sha256": _sha256(destination),
             "size": destination.stat().st_size,
             "target": spec["target"],
             "shape": spec["shape"],
-            "command": " ".join(
-                ["cargo", "build", "--release", "--locked", "--target", spec["target"], *spec["cargo_args"]]
-            ),
+            "command": " ".join(command),
             "rustflags": list(config["target"][spec["target"]]["rustflags"]),
         }
-        memory = imported_memory_pages(destination.read_bytes())
+        wasm = destination.read_bytes()
+        memory = imported_memory_pages(wasm)
         if memory is not None:
             files[name]["memory"] = memory
+        if name == GUARDED_ARTIFACT:
+            problem = guard_problem(wasm)
+            guard = shared_memory_guard(wasm)
+            if problem is not None or guard is None:
+                raise SystemExit(f"{name} {problem}; it would run unguarded in the Web app")
+            files[name]["sharedMemoryGuard"] = guard
     manifest: BuildManifest = {
         "schema": MANIFEST_SCHEMA,
         "repository": REPOSITORY,
@@ -245,7 +319,17 @@ def check(wasm_dir: Path = WASM_DIR, module_path: Path = MODULE_PATH) -> list[st
             problems.append(f"{name} is missing")
             continue
         size, digest = path.stat().st_size, _sha256(path)
-        memory = imported_memory_pages(path.read_bytes())
+        wasm = path.read_bytes()
+        if name == GUARDED_ARTIFACT:
+            problem = guard_problem(wasm)
+            if problem is not None:
+                problems.append(f"{name} {problem}")
+            elif shared_memory_guard(wasm) != expected.get("sharedMemoryGuard"):
+                problems.append(
+                    f"{name} carries guard record {shared_memory_guard(wasm)}; "
+                    f"the manifest records {expected.get('sharedMemoryGuard')}"
+                )
+        memory = imported_memory_pages(wasm)
         if memory != expected.get("memory"):
             problems.append(f"{name} imports memory {memory}; the manifest records {expected.get('memory')}")
         if (size, digest) != (expected["size"], expected["sha256"]):

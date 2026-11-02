@@ -3649,10 +3649,15 @@ export const createAppSetup = () => {
     askChoice,
     showNotice,
     canonicalSessionVersion: SESSION_VERSION,
-    // A Generate that adopts a Circular LOSAT result reconciles its rings; a
-    // Linear Generate and a Circular one without such a result leave them.
-    adoptCanonicalRenderArtifacts: (canonical, options) => {
-      if (adoptCanonicalRenderArtifacts(canonical, options)) reconcileCircularConservation(state.drawingOfMode('circular'));
+    // An adoption of a Circular LOSAT result reconciles its rings; any other leaves them. Only a request built from
+    // this draft moves the ring rows to its keys (`keepCircularConservationRowsThrough` states why).
+    adoptCanonicalRenderArtifacts: (canonical, { builtFromDraft = false, ...options }) => {
+      const drawing = state.drawingOfMode('circular');
+      const adopt = () => adoptCanonicalRenderArtifacts(canonical, options);
+      const adopted = builtFromDraft
+        ? circularTrackSlotEditor.keepCircularConservationRowsThrough(drawing, adopt)
+        : adopt();
+      if (adopted) reconcileCircularConservation(drawing);
     },
     setCircularConservationEnabled,
     getCommittedCanonicalSession,

@@ -1489,8 +1489,9 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
- * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean }) => void} adoptCanonicalRenderArtifacts
- *   The Session owner's adoption of a candidate's request, resources, and files.
+ * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, builtFromDraft?: boolean }) => void} adoptCanonicalRenderArtifacts
+ *   The Session owner's adoption of a candidate's request, resources, and files. `builtFromDraft` says the request was
+ *   built from the current draft (a Generate), not taken from the committed one (a rotation, an alignment, a placement).
  * @property {(drawing: DrawingState, enabled: boolean) => void} setCircularConservationEnabled
  *   The ring owner's switch of a Circular drawing's comparison rings, with their managed stack rows.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
@@ -5358,7 +5359,7 @@ export const createRunAnalysis = ({
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
         // The committed request keeps the computed typed analysis resource, so
         // target-only renders and Similarity alignment use it without LOSATP.
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, builtFromDraft: true });
       }
       // The identities of this request's records stay with it (DESIGN A1); History restores them with it.
       if (identitySources) {

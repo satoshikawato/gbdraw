@@ -11,8 +11,9 @@ built-in color tables, a fixed identity color scale, italic gene names, a transp
 Web PNG by default, and two Linear alignment options (`--auto_orient` and `--anchor_feature`, with
 Web buttons),
 and reads more real-world GenBank, EMBL, and GFF3 files. The Web app's LOSAT
-engine is now a build of a LOSAT development commit, and threaded LOSAT searches
-no longer stop on a memory fault.
+engine is now a build of a LOSAT development commit whose threaded searches
+carry LOSAT's own guard against the memory fault (see **Web app LOSAT engine** under
+Changed behavior, and Known issues).
 The Web UI is available in 17 languages (English and 16 translations).
 Sessions are now saved as session version 50 (0.14.4 writes 49; the canonical
 `renderRequest` schema stays 9): **a Session saved by 0.14.5 opens only in
@@ -61,8 +62,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   (OV-2369).** A threaded LOSAT search could stop with that message and run the
   whole pair again (the console said "running the pair again"), or fail after
   the third stop. In Chromium a copy into memory that another LOSAT thread had
-  just grown could trap. The Web app now checks each such copy and first brings
-  the thread's view of the memory up to date. Results are unchanged.
+  just grown could trap. The LOSAT build now brings the thread's view of the
+  memory up to date before memory copies and atomic instructions, which on ARM64
+  Linux and Android also covers stores (as LOSAT states it), and each thread
+  updates its view when it starts. Android was not measured. What the new
+  engine changes in the rows, against 0.14.4, is under **Web app LOSAT engine**.
 - **LOSATP links among tied hits are the same on the command line, in Python,
   and in the Web app (OV-2370, OV-2380).** LOSATP Pairwise and Similarity groups
   broke ties between equal-score protein hits on an internal handle that differs
@@ -99,6 +103,12 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   on the row stays on its series. A Depth row you turned off now stays in the
   stack, off, when its last file goes and when a file is added again, in Circular
   and Linear; before, it left and came back on.
+- **Web app: a comparison ring row through a ring search (OV-2442).** With
+  **Use custom stack** on, the **Generate Diagram** that ran a ring's search, or
+  ran it again with other rows, replaced the ring's Track row: a width or other
+  edit on the row was lost, the next Generate drew it under another id
+  (`conservation_x_2`), and a row that anchors to it stopped the next Generate
+  with an error. The row now stays, with its id and its edits.
 - **Web app: text left in English or hard to read in other languages.** The Undo
   and Redo tooltips of preserved settings, imported comparisons, and the
   **Labels do not fit** dialog, Auto values such as `above` and `ignored`, and
@@ -163,13 +173,20 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   it, and a Session stores the rows that a preset or `builtin:` table added, not
   the name.
 - **Web app LOSAT engine.** The engine is the LOSAT development commit
-  `dde737f18` (version 0.2.0 before its release; it was a build of LOSAT 0.1.0),
+  `f62da7f6b` (version 0.2.0 before its release; it was a build of LOSAT 0.1.0),
   not a LOSAT release. Its searches give the rows of the `losat` command of that
-  commit. LOSATP gives the same rows as before; on the Vibrio check its serial
-  searches took 26-38 % of the old engine's time.
-  LOSATN with task `blastn` gives different E-values and hits than before (on the
-  lambda x DE3 check, 21 rows instead of 19); task `megablast` and TLOSATX give
-  the same rows.
+  commit. Against the engine of 0.14.4:
+  - LOSATP gives the same rows on the Vibrio check and on three MjeNMV and
+    LvMJNV pairs; on the Vibrio check its serial searches took 23-29 % of the
+    old engine's time (measured in Node, not in a browser).
+  - LOSATN with task `megablast` gives the same rows on lambda x DE3 and on
+    LvMJNV x MeenMJNV (1 row), and other rows on MjeNMV x MelaMJNV (531 rows
+    instead of 538), MjeNMV x MjeNMV (610 instead of 662), and Vibrio harveyi
+    94-17 x FDAARGOS107 (2901 instead of 2902). They now match the `losat`
+    command of the same commit on those three pairs.
+  - LOSATN with task `blastn` gives different E-values and hits (lambda x DE3:
+    21 rows instead of 19; MjeNMV x MelaMJNV: 2668 instead of 2652).
+  - TLOSATX gives the same rows in another order, on the checks measured.
   - Task `dc-megablast` now runs dc-megablast (the old engine ran `blastn` for
     it) on threaded execution: **Threaded**, and **Auto** on a cross-origin
     isolated page. On serial execution (**Serial**, or **Auto** on a page
@@ -179,12 +196,16 @@ packages, and [Installation](./INSTALL.md) explains each install route.
     wherever the browser supports threads; the label reads `Auto (threaded)` or
     `Auto (serial)`. Before, **Auto** threaded only LOSATP above 500,000 FASTA
     characters.
-  - Run Info names the engine as `LOSAT 0.2.0+dde737f188dc (wasm)`.
+  - Run Info names the engine as `LOSAT 0.2.0+f62da7f6b505 (wasm)`.
   - Saved searches: a search saved by the command line or by this build is
-    reused. A search saved by an earlier Web app is reused for LOSATP and LOSATN
-    task `megablast`, which both engines give alike, and runs again once at the
-    next **Generate Diagram** for LOSATN `blastn`, `dc-megablast`, and TLOSATX.
-    No Gallery example searches again.
+    reused. A search saved by an earlier Web app is reused for LOSATP, which both
+    engines give alike on the checks above. LOSATN of any task and TLOSATX run
+    again once at the next **Generate Diagram**. So does a LOSATN or TLOSATX
+    search whose Run Info names `0.2.0+dde737f188dc`, saved on gbdraw.app while
+    it served that development build; a LOSATP search with that name is reused
+    after a Load while its view is unchanged, and keeps the name, and a changed
+    view searches again. No Gallery example searches again: the
+    shipped Gallery Sessions hold LOSATP rows only.
   - `gbdraw/web/wasm/losat/losat-build.json` records the build.
 - **Web app PNG background.** A PNG downloaded from the Web app now keeps the
   drawing's transparent background, as SVG and PNG from the command line and
@@ -357,13 +378,27 @@ file. See
 - After you delete a Legend row, giving another color rule that row's name, or a
   new color to a rule of that name, can place the returning row last in the Legend
   until the next **Generate Diagram**. 0.14.3 does the same.
+- With **Use custom stack** on, **Add Seq** after a ring search returns every ring
+  to its sequence file and replaces the ring rows: their edits are lost, and a row
+  anchored to one of them stops each **Generate Diagram** with an error on
+  `anchor_slot`. Choose the anchor again on that row, whose control shows
+  `Invalid:` and the old row. 0.14.4 does the same.
+- After you reorder the comparison rings, or remove one and add another, a record
+  rotation before the next **Generate Diagram** returns the rings of the last
+  Generate and drops the change with no message. The next Generate can then draw
+  a ring's rows under another ring's name. Press **Generate Diagram** before you
+  rotate. 0.14.4 does the same.
+- LOSAT's build does not guard `memory.init`. LOSAT reads this as safe but has
+  not measured it. If a threaded search still stops on "memory access out of
+  bounds", the Web app runs the pair again and fails after the third stop.
 
 Carried from 0.14.1:
 
 - A Session saved by 0.14.0 with a crop and ring LOSAT still holds unconverted
-  rows. Its ring draws as in 0.14.0 on a forward crop, and at another
-  unconverted place on a reverse-complemented crop, until the next **Generate
-  Diagram**, which reuses the raw LOSAT cache and converts the rows.
+  rows. After Load its ring draws as in 0.14.0. A redraw keeps that place on a
+  forward crop and moves the ring to another unconverted place on a
+  reverse-complemented crop. The next **Generate Diagram** runs the ring search
+  again and converts the new rows.
 
 Carried from 0.14.0:
 
