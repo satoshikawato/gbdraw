@@ -595,3 +595,42 @@ for (const pointer of [false, true]) {
     } finally { h.cleanup(); }
   });
 }
+
+// PD-OI-112: a control's step keeps the control's name and the value it set,
+// read as the step ends, for the History list; a step an action names
+// otherwise keeps none.
+test('a select step keeps the select\'s name and the option it set', async () => {
+  const h = await createSelectHarness({
+    getAttribute: (name) => (name === 'aria-label' ? 'Legend position' : null),
+    selectedOptions: [{ innerText: 'Left' }]
+  });
+  try {
+    h.dispatch('pointerdown');
+    await h.settle();
+    h.change('left');
+    h.dispatch('change');
+    await h.settle();
+    assert.deepEqual(h.history.stackEntries('undo').map((entry) => [entry.label, entry.detail]),
+      [['Change setting', { name: 'Legend position', value: 'Left' }]]);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('a step an action renames keeps no detail of the control that opened it', async () => {
+  const h = await createSelectHarness();
+  try {
+    const step = await h.history.begin('Change setting', { source: 'input-adapter', owner: 'select', detail: () => ({ name: 'Palette', value: 'arctic' }) });
+    let release = () => {};
+    const first = h.history.runUndoable('Load label edits', () => new Promise((resolve) => { release = resolve; }));
+    await h.settle();
+    await h.history.runUndoable('Change record topology', () => { h.change('none'); });
+    release();
+    await first;
+    await h.history.commit(step);
+    assert.deepEqual(h.history.stackEntries('undo').map((entry) => [entry.label, entry.detail]),
+      [['Change record topology', undefined]]);
+  } finally {
+    h.cleanup();
+  }
+});

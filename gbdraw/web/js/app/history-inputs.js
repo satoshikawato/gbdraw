@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { HistoryStepDetail } from '../services/history.js' */
 const TEXT_INPUT_TYPES = new Set([
   '',
   'date',
@@ -55,6 +56,51 @@ const controlLabel = (element) => {
   return msg('Edit setting');
 };
 
+/** @param {Element | null | undefined} element */
+const shownText = (element) => String(/** @type {HTMLElement | null | undefined} */ (element)?.innerText ?? element?.textContent ?? '')
+  .replace(/\s+/g, ' ').trim();
+
+/**
+ * The control's accessible name as shown now: its `aria-label`, the elements
+ * its `aria-labelledby` names, its labels, or a button's text.
+ * @param {HistoryControl} element
+ */
+const accessibleName = (element) => {
+  const aria = element.getAttribute?.('aria-label')?.trim();
+  if (aria) return aria;
+  const labelledBy = String(element.getAttribute?.('aria-labelledby') || '').split(/\s+/).filter(Boolean)
+    .map((id) => shownText(element.ownerDocument?.getElementById(id))).join(' ').trim();
+  if (labelledBy) return labelledBy;
+  const labels = [.../** @type {HTMLInputElement} */ (element).labels ?? []].map(shownText).join(' ').trim();
+  if (labels) return labels;
+  return String(element.tagName || '').toLowerCase() === 'button' ? shownText(element) : '';
+};
+
+/**
+ * PD-OI-112: what the History list shows of a control's step, read as the
+ * step ends: the control's name and the value it holds (a select's option
+ * text, a checkbox's state, a color, a text field's value); a button, a
+ * radio, a file input, or an editable element shows its name alone. A control
+ * without a name has none, and the step shows its label.
+ * @param {HistoryControl} element
+ * @returns {HistoryStepDetail | null}
+ */
+const describeControl = (element) => {
+  const name = accessibleName(element);
+  if (!name) return null;
+  const tag = String(element.tagName || '').toLowerCase();
+  const type = String(element.type || '').toLowerCase();
+  if (tag === 'select') {
+    const option = /** @type {HTMLSelectElement} */ (element).selectedOptions?.[0];
+    return { name, value: option ? shownText(option) : '' };
+  }
+  const value = String(/** @type {HTMLInputElement} */ (element).value ?? '');
+  if (type === 'checkbox') return { name, checked: Boolean(/** @type {HTMLInputElement} */ (element).checked) };
+  if (type === 'color') return { name, value, color: value };
+  if (tag === 'textarea' || (tag === 'input' && type !== 'password' && TEXT_INPUT_TYPES.has(type))) return { name, value };
+  return { name };
+};
+
 /**
  * @typedef {{ closed: boolean, deferAdapterCommit?: boolean }} HistoryInputsTransaction
  *   The part of an open History step that the input adapter reads.
@@ -63,8 +109,8 @@ const controlLabel = (element) => {
  * @template {HistoryInputsTransaction} [T=HistoryInputsTransaction]
  * @typedef {object} HistoryInputsHistory
  *   The two History functions the input adapter calls (R11); `T` is the step History opens.
- * @property {(label: string, options: { source: string, owner: unknown }) => Promise<T | null>} begin
- *   Opens one step for a control; resolves to null while History is busy.
+ * @property {(label: string, options: { source: string, owner: unknown, detail: () => HistoryStepDetail | null }) => Promise<T | null>} begin
+ *   Opens one step for a control, with the reader of its detail; resolves to null while History is busy.
  * @property {(transaction: T) => Promise<unknown>} commit
  *   Closes the step that `begin` opened.
  */
@@ -152,7 +198,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
       const existing = txByElement.get(element);
       if (existing && !existing.closed) return existing;
       // The control owns its transaction; another owner settles it first (R11).
-      const tx = await history.begin(controlLabel(element), { source, owner: element });
+      const tx = await history.begin(controlLabel(element), { source, owner: element, detail: () => describeControl(element) });
       if (tx) txByElement.set(element, tx);
       return tx;
     })();
