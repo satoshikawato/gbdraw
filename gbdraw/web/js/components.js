@@ -12,6 +12,7 @@ import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
 import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
 import { detectedTopologyNote } from './services/record-display-model.js';
+import { specificRuleHasQualifier } from './services/specific-color-rules.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsShortText, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
@@ -982,7 +983,11 @@ export const SpecificRuleRows = {
   template: '#specific-rule-rows-template',
   components: { OperationError, HelpTip },
   props: ['rules', 'featureKeys', 'available', 'patternText', 'patternDraft', 'fieldId'],
-  emits: ['set-field', 'move-up', 'move-down', 'remove', 'edit-pattern', 'retry-pattern', 'revert-pattern']
+  emits: ['set-field', 'move-up', 'move-down', 'remove', 'edit-pattern', 'retry-pattern', 'revert-pattern'],
+  // OV-2435: a row without a qualifier shows the reason the Add form gives, by the same check.
+  setup() {
+    return { specificRuleHasQualifier };
+  }
 };
 
 // The preview of record or title text with italic markup, shown under its

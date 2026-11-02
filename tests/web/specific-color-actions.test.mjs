@@ -9,7 +9,7 @@ import { compileDirectEditorMutationPlan, displayedLegendRowColors } from '../..
 import { readFileSync } from 'node:fs';
 import {
   createRuleLegendCaptions, diffLegendIntents, generatedLegendRow, legendRowRules, prepareSpecificColorImport,
-  rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions, savedRuleCaption, savedSpecificRules
+  rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions, savedRuleCaption, savedSpecificRules, specificRuleHasQualifier
 } from '../../gbdraw/web/js/services/specific-color-rules.js';
 import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/services/legend-row-names.js';
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
@@ -1791,4 +1791,38 @@ test('a group edit whose rows a Generate reinstalled as equal clones during the 
   assert.equal(held.calls(), 2);
   assert.deepEqual(s.state.manualSpecificRules.map((rule) => [rule.val, rule.color]).filter(([val]) => val === 'zzz'), [['zzz', '#778899']]);
   assert.ok(s.state.manualSpecificRules.some((rule) => rule.color === '#ff0000'));
+});
+
+// OV-2435: Python files a rule under its qualifier and visits only the
+// qualifiers a feature has, so a rule without one colors nothing; the CLI
+// color table refuses it. One check decides it for the Add form, a row edit,
+// and the hint of a row that has none.
+test('a specific color rule needs a qualifier; blank or spaces is none (OV-2435)', () => {
+  for (const qual of ['', '   ', undefined, null]) assert.equal(specificRuleHasQualifier({ feat: 'CDS', qual, val: 'a' }), false, String(qual));
+  assert.equal(specificRuleHasQualifier(null), false);
+  for (const qual of ['product', ' gene ', 'hash']) assert.equal(specificRuleHasQualifier({ qual }), true, qual);
+});
+for (const qual of ['', '  ']) {
+  test(`Add with the qualifier ${JSON.stringify(qual)} adds no rule and keeps the typed pattern (OV-2435)`, () => withDocument(async () => {
+    const s=setup();
+    s.state.errorLog={value:null};
+    Object.assign(s.state.newSpecRule,{qual,val:'dehydrogenase'});
+    await s.actions.addSpecificRule();
+    assert.deepEqual([s.state.manualSpecificRules,s.transactions,s.state.newSpecRule.val],[[],[],'dehydrogenase']);
+  }));
+  test(`a row edit that clears the qualifier (${JSON.stringify(qual)}) is refused and the field shows the rule's qualifier again (OV-2435)`, async () => {
+    const s=setup();
+    s.state.errorLog={value:null};
+    s.state.manualSpecificRules.push({feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:''});
+    const input={value:qual,isConnected:true};
+    assert.equal(await s.actions.setSpecificRuleField(0,'qual',qual,input),false);
+    assert.deepEqual([s.state.manualSpecificRules[0].qual,input.value,s.transactions],['gene','gene',[]]);
+  });
+}
+test('a row edit that gives a rule without a qualifier one is applied (OV-2435)', async () => {
+  const s=setup();
+  s.state.errorLog={value:null};
+  s.state.manualSpecificRules.push({feat:'CDS',qual:'',val:'a',color:'#112233',cap:''});
+  assert.equal(await s.actions.setSpecificRuleField(0,'qual','gene'),true);
+  assert.deepEqual([s.state.manualSpecificRules[0].qual,s.transactions],['gene',['Edit specific color rule']]);
 });

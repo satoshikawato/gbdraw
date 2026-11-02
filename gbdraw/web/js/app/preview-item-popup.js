@@ -12,6 +12,7 @@
 import { COMPARISON_LEGEND_SELECTOR, pythonLegendKey } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
+import { specificRuleHasQualifier } from '../services/specific-color-rules.js';
 import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
@@ -137,19 +138,16 @@ export const previewItemTarget = (target, svg) => {
 
 /**
  * OV-1466: a rule without a feature type is a whole sentence of its own, so a
- * locale writes "any feature" where and how its sentence needs it.
+ * locale writes "any feature" where and how its sentence needs it. OV-2435: a
+ * rule needs a qualifier (`specificRuleHasQualifier`); one without a qualifier
+ * or a pattern is named by its feature type alone, so no sentence has an empty part.
  * @param {ColorRuleLike} rule
  */
 const colorRuleText = (rule) => {
   const feature = text(rule?.feat);
   const qualifier = text(rule?.qual);
   const pattern = text(rule?.val);
-  if (!qualifier && !pattern) return feature ? t('{feature} color rule', { feature }) : t('Any feature color rule');
-  if (!qualifier) {
-    return feature
-      ? t('{feature} where a qualifier matches “{pattern}”', { feature, pattern })
-      : t('Any feature where a qualifier matches “{pattern}”', { pattern });
-  }
+  if (!specificRuleHasQualifier(rule) || !pattern) return feature ? t('{feature} color rule', { feature }) : t('Any feature color rule');
   return feature
     ? t('{feature} where {qualifier} matches “{pattern}”', { feature, qualifier, pattern })
     : t('Any feature where {qualifier} matches “{pattern}”', { qualifier, pattern });

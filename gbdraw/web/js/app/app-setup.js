@@ -47,7 +47,7 @@ import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup, defaultColorScopeLine } from './preview-item-popup.js';
-import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules } from '../services/specific-color-rules.js';
+import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules, specificRuleHasQualifier } from '../services/specific-color-rules.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
 import { drawnTracks, hiddenTrackLegendKeys, loadedTracks, trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
@@ -7773,6 +7773,7 @@ export const createAppSetup = () => {
     manualSpecificRules: drawingMember('manualSpecificRules'),
     ruleMatchingPending,
     newSpecRule,
+    specificRuleHasQualifier,
     specificRulePresets,
     specificRuleQualifierSuggestions,
     selectedSpecificPreset,

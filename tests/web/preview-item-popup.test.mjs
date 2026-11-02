@@ -334,6 +334,13 @@ test('a color rule for any feature is one whole sentence in every locale (OV-146
     rules: [{ feat: '', qual: '', val: '' }, { feat: '', qual: 'product', val: 'kinase' }]
   }), { kind: 'legend-entry', key: 'Ruled' }).ruleLines;
   assert.deepEqual(lines(), ['Any feature color rule', 'Any feature where product matches “kinase”']);
+  // OV-2435: a rule without a qualifier or a pattern is named by its feature type alone, never by a sentence
+  // with an empty part.
+  const partial = openView(createPopup({
+    entries: [{ caption: 'Ruled', color: '#d62728' }],
+    rules: [{ feat: 'CDS', qual: '', val: 'kinase' }, { feat: '', qual: ' ', val: 'kinase' }, { feat: 'CDS', qual: 'product', val: '' }]
+  }), { kind: 'legend-entry', key: 'Ruled' }).ruleLines;
+  assert.deepEqual(partial, ['CDS color rule', 'Any feature color rule', 'CDS color rule']);
   try {
     await setUiLocale('ja', async () => ({ default: Object.freeze({
       'Any feature color rule': 'A', 'Any feature where {qualifier} matches “{pattern}”': 'B {qualifier} {pattern}',

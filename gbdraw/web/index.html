@@ -5144,15 +5144,17 @@
                                         <select v-model="newSpecRule.feat" :aria-label="t('New color rule feature type')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                             <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                         </select>
-                                        <input v-model="newSpecRule.qual" list="specific-rule-qualifier-options" :placeholder="t('Qualifier (choose or type)')" :aria-label="t('Qualifier name')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                        <input v-model="newSpecRule.qual" list="specific-rule-qualifier-options" :placeholder="t('Qualifier (choose or type)')" :aria-label="t('Qualifier name')" :aria-describedby="specificRuleHasQualifier(newSpecRule) ? undefined : 'new-specific-rule-qualifier-hint'" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                     </div>
+                                    <!-- OV-2435: Add is disabled without a qualifier, by the check the action uses; this says why. -->
+                                    <p v-if="!specificRuleHasQualifier(newSpecRule)" id="new-specific-rule-qualifier-hint" data-specific-rule-qualifier-hint class="mb-1 ui-hint break-words">{{ t('Choose or type a qualifier. A rule without one colors nothing.') }}</p>
                                     <div class="flex gap-1 mb-1">
                                         <input v-model="newSpecRule.val" data-new-specific-rule-pattern :aria-label="t('New color rule pattern')" :placeholder="t('Regular expression (e.g. NADH)')" class="form-input form-input-compact flex-grow" :disabled="!semanticMutationAvailable">
                                         <input type="color" v-model="newSpecRule.color" :aria-label="t('New color rule color')" class="h-6 w-7 p-0 border rounded cursor-pointer shrink-0" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div class="flex gap-1">
                                         <input v-model="newSpecRule.cap" :aria-label="t('New color rule legend name')" :placeholder="t('Legend name (optional)')" class="form-input form-input-compact min-w-0 flex-grow" :disabled="!semanticMutationAvailable">
-                                        <button :aria-label="t('Add color rule')" @click="addSpecificRule" class="btn btn-secondary h-7 whitespace-nowrap px-2 text-xs" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add color rule') }}</button>
+                                        <button :aria-label="t('Add color rule')" @click="addSpecificRule" :aria-describedby="specificRuleHasQualifier(newSpecRule) ? undefined : 'new-specific-rule-qualifier-hint'" class="btn btn-secondary h-7 whitespace-nowrap px-2 text-xs" :disabled="!semanticMutationAvailable || !specificRuleHasQualifier(newSpecRule)"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add color rule') }}</button>
                                     </div>
                                 </div>
 
@@ -9124,7 +9126,8 @@
 <div class="space-y-1 mb-3">
     <div v-for="(rule, i) in rules" :key="fieldId(rule)" data-color-rule-row class="flex items-start gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
         <input type="color" :value="rule.color" @change="$emit('set-field', i, 'color', $event.target.value, $event.target)" :aria-label="t('Color rule {n} color', { n: i + 1 })" class="h-6 w-6 shrink-0 p-0 border rounded cursor-pointer" :disabled="!available">
-        <details class="min-w-0 flex-1" data-color-rule-editor>
+        <div class="min-w-0 flex-1">
+        <details data-color-rule-editor>
             <summary class="flex min-w-0 cursor-pointer items-center gap-1 py-1 text-slate-700">
                 <span class="min-w-0 truncate"><span class="text-slate-500">{{ rule.feat }} ·</span> {{ rule.qual }} = <span class="font-mono">{{ patternText(rule) }}</span></span>
                 <span v-if="patternDraft(rule)" class="shrink-0 font-semibold text-amber-700">{{ t('Not applied') }}</span>
@@ -9135,7 +9138,7 @@
                     <select :value="rule.feat" @change="$emit('set-field', i, 'feat', $event.target.value, $event.target)" :aria-label="t('Color rule {n} feature type', { n: i + 1 })" class="form-input form-input-compact" :disabled="!available">
                         <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                     </select>
-                    <input :value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" :placeholder="t('Qualifier (choose or type)')" :aria-label="t('Qualifier name')" class="form-input form-input-compact" :disabled="!available">
+                    <input :value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" :placeholder="t('Qualifier (choose or type)')" :aria-label="t('Qualifier name')" :aria-describedby="specificRuleHasQualifier(rule) ? undefined : `${fieldId(rule)}-qualifier`" class="form-input form-input-compact" :disabled="!available">
                 </div>
                 <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="t('Color rule {n} pattern', { n: i + 1 })" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" :placeholder="t('Regular expression')" data-history-ignore class="form-input form-input-compact w-full font-mono">
                 <!-- The pattern's state under its field, once; the rule for what Save Session, Generate and the downloads use sits in the help tip. -->
@@ -9158,6 +9161,9 @@
                 </div>
             </div>
         </details>
+        <!-- OV-2435: a row without a qualifier (a Session saved by an earlier version) colors nothing; it says why. -->
+        <p v-if="!specificRuleHasQualifier(rule)" :id="`${fieldId(rule)}-qualifier`" data-color-rule-qualifier-hint class="ui-hint break-words leading-snug">{{ t('Choose or type a qualifier. A rule without one colors nothing.') }}</p>
+        </div>
     </div>
     <div v-if="rules.length === 0" class="ui-hint italic text-center py-2">{{ t('No rules added') }}</div>
 </div>
