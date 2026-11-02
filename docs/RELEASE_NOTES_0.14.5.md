@@ -115,10 +115,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   search under another ring's name. **Move series outward**,
   **Move series inward**, **Remove series**, **Add Seq**, **Run LOSAT**,
   **Upload BLAST TSV**, and **Reset Settings** are now disabled while a Generate
-  runs. So are **Apply now** of **Rotate record using this feature** and
-  **Apply** of the alignment review and of **Align at feature**: Rotate, Align,
-  and Align at feature do not run during a Generate. A Rotate reached by keyboard
-  there dropped the Generate's result.
+  runs. So are **Apply now** of **Rotate record using this feature**,
+  **Align…** and **Review alignment options…** in the Similarity groups editor
+  and the feature popup, and **Apply** of the alignment review and of
+  **Align at feature**: Rotate, Align, and Align at feature do not run during a
+  Generate. A Rotate reached by keyboard there dropped the Generate's result.
 - **Web app: text left in English or hard to read in other languages.** The Undo
   and Redo tooltips of preserved settings, imported comparisons, and the
   **Labels do not fit** dialog, Auto values such as `above` and `ignored`, and

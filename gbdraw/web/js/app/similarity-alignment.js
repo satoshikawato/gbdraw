@@ -1594,7 +1594,8 @@ export const createSimilarityAlignmentActions = ({
       return {status:'ok'};
     }
     status.value = 'reviewing';
-    if (['canceled', 'stale', 'superseded'].includes(outcome?.status)) return outcome;
+    // A run refused while a Generate runs (`busy`) is no failure: it publishes no error.
+    if (['busy', 'canceled', 'stale', 'superseded'].includes(outcome?.status)) return outcome;
     const cause = publishError(outcome?.error);
     return { status: 'error', error: cause, recovery: outcome?.recovery };
   };
@@ -1978,7 +1979,7 @@ export const createSimilarityAlignmentActions = ({
         error.value = null;
         publishNotice(scope === 'positions' ? t('Alignment reset: record positions restored; record directions unchanged.')
           : t('Alignment reset: record positions and directions restored to before the latest Align.'));
-      } else if (!['canceled', 'stale', 'superseded'].includes(outcome?.status)) publishError(outcome?.error);
+      } else if (!['busy', 'canceled', 'stale', 'superseded'].includes(outcome?.status)) publishError(outcome?.error);
       return outcome;
     } catch (cause) {
       if (cause?.canceled === true) return { status: 'canceled' };

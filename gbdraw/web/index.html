@@ -6766,7 +6766,7 @@
                                     <button type="button"
                                             data-history-managed
                                             @click="alignByClickedOrthogroup($event)"
-                                            :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
+                                            :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
                                             :aria-busy="similarityAlignmentBusy"
                                             aria-describedby="clicked-alignment-action-description"
                                             class="min-w-0 px-2 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
@@ -6779,7 +6779,7 @@
                                                 data-history-managed
                                                 data-similarity-alignment-popup-review
                                                 @click="alignByClickedOrthogroup($event, 'review')"
-                                                :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
+                                                :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
                                                 :aria-busy="similarityAlignmentBusy"
                                                 aria-describedby="clicked-alignment-action-description"
                                                 class="match-link focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
@@ -8524,7 +8524,7 @@
                                     <button type="button"
                                             data-history-managed
                                             @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event)"
-                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy"
+                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
                                             :aria-busy="similarityAlignmentBusy"
                                             aria-describedby="similarity-alignment-drawer-reason"
                                             :title="t('Align to the selected exact feature')"
@@ -8536,7 +8536,7 @@
                                             data-history-managed
                                             data-similarity-alignment-drawer-review
                                             @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event, 'review')"
-                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy"
+                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
                                             :aria-busy="similarityAlignmentBusy"
                                             aria-describedby="similarity-alignment-drawer-reason"
                                             :title="t('Review alignment options for the selected exact feature')"
