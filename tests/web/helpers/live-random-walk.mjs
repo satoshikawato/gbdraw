@@ -110,9 +110,8 @@ const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Result the step before it showed. Every other step and label answers for the
 // current state.
 /**
- * @param {{ kind: string, feature?: string, text?: string }} step
+ * @param {{ kind: string, feature?: string }} step
  * @param {boolean} stepReflow
- * @param {string[]} notes
  * @param {{ unplaced: { id: string } | null } | undefined} previous
  * @returns {{ id: string } | null}
  */

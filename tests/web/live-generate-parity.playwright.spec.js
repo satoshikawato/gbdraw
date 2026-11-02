@@ -1182,7 +1182,9 @@ test.describe('a Result displayed after its intent changed', () => {
       await showResult(page, 1);
       await expectLiveEqualsGenerate(page, { label: 'a Result an Undo of a Generate returned, its edit gone before that Generate' });
     });
-    test(`an Undo of a Generate that replaced an unshown Result holding Label visibility On shows what Generate draws (${flag})`, async ({ page }) => {
+    // Reset's own redraw rewrites Result 1 before the later Generate, so the Undo
+    // of that Generate brings no stale Label On. Only a label text stays there.
+    test(`Reset's redraw of a Result holding Label visibility On leaves the Undo of the later Generate no stale label (${flag})`, async ({ page }) => {
       test.setTimeout(240_000);
       await open(page, { mode: 'circular', results: 'batch', reflow });
       await showResult(page, 1);
@@ -1200,6 +1202,23 @@ test.describe('a Result displayed after its intent changed', () => {
       await showResult(page, 1);
       await expectLiveEqualsGenerate(page, { label: 'a Label On in a Result an Undo of a Generate returned' });
     });
+    // In the drawing shown at the Reset, Reset's redraw applies Label visibility to a
+    // batch Result; a failed Reset redraw leaves that to the display's own redraw.
+    for (const [name, change] of [['Off', { labelVisibility: 'off' }], ['On', { labelVisibility: 'on' }]]) {
+      test(`Reset Settings in the same drawing shows a batch Result holding Label visibility ${name} as Generate draws it (${flag})`, async ({ page }) => {
+        test.setTimeout(240_000);
+        await open(page, { mode: 'circular', results: 'batch', reflow });
+        await showResult(page, 1);
+        if (name === 'On') await showNoLabels(page);
+        await popupEdit(page, BATCH_FEATURE, change);
+        await generate(page);
+        await showResult(page, 0);
+        await resetKeepingLabelSettings(page);
+        await settleLive(page);
+        await showResult(page, 1);
+        await expectLiveEqualsGenerate(page, { label: `Label ${name} in a Result shown after Reset Settings with its drawing shown` });
+      });
+    }
     test(`an Undo of a Generate that replaced an unshown Result without a hidden feature draws the feature (${flag})`, async ({ page }) => {
       test.setTimeout(240_000);
       await open(page, { mode: 'circular', results: 'batch', reflow });
@@ -1339,9 +1358,9 @@ test.describe('Undo and Redo', () => {
     const app = window.__GBDRAW_APP__;
     return app.extractedFeatures.find((feature) => feature.locus_tag === tag)?.svg_id;
   }, locusTag);
-  // The step, and what the figure shows of the feature as it returns.
+  // The step (none when `name` is null), and what the figure shows of the feature as it returns.
   const stepAndRead = (page, name, id) => evaluateWithRetainedPromise(page, async ({ name: step, id: featureId }) => {
-    await window.__GBDRAW_HISTORY__[step]();
+    if (step) await window.__GBDRAW_HISTORY__[step]();
     await window.Vue.nextTick();
     const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
     const shown = (element) => !element.closest('[display="none"]');
@@ -1447,6 +1466,7 @@ test.describe('Undo and Redo', () => {
         await settleLive(page);
         await history(page, 'undo');
         await settleLive(page);
+        expect(await stepAndRead(page, null, id), 'before the Redo').toEqual(SHOWN);
         await holdRerenders(page);
         const redo = await stepAndRead(page, 'redo', id);
         await releaseRerenders(page);
