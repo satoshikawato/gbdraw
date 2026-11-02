@@ -2167,9 +2167,14 @@ states that they are reviewed.
   domyślny (Default).
 - **Command words** (imperative): Zapisz, Wczytaj (Load), Importuj, Eksportuj, Prześlij (Upload),
   Pobierz (Download), Wygeneruj ponownie, Zastosuj, Resetuj, Cofnij, Ponów, Anuluj, Usuń (Delete and
-  Remove), Wyczyść (Clear), Dodaj, Zmień nazwę, Przeglądaj (Browse), Zaznacz (Select), Wybierz (Choose),
-  Zwiń, Rozwiń, Pomiń (Skip), Wyklucz (Omit), Scal (Merge), Zadokuj, Przypnij, Zachowaj (Keep), Obróć,
-  Spróbuj ponownie; states Włączone / Wyłączone (Wł. / Wył. on badges), Automatycznie.
+  Remove), Wyczyść (Clear), Dodaj, Zmień nazwę, Przeglądaj (Browse), Wybierz (Choose; Select, below),
+  Zaznacz, Zwiń, Rozwiń, Pomiń (Skip), Wyklucz (Omit), Scal (Merge), Zadokuj, Przypnij, Zachowaj (Keep),
+  Obróć, Spróbuj ponownie; states Włączone / Wyłączone (Wł. / Wył. on badges), Automatycznie.
+- **Select has two words** (Owner, 2026-11-02, as Microsoft Polish): Wybierz (wybrany, wybór) to pick from
+  a list, menu, dropdown or file picker, or one option among several (Wybierz ustawienie wstępne…, wybrany
+  rekord, Wybrane przez użytkownika); Zaznacz (zaznaczony; Odznacz) to tick a checkbox or mark rows,
+  features or text (Zaznacz wszystko, Odznacz wszystko, zaznaczone cechy, Zaznacz diagnostykę). Choose is
+  always Wybierz.
 - **Kept in English** (D-12, evidence in the glossary notes): GC skew, AT skew, skew, query, subject,
   locus tag, orthogroup, coortholog, inparalog, reciprocal best hit, near-reciprocal hit, upstream,
   downstream, open source, cross-origin isolated and the names of §1.1. They are lower case in prose,
