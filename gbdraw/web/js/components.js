@@ -883,23 +883,35 @@ export const FileUploader = {
     // while the file is inspected. When the user picks a file with focus in the component, hold the zone
     // at the viewport position it had at the pick: each frame, scroll the nearest scroller by the drift
     // (a drift the scroller cannot take, such as one above the page top, waits) for about five seconds
-    // (Owner D-23). The position is read at the pick because the parent's render moves the settings above
-    // the zone before this component's own watcher runs.
+    // (Owner D-23), and stop at once when the user scrolls, touches, clicks, or types. The position is
+    // read at the pick because the parent's render moves the settings above the zone before this
+    // component's own watcher runs.
     const root = ref(/** @type {HTMLElement | null} */ (null));
     const zone = ref(/** @type {HTMLElement | null} */ (null));
     const HOLD_MAX_FRAMES = 300;
+    const USER_SCROLL_EVENTS = ['wheel', 'touchstart', 'pointerdown', 'keydown'];
     /** @param {number} top */
     const holdZoneAt = (top) => {
       const area = root.value;
       const box = zone.value;
       if (!area || !box) return;
       let frames = 0;
+      let stopped = false;
+      const stop = () => {
+        stopped = true;
+        USER_SCROLL_EVENTS.forEach((type) => window.removeEventListener(type, stop, true));
+      };
+      USER_SCROLL_EVENTS.forEach((type) => window.addEventListener(type, stop, { capture: true, passive: true }));
       const hold = () => {
-        if (!box.isConnected || !area.contains(document.activeElement)) return;
+        if (stopped) return;
+        if (!box.isConnected || !area.contains(document.activeElement) || ++frames > HOLD_MAX_FRAMES) {
+          stop();
+          return;
+        }
         const drift = box.getBoundingClientRect().top - top;
         const scroller = nearestScroller(box);
         if (scroller && Math.abs(drift) > 0.5) scroller.scrollTop += drift;
-        if (++frames < HOLD_MAX_FRAMES) requestAnimationFrame(hold);
+        requestAnimationFrame(hold);
       };
       requestAnimationFrame(hold);
     };
