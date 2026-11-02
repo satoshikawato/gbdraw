@@ -79,7 +79,7 @@ test('selected D-loop without gene or locus_tag generates a feature annotation',
   const features = page.locator('details').filter({ has: page.locator('summary[aria-label="Features"]') });
   await features.locator('summary').press('Enter');
   await features.locator('select').filter({ has: page.locator('option[value="D-loop"]') }).selectOption('D-loop');
-  await features.getByRole('button', { name: /Add$/ }).click();
+  await features.getByRole('button', { name: 'Add type', exact: true }).click();
   await generateAndWaitForResult(page);
   const id = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.find((feature) => feature.type === 'D-loop').svg_id);
   await page.locator(`.origin-top svg [data-gbdraw-feature-id="${id}"]`).first().dispatchEvent('click', { ctrlKey: true });
