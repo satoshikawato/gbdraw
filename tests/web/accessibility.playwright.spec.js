@@ -81,6 +81,9 @@ const auditPage = (page) => page.evaluate(() => {
     if (description && !description.hidden) problems.push('description is in the reading order');
     if (description && tip.contains(description)) problems.push('description inside the tip wrapper');
     if (tip.closest('label')) problems.push('inside label');
+    // A tip needs the thing it explains on its line: a bare question mark on a
+    // line of its own explains nothing.
+    if (tip.parentElement.children.length === 1 && !text(tip.parentElement.textContent)) problems.push('alone on its line');
     if (tip.parentElement.closest('button, [role="button"]:not(summary)')) problems.push('inside a button');
     // A heading or summary computes its name from content, so one that holds a
     // tip keeps its visible name only through aria-label.
@@ -325,6 +328,31 @@ const windowTip = async (page) => {
   expect(descriptionId).toBeTruthy();
   return { section, input, button: page.locator(`.help-tip > button[aria-describedby="${descriptionId}"]`) };
 };
+
+// A file zone hides its label until a file is chosen, so its help tip sits
+// beside the zone, and the zone (the control) references the tip text.
+test('Colors file zones show their help tip beside the button and reference its text', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  const section = page.locator('details').filter({ has: page.locator('summary[aria-label="Colors"]') });
+  if (await section.getAttribute('open') === null) await section.locator(':scope > summary').press('Enter');
+  for (const name of ['Default colors file', 'Specific rules file']) {
+    const group = section.getByRole('group', { name: `${name} selection`, exact: true });
+    await reveal(group);
+    const zone = group.getByRole('button', { name: `Choose ${name}`, exact: true });
+    await expect(zone).toBeVisible();
+    const tip = group.locator('.help-tip > button');
+    await expect(tip, `${name} help tip inside the uploader group`).toHaveCount(1);
+    const descriptionId = await tip.getAttribute('aria-describedby');
+    expect(descriptionId).toBeTruthy();
+    await expect(zone).toHaveAttribute('aria-describedby', descriptionId);
+    const zoneBox = await zone.boundingBox();
+    const tipBox = await tip.boundingBox();
+    expect(tipBox.x, `${name} help tip right of the zone`).toBeGreaterThanOrEqual(zoneBox.x + zoneBox.width - 1);
+    expect(tipBox.y + tipBox.height / 2).toBeGreaterThan(zoneBox.y);
+    expect(tipBox.y + tipBox.height / 2).toBeLessThan(zoneBox.y + zoneBox.height);
+  }
+});
 
 test('help tips open from the keyboard and on hover, and Escape closes them', async ({ page }) => {
   test.setTimeout(180_000);

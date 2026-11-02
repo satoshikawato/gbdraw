@@ -825,6 +825,8 @@ export const ColorValueControl = {
  *   file changes what every drawing loaded from it (OV-1280, D-15-51)
  * @property {(file: File | undefined) => unknown} [afterChange] runs after the selection is stored, and after
  *   a Remove with the removed file (OV-1280); a result of `false` is not committed
+ * @property {string} [help] help tip text, shown beside the zone (the label is hidden until a file is
+ *   chosen) and referenced by the zone through aria-describedby
  */
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
@@ -832,7 +834,8 @@ export const ColorValueControl = {
 // selected file whose inspection failed is not shown as ready (UI-08).
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'projectHistory', 'inspectionFailed'],
+  components: { HelpTip },
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'projectHistory', 'inspectionFailed', 'help'],
   emits: ['update:modelValue', 'clearRequest'],
   /**
    * @param {FileUploaderProps} props
@@ -840,6 +843,7 @@ export const FileUploader = {
    */
   setup(props, { emit }) {
     const input = ref(null);
+    const helpId = `file-help-${useId()}`;
     const uploadAvailable = computed(() => !state.sessionOperationAvailability());
     const selectedFiles = computed(() => {
       if (Array.isArray(props.modelValue)) return props.modelValue.filter(Boolean);
@@ -905,7 +909,7 @@ export const FileUploader = {
         emit('update:modelValue', props.multiple ? [] : null);
       }
     };
-    return { input, handleFile, clearFile, hasSelection, selectedLabel, uploadAvailable };
+    return { input, helpId, handleFile, clearFile, hasSelection, selectedLabel, uploadAvailable };
   }
 };
 

@@ -5159,10 +5159,7 @@
                                     </button>
                                 </div>
                                 <div class="mt-2">
-                                    <file-uploader :label="t('Default colors file')" :model-value="files.d_color" @update:model-value="importAuxiliaryTable('d_color', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
-                                    <div class="ui-hint mt-1">
-                                        <help-tip :text="t('Tab-separated value (TSV) file of feature type and color. Feature types not listed keep the selected palette colors.')"></help-tip>
-                                    </div>
+                                    <file-uploader :label="t('Default colors file')" :help="t('Tab-separated value (TSV) file of feature type and color. Feature types not listed keep the selected palette colors.')" :model-value="files.d_color" @update:model-value="importAuxiliaryTable('d_color', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                 </div>
                             </div>
 
@@ -5206,10 +5203,7 @@
                                     @edit-pattern="editSpecificRulePattern" @retry-pattern="retrySpecificRulePattern" @revert-pattern="revertSpecificRulePattern"></specific-rule-rows>
 
                                 <div class="mt-2">
-                                    <file-uploader :label="t('Specific rules file')" :model-value="files.t_color" @update:model-value="importAuxiliaryTable('t_color', $event)" :after-change="waitForAuxiliaryFileImport" :project-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
-                                    <div class="ui-hint mt-1">
-                                        <help-tip :text="t('TSV file of rules: feature type, qualifier, regular expression, color, and optional legend name.')"></help-tip>
-                                    </div>
+                                    <file-uploader :label="t('Specific rules file')" :help="t('TSV file of rules: feature type, qualifier, regular expression, color, and optional legend name.')" :model-value="files.t_color" @update:model-value="importAuxiliaryTable('t_color', $event)" :after-change="waitForAuxiliaryFileImport" :project-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                 </div>
                             </div>
                         </div>
@@ -9297,10 +9291,12 @@
             <label class="input-label mb-0">{{ label }}</label>
             <button @click.stop="clearFile" :disabled="!uploadAvailable" :aria-label="t('Remove {name}', { name: $attrs['data-input-aria-label'] || label })" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> {{ t('Remove') }}</button>
         </div>
+        <div class="flex items-center gap-1">
         <div
-            class="upload-zone"
+            class="upload-zone flex-1 min-w-0"
             :class="{'ready': hasSelection && !inspectionFailed, 'failed': hasSelection && inspectionFailed}"
             role="button"
+            :aria-describedby="help ? helpId : undefined"
             :tabindex="uploadAvailable ? 0 : -1"
             :aria-disabled="!uploadAvailable"
             :aria-label="t('Choose {name}', { name: $attrs['data-input-aria-label'] || label })"
@@ -9321,6 +9317,8 @@
                 <i class="ph ph-check-circle" aria-hidden="true"></i>
                 <span class="min-w-0 truncate" :title="selectedLabel">{{ selectedLabel }}</span>
             </div>
+        </div>
+        <help-tip v-if="help" :id="helpId" :text="help" :label="t('Help: {name}', { name: $attrs['data-input-aria-label'] || label })"></help-tip>
         </div>
     </div>
 </script>
