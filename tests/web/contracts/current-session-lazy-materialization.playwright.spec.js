@@ -12,6 +12,7 @@ const {
   getDiagramWorkerActivity,
   openApp
 } = require('../helpers/app-lifecycle.cjs');
+const { ringSessionText } = require('../helpers/ring-session.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const webSessionRoot = join(repoRoot, 'gbdraw', 'web', 'gallery', 'sessions');
@@ -27,16 +28,7 @@ const frozenV39Session = join(
   'sessions',
   'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz'
 );
-const neutralConservationSession = join(
-  repoRoot,
-  'tests',
-  'fixtures',
-  'sessions',
-  'synthetic_conservation.gbdraw-session.json.gz'
-);
-const neutralConservationSessionText = gunzipSync(
-  readFileSync(neutralConservationSession)
-).toString('utf8');
+const neutralConservationSessionText = ringSessionText();
 
 const STRUCTURAL_METRICS = [
   'base64DecodeCount',

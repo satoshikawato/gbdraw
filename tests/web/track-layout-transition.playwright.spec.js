@@ -4,6 +4,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
+const { RING_SESSION_FILE, ringSessionUpload } = require('./helpers/ring-session.cjs');
 
 // R-3, Q3 (Owner, 2026-10-04): every edit that changes the direction of a
 // draft feature slot runs through one transition, which asks before it leaves
@@ -1414,14 +1415,13 @@ test('rev 7: Linear File removal with no row reaching what it takes asks only it
 });
 
 // A Circular managed comparison ring row that leaves with its source (OV-2289).
-const RING_SESSION = 'tests/fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz';
-const loadRingSession = async (browser, { stack = true } = {}) => {
+const loadRingSession = async (browser, { stack = true, session = ringSessionUpload() } = {}) => {
   const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await context.newPage();
   await page.addInitScript(() => { window.__LIFECYCLE__ = []; window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent: (event) => window.__LIFECYCLE__.push(event) }; });
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(RING_SESSION);
+  await page.locator('input[accept^=".json,"]').setInputFiles(session);
   await page.waitForFunction(() => window.__LIFECYCLE__.some((event) => event.name === 'interactiveReady') && !window.__GBDRAW_APP__.sessionImportPending);
   await page.locator('[data-setting="region-annotations"] input[type=file]').first().setInputFiles({
     name: 'regions.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from('set_id\tid\tmark\trecord\tstart\tend\nmarks\tm1\thighlight\treference-a\t100\t900\n')
@@ -1463,6 +1463,50 @@ test('rev 7: Circular removing a comparison source whose managed ring row anothe
         expect(after.rows.some((row) => row.startsWith('conservation_comparison_b:'))).toBe(false);
       }
     });
+  } finally { await page.context().close(); }
+});
+
+// OV-2442: a search gives each ring another source file (other bytes, another key). The ring's row stays: its id,
+// by which another row anchors to it and the next Generate draws it, and its edits. The Session's rows have no
+// runtime record, so the first Generate searches; the stub gives other rows than the stored ones.
+test('a ring search that writes other rows keeps the managed ring row, its edits, and the row that reaches it', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await loadRingSession(browser, { session: RING_SESSION_FILE });
+  try {
+    const rows = () => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      return state.activeDrawing().adv.circular_track_slots.flatMap((row) => (
+        row.renderer === 'sequence_conservation' ? [[row.id, row.width]]
+          : row.renderer === 'annotations' ? [[row.id, row.params.anchor_slot]] : []
+      ));
+    });
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      state.losatExecution.executionMode = 'serial';
+      window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+        window.__RING_SEARCHES__ = (window.__RING_SEARCHES__ || 0) + jobs.length;
+        return jobs.map((job) => ({
+          cacheKey: job.cacheKey,
+          text: `${job.queryName || 'query'}\treference-a\t99\t300\t3\t0\t1\t300\t1\t300\t1e-20\t500\n`
+        }));
+      };
+      const ring = state.activeDrawing().adv.circular_track_slots.find((row) => row.id === 'conservation_comparison_b');
+      ring.width = '9px';
+    });
+    const before = await rows();
+    expect(before).toEqual(expect.arrayContaining([['conservation_comparison_b', '9px'], ['mark', 'conservation_comparison_b']]));
+    await expectGenerates(page);
+    expect(await page.evaluate(() => window.__RING_SEARCHES__)).toBe(3);
+    expect(await rows()).toEqual(before);
+    const drawn = () => page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      return String(app.currentResults()[app.selectedResultIndex].content);
+    });
+    const first = await drawn();
+    await expectGenerates(page);
+    expect(await page.evaluate(() => window.__RING_SEARCHES__), 'the second Generate reuses the search').toBe(3);
+    expect(await rows()).toEqual(before);
+    expect(await drawn()).toBe(first);
   } finally { await page.context().close(); }
 });
 

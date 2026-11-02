@@ -3,9 +3,10 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { ringSessionUpload } = require('./helpers/ring-session.cjs');
 
 const seed = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
-const conservationSession = resolve('tests/fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz');
+const conservationSession = ringSessionUpload();
 const sessionInput = 'input[type="file"][accept^=".json,"]';
 
 const preparePage = async (page) => {

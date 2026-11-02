@@ -3652,7 +3652,11 @@ export const createAppSetup = () => {
     // A Generate that adopts a Circular LOSAT result reconciles its rings; a
     // Linear Generate and a Circular one without such a result leave them.
     adoptCanonicalRenderArtifacts: (canonical, options) => {
-      if (adoptCanonicalRenderArtifacts(canonical, options)) reconcileCircularConservation(state.drawingOfMode('circular'));
+      const drawing = state.drawingOfMode('circular');
+      const adopted = circularTrackSlotEditor.keepCircularConservationRowsThrough(
+        drawing, () => adoptCanonicalRenderArtifacts(canonical, options)
+      );
+      if (adopted) reconcileCircularConservation(drawing);
     },
     setCircularConservationEnabled,
     getCommittedCanonicalSession,

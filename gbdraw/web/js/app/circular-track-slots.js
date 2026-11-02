@@ -963,6 +963,28 @@ export const createCircularTrackSlotEditor = ({
       : new Set()
   );
 
+  /**
+   * A change that gives each comparison ring another source file and keeps the rings and their order: a Generate
+   * that adopts a LOSAT result, whose rows take the place of the FASTA or of the rows an earlier search wrote. A
+   * managed row names its ring by the source file's key (`series_key`), so it moves to the new key here and keeps
+   * its id, by which other rows anchor to it, and its edits (OV-2442).
+   * @template T
+   * @param {DrawingState} drawing @param {() => T} replaceSources
+   * @returns {T}
+   */
+  const keepCircularConservationRowsThrough = (drawing, replaceSources) => {
+    const before = conservationEntriesForState(state, drawing);
+    const replaced = replaceSources();
+    const after = conservationEntriesForState(state, drawing);
+    if (before.length !== after.length) return replaced;
+    const keyAfter = new Map(before.map((entry, index) => [String(entry.sourceKey), String(after[index].sourceKey)]));
+    drawing.adv.circular_track_slots.forEach((/** @type {CircularTrackSlot} */ slot) => {
+      const key = keyAfter.get(managedConservationSlotKey(slot));
+      if (isManagedConservationSlot(slot) && key) slot.params = { ...slot.params, series_key: key };
+    });
+    return replaced;
+  };
+
   const syncCircularConservationSlots = () => {
     const drawing = state.drawingOfMode('circular');
     const entries = conservationEntriesForState(state, drawing);
@@ -1809,6 +1831,7 @@ export const createCircularTrackSlotEditor = ({
     changeCircularDepthSources,
     circularDepthSourceLoss,
     circularConservationRowsLeaving,
+    keepCircularConservationRowsThrough,
     ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetCircularTrackSlotsFromSimpleControls,
       resetCircularTrackSlotsToPreset,

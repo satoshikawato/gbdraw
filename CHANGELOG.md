@@ -91,6 +91,10 @@ write-up of a release.
   and Collinear blocks do, instead of failing with "Ordered BLAST/protein comparison
   inputs are ambiguous". `-b/--blast` on such a layout is still refused; the
   message now says to list the tables in `--comparisons_table` (OV-2371).
+- Fixed: Web app: with **Use custom stack** on, the Generate that ran a ring's
+  LOSAT search replaced its Track row: the row lost its edits, the next Generate
+  drew it under another id, and a row anchored to it stopped that Generate with
+  an error. The row now keeps its id and edits (OV-2442).
 - Fixed: a threaded LOSAT search in the Web app could stop with "memory access
   out of bounds" and run the whole pair again (the console said "running the
   pair again"), or fail after the third stop. In Chromium a copy into memory
@@ -106,14 +110,14 @@ write-up of a release.
   three MjeNMV and LvMJNV pairs); LOSATN `megablast` gives other rows on some
   pairs (MjeNMV x MelaMJNV 531 rows instead of 538); LOSATN `blastn` gives
   different E-values and hits (lambda x DE3 21 rows instead of 19); TLOSATX gives
-  the same rows in another order.
+  the same rows in another order on the checks measured.
   Task `dc-megablast` now runs dc-megablast (the old engine ran `blastn` for
   it) on threaded execution: the default, and **Auto** on a cross-origin
   isolated page. **Serial**, or a page without isolation, stops before the
   search with a message that `dc-megablast` needs threaded LOSAT. **Auto** now
   runs LOSATN and TLOSATX on threaded execution too, wherever the page allows
   it. Run Info names the engine's version. A LOSATP search saved by an earlier Web
-  app is reused, because this engine gives the same rows; its saved LOSATN
+  app is reused, because this engine gives the same rows on those checks; its saved LOSATN
   searches of any task and TLOSATX searches run again once at the next
   **Generate Diagram**. Searches saved by
   the command line are reused as before.

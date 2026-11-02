@@ -103,6 +103,12 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   on the row stays on its series. A Depth row you turned off now stays in the
   stack, off, when its last file goes and when a file is added again, in Circular
   and Linear; before, it left and came back on.
+- **Web app: a comparison ring row through a ring search (OV-2442).** With
+  **Use custom stack** on, the **Generate Diagram** that ran a ring's search, or
+  ran it again with other rows, replaced the ring's Track row: a width or other
+  edit on the row was lost, the next Generate drew it under another id
+  (`conservation_x_2`), and a row that anchors to it stopped the next Generate
+  with an error. The row now stays, with its id and its edits.
 - **Web app: text left in English or hard to read in other languages.** The Undo
   and Redo tooltips of preserved settings, imported comparisons, and the
   **Labels do not fit** dialog, Auto values such as `above` and `ignored`, and
@@ -173,10 +179,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   - LOSATP gives the same rows on the Vibrio check and on three MjeNMV and
     LvMJNV pairs; on the Vibrio check its serial searches took 23-29 % of the
     old engine's time (measured in Node, not in a browser).
-  - LOSATN with task `megablast` gives the same rows on lambda x DE3 and on one
-    Vibrio pair, and other rows on MjeNMV x MelaMJNV (531 rows instead of 538)
-    and MjeNMV x MjeNMV (610 instead of 662). They now match the `losat`
-    command of the same commit on those pairs.
+  - LOSATN with task `megablast` gives the same rows on lambda x DE3 and on
+    LvMJNV x MeenMJNV (1 row), and other rows on MjeNMV x MelaMJNV (531 rows
+    instead of 538), MjeNMV x MjeNMV (610 instead of 662), and Vibrio harveyi
+    94-17 x FDAARGOS107 (2901 instead of 2902). They now match the `losat`
+    command of the same commit on those three pairs.
   - LOSATN with task `blastn` gives different E-values and hits (lambda x DE3:
     21 rows instead of 19; MjeNMV x MelaMJNV: 2668 instead of 2652).
   - TLOSATX gives the same rows in another order, on the checks measured.
@@ -196,7 +203,8 @@ packages, and [Installation](./INSTALL.md) explains each install route.
     again once at the next **Generate Diagram**. So does a LOSATN or TLOSATX
     search whose Run Info names `0.2.0+dde737f188dc`, saved on gbdraw.app while
     it served that development build; a LOSATP search with that name is reused
-    after a Load and keeps the name. No Gallery example searches again: the
+    after a Load while its view is unchanged, and keeps the name, and a changed
+    view searches again. No Gallery example searches again: the
     shipped Gallery Sessions hold LOSATP rows only.
   - `gbdraw/web/wasm/losat/losat-build.json` records the build.
 - **Web app PNG background.** A PNG downloaded from the Web app now keeps the
@@ -379,7 +387,7 @@ Carried from 0.14.1:
 - A Session saved by 0.14.0 with a crop and ring LOSAT still holds unconverted
   rows. Its ring draws as in 0.14.0 on a forward crop, and at another
   unconverted place on a reverse-complemented crop, until the next **Generate
-  Diagram**, which reuses the raw LOSAT cache and converts the rows.
+  Diagram**, which runs the ring search again and converts the new rows.
 
 Carried from 0.14.0:
 
