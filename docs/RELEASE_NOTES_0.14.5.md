@@ -109,6 +109,13 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   edit on the row was lost, the next Generate drew it under another id
   (`conservation_x_2`), and a row that anchors to it stopped the next Generate
   with an error. The row now stays, with its id and its edits.
+- **Web app: the ring controls during a Generate (OV-2446).** During a
+  **Generate Diagram**, a reorder of the comparison rings by keyboard, or a
+  switch to **Upload BLAST TSV** and back to **Run LOSAT**, could draw a ring's
+  search under another ring's name. **Move series outward**,
+  **Move series inward**, **Remove series**, **Add Seq**, **Run LOSAT**,
+  **Upload BLAST TSV**, and **Reset Settings** are now disabled while a Generate
+  runs.
 - **Web app: text left in English or hard to read in other languages.** The Undo
   and Redo tooltips of preserved settings, imported comparisons, and the
   **Labels do not fit** dialog, Auto values such as `above` and `ignored`, and
@@ -380,14 +387,20 @@ file. See
   until the next **Generate Diagram**. 0.14.3 does the same.
 - With **Use custom stack** on, **Add Seq** after a ring search returns every ring
   to its sequence file and replaces the ring rows: their edits are lost, and a row
-  anchored to one of them stops each **Generate Diagram** with an error on
-  `anchor_slot`. Choose the anchor again on that row, whose control shows
-  `Invalid:` and the old row. 0.14.4 does the same.
-- After you reorder the comparison rings, or remove one and add another, a record
-  rotation before the next **Generate Diagram** returns the rings of the last
-  Generate and drops the change with no message. The next Generate can then draw
-  a ring's rows under another ring's name. Press **Generate Diagram** before you
-  rotate. 0.14.4 does the same.
+  anchored to one of them stops each **Generate Diagram** with "Track row N.
+  Field: Enabled drawable anchor." Choose the anchor again on that row, whose
+  control shows `Invalid:` and the old row. 0.14.4 does the same.
+- After any change to the comparison rings (a reorder, **Remove series**, or
+  **Add Seq**), a record rotation before the next **Generate Diagram** returns the
+  rings of the last Generate and drops the change with no message. After a
+  reorder or a Remove, the next Generate can then draw a ring's rows under another ring's
+  name. Press **Generate Diagram** before you rotate. 0.14.4 does the same.
+- With **Use custom stack** on, after Undo goes back past a Track-stack edit made
+  before a Generate that ran the ring searches, each **Generate Diagram** stops
+  with "Track row N. Use the supported conservation workflow and select a
+  comparison source.", also after another Undo or Redo. Turn **Use custom stack**
+  off, press **Generate Diagram**, turn it on, and press it again; the ring rows
+  are made again without their edits. 0.14.4 does the same.
 - LOSAT's build does not guard `memory.init`. LOSAT reads this as safe but has
   not measured it. If a threaded search still stops on "memory access out of
   bounds", the Web app runs the pair again and fails after the third stop.

@@ -1592,7 +1592,7 @@ test('a Rotate after a ring reorder leaves each ring its own row, width, and anc
     await settleLive(page);
     const after = await ringRows(page);
     expect(after.map((row) => [row.id, row.label, row.width])).toEqual(before.map((row) => [row.id, row.label, row.width]));
-    expect(await drawnRings(page), 'the next Generate draws each row as before the Rotate').toEqual(drawn);
+    expect(await drawnRings(page), 'the next Generate draws each row in the color and at the radii it had before the Rotate').toEqual(drawn);
     expect(await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().adv.circular_track_slots.find((row) => row.id === 'mark').params.anchor_slot))
       .toBe('conservation_ringa');
   } finally { await page.context().close(); }
@@ -1612,6 +1612,127 @@ test('a Rotate after a Remove and an Add Seq puts no edit on another ring', asyn
     expect((await ringRows(page)).map((row) => [row.file, row.label, row.width]), 'the edit of ringz is not on a committed ring').toEqual([
       ['ringa', 'ringa', null], ['ringb', 'ringb', null], ['ringc', 'ringc', null]
     ]);
+  } finally { await page.context().close(); }
+});
+
+// While a Generate runs, every control that rewrites the ring series is disabled (Run LOSAT and Upload BLAST TSV,
+// Move series, Remove series, Add Seq) and Reset Settings is refused, so a keyboard user behind the overlay cannot
+// change the rings either. A row moves to its ring's new key only if the rings at adoption are the rings the request
+// was built from; that compare stays for a change that does not come through these controls.
+const revealRingControls = (page) => reveal(page.locator('button[aria-label="Add Seq"], button:has-text("Add Seq")').first());
+const expectEachRowOnItsRing = async (page) => {
+  const rows = await ringRows(page);
+  expect(rows.map((row) => row.file).sort()).toEqual(['ringa', 'ringb', 'ringc']);
+  expect(rows.map((row) => [row.id.replace(/^conservation_|_\d+$/g, ''), row.label]), 'each row\'s id and name are of the file it draws')
+    .toEqual(rows.map((row) => [row.file, row.file]));
+};
+const ringLabels = (page) => page.evaluate(() => window.__GBDRAW_APP__.circularConservation.series.map((entry) => entry.label));
+// Each control that changes the rings, as a keyboard user reaches it: Move series both ways, Remove series, Add Seq,
+// Reset Settings, and the two source radios (last: Upload BLAST TSV would hide the others).
+const ringControls = (page) => [
+  page.getByRole('button', { name: 'Move series inward', exact: true }).first(),
+  page.getByRole('button', { name: 'Move series outward', exact: true }).nth(1),
+  page.getByRole('button', { name: 'Remove series', exact: true }).last(),
+  page.getByRole('button', { name: 'Add Seq', exact: true }),
+  page.getByRole('button', { name: 'Reset Settings', exact: true }),
+  page.locator('[data-setting="pairwise-comparisons"]').getByRole('radio', { name: 'Upload BLAST TSV', exact: true }),
+  page.locator('[data-setting="pairwise-comparisons"]').getByRole('radio', { name: 'Run LOSAT', exact: true })
+];
+// Focus the control by keyboard focus, not by pointer, and press the key; a disabled control takes no focus.
+const pressOn = async (page, control, key) => {
+  await page.evaluate(() => document.activeElement?.blur());
+  await control.evaluate((element) => element.focus());
+  await page.keyboard.press(key);
+};
+const holdNextSearch = (page, { fail = false } = {}) => page.evaluate((shouldFail) => {
+  window.__RELEASE_SEARCH__ = null;
+  window.__HOLD_SEARCH__ = true;
+  window.__FAIL_SEARCH__ = shouldFail;
+}, fail);
+const releaseSearch = async (page) => {
+  await page.evaluate(() => window.__RELEASE_SEARCH__());
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 120000 });
+  await settleLive(page);
+};
+
+test('the ring controls are disabled while a Generate runs, and work again after it ends or fails', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await loadAddedRings(browser);
+  try {
+    await revealRingControls(page);
+    await page.evaluate(() => {
+      const search = window.__GBDRAW_LOSAT_EXECUTOR__;
+      window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+        if (window.__HOLD_SEARCH__) {
+          window.__HOLD_SEARCH__ = false;
+          await new Promise((resolve) => { window.__RELEASE_SEARCH__ = resolve; });
+          if (window.__FAIL_SEARCH__) throw new Error('stub search failure');
+        }
+        return search(jobs);
+      };
+    });
+    let chosenFiles = 0;
+    page.on('filechooser', async (chooser) => {
+      chosenFiles += 1;
+      await chooser.setFiles({ name: 'ringz.fasta', mimeType: 'text/plain', buffer: Buffer.from('>ringz\nACGTACGTACGTACGTACGTACGT\n') });
+    });
+    const generateButton = page.getByRole('button', { name: 'Generate Diagram', exact: true });
+    // Out of file order, so a control that derives the series again from the files changes it.
+    await ringControls(page)[0].click();
+    expect(await ringLabels(page)).toEqual(['ringb', 'ringa', 'ringc']);
+    for (const fail of [true, false]) {
+      await holdNextSearch(page, { fail });
+      await generateButton.click();
+      await page.waitForFunction(() => Boolean(window.__RELEASE_SEARCH__), null, { timeout: 120000 });
+      const [inward, outward, remove, addSeq, reset, upload, losat] = ringControls(page);
+      await pressOn(page, inward, 'Enter');
+      await pressOn(page, outward, ' ');
+      await pressOn(page, remove, 'Enter');
+      await pressOn(page, addSeq, ' ');
+      await pressOn(page, reset, 'Enter');
+      await expect(page.getByRole('dialog', { name: 'Reset all settings?', exact: true }), 'Reset Settings asks nothing while the search runs')
+        .toHaveCount(0);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.resetSettings()), 'the owner refuses Reset Settings while the search runs')
+        .toEqual({ status: 'busy', reason: 'Generating diagram. Retry after generation finishes.' });
+      await pressOn(page, upload, ' ');
+      await pressOn(page, losat, ' ');
+      expect(await ringLabels(page), 'no key press changes the rings while the search runs').toEqual(['ringb', 'ringa', 'ringc']);
+      expect(chosenFiles, 'Add Seq opens no file chooser while the search runs').toBe(0);
+      for (const control of ringControls(page)) await expect(control).toBeDisabled();
+      await releaseSearch(page);
+      expect(await page.evaluate(async () => (await import('./js/state.js')).state.errorLog.value === null)).toBe(!fail);
+      for (const control of ringControls(page)) await expect(control).toBeEnabled();
+    }
+    await expectEachRowOnItsRing(page);
+    await pressOn(page, ringControls(page)[0], 'Enter');
+    expect(await ringLabels(page), 'Move series works again by keyboard after the Generate').toEqual(['ringa', 'ringb', 'ringc']);
+  } finally { await page.context().close(); }
+});
+
+// A change through the hook, not a control: the compare at adoption replaces the rows instead of moving them to the
+// other ring's key. This checks the state right after that Generate only; the series it adopts still takes the draft's
+// entry at the same place (`adoptCanonicalRenderArtifacts`). No control in the Web UI rewrites the series while a
+// Generate runs: the ring controls and the source radios are disabled, and Reset Settings is refused.
+test('a ring reorder after the request is built puts no row on another ring', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await loadAddedRings(browser);
+  try {
+    await revealRingControls(page);
+    await page.evaluate(() => {
+      const hooks = window.__GBDRAW_TEST_HOOKS__;
+      const previous = hooks.onSessionLifecycleEvent;
+      hooks.onSessionLifecycleEvent = (event) => {
+        previous?.(event);
+        if (event.name === 'canonical-request-built' && !window.__RING_MOVED__) {
+          window.__GBDRAW_APP__.moveCircularConservationSeries(0, 1);
+          window.__RING_MOVED__ = window.__GBDRAW_APP__.circularConservation.series.map((entry) => entry.label);
+        }
+      };
+    });
+    await expectGenerates(page);
+    expect(await page.evaluate(() => window.__RING_MOVED__)).toEqual(['ringb', 'ringa', 'ringc']);
+    await settleLive(page);
+    await expectEachRowOnItsRing(page);
   } finally { await page.context().close(); }
 });
 

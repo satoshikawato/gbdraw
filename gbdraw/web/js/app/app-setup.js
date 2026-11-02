@@ -3649,8 +3649,8 @@ export const createAppSetup = () => {
     askChoice,
     showNotice,
     canonicalSessionVersion: SESSION_VERSION,
-    // An adoption of a Circular LOSAT result reconciles its rings; any other leaves them. Only a request built from
-    // this draft moves the ring rows to its keys (`keepCircularConservationRowsThrough` states why).
+    // An adoption of a Circular LOSAT result reconciles its rings; any other leaves them. The ring rows move to its keys
+    // only if the draft's rings are those the request was built from (`keepCircularConservationRowsThrough` states why).
     adoptCanonicalRenderArtifacts: (canonical, { builtFromDraft = false, ...options }) => {
       const drawing = state.drawingOfMode('circular');
       const adopt = () => adoptCanonicalRenderArtifacts(canonical, options);
@@ -5566,7 +5566,7 @@ export const createAppSetup = () => {
   // comparisons are the Linear drawing's. The button asks first and says what
   // the reset keeps; `resetSettings` itself does not ask.
   const requestResetSettings = async () => {
-    const sessionBusy = sessionOperationAvailability();
+    const sessionBusy = sessionOperationAvailability('reset');
     if (sessionBusy) return sessionBusy;
     const choice = await askChoice({
       title: t('Reset all settings?'),
@@ -5588,7 +5588,7 @@ export const createAppSetup = () => {
   };
   const resetSettings = () => {
     const drawing = state.drawingOfMode('linear');
-    const sessionBusy = sessionOperationAvailability();
+    const sessionBusy = sessionOperationAvailability('reset');
     if (sessionBusy) return sessionBusy;
     // A notice (a loaded Session's warnings, a table import) described the
     // settings the reset replaces. Generate keeps it: it describes the Session.
