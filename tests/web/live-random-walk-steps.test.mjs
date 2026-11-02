@@ -71,14 +71,12 @@ test('a replay refuses a restoring step when no row is deleted', () => {
 // for the current state.
 test('a step shows unplaced labels only from a text edit with Auto Reflow off and the Undos after it', () => {
   const step = { kind: 'labelText', feature: 'record 1, feature f5aa08bf5', text: 'x' };
-  const edited = { id: 'f5aa08bf5', text: null };
-  assert.deepEqual(unplacedLabels(step, false, [], undefined), edited);
-  assert.deepEqual(unplacedLabels(step, false, ['label text scope single'], undefined), edited);
-  assert.deepEqual(unplacedLabels(step, false, ['label text scope all'], undefined), { id: 'f5aa08bf5', text: 'x' });
-  assert.equal(unplacedLabels(step, true, [], undefined), null);
-  assert.deepEqual(unplacedLabels({ kind: 'undo' }, true, [], { unplaced: edited }), edited);
-  assert.equal(unplacedLabels({ kind: 'undo' }, true, [], { unplaced: null }), null);
-  assert.equal(unplacedLabels({ kind: 'undo' }, true, [], undefined), null);
-  assert.equal(unplacedLabels({ kind: 'undoRedo' }, true, [], { unplaced: edited }), null);
-  assert.equal(unplacedLabels({ kind: 'fill' }, true, [], { unplaced: edited }), null);
+  const edited = { id: 'f5aa08bf5' };
+  assert.deepEqual(unplacedLabels(step, false, undefined), edited);
+  assert.equal(unplacedLabels(step, true, undefined), null);
+  assert.deepEqual(unplacedLabels({ kind: 'undo' }, true, { unplaced: edited }), edited);
+  assert.equal(unplacedLabels({ kind: 'undo' }, true, { unplaced: null }), null);
+  assert.equal(unplacedLabels({ kind: 'undo' }, true, undefined), null);
+  assert.equal(unplacedLabels({ kind: 'undoRedo' }, true, { unplaced: edited }), null);
+  assert.equal(unplacedLabels({ kind: 'fill' }, true, { unplaced: edited }), null);
 });

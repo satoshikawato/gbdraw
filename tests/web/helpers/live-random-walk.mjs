@@ -105,8 +105,7 @@ const ADDED_CAPTIONS = ['Walk group', 'Added row'];
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // The labels a step shows from a text edit made with Auto Reflow off that neither a
-// reflow nor a Generate has placed, or null: the edited feature, and the text when
-// the edit reached every label with it. The walk Generates after every step, so an
+// reflow nor a Generate has placed, or null: the edited feature only. The walk Generates after every step, so an
 // Undo right after that edit returns its Result, and each further Undo returns the
 // Result the step before it showed. Every other step and label answers for the
 // current state.
@@ -114,16 +113,13 @@ const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * @param {{ kind: string, feature?: string, text?: string }} step
  * @param {boolean} stepReflow
  * @param {string[]} notes
- * @param {{ unplaced: { id: string, text: string | null } | null } | undefined} previous
- * @returns {{ id: string, text: string | null } | null}
+ * @param {{ unplaced: { id: string } | null } | undefined} previous
+ * @returns {{ id: string } | null}
  */
-export const unplacedLabels = (step, stepReflow, notes, previous) => {
+export const unplacedLabels = (step, stepReflow, previous) => {
   if (step.kind === 'undo') return previous?.unplaced ?? null;
   if (step.kind !== 'labelText' || stepReflow) return null;
-  return {
-    id: String(step.feature).split(', feature ')[1],
-    text: notes.includes('label text scope all') ? String(step.text) : null
-  };
+  return { id: String(step.feature).split(', feature ')[1] };
 };
 
 // The fixture opened with both drawings holding a Result; the floor of the
@@ -637,7 +633,7 @@ const bindLabels = (page, key) => evaluateWithRetainedPromise(page, async (targe
  * @typedef {{ seed: number, title: string, fixture: string, reflow: boolean, steps: RecordedStep[], shrink?: object }} WalkRecord
  */
 /** @typedef {{ phase: string, drawing: string, slices: string[] }} IsolationChange */
-/** @typedef {{ index: number, kind: string, unplaced: { id: string, text: string | null } | null, differences: string[], isolation: IsolationChange[] }} StepResult */
+/** @typedef {{ index: number, kind: string, unplaced: { id: string } | null, differences: string[], isolation: IsolationChange[] }} StepResult */
 /**
  * Where the steps of a run come from: the walk draws them, a replay reads
  * them. Each returns null when the step cannot apply in `state`.
@@ -767,7 +763,7 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
     const isolation = BARRIER_KINDS.includes(record.step.kind) ? [] : isolationChanges('the step', before, afterStep,
       Object.keys(before.drawings).filter((drawingId) => record.step.kind === 'drawingSwitch' || drawingId !== before.active));
     if (record.step.kind === 'load') for (const drawingId of Object.keys(floors)) delete floors[drawingId];
-    const unplaced = unplacedLabels(record.step, stepReflow, record.notes, results.at(-1));
+    const unplaced = unplacedLabels(record.step, stepReflow, results.at(-1));
     let differences = [];
     try {
       await expectLiveEqualsGenerate(page, { label: `step ${index} (${record.step.kind})`, unplaced });

@@ -1182,6 +1182,24 @@ test.describe('a Result displayed after its intent changed', () => {
       await showResult(page, 1);
       await expectLiveEqualsGenerate(page, { label: 'a Result an Undo of a Generate returned, its edit gone before that Generate' });
     });
+    test(`an Undo of a Generate that replaced an unshown Result holding Label visibility On shows what Generate draws (${flag})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow });
+      await showResult(page, 1);
+      await showNoLabels(page);
+      await popupEdit(page, BATCH_FEATURE, { labelVisibility: 'on' });
+      await generate(page);
+      await showResult(page, 0);
+      await resetKeepingLabelSettings(page);
+      await settleLive(page);
+      await generate(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      // That Undo returns the state Reset wrote.
+      await setAutoReflow(page, reflow === 'on');
+      await showResult(page, 1);
+      await expectLiveEqualsGenerate(page, { label: 'a Label On in a Result an Undo of a Generate returned' });
+    });
     test(`an Undo of a Generate that replaced an unshown Result without a hidden feature draws the feature (${flag})`, async ({ page }) => {
       test.setTimeout(240_000);
       await open(page, { mode: 'circular', results: 'batch', reflow });
@@ -1370,21 +1388,23 @@ test.describe('Undo and Redo', () => {
     await new Promise((resolve) => { setTimeout(resolve, 100); });
     app.layoutRepositionMode = false;
   });
-  test('a moved Legend returns through Undo after a label edit, Auto Reflow on (linear)', async ({ page }) => {
-    test.fail(true, 'OV-2437: the Undo of the drag after a label edit does nothing with Auto Reflow on');
-    test.setTimeout(180_000);
-    await open(page, { mode: 'linear', results: 'single', reflow: 'on' });
-    const start = await movedLegend(page);
-    await dragLegend(page);
-    await settleLive(page);
-    await popupEdit(page, 'FL2', { labelText: 'beside the Legend' });
-    await settleLive(page);
-    await history(page, 'undo');
-    await settleLive(page);
-    await history(page, 'undo');
-    await settleLive(page);
-    expect(await movedLegend(page), 'Undo of the drag returns it').toEqual(start);
-  });
+  for (const mode of ['linear', 'circular']) {
+    test(`a moved Legend returns through Undo after a label edit, Auto Reflow on (${mode})`, async ({ page }) => {
+      test.fail(true, 'OV-2437: the Undo of the drag after a label edit does nothing with Auto Reflow on');
+      test.setTimeout(180_000);
+      await open(page, { mode, results: 'single', reflow: 'on' });
+      const start = await movedLegend(page);
+      await dragLegend(page);
+      await settleLive(page);
+      await popupEdit(page, 'FL2', { labelText: 'beside the Legend' });
+      await settleLive(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      expect(await movedLegend(page), 'Undo of the drag returns it').toEqual(start);
+    });
+  }
   for (const mode of ['linear', 'circular']) {
     for (const { domain, edit, edited } of AT_ONCE_CASES) {
       test(`Undo and Redo of ${domain} apply at once with no rerender, Auto Reflow off (${mode})`, async ({ page }) => {
@@ -1403,10 +1423,12 @@ test.describe('Undo and Redo', () => {
         await expectLiveEqualsGenerate(page, { label: `Undo of ${domain}` });
       });
     }
-    // With Auto Reflow on, Undo and Redo of a hide or a Label Off wait for the rerender.
+    // With Auto Reflow on, an Undo of a hide or a Label Off waits for the rerender
+    // (OV-2436); the Redo after it applies at once, with the rerender held only
+    // for the Redo.
     for (const { domain, edit, edited } of AT_ONCE_CASES.slice(0, 2)) {
-      test(`Undo and Redo of ${domain} apply at once, Auto Reflow on (${mode})`, async ({ page }) => {
-        test.fail(true, 'OV-2436: Undo and Redo of a hide or a Label Off wait for the rerender with Auto Reflow on');
+      test(`Undo of ${domain} applies at once, Auto Reflow on (${mode})`, async ({ page }) => {
+        test.fail(true, 'OV-2436: an Undo of a hide or a Label Off waits for the rerender with Auto Reflow on');
         test.setTimeout(180_000);
         await open(page, { mode, results: 'single', reflow: 'on' });
         const id = await featureIdOf(page, 'FL2');
@@ -1414,10 +1436,20 @@ test.describe('Undo and Redo', () => {
         await settleLive(page);
         await holdRerenders(page);
         const undo = await stepAndRead(page, 'undo', id);
+        await releaseRerenders(page);
+        expect(undo, 'Undo').toEqual(SHOWN);
+      });
+      test(`Redo of ${domain} applies at once after the Undo has finished, Auto Reflow on (${mode})`, async ({ page }) => {
+        test.setTimeout(180_000);
+        await open(page, { mode, results: 'single', reflow: 'on' });
+        const id = await featureIdOf(page, 'FL2');
+        await edit(page);
+        await settleLive(page);
+        await history(page, 'undo');
+        await settleLive(page);
+        await holdRerenders(page);
         const redo = await stepAndRead(page, 'redo', id);
         await releaseRerenders(page);
-        await settleLive(page);
-        expect(undo, 'Undo').toEqual(SHOWN);
         expect(redo, 'Redo').toEqual(edited);
       });
     }
@@ -1532,7 +1564,7 @@ test('a leader lost on another label fails where the edited label is left unplac
   expect(hidden, 'another label draws a leader').toHaveLength(1);
   const unexpected = await expectLiveEqualsGenerate(page, {
     label: 'the Undo with one other leader removed',
-    unplaced: { id: LEADER_FEATURE.biological_feature_id, text: null }
+    unplaced: { id: LEADER_FEATURE.biological_feature_id }
   }).then(() => [], (error) => error?.matcherResult?.actual);
   expect(unexpected).toEqual([`leader ${hidden[0]} drawn: live false, generated true`]);
 });

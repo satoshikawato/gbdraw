@@ -219,15 +219,12 @@ const diffSemanticSnapshots = (live, generated) => {
 
 // The context an allowed-difference condition reads: the live Result's
 // context, and whether the feature's label is drawn on both sides. `unplaced`
-// names the labels a text edit with Auto Reflow off left that nothing has placed,
-// shown now under the current state: the edited feature's `id`, and the `text` when
-// the edit reached every label with that text. Those read as Auto Reflow off; a
-// difference on any other label answers for the current state.
+// names the label a text edit with Auto Reflow off left that nothing has placed,
+// shown now under the current state: the edited feature's `id`. It reads as Auto
+// Reflow off; a difference on any other label answers for the current state.
 const differenceContext = (difference, live, generated, unplaced = null) => ({
   ...live.context,
-  autoReflow: live.context.autoReflow && !(
-    unplaced && (difference.id === unplaced.id || (unplaced.text !== null && live.labels[difference.id]?.text.includes(unplaced.text)))
-  ),
+  autoReflow: live.context.autoReflow && !(unplaced && difference.id === unplaced.id),
   labelDrawnInBoth: Boolean(live.labels[difference.id] && generated.labels[difference.id])
 });
 

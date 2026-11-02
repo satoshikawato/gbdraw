@@ -131,8 +131,8 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   - the label texts and **Label visibility** a Result was drawn with, when **Reset
     Settings**, Save, and Load pass before it is shown again (it still draws the
     features it lacks);
-  - the same, on a Result not shown when those edits left and returned by an Undo
-    of a later **Generate Diagram**.
+  - a label text on a Result not shown when the edit left, returned by an Undo of a
+    later **Generate Diagram**.
 
   Settings marked **Applies on Generate** still wait for **Generate Diagram**.
 - **Web app: text typed in the Features list.** Text typed in a label input of the
@@ -325,16 +325,18 @@ file. See
   when **Auto Reflow** is on by then. 0.14.4 does the same.
 - An Undo or a Redo back to **Label visibility** On draws no label on a figure that
   lacks it, until the next redraw or **Generate Diagram**.
-- With **Auto Reflow** on, an Undo or a Redo of a feature hide or of **Label
-  visibility** Off changes the figure only when the redraw it starts finishes, not
-  at once. 0.14.4 does the same.
-- With **Auto Reflow** on, on a Linear diagram, after you drag the Legend and then
-  edit a label text, the Undo that should return the Legend does nothing and uses up
-  its step, so the Legend stays where you dragged it. 0.14.4 does the same.
-- After you stroke a color rule's Legend row, delete the row, press **Generate
-  Diagram**, give its feature another Legend name, and press **Restore**, the next
-  **Generate Diagram** fails with "The generated result could not be accepted". 0.14.4
-  does the same.
+- With **Auto Reflow** on, an Undo of a feature hide or of **Label visibility** Off
+  changes the figure only when the redraw it starts finishes, not at once. A Redo
+  applies at once. 0.14.4 does the same.
+- With **Auto Reflow** on, on Circular and Linear diagrams, after you drag the Legend
+  and then edit a label text, the Undo that should return the Legend does nothing and
+  uses up its step, so the Legend stays where you dragged it. 0.14.4 does the same.
+- After you set a stroke on a Legend row, delete the row, press **Generate Diagram**,
+  then remove or recaption its color rule or give its feature another Legend name
+  (also for a row with no color rule), and press **Restore**, the next **Generate
+  Diagram** fails with "The generated result could not be accepted", on Circular and
+  Linear diagrams. A Legend row without a stroke does not fail; set no stroke on a
+  row you delete. 0.14.4 does the same.
 - Edits made on a Linear File card that draws every record of its file, in a
   Session saved by gbdraw 0.13.0, do not follow its records after the first
   **Generate Diagram** splits the card into one card per record.
