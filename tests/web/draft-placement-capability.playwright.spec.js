@@ -71,7 +71,7 @@ for (const mode of ['circular', 'linear']) {
           });
           return { errors, before, after: app.featurePlacementActions.valueFor(feature) };
         }, sides);
-        expect(rejected.errors.every((message) => message.includes('Unavailable'))).toBe(true);
+        expect(rejected.errors.every((message) => /no feature track for this placement|not in the displayed Result/.test(message))).toBe(true);
         expect(rejected.after).toBe(rejected.before);
       }
       await closePopup();
