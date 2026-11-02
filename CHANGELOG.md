@@ -94,7 +94,8 @@ write-up of a release.
 - Fixed: Web app: with **Use custom stack** on, the Generate that ran a ring's
   LOSAT search replaced its Track row: the row lost its edits, the next Generate
   drew it under another id, and a row anchored to it stopped that Generate with
-  an error. The row now keeps its id and edits (OV-2442).
+  an error. The row now keeps its id and edits; when the rings change while that Generate runs, it replaces
+  the rows as before (OV-2442).
 - Fixed: a threaded LOSAT search in the Web app could stop with "memory access
   out of bounds" and run the whole pair again (the console said "running the
   pair again"), or fail after the third stop. In Chromium a copy into memory
@@ -182,10 +183,17 @@ write-up of a release.
   diagrams; a row without a stroke does not fail (OV-2412).
 - Known issue: Web app: with **Use custom stack** on, **Add Seq** after a ring search returns every ring to
   its sequence file and replaces the ring rows: their edits are lost, and a row anchored to one of them stops
-  each **Generate Diagram** with an error on `anchor_slot` until its anchor is chosen again (OV-2443).
-- Known issue: Web app: after the comparison rings are reordered, or one is removed and another added, a record
-  rotation before the next **Generate Diagram** returns the rings of the last Generate and drops the change
-  with no message, and the next Generate can draw a ring's rows under another ring's name (OV-2444).
+  each **Generate Diagram** with "Track row N. Field: Enabled drawable anchor." until its anchor is chosen
+  again (OV-2443).
+- Known issue: Web app: after any change to the comparison rings (a reorder, **Remove series**, or **Add Seq**),
+  a record rotation before the next **Generate Diagram** returns the rings of the last Generate and drops the
+  change with no message, and after a reorder or a Remove the next Generate can draw a ring's rows under another ring's
+  name (OV-2444).
+- Known issue: Web app: with **Use custom stack** on, after Undo goes back past a Track-stack edit made before a
+  Generate that ran the ring searches, each **Generate Diagram** stops with "Track row N. Use the supported
+  conservation workflow and select a comparison source.", also after another Undo or Redo; turning
+  **Use custom stack** off, Generate, and on again recovers, with the ring rows made again without their
+  edits (OV-2445).
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

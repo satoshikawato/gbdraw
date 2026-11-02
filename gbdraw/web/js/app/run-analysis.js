@@ -228,7 +228,7 @@ import {
  */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
-/** @import { CircularConservationLike } from '../services/conservation-series.js' */
+/** @import { CircularConservationLike, RawConservationSeriesEntry } from '../services/conservation-series.js' */
 /** @import { FeatureFill, LegendRow } from '../services/drawing/paint.js' */
 /** @import { LinearComparisonResolvedEdge } from '../services/linear-comparisons.js' */
 /** @import { RequestCanonicalComparison } from '../services/session-request.js' */
@@ -1209,6 +1209,12 @@ const buildConservationSeries = (sourceFiles, circularConservation) => {
     color: entry.color
   }));
 };
+/**
+ * The rings of a series as one string: equal only for the same keys in the same order. It reads the keys the series
+ * holds, so both sides of a comparison read one channel whichever files the keys came from.
+ * @param {readonly RawConservationSeriesEntry[]} series
+ */
+const ringKeysOfSeries = (series) => JSON.stringify(series.map((entry) => String(entry.sourceKey)));
 /** @param {unknown} value */
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -1490,8 +1496,9 @@ export const executeCanonicalRenderCandidate = async ({
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, builtFromDraft?: boolean }) => void} adoptCanonicalRenderArtifacts
- *   The Session owner's adoption of a candidate's request, resources, and files. `builtFromDraft` says the request was
- *   built from the current draft (a Generate), not taken from the committed one (a rotation, an alignment, a placement).
+ *   The Session owner's adoption of a candidate's request, resources, and files. `builtFromDraft` says the draft's rings
+ *   at this adoption are the rings the request was built from: a Generate whose rings did not change while it ran, not
+ *   the committed request (a rotation, an alignment, a placement).
  * @property {(drawing: DrawingState, enabled: boolean) => void} setCircularConservationEnabled
  *   The ring owner's switch of a Circular drawing's comparison rings, with their managed stack rows.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
@@ -2620,6 +2627,9 @@ export const createRunAnalysis = ({
     let generatedLabelProjection = null;
     // The Feature visibility the request draws, kept with the input summaries.
     let drawnVisibility = '';
+    // The rings this run's ring searches read (`ringKeysOfSeries`); null when it runs none.
+    /** @type {string | null} */
+    let requestRingKeys = null;
     // The record key moves of this run (OV-1949), and the record lists its identities are read from.
     /** @type {ReadonlyMap<string, string>} */
     let recordMoves = new Map();
@@ -3392,6 +3402,7 @@ export const createRunAnalysis = ({
             if (comparisonFiles.length === 0) {
               throw new Error('Please upload at least one comparison sequence file for Pairwise Comparisons.');
             }
+            requestRingKeys = ringKeysOfSeries(drawing.circularConservation.series);
             const conservationEntries = orderedConservationSources(comparisonFiles, drawing.circularConservation);
             const conservationSeries = buildConservationSeries(comparisonFiles, drawing.circularConservation);
             const conservationResults = await runCircularLosatConservation(conservationEntries);
@@ -5359,7 +5370,11 @@ export const createRunAnalysis = ({
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
         // The committed request keeps the computed typed analysis resource, so
         // target-only renders and Similarity alignment use it without LOSATP.
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, builtFromDraft: true });
+        adoptCanonicalRenderArtifacts(canonical, {
+          adoptOwnedRequest: true,
+          // The ring controls stay enabled during a Generate, so the draft's rings may have changed since the searches.
+          builtFromDraft: requestRingKeys !== null && requestRingKeys === ringKeysOfSeries(drawing.circularConservation.series)
+        });
       }
       // The identities of this request's records stay with it (DESIGN A1); History restores them with it.
       if (identitySources) {
