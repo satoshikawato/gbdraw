@@ -985,14 +985,15 @@ test('sentences with a count or a qualifier are whole keys, and none is built fr
     'Exact replay references {files}, which is included in "Download reproducibility files".',
     'Exact replay references {files}, which are included in "Download reproducibility files".',
     'This tool runs entirely in your browser.', 'It uses WebAssembly (Pyodide).',
-    '{feature} where a qualifier matches “{pattern}”', 'Any feature where a qualifier matches “{pattern}”',
     'All features that share:',
     'Room kept toward the center for the inside tracks: {px} px.',
     'Room kept toward the center for the inside tracks (among them GC content, GC skew, and the scale): {px} px.',
     'number of groups in a block\u0004Similarity groups'
   ]) assert.ok(keys.has(key), key);
   for (const key of [
-    '{first} and {second}', 'the scale', 'a qualifier', 'entirely in your browser', 'This tool runs {where} using WebAssembly (Pyodide).', 'All features with the same'
+    '{first} and {second}', 'the scale', 'a qualifier', 'entirely in your browser', 'This tool runs {where} using WebAssembly (Pyodide).', 'All features with the same',
+    // OV-2435: a color rule needs a qualifier, so no sentence names a rule without one.
+    '{feature} where a qualifier matches “{pattern}”', 'Any feature where a qualifier matches “{pattern}”'
   ]) assert.ok(!keys.has(key), key);
   assert.deepEqual([...keys.keys()].filter((key) => /file\(s\)/.test(key)), []);
 });
