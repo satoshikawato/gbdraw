@@ -1592,7 +1592,7 @@ test('a Rotate after a ring reorder leaves each ring its own row, width, and anc
     await settleLive(page);
     const after = await ringRows(page);
     expect(after.map((row) => [row.id, row.label, row.width])).toEqual(before.map((row) => [row.id, row.label, row.width]));
-    expect(await drawnRings(page), 'the next Generate draws each row as before the Rotate').toEqual(drawn);
+    expect(await drawnRings(page), 'the next Generate draws each row in the color and at the radii it had before the Rotate').toEqual(drawn);
     expect(await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().adv.circular_track_slots.find((row) => row.id === 'mark').params.anchor_slot))
       .toBe('conservation_ringa');
   } finally { await page.context().close(); }
@@ -1612,6 +1612,65 @@ test('a Rotate after a Remove and an Add Seq puts no edit on another ring', asyn
     expect((await ringRows(page)).map((row) => [row.file, row.label, row.width]), 'the edit of ringz is not on a committed ring').toEqual([
       ['ringa', 'ringa', null], ['ringb', 'ringb', null], ['ringc', 'ringc', null]
     ]);
+  } finally { await page.context().close(); }
+});
+
+// The ring controls stay enabled during a Generate: the overlay stops the pointer, not the keyboard. A row moves to its
+// ring's new key only if the rings at adoption are the rings the request was built from.
+const revealRingControls = (page) => reveal(page.locator('button[aria-label="Add Seq"], button:has-text("Add Seq")').first());
+const expectEachRowOnItsRing = async (page) => {
+  const rows = await ringRows(page);
+  expect(rows.map((row) => row.file).sort()).toEqual(['ringa', 'ringb', 'ringc']);
+  expect(rows.map((row) => [row.id.replace(/^conservation_|_\d+$/g, ''), row.label]), 'each row\'s id and name are of the file it draws')
+    .toEqual(rows.map((row) => [row.file, row.file]));
+};
+
+test('a ring reorder with the keyboard while the search runs puts no row on another ring', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await loadAddedRings(browser);
+  try {
+    await revealRingControls(page);
+    await page.evaluate(() => {
+      const search = window.__GBDRAW_LOSAT_EXECUTOR__;
+      window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+        if (!window.__RELEASE_SEARCH__) await new Promise((resolve) => { window.__RELEASE_SEARCH__ = resolve; });
+        return search(jobs);
+      };
+    });
+    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+    await page.waitForFunction(() => Boolean(window.__RELEASE_SEARCH__), null, { timeout: 120000 });
+    await page.locator('button[aria-label="Move series inward"]').first().focus();
+    await page.keyboard.press('Enter');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.circularConservation.series.map((entry) => entry.label)))
+      .toEqual(['ringb', 'ringa', 'ringc']);
+    await page.evaluate(() => window.__RELEASE_SEARCH__());
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 120000 });
+    await settleLive(page);
+    expect(await page.evaluate(async () => (await import('./js/state.js')).state.errorLog.value?.code ?? null)).toBeNull();
+    await expectEachRowOnItsRing(page);
+  } finally { await page.context().close(); }
+});
+
+test('a ring reorder after the request is built puts no row on another ring', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await loadAddedRings(browser);
+  try {
+    await revealRingControls(page);
+    await page.evaluate(() => {
+      const hooks = window.__GBDRAW_TEST_HOOKS__;
+      const previous = hooks.onSessionLifecycleEvent;
+      hooks.onSessionLifecycleEvent = (event) => {
+        previous?.(event);
+        if (event.name === 'canonical-request-built' && !window.__RING_MOVED__) {
+          window.__RING_MOVED__ = true;
+          document.querySelector('button[aria-label="Move series inward"]').click();
+        }
+      };
+    });
+    await expectGenerates(page);
+    expect(await page.evaluate(() => window.__RING_MOVED__)).toBe(true);
+    await settleLive(page);
+    await expectEachRowOnItsRing(page);
   } finally { await page.context().close(); }
 });
 

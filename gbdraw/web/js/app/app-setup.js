@@ -3649,8 +3649,8 @@ export const createAppSetup = () => {
     askChoice,
     showNotice,
     canonicalSessionVersion: SESSION_VERSION,
-    // An adoption of a Circular LOSAT result reconciles its rings; any other leaves them. Only a request built from
-    // this draft moves the ring rows to its keys (`keepCircularConservationRowsThrough` states why).
+    // An adoption of a Circular LOSAT result reconciles its rings; any other leaves them. The ring rows move to its keys
+    // only if the draft's rings are those the request was built from (`keepCircularConservationRowsThrough` states why).
     adoptCanonicalRenderArtifacts: (canonical, { builtFromDraft = false, ...options }) => {
       const drawing = state.drawingOfMode('circular');
       const adopt = () => adoptCanonicalRenderArtifacts(canonical, options);
