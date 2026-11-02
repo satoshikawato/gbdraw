@@ -4496,6 +4496,7 @@
                                                     class="inline-flex min-w-0 items-center gap-1 text-left select-none"
                                                     :class="circularTrackSlotsPanelOpen ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
                                                     :aria-expanded="circularTrackSlotsPanelOpen ? 'true' : 'false'"
+                                                    data-track-slots-toggle
                                                     aria-controls="circular-custom-track-slots-panel"
                                                     aria-describedby="circular-custom-track-slots-timing help-circular-custom-track-slots"
                                                     :title="circularTrackSlotsPanelOpen ? t('Close Custom Track Slots') : t('Open Custom Track Slots')"
@@ -5834,6 +5835,7 @@
                                 type="button"
                                 data-history-ignore
                                 data-scale-visibility-note
+                                aria-controls="circular-custom-track-slots-panel"
                                 @click="showCircularTicksSlot"
                                 class="text-xs text-blue-600 text-left">{{ t('Show Ticks slot') }}</button>
                             <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
@@ -9288,13 +9290,14 @@
 </script>
 
 <script type="text/x-template" id="file-uploader-template">
-    <div class="w-full" data-history-managed role="group" :aria-label="t('{name} selection', { name: $attrs['data-input-aria-label'] || label })">
+    <div ref="root" class="w-full" data-history-managed role="group" :aria-label="t('{name} selection', { name: $attrs['data-input-aria-label'] || label })">
         <div v-if="hasSelection" class="flex justify-between items-end mb-1">
             <label class="input-label mb-0">{{ label }}</label>
             <button @click.stop="clearFile" :disabled="!uploadAvailable" :aria-label="t('Remove {name}', { name: $attrs['data-input-aria-label'] || label })" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> {{ t('Remove') }}</button>
         </div>
         <div class="flex items-center gap-1">
         <div
+            ref="zone"
             class="upload-zone flex-1 min-w-0"
             :class="{'ready': hasSelection && !inspectionFailed, 'failed': hasSelection && inspectionFailed}"
             role="button"

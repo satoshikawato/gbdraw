@@ -36,7 +36,7 @@ import {
 import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
-import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../services/config-field-readers.js';
+import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../utils/download-names.js';
 import { admitFeatureCatalog, biologicalFeatureKey, resultCatalogFeatures } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { inputSummaryOf } from '../services/input-summary.js';
@@ -6472,7 +6472,7 @@ export const createAppSetup = () => {
     const slot = ticks.find((candidate) => candidate.enabled) || ticks[0];
     const row = slot ? document.querySelector(`[data-capture="circular-track-slot-${CSS.escape(slot.id)}"]`) : null;
     const panel = document.getElementById('circular-custom-track-slots-panel');
-    const toggle = /** @type {HTMLElement | null} */ (document.querySelector('[aria-controls="circular-custom-track-slots-panel"]'));
+    const toggle = /** @type {HTMLElement | null} */ (document.querySelector('[data-track-slots-toggle]'));
     const control = /** @type {HTMLElement | null} */ (row?.querySelector('input, select, button') ?? null);
     if (row instanceof HTMLElement && control) {
       await settingsPaneActions.revealSetting(row, { focus: control });

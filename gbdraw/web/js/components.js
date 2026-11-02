@@ -837,6 +837,19 @@ export const ColorValueControl = {
  *   chosen) and referenced by the zone through aria-describedby
  */
 
+/**
+ * The nearest ancestor that scrolls (overflow-y auto or scroll, taller than its box), else the page.
+ * @param {Element} element
+ * @returns {Element | null}
+ */
+const nearestScroller = (element) => {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) return node;
+  }
+  return document.scrollingElement;
+};
+
 // `inspectionFailed` is the slot's existing inspection status, passed by the
 // parent that shows its message (for example "No records were found"): a
 // selected file whose inspection failed is not shown as ready (UI-08).
@@ -866,10 +879,36 @@ export const FileUploader = {
       const suffix = items.length > 2 ? ` +${items.length - 2}` : '';
       return t('{count} files: {names}', { count: items.length, names: `${firstNames}${suffix}` });
     });
+    // The label row appears above the zone once a file is chosen, and the settings above it keep changing
+    // while the file is inspected. When the user picks a file with focus in the component, hold the zone
+    // at the viewport position it had at the pick: each frame, scroll the nearest scroller by the drift
+    // (a drift the scroller cannot take, such as one above the page top, waits) for about five seconds
+    // (Owner D-23). The position is read at the pick because the parent's render moves the settings above
+    // the zone before this component's own watcher runs.
+    const root = ref(/** @type {HTMLElement | null} */ (null));
+    const zone = ref(/** @type {HTMLElement | null} */ (null));
+    const HOLD_MAX_FRAMES = 300;
+    /** @param {number} top */
+    const holdZoneAt = (top) => {
+      const area = root.value;
+      const box = zone.value;
+      if (!area || !box) return;
+      let frames = 0;
+      const hold = () => {
+        if (!box.isConnected || !area.contains(document.activeElement)) return;
+        const drift = box.getBoundingClientRect().top - top;
+        const scroller = nearestScroller(box);
+        if (scroller && Math.abs(drift) > 0.5) scroller.scrollTop += drift;
+        if (++frames < HOLD_MAX_FRAMES) requestAnimationFrame(hold);
+      };
+      requestAnimationFrame(hold);
+    };
     const handleFile = (/** @type {{ target: HTMLInputElement }} */ e) => {
       const busy = state.sessionOperationAvailability();
       if (busy) { e.target.value = ''; return busy; }
       const nextFiles = Array.from(e.target.files || []);
+      const pickTop = !hasSelection.value && zone.value && root.value?.contains(document.activeElement)
+        ? zone.value.getBoundingClientRect().top : null;
       // A chosen input file makes a Generate likely: download the Worker's boot files now.
       if (nextFiles.length) prefetchPyodideBootAssets();
       const update = () => {
@@ -878,6 +917,7 @@ export const FileUploader = {
         } else if (nextFiles[0]) {
           emit('update:modelValue', nextFiles[0]);
         }
+        if (pickTop !== null) holdZoneAt(pickTop);
       };
       const history = window.__GBDRAW_HISTORY__;
       const apply = async () => {
@@ -917,7 +957,7 @@ export const FileUploader = {
         emit('update:modelValue', props.multiple ? [] : null);
       }
     };
-    return { input, helpId, handleFile, clearFile, hasSelection, selectedLabel, uploadAvailable };
+    return { input, root, zone, helpId, handleFile, clearFile, hasSelection, selectedLabel, uploadAvailable };
   }
 };
 

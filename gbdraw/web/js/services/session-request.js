@@ -53,7 +53,7 @@ import {
   parseCircularTrackSlotSpecs
 } from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
-import { downloadSafeName } from '../utils/download-names.js';
+import { DEFAULT_LINEAR_OUTPUT_PREFIX, downloadSafeName } from '../utils/download-names.js';
 import { projectCircularMeasureDraft } from './circular-track-measure.js';
 import {
   buildLinearTrackSlotPayload,
@@ -119,7 +119,7 @@ import { repairByDescription } from '../utils/contract-repair.js';
 import { isPlainObject } from '../utils/contract-shape.js';
 import { DEFINITION_LINE_STYLE_KINDS, requireDefinitionLineFontSizes } from './definition-line-style-state.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
-import { DEFAULT_LINEAR_OUTPUT_PREFIX, DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
+import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
