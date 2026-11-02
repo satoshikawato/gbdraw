@@ -727,6 +727,10 @@ const CONSERVATION_ROWS = Object.freeze([
 /** Omitted: the fresh default in every Session version. @type {FieldReader<boolean>} */
 export const readLinearRecordLayoutEnabled = (value) => (typeof value === 'boolean' ? { value, lost: false }
   : { value: WEB_UX_PROFILE.linear.arrangeInRowsByDefault, lost: !isUnsetValue(value) });
+// The output prefix of a Linear request without one; the Output Prefix field shows it as its placeholder.
+// Python owns the value (`RenderOutputRequest.output_prefix`); this is its registered twin (`concern:output-prefix`).
+export const DEFAULT_LINEAR_OUTPUT_PREFIX = 'out';
+
 /** The Linear record gap's default, in px: Python's (`CanonicalLinearLayout.recordGapPx`). */
 export const DEFAULT_LINEAR_RECORD_GAP_PX = /** @type {number} */ (
   /** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types.CanonicalLinearLayout).defaults?.recordGapPx);

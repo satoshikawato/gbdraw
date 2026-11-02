@@ -119,7 +119,7 @@ import { repairByDescription } from '../utils/contract-repair.js';
 import { isPlainObject } from '../utils/contract-shape.js';
 import { DEFINITION_LINE_STYLE_KINDS, requireDefinitionLineFontSizes } from './definition-line-style-state.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
-import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
+import { DEFAULT_LINEAR_OUTPUT_PREFIX, DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
@@ -645,8 +645,6 @@ const canonicalRecordDisplay = (raw) => {
 // Fresh canonical requests use only these typed GbdrawConfig leaf paths.
 // The snake_case aliases derived below exist solely in the persisted-session
 // reader; they are never emitted by buildConfigOverrides().
-// The output prefix of a Linear request without one; the Output Prefix field shows it as its placeholder.
-export const DEFAULT_LINEAR_OUTPUT_PREFIX = 'out';
 
 const CONFIG_OVERRIDE_PATHS = Object.freeze({
   arrowHeadLengthRatio: 'objects.features.arrow_geometry.head_length_ratio',

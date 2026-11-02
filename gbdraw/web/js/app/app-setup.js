@@ -36,7 +36,7 @@ import {
 import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
-import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../services/session-request.js';
+import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../services/config-field-readers.js';
 import { admitFeatureCatalog, biologicalFeatureKey, resultCatalogFeatures } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { inputSummaryOf } from '../services/input-summary.js';
