@@ -57,7 +57,7 @@ def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> 
     assert tip_template.count("<button") == 1
     assert 'v-else' not in tip_template
     assert ':aria-expanded="visible"' in tip_template
-    assert '@keydown.esc.stop="close"' in tip_template
+    assert '@keydown.esc="onEscape"' in tip_template
 
 
 def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> None:

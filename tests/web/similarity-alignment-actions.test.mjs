@@ -1054,7 +1054,7 @@ test('exclusive modes, reference Custom, Select and Skip are local with zero Wor
   const unknown=f.actions.directionPreview.value.records.find(r=>r.exclusion==='unknown_strand');
   assert.match(unknown.exclusionLabel,/^Direction unchanged: /);
   assert.match(f.actions.directionPreview.value.effect,/1 record keeps its direction/);
-  assert.match(f.actions.directionPreview.value.effect,/1 record stays unchanged/);
+  assert.match(f.actions.directionPreview.value.effect,/1 record unchanged/);
 });
 test('Apply and both Reset scopes own one History transaction and consume receipt',async()=>{
   for(const scope of ['positions','positions-and-directions']){

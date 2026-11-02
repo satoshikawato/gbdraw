@@ -950,7 +950,7 @@ test('the record topology a file declares and the option values of an error are 
     'Choose Pairwise matches, Similarity groups, or Collinear blocks.', 'Choose Adjacent pairs or All records.',
     'Choose Auto, CDS, or Locus.', 'Choose All hits or Reciprocal best hits.', 'Choose Strand or Gene order.',
     'Choose Average identity, Orientation, or Orientation + identity.',
-    'Depth TSV for file {file}, series {series}', 'Depth TSV for sequence {sequence}, series {series}',
+    'Depth TSV for file {file}, series {series}', 'Depth TSV · series {series} for sequence {sequence}',
     'BLAST TSV for #{from} to #{to}',
     'vs {record}', 'Not moved: {reason}', 'Not moved', 'Session file: {path} could not be read and is left out.',
     'record direction\u0004forward', 'record direction\u0004reverse', 'collinearity block kind\u0004syntenic'

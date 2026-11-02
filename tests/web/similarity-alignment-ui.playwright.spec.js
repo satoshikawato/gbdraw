@@ -849,7 +849,7 @@ test('exclusive direction modes and Custom follow keyboard choices without Worke
   await page.keyboard.press('ArrowDown');
   await expect(dialog.getByRole('radio', { name: /Select .*bp, strand/ }).nth(1)).toBeChecked();
   await page.keyboard.press('ArrowDown'); await expect(skip).toBeChecked();
-  await expect(dialog.locator('#alignment-direction-scope')).toContainText('1 record stays unchanged');
+  await expect(dialog.locator('#alignment-direction-scope')).toContainText('1 record unchanged');
   await modes.getByRole('radio', { name: 'Keep as is', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(modes.getByRole('radio', { name: 'All right', exact: true })).toBeChecked();

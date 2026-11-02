@@ -2998,7 +2998,7 @@
                                                 accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
                                                 :model-value="getLinearDepthFile(seq, track.index)"
                                                 @update:model-value="setLinearDepthFile(seq, track.index, $event)"
-                                                :data-input-aria-label="t('Depth TSV for sequence {sequence}, series {series}', { sequence: idx + 1, series: track.index + 1 })"
+                                                :data-input-aria-label="t('Depth TSV · series {series} for sequence {sequence}', { sequence: idx + 1, series: track.index + 1 })"
                                             ></file-uploader>
                                         </div>
                                     </div>
@@ -3711,7 +3711,8 @@
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">{{ t('LOSAT cache') }}</div>
-                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)"><i class="ph ph-trash" aria-hidden="true"></i> {{ tn(losatCacheInfo.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}</button>
+                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'linear-losat-cache-reason' : null"><i class="ph ph-trash" aria-hidden="true"></i> {{ losatCacheInfo.length === 0 ? t('Clear LOSAT results') : tn(losatCacheInfo.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}</button>
+                                <p v-if="losatCacheInfo.length === 0" id="linear-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>
                             </section>
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('collinear-details') || linearComparisonUi.sectionKeys.advanced.includes('paralog-links')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
@@ -3776,7 +3777,7 @@
                                     <button :aria-label="t('Duplicate set')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="duplicateAnnotationSet(set)" :title="t('Duplicate set')" :disabled="!semanticMutationAvailable"><i class="ph ph-copy" aria-hidden="true"></i></button>
                                     <button :aria-label="t('Delete set')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotationSet(set)" :title="t('Delete set')" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                 </div>
-                                <input :value="set.legendLabel" @input="setAnnotationSetLegendLabel(set, $event.target.value)" :aria-label="t('Set legend label')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Legend label')" :disabled="!semanticMutationAvailable">
+                                <input :value="set.legendLabel" @input="setAnnotationSetLegendLabel(set, $event.target.value)" :aria-label="t('Set legend label')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('legend label')" :disabled="!semanticMutationAvailable">
                                 <div v-for="(item, itemIndex) in set.annotations" :key="item.id" data-annotation-row class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
                                     <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1.15fr)_auto_1.5rem] items-center gap-1" :class="{ '!grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_1.5rem]': item.target.kind === 'featureIdentity' }">
                                         <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" :aria-label="t('Annotation id')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Name')" :disabled="!semanticMutationAvailable">
@@ -3835,7 +3836,7 @@
                                                     <input type="number" min="0" :value="item.lane" @input="setAnnotationField(set, item, 'lane', $event.target.value)" :disabled="!semanticMutationAvailable || (item.mark === 'highlight')" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" :placeholder="t('Auto')" :aria-label="t('Annotation lane')" :aria-describedby="`help-annotation-lane-${item.id}`">
                                                     <help-tip :id="`help-annotation-lane-${item.id}`" :label="t('Help: Annotation lane')" :text="t('Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band.')"></help-tip>
                                                 </div>
-                                                <div data-setting="annotation-style" class="flex items-center gap-1"><label class="flex items-center gap-1 text-[10px] text-slate-600">{{ t('Line color') }} <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-6 w-8 p-0" :disabled="!semanticMutationAvailable"></label><setting-note setting="annotation-style" :item="{ setId: set.id, itemId: item.id }"></setting-note></div>
+                                                <div data-setting="annotation-style" class="flex items-center gap-1"><label class="flex items-center gap-1 text-[10px] text-slate-600">{{ t('Line color') }} <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-6 w-8 p-0" :aria-describedby="`annotation-line-timing-${setIndex}-${itemIndex}`" :disabled="!semanticMutationAvailable"></label><setting-note :id="`annotation-line-timing-${setIndex}-${itemIndex}`" setting="annotation-style" :item="{ setId: set.id, itemId: item.id }"></setting-note></div>
                                                 <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" :checked="Boolean((item.style || set.defaultStyle).hatch)" @change="setAnnotationStyle(set, item, 'hatch', $event.target.checked ? { angle: 45, spacing: 5, color: (item.style || set.defaultStyle).stroke, width: 1, cross: false } : null)" :disabled="!semanticMutationAvailable"> {{ t('Hatch') }}</label>
                                             </div>
                                         </div>
@@ -3900,13 +3901,14 @@
                                     </div>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
-                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatCacheInfo.length === 0">
+                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatCacheInfo.length === 0" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
                                         <i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}
                                     </button>
-                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)">
-                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ tn(losatCacheInfo.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}
+                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
+                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ losatCacheInfo.length === 0 ? t('Clear LOSAT results') : tn(losatCacheInfo.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}
                                     </button>
                                 </div>
+                                <p v-if="losatCacheInfo.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>
                             </div>
                             <div v-if="circularConservation.source === 'upload' && circularConservationSeriesRows.length === 0">
                                 <span class="text-[9px] flex items-center">{{ t('Series names') }} <help-tip id="help-circular-comparison-series-names" :text="t('Optional fallback names for rings, one per source. Use new lines or commas.')"></help-tip></span>
@@ -4039,7 +4041,7 @@
                                     type="button"
                                     data-history-managed
                                     class="btn btn-secondary shrink-0 px-2 py-1 text-[10px]"
-                                    :aria-label="t('Reset preserved setting {path}', { path: entry.path })"
+                                    :aria-label="t('Reset setting {path}', { path: entry.path })"
                                     @click="resetUnmanagedConfigOverride(entry.path)"
                                  :disabled="!semanticMutationAvailable">
                                     {{ t('Reset setting') }}
@@ -5088,7 +5090,7 @@
                                         <span v-else>{{ t('Apply preset') }}</span>
                                     </button>
                                 </div>
-                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules') }}<template v-if="selectedSpecificPreset === 'cog'">{{ sentenceSeparator() }}{{ t('Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.') }}</template></p>
+                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules') }}<span v-if="selectedSpecificPreset === 'cog'" class="block">{{ t('Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.') }}</span></p>
                             </div>
 
                             <div>

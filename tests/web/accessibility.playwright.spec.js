@@ -607,7 +607,7 @@ test('the icon rail buttons have stable author-provided names', async ({ page })
 
 // UI-09: a control disabled for a reason the section does not show names it
 // in one visible line that the control references.
-test('disabled Single-record controls reference a visible reason', async ({ page }) => {
+test('disabled Single-record and LOSAT cache controls reference a visible reason', async ({ page }) => {
   test.setTimeout(180_000);
   await openApp(page);
   await page.getByLabel('GenBank/DDBJ File', { exact: true })
@@ -616,13 +616,15 @@ test('disabled Single-record controls reference a visible reason', async ({ page
     { timeout: 120_000 }).toBeGreaterThan(0);
   await page.evaluate(() => document.querySelectorAll('details').forEach((details) => { details.open = true; }));
   for (const name of ['Circular record label', 'Circular record subtitle', 'Circular region start', 'Circular region end',
-    'Circular reverse complement']) {
+    'Circular reverse complement', 'Save Raw LOSAT TSV', 'Clear LOSAT results']) {
+    // The LOSAT cache buttons name their reason in the one line "No LOSAT results yet".
+    const expected = /LOSAT/.test(name) ? /^No LOSAT results yet$/ : /^Available /;
     const control = page.getByLabel(name, { exact: true }).or(page.getByRole('button', { name, exact: true })).first();
     await expect(control, name).toBeDisabled();
     const reason = await control.evaluate((element) => (element.getAttribute('aria-describedby') || '').split(/\s+/)
       .map((id) => document.getElementById(id)).filter((target) => target?.checkVisibility()
-        && /^Available /.test(target.textContent.trim())).map((target) => target.textContent.trim())[0] || '');
-    expect(reason, `${name} names why it is disabled`).toMatch(/^Available /);
+        && /^(Available |No LOSAT results yet$)/.test(target.textContent.trim())).map((target) => target.textContent.trim())[0] || '');
+    expect(reason, `${name} names why it is disabled`).toMatch(expected);
   }
 });
 

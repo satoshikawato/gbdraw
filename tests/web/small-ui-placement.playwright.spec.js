@@ -9,14 +9,14 @@ const { load, popup: openFromFeatureList, seeds } = require('./helpers/mode-tran
 
 const open = browser => load(browser, seeds.circular, { width: 1600, height: 1000 });
 
-test('FL-11 the preset panel says what Bakta changes and that the palette is unchanged', async ({ browser }) => {
+test('FL-11 the preset panel says what a preset replaces and what Bakta changes', async ({ browser }) => {
   test.setTimeout(300000);
   const page = await open(browser);
   try {
     const effects = page.locator('[data-preset-scheme-effects]');
     await expect(effects).toHaveCount(1);
     await effects.evaluate(element => { for (let node = element.closest('details'); node; node = node.parentElement?.closest('details')) node.open = true; });
-    await expect(effects).toContainText('the palette is unchanged');
+    await expect(effects).toContainText('Replaces the specific rules');
     // The Bakta side effects show when Bakta is the chosen preset.
     await expect(effects).not.toContainText('Bakta');
     await page.getByLabel('Preset scheme', { exact: true }).selectOption('cog');
