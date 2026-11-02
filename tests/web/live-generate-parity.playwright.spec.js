@@ -13,12 +13,12 @@
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
 const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { answerSessionTitle, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
+const { answerSessionTitle, evaluateWithRetainedPromise, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const {
-  open, openBothDrawings, otherMode, switchDrawing, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
+  SINGLE_FIXTURE, open, openBothDrawings, otherMode, switchDrawing, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
   legendRowColor, FL1_ALPHA, renameRow, legendRowStrokeColor, editorLegendRows, switchPalette, deleteLegendRow,
   BATCH_0004_OFF, renameLegendRow, resetSettings, displayWhileSaveHeld, saveWhileDisplaying, loadFeatureEdits
 } = require('./helpers/live-generate-parity-steps.cjs');
@@ -695,6 +695,20 @@ const legendList = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return app.legendEntries.map((entry) => ({ caption: entry.caption, color: app.legendEntryColor(entry) }));
 });
+// A rerender held until released, so a case does not pass by timing.
+const holdRerenders = (page) => page.evaluate(() => {
+  window.__GBDRAW_TEST_HOOKS__ ||= {};
+  window.__heldRerenders = [];
+  window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => new Promise((resolve) => { window.__heldRerenders.push(resolve); });
+});
+const releaseRerenders = async (page) => {
+  await page.evaluate(() => {
+    delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+    window.__heldRerenders.forEach((resolve) => resolve());
+  });
+  await settleLive(page);
+};
+const rerenderHeld = (page) => page.waitForFunction(() => window.__heldRerenders.length > 0);
 const RESET_CASES = [
   {
     domain: 'a Legend row stroke (OV-287)',
@@ -743,7 +757,8 @@ const RESET_CASES = [
   },
   {
     domain: 'a feature hidden (OV-290)',
-    edit: (page) => popupEdit(page, 'FL2', { visibility: 'off' })
+    edit: (page) => popupEdit(page, 'FL2', { visibility: 'off' }),
+    undoRedo: true
   },
   {
     // The Result Generate drew lacks the feature, so Reset asks for the rerender.
@@ -790,16 +805,22 @@ const LABEL_SETTINGS = Object.freeze([
   ['circular', 'form', 'labels_mode'], ['circular', 'form', 'multi_record_canvas'], ['circular', 'adv', 'circular_grouping_intent'],
   ['linear', 'form', 'show_labels_linear']
 ]);
+const readLabelSettings = (page) => page.evaluate(async (settings) => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  return settings.map(([drawingMode, group, name]) => [drawingMode, group, name, window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name]]);
+}, LABEL_SETTINGS);
+const writeLabelSettings = (page, values) => page.evaluate(async (written) => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  written.forEach(([drawingMode, group, name, value]) => { window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name] = value; });
+}, values);
+// Reset writes Auto Reflow off and default label settings. A case keeps both, so
+// its display runs with the state its title names.
 const resetKeepingLabelSettings = async (page) => {
-  const kept = await page.evaluate(async (settings) => {
-    const { state } = await import('/gbdraw/web/js/state.js');
-    return settings.map(([drawingMode, group, name]) => [drawingMode, group, name, window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name]]);
-  }, LABEL_SETTINGS);
+  const kept = await readLabelSettings(page);
+  const autoReflow = await page.evaluate(() => window.__GBDRAW_APP__.autoLabelReflowEnabled);
   await resetSettings(page);
-  await page.evaluate(async (values) => {
-    const { state } = await import('/gbdraw/web/js/state.js');
-    values.forEach(([drawingMode, group, name, value]) => { window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name] = value; });
-  }, kept);
+  await writeLabelSettings(page, kept);
+  await setAutoReflow(page, autoReflow);
 };
 const resetFromOtherDrawing = async (page, mode) => {
   await switchDrawing(page, otherMode(mode));
@@ -910,11 +931,572 @@ test('Reset Settings from the other drawing after a Load shows the removed color
   await loaded.context().close();
 });
 
-// OV-2410: Generate draws this label outside its arc with a leader for a text
+// OV-2293: when a displayed Result asks for the rerender. A drawn label edit left
+// its drawing while the Result was not shown, on a feature that Result draws, or
+// a feature it lacks is drawn again; once, with Auto Reflow on or off. Nothing
+// else: an edit the Result followed live, or that another Result draws, needs no
+// Python run at the display.
+test.describe('a Result displayed after its intent changed', () => {
+  const BATCH_FEATURE = { biological_feature_id: 'f5aa08bf5', record_idx: 1 };
+  const rerenderRequests = (page) => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return state.labelReflowRequestSeq.value + state.labelReflowForceRequestSeq.value;
+  });
+  const expectNoRerenderOfDisplay = async (page, display) => {
+    await settleLive(page);
+    const before = await rerenderRequests(page);
+    await display();
+    await settleLive(page);
+    expect(await rerenderRequests(page), 'the display asks for no rerender').toBe(before);
+  };
+  const failRerenders = (page) => page.evaluate(() => {
+    window.__GBDRAW_TEST_HOOKS__ ||= {};
+    window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => { throw new Error('forced rerender failure'); };
+  });
+  const allowRerenders = (page) => page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
+  const saveAndLoad = async (page, browser, testInfo, name) => {
+    const saved = testInfo.outputPath(`${name}.gbdraw-session.json`);
+    await download(page, 'Save Session', saved, { title: '' });
+    return load(browser, saved);
+  };
+
+  for (const reflow of ['off', 'on']) {
+    const flag = `Auto Reflow ${reflow}`;
+    test(`a label text cleared live after a Generate asks for no rerender at a Result switch (${flag})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow });
+      await showResult(page, 1);
+      await popupEdit(page, BATCH_FEATURE, { labelText: 'walk label' });
+      await generate(page);
+      await showResult(page, 1);
+      await popupEdit(page, BATCH_FEATURE, { labelText: '' });
+      await expectNoRerenderOfDisplay(page, () => showResult(page, 0));
+      await expectNoRerenderOfDisplay(page, () => showResult(page, 1));
+      await expectLiveEqualsGenerate(page, { label: 'the text cleared on its own Result, then a Result switch and back' });
+    });
+    test(`a live visibility edit asks for no rerender at a Result switch (${flag})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow });
+      await showResult(page, 1);
+      await popupEdit(page, BATCH_FEATURE, { visibility: 'off' });
+      await expectNoRerenderOfDisplay(page, () => showResult(page, 0));
+      await expectNoRerenderOfDisplay(page, () => showResult(page, 1));
+    });
+    test(`an Undo of a live label text and of its Generate asks for no rerender at a Result switch (${flag})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow });
+      await showResult(page, 1);
+      await popupEdit(page, BATCH_FEATURE, { labelText: 'walk label' });
+      await generate(page);
+      await history(page, 'undo');
+      await history(page, 'undo');
+      await settleLive(page);
+      const shown = await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex);
+      await expectNoRerenderOfDisplay(page, () => showResult(page, shown === 0 ? 1 : 0));
+    });
+    // With Auto Reflow off the bytes hold the source text beside the edit, so the
+    // display projects it. With it on, Python drew the edit: the display draws again.
+    test(`an Undo of a live label text while another Result is shown shows what Generate draws (${flag})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow });
+      await showResult(page, 1);
+      await popupEdit(page, BATCH_FEATURE, { labelText: 'x' });
+      await settleLive(page);
+      await showResult(page, 0);
+      await history(page, 'undo');
+      if (reflow === 'off') await expectNoRerenderOfDisplay(page, () => showResult(page, 1));
+      else await showResult(page, 1);
+      await expectLiveEqualsGenerate(page, { label: 'an Undo of a live text while another Result was shown' });
+    });
+    for (const mode of ['linear', 'circular']) {
+      const feature = 'FL1';
+      const both = `${mode}, ${flag}`;
+      test(`a Save and Load with a label text cleared after the Generate asks for no rerender at the switch (${both})`, async ({ page, browser }, testInfo) => {
+        test.setTimeout(240_000);
+        await openBothDrawings(page, { mode, results: 'single', reflow });
+        await popupEdit(page, feature, { labelText: 'walk label' });
+        await generate(page);
+        await popupEdit(page, feature, { labelText: '' });
+        await settleLive(page);
+        await switchDrawing(page, otherMode(mode));
+        const loaded = await saveAndLoad(page, browser, testInfo, 'cleared-label');
+        await expectNoRerenderOfDisplay(loaded, () => switchDrawing(loaded, mode));
+        await loaded.context().close();
+      });
+      test(`Save and Load after Reset Settings from the other drawing draws the hidden feature when its Result is shown (${both})`, async ({ page, browser }, testInfo) => {
+        test.setTimeout(240_000);
+        await openBothDrawings(page, { mode, results: 'single', reflow });
+        await popupEdit(page, 'FL2', { visibility: 'off' });
+        await generate(page);
+        await switchDrawing(page, otherMode(mode));
+        await resetKeepingLabelSettings(page);
+        const loaded = await saveAndLoad(page, browser, testInfo, 'reset-saved');
+        await switchDrawing(loaded, mode);
+        await expectLiveEqualsGenerate(loaded, { label: 'Reset, Save, Load, then the other drawing' });
+        await loaded.context().close();
+      });
+      // What stays until Generate: nothing in a loaded Session says what the bytes
+      // of a Result hold, and a Load alone moves no label.
+      test(`Save and Load after Reset Settings from the other drawing leave a label text until the next Generate (${both})`, async ({ page, browser }, testInfo) => {
+        test.setTimeout(240_000);
+        await openBothDrawings(page, { mode, results: 'single', reflow });
+        await popupEdit(page, feature, { labelText: 'walk label' });
+        await generate(page);
+        await switchDrawing(page, otherMode(mode));
+        await resetKeepingLabelSettings(page);
+        const loaded = await saveAndLoad(page, browser, testInfo, 'reset-saved-label');
+        await expectNoRerenderOfDisplay(loaded, () => switchDrawing(loaded, mode));
+        const drawnTexts = () => loaded.evaluate(() => [...window.__GBDRAW_APP__.svgContainer.querySelectorAll('svg text[data-label-feature-id]')]
+          .map((element) => element.textContent));
+        expect(await drawnTexts(), 'the label text stays').toContain('walk label');
+        await generate(loaded);
+        expect(await drawnTexts(), 'Generate draws the reset text').not.toContain('walk label');
+        await loaded.context().close();
+      });
+      test(`Reset Settings from the other drawing after a Load reaches a label text the Result draws (${both})`, async ({ page, browser }, testInfo) => {
+        test.setTimeout(240_000);
+        await openBothDrawings(page, { mode, results: 'single', reflow });
+        await popupEdit(page, feature, { labelText: 'walk label' });
+        await generate(page);
+        await switchDrawing(page, otherMode(mode));
+        const loaded = await saveAndLoad(page, browser, testInfo, 'reset-after-load-label');
+        await resetKeepingLabelSettings(loaded);
+        await switchDrawing(loaded, mode);
+        await expectLiveEqualsGenerate(loaded, { label: 'a label text in a loaded Result, then Reset from the other drawing' });
+        await loaded.context().close();
+      });
+      test(`an Undo of a color rule step keeps what a later Reset from the other drawing asks of the Result (${both})`, async ({ page }) => {
+        test.setTimeout(240_000);
+        await openBothDrawings(page, { mode, results: 'single', reflow });
+        await popupEdit(page, feature, { labelText: 'walk label' });
+        await generate(page);
+        await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' });
+        await settleLive(page);
+        await history(page, 'undo');
+        await settleLive(page);
+        await resetFromOtherDrawing(page, mode);
+        await expectLiveEqualsGenerate(page, { label: 'a checkpoint Undo, then Reset from the other drawing' });
+      });
+      test(`an Undo of Reset Settings from the other drawing after its Result was shown draws the edit again (${both})`, async ({ page }) => {
+        test.setTimeout(240_000);
+        await openBothDrawings(page, { mode, results: 'single', reflow });
+        await popupEdit(page, feature, { labelText: 'walk label' });
+        await generate(page);
+        await resetFromOtherDrawing(page, mode);
+        await settleLive(page);
+        await switchDrawing(page, otherMode(mode));
+        await history(page, 'undo');
+        await settleLive(page);
+        await switchDrawing(page, mode);
+        await expectLiveEqualsGenerate(page, { label: 'an Undo of the Reset after the Result was shown' });
+      });
+      test(`an Undo of Reset Settings before its Result was shown asks for no rerender (${both})`, async ({ page }) => {
+        test.setTimeout(240_000);
+        await openBothDrawings(page, { mode, results: 'single', reflow });
+        await popupEdit(page, feature, { labelText: 'walk label' });
+        await generate(page);
+        await switchDrawing(page, otherMode(mode));
+        await resetKeepingLabelSettings(page);
+        await settleLive(page);
+        await history(page, 'undo');
+        await expectNoRerenderOfDisplay(page, () => switchDrawing(page, mode));
+      });
+      for (const [name, text] of [['blank', ''], ['edited', 'bulk label']]) {
+        test(`Reset Settings from the other drawing after a Label TSV ${name} text and a Generate shows what Generate draws (${both})`, async ({ page }) => {
+          test.setTimeout(240_000);
+          await openBothDrawings(page, { mode, results: 'single', reflow });
+          await evaluateWithRetainedPromise(page, (bulkText) => window.__GBDRAW_APP__.loadLabelOverrideTable({
+            target: { files: [new File([`*\t*\tlabel\t^alpha protein$\t${bulkText}\n`], 'labels.tsv', { type: 'text/plain' })] }
+          }), text);
+          await settleLive(page);
+          await generate(page);
+          await resetFromOtherDrawing(page, mode);
+          await expectLiveEqualsGenerate(page, { label: `a Label TSV ${name} text, then Reset from the other drawing` });
+        });
+      }
+      for (const [name, edit] of [['hidden feature', { visibility: 'off' }], ['label text', { labelText: 'walk label' }]]) {
+        test(`a rerender that failed on a display does not run again at the next display (${name}, ${both})`, async ({ page }) => {
+          test.setTimeout(240_000);
+          await openBothDrawings(page, { mode, results: 'single', reflow });
+          await popupEdit(page, 'FL2', edit);
+          await generate(page);
+          await switchDrawing(page, otherMode(mode));
+          await resetKeepingLabelSettings(page);
+          await failRerenders(page);
+          const before = await rerenderRequests(page);
+          await switchDrawing(page, mode);
+          await expect.poll(() => rerenderRequests(page), 'the display asks once').toBe(before + 1);
+          await settleLive(page);
+          await allowRerenders(page);
+          expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), 'the failure is reported').not.toBeNull();
+          await switchDrawing(page, otherMode(mode));
+          await expectNoRerenderOfDisplay(page, () => switchDrawing(page, mode));
+        });
+      }
+    }
+    test(`Reset Settings with a Result an Undo of a later Generate returned reaches what its bytes drew (${flag})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow });
+      await showResult(page, 1);
+      await popupEdit(page, BATCH_FEATURE, { visibility: 'off' });
+      await generate(page);
+      await generate(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      await showResult(page, 0);
+      await resetKeepingLabelSettings(page);
+      await showResult(page, 1);
+      await expectLiveEqualsGenerate(page, { label: 'a hide in a Result an Undo of a Generate returned' });
+    });
+    test(`Reset Settings with a label text in a Result an Undo of a later Generate returned shows what Generate draws (${flag})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow });
+      await showResult(page, 1);
+      await popupEdit(page, BATCH_FEATURE, { labelText: 'walk label' });
+      await generate(page);
+      await generate(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      await showResult(page, 0);
+      await resetKeepingLabelSettings(page);
+      await showResult(page, 1);
+      await expectLiveEqualsGenerate(page, { label: 'a label text in a Result an Undo of a Generate returned' });
+    });
+    // An Undo of a Generate says nothing of what the Result it returns was drawn
+    // with beyond the state it restores, so this text stays until the next Generate.
+    test(`an Undo of a Generate that replaced an unshown Result holding a label text shows what Generate draws (${flag})`, async ({ page }) => {
+      test.fail(true, 'OV-2293: a label edit that left before the Generate an Undo takes back');
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow });
+      await showResult(page, 1);
+      await popupEdit(page, BATCH_FEATURE, { labelText: 'walk label' });
+      await generate(page);
+      await showResult(page, 0);
+      await resetKeepingLabelSettings(page);
+      await settleLive(page);
+      await generate(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      // That Undo returns the state Reset wrote.
+      await setAutoReflow(page, reflow === 'on');
+      await showResult(page, 1);
+      await expectLiveEqualsGenerate(page, { label: 'a Result an Undo of a Generate returned, its edit gone before that Generate' });
+    });
+    test(`an Undo of a Generate that replaced an unshown Result holding Label visibility On shows what Generate draws (${flag})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow });
+      await showResult(page, 1);
+      await showNoLabels(page);
+      await popupEdit(page, BATCH_FEATURE, { labelVisibility: 'on' });
+      await generate(page);
+      await showResult(page, 0);
+      await resetKeepingLabelSettings(page);
+      await settleLive(page);
+      await generate(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      // That Undo returns the state Reset wrote.
+      await setAutoReflow(page, reflow === 'on');
+      await showResult(page, 1);
+      await expectLiveEqualsGenerate(page, { label: 'a Label On in a Result an Undo of a Generate returned' });
+    });
+    test(`an Undo of a Generate that replaced an unshown Result without a hidden feature draws the feature (${flag})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow });
+      await showResult(page, 1);
+      await popupEdit(page, BATCH_FEATURE, { visibility: 'off' });
+      await generate(page);
+      await showResult(page, 0);
+      await resetKeepingLabelSettings(page);
+      await settleLive(page);
+      await generate(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      // That Undo returns the state Reset wrote.
+      await setAutoReflow(page, reflow === 'on');
+      await showResult(page, 1);
+      await expectLiveEqualsGenerate(page, { label: 'a hide in a Result an Undo of a Generate returned, gone before that Generate' });
+    });
+    for (const [name, change] of [['hidden feature', { visibility: 'off' }], ['label text', { labelText: 'walk label' }]]) {
+      test(`a rerender that failed on a Result display does not run again at the next display (${name}, ${flag})`, async ({ page }) => {
+        test.setTimeout(240_000);
+        await open(page, { mode: 'circular', results: 'batch', reflow });
+        await showResult(page, 1);
+        await popupEdit(page, BATCH_FEATURE, change);
+        await generate(page);
+        await showResult(page, 0);
+        await resetKeepingLabelSettings(page);
+        await settleLive(page);
+        await failRerenders(page);
+        const before = await rerenderRequests(page);
+        await showResult(page, 1);
+        await expect.poll(() => rerenderRequests(page), 'the display asks once').toBe(before + 1);
+        await settleLive(page);
+        await allowRerenders(page);
+        expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), 'the failure is reported').not.toBeNull();
+        await expectNoRerenderOfDisplay(page, () => showResult(page, 0));
+        await expectNoRerenderOfDisplay(page, () => showResult(page, 1));
+      });
+    }
+    test(`a rerender that failed on an edit does not run again when another batch Result is displayed (${flag})`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow });
+      await showResult(page, 1);
+      await failRerenders(page);
+      await popupEdit(page, BATCH_FEATURE, { labelVisibility: 'off' });
+      await popupEdit(page, BATCH_FEATURE, { labelVisibility: 'default' });
+      await settleLive(page);
+      await allowRerenders(page);
+      await expectNoRerenderOfDisplay(page, () => showResult(page, 0));
+    });
+  }
+  // A Load alone moves no label of a cropped Result: its features outside the crop ask nothing.
+  test('a switch to a cropped Result a Load restored asks for no rerender', async ({ page, browser }, testInfo) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    await page.evaluate(() => { Object.assign(window.__GBDRAW_APP__.linearSeqs[0], { region_start: 1, region_end: 1000 }); });
+    await generate(page);
+    await switchDrawing(page, 'circular');
+    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(SINGLE_FIXTURE);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 }).toBeGreaterThan(0);
+    await settleLive(page);
+    await generate(page);
+    const loaded = await saveAndLoad(page, browser, testInfo, 'cropped');
+    await expectNoRerenderOfDisplay(loaded, () => switchDrawing(loaded, 'linear'));
+    await loaded.context().close();
+  });
+  // Undo or Redo back to Label visibility On, on a figure that lacks the label:
+  // only a rerender can draw it, and History steps ask for none here (OV-2413).
+  for (const mode of ['linear', 'circular']) {
+    const labelsNoneOn = async (page) => {
+      await open(page, { mode, results: 'single', reflow: 'off' });
+      await showNoLabels(page);
+      await popupEdit(page, 'FL1', { labelVisibility: 'on' });
+      await settleLive(page);
+    };
+    test(`an Undo back to Label visibility On draws the label (${mode})`, async ({ page }) => {
+      test.fail(true, 'OV-2413: an Undo back to Label visibility On on a figure without the label');
+      test.setTimeout(240_000);
+      await labelsNoneOn(page);
+      await popupEdit(page, 'FL1', { labelVisibility: 'default' });
+      await settleLive(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      await expectLiveEqualsGenerate(page, { label: 'an Undo back to On' });
+    });
+    test(`a Redo of Label visibility On draws the label (${mode})`, async ({ page }) => {
+      test.fail(true, 'OV-2413: a Redo of Label visibility On on a figure without the label');
+      test.setTimeout(240_000);
+      await labelsNoneOn(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      await history(page, 'redo');
+      await settleLive(page);
+      await expectLiveEqualsGenerate(page, { label: 'a Redo of On' });
+    });
+  }
+  // Text typed in the Features list stays through a rerender, as in the popup.
+  test('text typed in the Features list label input survives a rerender', async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'on' });
+    await page.getByRole('button', { name: 'Editor', exact: true }).click();
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      app.featurePanelTab = 'features';
+      app.featureListExpandedId = app.filteredFeatures.find((feature) => feature.locus_tag === 'FL2').id;
+    });
+    const input = page.locator('[data-feature-list-editor] input[type="text"]');
+    await input.waitFor();
+    await holdRerenders(page);
+    const edit = popupEdit(page, 'FL1', { labelText: 'held FL1' });
+    await rerenderHeld(page);
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      app.featureListExpandedId = app.filteredFeatures.find((feature) => feature.locus_tag === 'FL2').id;
+    });
+    await input.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('typed in the list');
+    await releaseRerenders(page);
+    await edit;
+    await expect(input).toHaveValue('typed in the list');
+    await input.blur();
+    await page.evaluate(() => window.__GBDRAW_APP__.handleLabelTextScopeChoice('single'));
+    await settleLive(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.getEditableLabelByFeatureId(
+      window.__GBDRAW_APP__.extractedFeatures.find((feature) => feature.locus_tag === 'FL2').svg_id).text)).toBe('typed in the list');
+    await expectLiveEqualsGenerate(page, { label: 'the text typed during a rerender' });
+  });
+});
+
+// Undo and Redo of a feature hide, a Label Off, or a label text apply at once with
+// Auto Reflow off: when Undo or Redo returns, the figure shows the step, with any
+// rerender held. Guards of how History steps work, which also keep the moved
+// Legend and the displayed batch Result where they are. With Auto Reflow on, two
+// of them are confirmed mismatches, marked with their findings.
+test.describe('Undo and Redo', () => {
+  const featureIdOf = (page, locusTag) => page.evaluate((tag) => {
+    const app = window.__GBDRAW_APP__;
+    return app.extractedFeatures.find((feature) => feature.locus_tag === tag)?.svg_id;
+  }, locusTag);
+  // The step, and what the figure shows of the feature as it returns.
+  const stepAndRead = (page, name, id) => evaluateWithRetainedPromise(page, async ({ name: step, id: featureId }) => {
+    await window.__GBDRAW_HISTORY__[step]();
+    await window.Vue.nextTick();
+    const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    const shown = (element) => !element.closest('[display="none"]');
+    return {
+      feature: [...root.querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)].filter(shown).length > 0,
+      labels: [...root.querySelectorAll(`text[data-label-feature-id="${CSS.escape(featureId)}"]`)].filter(shown).map((label) => label.textContent)
+    };
+  }, { name, id });
+  const SHOWN = { feature: true, labels: ['beta protein'] };
+  const AT_ONCE_CASES = [
+    { domain: 'a feature hide', edit: (page) => popupEdit(page, 'FL2', { visibility: 'off' }), edited: { feature: false, labels: [] } },
+    { domain: 'a Label Off', edit: (page) => popupEdit(page, 'FL2', { labelVisibility: 'off' }), edited: { feature: true, labels: [] } },
+    { domain: 'a label text', edit: (page) => popupEdit(page, 'FL2', { labelText: 'at once text' }), edited: { feature: true, labels: ['at once text'] } },
+    {
+      domain: 'a feature hide by a visibility rule',
+      edit: (page) => addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^FL2$', action: 'off' }),
+      edited: { feature: false, labels: [] }
+    }
+  ];
+  const rerenderRequests = (page) => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return state.labelReflowRequestSeq.value + state.labelReflowForceRequestSeq.value;
+  });
+  const movedLegend = (page) => page.evaluate(async () => {
+    const { compositionUserDeltas } = await import('/gbdraw/web/js/app/legend-layout/composition-actions.js');
+    return compositionUserDeltas(window.__GBDRAW_APP__.svgContainer.querySelector('svg'));
+  });
+  const dragLegend = (page) => page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.layoutRepositionMode = true;
+    await window.Vue.nextTick();
+    const svg = app.svgContainer.querySelector('svg');
+    const parts = [...svg.querySelectorAll('[data-gbdraw-composition-role="legend"]')];
+    const target = parts.find((element) => element.id !== 'length_bar') || parts[0];
+    const box = target.getBoundingClientRect();
+    const [x, y] = [box.left + Math.min(box.width / 2, 8), box.top + Math.min(box.height / 2, 8)];
+    const mouse = (type, clientX, clientY, buttons) => new MouseEvent(type, { bubbles: true, cancelable: true, clientX, clientY, buttons, view: window });
+    const frame = () => new Promise((resolve) => { requestAnimationFrame(resolve); });
+    target.dispatchEvent(mouse('mousedown', x, y, 1));
+    await frame();
+    svg.dispatchEvent(mouse('mousemove', x + 30, y + 20, 1));
+    await frame();
+    svg.dispatchEvent(mouse('mouseup', x + 30, y + 20, 0));
+    await new Promise((resolve) => { setTimeout(resolve, 100); });
+    app.layoutRepositionMode = false;
+  });
+  for (const mode of ['linear', 'circular']) {
+    test(`a moved Legend returns through Undo after a label edit, Auto Reflow on (${mode})`, async ({ page }) => {
+      test.fail(true, 'OV-2437: the Undo of the drag after a label edit does nothing with Auto Reflow on');
+      test.setTimeout(180_000);
+      await open(page, { mode, results: 'single', reflow: 'on' });
+      const start = await movedLegend(page);
+      await dragLegend(page);
+      await settleLive(page);
+      await popupEdit(page, 'FL2', { labelText: 'beside the Legend' });
+      await settleLive(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      await history(page, 'undo');
+      await settleLive(page);
+      expect(await movedLegend(page), 'Undo of the drag returns it').toEqual(start);
+    });
+  }
+  for (const mode of ['linear', 'circular']) {
+    for (const { domain, edit, edited } of AT_ONCE_CASES) {
+      test(`Undo and Redo of ${domain} apply at once with no rerender, Auto Reflow off (${mode})`, async ({ page }) => {
+        test.setTimeout(180_000);
+        await open(page, { mode, results: 'single', reflow: 'off' });
+        const id = await featureIdOf(page, 'FL2');
+        await edit(page);
+        await settleLive(page);
+        const before = await rerenderRequests(page);
+        await holdRerenders(page);
+        expect(await stepAndRead(page, 'undo', id), 'Undo').toEqual(SHOWN);
+        expect(await stepAndRead(page, 'redo', id), 'Redo').toEqual(edited);
+        expect(await stepAndRead(page, 'undo', id), 'Undo again').toEqual(SHOWN);
+        await releaseRerenders(page);
+        expect(await rerenderRequests(page), 'the steps ask for no rerender').toBe(before);
+        await expectLiveEqualsGenerate(page, { label: `Undo of ${domain}` });
+      });
+    }
+    // With Auto Reflow on, an Undo of a hide or a Label Off waits for the rerender
+    // (OV-2436); the Redo after it applies at once, with the rerender held only
+    // for the Redo.
+    for (const { domain, edit, edited } of AT_ONCE_CASES.slice(0, 2)) {
+      test(`Undo of ${domain} applies at once, Auto Reflow on (${mode})`, async ({ page }) => {
+        test.fail(true, 'OV-2436: an Undo of a hide or a Label Off waits for the rerender with Auto Reflow on');
+        test.setTimeout(180_000);
+        await open(page, { mode, results: 'single', reflow: 'on' });
+        const id = await featureIdOf(page, 'FL2');
+        await edit(page);
+        await settleLive(page);
+        await holdRerenders(page);
+        const undo = await stepAndRead(page, 'undo', id);
+        await releaseRerenders(page);
+        expect(undo, 'Undo').toEqual(SHOWN);
+      });
+      test(`Redo of ${domain} applies at once after the Undo has finished, Auto Reflow on (${mode})`, async ({ page }) => {
+        test.setTimeout(180_000);
+        await open(page, { mode, results: 'single', reflow: 'on' });
+        const id = await featureIdOf(page, 'FL2');
+        await edit(page);
+        await settleLive(page);
+        await history(page, 'undo');
+        await settleLive(page);
+        await holdRerenders(page);
+        const redo = await stepAndRead(page, 'redo', id);
+        await releaseRerenders(page);
+        expect(redo, 'Redo').toEqual(edited);
+      });
+    }
+    test(`a moved Legend returns through Undo of a label edit, and comes back through Redo, Auto Reflow off (${mode})`, async ({ page }) => {
+      test.setTimeout(180_000);
+      await open(page, { mode, results: 'single', reflow: 'off' });
+      const moved = () => movedLegend(page);
+      const start = await moved();
+      await dragLegend(page);
+      await settleLive(page);
+      const dragged = await moved();
+      expect(dragged, 'the drag moves the Legend').not.toEqual(start);
+      await popupEdit(page, 'FL2', { labelText: 'beside the Legend' });
+      await settleLive(page);
+      await history(page, 'undo');
+      expect(await moved(), 'Undo of the label edit keeps the Legend').toEqual(dragged);
+      await history(page, 'undo');
+      expect(await moved(), 'Undo of the drag returns it').toEqual(start);
+      await history(page, 'redo');
+      expect(await moved(), 'Redo of the drag').toEqual(dragged);
+    });
+  }
+  for (const [name, change] of [['a hide', { visibility: 'off' }], ['a label text', { labelText: 'on result 1' }]]) {
+    test(`Undo and Redo of ${name} leave another batch Result displayed`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+      const shownResult = () => page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex);
+      await showResult(page, 1);
+      await popupEdit(page, { biological_feature_id: 'f5aa08bf5', record_idx: 1 }, change);
+      await settleLive(page);
+      await showResult(page, 0);
+      await history(page, 'undo');
+      await settleLive(page);
+      expect(await shownResult(), 'Undo').toBe(0);
+      await history(page, 'redo');
+      await settleLive(page);
+      expect(await shownResult(), 'Redo').toBe(0);
+    });
+  }
+});
+
+// OV-2410 (Circular here; Linear below): Generate draws this label outside its arc with a leader for a text
 // that does not fit, and inside it without one for a text that does. The label
 // text edit places the label only with Auto Reflow on, as documented; with it
-// off the label keeps its place until a reflow or Generate, also through an Undo
-// of the Generate with Auto Reflow turned on meanwhile.
+// off the label keeps its place until a reflow or Generate. That place also comes
+// back with an Undo of the Generate while Auto Reflow is on, which the allowed
+// difference does not cover.
 const LEADER_FEATURE = { biological_feature_id: 'f5aa08bf5', record_idx: 1 };
 const LEADER_TEXT = 'alpha protein, edited live';
 const openLeaderCase = async (page, reflow) => {
@@ -943,7 +1525,8 @@ test('a label text edit with Auto Reflow off leaves only its leader to the next 
   await popupEdit(page, LEADER_FEATURE, { labelText: LEADER_TEXT });
   expect(leaderDifferences(await expectLiveEqualsGenerate(page, { label: 'the edit with Auto Reflow off' }))).toEqual(LEADER_AWAITS_REFLOW);
 });
-test('an Undo of a Generate keeps the placement of the labels it returns when Auto Reflow was turned on meanwhile', async ({ page }) => {
+test('an Undo of a Generate returns labels placed for the state before it when Auto Reflow was turned on meanwhile', async ({ page }) => {
+  test.fail(true, 'OV-2410: the leader of a label text placed with Auto Reflow off stays through this Undo');
   test.setTimeout(240_000);
   await openLeaderCase(page, 'off');
   await popupEdit(page, LEADER_FEATURE, { labelText: LEADER_TEXT });
@@ -951,8 +1534,39 @@ test('an Undo of a Generate keeps the placement of the labels it returns when Au
   await showResult(page, LEADER_FEATURE.record_idx);
   await setAutoReflow(page, true);
   await history(page, 'undo');
-  expect(leaderDifferences(await expectLiveEqualsGenerate(page, { label: 'the Undo with Auto Reflow on', placedWithAutoReflow: false })))
-    .toEqual(LEADER_AWAITS_REFLOW);
+  await expectLiveEqualsGenerate(page, { label: 'the Undo with Auto Reflow on' });
+});
+test('a label text edit on a Linear diagram draws the leader Generate draws, Auto Reflow off', async ({ page }) => {
+  test.fail(true, 'OV-2410: a label text edit with Auto Reflow off leaves the leader to the next placement');
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await popupEdit(page, 'FL1', { labelText: 'alpha protein, edited live with a much longer text' });
+  await expectLiveEqualsGenerate(page, { allowed: [], label: 'the edit on a Linear diagram' });
+});
+// The random walk's allowance for an Undo covers the edited label alone: a leader
+// lost on any other label is a difference. The test removes one to show it.
+test('a leader lost on another label fails where the edited label is left unplaced', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openLeaderCase(page, 'off');
+  await popupEdit(page, LEADER_FEATURE, { labelText: 'x' });
+  await generate(page);
+  await showResult(page, LEADER_FEATURE.record_idx);
+  await setAutoReflow(page, true);
+  await history(page, 'undo');
+  await settleLive(page);
+  const hidden = await page.evaluate((edited) => {
+    const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    const others = [...root.querySelectorAll('[data-label-feature-id]')]
+      .filter((element) => element.localName !== 'text' && element.getAttribute('data-label-feature-id') !== edited);
+    others.forEach((element) => element.setAttribute('display', 'none'));
+    return [...new Set(others.map((element) => element.getAttribute('data-label-feature-id')))];
+  }, LEADER_FEATURE.biological_feature_id);
+  expect(hidden, 'another label draws a leader').toHaveLength(1);
+  const unexpected = await expectLiveEqualsGenerate(page, {
+    label: 'the Undo with one other leader removed',
+    unplaced: { id: LEADER_FEATURE.biological_feature_id }
+  }).then(() => [], (error) => error?.matcherResult?.actual);
+  expect(unexpected).toEqual([`leader ${hidden[0]} drawn: live false, generated true`]);
 });
 test('a label text that fits its arc draws no leader live or from Generate, Auto Reflow off', async ({ page }) => {
   test.setTimeout(240_000);

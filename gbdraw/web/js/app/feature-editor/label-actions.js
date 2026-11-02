@@ -918,6 +918,10 @@ export const createFeatureLabelActions = ({
 
   /** @param {Element} svg */
   const refreshEditableList = (svg) => {
+    // Text typed in the Features list and not committed stays through a rerender.
+    const typed = new Map(editableLabels.value
+      .filter((/** @type {EditableLabelEntry} */ entry) => entry.featureId && entry.draftText !== entry.text)
+      .map((/** @type {EditableLabelEntry} */ entry) => [entry.featureId, entry.draftText]));
     /** @type {EditableLabelEntry[]} */
     const nextEntries = [];
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl, index) => {
@@ -934,7 +938,7 @@ export const createFeatureLabelActions = ({
         sourceText,
         featureId,
         kind,
-        draftText: text
+        draftText: typed.get(featureId) ?? text
       });
     });
     editableLabels.value = nextEntries;

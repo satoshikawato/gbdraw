@@ -2304,3 +2304,27 @@ test('a rule commit beside a rule row with a Legend color of its own is applied,
   expect(await fills(), 'the row of the recolored rule').toEqual({ alpha: '#2a9d8f', 'Walk group': '#ff0000' });
   await expectLiveEqualsGenerate(page, { label: 'a rule row with a Legend color of its own recolored' });
 });
+
+test('a stroked rule row deleted, its feature renamed in the popup, restores and generates', async ({ page }) => {
+  test.fail(true, 'OV-2412: Generate after this Restore fails with "The generated result could not be accepted"');
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#2a9d8f', cap: 'Alpha row' });
+  await settleLive(page);
+  await legendRowStrokeColor(page, 'Alpha row', '#7b2cbf');
+  await settleLive(page);
+  await deleteLegendRow(page, 'Alpha row');
+  await generate(page);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.locus_tag === 'FL1'), null);
+    await window.Vue.nextTick();
+    app.clickedFeature.legendName = 'Other name';
+    await app.handleLegendNameCommit();
+    app.clickedFeature = null;
+  });
+  await settleLive(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.restoreAllDeletedLegendEntries());
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'the Restore after the popup rename' });
+});

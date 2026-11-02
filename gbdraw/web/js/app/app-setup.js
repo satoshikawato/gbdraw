@@ -36,7 +36,7 @@ import {
 import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
-import { admitFeatureCatalog } from '../services/feature-catalog.js';
+import { admitFeatureCatalog, biologicalFeatureKey, resultCatalogFeatures } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { inputSummaryOf } from '../services/input-summary.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
@@ -3560,9 +3560,9 @@ export const createAppSetup = () => {
       // rules while it was not shown (a file card's Remove, an Undo or Redo
       // there), is drawn again when its Legend cannot show them, as after a
       // History restore of the rules. OV-2293: any Result displayed is drawn
-      // again when its bytes hold a label edit its drawing no longer holds (a
-      // Reset Settings while it was not shown). The rerender draws new Results
-      // from the current intent, so this does not repeat.
+      // again when its bytes hold a label edit that left its drawing while it
+      // was not shown (a Reset Settings, an Undo). The display records what it
+      // shows, so a failed rerender does not repeat here.
       const display = displayAsks;
       displayAsks = null;
       if (display?.identity === context.resultIdentity) {
@@ -4415,10 +4415,16 @@ export const createAppSetup = () => {
   // What a displayed Result asks of the rerender, read once it is ready
   // (`afterReady`): `rules`, the rule table it was last shown with, or the one
   // it was drawn with when that is unknown (a restored Result), for OV-1280;
-  // `labelIntentGone`, whether its bytes were drawn with a label edit its
-  // drawing no longer holds (OV-2293).
+  // `labelIntentGone`, whether its bytes hold a label edit that left its drawing
+  // since it was last shown (OV-2293).
   /** @type {{ identity: string, rules: SpecificColorRule[] | null, labelIntentGone: boolean } | null} */
   let displayAsks = null;
+  // Whether a Result draws a feature; an unknown catalog answers yes.
+  /** @param {number} resultIndex @returns {(recordKey: string, featureId: string) => boolean} */
+  const resultDrawsFeature = (resultIndex) => {
+    const rendered = resultCatalogFeatures(state, resultIndex)?.renderedByIdentity;
+    return (recordKey, featureId) => !rendered || rendered.has(biologicalFeatureKey(recordKey, featureId));
+  };
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
   // binder's label step.
@@ -4447,7 +4453,9 @@ export const createAppSetup = () => {
     displayAsks = {
       identity,
       rules: paintRuleTable(previous) ?? paintRuleTable(drawn),
-      labelIntentGone: drawnLabelIntentGone(drawn.labels, current.labels)
+      labelIntentGone: drawn.labels !== current.labels && drawnLabelIntentGone(
+        drawn.labels, previous.labels, current.labels, resultDrawsFeature(context.resultIndex)
+      )
     };
     const colors = !sameColors(previous.colors, current.colors);
     const visibility = previous.visibility !== current.visibility;
@@ -4470,9 +4478,12 @@ export const createAppSetup = () => {
       // The palette, rules, and visibility prepare their matches when their
       // intent changed (`colors`, `visibility`); then one compile of the
       // domains the Result shows.
-      // OV-2293: a Result whose bytes were drawn with other visibility asks for
-      // the rerender when they lack a feature.
-      const preparation = { colors, visibility, rerender: drawn.visibility !== current.visibility, show: false };
+      // OV-2293: a Result whose bytes were drawn with other visibility, or
+      // restored and not known to show any (a Reset before a Save and Load), asks
+      // for the rerender when they lack a feature.
+      const preparation = {
+        colors, visibility, rerender: previous.visibility === '' || drawn.visibility !== current.visibility, show: false
+      };
       let prepared = await projectMountedEditorIntent(preparation);
       // Declined with nothing blocking (the rules changed meanwhile): prepared
       // once more here, so the display still compiles once (R14-3).
@@ -4494,7 +4505,6 @@ export const createAppSetup = () => {
       phase: context.phase,
       rootGeneration: context.rootGeneration
     });
-    if (!projects && !failed) return;
     if (projects) {
       try {
         showEditorIntent({ domains, operations });
@@ -4906,6 +4916,14 @@ export const createAppSetup = () => {
     requestLabelTextChangeByFeatureId
   );
   const requestLabelTextChangeByKeyWithHistory = undoableAction(msg('Change label text'), requestLabelTextChangeByKey);
+  // The Features list's label input commits what was typed; its draft then follows the label.
+  /** @param {string} featureId @param {string} text */
+  const commitListLabelDraft = (featureId, text) => {
+    const committed = requestLabelTextChangeByFeatureIdWithHistory(featureId, text);
+    const entry = featureActions.getEditableLabelByFeatureId(featureId);
+    if (entry) entry.draftText = entry.text;
+    return committed;
+  };
   const resetAllLabelTextOverridesWithHistory = undoableAction(msg('Reset label edits'), resetAllLabelTextOverrides);
   const loadLabelOverrideTableWithHistory = undoableAction(msg('Load label edits'), loadLabelOverrideTable);
   const runInfoCopyStatus = ref('');
@@ -7923,6 +7941,7 @@ export const createAppSetup = () => {
     handleLabelTextScopeChoice: handleLabelTextScopeChoiceWithHistory,
     handleHiddenLabelTextChoice: handleHiddenLabelTextChoiceWithHistory,
     requestLabelTextChangeByFeatureId: requestLabelTextChangeByFeatureIdWithHistory,
+    commitListLabelDraft,
     requestLabelTextChangeByKey: requestLabelTextChangeByKeyWithHistory,
     resetAllLabelTextOverrides: resetAllLabelTextOverridesWithHistory,
     downloadLabelOverrideTable,

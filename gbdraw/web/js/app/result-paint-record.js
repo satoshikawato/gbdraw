@@ -94,17 +94,33 @@ const sameFills = (left, right) => sameColors(left.colors, right.colors) && left
 // left. Only Python decides whether Default draws a label and which text it
 // started from, so no projection of the Result's bytes can show them; another
 // value (Off to On, one text to another) the label projection shows or asks for.
-/** @param {string} drawn @param {string} current */
-export const drawnLabelIntentGone = (drawn, current) => {
+// An edit that had already left when the Result was last shown (`shown`, '' when
+// unknown) is not asked about: the Result followed it, or asked once for it. A
+// row of a feature the Result does not draw (`drawsFeature`) says nothing of it.
+// The bytes hold no source text, so a bulk text counts for every Result.
+/**
+ * @param {string} drawn
+ * @param {string} shown
+ * @param {string} current
+ * @param {(recordKey: string, featureId: string) => boolean} drawsFeature
+ */
+export const drawnLabelIntentGone = (drawn, shown, current, drawsFeature) => {
   const [drawnRows, drawnBulk] = /** @type {LabelPaintRows} */ (JSON.parse(drawn));
-  const [rows, bulk] = /** @type {LabelPaintRows} */ (JSON.parse(current));
   const rowKey = (/** @type {LabelPaintRows[0][number]} */ [recordKey, featureId]) => JSON.stringify([recordKey, featureId]);
-  const held = new Map(rows.map((row) => [rowKey(row), row]));
+  const read = (/** @type {string} */ labels) => {
+    const [rows, bulk] = /** @type {LabelPaintRows} */ (JSON.parse(labels));
+    return { held: new Map(rows.map((row) => [rowKey(row), row])), bulk };
+  };
+  const now = read(current);
+  const before = shown ? read(shown) : null;
   const shownByDefault = (/** @type {string | null | undefined} */ visibility) => visibility !== 'on' && visibility !== 'off';
-  return drawnRows.some((row) => {
-    const now = held.get(rowKey(row));
-    return (!shownByDefault(row[2]) && shownByDefault(now?.[2])) || (row[3] !== null && (now?.[3] ?? null) === null);
-  }) || Object.entries(drawnBulk).some(([source, text]) => bulk[source] !== text);
+  const rowGone = (/** @type {LabelPaintRows[0][number]} */ row, /** @type {ReturnType<typeof read>} */ { held }) => {
+    const heldRow = held.get(rowKey(row));
+    return (!shownByDefault(row[2]) && shownByDefault(heldRow?.[2])) || (row[3] !== null && (heldRow?.[3] ?? null) === null);
+  };
+  const bulkGone = (/** @type {string} */ source, /** @type {string} */ text, /** @type {ReturnType<typeof read>} */ { bulk }) => bulk[source] !== text;
+  return drawnRows.some((row) => rowGone(row, now) && !(before && rowGone(row, before)) && drawsFeature(row[0], row[1]))
+    || Object.entries(drawnBulk).some(([source, text]) => bulkGone(source, text, now) && !(before && bulkGone(source, text, before)));
 };
 
 // A paint state no editor state equals: a Result recorded with it shows
@@ -118,7 +134,8 @@ export const createResultPaintRecord = () => {
   const shownByResult = new Map();
   // The editor state each Result's bytes were drawn with, which a live edit
   // does not change: a rerender or a Generate draws a new Result. A restored
-  // Result is taken as drawn with the state it was restored under.
+  // Result not displayed is taken as drawn with the state of its drawing at the
+  // restore, which is all a Session or an Undo of a Generate says of its bytes.
   /** @type {Map<string, EditorPaintState>} */
   const drawnByResult = new Map();
   let bound = '';
