@@ -1202,8 +1202,8 @@ test.describe('a Result displayed after its intent changed', () => {
       await showResult(page, 1);
       await expectLiveEqualsGenerate(page, { label: 'a Label On in a Result an Undo of a Generate returned' });
     });
-    // In the drawing that was reset, Reset's redraw applies Label visibility to a
-    // batch Result when it is displayed; only a label text stays (OV-2293).
+    // In the drawing shown at the Reset, Reset's redraw applies Label visibility to a
+    // batch Result; a failed Reset redraw leaves that to the display's own redraw.
     for (const [name, change] of [['Off', { labelVisibility: 'off' }], ['On', { labelVisibility: 'on' }]]) {
       test(`Reset Settings in the same drawing shows a batch Result holding Label visibility ${name} as Generate draws it (${flag})`, async ({ page }) => {
         test.setTimeout(240_000);
@@ -1216,7 +1216,7 @@ test.describe('a Result displayed after its intent changed', () => {
         await resetKeepingLabelSettings(page);
         await settleLive(page);
         await showResult(page, 1);
-        await expectLiveEqualsGenerate(page, { label: `Label ${name} in a Result shown after Reset Settings of its drawing` });
+        await expectLiveEqualsGenerate(page, { label: `Label ${name} in a Result shown after Reset Settings with its drawing shown` });
       });
     }
     test(`an Undo of a Generate that replaced an unshown Result without a hidden feature draws the feature (${flag})`, async ({ page }) => {

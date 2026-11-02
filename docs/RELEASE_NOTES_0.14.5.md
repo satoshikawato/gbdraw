@@ -130,8 +130,8 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   - a Result whose redraw failed (a later color edit on it can also correct it);
   - the label text a Result was drawn with, when **Reset Settings**, Save, and Load
     pass before it is shown again (it still draws the features it lacks), and its
-    **Label visibility** too when the Reset was made in the other drawing (in the
-    reset drawing, the redraw applies it);
+    **Label visibility** too when the Reset was made with the other drawing shown
+    (in the drawing shown at the Reset, its redraw applies it);
   - a label text on a Result not shown when the edit left, returned by an Undo of a
     later **Generate Diagram**.
 

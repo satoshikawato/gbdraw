@@ -147,8 +147,8 @@ write-up of a release.
   Generate. The display redraws once when the Result was drawn with such an edit, even where the redraw
   changes nothing. A failed redraw does not run again at the next display. A Result whose redraw failed
   stays until its next redraw, a later color edit on it, or Generate; until the next redraw or Generate stay the label text a Result was drawn
-  with when Reset, Save, and Load pass before it is shown, and its **Label visibility** too when the Reset was made in the
-  other drawing (in the reset drawing, the redraw applies it), and a label text on a Result not shown when the
+  with when Reset, Save, and Load pass before it is shown, and its **Label visibility** too when the Reset was made with the
+  other drawing shown (in the drawing shown at the Reset, its redraw applies it), and a label text on a Result not shown when the
   edit left, returned by an Undo of a later Generate. **Applies on Generate** settings still wait for Generate.
 - Fixed: text typed in a Features list label input stays when a redraw finishes.
 - Known issue: with **Auto Reflow** off, Circular and Linear, a label text that Generate places away from
