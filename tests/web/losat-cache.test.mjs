@@ -121,8 +121,8 @@ assert.ok(cache.getCurrentRawLosatCacheEntry(
 ));
 // Reuse by the runtime that searched the rows. A CLI search and this LOSAT Wasm build are reused. The Wasm of
 // gbdraw 0.14.4 and earlier (`version: null`) and rows with no runtime record (Sessions before version 44,
-// promoted legacy protein caches) are reused only for LOSATP and LOSATN task megablast, whose rows that Wasm gives
-// as this build does; its task blastn, dc-megablast (it ran blastn, OV-2377) and TLOSATX rows are searched again.
+// promoted legacy protein caches) are reused only for LOSATP, whose rows that Wasm gives as this build does; LOSATN
+// of any task (megablast differs on MjeNMV x MelaMJNV, 538 and 531) and TLOSATX rows are searched again.
 // Rows of any other Wasm build are searched again.
 const { LOSAT_WASM_BUILD } = await import(pathToFileURL(join(tempRoot, 'services', 'losat-build.generated.js')));
 const wasmRuntime = (version, program) => ({ kind: 'losat', source: 'wasm', version, program });
@@ -130,7 +130,7 @@ const wasmRuntime = (version, program) => ({ kind: 'losat', source: 'wasm', vers
 const reuseCases = [];
 for (const [program, args, equalRows] of [
   ['blastp', [], true],
-  ['blastn', ['--task', 'megablast'], true],
+  ['blastn', ['--task', 'megablast'], false],
   ['blastn', [], false],
   ['blastn', ['--task', 'blastn'], false],
   ['blastn', ['--task', 'dc-megablast'], false],
@@ -150,9 +150,9 @@ for (const [program, args, runtimeOf, reused] of reuseCases) {
   const entry = { ...base, program, args, ...(runtime ? { runtime } : {}) };
   assert.equal(cache.isReusableLosatEntry(entry), reused, `${program} ${JSON.stringify(args)} ${JSON.stringify(runtime)}`);
 }
-// The lookups apply it: a nucleotide entry of the earlier Wasm with task blastn is not returned; with megablast it is.
+// The lookups apply it: a nucleotide entry of the earlier Wasm is not returned, whatever its task.
 const nucleotideMetadata = { program: 'blastn', outfmt: '6', queryCanonicalHash: 'q', subjectCanonicalHash: 's' };
-for (const [task, reused] of [['megablast', true], ['blastn', false]]) {
+for (const [task, reused] of [['megablast', false], ['blastn', false]]) {
   const entry = { ...nucleotideEntry, args: ['--task', task], runtime: wasmRuntime(null, 'blastn') };
   assert.equal(
     Boolean(cache.getCurrentRawLosatCacheEntry(new Map([['nucleotide-key', entry]]), 'nucleotide-key', { ...nucleotideMetadata, args: ['--task', task] })),

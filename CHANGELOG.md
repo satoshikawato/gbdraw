@@ -97,20 +97,25 @@ write-up of a release.
   that another LOSAT thread had just grown could trap; the LOSAT build now brings
   the thread's view of the memory up to date before memory copies and atomic
   instructions, which on ARM64 Linux and Android also covers stores (as LOSAT
-  states it), and each thread updates its view when it starts.
+  states it), and each thread updates its view when it starts. Android was not
+  measured.
 - Changed: the Web app's LOSAT engine is the LOSAT development commit
   `f62da7f6b` (version 0.2.0 before its release; it was a build of LOSAT
-  0.1.0). Its searches give the rows of the `losat` command of that commit;
-  LOSATN with task `blastn` gives different E-values and hits than before.
+  0.1.0). Its searches give the rows of the `losat` command of that commit.
+  Against 0.14.4: LOSATP gives the same rows (Vibrio check,
+  three MjeNMV and LvMJNV pairs); LOSATN `megablast` gives other rows on some
+  pairs (MjeNMV x MelaMJNV 531 rows instead of 538); LOSATN `blastn` gives
+  different E-values and hits (lambda x DE3 21 rows instead of 19); TLOSATX gives
+  the same rows in another order.
   Task `dc-megablast` now runs dc-megablast (the old engine ran `blastn` for
   it) on threaded execution: the default, and **Auto** on a cross-origin
   isolated page. **Serial**, or a page without isolation, stops before the
   search with a message that `dc-megablast` needs threaded LOSAT. **Auto** now
   runs LOSATN and TLOSATX on threaded execution too, wherever the page allows
-  it. Run Info names the engine's version. Saved LOSATP and LOSATN `megablast`
-  searches of an earlier Web app are reused, because this engine gives the
-  same rows; its saved LOSATN `blastn` and `dc-megablast` searches and TLOSATX
-  searches run again once at the next **Generate Diagram**. Searches saved by
+  it. Run Info names the engine's version. A LOSATP search saved by an earlier Web
+  app is reused, because this engine gives the same rows; its saved LOSATN
+  searches of any task and TLOSATX searches run again once at the next
+  **Generate Diagram**. Searches saved by
   the command line are reused as before.
   `gbdraw/web/wasm/losat/losat-build.json` records the build.
 - Added: built-in specific-color tables. `-t/--table` and

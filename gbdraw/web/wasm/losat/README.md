@@ -44,7 +44,9 @@ because it changes the file name in the module's name section.
 
 Notes:
 
-- The Web app keeps `losat.wasm` as the serial fallback.
+- The Web app keeps `losat.wasm` as the serial fallback. It is a local build:
+  LOSAT publishes no artifact for it at this commit, so there is nothing to
+  compare it with. It reproduces from a fresh clone at CI's paths.
 - Threaded browser execution needs COOP/COEP response headers so that
   `SharedArrayBuffer` is available.
 - For threaded LOSAT, `-num_threads N` is N compute threads. The browser
