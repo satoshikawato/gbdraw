@@ -646,12 +646,25 @@ test('the History list names each step and a pick walks to its row', async ({ pa
   await expect(strands).toBeChecked({ checked: !strandsOn });
   await expect(position).toHaveValue(await position.locator('option').nth(1).getAttribute('value'));
 
+  // Escape closes the list alone: the Escape handlers of the layers under it never see the key.
+  await page.evaluate(() => {
+    window.__historyListEscapes = 0;
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') window.__historyListEscapes += 1; });
+  });
   await page.keyboard.press('Escape');
   await expect(list).toHaveCount(0);
   await expect(toggle).toBeFocused();
-  await toggle.click();
-  await rows.filter({ hasText: 'Rename Session' }).click();
+  expect(await page.evaluate(() => window.__historyListEscapes)).toBe(0);
+  // From the keyboard: the focused row keeps the focus through the walk and is the current row after it.
+  await page.keyboard.press('Enter');
+  await expect(list.locator('[aria-current="step"]')).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  await expect(rows.first()).toBeFocused();
+  await page.keyboard.press('Enter');
   await expectHistory(page, 3, 0, 'Rename Session');
+  await expect(rows.first()).toHaveAttribute('aria-current', 'step');
+  await expect(rows.first()).toBeFocused();
   await page.locator('.app-brand').click();
   await expect(list).toHaveCount(0);
 

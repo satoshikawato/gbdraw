@@ -77,11 +77,23 @@ const accessibleName = (element) => {
 };
 
 /**
+ * A radio's group name: its fieldset's legend, or its radio group's name.
+ * @param {HistoryControl} element
+ */
+const radioGroupName = (element) => {
+  const group = element.closest?.('fieldset, [role="radiogroup"]');
+  if (!group) return '';
+  const legend = String(group.tagName || '').toLowerCase() === 'fieldset' ? group.querySelector?.('legend') : null;
+  return legend ? shownText(legend) : accessibleName(group);
+};
+
+/**
  * PD-OI-112: what the History list shows of a control's step, read as the
  * step ends: the control's name and the value it holds (a select's option
- * text, a checkbox's state, a color, a text field's value); a button, a
- * radio, a file input, or an editable element shows its name alone. A control
- * without a name has none, and the step shows its label.
+ * text, a checkbox's state, a color, a text field's value, a radio's label
+ * under its group's name, or under the step's label when the group has none);
+ * a button, a file input, or an editable element shows its name alone. A
+ * control without a name has none, and the step shows its label.
  * @param {HistoryControl} element
  * @returns {HistoryStepDetail | null}
  */
@@ -90,6 +102,7 @@ const describeControl = (element) => {
   if (!name) return null;
   const tag = String(element.tagName || '').toLowerCase();
   const type = String(element.type || '').toLowerCase();
+  if (type === 'radio') return { name: radioGroupName(element), value: name };
   if (tag === 'select') {
     const option = /** @type {HTMLSelectElement} */ (element).selectedOptions?.[0];
     return { name, value: option ? shownText(option) : '' };

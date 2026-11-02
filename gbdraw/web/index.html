@@ -1686,7 +1686,7 @@
             display: flex; align-items: center; gap: 0.75rem; width: 100%; min-height: 1.875rem; padding: 0 0.75rem;
             text-align: left; white-space: nowrap;
         }
-        .history-list-row:disabled { cursor: not-allowed; }
+        .history-list-row[aria-disabled="true"] { cursor: default; }
         .history-list-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .history-list-value {
             flex: 1 1 0; min-width: 2.5rem; overflow: hidden; text-overflow: ellipsis; text-align: right;
@@ -1700,7 +1700,7 @@
         .history-list-row[data-place="start"] { color: #475569; }
         .history-list-row[data-place="current"] { background-color: #eff6ff; box-shadow: inset 3px 0 0 #2563eb; font-weight: 600; color: #1d4ed8; }
         .history-list-row[data-place="current"] .history-list-value { font-weight: 400; color: #1d4ed8; }
-        .history-list-row:not(:disabled):hover, .history-list-row:focus-visible { background-color: #bfdbfe; outline: none; }
+        .history-list-row:not([aria-disabled="true"]):hover, .history-list-row:focus-visible { background-color: #bfdbfe; outline: none; }
         .history-list-tag {
             flex: none; padding: 0 0.3rem; border-radius: 0.25rem; background-color: #dbeafe;
             font-size: 0.625rem; font-weight: 700; line-height: 1rem; color: #1d4ed8;
@@ -2410,7 +2410,7 @@
             <ol class="history-list-rows">
                 <li v-for="row in historyList.rows.value" :key="row.key">
                     <button type="button" class="history-list-row" :data-place="row.place" :aria-current="row.place === 'current' ? 'step' : null"
-                            :disabled="historyList.rowDisabled(row)" @click="historyList.pick(row)"
+                            :aria-disabled="historyList.rowDisabled(row) ? 'true' : null" @click="historyList.pick(row)"
                             @pointerenter="historyList.pointed.value = row.key" @pointerleave="historyList.pointed.value = null"
                             @focus="historyList.pointed.value = row.key" @blur="historyList.pointed.value = null">
                         <span class="history-list-name">{{ row.text.name }}</span>

@@ -634,3 +634,26 @@ test('a step an action renames keeps no detail of the control that opened it', a
     h.cleanup();
   }
 });
+
+test('a radio step keeps its group\'s name and the radio\'s label, or the label alone without a group name', async () => {
+  for (const [legend, expected] of [['Input format', { name: 'Input format', value: 'GFF3 + FASTA' }], [null, { name: '', value: 'GFF3 + FASTA' }]]) {
+    const h = await createBoundaryHarness();
+    try {
+      const group = legend
+        ? { tagName: 'FIELDSET', querySelector: (selector) => (selector === 'legend' ? { innerText: legend } : null), getAttribute: () => null }
+        : null;
+      const { radio } = h.controls;
+      const closest = radio.closest;
+      Object.assign(radio, {
+        getAttribute: () => null,
+        labels: [{ innerText: 'GFF3 + FASTA' }],
+        closest: (selector) => (selector.includes('radiogroup') ? group : closest(selector))
+      });
+      await moveRadioWithArrow(h);
+      await settleTasks();
+      assert.deepEqual(h.history.stackEntries('undo').map((entry) => entry.detail), [expected]);
+    } finally {
+      h.cleanup();
+    }
+  }
+});

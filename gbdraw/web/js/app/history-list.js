@@ -5,7 +5,9 @@
 // Redo to the state right after the picked step (`travelTo`), and the pick is
 // no step. A step reads as its detail, or as its label translated where it is
 // shown (`stepText`), in the list and in the Undo and Redo titles. The list
-// stays open until a press outside it or Escape.
+// stays open until a press outside it or Escape. While a pick walks, History
+// reports Undo and Redo unavailable, so the rows wait as the buttons do; a
+// row that cannot be picked stays focusable (`aria-disabled`).
 /** @import { HistoryTimeline, HistoryTimelineStep } from '../services/history.js' */
 import { t, tm, tn } from '../utils/i18n.js';
 
@@ -71,7 +73,6 @@ export const createHistoryControls = ({ revision, canUndo, canRedo, undo, redo, 
     return canRedoHistory.value && step ? t('Redo {action}', { action: stepText(step).name }) : t('Redo');
   });
 
-  const traveling = ref(false);
   /**
    * @param {HistoryTimelineStep} step @param {HistoryListRow['place']} place
    * @param {HistoryListRow['direction']} direction @param {number} steps
@@ -94,7 +95,7 @@ export const createHistoryControls = ({ revision, canUndo, canRedo, undo, redo, 
   });
   const available = computed(() => canUndoHistory.value || canRedoHistory.value);
   /** @param {HistoryListRow} row */
-  const rowDisabled = (row) => traveling.value || (row.steps > 0 && !(row.direction === 'undo' ? canUndoHistory.value : canRedoHistory.value));
+  const rowDisabled = (row) => row.steps === 0 || !(row.direction === 'undo' ? canUndoHistory.value : canRedoHistory.value);
 
   const open = ref(false);
   // The row under the pointer or focus, by its key.
@@ -126,9 +127,11 @@ export const createHistoryControls = ({ revision, canUndo, canRedo, undo, redo, 
     if (target && (listElement()?.contains(target) || anchor?.contains(target))) return;
     closeList();
   };
+  // Escape closes the list alone, not the layer under it as well.
   /** @param {KeyboardEvent} event */
   const onEscape = (event) => {
     if (event.key !== 'Escape') return;
+    event.stopPropagation();
     const toggle = anchor;
     closeList();
     toggle?.focus({ preventScroll: true });
@@ -156,21 +159,16 @@ export const createHistoryControls = ({ revision, canUndo, canRedo, undo, redo, 
 
   /** @param {HistoryListRow} row */
   const pick = async (row) => {
-    if (row.steps === 0 || rowDisabled(row)) return;
-    traveling.value = true;
-    try {
-      await travelTo(row.target);
-    } finally {
-      traveling.value = false;
-    }
+    if (rowDisabled(row)) return;
+    await travelTo(row.target);
   };
-  // Arrow keys move through the rows that can be picked.
+  // Arrow keys move through the rows.
   /** @param {KeyboardEvent} event */
   const onListKeydown = (event) => {
     const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
     if (!step) return;
     event.preventDefault();
-    const buttons = /** @type {HTMLButtonElement[]} */ ([...(listElement()?.querySelectorAll('button:not(:disabled)') ?? [])]);
+    const buttons = /** @type {HTMLButtonElement[]} */ ([...(listElement()?.querySelectorAll('.history-list-row') ?? [])]);
     const at = buttons.indexOf(/** @type {HTMLButtonElement} */ (document.activeElement));
     buttons[Math.min(buttons.length - 1, Math.max(0, at + step))]?.focus();
   };

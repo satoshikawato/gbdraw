@@ -798,3 +798,72 @@ test('a step recorded during a walk stops it before the next step', async () => 
   assert.deepEqual({ x: intent.x, undo: history.timeline().undo.map((step) => step.label), redo: history.timeline().redo },
     { x: 9, undo: ['Late edit', 'Step 2', 'Step 1'], redo: [] });
 });
+
+test('a step that cannot be applied stops the walk with the Undo warning, and Undo and Redo wait while a walk runs', async () => {
+  const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+  let intent = { x: 0 };
+  let session = { title: '' };
+  const history = createHistoryRouter({
+    drawingIds: ['circular'],
+    activeDrawingId: () => 'circular',
+    sessionHistory: { buildIntent: () => ({ ...session }), applyIntent: (next) => { session = { ...next }; } },
+    managerOptions: () => ({
+      buildIntent: () => ({ ...intent }),
+      applyIntent: (next) => { intent = { ...next }; },
+      buildCheckpoint: () => ({ ...intent }),
+      applyCheckpoint: (next) => { intent = { ...next }; }
+    })
+  });
+  await history.captureBaseline('Initial state');
+  await history.runUndoable('Step 1', () => { intent.x = 1; });
+  /** @type {{ canUndo: boolean, canRedo: boolean, undo: unknown } | null} */
+  let duringWalk = null;
+  await history.runUndoableCommand('Stuck command', () => ({
+    apply: () => true,
+    revert: async () => {
+      duringWalk = { canUndo: history.canUndo(), canRedo: history.canRedo(), undo: await history.undo() };
+      return false;
+    }
+  }));
+  await history.runUndoable('Step 3', () => { intent.x = 3; });
+  const warnings = [];
+  const warn = console.warn;
+  console.warn = (message) => warnings.push(String(message));
+  try {
+    assert.equal(await history.travelTo(history.timeline().undo[2].sequence), false);
+  } finally {
+    console.warn = warn;
+  }
+  assert.deepEqual(duringWalk, { canUndo: false, canRedo: false, undo: false });
+  assert.match(warnings.join('\n'), /"Stuck command" could not undo/);
+  assert.deepEqual({ x: intent.x, undo: history.timeline().undo.map((step) => step.label), redo: history.timeline().redo.map((step) => step.label) },
+    { x: 1, undo: ['Stuck command', 'Step 1'], redo: ['Step 3'] });
+  assert.equal(history.canUndo(), true);
+});
+
+test('the start row says the oldest kept state once the shared byte budget dropped a project step', async () => {
+  const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+  let intent = { x: 0 };
+  let session = { title: '' };
+  const history = createHistoryRouter({
+    drawingIds: ['circular'],
+    activeDrawingId: () => 'circular',
+    maxBytes: 6000,
+    sessionHistory: { buildIntent: () => ({ ...session }), applyIntent: (next) => { session = { ...next }; } },
+    managerOptions: () => ({
+      buildIntent: () => ({ ...intent }),
+      applyIntent: (next) => { intent = { ...next }; },
+      buildCheckpoint: () => ({ ...intent }),
+      applyCheckpoint: (next) => { intent = { ...next }; }
+    })
+  });
+  await history.captureBaseline('Initial state');
+  await history.runUndoable('Rename Session', () => { session.title = 'a'.repeat(1000); });
+  assert.deepEqual(history.timeline().start, { label: 'Initial state', trimmed: false });
+  for (const letter of ['b', 'c', 'd', 'e']) {
+    await history.runUndoable('Rename Session', () => { session.title = letter.repeat(1000); });
+  }
+  const { start, undo } = history.timeline();
+  assert.ok(undo.length < 5, `the budget kept ${undo.length} steps`);
+  assert.deepEqual(start, { label: 'Initial state', trimmed: true });
+});

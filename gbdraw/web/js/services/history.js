@@ -321,14 +321,14 @@ const checkpointSvgBytes = (checkpoint) => (
  *   beforeIntent?: HistoryIntent | null,
  *   takeEntry?: HistoryStepBase['takeEntry'],
  *   sessionMark?: SessionMark | null,
- *   describe?: { label: string, read: () => HistoryStepDetail | null } | null
+ *   describe?: (() => HistoryStepDetail | null) | null
  * }} HistoryTransaction
  *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
  *   `committedAt`: the intent generation at which a commit closed it. `actions`: the `runUndoable`
  *   calls that ran on it, each with the step name it started with. `serial`: an intent step's
  *   number, in the order the steps began (`intentStepSerial`). `sessionMark`: the router's Session
- *   values as the step opened (`stepOpened`). `describe`: the reader of the step's detail, for the
- *   label the step opened with.
+ *   values as the step opened (`stepOpened`). `describe`: the reader of the step's detail, until an
+ *   action renames the step.
  * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
  *   One changed leaf of an intent; `path[0]` is the domain.
  * @typedef {(path: readonly string[], value: unknown) => unknown} IntentEditedPart
@@ -1006,7 +1006,7 @@ export const createHistoryManager = ({
       serial,
       takeEntry: options.takeEntry,
       sessionMark: stepOpened(),
-      describe: options.detail ? { label, read: options.detail } : null
+      describe: options.detail ?? null
     };
     activeTransaction = tx;
     touchTransaction();
@@ -1080,8 +1080,7 @@ export const createHistoryManager = ({
 
     const entry = buildPatchEntry(from, afterRecord, options);
     const label = entry?.label ?? from.label;
-    // A step an action names otherwise loses the detail it opened with.
-    const detail = from.describe?.label === label ? from.describe.read() : null;
+    const detail = from.describe?.() ?? null;
     if (entry && detail) entry.detail = detail;
     endStep(entry, { label, takeEntry: from.takeEntry, sessionMark: from.sessionMark, detail });
     if (!entry) {
@@ -1213,7 +1212,11 @@ export const createHistoryManager = ({
     // OV-464: a call that joins belongs to the action that started on the
     // step with its label, and commits under the name that action started
     // with, whatever a later action has named the step since.
-    if (open?.actions && !actionCallDepth && !options.joinsOpenStep) open.label = label;
+    if (open?.actions && !actionCallDepth && !options.joinsOpenStep) {
+      open.label = label;
+      // PD-OI-112: the step is the action's now, not the control's that opened it.
+      open.describe = null;
+    }
     const joined = options.joinsOpenStep ? open?.actions?.find((started) => started.label === label) : null;
     const action = { label, stepLabel: joined ? joined.stepLabel : tx?.label };
 
@@ -2386,6 +2389,9 @@ export const createHistoryRouter = ({
   // OV-1339: an Undo or Redo is pending from its call, before the shown
   // drawing settles its open step, so the drawing switch waits for it.
   const projectTraversals = makeRef(0);
+  // PD-OI-112: while a pick in the History list walks, Undo, Redo, and the
+  // list's rows wait for it: one availability (R11).
+  const walks = makeRef(0);
   /** @param {'undo' | 'redo'} direction */
   const traverse = async (direction) => {
     projectTraversals.value += 1;
@@ -2462,10 +2468,10 @@ export const createHistoryRouter = ({
   const own = {
     managerOf,
     revision: { get value() { return projectRevision.value + managerOf(activeDrawingId()).revision.value; } },
-    undo: () => traverse('undo'),
-    redo: () => traverse('redo'),
-    canUndo: () => managerOf(activeDrawingId()).canUndo() || (projectUndo.length > 0 && shownIdle()),
-    canRedo: () => managerOf(activeDrawingId()).canRedo() || (projectRedo.length > 0 && shownIdle()),
+    undo: () => (walks.value > 0 ? Promise.resolve(false) : traverse('undo')),
+    redo: () => (walks.value > 0 ? Promise.resolve(false) : traverse('redo')),
+    canUndo: () => walks.value === 0 && (managerOf(activeDrawingId()).canUndo() || (projectUndo.length > 0 && shownIdle())),
+    canRedo: () => walks.value === 0 && (managerOf(activeDrawingId()).canRedo() || (projectRedo.length > 0 && shownIdle())),
     undoLabel: () => (shownIdle() ? nextProjectStep('undo')?.label ?? managerOf(activeDrawingId()).undoLabel() : ''),
     redoLabel: () => (shownIdle() ? nextProjectStep('redo')?.label ?? managerOf(activeDrawingId()).redoLabel() : ''),
     getUndoCount: () => managerOf(activeDrawingId()).getUndoCount() + projectUndo.length,
@@ -2503,7 +2509,9 @@ export const createHistoryRouter = ({
     // a step not taken (with its own warning). The walk is one traversal, so a
     // drawing switch waits for all of it.
     travelTo: async (/** @type {number | null} */ target) => {
+      if (walks.value > 0) return false;
       projectTraversals.value += 1;
+      walks.value += 1;
       try {
         const busy = await managerOf(activeDrawingId()).settleBeforeTraversal();
         if (busy) return busy;
@@ -2520,6 +2528,7 @@ export const createHistoryRouter = ({
         }
         return true;
       } finally {
+        walks.value -= 1;
         projectTraversals.value -= 1;
       }
     },
