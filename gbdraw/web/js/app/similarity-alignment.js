@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
-import { joinSentences, listText, msg, t, tm, tn } from '../utils/i18n.js';
+import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { recordTranslationsFor } from '../services/linear-record-layout.js';
@@ -249,6 +249,9 @@ const directionExclusionLabels = Object.freeze({
   unusable_anchor: msg('The selected anchor cannot be displayed.'),
   unknown_strand: msg('The selected anchor has no known direction; it is never guessed.')
 });
+
+/** @param {boolean} reversed Whether a record reads opposite to its source file. */
+const recordDirectionWord = (reversed) => reversed ? tx('record direction', 'reverse') : tx('record direction', 'forward');
 
 /** @param {unknown} arrow */
 const arrowLabel = (arrow) => arrow === 1 ? t('right-facing') : arrow === -1 ? t('left-facing') : t('unknown');
@@ -526,7 +529,7 @@ const successfulSummary = (plan, reversed) => {
     explicitlySkipped,
     noCandidate,
     reversed,
-    text: t('Alignment applied: {aligned} aligned, {unchanged} unchanged, {explicitlySkipped} explicitly skipped, {noCandidate} no-candidate, {reversed} reversed.',
+    text: t('Alignment applied: {aligned} aligned, {unchanged} unchanged, {explicitlySkipped} explicitly skipped, {noCandidate} without a candidate, {reversed} reversed.',
       { aligned, unchanged, explicitlySkipped, noCandidate, reversed })
   });
 };
@@ -1591,7 +1594,8 @@ export const createSimilarityAlignmentActions = ({
       return {status:'ok'};
     }
     status.value = 'reviewing';
-    if (['canceled', 'stale', 'superseded'].includes(outcome?.status)) return outcome;
+    // A run refused while a Generate runs (`busy`) is no failure: it publishes no error.
+    if (['busy', 'canceled', 'stale', 'superseded'].includes(outcome?.status)) return outcome;
     const cause = publishError(outcome?.error);
     return { status: 'error', error: cause, recovery: outcome?.recovery };
   };
@@ -1900,6 +1904,7 @@ export const createSimilarityAlignmentActions = ({
       return {recordKey: delta.recordKey, label: recordName?.label || t('Unavailable record'),
         name: shortRecordName(recordName) || t('Unavailable record'),
         current: baseReverseComplement(record), restored: delta.before,
+        currentWord: recordDirectionWord(baseReverseComplement(record)), restoredWord: recordDirectionWord(delta.before),
         laterManualEdit: baseReverseComplement(record) !== delta.after};
     });
     const count = targets.length;
@@ -1974,7 +1979,7 @@ export const createSimilarityAlignmentActions = ({
         error.value = null;
         publishNotice(scope === 'positions' ? t('Alignment reset: record positions restored; record directions unchanged.')
           : t('Alignment reset: record positions and directions restored to before the latest Align.'));
-      } else if (!['canceled', 'stale', 'superseded'].includes(outcome?.status)) publishError(outcome?.error);
+      } else if (!['busy', 'canceled', 'stale', 'superseded'].includes(outcome?.status)) publishError(outcome?.error);
       return outcome;
     } catch (cause) {
       if (cause?.canceled === true) return { status: 'canceled' };
@@ -2244,25 +2249,25 @@ export const createSimilarityAlignmentActions = ({
       // The direction is part of each whole sentence: a bare "right" or "left" is no key.
       effect = intent.mode === 'left'
         ? tn(eligible.length, 'Reverses {records} so the chosen feature points left.',
-          'Reverses {records} so all {count} chosen features point left.', { records: reversedText })
+          'Reverses {records} so the {count} chosen features point left.', { records: reversedText })
         : tn(eligible.length, 'Reverses {records} so the chosen feature points right.',
-          'Reverses {records} so all {count} chosen features point right.', { records: reversedText });
+          'Reverses {records} so the {count} chosen features point right.', { records: reversedText });
     } else if (sameAfter) {
       effect = joinSentences(t('No record is reversed.'), sameAfter === 'left'
-        ? tn(eligible.length, 'The chosen feature already points left.', 'All {count} chosen features already point left.')
-        : tn(eligible.length, 'The chosen feature already points right.', 'All {count} chosen features already point right.'));
+        ? tn(eligible.length, 'The chosen feature already points left.', 'The {count} chosen features already point left.')
+        : tn(eligible.length, 'The chosen feature already points right.', 'The {count} chosen features already point right.'));
     } else {
       effect = joinSentences(t('No record is reversed.'),
         tn(eligible.length, '{count} chosen feature keeps its current direction.', '{count} chosen features keep their current directions.'));
     }
     // Verb agreement lives in the two forms of one key.
     if (excluded) {
-      effect = joinSentences(effect, tn(excluded, '{count} record stays unchanged; the reason is in its card.',
-        '{count} records stay unchanged; the reason is in their cards.'));
+      effect = joinSentences(effect, tn(excluded, '{count} record unchanged.',
+        '{count} records unchanged.'));
     }
     if (unknownStrand) {
-      effect = joinSentences(effect, tn(unknownStrand, '{count} record keeps its direction; the reason is in its card.',
-        '{count} records keep their direction; the reason is in their cards.'));
+      effect = joinSentences(effect, tn(unknownStrand, '{count} record keeps its direction.',
+        '{count} records keep their direction.'));
     }
     // D-11: the reference feature centre stays fixed; its record's left edge may move.
     const shift = Math.round(projected.reference.deltaX);

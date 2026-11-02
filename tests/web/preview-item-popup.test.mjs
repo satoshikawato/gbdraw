@@ -237,9 +237,9 @@ test('a Circular record popup without its own fields names the cause', () => {
   assert.equal(hint('not-inspected'), 'Inspect source records in the sidebar to edit this record\'s label.');
   assert.equal(hint('multi-record-canvas'), 'Multi-Record Canvas uses a grid. Turn it off to select one record.');
   assert.equal(hint('no-single-record'), 'Select one record to edit crop, orientation, and title lines.');
-  for (const cause of ['multi-record-canvas', 'no-single-record']) {
-    assert.ok(sidebar.includes(`>{{ t('${hint(cause)}') }}</p>`), `the sidebar shows the ${cause} sentence`);
-  }
+  assert.ok(sidebar.includes(`>{{ t('${hint('no-single-record')}') }}</p>`), 'the sidebar shows the no-single-record sentence');
+  // The sidebar offers the Multi-Record Canvas link in place of the sentence (ui-copy-diet D-03).
+  assert.ok(sidebar.includes(`@click="showCircularCanvasSetting" class="mt-1 text-xs text-blue-600">{{ t('Show Multi-Record Canvas setting') }}</button>`));
 });
 
 // A Linear file that draws several records: the drawn record id names the
@@ -290,7 +290,7 @@ test('the legend-entry view names the rule behind the color and the feature coun
     rules: [{ feat: 'CDS', qual: 'gene_kind', val: 'biosynthetic$' }]
   }), { kind: 'legend-entry', key: 'Core biosynthetic genes' });
   assert.equal(ruled.subtitle, '16 features');
-  assert.equal(ruled.colorSource, 'From this color rule:');
+  assert.equal(ruled.colorSource, null);
   assert.deepEqual(ruled.ruleLines, ['CDS where gene_kind matches “biosynthetic$”']);
   assert.equal(ruled.dialogLabel, 'Legend item: Core biosynthetic genes');
 
@@ -334,6 +334,13 @@ test('a color rule for any feature is one whole sentence in every locale (OV-146
     rules: [{ feat: '', qual: '', val: '' }, { feat: '', qual: 'product', val: 'kinase' }]
   }), { kind: 'legend-entry', key: 'Ruled' }).ruleLines;
   assert.deepEqual(lines(), ['Any feature color rule', 'Any feature where product matches “kinase”']);
+  // OV-2435: a rule without a qualifier or a pattern is named by its feature type alone, never by a sentence
+  // with an empty part.
+  const partial = openView(createPopup({
+    entries: [{ caption: 'Ruled', color: '#d62728' }],
+    rules: [{ feat: 'CDS', qual: '', val: 'kinase' }, { feat: '', qual: ' ', val: 'kinase' }, { feat: 'CDS', qual: 'product', val: '' }]
+  }), { kind: 'legend-entry', key: 'Ruled' }).ruleLines;
+  assert.deepEqual(partial, ['CDS color rule', 'Any feature color rule', 'CDS color rule']);
   try {
     await setUiLocale('ja', async () => ({ default: Object.freeze({
       'Any feature color rule': 'A', 'Any feature where {qualifier} matches “{pattern}”': 'B {qualifier} {pattern}',
@@ -374,7 +381,7 @@ test('the legend-entry view of a track row names its plot, not features (OV-1272
   const views = ['GC content', 'GC skew (+)', 'Depth'].map((key) => openView(created, { kind: 'legend-entry', key }));
   assert.deepEqual(views.map((view) => view.subtitle), ['Content plot', 'Skew plot', 'Depth plot']);
   views.forEach((view) => {
-    assert.equal(view.colorSource, 'Changes this legend swatch only. The plot keeps the color set in Settings.');
+    assert.equal(view.colorSource, 'Changes the legend swatch only.');
     assert.deepEqual(view.ruleLines, []);
   });
   assert.deepEqual([views[0].title, views[0].name, views[0].dialogLabel], ['GC content', 'GC content', 'Legend item: GC content']);
@@ -404,7 +411,7 @@ test('a feature row named like a track row keeps the feature view (OV-1272)', ()
   assert.equal(feature.subtitle, '3 features');
   assert.notEqual(feature.colorSource, track.colorSource);
   assert.equal(track.subtitle, 'Content plot');
-  assert.equal(track.colorSource, 'Changes this legend swatch only. The plot keeps the color set in Settings.');
+  assert.equal(track.colorSource, 'Changes the legend swatch only.');
 });
 
 test('the record-definition view lists the facts of the displayed Result', () => {
@@ -438,6 +445,41 @@ test('the record-definition view lists the facts of the displayed Result', () =>
     { kind: 'record-definition', recordIndex: 0, recordId: 'NC_012920.1' });
   assert.equal(circular.facts.find((fact) => fact.label === 'Region').value, 'Whole record');
   assert.equal(circular.facts.some((fact) => fact.label === 'Alignment'), false);
+});
+
+// OV-2328: the reason a record was not moved is its label as the UI shows it
+// elsewhere, inserted unchanged; lower-casing a translated label damages
+// German nouns and Turkish I.
+test('a record the alignment did not move shows its reason label unchanged', () => {
+  const alignmentOf = (alignment) => openView(createPopup({
+    requestRecords: [{ recordKey: 'uid-1' }],
+    recordRows: [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'BGC0000708', canonicalRecordKey: 'uid-1' }],
+    alignment: { recordKey: 'uid-1', ...alignment }
+  }), { kind: 'record-definition', recordIndex: 0, recordId: 'BGC0000708' })
+    .facts.find((fact) => fact.label === 'Alignment').value;
+  assert.equal(alignmentOf({ status: 'skipped', rationaleLabel: 'Skipped by user' }), 'Not moved: Skipped by user');
+  assert.equal(alignmentOf({ status: 'skipped', rationaleLabel: '' }), 'Not moved');
+});
+
+// The record's place in a similarity alignment and a sequence alignment (the
+// match popup's Alignment section) are two senses of one English word: the
+// record fact is its own key, so a locale can name each sense (pl Wyrównanie
+// vs Dopasowanie).
+test('the record popup labels its similarity alignment fact with its own key', async () => {
+  const label = () => openView(createPopup({
+    requestRecords: [{ recordKey: 'uid-1' }],
+    recordRows: [{ scope: 'linear', sourceUid: 'uid-1', recordId: 'BGC0000708', canonicalRecordKey: 'uid-1' }],
+    alignment: { recordKey: 'uid-1', status: 'aligned', anchorLabel: 'neoU' }
+  }), { kind: 'record-definition', recordIndex: 0, recordId: 'BGC0000708' }).facts.at(-1).label;
+  assert.equal(label(), 'Alignment');
+  try {
+    await setUiLocale('pl', async () => ({ default: Object.freeze({
+      Alignment: 'Dopasowanie', 'similarity alignment\u0004Alignment': 'Wyrównanie'
+    }) }));
+    assert.equal(label(), 'Wyrównanie');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });
 
 // OV-502: only a Linear definition marks which line is the record's name. A

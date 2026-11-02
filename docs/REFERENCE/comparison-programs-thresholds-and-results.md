@@ -233,7 +233,7 @@ positional adjacent pairs. The button that matches the resolved plan is pressed;
 a selected or mixed plan presses none of them and shows a **Custom** badge.
 
 Open **Selected pairs (N)** to change the source or uploaded file for one pair,
-omit a pair, or select **Add** and define an explicit non-adjacent pair. The
+omit a pair, or select **Add pair** and define an explicit non-adjacent pair. The
 pair sections are grouped there instead of appearing between record cards.
 Each included uploaded edge needs its own active file. An omitted edge
 contributes no comparison results and does not reserve a search job. Retained inactive

@@ -487,7 +487,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
   await expect(apply).toBeEnabled();
   await expect(apply).toHaveAttribute('aria-describedby', 'similarity-alignment-apply-reason');
-  await expect(page.locator('#similarity-alignment-apply-reason')).toHaveText('Nothing changes until Apply.');
+  await expect(page.locator('#similarity-alignment-apply-reason')).toHaveText('');
   await page.screenshot({
     path: testInfo.outputPath('desktop-ambiguity.png'),
     fullPage: true
@@ -659,7 +659,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(summary).toContainText('1 aligned');
   await expect(summary).toContainText('1 unchanged');
   await expect(summary).toContainText('0 explicitly skipped');
-  await expect(summary).toContainText('0 no-candidate');
+  await expect(summary).toContainText('0 without a candidate');
   await expect(summary).toContainText('0 reversed');
   expect(await page.evaluate(
     () => window.__GBDRAW_HISTORY__.getUndoCount()
@@ -675,9 +675,9 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(inspector).toBeVisible();
   // UX-B06: one line until opened; the reference and each record's rationale are inside.
   await expect(inspector.locator('summary')).toContainText(/^Aligned to .+ in .+$/);
-  await expect(inspector.getByText('Exact reference:')).toBeHidden();
+  await expect(inspector.getByText('Exact reference', { exact: true })).toBeHidden();
   await inspector.locator('summary').click();
-  await expect(inspector.getByText('Exact reference:')).toBeVisible();
+  await expect(inspector.getByText('Exact reference', { exact: true })).toBeVisible();
   await expect(inspector).toContainText('Selected by user');
   await expect(inspector).toContainText('Exact reference');
   await page.screenshot({ path: testInfo.outputPath('narrow-final.png'), fullPage: true });
@@ -849,7 +849,7 @@ test('exclusive direction modes and Custom follow keyboard choices without Worke
   await page.keyboard.press('ArrowDown');
   await expect(dialog.getByRole('radio', { name: /Select .*bp, strand/ }).nth(1)).toBeChecked();
   await page.keyboard.press('ArrowDown'); await expect(skip).toBeChecked();
-  await expect(dialog.locator('#alignment-direction-scope')).toContainText('1 record stays unchanged');
+  await expect(dialog.locator('#alignment-direction-scope')).toContainText('1 record unchanged');
   await modes.getByRole('radio', { name: 'Keep as is', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(modes.getByRole('radio', { name: 'All right', exact: true })).toBeChecked();
@@ -945,9 +945,10 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await expect(application).toHaveCount(0);
 });
 
-test('one usable member applies directly through one Worker resolve and one History action', async ({ page }, testInfo) => {
-  test.setTimeout(180000);
-  await captureUnhandledRejections(page);
+// The collinear fixture with og_1 reduced to one usable member in record_a, its Linear comparisons a blastp
+// orthogroup search, and the drawer showing og_1 with the exact reference in record_b. Returns the drawer, the
+// Session bytes, and the reference option.
+const loadOneCandidateSession = async (page, testInfo) => {
   const directory = testInfo.outputPath('one-candidate-fixture');
   mkdirSync(directory, { recursive: true });
   execFileSync('python', ['-c',
@@ -955,8 +956,6 @@ test('one usable member applies directly through one Worker resolve and one Hist
     directory
   ], { cwd: process.cwd(), stdio: 'pipe' });
   const source = readFileSync(join(directory, 'mixed.gbdraw-session.json'), 'utf8');
-  const errors = [];
-  page.on('pageerror', (error) => errors.push(String(error?.message || error)));
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   const session = Buffer.from(await page.evaluate(async (raw) => {
@@ -996,6 +995,15 @@ test('one usable member applies directly through one Worker resolve and one Hist
   ));
   expect(reference).not.toBe('');
   await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
+  return { drawer, session, reference };
+};
+
+test('one usable member applies directly through one Worker resolve and one History action', async ({ page }, testInfo) => {
+  test.setTimeout(180000);
+  await captureUnhandledRejections(page);
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error?.message || error)));
+  const { drawer, session, reference } = await loadOneCandidateSession(page, testInfo);
   const before = await artifactSnapshot(page);
   const drawerReview = drawer.getByRole('button', { name: 'Review alignment options…' });
   const normalAlign = drawer.getByRole('button', { name: 'Align…', exact: true });
@@ -1196,6 +1204,71 @@ test('one usable member applies directly through one Worker resolve and one Hist
   await similarityTab.click();
   await expect(drawer.locator('[data-similarity-alignment-plan-inspector]')).toBeVisible();
   expect(errors).toEqual([]);
+  await expectNoUnhandledRejections(page);
+});
+
+// Align… runs the committed request again and replaces the Result, and Review alignment options… leads to that run;
+// either would replace the Result a running Generate adopts (OV-2446). While a Generate runs, the four buttons of the
+// drawer and the feature popup are disabled, also for the keyboard, and an Align started by code is refused without
+// an error. The Generate then commits its own Result.
+test('Align… and Review alignment options… are disabled while a Generate runs, and the Generate keeps its Result', async ({ page }, testInfo) => {
+  test.setTimeout(420000);
+  await captureUnhandledRejections(page);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const { drawer } = await loadOneCandidateSession(page, testInfo);
+  const alignState = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { error: state.errorLog.value?.code ?? null, alignError: window.__GBDRAW_APP__.similarityAlignmentError?.code ?? null,
+      plan: state.similarityAlignmentPlan.value !== null, undoLabel: window.__GBDRAW_HISTORY__.undoLabel() };
+  });
+  // Focus by keyboard focus, not by pointer, and press the key; a disabled button takes no focus.
+  const pressOn = async (control, key) => {
+    await page.evaluate(() => document.activeElement?.blur());
+    await control.evaluate((element) => element.focus());
+    await page.keyboard.press(key);
+  };
+  // The Generate's search waits for the release, then runs, single-threaded (the test server is not cross-origin
+  // isolated).
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.clearLosatCache();
+    window.__GBDRAW_APP__.losatExecution.executionMode = 'serial';
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+      await new Promise((resolve) => { window.__RELEASE_SEARCH__ = resolve; });
+      return (await import('./js/services/losat.js')).runLosatPairsParallel(jobs, options);
+    };
+  });
+  await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+  await page.waitForFunction(() => Boolean(window.__RELEASE_SEARCH__), null, { timeout: 180000 });
+
+  const drawerButtons = [drawer.getByRole('button', { name: 'Align…', exact: true }),
+    drawer.getByRole('button', { name: 'Review alignment options…' })];
+  for (const button of drawerButtons) {
+    await expect(button, 'the drawer button is disabled while the Generate runs').toBeDisabled();
+    await pressOn(button, 'Enter');
+  }
+  const b0FeatureId = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
+    .find(({ protein_id: proteinId }) => proteinId === 'b0').svg_id);
+  await page.locator(`[data-gbdraw-feature-id="${b0FeatureId}"]`).first().dispatchEvent('click', { clientX: 400, clientY: 300 });
+  const popup = page.locator('.feature-popup[role="dialog"]');
+  await expect(popup).toBeVisible();
+  for (const button of [popup.getByRole('button', { name: 'Align…', exact: true }),
+    popup.getByRole('button', { name: 'Review alignment options…' })]) {
+    await expect(button, 'the popup button is disabled while the Generate runs').toBeDisabled();
+    await pressOn(button, 'Enter');
+  }
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentStatus), 'no key press starts an alignment').toBe('idle');
+  await expect(page.getByRole('dialog', { name: 'Review alignment' })).toHaveCount(0);
+
+  // Started by code, the one-click Align resolves and its run is refused: no error, no step, no plan.
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.startSimilarityAlignmentFromDrawer('og_1')))
+    .toEqual({ status: 'busy', reason: 'Generating diagram. Retry after generation finishes.' });
+  expect(await alignState()).toEqual({ error: null, alignError: null, plan: false, undoLabel: '' });
+  await page.evaluate(() => window.__GBDRAW_APP__.cancelSimilarityAlignmentDialog());
+
+  await page.evaluate(() => window.__RELEASE_SEARCH__());
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 180000 });
+  expect(await alignState(), 'the Generate commits its Result; no Align step').toEqual(
+    { error: null, alignError: null, plan: false, undoLabel: 'Generate diagram' });
   await expectNoUnhandledRejections(page);
 });
 
@@ -1531,7 +1604,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     app.rightDrawerTab = 'orthogroups';
     await window.Vue.nextTick();
     const labels = [...document.querySelectorAll(
-      '[data-similarity-alignment-plan-inspector] [data-alignment-record-key]:has([aria-label$=" reversed relative to source"])'
+      '[data-similarity-alignment-plan-inspector] [data-alignment-record-key]:has([aria-label$=" reversed relative to the source file"])'
     )].map((element) => element.dataset.alignmentRecordKey);
     app.showRightDrawer = previous.open;
     app.rightDrawerTab = previous.tab;
@@ -1933,7 +2006,7 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await dialog.getByRole('radio', { name: 'All right', exact: true }).check();
   await expect(unknown).toContainText('no known direction; it is never guessed');
   await expect(missing).toContainText('No usable candidate');
-  await expect(dialog.locator('#alignment-direction-scope')).toContainText('all 2 chosen features point right');
+  await expect(dialog.locator('#alignment-direction-scope')).toContainText('the 2 chosen features point right');
   const initial = await artifactSnapshot(page);
   const preview = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview);
   expect(preview.records.filter(r => r.beforeReverseComplement !== r.afterReverseComplement).map(r => r.recordKey)).toEqual(['record-1']);

@@ -37,6 +37,9 @@ const reportThreadFault = (tid, error, context) => {
 
 const runThreadStart = (context, tid, startArg) => {
   try {
+    // This instance may be older than the growth that made room for this thread's stack and TLS.
+    // memory.grow(0) allocates nothing and updates this worker's view of the memory, as LOSAT's own host does.
+    context.memory.grow(0);
     context.instance.exports.wasi_thread_start(tid, startArg);
   } catch (error) {
     reportThreadFault(tid, error, context);
@@ -76,7 +79,7 @@ const instantiateThreadContext = async ({
   if (typeof instance.exports.wasi_thread_start !== 'function') {
     throw new Error('Threaded LOSAT wasm does not export wasi_thread_start.');
   }
-  return { instance, stdoutChunks, stderrChunks };
+  return { instance, memory, stdoutChunks, stderrChunks };
 };
 
 const flushThreadOutput = (context, payload = {}) => {

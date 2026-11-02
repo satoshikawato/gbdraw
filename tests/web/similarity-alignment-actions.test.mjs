@@ -408,6 +408,30 @@ test('canceled or stale resolved completion cannot install a plan or Result', as
   assert.equal(applying.actions.summary.value, null);
 });
 
+// While a Generate runs, the run refuses an Align and a Reset (`sessionOperationAvailability('not-during-run')`):
+// a refusal, not a failure, so no error is published and the Result stays (OV-2446).
+test('an Align or Reset run refused while a Generate runs publishes no error and keeps the Result', async () => {
+  const busy = { status: 'busy', reason: 'Generating diagram. Retry after generation finishes.' };
+  let refuse = true;
+  const f = create({ generation: async () => (refuse ? busy : { status: 'ok' }) });
+  const prior = f.state.results.value;
+  assert.deepEqual(await startAlign(f), busy);
+  assert.equal(f.state.errorLog.value, null);
+  assert.equal(f.actions.error.value, null);
+  assert.equal(f.state.results.value, prior);
+  assert.equal(f.history.getUndoCount(), 0);
+  f.actions.cancel();
+  refuse = false;
+  await startReview(f); f.actions.setDirectionMode('left'); assert.equal((await f.actions.applyDraft()).status, 'ok');
+  const aligned = f.state.results.value;
+  refuse = true;
+  assert.deepEqual(await f.actions.resetAlignment('positions'), busy);
+  assert.equal(f.state.errorLog.value, null);
+  assert.equal(f.actions.error.value, null);
+  assert.equal(f.state.results.value, aligned);
+  assert.equal(f.history.getUndoCount(), 1);
+});
+
 test('busy is synchronous, duplicate starts are ignored, and exact popup reference survives', async () => {
   const pending = deferred();
   const fixture = create({ members: [reference, otherReference, targetA, targetC],
@@ -1029,8 +1053,8 @@ test('exclusive modes, reference Custom, Select and Skip are local with zero Wor
   // An unknown-strand anchor still moves its record; only its direction stays (PD-OI-027).
   const unknown=f.actions.directionPreview.value.records.find(r=>r.exclusion==='unknown_strand');
   assert.match(unknown.exclusionLabel,/^Direction unchanged: /);
-  assert.match(f.actions.directionPreview.value.effect,/1 record keeps its direction/);
-  assert.match(f.actions.directionPreview.value.effect,/1 record stays unchanged/);
+  // Each count line is its own sentence in the joined effect, never run together.
+  assert.match(f.actions.directionPreview.value.effect,/\. 1 record unchanged\. 1 record keeps its direction\.$/);
 });
 test('Apply and both Reset scopes own one History transaction and consume receipt',async()=>{
   for(const scope of ['positions','positions-and-directions']){
@@ -1101,6 +1125,9 @@ test('Align A then B resets to B before, including reference and only affected l
   assert.equal(f.actions.resetPreview.value.targets[0].name,'Exact displayed record');
   assert.equal(f.actions.resetPreview.value.directionsLabel,'Positions and directions (2 records)');
   assert.equal(f.actions.resetPreview.value.targets[0].laterManualEdit,true);
+  // The direction words go through the catalogs (the template never holds them).
+  const {current,restored,currentWord,restoredWord}=f.actions.resetPreview.value.targets[0];
+  assert.deepEqual([currentWord,restoredWord],[current,restored].map(reverse=>reverse?'reverse':'forward'));
   assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'ok');
   assert.deepEqual(f.state.linearSeqs.map(row=>row.region_reverse),[...afterA.slice(0,2),true]);
   assert.equal(f.state.similarityAlignmentResetReceipt.value,null);

@@ -12,12 +12,13 @@
 import { COMPARISON_LEGEND_SELECTOR, pythonLegendKey } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
+import { specificRuleHasQualifier } from '../services/specific-color-rules.js';
 import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
 } from '../services/linear-sources.js';
 import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js';
-import { msg, t, tn, tm } from '../utils/i18n.js';
+import { msg, t, tn, tm, tx } from '../utils/i18n.js';
 
 /**
  * The item a preview popup is about: a Legend row by its key, or the
@@ -137,25 +138,26 @@ export const previewItemTarget = (target, svg) => {
 
 /**
  * OV-1466: a rule without a feature type is a whole sentence of its own, so a
- * locale writes "any feature" where and how its sentence needs it.
+ * locale writes "any feature" where and how its sentence needs it. OV-2435: a
+ * rule needs a qualifier (`specificRuleHasQualifier`); one without a qualifier
+ * or a pattern is named by its feature type alone, so no sentence has an empty part.
  * @param {ColorRuleLike} rule
  */
 const colorRuleText = (rule) => {
   const feature = text(rule?.feat);
   const qualifier = text(rule?.qual);
   const pattern = text(rule?.val);
-  if (!qualifier && !pattern) return feature ? t('{feature} color rule', { feature }) : t('Any feature color rule');
-  const params = { qualifier: qualifier || t('a qualifier'), pattern };
+  if (!specificRuleHasQualifier(rule) || !pattern) return feature ? t('{feature} color rule', { feature }) : t('Any feature color rule');
   return feature
-    ? t('{feature} where {qualifier} matches “{pattern}”', { feature, ...params })
-    : t('Any feature where {qualifier} matches “{pattern}”', params);
+    ? t('{feature} where {qualifier} matches “{pattern}”', { feature, qualifier, pattern })
+    : t('Any feature where {qualifier} matches “{pattern}”', { qualifier, pattern });
 };
 
 // OV-1272: a track row names its plot; it lists no features, and its Color
 // edits only the swatch (the plot's color is a Settings value).
 /** @type {Readonly<Record<DrawnTrack['kind'], string>>} */
 const TRACK_ROW_SUBTITLE = Object.freeze({ content: msg('Content plot'), skew: msg('Skew plot'), depth: msg('Depth plot') });
-const TRACK_ROW_COLOR_SOURCE = msg('Changes this legend swatch only. The plot keeps the color set in Settings.');
+const TRACK_ROW_COLOR_SOURCE = msg('Changes the legend swatch only.');
 
 /**
  * OIC-029: what the Legend item choice of the scope dialog and the Legend popup's Color do to a type's default
@@ -184,12 +186,13 @@ const buildLegendEntryView = ({
   const ruleLines = trackKind ? [] : rules.map(colorRuleText);
   const defaultColorLine = trackKind || ruleLines.length ? null : defaultColorScopeLine(defaultColorType, replacedDefaultColor);
   // OV-1336: the OIC-029 line, once shown, says where the color comes from by itself; the caption gives way.
+  // One rule line says where the color comes from by itself too; several get their count.
   const colorSource = defaultColorLine
     ? null
     : trackKind
       ? tm(TRACK_ROW_COLOR_SOURCE)
       : ruleLines.length
-        ? tn(ruleLines.length, 'From this color rule:', 'From these {count} color rules:')
+        ? (ruleLines.length > 1 ? tn(ruleLines.length, '{count} color rule', '{count} color rules') : null)
         : featureTypes.has(key)
           ? t('Default color of {type} features', { type: key })
           : t('Color set on individual features');
@@ -226,7 +229,8 @@ const alignmentText = (decision) => {
   if (!decision) return t('Not aligned');
   if (decision.status === 'reference') return t('Reference ({anchor})', { anchor: text(decision.anchorLabel) });
   if (decision.status === 'aligned') return t('Aligned on {anchor}', { anchor: text(decision.anchorLabel) });
-  return t('Not moved ({reason})', { reason: text(decision.rationaleLabel).toLowerCase() || t('skipped') });
+  const reason = text(decision.rationaleLabel);
+  return reason ? t('Not moved: {reason}', { reason }) : t('Not moved');
 };
 
 /**
@@ -261,7 +265,9 @@ const buildRecordDefinitionView = ({
     { label: t('Display start'), value: start == null ? t('Record start') : NUMBER.format(start) },
     { label: t('Region'), value: regionText(record?.region) }
   ];
-  if (alignmentShown) facts.push({ label: t('Alignment'), value: alignmentText(alignment) });
+  // The record's place in a similarity alignment, not a sequence alignment
+  // (the match popup's Alignment section): a locale may name the two apart.
+  if (alignmentShown) facts.push({ label: tx('similarity alignment', 'Alignment'), value: alignmentText(alignment) });
   return {
     kind: /** @type {const} */ ('record-definition'),
     identity: `record:${scope}:${recordIndex}:${recordId}`,

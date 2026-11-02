@@ -187,7 +187,7 @@ const partsCapability = (parts, profile, recordLength) => {
       return unavailable('location-parts-invalid', t('Feature-part coordinates are invalid or outside the source record.'));
     }
     if (!partStrandMatches(part.strand, profile.strand)) {
-      return unavailable('location-strand-mismatch', t('Feature part strands disagree with the source profile.'));
+      return unavailable('location-strand-mismatch', t('A part of this feature is on a different strand from the feature.'));
     }
   }
   // The loop above returned for every missing part.
@@ -317,7 +317,7 @@ export const resolveFeatureAnchor = ({
   const midpoint = positional;
   const biologicalEnds = !positional.enabled ? positional
     : !['+', '-'].includes(located.strand)
-      ? unavailable('biological-direction-unavailable', t('Biological 5-prime and 3-prime ends require a known strand.'))
+      ? unavailable('biological-direction-unavailable', t('Biological 5′ and 3′ ends require a known strand.'))
       : available();
   const offsetBasis = profile?.strand === 'unstranded' ? 'source-forward' : 'strand';
   const offset = !positional.enabled ? { ...positional, basis: offsetBasis }
@@ -329,7 +329,7 @@ export const resolveFeatureAnchor = ({
         : available();
   const featureEnd = !positional.enabled ? positional
     : located.strand === 'unstranded' && located.partOrder !== 'source-forward'
-      ? unavailable('feature-end-direction-unavailable', t('Feature-end placement requires a known display traversal path.'))
+      ? unavailable('feature-end-direction-unavailable', t('Feature-end placement requires a known strand or parts listed in forward order in the file.'))
       : available();
   // The feature's first base in display order is its 5-prime or 3-prime base,
   // so placing it at the start needs a known strand.

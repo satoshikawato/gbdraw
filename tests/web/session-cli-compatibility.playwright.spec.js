@@ -174,7 +174,7 @@ for (const entry of cases) {
         if (entry.args.includes('-b')) {
           const resolution = run.page.locator('[data-imported-comparison-resolution]');
           await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
-          await expect(resolution).toContainText('Selected action: INHERIT');
+          await expect(resolution).toContainText('INHERIT');
         }
         await generateAndWaitForResult(run.page);
         const after = await snapshot(run.page);

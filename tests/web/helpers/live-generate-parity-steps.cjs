@@ -55,6 +55,46 @@ const generate = async (page) => {
 // expects a Label visibility On dialog, so one fails the edit. An empty edit
 // opens and closes the popup, as a reader looking at the feature does, which
 // binds the labels.
+const otherMode = (mode) => (mode === 'circular' ? 'linear' : 'circular');
+
+// One drawing switch (the mode buttons call `selectDrawing`), settled.
+const switchDrawing = async (page, drawingId) => {
+  await settleLive(page);
+  const outcome = await page.evaluate((id) => window.__GBDRAW_APP__.selectDrawing(id), drawingId);
+  expect(outcome, `the switch to ${drawingId}`).toEqual({ status: 'ok' });
+  await expect.poll(() => page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.circularRecordDiscovery.status))
+    .not.toBe('loading');
+  await page.evaluate(async () => { await window.Vue.nextTick(); });
+  await settleLive(page);
+};
+
+// `mode`'s drawing opened as `open` does, then the other drawing with a Result,
+// then `mode`'s drawing shown. Resolves to the other drawing's History depth at
+// its Result.
+const openBothDrawings = async (page, { mode, results, reflow }) => {
+  await open(page, { mode, results, reflow });
+  await switchDrawing(page, otherMode(mode));
+  if (mode === 'circular') {
+    await page.evaluate(async (text) => {
+      const app = window.__GBDRAW_APP__;
+      app.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'forced_label_underlay.gb', { type: 'text/plain', lastModified: 1000 }));
+      await window.Vue.nextTick();
+    }, readFileSync(SINGLE_FIXTURE, 'utf8'));
+    await settleLive(page);
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_labels_linear = 'all'; });
+  } else {
+    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(SINGLE_FIXTURE);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
+      .toBeGreaterThan(0);
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
+    await settleLive(page);
+  }
+  await generate(page);
+  const otherFloor = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await switchDrawing(page, mode);
+  return otherFloor;
+};
+
 const popupEdit = async (page, match, edit = {}) => {
   await evaluateWithRetainedPromise(page, async ({ target, change }) => {
     const app = window.__GBDRAW_APP__;
@@ -283,6 +323,9 @@ const loadFeatureEdits = (page, rows) => evaluateWithRetainedPromise(page, async
 module.exports = {
   SINGLE_FIXTURE,
   open,
+  openBothDrawings,
+  otherMode,
+  switchDrawing,
   generate,
   popupEdit,
   addVisibilityRule,

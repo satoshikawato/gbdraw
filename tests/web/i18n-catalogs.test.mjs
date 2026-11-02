@@ -20,7 +20,9 @@ import {
   CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, pluralTranslation, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
   uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
-import { memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { COLLINEAR_COLOR_MODE_TEXT, memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { COLLINEARITY_COLOR_MODES } from '../../tools/i18n/collinearity-words.generated.mjs';
+import { detectedTopologyNote } from '../../gbdraw/web/js/services/record-display-model.js';
 import { CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, catalogStatus } from '../../tools/i18n/catalogs.mjs';
 import {
   PLACEHOLDER, VOID_TAGS, WEB_ROOT as webRoot, compiledHtml, elementEnd, extractCalls, sourceCalls, sourceFiles, sourceKeys, webPath
@@ -252,6 +254,17 @@ test('no stylesheet, template or module of the Web UI selects by a translated at
   const files = [...sourceFiles(), ...webStylesheets()];
   assert.ok(files.some((path) => path.endsWith(join('css', 'tailwind.input.css'))), 'the Tailwind input is read');
   const problems = files.flatMap((path) => translatedSelectorProblems(readFileSync(path, 'utf8'), webPath(path)));
+  assert.deepEqual(problems, []);
+});
+
+// A static placeholder shows in every language as written, so it holds only a
+// code value (slot_id, product,gene,locus_tag); an example sentence goes
+// through t('e.g., {example}', …) like its siblings (OV-2329: "e.g. K-12").
+test('index.html has no static placeholder that is an English example', () => {
+  const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
+  const problems = html.split('\n').flatMap((line, index) => (
+    /(?:^|\s)placeholder="(?:e\.g\.|for example)/i.test(line) ? [`index.html:${index + 1}: ${line.trim()}`] : []
+  ));
   assert.deepEqual(problems, []);
 });
 
@@ -612,11 +625,11 @@ test('OV-1476: no key names a control, row or syntax the UI does not have', asyn
 // sentence; each case is a whole sentence of its own.
 test('OV-1477: track, mode, control and setting names are not placeholders inside sentences', () => {
   const keys = sourceCalls().map((call) => call.key).filter(Boolean);
-  const inserted = [/\{track\}/, /\{control\}/, /No \{mode\} Result/, /^\{setting\} removes/];
+  const inserted = [/\{track\}/, /\{control\}/, /No \{mode\} Result/, /^\{setting\} removes/, /\{mode\} track/, /\{topology\}/];
   assert.deepEqual(keys.filter((key) => inserted.some((pattern) => pattern.test(key))), []);
   for (const key of [
-    'Hide GC content?', 'Keep GC skew', 'Hidden: Hide GC Content is on.', 'No Circular Result yet. Configure settings and click Generate.',
-    'Choosing {setting} removes the lane for {count} feature you placed manually.', 'This change removes the lane for {count} features you placed manually.'
+    'Hide GC content?', 'Keep GC skew', 'Hidden by Hide GC Content',
+    'Choosing "{setting}" removes the lane for {count} feature you placed manually.', 'This change removes the lane for {count} features you placed manually.'
   ]) assert.ok(keys.includes(key), key);
 });
 
@@ -633,8 +646,8 @@ test('the English cites the controls the UI has and names what each text describ
   ];
   assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
   for (const key of [
-    'Field to search', 'Tick Font Size', 'Annotation qualifier value', 'No feature types selected', 'Comparison ring color for {file}',
-    'Max hits per protein for groups', 'Protein BLASTP max hits per protein for groups', 'Color set on individual features',
+    'Field to search', 'Tick Font Size', 'Annotation qualifier value', 'Comparison ring color for {file}',
+    'Max hits per protein for groups', 'Color set on individual features',
     'Upload BLAST TSV', 'Advanced similarity group settings'
   ]) assert.ok(keys.includes(key), key);
 });
@@ -665,20 +678,21 @@ test('OV-1506: Layout, Labels and Features have rail keys of their own', async (
   assert.deepEqual(rail.map(({ context, english }) => `${context}:${english}`), ['rail:Layout', 'rail:Features', 'rail:Labels']);
 });
 
-test('the UI languages are the eleven of the Language menu, Latin script first, then Thai, each named in itself', () => {
+test('the UI languages are the seventeen of the Language menu, Latin script first, then Cyrillic, then Thai, each named in itself', () => {
   assert.deepEqual(UI_LOCALES.map(({ tag, name }) => [tag, name]), [
-    ['en', 'English'], ['id', 'Bahasa Indonesia'], ['es', 'Español'], ['fr', 'Français'], ['pt', 'Português'],
-    ['vi', 'Tiếng Việt'], ['th', 'ไทย'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
+    ['en', 'English'], ['id', 'Bahasa Indonesia'], ['de', 'Deutsch'], ['es', 'Español'], ['fr', 'Français'], ['it', 'Italiano'],
+    ['pl', 'Polski'], ['pt', 'Português'], ['vi', 'Tiếng Việt'], ['tr', 'Türkçe'],
+    ['ru', 'Русский'], ['uk', 'Українська'], ['th', 'ไทย'], ['ja', '日本語'], ['zh-Hans', '简体中文'], ['zh-Hant', '繁體中文'], ['ko', '한국어']
   ]);
   assert.ok(Object.isFrozen(UI_LOCALES) && UI_LOCALES.every(Object.isFrozen));
   for (const { tag } of UI_LOCALES) assert.equal(uiLocaleOf(tag), tag);
-  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de', null, undefined, 3, '../x']) {
+  for (const value of ['', 'EN', 'ja-JP', 'zh', 'zh-CN', 'pt-BR', 'pt-PT', 'es-ES', 'fr-FR', 'ko-KR', 'id-ID', 'in', 'vi-VN', 'th-TH', 'de-DE', 'DE', 'it-IT', 'pl-PL', 'tr-TR', 'ru-RU', 'uk-UA', 'ua', 'xx', null, undefined, 3, '../x']) {
     assert.equal(uiLocaleOf(value), null, JSON.stringify(value));
   }
 });
 
 test('a locale outside the UI languages is refused', async () => {
-  await assert.rejects(setUiLocale('de', async () => ({ default: {} })), /Unknown UI locale/);
+  await assert.rejects(setUiLocale('xx', async () => ({ default: {} })), /Unknown UI locale/);
   assert.equal(uiLocale.value, SOURCE_LOCALE);
 });
 
@@ -686,7 +700,7 @@ test('two sentences are joined with a space in English, the other Latin-script l
   assert.equal(sentenceSeparator(), ' ');
   assert.equal(joinSentences('Exported a.svg.', 'Find it in your browser\'s downloads.'), 'Exported a.svg. Find it in your browser\'s downloads.');
   try {
-    for (const tag of ['id', 'es', 'fr', 'pt', 'vi', 'th', 'ko']) {
+    for (const tag of ['id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'ru', 'uk', 'th', 'ko']) {
       await setUiLocale(tag, async () => ({ default: {} }));
       assert.equal(sentenceSeparator(), ' ', tag);
       assert.equal(joinSentences('A.', 'B.'), 'A. B.', tag);
@@ -708,7 +722,7 @@ test('a list keeps today\'s English and uses the locale\'s list pattern in every
   assert.equal(listText(['A', 'B', 'C']), 'A, B, and C');
   assert.equal(listText(['A', 'B', 'C', '2 more']), 'A, B, C, and 2 more');
   try {
-    for (const tag of ['id', 'es', 'fr', 'pt', 'vi', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
+    for (const tag of ['id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'ru', 'uk', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']) {
       await setUiLocale(tag, async () => ({ default: {} }));
       const expected = new Intl.ListFormat(tag, { type: 'conjunction' });
       assert.equal(listText(['A']), 'A', tag);
@@ -755,6 +769,14 @@ test('the shown locale\'s plural rules pick the form, and the English text of th
       ['pt', ['one:0', 'one:1', 'other:2', 'other:1000000']],
       // es and fr select `many` for 1000000, which takes `other`.
       ['es', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      // de and tr take `one` for 1 only; it selects `many` for 1000000, pl, ru and uk `few` for 2 and `many` for 0
+      // and 1000000, and a string value shows its `other` text for those.
+      ['de', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      ['it', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      ['pl', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      ['tr', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      ['ru', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      ['uk', ['other:0', 'one:1', 'other:2', 'other:1000000']],
       ['ja', ['other:0', 'other:1', 'other:2', 'other:1000000']],
       ['zh-Hans', ['other:0', 'other:1', 'other:2', 'other:1000000']],
       ['zh-Hant', ['other:0', 'other:1', 'other:2', 'other:1000000']],
@@ -806,7 +828,7 @@ test('a language with few and many forms: the `one` form is the text for exactly
 
 test('every `one` text of a tn() call is a catalog key', () => {
   const keys = new Set(sourceCalls().map((call) => call.key));
-  for (const key of ['From this color rule:', 'The chosen feature already points left.', '({count} record)']) assert.ok(keys.has(key), key);
+  for (const key of ['{count} color rule', 'The chosen feature already points left.', '({count} record)']) assert.ok(keys.has(key), key);
 });
 
 test('OV-1415: the words a declined label table names as changed are a key, shown in the UI language', async () => {
@@ -816,13 +838,163 @@ test('OV-1415: the words a declined label table names as changed are a key, show
   assert.match(source, /\{ inputs: tm\(RULE_INPUT_CHANGE_WORDS\) \}/);
 });
 
-// OV-1690: the record list sentence ends inside its key, so a locale writes its
-// own punctuation, and the next sentence follows the locale's separator.
-test('OV-1690: the record list sentence is one key, joined to the next with the sentence separator', () => {
+// OV-1690: the record list status is one key, so a locale writes its own
+// separator; its timing is the clock of the Input Genomes row (PD-OI-037 rev 3),
+// not a sentence joined to it.
+test('OV-1690: the record list status is one key, followed by the timing clock', () => {
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const start = html.indexOf('<p id="record-list-description"');
   const block = html.slice(start, html.indexOf('</p>', start));
-  assert.match(block, /<i18n-text :text="t\('\{file\}: \{records\}\.'\)">/);
-  assert.match(block, /sentenceSeparator\(\) \+ settingApplicationSentence\('inputs'\)/);
-  assert.doesNotMatch(block, /<\/span>\.|<\/strong>:/);
+  assert.match(block, /<i18n-text :text="t\('\{file\} · \{records\}'\)">/);
+  assert.match(block, /<\/i18n-text> <span data-setting="inputs"><setting-note setting="inputs"><\/setting-note><\/span>/);
+  assert.doesNotMatch(block, /<\/span>\.|<\/strong>:|settingApplicationSentence/);
+});
+
+// A literal with words as a branch of a shown expression is English in every
+// locale: `{{ on ? 'reverse' : 'forward' }}`. A literal inside a call
+// (`t('…')`, `settingApplicationText(on ? 'live' : 'generate')`) and the right
+// side of a comparison are not branches.
+/**
+ * The word literals an expression can show: its whole value, or a branch of its
+ * outermost conditional.
+ * @param {string} expression
+ * @returns {string[]}
+ */
+const bareEnglishBranches = (expression) => {
+  /** @type {string[]} */
+  const found = [];
+  let depth = 0;
+  let afterBranch = true;
+  for (let at = 0; at < expression.length; at += 1) {
+    const char = expression[at];
+    if (char === '\'' || char === '"' || char === '`') {
+      let end = at + 1;
+      while (end < expression.length && expression[end] !== char) end += expression[end] === '\\' ? 2 : 1;
+      const literal = expression.slice(at, end + 1);
+      if (depth === 0 && afterBranch && /[A-Za-z]/.test(literal.replace(/\$\{[^}]*\}/g, ''))) found.push(literal);
+      afterBranch = false;
+      at = end;
+    } else if (/\s/.test(char)) {
+      continue;
+    } else {
+      if ('([{'.includes(char)) depth += 1;
+      if (')]}'.includes(char)) depth -= 1;
+      afterBranch = depth === 0 && (char === ':' || (char === '?' && expression[at + 1] !== '.' && expression[at + 1] !== '?' && expression[at - 1] !== '?'));
+    }
+  }
+  return found;
+};
+const SHOWN_BINDING = /\s:(aria-label|title|placeholder|label|alt|data-input-aria-label)="([^"]*)"/g;
+
+test('the bare English branch check finds a literal branch and leaves calls and comparisons alone', () => {
+  assert.deepEqual(bareEnglishBranches("on ? 'reverse' : 'forward'"), ["'reverse'", "'forward'"]);
+  assert.deepEqual(bareEnglishBranches("a ? t('A') : b === 'ready' ? t('B') : 'Align…'"), ["'Align…'"]);
+  assert.deepEqual(bareEnglishBranches('`Depth TSV for sequence ${index + 1}`'), ['`Depth TSV for sequence ${index + 1}`']);
+  assert.deepEqual(bareEnglishBranches("label(on ? 'live' : 'generate')"), []);
+  assert.deepEqual(bareEnglishBranches("a ? t('A') : t('B')"), []);
+  assert.deepEqual(bareEnglishBranches("index ? ', ' : ''"), []);
+  assert.deepEqual(bareEnglishBranches('unit ? ` ${unit}` : \'\''), []);
+  assert.deepEqual(bareEnglishBranches("a?.b ?? c"), []);
+});
+
+test('no mustache or shown attribute of index.html has a bare English literal as a branch', () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const lineOf = (/** @type {number} */ index) => html.slice(0, index).split('\n').length;
+  const found = [
+    ...[...html.matchAll(/\{\{([\s\S]*?)\}\}/g)].map((match) => [match.index, match[1]]),
+    ...[...html.matchAll(SHOWN_BINDING)].map((match) => [match.index, match[2]])
+  ].flatMap(([index, expression]) => bareEnglishBranches(String(expression)).map((literal) => `index.html:${lineOf(Number(index))}: ${literal}`));
+  assert.deepEqual(found, []);
+});
+
+test('the record row names the topology its file declares through one key per value', () => {
+  assert.deepEqual(['circular', 'linear', 'unknown', undefined].map(detectedTopologyNote),
+    ['(file: circular)', '(file: linear)', '(file: topology unknown)', '(file: topology unknown)']);
+});
+
+// A "Choose" sentence names the options as their controls show them: a label of
+// the page, or of the two option tables the page lists (comparison-ui, pairwise-match-popup).
+test('each name in a Choose sentence of an error is a control label', () => {
+  const read = (path) => readFileSync(new URL(`../../gbdraw/web/${path}`, import.meta.url), 'utf8');
+  const labels = [read('index.html'), read('js/app/comparison-ui.js'), read('js/app/pairwise-match-popup.js')].join('\n');
+  const sentences = [...read('js/utils/error-normalization.js').matchAll(/: '(Choose [A-Z][^']*)\.'/g)].map((match) => match[1])
+    .filter((sentence) => !sentence.includes(' for '));
+  assert.ok(sentences.length >= 11, String(sentences.length));
+  const isLabel = (name) => labels.includes(`'${name}')`) || labels.includes(`>${name}</option>`);
+  const missing = sentences.flatMap((sentence) => sentence.slice('Choose '.length).split(/, or |, | or /)
+    .filter((name) => !isLabel(name)).map((name) => `${sentence}: ${name}`));
+  assert.deepEqual(missing, []);
+});
+
+// Python's color modes reach the shared table through the generator, so a new mode fails here.
+test('the Collinear color mode table lists the modes Python writes', () => {
+  assert.deepEqual(Object.keys(COLLINEAR_COLOR_MODE_TEXT), [...COLLINEARITY_COLOR_MODES]);
+  const page = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  assert.match(page, /v-for="\[value, label\] in collinearColorModeOptions"/);
+  assert.doesNotMatch(page, /<option value="orientation_identity">/);
+});
+
+// The copied summary uses the keys of the popup that shows it.
+test('the copied Collinear block summary holds no English of its own', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/app/pairwise-match-popup.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /summaryText: `Collinear block:/);
+});
+
+// The sentences of the Source recipe name no mode: the recipe is of one diagram.
+test('the record topology a file declares and the option values of an error are whole keys', async () => {
+  const keys = [...(await sourceKeys()).keys.keys()];
+  for (const key of [
+    '(file: circular)', '(file: linear)', '(file: topology unknown)',
+    'Choose Error on overflow, Compress, or Clip.', 'Choose Foreground or Underlay.', 'Choose Auto (Default), Linear, or Equal.',
+    'Choose Above, Features on axis, or Below.', 'Choose Auto or Above Feature.',
+    'Choose Pairwise matches, Similarity groups, or Collinear blocks.', 'Choose Adjacent pairs or All records.',
+    'Choose Auto, CDS, or Locus.', 'Choose All hits or Reciprocal best hits.', 'Choose Strand or Gene order.',
+    'Choose Average identity, Orientation, or Orientation + identity.',
+    'Depth TSV for file {file}, series {series}', 'Depth TSV · series {series} for sequence {sequence}',
+    'BLAST TSV for #{from} to #{to}',
+    'vs {record}', 'Not moved: {reason}', 'Not moved', 'Session file: {path} could not be read and is left out.',
+    'record direction\u0004forward', 'record direction\u0004reverse', 'collinearity block kind\u0004syntenic'
+  ]) assert.ok(keys.includes(key), key);
+  const stale = [
+    /^Choose error, compress/, /^Choose foreground or/, /^Choose auto,/, /^Choose above, middle/, /^Choose auto or above_feature/,
+    /^Choose pairwise,/, /^Choose adjacent or all/, /^Choose all or rbh/, /^Choose strand or order/, /^Choose average_identity/,
+    /^vs$/, /^Not moved \(/, /^skipped$/, /\{name\} \(\{path\}\)/
+  ];
+  assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
+});
+
+// A sentence reads whole in each case: no fragment takes its place, and a count is a tn() pair.
+test('sentences with a count or a qualifier are whole keys, and none is built from a translated fragment', async () => {
+  const { keys } = await sourceKeys();
+  const pairOf = (key) => keys.get(key)?.plural;
+  for (const [one, other] of [
+    ['The label reading "{text}"', 'All {count} labels reading "{text}"'],
+    ['The "{name}" feature', 'All {count} "{name}" features'],
+    ['one more', '{count} more'],
+    ['and one more', 'and {count} more'],
+    ['Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete'],
+    ['Running {program} comparisons for the circular diagram: {completed}/{total} job complete', 'Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete'],
+    ['Importing it removes the annotation set.', 'Importing it removes the {count} annotation sets.'],
+    ['The chosen feature already points left.', 'The {count} chosen features already point left.'],
+    ['The chosen feature already points right.', 'The {count} chosen features already point right.'],
+    ['Reverses {records} so the chosen feature points left.', 'Reverses {records} so the {count} chosen features point left.'],
+    ['Reverses {records} so the chosen feature points right.', 'Reverses {records} so the {count} chosen features point right.']
+  ]) assert.deepEqual(pairOf(other), { one, other }, other);
+  for (const key of [
+    'The Source recipe references a browser-generated file: {files}. Use "Download reproducibility files" to save it next to the uploaded inputs before running the command in a terminal.',
+    'The Source recipe references browser-generated files: {files}. Use "Download reproducibility files" to save them next to the uploaded inputs before running the command in a terminal.',
+    'Exact replay references {files}, which is included in "Download reproducibility files".',
+    'Exact replay references {files}, which are included in "Download reproducibility files".',
+    'Your files never leave this device',
+    'All features sharing',
+    'Room kept toward the center for the inside tracks: {px} px.',
+    'Room kept toward the center for the inside tracks (among them GC content, GC skew, and the scale): {px} px.',
+    'number of groups in a block\u0004Similarity groups'
+  ]) assert.ok(keys.has(key), key);
+  for (const key of [
+    '{first} and {second}', 'the scale', 'a qualifier', 'entirely in your browser', 'This tool runs {where} using WebAssembly (Pyodide).', 'All features with the same',
+    // OV-2435: a color rule needs a qualifier, so no sentence names a rule without one.
+    '{feature} where a qualifier matches “{pattern}”', 'Any feature where a qualifier matches “{pattern}”'
+  ]) assert.ok(!keys.has(key), key);
+  assert.deepEqual([...keys.keys()].filter((key) => /file\(s\)/.test(key)), []);
 });

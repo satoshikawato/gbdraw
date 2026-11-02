@@ -177,6 +177,13 @@ class LabelFitFailurePayload(TypedDict):
     rowToken: str | None
 
 
+def label_fit_setting_words() -> tuple[str, ...]:
+    """The control names and option words a row's settings name: English catalog keys of the Web UI."""
+
+    names = (name for name, _unit in (*_SETTING_NAMES.values(), *_MODE_SETTING_NAMES.values()))
+    return tuple(dict.fromkeys((*names, *_VALUE_WORDS.values())))
+
+
 def label_fit_mode(value: object) -> LabelFitMode:
     """The diagram mode of a Web render, whose controls a row's settings name."""
 

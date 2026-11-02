@@ -12,6 +12,7 @@ const {
   getDiagramWorkerActivity,
   openApp
 } = require('../helpers/app-lifecycle.cjs');
+const { ringSessionText } = require('../helpers/ring-session.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const webSessionRoot = join(repoRoot, 'gbdraw', 'web', 'gallery', 'sessions');
@@ -27,16 +28,7 @@ const frozenV39Session = join(
   'sessions',
   'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz'
 );
-const neutralConservationSession = join(
-  repoRoot,
-  'tests',
-  'fixtures',
-  'sessions',
-  'synthetic_conservation.gbdraw-session.json.gz'
-);
-const neutralConservationSessionText = gunzipSync(
-  readFileSync(neutralConservationSession)
-).toString('utf8');
+const neutralConservationSessionText = ringSessionText();
 
 const STRUCTURAL_METRICS = [
   'base64DecodeCount',
@@ -1557,7 +1549,7 @@ test('preflight and lazy-access failures preserve the committed preview', async 
 
   const rejected = await loadSyntheticSession(page, 'newer-version');
   expect(rejected.status).toBe('error');
-  expect(rejected.message).toContain('Load a supported Session file or recreate it with the current writer.');
+  expect(rejected.message).toContain('Load a Session file that this version of gbdraw supports.');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
     code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'SESSION_TOO_NEW', latestSessionVersion: expect.any(Number) }
   });

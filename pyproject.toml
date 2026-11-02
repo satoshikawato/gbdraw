@@ -37,7 +37,7 @@ dependencies = [
 
 [project.optional-dependencies]
 export = ["cairosvg"]
-typecheck = ["mypy==2.4.0"]
+typecheck = ["mypy==2.4.1"]
 dev = [
     "build",
     "cairosvg",
@@ -48,7 +48,7 @@ dev = [
     "pytest-cov>=4.0",
     "pytest-timeout>=2.0",
     "pytest-xdist>=3.6",
-    "ruff==0.17.2",
+    "ruff==0.17.3",
     "setuptools>=61.0",
     "wheel",
 ]
@@ -94,7 +94,7 @@ filterwarnings = [
 timeout = 300
 
 [tool.ruff]
-required-version = "==0.17.2"
+required-version = "==0.17.3"
 
 [tool.ruff.lint]
 select = ["E", "F", "W"]

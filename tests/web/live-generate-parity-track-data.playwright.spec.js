@@ -1126,9 +1126,11 @@ const hideInStack = async (page, box, choice) => {
   await page.getByRole('button', { name: choice, exact: true }).click();
   await settleLive(page);
 };
-// The text of the track toggles' scope (the Layout card may be closed).
+// The text of the track toggles' scope (the Layout card may be closed), with
+// the note of each timing clock in it, which its hidden description holds.
 const trackScopeText = (page) => page.evaluate(() => [...document.querySelectorAll('[data-setting="track-visibility"]')]
-  .map((scope) => scope.textContent).join(' | '));
+  .map((scope) => [scope.textContent, ...[...scope.querySelectorAll('[data-timing-clock] .help-tip-trigger')]
+    .map((clock) => document.getElementById(clock.getAttribute('aria-describedby'))?.textContent || '')].join(' ')).join(' | '));
 
 for (const mode of ['circular', 'linear']) {
   test(`GT B2: one of two Depth rows switched off and on applies live (${mode} stack)`, async ({ page }) => {
@@ -1368,7 +1370,7 @@ test('GT B10 (OV-2237): on a Result loaded without a request a hide waits for Ge
     const before = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[window.__GBDRAW_APP__.selectedResultIndex].content);
     const listed = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
     await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('[data-applies-on-generate="track-visibility"]')]
-      .map((note) => note.textContent.trim())), 'the toggles say Applies on Generate').toContain('Applies on Generate');
+      .map((note) => note.querySelector('.help-tip-trigger').getAttribute('aria-label'))), 'the toggles say Applies on Generate').toContain('Applies on Generate');
     const box = await page.evaluate(() => (window.__GBDRAW_APP__.mode === 'linear' ? 'Show GC Content' : 'Hide GC Content'));
     await clickTrackCheckbox(page, box);
     await settleLive(page);

@@ -229,7 +229,7 @@ def _configure_feature_types(page: Page) -> None:
         feature_name.locator("xpath=..").get_by_role("button").click()
     picker = details.locator('select:has(option[value="rep_origin"])')
     expect(picker).to_have_count(1)
-    add_button = details.get_by_role("button", name=re.compile(r"Add$"))
+    add_button = details.get_by_role("button", name="Add type", exact=True)
     for feature_type in GALLERY_FEATURE_TYPES:
         selected = tuple(
             page.evaluate(
@@ -267,7 +267,7 @@ def _configure_gallery_presentation(page: Page) -> None:
     toggle_disclosure(colors)
     preset = page.get_by_label("Preset scheme", exact=True)
     preset.select_option(PLASTID_PRESET_ID)
-    preset.locator("xpath=..").get_by_role("button", name="Apply", exact=True).click()
+    preset.locator("xpath=..").get_by_role("button", name="Apply preset", exact=True).click()
     page.wait_for_function(
         "(count) => window.__GBDRAW_APP__?.manualSpecificRules?.length === count",
         arg=PLASTID_RULE_COUNT,

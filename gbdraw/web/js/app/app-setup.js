@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
-/** @import { SwitchedTrackRow } from './track-slot-edits.js' */
+/** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
@@ -28,7 +28,7 @@
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
-import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
+import { createResultPaintRecord, drawnLabelIntentGone, editorPaintState, paintRuleTable, sameColors, visibilityPaintState } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
   requestFeatureVisibilityRules
@@ -36,7 +36,8 @@ import {
 import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
-import { admitFeatureCatalog } from '../services/feature-catalog.js';
+import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../utils/download-names.js';
+import { admitFeatureCatalog, biologicalFeatureKey, resultCatalogFeatures } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { inputSummaryOf } from '../services/input-summary.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
@@ -47,7 +48,7 @@ import { settingsScrollOwner } from '../services/settings-sections.js';
 import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup, defaultColorScopeLine } from './preview-item-popup.js';
-import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules } from '../services/specific-color-rules.js';
+import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules, specificRuleHasQualifier } from '../services/specific-color-rules.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
 import { drawnTracks, hiddenTrackLegendKeys, loadedTracks, trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
@@ -149,7 +150,7 @@ import {
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { appliedFeatureColors, COMPARISON_COLOR_KEYS, colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
-import { groupCountText } from './pairwise-match-popup.js';
+import { COLLINEAR_COLOR_MODE_TEXT, groupCountText } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
 import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
@@ -163,7 +164,7 @@ import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
 /** @import { PopupPlacement } from '../utils/popup-bounds.js' */
-import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
+import { formatElapsedMs, reproducibilityLabel, shownRunInfoNoteParts } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
@@ -175,6 +176,7 @@ import {
 import { createResultsManager } from './results.js';
 import { createAuxiliaryFileImports, setupWatchers } from './watchers.js';
 import { createDialogChoice, setupHistoryInputs } from './history-inputs.js';
+import { createHistoryControls } from './history-list.js';
 import { createChoicePrompt, createNoticeBanner } from './app-messages.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
@@ -185,7 +187,7 @@ import {
 import { createRightDrawerController } from './right-drawer.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
-import { askingTrackRowSwitch } from './track-slot-edits.js';
+import { askTrackSourceRemoval, askingTrackRowRemoval, askingTrackRowSwitch } from './track-slot-edits.js';
 import { createAnnotationEditor } from './annotations.js';
 import { buildLegendStyleRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
@@ -314,6 +316,7 @@ import {
   defaultDepthSeriesLabel,
   reindexDepthSlots,
   removeDepthTrackColumnAt,
+  depthSeriesRemovalLoss,
   syncDepthSlotLabels,
   uploadedDepthFileCount
 } from '../services/depth-track-state.js';
@@ -1787,28 +1790,11 @@ export const createAppSetup = () => {
   // is pure (services/feature-identity.js) over the record display's binding.
   /** @param {RecordKeyedFeature} feature */
   const isCurrentResultFeature = (feature) => isCurrentFeature(feature, recordDisplayControls.sourceBinding());
-  const canUndoHistory = computed(() => {
-    void history.revision.value;
-    return history.canUndo();
+  // Undo, Redo, and the History list (PD-OI-112).
+  const { canUndoHistory, canRedoHistory, undoHistoryTitle, redoHistoryTitle, undoHistory, redoHistory, historyList } = createHistoryControls({
+    revision: () => history.revision.value, canUndo: history.canUndo, canRedo: history.canRedo, undo: history.undo, redo: history.redo,
+    timeline: history.timeline, travelTo: history.travelTo, computed, ref, nextTick
   });
-  const canRedoHistory = computed(() => {
-    void history.revision.value;
-    return history.canRedo();
-  });
-  const undoHistoryTitle = computed(() => {
-    void history.revision.value;
-    // A step label is History's identity (services/history.js compares it):
-    // it stays English and is translated here, where it is shown.
-    const label = history.undoLabel();
-    return label ? t('Undo {action}', { action: tm(label) }) : t('Undo');
-  });
-  const redoHistoryTitle = computed(() => {
-    void history.revision.value;
-    const label = history.redoLabel();
-    return label ? t('Redo {action}', { action: tm(label) }) : t('Redo');
-  });
-  const undoHistory = () => history.undo();
-  const redoHistory = () => history.redo();
   // D-03: the Rich Feature Popup preference records no Undo step, but a change
   // of it is unsaved work that Load Session asks about (D-07 (b)).
   const markRichFeaturePopupChanged = () => history.markChangeOutsideHistory();
@@ -1832,7 +1818,7 @@ export const createAppSetup = () => {
   const resetUnmanagedConfigOverride = (path) => {
     const drawing = state.activeDrawing();
     return history.runUndoable(
-      `Reset preserved setting ${path}`,
+      msg('Reset preserved setting'),
       () => {
         if (!Object.prototype.hasOwnProperty.call(drawing.unmanagedConfigOverrides, path)) {
           return false;
@@ -2160,7 +2146,7 @@ export const createAppSetup = () => {
       history,
       nextTick
     });
-    await history.captureBaseline('Initial state');
+    await history.captureBaseline(msg('Initial state'));
   });
   onUnmounted(() => {
     if (featureSearchDebounceId !== null) clearTimeout(featureSearchDebounceId);
@@ -2236,14 +2222,19 @@ export const createAppSetup = () => {
   const linearTrackSlotEditor = createLinearTrackSlotEditor({
     state, changeTrackLayout, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions
   });
-  // PD-OI-104 scenario revision 6: a row's own switch asks before it turns off a
-  // drawn row of the shown stack that other rows start at or extend to.
-  /** @template {SwitchedTrackRow} Row @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
-  const askingRowSwitch = (setEnabled, slotsKey) => askingTrackRowSwitch({
+  // PD-OI-104 scenario revisions 6 and 7: a row's own switch, a row's Remove, and
+  // the removal of a Depth file or series ask before they take out of the shown
+  // stack a row that other rows start at or extend to.
+  /** @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+  const askingStackPorts = (slotsKey) => ({
     askChoice, runUndoable: history.runUndoable, busy: sessionOperationAvailability,
-    rows: () => /** @type {readonly Row[]} */ (state.activeDrawing().adv[slotsKey]),
-    mode: slotsKey === 'circular_track_slots' ? 'circular' : 'linear'
-  }, setEnabled);
+    rows: () => /** @type {readonly SwitchedTrackRow[]} */ (state.activeDrawing().adv[slotsKey]),
+    mode: /** @type {'circular' | 'linear'} */ (slotsKey === 'circular_track_slots' ? 'circular' : 'linear')
+  });
+  /** @template {SwitchedTrackRow} Row @param {(slot: Row | null | undefined, enabled: unknown, turnOffReaching?: (() => void) | Event) => unknown} setEnabled @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+  const askingRowSwitch = (setEnabled, slotsKey) => askingTrackRowSwitch(/** @type {AskingStackPorts<Row>} */ (askingStackPorts(slotsKey)), setEnabled);
+  /** @param {(index: unknown, turnOffReaching?: (() => void) | Event) => unknown} removeRow @param {'circular_track_slots' | 'linear_track_slots'} slotsKey */
+  const askingRowRemoval = (removeRow, slotsKey) => askingTrackRowRemoval(askingStackPorts(slotsKey), removeRow);
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, askChoice,
@@ -2359,6 +2350,9 @@ export const createAppSetup = () => {
     }));
   };
   const linearDepthRows = () => linearSeqs.map((seq) => depthFileSlotsFromValue(seq?.depth));
+  // The Depth file rows a removal reads, by identity: a Depth change writes new ones.
+  const circularDepthSources = () => [files.c_depth];
+  const linearDepthSources = () => linearSeqs.map((seq) => seq?.depth);
   const linearDepthLogicalWidth = () => depthTrackMatrixWidth(linearDepthRows());
   const linearDepthTrackUiCount = () => Math.max(1, linearDepthLogicalWidth());
   /** @param {number} width */
@@ -2761,74 +2755,108 @@ export const createAppSetup = () => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
-    ensureDepthTrackConfigCount(drawing, idx + 1);
-    depthTrackUiCounts.circular = Math.max(depthTrackUiCounts.circular, idx + 1);
-    const rows = circularDepthRows();
     const previousFile = circularDepthRepresentatives()[idx] || null;
-    // A new file can rename an auto-labeled series, so the label follows in the same retirement.
-    retireLegendStylesOfUnnamedCaptions(() => {
-      circularTrackSlotEditor.changeCircularDepthSources(() => {
-        rows.forEach((row) => {
-          row[idx] = file || null;
-        });
-        files.c_depth = rows.map((row) => compactDepthFileSlots(row));
-      });
-      if (file) {
-        updateDepthTrackLabelFromFile(drawing, idx, file, previousFile);
-        drawing.form.show_depth = true;
-      }
+    const nextDepth = circularDepthRows().map((row) => {
+      row[idx] = file || null;
+      return compactDepthFileSlots(row);
     });
+    /** @param {() => void} [turnOffReaching] */
+    const apply = (turnOffReaching) => {
+      ensureDepthTrackConfigCount(drawing, idx + 1);
+      depthTrackUiCounts.circular = Math.max(depthTrackUiCounts.circular, idx + 1);
+      // A new file can rename an auto-labeled series, so the label follows in the same retirement.
+      retireLegendStylesOfUnnamedCaptions(() => {
+        circularTrackSlotEditor.changeCircularDepthSources(() => {
+          files.c_depth = nextDepth;
+          turnOffReaching?.();
+        });
+        if (file) {
+          updateDepthTrackLabelFromFile(drawing, idx, file, previousFile);
+          drawing.form.show_depth = true;
+        }
+      });
+    };
+    const asked = file ? null : askTrackSourceRemoval(askingStackPorts('circular_track_slots'), {
+      kind: 'depth-file',
+      loss: circularTrackSlotEditor.circularDepthSourceLoss(drawing, nextDepth),
+      sources: circularDepthSources,
+      label: msg('Change uploaded file'),
+      apply
+    });
+    return asked ?? apply();
   };
   /** @param {LinearSeq | null | undefined} seq @param {number} index */
   const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
-  /** @param {DrawingState} drawing @param {LinearSeq[]} sequences @param {number} index @param {FileLike | null} file */
-  const setLinearDepthFiles = (drawing, sequences, index, file) => {
+  /**
+   * @param {DrawingState} drawing @param {LinearSeq[]} sequences @param {number} index @param {FileLike | null} file
+   * @param {string} [label] The History step of the removal, when it asks.
+   * @param {(apply: () => unknown) => unknown} [run] Runs the removal when nothing asks.
+   */
+  const setLinearDepthFiles = (drawing, sequences, index, file, label = msg('Change uploaded file'), run = (apply) => apply()) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const targets = Array.from(sequences || []).filter(Boolean);
     if (!targets.length) return;
     const idx = Math.max(0, Number(index) || 0);
     const logicalWidth = Math.max(linearDepthLogicalWidth(), idx + 1);
-    padLinearDepthRows(logicalWidth);
-    ensureDepthTrackConfigCount(drawing, logicalWidth);
     const previousFile = getLinearDepthFile(targets[0], idx);
-    retireLegendStylesOfUnnamedCaptions(() => {
-      linearTrackSlotEditor.changeLinearDepthSources(() => {
-        targets.forEach((seq) => {
-          const slots = depthFileSlotsFromValue(seq.depth);
-          if (file) {
-            slots[idx] = file;
-            seq.depth = slots;
-          } else {
-            seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
-          }
+    /** @param {() => void} [turnOffReaching] */
+    const apply = (turnOffReaching) => {
+      padLinearDepthRows(logicalWidth);
+      ensureDepthTrackConfigCount(drawing, logicalWidth);
+      retireLegendStylesOfUnnamedCaptions(() => {
+        linearTrackSlotEditor.changeLinearDepthSources(() => {
+          targets.forEach((seq) => {
+            const slots = depthFileSlotsFromValue(seq.depth);
+            if (file) {
+              slots[idx] = file;
+              seq.depth = slots;
+            } else {
+              seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
+            }
+          });
+          turnOffReaching?.();
         });
+        if (file) {
+          updateDepthTrackLabelFromFile(drawing, idx, file, previousFile);
+          drawing.form.show_depth = true;
+        }
       });
-      if (file) {
-        updateDepthTrackLabelFromFile(drawing, idx, file, previousFile);
-        drawing.form.show_depth = true;
-      }
+    };
+    if (file) return apply();
+    const cleared = new Set(targets.map((seq) => seq.uid));
+    const asked = askTrackSourceRemoval(askingStackPorts('linear_track_slots'), {
+      kind: 'depth-file',
+      loss: linearTrackSlotEditor.linearDepthSourceLoss(drawing, linearSeqs.map((seq) => (
+        cleared.has(seq.uid) ? clearDepthTrackSourceAt(seq.depth, idx, logicalWidth) : depthFileSlotsFromValue(seq.depth)
+      ))),
+      sources: linearDepthSources,
+      label,
+      apply
     });
+    return asked ?? run(apply);
   };
   /** @param {LinearSeq} seq @param {number} index @param {FileLike | null} file */
   const setLinearDepthFile = (seq, index, file) => {
     const drawing = state.drawingOfMode('linear');
     return setLinearDepthFiles(drawing, [seq], index, file);
   };
-  /** @param {LinearSourceGroup} source @param {number} index @param {FileLike | null} file */
-  const setLinearSourceDepthFile = (source, index, file) => {
-    const drawing = state.drawingOfMode('linear');
-    return setLinearDepthFiles(
-      drawing,
-      (source?.records || []).map(({ sequence }) => sequence),
-      index,
-      file
-    );
-  };
+  /** @param {LinearSourceGroup} source @param {number} index @param {FileLike | null} file @param {string} [label] @param {(apply: () => unknown) => unknown} [run] */
+  const setLinearSourceDepthFile = (source, index, file, label, run) => setLinearDepthFiles(
+    state.drawingOfMode('linear'),
+    (source?.records || []).map(({ sequence }) => sequence),
+    index,
+    file,
+    label,
+    run
+  );
   /** @param {LinearSourceGroup} source @param {number} index */
-  const clearLinearSourceDepthFile = (source, index) => history.runUndoable(
+  const clearLinearSourceDepthFile = (source, index) => setLinearSourceDepthFile(
+    source,
+    index,
+    null,
     msg('Clear File Depth TSV'),
-    () => setLinearSourceDepthFile(source, index, null)
+    (apply) => history.runUndoable(msg('Clear File Depth TSV'), apply)
   );
   const addCircularDepthTrack = () => {
     const drawing = state.drawingOfMode('circular');
@@ -2847,8 +2875,16 @@ export const createAppSetup = () => {
     ensureDepthTrackConfigCount(drawing, nextCount);
     retireLegendStylesOfUnnamedCaptions(() => { if (hasAnyLinearDepthFiles.value) drawing.form.show_depth = true; });
   };
-  /** @param {number} index */
-  const removeCircularDepthTrack = (index) => {
+  // The Depth file rows, and the series that stay, after the removal of a
+  // series: the removal writes them and its question reads them.
+  /** @param {number} idx */
+  const circularSeriesRemoval = (idx) => {
+    const rows = removeDepthTrackColumnAt(circularDepthRows(), idx).map((row) => compactDepthFileSlots(row));
+    return { rows, keptSeries: representativeDepthFiles(rows).length };
+  };
+  const keptLinearSeriesCount = () => Math.max(0, linearDepthLogicalWidth() - 1);
+  /** @param {number} index @param {() => void} [turnOffReaching] */
+  const removeCircularDepthTrack = (index, turnOffReaching) => {
     const drawing = state.drawingOfMode('circular');
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -2858,15 +2894,14 @@ export const createAppSetup = () => {
     retireLegendStylesOfUnnamedCaptions(() => {
       const count = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular);
       const previousFiles = circularDepthRepresentatives();
-      files.c_depth = removeDepthTrackColumnAt(circularDepthRows(), idx)
-        .map((row) => compactDepthFileSlots(row));
+      const { rows, keptSeries } = circularSeriesRemoval(idx);
+      files.c_depth = rows;
       if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
       // Show Depth goes off with the drawing's last Depth source (OV-82).
       if (!hasCircularDepthFiles.value) drawing.form.show_depth = false;
       depthTrackUiCounts.circular = count <= 1 ? 1 : Math.max(1, count - 1);
       refreshDepthTrackLabelsAfterRemoval(drawing, previousFiles, circularDepthRepresentatives(), idx);
       ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('circular'));
-      const activeFileCount = circularDepthRepresentatives().length;
       // The removed series' rows before the Axis lower its index, as in Linear,
       // so no other row crosses the Axis (R10).
       const axis = drawing.adv.circular_track_slots_axis_index;
@@ -2880,17 +2915,31 @@ export const createAppSetup = () => {
         ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
           slots: drawing.adv.circular_track_slots,
           removedIndex: idx,
-          activeCount: activeFileCount,
-          managedPredicate: isDefaultManagedDepthSlot
+          activeCount: keptSeries
         }))
       );
       if (removedBeforeAxis) drawing.adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
+      turnOffReaching?.();
       syncDepthTrackSlotLabelsForTrack(drawing, idx);
       circularTrackSlotEditor.normalizeCircularTrackSlots();
     });
   };
   /** @param {number} index */
-  const removeLinearDepthTrack = (index) => {
+  const askingRemoveCircularDepthTrack = (index) => {
+    const idx = Number(index);
+    if (sessionOperationAvailability() || !Number.isInteger(idx) || idx < 0) return removeCircularDepthTrack(index);
+    const ports = askingStackPorts('circular_track_slots');
+    return askTrackSourceRemoval(ports, {
+      kind: 'depth-series',
+      series: idx,
+      loss: depthSeriesRemovalLoss(ports.rows(), idx, circularSeriesRemoval(idx).keptSeries),
+      sources: circularDepthSources,
+      label: msg('Remove Depth series'),
+      apply: (turnOffReaching) => removeCircularDepthTrack(index, turnOffReaching)
+    }) ?? removeCircularDepthTrack(index);
+  };
+  /** @param {number} index @param {() => void} [turnOffReaching] */
+  const removeLinearDepthTrack = (index, turnOffReaching) => {
     const drawing = state.drawingOfMode('linear');
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -2898,6 +2947,7 @@ export const createAppSetup = () => {
     if (!Number.isInteger(idx) || idx < 0) return;
     const logicalWidth = linearDepthLogicalWidth();
     if (idx >= logicalWidth) return;
+    const keptSeries = keptLinearSeriesCount();
     // Removing a series retires the Legend styles of its rows (OV-65).
     retireLegendStylesOfUnnamedCaptions(() => {
       const nextRows = removeDepthTrackColumnAt(linearDepthRows(), idx);
@@ -2922,8 +2972,7 @@ export const createAppSetup = () => {
         ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
           slots: drawing.adv.linear_track_slots,
           removedIndex: idx,
-          activeCount: Math.max(0, logicalWidth - 1),
-          managedPredicate: isDefaultManagedDepthSlot
+          activeCount: keptSeries
         }))
       );
       if (Number.isInteger(previousAxisIndex)) {
@@ -2932,10 +2981,26 @@ export const createAppSetup = () => {
           previousAxisIndex - removedManagedSlotCountBeforeAxis
         );
       }
+      turnOffReaching?.();
       syncDepthTrackSlotLabelsForTrack(drawing, 0);
       linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks();
       linearTrackSlotEditor.normalizeLinearTrackSlots();
     });
+  };
+  /** @param {number} index */
+  const askingRemoveLinearDepthTrack = (index) => {
+    const idx = Number(index);
+    const logicalWidth = linearDepthLogicalWidth();
+    if (sessionOperationAvailability() || !Number.isInteger(idx) || idx < 0 || idx >= logicalWidth) return removeLinearDepthTrack(index);
+    const ports = askingStackPorts('linear_track_slots');
+    return askTrackSourceRemoval(ports, {
+      kind: 'depth-series',
+      series: idx,
+      loss: depthSeriesRemovalLoss(ports.rows(), idx, keptLinearSeriesCount()),
+      sources: linearDepthSources,
+      label: msg('Remove Depth series'),
+      apply: (turnOffReaching) => removeLinearDepthTrack(index, turnOffReaching)
+    }) ?? removeLinearDepthTrack(index);
   };
   // Each drawing holds a series for each of its own mode's Depth sources: a
   // new drawing at setup and after Reset Settings. Each Depth control fits its
@@ -2989,12 +3054,48 @@ export const createAppSetup = () => {
   const setCircularConservationUploadFiles = (nextFiles) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    files.c_conservation_blasts = normalizeFileList(nextFiles);
-    files.c_conservation_blasts_source = null;
-    files.c_conservation_sequence_sources = [];
-    losatCacheInfo.value = [];
-    reconcileCircularConservation(state.drawingOfMode('circular'));
+    const drawing = state.drawingOfMode('circular');
+    const sourceFiles = normalizeFileList(nextFiles);
+    /** @param {() => void} [turnOffReaching] */
+    const apply = (turnOffReaching) => {
+      files.c_conservation_blasts = sourceFiles;
+      files.c_conservation_blasts_source = null;
+      files.c_conservation_sequence_sources = [];
+      losatCacheInfo.value = [];
+      reconcileCircularConservation(drawing);
+      turnOffReaching?.();
+    };
+    return askRingSourceRemoval(drawing, sourceFiles, seriesOfRingFiles(drawing, sourceFiles), msg('Change uploaded file'), apply) ?? apply();
   };
+  /**
+   * The series a change of the ring files leaves (`reconcileCircularConservation`).
+   * @param {DrawingState} drawing @param {FileLike[]} sourceFiles
+   */
+  const seriesOfRingFiles = (drawing, sourceFiles) => reconcileConservationSeries({
+    sourceFiles,
+    previousSeries: drawing.circularConservation.series,
+    legacyLabels: parseConservationLabelText(drawing.circularConservation.labels)
+  });
+  /**
+   * A change of the comparison sources asks when a managed ring row another row
+   * reaches leaves with its source (`askTrackSourceRemoval`).
+   * @param {DrawingState} drawing @param {FileLike[]} sourceFiles The ring files it leaves.
+   * @param {readonly RawConservationSeriesEntry[]} series The series it leaves. @param {string} label
+   * @param {(turnOffReaching: () => void) => unknown} apply
+   */
+  const askRingSourceRemoval = (drawing, sourceFiles, series, label, apply) => askTrackSourceRemoval(askingStackPorts('circular_track_slots'), {
+    kind: 'comparison',
+    loss: {
+      leaving: circularTrackSlotEditor.circularConservationRowsLeaving(
+        drawing, orderedConservationSources(sourceFiles, { ...drawing.circularConservation, series })
+      ),
+      stayingOn: new Set(),
+      emptySeries: () => []
+    },
+    sources: () => [files.c_conservation_blasts, files.c_conservation_fastas, ...drawing.circularConservation.series],
+    label,
+    apply
+  });
   // The comparison rings of a Circular drawing follow their source files: the
   // series, whether the rings are on, and the managed stack rows. Each
   // transition that changes the source, its files, or the legacy series names
@@ -3180,18 +3281,22 @@ export const createAppSetup = () => {
         sequenceSources: orderedSequenceSources,
         series: drawing.circularConservation.series
       }, idx);
-      drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...kept.series);
-      drawing.circularConservation.labels = kept.labels;
-      files.c_conservation_blasts = kept.blasts;
-      files.c_conservation_fastas = kept.fastas;
-      files.c_conservation_sequence_sources = kept.sequenceSources;
-      files.c_conservation_blasts_source = kept.blasts.length > 0
-        ? 'losat-cache'
-        : null;
-      drawing.circularConservation.enabled = kept.enabled;
-      losatCacheInfo.value = [];
-      refreshCircularConservationSlots(drawing);
-      return;
+      /** @param {() => void} [turnOffReaching] */
+      const applyKept = (turnOffReaching) => {
+        drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...kept.series);
+        drawing.circularConservation.labels = kept.labels;
+        files.c_conservation_blasts = kept.blasts;
+        files.c_conservation_fastas = kept.fastas;
+        files.c_conservation_sequence_sources = kept.sequenceSources;
+        files.c_conservation_blasts_source = kept.blasts.length > 0
+          ? 'losat-cache'
+          : null;
+        drawing.circularConservation.enabled = kept.enabled;
+        losatCacheInfo.value = [];
+        refreshCircularConservationSlots(drawing);
+        turnOffReaching?.();
+      };
+      return askRingSourceRemoval(drawing, /** @type {FileLike[]} */ (normalizeFileList(kept.blasts)), kept.series, msg('Remove series'), applyKept) ?? applyKept();
     }
     const entry = drawing.circularConservation.series[idx];
     const sourceFiles = getCircularConservationSourceFiles(drawing);
@@ -3203,13 +3308,19 @@ export const createAppSetup = () => {
     }
     if (sourceIndex < 0 && idx < sourceFiles.length) sourceIndex = idx;
     if (sourceIndex < 0 || sourceIndex >= sourceFiles.length) return;
-    if (isCircularConservationUploadSource(drawing)) {
-      files.c_conservation_sequence_sources = (Array.isArray(files.c_conservation_sequence_sources)
-        ? files.c_conservation_sequence_sources
-        : [])
-        .filter((/** @type {unknown} */ _, /** @type {number} */ fileIndex) => fileIndex !== sourceIndex);
-    }
-    setCircularConservationSourceFiles(drawing, sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex));
+    const keptFiles = sourceFiles.filter((_, fileIndex) => fileIndex !== sourceIndex);
+    /** @param {() => void} [turnOffReaching] */
+    const apply = (turnOffReaching) => {
+      if (isCircularConservationUploadSource(drawing)) {
+        files.c_conservation_sequence_sources = (Array.isArray(files.c_conservation_sequence_sources)
+          ? files.c_conservation_sequence_sources
+          : [])
+          .filter((/** @type {unknown} */ _, /** @type {number} */ fileIndex) => fileIndex !== sourceIndex);
+      }
+      setCircularConservationSourceFiles(drawing, keptFiles);
+      turnOffReaching?.();
+    };
+    return askRingSourceRemoval(drawing, keptFiles, seriesOfRingFiles(drawing, keptFiles), msg('Remove series'), apply) ?? apply();
   };
   // E1: the artifacts of the drawings not shown, in the slot store of the
   // History snapshot service; only its named operations change it.
@@ -3433,11 +3544,15 @@ export const createAppSetup = () => {
       // OV-1280: a Result a mode switch shows again, whose drawing changed its
       // rules while it was not shown (a file card's Remove, an Undo or Redo
       // there), is drawn again when its Legend cannot show them, as after a
-      // History restore of the rules.
-      const arrival = arrivalShownRules;
-      arrivalShownRules = null;
-      if (context.bindingOptions.modeArrival && arrival?.rules && arrival.identity === context.resultIdentity) {
-        featureActions.followRestoredSpecificRules(arrival.rules);
+      // History restore of the rules. OV-2293: any Result displayed is drawn
+      // again when its bytes hold a label edit that left its drawing while it
+      // was not shown (a Reset Settings, an Undo). The display records what it
+      // shows, so a failed rerender does not repeat here.
+      const display = displayAsks;
+      displayAsks = null;
+      if (display?.identity === context.resultIdentity) {
+        if (context.bindingOptions.modeArrival && display.rules) featureActions.followRestoredSpecificRules(display.rules);
+        if (display.labelIntentGone) featureActions.requestAutomaticRerender();
       }
       // D-36: a label rerender pays the redraw its drawing owes when, as its
       // Result is ready, no later rerender runs and its figure shows the
@@ -3519,10 +3634,15 @@ export const createAppSetup = () => {
     askChoice,
     showNotice,
     canonicalSessionVersion: SESSION_VERSION,
-    // A Generate that adopts a Circular LOSAT result reconciles its rings; a
-    // Linear Generate and a Circular one without such a result leave them.
-    adoptCanonicalRenderArtifacts: (canonical, options) => {
-      if (adoptCanonicalRenderArtifacts(canonical, options)) reconcileCircularConservation(state.drawingOfMode('circular'));
+    // An adoption of a Circular LOSAT result reconciles its rings; any other leaves them. The ring rows move to its keys
+    // only if the draft's rings are those the request was built from (`keepCircularConservationRowsThrough` states why).
+    adoptCanonicalRenderArtifacts: (canonical, { builtFromDraft = false, ...options }) => {
+      const drawing = state.drawingOfMode('circular');
+      const adopt = () => adoptCanonicalRenderArtifacts(canonical, options);
+      const adopted = builtFromDraft
+        ? circularTrackSlotEditor.keepCircularConservationRowsThrough(drawing, adopt)
+        : adopt();
+      if (adopted) reconcileCircularConservation(drawing);
     },
     setCircularConservationEnabled,
     getCommittedCanonicalSession,
@@ -3767,7 +3887,7 @@ export const createAppSetup = () => {
     if (result?.status === 'ok') {
       // The Depth panel shows each loaded Circular series, with or without a Depth file (BA-OD94).
       depthTrackUiCounts.circular = Math.max(1, state.drawingOfMode('circular').adv.depth_tracks.length);
-      showNotice({ text: name ? t('Session loaded: {file}', { file: name }) : t('Session loaded.'), items: result.notices || [] });
+      showNotice({ text: name ? t('Session loaded: {file}.', { file: name }) : t('Session loaded.'), items: result.notices || [] });
     } else if (result?.status === 'legacy') {
       showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
     }
@@ -3854,7 +3974,7 @@ export const createAppSetup = () => {
         settingsPaneActions.closeSettingsPopup();
         await nextTick();
         recordSessionLifecycleEvent('history-baseline-start');
-        if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
+        if (!await history.initializeIntentBaseline(msg('Loaded session'), { isCurrent: result.isCurrent })) {
           throw new Error('Session loading canceled.');
         }
         featureActions.clearSpecificRulePatternDrafts();
@@ -3865,7 +3985,7 @@ export const createAppSetup = () => {
       }
     }
   });
-  // UJ-06 (Owner 2026-10-08): Load an example shows only where this origin
+  // UJ-06 (Owner 2026-10-08): Open Gallery example shows only where this origin
   // serves the Gallery catalog (gbdraw.app, not the pip GUI), and its chooser
   // lists every catalog example. The choice closes the chooser, asks the UJ-09
   // question, and loads the Session through the Load Session path. The catalog
@@ -4130,7 +4250,11 @@ export const createAppSetup = () => {
     // reached only the mounted Result).
     resultPaintRecord.commit(identities, context.resultIdentity, current, {
       restored: context.phase === 'session-load' || Boolean(context.bindingOptions.trustedRestore),
-      drawn
+      drawn,
+      drawingStateOf: (identity) => {
+        const holder = state.drawingList().find(({ id }) => resultIdentitiesOf(id).includes(identity));
+        return holder ? currentEditorProjectionState(holder) : current;
+      }
     });
     [...departedResultIntent.keys()].forEach((identity) => {
       if (!identities.includes(identity)) departedResultIntent.delete(identity);
@@ -4278,11 +4402,19 @@ export const createAppSetup = () => {
   // whose intent changed since it was last shown; each paint domain it shows
   // returns to Python's values where no operation sets it (OV-144).
   const LEGEND_STRUCTURE_DOMAINS = LIVE_EDIT_DOMAINS.legendStructure;
-  // OV-1280: the rule table the Result a mode switch shows again was last
-  // shown with (`resultPaintRecord`), read once it is ready (`afterReady`);
-  // null rules: unknown (a restored Result).
-  /** @type {{ identity: string, rules: SpecificColorRule[] | null } | null} */
-  let arrivalShownRules = null;
+  // What a displayed Result asks of the rerender, read once it is ready
+  // (`afterReady`): `rules`, the rule table it was last shown with, or the one
+  // it was drawn with when that is unknown (a restored Result), for OV-1280;
+  // `labelIntentGone`, whether its bytes hold a label edit that left its drawing
+  // since it was last shown (OV-2293).
+  /** @type {{ identity: string, rules: SpecificColorRule[] | null, labelIntentGone: boolean } | null} */
+  let displayAsks = null;
+  // Whether a Result draws a feature; an unknown catalog answers yes.
+  /** @param {number} resultIndex @returns {(recordKey: string, featureId: string) => boolean} */
+  const resultDrawsFeature = (resultIndex) => {
+    const rendered = resultCatalogFeatures(state, resultIndex)?.renderedByIdentity;
+    return (recordKey, featureId) => !rendered || rendered.has(biologicalFeatureKey(recordKey, featureId));
+  };
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
   // binder's label step.
@@ -4294,7 +4426,7 @@ export const createAppSetup = () => {
   const projectEditorIntentOnDisplay = async (drawing, context, resultLegendOrder) => {
     const identity = context.resultIdentity;
     const current = currentEditorProjectionState(drawing);
-    arrivalShownRules = null;
+    displayAsks = null;
     const departedIntent = departedResultIntent.get(identity);
     departedResultIntent.delete(identity);
     if (departedIntent !== undefined && departedIntent === displayedIntentSignature(drawing)) {
@@ -4307,7 +4439,14 @@ export const createAppSetup = () => {
       return;
     }
     const previous = resultPaintRecord.display(identity, current);
-    if (context.bindingOptions.modeArrival) arrivalShownRules = { identity, rules: paintRuleTable(previous) };
+    const drawn = resultPaintRecord.drawn(identity) ?? current;
+    displayAsks = {
+      identity,
+      rules: paintRuleTable(previous) ?? paintRuleTable(drawn),
+      labelIntentGone: drawn.labels !== current.labels && drawnLabelIntentGone(
+        drawn.labels, previous.labels, current.labels, resultDrawsFeature(context.resultIndex)
+      )
+    };
     const colors = !sameColors(previous.colors, current.colors);
     const visibility = previous.visibility !== current.visibility;
     const strokes = previous.strokes !== current.strokes;
@@ -4329,10 +4468,16 @@ export const createAppSetup = () => {
       // The palette, rules, and visibility prepare their matches when their
       // intent changed (`colors`, `visibility`); then one compile of the
       // domains the Result shows.
-      let prepared = await projectMountedEditorIntent({ colors, visibility, show: false });
+      // OV-2293: a Result whose bytes were drawn with other visibility, or
+      // restored and not known to show any (a Reset before a Save and Load), asks
+      // for the rerender when they lack a feature.
+      const preparation = {
+        colors, visibility, rerender: previous.visibility === '' || drawn.visibility !== current.visibility, show: false
+      };
+      let prepared = await projectMountedEditorIntent(preparation);
       // Declined with nothing blocking (the rules changed meanwhile): prepared
       // once more here, so the display still compiles once (R14-3).
-      if (prepared === false && !displayBlocked()) prepared = await projectMountedEditorIntent({ colors, visibility, show: false });
+      if (prepared === false && !displayBlocked()) prepared = await projectMountedEditorIntent(preparation);
       declined = prepared === false;
       domains = [...domains, ...(prepared || []), ...(strokes ? STROKE_DOMAINS : [])];
       operations = compileDisplayedResultOperations(drawing, context.resultIndex, { replayDefaultLegendOrder, domains });
@@ -4350,7 +4495,6 @@ export const createAppSetup = () => {
       phase: context.phase,
       rootGeneration: context.rootGeneration
     });
-    if (!projects && !failed) return;
     if (projects) {
       try {
         showEditorIntent({ domains, operations });
@@ -4755,14 +4899,21 @@ export const createAppSetup = () => {
   const updateClickedFeatureLabelTextWithHistory = undoableAction(msg('Change label text'), updateClickedFeatureLabelText);
   const handleLabelTextScopeChoiceWithHistory = undoableAction(msg('Change label text'), handleLabelTextScopeChoice);
   // The Label Not Shown choice answers the label edit whose step is open: one step, under that step's name.
-  // The label stays an unmarked literal (its Undo title stays English): a
-  // registered test reads it from this line (feature-label-visual-unit.test.mjs).
-  const handleHiddenLabelTextChoiceWithHistory = undoableAction('Change label visibility', handleHiddenLabelTextChoice, { joinsOpenStep: true });
+  // A registered test reads the label from this line (feature-label-visual-unit.test.mjs).
+  const handleHiddenLabelTextChoiceWithHistory = undoableAction(msg('Change label visibility'), handleHiddenLabelTextChoice, { joinsOpenStep: true });
   const requestLabelTextChangeByFeatureIdWithHistory = undoableAction(
     msg('Change label text'),
     requestLabelTextChangeByFeatureId
   );
   const requestLabelTextChangeByKeyWithHistory = undoableAction(msg('Change label text'), requestLabelTextChangeByKey);
+  // The Features list's label input commits what was typed; its draft then follows the label.
+  /** @param {string} featureId @param {string} text */
+  const commitListLabelDraft = (featureId, text) => {
+    const committed = requestLabelTextChangeByFeatureIdWithHistory(featureId, text);
+    const entry = featureActions.getEditableLabelByFeatureId(featureId);
+    if (entry) entry.draftText = entry.text;
+    return committed;
+  };
   const resetAllLabelTextOverridesWithHistory = undoableAction(msg('Reset label edits'), resetAllLabelTextOverrides);
   const loadLabelOverrideTableWithHistory = undoableAction(msg('Load label edits'), loadLabelOverrideTable);
   const runInfoCopyStatus = ref('');
@@ -4781,7 +4932,7 @@ export const createAppSetup = () => {
     if (!command) return;
     try {
       await copyTextToClipboard(command);
-      const copied = t('Copied');
+      const copied = t('Copied!');
       status.value = copied;
       setTimeout(() => {
         if (status.value === copied) status.value = '';
@@ -4945,9 +5096,19 @@ export const createAppSetup = () => {
     return runAnalysis();
   };
 
-  /** @param {DrawingState} drawing @param {unknown} action */
+  // The buttons that choose what happens to a saved comparison, the History
+  // step of the choice, and the line that names the chosen one. English names
+  // it as the Session stores it (INHERIT, REPLACE, CLEAR; PD-OI-106 keeps the
+  // English text); another language names it by its button.
+  /** @type {Readonly<Record<string, string>>} */
+  const importedComparisonActionLabels = Object.freeze({
+    [IMPORTED_COMPARISON_ACTIONS.INHERIT]: msg('Inherit saved comparison'),
+    [IMPORTED_COMPARISON_ACTIONS.REPLACE]: msg('Replace with current controls'),
+    [IMPORTED_COMPARISON_ACTIONS.CLEAR]: msg('Clear comparison')
+  });
+  /** @param {DrawingState} drawing @param {string} action */
   const chooseImportedComparisonAction = (drawing, action) => history.runUndoable(
-    `${String(action || '').toLowerCase()} imported comparison`,
+    importedComparisonActionLabels[action],
     () => {
       const outcome = resolveImportedComparisonAction({
         intent: drawing.importedComparisonIntent,
@@ -4989,16 +5150,6 @@ export const createAppSetup = () => {
   const importedComparisonNeedsResolution = computed(() => (
     state.activeDrawing().importedComparisonIntent.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
   ));
-  // The buttons that choose what happens to a saved comparison, and the line
-  // that names the chosen one. English names it as the Session stores it
-  // (INHERIT, REPLACE, CLEAR; PD-OI-106 keeps the English text); another
-  // language names it by its button.
-  /** @type {Readonly<Record<string, string>>} */
-  const importedComparisonActionLabels = Object.freeze({
-    [IMPORTED_COMPARISON_ACTIONS.INHERIT]: msg('Inherit saved comparison'),
-    [IMPORTED_COMPARISON_ACTIONS.REPLACE]: msg('Replace with current controls'),
-    [IMPORTED_COMPARISON_ACTIONS.CLEAR]: msg('Clear comparison')
-  });
   const importedComparisonActionText = computed(() => {
     /** @type {string | null} */
     const action = state.activeDrawing().importedComparisonIntent.action;
@@ -5400,20 +5551,14 @@ export const createAppSetup = () => {
   // comparisons are the Linear drawing's. The button asks first and says what
   // the reset keeps; `resetSettings` itself does not ask.
   const requestResetSettings = async () => {
-    const sessionBusy = sessionOperationAvailability();
+    const sessionBusy = sessionOperationAvailability('not-during-run');
     if (sessionBusy) return sessionBusy;
     const choice = await askChoice({
       title: t('Reset all settings?'),
-      description: joinSentences(t('Circular and Linear both return to their default settings.'), t('This also removes your edits:')),
-      items: [
-        t('Colors, color rules, and the palette'),
-        t('Labels, Feature visibility, and Feature placements'),
-        t('Legend names, deleted Legend rows, Similarity group names, and Region Annotations'),
-        t('Linear record definitions, subtitles, regions, reverse complement, and alignment'),
-        t('Linear comparisons, which turn off; their uploaded tables stay'),
-        t('The Default colors, Specific rules, Blacklist, Whitelist, and Priority files, with the settings they loaded')
+      lines: [
+        { icon: 'ph-warning', text: t('Your edits are removed too') },
+        { icon: 'ph-arrow-counter-clockwise', text: t('Undo restores them') }
       ],
-      note: joinSentences(t('Input files (genome, Depth, and comparison files for circular diagrams), the records you chose, and File defaults stay.'), t('Undo brings the settings back.')),
       actions: [{ id: 'reset', label: t('Reset all settings'), tone: 'danger' }],
       cancelLabel: t('Keep settings')
     });
@@ -5422,7 +5567,7 @@ export const createAppSetup = () => {
   };
   const resetSettings = () => {
     const drawing = state.drawingOfMode('linear');
-    const sessionBusy = sessionOperationAvailability();
+    const sessionBusy = sessionOperationAvailability('not-during-run');
     if (sessionBusy) return sessionBusy;
     // A notice (a loaded Session's warnings, a table import) described the
     // settings the reset replaces. Generate keeps it: it describes the Session.
@@ -5928,7 +6073,7 @@ export const createAppSetup = () => {
       const result = await exportMethod(snapshot, fontPorts);
       if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
       if (result.fontWarnings.length > 0) {
-        showNotice({ text: joinSentences(t('Exported {file}.', { file: result.filename }), t('Find it in your browser\'s downloads.')), items: result.fontWarnings });
+        showNotice({ text: t('Exported {file}.', { file: result.filename }), items: result.fontWarnings });
       }
       return result;
     } catch (error) {
@@ -5984,7 +6129,7 @@ export const createAppSetup = () => {
     // The title is part of the History snapshot: a rename is its own step.
     const title = normalizeSessionTitle(input);
     if (title === normalizeSessionTitle(sessionTitle.value)) return;
-    return history.runUndoable(msg('Rename Session'), () => { sessionTitle.value = title; });
+    return history.runUndoable(msg('Rename Session'), () => { sessionTitle.value = title; }, { detail: () => ({ value: title }) });
   };
 
   const saveSessionWithTitle = () => exportSession(null, {
@@ -6041,7 +6186,7 @@ export const createAppSetup = () => {
       history.markSavePoint();
       // D-02: a font gbdraw does not bundle is saved by name only (receipt 〔警告〕).
       showNotice({
-        text: joinSentences(t('Session saved: {file}.', { file: filename }), t('Find it in your browser\'s downloads.')),
+        text: t('Session saved: {file}.', { file: filename }),
         // Each drawing's font, and the font of the shown Result, whose committed
         // request the Session saves too (OV-742).
         items: customFontSaveWarnings(
@@ -6118,7 +6263,7 @@ export const createAppSetup = () => {
       ? tm(RECORDS_NOT_INSPECTED_LABEL)
       : entries.length > 1 || drawing.adv.circular_grouping_intent === 'batch'
         ? (drawnCount < entries.length ? tn(entries.length, '{drawn} of {count} record (separate diagrams)', '{drawn} of {count} records (separate diagrams)', { drawn: drawnCount }) : t('All records (separate diagrams)'))
-        : t('Automatic (only record)');
+        : t('Automatic (single record)');
     return [
       { value: '', label: automaticLabel, synthetic: false },
       ...(current && selection.status !== 'resolved'
@@ -6313,6 +6458,31 @@ export const createAppSetup = () => {
     await settingsPaneActions.revealSetting(control);
     return { status: 'ok' };
   };
+  // With Custom Track Slots on, a Ticks row owns the coordinate scale: the link beside Show Coordinate Scale
+  // reveals that row (the first enabled one, else the first), or the Custom Track Slots panel when the stack
+  // has none. It changes no setting.
+  const showCircularTicksSlot = async () => {
+    const drawing = state.activeDrawing();
+    if (mode.value !== 'circular' || !drawing.adv.circular_track_slots_enabled) return { status: 'unavailable' };
+    circularTrackSlotsPanelOpen.value = true;
+    await nextTick();
+    /** @type {CircularTrackSlot[]} */
+    const slots = Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [];
+    const ticks = slots.filter((slot) => slot.renderer === 'ticks');
+    const slot = ticks.find((candidate) => candidate.enabled) || ticks[0];
+    const row = slot ? document.querySelector(`[data-capture="circular-track-slot-${CSS.escape(slot.id)}"]`) : null;
+    const panel = document.getElementById('circular-custom-track-slots-panel');
+    const toggle = /** @type {HTMLElement | null} */ (document.querySelector('[data-track-slots-toggle]'));
+    const control = /** @type {HTMLElement | null} */ (row?.querySelector('input, select, button') ?? null);
+    if (row instanceof HTMLElement && control) {
+      await settingsPaneActions.revealSetting(row, { focus: control });
+    } else if (panel && toggle) {
+      await settingsPaneActions.revealSetting(panel, { align: 'start', focus: toggle });
+    } else {
+      return { status: 'unavailable' };
+    }
+    return { status: 'ok' };
+  };
   watch(() => [mode.value, circularSingleRecordPresentationEnabled.value,
     circularRecordDiscoveryState.value.primaryFile, circularRecordDiscoveryState.value.pairedFile,
     state.activeDrawing().form.circular_record_selector], async (/** @type {unknown[]} */ current, /** @type {unknown[]} */ previous = []) => {
@@ -6453,7 +6623,8 @@ export const createAppSetup = () => {
       preserveLosatCacheInfo = false,
       layoutEntries = drawing.linearRecordRows,
       alignmentMutation = msg('source set changed.'),
-      retiredRecordKeys = /** @type {string[]} */ ([])
+      retiredRecordKeys = /** @type {string[]} */ ([]),
+      turnOffReaching = /** @type {(() => void) | undefined} */ (undefined)
     } = {}
   ) => {
     const sessionBusy = sessionOperationAvailability();
@@ -6468,6 +6639,7 @@ export const createAppSetup = () => {
     // Removing a File can remove the last source of a Depth series.
     retireLegendStylesOfUnnamedCaptions(() => linearTrackSlotEditor.changeLinearDepthSources(() => {
       changeRecordSources(() => linearSeqs.splice(0, linearSeqs.length, ...next));
+      turnOffReaching?.();
     }));
     const activeUids = new Set(next.map((seq) => seq.uid));
     pendingLinearRecordExpansions.forEach((_, uid) => {
@@ -6572,12 +6744,27 @@ export const createAppSetup = () => {
    * the caller's History step: the removal dialog and Remove File (D-06).
    * @param {Extract<LinearSourceRemovalPlan, { allowed: true }>} plan
    * @param {'clear' | 'delete'} intent
+   * @param {() => void} [turnOffReaching]
    */
-  const removeLinearSource = (plan, intent) => {
+  const removeLinearSource = (plan, intent, turnOffReaching) => {
     const next = [...plan.retainedSequences];
     if (intent === 'clear') next.splice(plan.insertionIndex, 0, createLinearSeq());
-    return applyLinearSeqMutation(state.drawingOfMode('linear'), next);
+    return applyLinearSeqMutation(state.drawingOfMode('linear'), next, { turnOffReaching });
   };
+  /**
+   * A Linear File removal asks, after its own question, when it takes the last
+   * Depth source of a series that another row reaches (`askTrackSourceRemoval`).
+   * @param {readonly Partial<LinearSeq>[]} kept The record cards with a Depth file that stay.
+   * @param {string} label
+   * @param {(turnOffReaching: () => void) => unknown} apply
+   */
+  const askLinearFileRemoval = (kept, label, apply) => askTrackSourceRemoval(askingStackPorts('linear_track_slots'), {
+    kind: 'linear-file',
+    loss: linearTrackSlotEditor.linearDepthSourceLoss(state.activeDrawing(), kept.map((seq) => seq.depth)),
+    sources: linearDepthSources,
+    label,
+    apply
+  });
   /** @param {'clear' | 'delete'} intent */
   const applyLinearSourceRemoval = async (intent) => {
     const sessionBusy = sessionOperationAvailability();
@@ -6592,10 +6779,20 @@ export const createAppSetup = () => {
       closeLinearSourceRemovalDialog();
       return false;
     }
-    const operation = await history.runUndoable(
-      intent === 'clear' ? msg('Clear Linear File') : msg('Delete Linear File'),
-      () => removeLinearSource(plan, intent)
-    );
+    const label = intent === 'clear' ? msg('Clear Linear File') : msg('Delete Linear File');
+    const asked = askLinearFileRemoval(plan.retainedSequences, label, (turnOffReaching) => removeLinearSource(plan, intent, turnOffReaching));
+    if (asked) {
+      // The File's dialog gives way to the second question; its Cancel leaves the File and returns the focus.
+      const returnFocus = linearSourceRemovalReturnFocus.value;
+      closeLinearSourceRemovalDialog({ restoreFocus: false });
+      const answer = await asked;
+      if (answer === false) {
+        linearSourceRemovalReturnFocus.value = returnFocus;
+        void restoreLinearSourceRemovalFocus();
+      } else await focusLinearSourceAfterRemoval(plan.sourceIndex);
+      return answer;
+    }
+    const operation = await history.runUndoable(label, () => removeLinearSource(plan, intent));
     closeLinearSourceRemovalDialog({ restoreFocus: false });
     await focusLinearSourceAfterRemoval(plan.sourceIndex);
     return operation;
@@ -6647,10 +6844,17 @@ export const createAppSetup = () => {
       }) ? RETIRED_LINEAR_RECORD_PRESENTATION : RETIRED_LINEAR_RECORD_REFERENCE)
     });
     const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
-    applyLinearSeqMutation(drawing, linearSeqs.flatMap((entry) => (
+    const nextSeqs = linearSeqs.flatMap((entry) => (
       entry.uid === group.uid ? (keepSource ? [replacement] : [])
         : members.has(entry.uid) ? [] : [entry]
-    )), { alignmentMutation: msg('source replaced.'), retiredRecordKeys: [...members] });
+    ));
+    /** @param {() => void} [turnOffReaching] */
+    const apply = (turnOffReaching) => applyLinearSeqMutation(drawing, nextSeqs, {
+      alignmentMutation: msg('source replaced.'), retiredRecordKeys: [...members], turnOffReaching
+    });
+    const asked = keepSource ? null : askLinearFileRemoval(nextSeqs, msg('Delete Linear File'), apply);
+    if (asked) return asked;
+    apply();
     if (keepSource) {
       pendingLinearRecordExpansions.set(replacement.uid, !seq[field]);
       pendingLinearUploads.add(replacement.uid);
@@ -6764,6 +6968,11 @@ export const createAppSetup = () => {
     }
     return true;
   };
+  /** @param {string} sourceKey The Linear File's key in the record list. */
+  const recordFileRemovalPlan = (sourceKey) => {
+    const intent = /** @type {'clear' | 'delete'} */ (linearSourceGroups.value.length > 1 ? 'delete' : 'clear');
+    return { intent, plan: planLinearSourceRemoval({ sequences: linearSeqs, sourceUid: sourceKey, intent }) };
+  };
   /**
    * D-06 Remove File, inside the dialog's History step: a Linear File is
    * deleted, or cleared when it is the only File; the Circular input loses its
@@ -6779,9 +6988,16 @@ export const createAppSetup = () => {
       }
       return setCircularSourceFile('c_gb', null);
     }
-    const intent = linearSourceGroups.value.length > 1 ? 'delete' : 'clear';
-    const plan = planLinearSourceRemoval({ sequences: linearSeqs, sourceUid: sourceKey, intent });
+    const { intent, plan } = recordFileRemovalPlan(sourceKey);
     return plan.allowed ? removeLinearSource(plan, intent) : false;
+  };
+  /** @param {RecordSelectionMode} listMode @param {string} sourceKey @param {string} label */
+  const askRecordFileRemoval = (listMode, sourceKey, label) => {
+    if (listMode !== 'linear' || dialogChoice.pending.value || history.mutationPending()) return null;
+    const { intent, plan } = recordFileRemovalPlan(sourceKey);
+    return plan.allowed
+      ? askLinearFileRemoval(plan.retainedSequences, label, (turnOffReaching) => removeLinearSource(plan, intent, turnOffReaching))
+      : null;
   };
   const recordSelection = createRecordSelection({
     reactive,
@@ -6796,9 +7012,10 @@ export const createAppSetup = () => {
       rebindAnnotationRecords();
       if (listMode !== 'linear') return;
       invalidateLinearComparisonArtifacts(state.drawingOfMode('linear'), { preserveLosatCacheInfo: true });
-      similarityAlignmentActions?.clearForMutation?.(msg('record drawing changed.'));
+      similarityAlignmentActions?.clearForMutation?.(msg('records to draw changed.'));
     },
     removeSource: removeRecordSource,
+    askRemoveSource: askRecordFileRemoval,
     deleteRecordSettings,
     // After a Session load the records are read on demand, as Generate reads them.
     prepareRecords: async (listMode) => {
@@ -6819,7 +7036,7 @@ export const createAppSetup = () => {
     const drawing = state.activeDrawing();
     return (
       linearSourceMovePlan(drawing, 0, 1).reason === 'custom-layout'
-        ? t('Files cannot be moved while Record Layout does not give each File its own consecutive rows. Change the rows in Advanced comparison and layout → Record Layout.')
+        ? t('Files cannot be moved while Record Layout does not give each File its own consecutive rows. Change the rows in Record Layout under Advanced comparison and layout.')
         : ''
     );
   });
@@ -6995,6 +7212,7 @@ export const createAppSetup = () => {
     sessionImportPending,
     sessionSavePending,
     semanticMutationAvailable,
+    sessionOperationAvailability,
     dialogChoicePending,
     missingBlastTsvDialog,
     missingBlastTsvRows,
@@ -7038,6 +7256,7 @@ export const createAppSetup = () => {
     selectedResultIndex,
     failedGeneratePreservedResult,
     generationFailureRecovery,
+    collinearColorModeOptions: Object.entries(COLLINEAR_COLOR_MODE_TEXT),
     importedComparisonIntent: drawingMember('importedComparisonIntent'),
     importedComparisonNeedsResolution,
     importedComparisonActionLabels,
@@ -7152,8 +7371,8 @@ export const createAppSetup = () => {
     syncDepthTrackSlotLabel,
     addCircularDepthTrack,
     addLinearDepthTrack,
-    removeCircularDepthTrack,
-    removeLinearDepthTrack,
+    removeCircularDepthTrack: askingRemoveCircularDepthTrack,
+    removeLinearDepthTrack: askingRemoveLinearDepthTrack,
     getCircularDepthFile,
     setCircularDepthFile,
     getLinearDepthFile,
@@ -7292,7 +7511,7 @@ export const createAppSetup = () => {
     circularTrackAddBlockReason: circularTrackSlotEditor.circularTrackAddBlockReason,
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
     canDuplicateCircularTrackSlot: circularTrackSlotEditor.canDuplicateCircularTrackSlot,
-    removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
+    removeCircularTrackSlot: askingRowRemoval(circularTrackSlotEditor.removeCircularTrackSlot, 'circular_track_slots'),
     setCircularTrackSlotEnabled: askingRowSwitch(circularTrackSlotEditor.setCircularTrackSlotEnabled, 'circular_track_slots'),
     circularTrackSlotEffectiveEnabled: circularTrackSlotEditor.circularTrackSlotEffectiveEnabled,
     circularTrackSlotHiddenBySuppress: circularTrackSlotEditor.circularTrackSlotHiddenBySuppress,
@@ -7349,7 +7568,7 @@ export const createAppSetup = () => {
     linearTrackAddBlockReason: linearTrackSlotEditor.linearTrackAddBlockReason,
     duplicateLinearTrackSlot: linearTrackSlotEditor.duplicateLinearTrackSlot,
     canDuplicateLinearTrackSlot: linearTrackSlotEditor.canDuplicateLinearTrackSlot,
-    removeLinearTrackSlot: linearTrackSlotEditor.removeLinearTrackSlot,
+    removeLinearTrackSlot: askingRowRemoval(linearTrackSlotEditor.removeLinearTrackSlot, 'linear_track_slots'),
     setLinearTrackSlotEnabled: askingRowSwitch(linearTrackSlotEditor.setLinearTrackSlotEnabled, 'linear_track_slots'),
     moveLinearTrackSlot: linearTrackSlotEditor.moveLinearTrackSlot,
     canMoveLinearTrackSlot: linearTrackSlotEditor.canMoveLinearTrackSlot,
@@ -7501,6 +7720,8 @@ export const createAppSetup = () => {
     inspectCircularSourceRecords,
     circularRecordSelectionEnabled,
     showCircularCanvasSetting,
+    showCircularTicksSlot,
+    DEFAULT_LINEAR_OUTPUT_PREFIX,
     setCircularRecordPresentationSelector,
     changeCircularMultiRecordCanvas,
     setCircularSourceFile,
@@ -7559,6 +7780,7 @@ export const createAppSetup = () => {
     manualSpecificRules: drawingMember('manualSpecificRules'),
     ruleMatchingPending,
     newSpecRule,
+    specificRuleHasQualifier,
     specificRulePresets,
     specificRuleQualifierSuggestions,
     selectedSpecificPreset,
@@ -7733,6 +7955,7 @@ export const createAppSetup = () => {
     handleLabelTextScopeChoice: handleLabelTextScopeChoiceWithHistory,
     handleHiddenLabelTextChoice: handleHiddenLabelTextChoiceWithHistory,
     requestLabelTextChangeByFeatureId: requestLabelTextChangeByFeatureIdWithHistory,
+    commitListLabelDraft,
     requestLabelTextChangeByKey: requestLabelTextChangeByKeyWithHistory,
     resetAllLabelTextOverrides: resetAllLabelTextOverridesWithHistory,
     downloadLabelOverrideTable,
@@ -7823,6 +8046,7 @@ export const createAppSetup = () => {
     downloadCliHelperFiles,
     runInfoElapsedText,
     runInfoReproducibilityText,
+    shownRunInfoNoteParts,
     runInfoHasCliHelperFiles,
     resetSettings,
     requestResetSettings,
@@ -7851,6 +8075,7 @@ export const createAppSetup = () => {
     redoHistoryTitle,
     undoHistory,
     redoHistory,
+    historyList,
     manualPriorityRules: drawingMember('manualPriorityRules'),
     newPriorityRule,
     addPriorityRule

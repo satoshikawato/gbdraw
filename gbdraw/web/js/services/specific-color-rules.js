@@ -29,6 +29,15 @@ export const normalizeSpecificRule = (rule, { fromFile = Boolean(rule?.fromFile)
   ...(fromFile ? { fromFile: true } : {})
 });
 
+/**
+ * OV-2435: whether a rule names a qualifier, the one check of the Add form, a row edit, and a row's hint. Python
+ * files a rule under its qualifier and reads only the qualifiers a feature has, so a rule without one colors
+ * nothing; the CLI color table refuses it (`read_color_table` in `gbdraw/io/colors.py`).
+ * @param {SpecificRuleInput} rule
+ * @returns {boolean}
+ */
+export const specificRuleHasQualifier = (rule) => normalizeText(rule?.qual) !== '';
+
 /** @param {SpecificRuleInput} rule */
 export const specificRuleIdentity = (rule) => {
   const normalized = normalizeSpecificRule(rule);

@@ -74,8 +74,8 @@ test('Apply over an active Similarity alignment writes the translations without 
   assert.equal(page.helperCalls[0].payload.selector, 'gene=COX1');
   assert.equal(action.preview.value.clearsAlignment, true);
   assert.deepEqual(action.previewLines.value, [
-    '#1 NC_012920.1: keeps its place (first record with the feature)',
-    '#2 NC_002333.2: moves -62.8 px'
+    '#1 NC_012920.1 keeps its place (first record with the feature)',
+    '#2 NC_002333.2 moves -62.8 px'
   ]);
   assert.equal(page.runs.length, 0, 'nothing changes before Apply');
 

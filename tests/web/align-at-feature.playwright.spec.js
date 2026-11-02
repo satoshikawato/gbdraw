@@ -80,8 +80,8 @@ test('Align at feature previews the moved record, writes its translation as one 
   const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   const stepsBefore = await undoCount();
   const preview = await resolveSelector(page, 'gene=COX1');
-  await expect(preview).toContainText('#1 NC_012920.1: keeps its place (first record with the feature)');
-  await expect(preview).toContainText(/#2 NC_002333\.2: moves -\d/);
+  await expect(preview).toContainText('#1 NC_012920.1 keeps its place (first record with the feature)');
+  await expect(preview).toContainText(/#2 NC_002333\.2 moves -\d/);
   // Nothing changes before Apply.
   expect(await placement(page)).toEqual(before);
   expect(await undoCount()).toBe(stepsBefore);
@@ -129,8 +129,8 @@ test('Align at feature over an active Similarity alignment clears it in the same
   // Only BGC0000709 has this protein: it is the reference, every other record keeps its aligned place.
   const preview = await resolveSelector(page, 'protein_id=CAF33300.1');
   await expect(preview).toContainText('Apply clears the active similarity alignment.');
-  await expect(preview).toContainText('#2 BGC0000709: keeps its place (first record with the feature)');
-  await expect(preview).toContainText('#1 BGC0000708: keeps its place (no matching feature)');
+  await expect(preview).toContainText('#2 BGC0000709 keeps its place (first record with the feature)');
+  await expect(preview).toContainText('#1 BGC0000708 keeps its place (no matching feature)');
   await page.getByTestId('linear-anchor-feature-apply').click();
   await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveText('Records aligned at protein_id=CAF33300.1.', { timeout: 180_000 });
   await expect(page.locator('[data-similarity-alignment-notice]')).toHaveText('Alignment cleared: records aligned at a feature.');

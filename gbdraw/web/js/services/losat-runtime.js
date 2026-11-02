@@ -1,5 +1,4 @@
 // @ts-check
-import { guardSharedMemoryBulkOps } from './losat-shared-memory-guard.js';
 import { LOSAT_SEARCH_FLAGS } from '../contracts/schema.generated.js';
 
 /**
@@ -78,10 +77,7 @@ export const losatCommandArgs = ({ program, outfmt = '6', extraArgs, threads }) 
 /**
  * Fetch and compile a packaged LOSAT wasm. Its URL carries no version, so the
  * request always revalidates (`no-cache`): an unchanged file costs a 304, and a
- * file replaced at the same URL is never served from a stale cache. A threaded
- * module's bulk memory operations are guarded (`guardSharedMemoryBulkOps`);
- * a module the guard declines compiles as it is, and a trapped threaded job
- * still runs again (`services/losat.js`).
+ * file replaced at the same URL is never served from a stale cache.
  * @param {string} wasmUrl
  * @param {string} label the asset named when it is missing
  * @returns {Promise<WebAssembly.Module>}
@@ -91,10 +87,7 @@ export const compileLosatWasm = async (wasmUrl, label) => {
   if (!response.ok) {
     throw new Error(`Missing packaged asset: ${label} not found at ${wasmUrl}`);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const guarded = guardSharedMemoryBulkOps(bytes);
-  if (!guarded) console.warn(`${label} at ${wasmUrl}: its bulk memory operations could not be guarded; it runs unguarded.`);
-  return WebAssembly.compile(guarded ? guarded.bytes : bytes);
+  return WebAssembly.compile(await response.arrayBuffer());
 };
 
 /** @param {Uint8Array[]} chunks */

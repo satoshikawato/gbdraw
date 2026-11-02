@@ -55,7 +55,7 @@ Select **Linear**. On a fresh Linear page, **No comparison** is pressed in the
 2. Select **Add sequence** below the File list.
 3. In the second **GenBank / DDBJ File** control, choose `NC_042057.1.gb`.
 
-Keep Lambda first and DE3 second. Leave both **Region (optional)** sections unchanged so the inputs remain the complete `NC_001416.1` (48,502 bp) and `NC_042057.1` (42,925 bp) records.
+Keep Lambda first and DE3 second. Leave both **Region** sections unchanged so the inputs remain the complete `NC_001416.1` (48,502 bp) and `NC_042057.1` (42,925 bp) records.
 
 ![Two complete GenBank records selected for a Linear diagram](../images/t-gui-03/01-input-ready.png)
 

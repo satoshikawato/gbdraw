@@ -19,14 +19,14 @@
 // - in th: the shown catalog in the header and the icon rail, the Thai font
 //   stack, and the 12 px floor of the session label and the rail names (a rail
 //   name may take two lines and stays inside its entry);
-// - at 1024x768, 1280x800 and 1440x900, in all 11 languages: every rail name
+// - at 1024x768, 1280x800 and 1440x900, in all 17 languages: every rail name
 //   stays inside the rail column (inside its border and padding) and no word of
 //   it is split over two lines (ja フィーチャー, fr Disposition), and the footer holds its text without a page
 //   scroll, with nothing drawn over it and the settings pane, its Generate
-//   bar and the Result pane ending above it (stacked: en, ja; rail: all 11)
+//   bar and the Result pane ending above it (stacked: en, ja; rail: all 17)
 //   (OV-1506, OV-1427, OV-1509); the page does not scroll sideways,
 //   the header's mode and Session names keep one line (OV-1515), and each
-//   footer separator stays on the line of the link before it (OV-1517);
+//   footer item stays whole on one line, with spacing between items (OV-1517);
 // - storage that throws, or a catalog that fails to load, leaves English.
 // - in every language, the "Suggest a translation fix" link beside the menu is
 //   named in that language (English where the catalog has no entry), opens a
@@ -158,10 +158,11 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   await expect(menu(page)).toHaveValue('en');
   await expect(menu(page)).toHaveAccessibleName('Language');
   await expect(menu(page).locator('option')).toHaveText([
-    'English', 'Bahasa Indonesia', 'Español', 'Français', 'Português', 'Tiếng Việt', 'ไทย', '日本語', '简体中文', '繁體中文', '한국어'
+    'English', 'Bahasa Indonesia', 'Deutsch', 'Español', 'Français', 'Italiano', 'Polski', 'Português', 'Tiếng Việt', 'Türkçe', 'Русский',
+    'Українська', 'ไทย', '日本語', '简体中文', '繁體中文', '한국어'
   ]);
   expect(await menu(page).locator('option').evaluateAll((options) => options.map((option) => option.lang)))
-    .toEqual(['en', 'id', 'es', 'fr', 'pt', 'vi', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']);
+    .toEqual(['en', 'id', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'vi', 'tr', 'ru', 'uk', 'th', 'ja', 'zh-Hans', 'zh-Hant', 'ko']);
   await expect(loadButton(page)).toHaveAccessibleName('Load Session');
   expect(await stored(page)).toEqual([]);
 
@@ -246,8 +247,10 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
   const panel = page.locator('.run-info-panel');
   const { notes, description } = await page.evaluate(() => window.__GBDRAW_APP__.lastRunInfo)
     .then((info) => ({ notes: info.reproducibility.notes, description: info.downloadBundle.description }));
+  // The stored notes are unchanged; the tab shows only the notes a reader acts on (ui-copy-diet 2026-11-02).
   expect(notes).toContain('The Source recipe can be rerun with the uploaded file names shown here.');
-  await expect(panel.getByText(zh['The Source recipe can be rerun with the uploaded file names shown here.'], { exact: true })).toBeVisible();
+  await expect(panel.getByText(zh['The Source recipe can be rerun with the uploaded file names shown here.'], { exact: true })).toHaveCount(0);
+  await expect(panel.getByText(zh['Source recipe'], { exact: true })).toBeVisible();
   const shown = await panel.locator('p').allTextContents();
   for (const english of [...notes, description]) expect(shown.map((text) => text.trim())).not.toContain(english);
   await panel.screenshot({ path: testInfo.outputPath('run-info-zh-Hans.png') });
@@ -416,8 +419,8 @@ const railAndFooterFit = (page) => page.evaluate(() => {
     // A fixed element (the Generate bar) has no offsetParent: shown means it has a box.
     return element && element.getClientRects().length > 0 && element.getBoundingClientRect().bottom > box.top + 0.5;
   });
-  // The header's mode and Session names keep one line (OV-1515), and a footer
-  // separator stays on the line of the link before it (OV-1517).
+  // The header's mode and Session names keep one line (OV-1515), and each footer
+  // item stays whole on one line: a line breaks only between items (OV-1517).
   const lineTops = (element) => {
     const range = document.createRange();
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -431,24 +434,19 @@ const railAndFooterFit = (page) => page.evaluate(() => {
   const wrappedHeaderNames = [...document.querySelectorAll('.mode-switch > button, .app-session-label')]
     .filter((element) => element.getClientRects().length > 0 && lineTops(element).length > 1)
     .map((element) => element.textContent.trim());
-  const separatorsAlone = [...footer.querySelectorAll('a')].flatMap((link) => {
-    const next = link.nextSibling;
-    const at = next?.nodeType === Node.TEXT_NODE ? next.textContent.indexOf('|') : -1;
-    if (at < 0) return [];
-    const range = document.createRange();
-    range.setStart(next, at);
-    range.setEnd(next, at + 1);
-    const separator = range.getBoundingClientRect();
-    const linkLines = lineTops(link);
-    // A link name keeps one line (Satoshi / Kawato split before OV-1517), and its separator follows on that line.
-    return linkLines.length === 1 && Math.abs(separator.top - linkLines[0]) < 3 ? [] : [link.textContent.trim()];
-  });
+  // An item keeps one line (Satoshi / Kawato split before OV-1517); the footer separates items by spacing, not "|".
+  const items = [...footer.querySelectorAll('[data-footer-item]')];
+  const splitItems = [
+    ...(items.length === 4 ? [] : [`${items.length} footer items`]),
+    ...(/\|/.test(footer.textContent) ? ['"|" separator'] : []),
+    ...items.filter((item) => lineTops(item).length !== 1).map((item) => item.textContent.trim())
+  ];
   return {
     names: names.length,
     outside,
     splitWords,
     wrappedHeaderNames,
-    separatorsAlone,
+    splitItems,
     pageScrollsX: document.documentElement.scrollWidth > innerWidth,
     footerHoldsText: Math.min(...content.map((rect) => rect.top)) >= box.top - 0.5 && Math.max(...content.map((rect) => rect.bottom)) <= box.bottom + 0.5,
     coveredLines,
@@ -526,10 +524,10 @@ test('rail names stay inside the rail and keep each word on one line, nothing co
     });
   }
   const viewports = [{ width: 1024, height: 768 }, { width: 1280, height: 800 }, { width: 1440, height: 900 }];
-  const fit = { outside: [], splitWords: [], wrappedHeaderNames: [], separatorsAlone: [], pageScrollsX: false, footerHoldsText: true, coveredLines: [], below: [], pageScrolls: false };
+  const fit = { outside: [], splitWords: [], wrappedHeaderNames: [], splitItems: [], pageScrollsX: false, footerHoldsText: true, coveredLines: [], below: [], pageScrolls: false };
   for (const display of ['stacked', 'rail']) {
     if (display === 'rail') await page.getByRole('button', { name: 'Collapse settings to icons', exact: true }).click();
-    for (const tag of display === 'rail' ? ['en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'es', 'fr', 'pt', 'id', 'vi', 'th'] : ['en', 'ja']) {
+    for (const tag of display === 'rail' ? ['en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'es', 'fr', 'pt', 'id', 'vi', 'th', 'de', 'it', 'pl', 'tr', 'ru', 'uk'] : ['en', 'ja']) {
       await menu(page).selectOption(tag);
       await expect.poll(() => pageLanguage(page)).toBe(tag);
       for (const viewport of viewports) {
@@ -554,7 +552,7 @@ test('in every language, the link beside the menu opens the feedback form with o
   // Beside the menu: the next element after it.
   expect(await menu(page).evaluate((select) => select.nextElementSibling?.matches('a[data-translation-feedback]'))).toBe(true);
   const tags = await menu(page).locator('option').evaluateAll((options) => options.map((option) => option.value));
-  expect(tags).toHaveLength(11);
+  expect(tags).toHaveLength(17);
   const minTitle = await page.evaluate(async () => (await import('./js/app/header-fit.js')).SESSION_TITLE_MIN_PX);
   expect(minTitle).toBeGreaterThan(0);
   for (const tag of tags) {

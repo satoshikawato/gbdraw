@@ -128,7 +128,7 @@ def test_presentation_flows_use_visible_controls_without_state_injection() -> No
         'get_by_label("Palette", exact=True)',
         'get_by_label("Default colors file", exact=True).set_input_files',
         'get_by_role("button", name="Whitelist", exact=True)',
-        'get_by_role("textbox", name="Qual", exact=True).fill("gene")',
+        'get_by_role("textbox", name="Qualifier", exact=True).fill("gene")',
         'get_by_label("Priority File (TSV)", exact=True).set_input_files',
         'get_by_role("textbox", name="Plot Title", exact=True)',
         'get_by_label("Legend position", exact=True)',

@@ -361,7 +361,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await expect(lock).toBeChecked();
   // PD-OI-024 revision 3: one text source feeds the help-tip and the
   // checkbox's accessible description instead of an always-on paragraph.
-  await expect(lock).toHaveAttribute('aria-describedby', 'linear-definition-lock-help');
+  await expect(lock).toHaveAttribute('aria-describedby', 'linear-definition-lock-help linear-definition-lock-timing');
   await expect(lock).toHaveAccessibleDescription(new RegExp(['ON aligns Linear definitions in a common left column',
     'OFF centers them in a common column width and follows row offsets'].join('.*')));
   const helpButton = page.locator('.help-tip > button[aria-describedby="linear-definition-lock-help"]');
@@ -1099,7 +1099,7 @@ test('Selected pairs focuses Add and repairs an unplaced draft in its boundary',
   });
   const [uidA, uidB, uidC] = uids;
   await openLinearSelectedPairs(page);
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Add pair', exact: true }).click();
 
   const addedPair = linearComparisonPair(page, `${uidA}->${uidB}`);
   await expect(addedPair).toBeVisible();
@@ -1398,11 +1398,11 @@ test('No comparison completes a real render without touching dormant comparison 
   await expect(dormantPair.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #1 to #2'
   })).toHaveCount(0);
-  await expect(dormantPair).toContainText('Retained, inactive BLAST TSV: dormant-comparison.tsv');
+  await expect(dormantPair).toContainText('Not used · dormant-comparison.tsv');
 
   const dormantRawResult = page.locator(`[data-linear-raw-result="${dormantEdgeKey}"]`);
   await expect(dormantRawResult).toContainText(
-    'Retained, inactive filename: dormant-losat-name.tsv'
+    'Not used · dormant-losat-name.tsv'
   );
 
   await dormantPair.getByRole('button', { name: 'Reuse BLAST TSV for #1 to #2' }).click();
@@ -1421,7 +1421,7 @@ test('No comparison completes a real render without touching dormant comparison 
 
   await dormantPair.getByRole('radio', { name: 'No comparison' }).check();
   await expect(dormantUpload).toHaveCount(0);
-  await expect(dormantPair).toContainText('Retained, inactive BLAST TSV: dormant-comparison.tsv');
+  await expect(dormantPair).toContainText('Not used · dormant-comparison.tsv');
   expect(await page.evaluate(() => {
     const edge = window.__GBDRAW_APP__.linearComparisonPlan.edges[0];
     return [edge.included, edge.fileActive, edge.file?.name, edge.losatFilename];
@@ -2120,7 +2120,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       intent: 'custom',
       losatMode: 'blastn',
       losatpMode: 'collinear',
-      filterSummary: expect.stringContaining('E-value <= '),
+      filterSummary: expect.stringContaining('E-value ≤ '),
       // The Settings disclosure's display order: Performance comes last.
       settings: [
         'losat-mode', 'blastn-task',
@@ -3214,7 +3214,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
     executorCallsUnchanged: true,
     committedResultPreserved: true
   });
-  expect(rejected.errorSummary).toMatch(/Pairwise max hits/i);
+  expect(rejected.errorSummary).toMatch(/Pairwise display max hits/i);
 });
 
 // OIC-015: observe the jobs submitted to LOSAT and the resulting typed render,

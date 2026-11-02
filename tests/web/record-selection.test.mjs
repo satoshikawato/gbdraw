@@ -21,7 +21,7 @@ import {
 const computed = (getter) => ({ get value() { return getter(); } });
 const reactive = (value) => value;
 
-const makeOwner = ({ sources, recordsOff = { linear: [], circular: [] }, requests = [], prepareRecords = async () => {} } = {}) => {
+const makeOwner = ({ sources, recordsOff = { linear: [], circular: [] }, requests = [], prepareRecords = async () => {}, askRemoveSource = () => null } = {}) => {
   const log = [];
   const offLists = { linear: [...recordsOff.linear], circular: [...recordsOff.circular] };
   const choice = { pending: false };
@@ -39,6 +39,7 @@ const makeOwner = ({ sources, recordsOff = { linear: [], circular: [] }, request
     closeAfterDialogChoice: (close) => close(),
     afterRecordSetChange: (mode) => log.push(`invalidate:${mode}`),
     removeSource: (mode, key) => { log.push(`remove:${mode}:${key}`); return true; },
+    askRemoveSource,
     deleteRecordSettings: (mode, keys) => { log.push(`delete:${mode}:${keys.join(',')}`); return true; },
     prepareRecords: async (mode) => { await prepareRecords(mode); log.push(`prepare:${mode}`); },
     autoOpenRequests: requests
@@ -95,6 +96,22 @@ test('Remove File removes the whole file in one step and closes its list (D-06)'
   assert.deepEqual(log, ['prepare:circular', 'step:Remove File', 'remove:circular:circular']);
   assert.equal(owner.removeFileDialog.open, false);
   assert.equal(owner.recordListView.value.open, false);
+});
+
+test('Remove File gives way to a second question: Cancel keeps the list, the choice closes it, and neither runs its own step', async () => {
+  for (const [answer, listOpen] of [[false, true], [true, false]]) {
+    const { owner, log } = makeOwner({
+      sources: { circular: [linearFile('circular', 2, 'genome.gb')] },
+      recordsOff: { linear: [], circular: ['circular-1'] },
+      askRemoveSource: (mode, key, label) => { log.push(`ask:${mode}:${key}:${label}`); return Promise.resolve(answer); }
+    });
+    await owner.openRecordList('circular', 'circular');
+    await owner.toggleRecord('circular', 'circular', 'circular-2', checkbox(false));
+    await owner.resolveRemoveFile('remove');
+    assert.deepEqual(log, ['prepare:circular', 'ask:circular:circular:Remove File']);
+    assert.equal(owner.removeFileDialog.open, false);
+    assert.equal(owner.recordListView.value.open, listOpen);
+  }
 });
 
 test('Select all and Select none act on the rows shown; a bulk change that empties the file applies nothing', async () => {

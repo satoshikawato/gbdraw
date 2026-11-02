@@ -12,11 +12,11 @@ import {
 
 const DEFAULT_WASM_PATH = './wasm/losat/losat.wasm';
 const DEFAULT_THREADED_WASM_PATH = LOSAT_THREADED_WASM_URL || './wasm/losat/losat-threaded.wasm';
-// Chromium can trap a thread's memory.copy or memory.fill right after another
-// thread grows the shared memory; compileLosatWasm guards those operations
-// (services/losat-shared-memory-guard.js). A trap the guard does not cover, or
-// one in a module the guard declines, ends the job; a job is deterministic, so
-// a trapped job runs again, up to this many times, before the run fails.
+// Chromium can trap a thread's memory access right after another thread grows
+// the shared memory. LOSAT guards those accesses when it builds the threaded file
+// (tools/record_losat_wasm_build.py refuses a file without its record). A trap the
+// guard does not cover ends the job; a job is deterministic, so a trapped job runs
+// again, up to this many times, before the run fails.
 const THREADED_TRAP_RETRY_LIMIT = 2;
 const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 // The LOSATN tasks of the serial engine (losat.wasm, LOSAT web ABI v1: src/web_api.rs parse_blastn_args).

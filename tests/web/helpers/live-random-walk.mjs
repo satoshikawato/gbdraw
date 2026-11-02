@@ -33,7 +33,7 @@ import { join } from 'node:path';
 import { evaluateWithRetainedPromise, takePageErrors } from './app-lifecycle.cjs';
 import { expectLiveEqualsGenerate, settleLive, showResult } from './live-generate-parity.cjs';
 import { download } from './mode-transition.cjs';
-import { SINGLE_FIXTURE, generate, open } from './live-generate-parity-steps.cjs';
+import { generate, openBothDrawings, otherMode, switchDrawing } from './live-generate-parity-steps.cjs';
 import { BARRIER_KINDS, FIXTURES, createRandom, planWalk } from './live-random-walk-plan.mjs';
 import { shrinkWalk } from './live-random-walk-shrink.mjs';
 
@@ -74,7 +74,8 @@ export const ALLOWLIST_WALK_KINDS = Object.freeze({
   'mode switch back to a Result': 'drawingSwitch',
   'Session Load': 'load',
   'Legend rename onto a deleted row (Restore and merge)': 'legendRename',
-  'Reset Settings': 'reset'
+  'Reset Settings': 'reset',
+  'Result display after Reset Settings': 'resultSwitch'
 });
 
 // The confirmed mismatches of a step kind (multi-drawing-project FINDINGS.md),
@@ -102,44 +103,29 @@ const INSIDE_LABEL_TEXT = 'x';
 const CAPTIONS = ['Walk caption', 'transfer RNA', 'Renamed group', 'CDS'];
 const ADDED_CAPTIONS = ['Walk group', 'Added row'];
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const otherMode = (mode) => (mode === 'circular' ? 'linear' : 'circular');
 
-// One drawing switch (the mode buttons call `selectDrawing`), settled.
-const switchDrawing = async (page, drawingId) => {
-  await settleLive(page);
-  const outcome = await page.evaluate((id) => window.__GBDRAW_APP__.selectDrawing(id), drawingId);
-  expect(outcome, `the switch to ${drawingId}`).toEqual({ status: 'ok' });
-  await expect.poll(() => page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.circularRecordDiscovery.status))
-    .not.toBe('loading');
-  await page.evaluate(async () => { await window.Vue.nextTick(); });
-  await settleLive(page);
+// The labels a step shows from a text edit made with Auto Reflow off that neither a
+// reflow nor a Generate has placed, or null: the edited feature only. The walk Generates after every step, so an
+// Undo right after that edit returns its Result, and each further Undo returns the
+// Result the step before it showed. Every other step and label answers for the
+// current state.
+/**
+ * @param {{ kind: string, feature?: string }} step
+ * @param {boolean} stepReflow
+ * @param {{ unplaced: { id: string } | null } | undefined} previous
+ * @returns {{ id: string } | null}
+ */
+export const unplacedLabels = (step, stepReflow, previous) => {
+  if (step.kind === 'undo') return previous?.unplaced ?? null;
+  if (step.kind !== 'labelText' || stepReflow) return null;
+  return { id: String(step.feature).split(', feature ')[1] };
 };
 
-// The fixture: its drawing opened as the parity specs open it (labels drawn
-// outside), then the other drawing with a Result, then its drawing shown.
-const openFixture = async (page, fixture, reflow) => {
-  await open(page, { mode: fixture.mode, results: fixture.results, reflow: reflow ? 'on' : 'off' });
-  await switchDrawing(page, otherMode(fixture.mode));
-  if (fixture.mode === 'circular') {
-    await page.evaluate(async (text) => {
-      const app = window.__GBDRAW_APP__;
-      app.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'forced_label_underlay.gb', { type: 'text/plain', lastModified: 1000 }));
-      await window.Vue.nextTick();
-    }, readFileSync(SINGLE_FIXTURE, 'utf8'));
-    await settleLive(page);
-    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_labels_linear = 'all'; });
-  } else {
-    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(SINGLE_FIXTURE);
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
-      .toBeGreaterThan(0);
-    await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
-    await settleLive(page);
-  }
-  await generate(page);
-  const otherFloor = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
-  await switchDrawing(page, fixture.mode);
-  return { [otherMode(fixture.mode)]: otherFloor };
-};
+// The fixture opened with both drawings holding a Result; the floor of the
+// other drawing's History is where its opening ends.
+const openFixture = async (page, fixture, reflow) => ({
+  [otherMode(fixture.mode)]: await openBothDrawings(page, { mode: fixture.mode, results: fixture.results, reflow: reflow ? 'on' : 'off' })
+});
 
 // The file each drawing draws.
 const fileOf = (fixture, drawingId) => (drawingId === 'circular' && fixture.mode === 'circular' ? fixture.results : 'single');
@@ -646,7 +632,7 @@ const bindLabels = (page, key) => evaluateWithRetainedPromise(page, async (targe
  * @typedef {{ seed: number, title: string, fixture: string, reflow: boolean, steps: RecordedStep[], shrink?: object }} WalkRecord
  */
 /** @typedef {{ phase: string, drawing: string, slices: string[] }} IsolationChange */
-/** @typedef {{ index: number, kind: string, differences: string[], isolation: IsolationChange[] }} StepResult */
+/** @typedef {{ index: number, kind: string, unplaced: { id: string } | null, differences: string[], isolation: IsolationChange[] }} StepResult */
 /**
  * Where the steps of a run come from: the walk draws them, a replay reads
  * them. Each returns null when the step cannot apply in `state`.
@@ -776,9 +762,10 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
     const isolation = BARRIER_KINDS.includes(record.step.kind) ? [] : isolationChanges('the step', before, afterStep,
       Object.keys(before.drawings).filter((drawingId) => record.step.kind === 'drawingSwitch' || drawingId !== before.active));
     if (record.step.kind === 'load') for (const drawingId of Object.keys(floors)) delete floors[drawingId];
+    const unplaced = unplacedLabels(record.step, stepReflow, results.at(-1));
     let differences = [];
     try {
-      await expectLiveEqualsGenerate(page, { label: `step ${index} (${record.step.kind})` });
+      await expectLiveEqualsGenerate(page, { label: `step ${index} (${record.step.kind})`, unplaced });
     } catch (error) {
       // expectLiveEqualsGenerate fails with the unexpected differences as `actual`.
       if (!Array.isArray(error?.matcherResult?.actual)) {
@@ -791,7 +778,7 @@ const runSteps = async (page, { fixture, reflow, planned, source, sessionPath, r
     const afterGenerate = await sliceHashes(page);
     isolation.push(...isolationChanges('Generate', afterStep, afterGenerate,
       Object.keys(afterStep.drawings).filter((drawingId) => drawingId !== afterStep.active)));
-    results.push({ index, kind: record.step.kind, differences, isolation });
+    results.push({ index, kind: record.step.kind, unplaced, differences, isolation });
   }
   return { records, results };
 };

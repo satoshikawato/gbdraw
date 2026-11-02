@@ -89,7 +89,7 @@ for (const composite of [false, true]) {
         for (const invalid of allPlacements.filter((value) => !enabled.includes(value))) {
           const rejected = await page.evaluate(({ feature, invalid }) => {
             try { window.__GBDRAW_APP__.featurePlacementActions.setPlacement([feature], invalid); return false; }
-            catch (error) { return error.message.includes('Unavailable'); }
+            catch (error) { return /no feature track for this placement|not in the displayed Result/.test(error.message); }
           }, { feature, invalid });
           expect(rejected).toBe(true);
         }

@@ -1,7 +1,7 @@
 // @ts-check
 // UJ-06 (Owner 2026-10-08): the Gallery catalog that this origin serves is the
 // one source of the empty state's examples. gbdraw.app serves it; the pip GUI
-// does not ship it, so there the list is empty and Load an example is absent.
+// does not ship it, so there the list is empty and Open Gallery example is absent.
 // #1383 (PD-OI-108): an example whose catalog entry has a published tutorial
 // carries the address of that tutorial, which the chooser and the notice after
 // Load example link to.

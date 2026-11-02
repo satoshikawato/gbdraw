@@ -918,6 +918,10 @@ export const createFeatureLabelActions = ({
 
   /** @param {Element} svg */
   const refreshEditableList = (svg) => {
+    // Text typed in the Features list and not committed stays through a rerender.
+    const typed = new Map(editableLabels.value
+      .filter((/** @type {EditableLabelEntry} */ entry) => entry.featureId && entry.draftText !== entry.text)
+      .map((/** @type {EditableLabelEntry} */ entry) => [entry.featureId, entry.draftText]));
     /** @type {EditableLabelEntry[]} */
     const nextEntries = [];
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl, index) => {
@@ -934,7 +938,7 @@ export const createFeatureLabelActions = ({
         sourceText,
         featureId,
         kind,
-        draftText: text
+        draftText: typed.get(featureId) ?? text
       });
     });
     editableLabels.value = nextEntries;
@@ -1534,9 +1538,7 @@ export const createFeatureLabelActions = ({
     const next = [];
     if (normalizeVisibilityMode(rowOf(drawing, clicked.feat)?.labelVisibility) === 'on') {
       next.push(blocker === 'hidden' ? t('On applies when the feature is shown.') : t('On applies when the label can be drawn.'));
-    } else if (!blocker && draft === 'default') {
-      next.push(t('Choose On to show it.'));
-    } else if (!blocker) {
+    } else if (!blocker && draft !== 'default') {
       return '';
     }
     const note = LABEL_ABSENCE_REASONS[labelAbsenceReason(drawing, feature, diagramOptions)]?.note;
@@ -1845,7 +1847,7 @@ export const createFeatureLabelActions = ({
         .map((sourceText) => `*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${
           normalizeTsvCell(drawing.labelTextBulkOverrides[sourceText])}`);
     if (rows.length === 0) {
-      showNotice({ text: joinSentences(t('There are no label rules to export.'), t('Export Feature Edits TSV writes per-feature label edits.')) });
+      showNotice({ text: t('There are no label rules to export.') });
       return;
     }
     const selectedIdx = selectedResultIndex.value;

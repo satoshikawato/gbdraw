@@ -77,10 +77,11 @@ export const losatSearchTask = (args) => {
 /**
  * Whether Generate may reuse a raw entry's rows, by the runtime that searched them. A CLI search and this LOSAT
  * Wasm build are always reused. Rows of the Wasm of gbdraw 0.14.4 and earlier (`version: null`) and rows with no
- * runtime record (Sessions before version 44, promoted legacy protein caches) are reused only for the searches
- * that Wasm gives the same rows as this build: LOSATP, and LOSATN task megablast (#1540's engine parity). Its
- * LOSATN task blastn gave other E-values and hits, its task dc-megablast ran blastn (OV-2377), and its TLOSATX
- * rows came in another order, so those are searched again once. So are rows of any other Wasm build.
+ * runtime record (Sessions before version 44, promoted legacy protein caches) are reused only for LOSATP, whose
+ * rows that Wasm gives as this build does (measured on the Vibrio check and three MjeNMV and LvMJNV pairs). LOSATN
+ * of any task is searched again once: megablast rows differ on MjeNMV x MelaMJNV (538 and 531), blastn gave other
+ * E-values and hits, dc-megablast ran blastn (OV-2377). So are TLOSATX rows, which came in another order, and rows
+ * of any other Wasm build.
  * @param {unknown} entry
  * @returns {boolean}
  */
@@ -89,7 +90,7 @@ export const isReusableLosatEntry = (entry) => {
   const runtime = isPlainObject(entry.runtime) ? entry.runtime : null;
   if (runtime !== null && (runtime.source !== 'wasm' || runtime.version === LOSAT_WASM_BUILD.version)) return true;
   if (runtime !== null && runtime.version !== null) return false;
-  return entry.program === 'blastp' || (entry.program === 'blastn' && losatSearchTask(entry.args) === 'megablast');
+  return entry.program === 'blastp';
 };
 
 // Default raw LOSAT TSV name of a Linear edge; the CLI port is

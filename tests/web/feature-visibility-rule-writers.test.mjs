@@ -321,10 +321,11 @@ export const templatePaintWriters = (html) => [
 // an action other than the transition's.
 export const templateRuleWriters = (html) => {
   const writers = templateWriters(html, [NAME]);
-  const rowsStart = html.search(new RegExp(`v-for="\\(rule, i\\) in ${NAME}"`));
-  const rowsEnd = html.indexOf(`v-if="${NAME}.length === 0"`, rowsStart);
-  if (rowsStart < 0 || rowsEnd < 0) return [...writers, 'rule rows: markup not found; update this guard'];
-  const rows = html.slice(rowsStart, rowsEnd);
+  // The rule rows are the one element that iterates the rules.
+  const forAt = html.search(new RegExp(`v-for="\\(rule, i\\) in ${NAME}"`));
+  if (forAt < 0) return [...writers, 'rule rows: markup not found; update this guard'];
+  const rowsStart = html.lastIndexOf('<', forAt);
+  const rows = elementAt(html, forAt);
   for (const match of rows.matchAll(BINDINGS)) {
     const [, attribute, expression] = match;
     const action = expression.match(/^\s*([\w$]+)\s*\(/)?.[1];

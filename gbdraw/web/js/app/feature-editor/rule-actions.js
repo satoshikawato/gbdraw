@@ -14,7 +14,7 @@ import { isCardRow, serializeSpecificRules, withoutImportedRows } from '../../se
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, drawnRuleMatches, legendColorCopies, legendRowRules, listedRuleRowRemoval,
-  prepareSpecificColorImport, rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions
+  prepareSpecificColorImport, rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions, specificRuleHasQualifier
 } from '../../services/specific-color-rules.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
@@ -674,6 +674,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const current = drawing.manualSpecificRules[index];
     if (!current) return;
     if (field === 'val') return applySpecificRulePattern(drawing, current, value);
+    // OV-2435: a rule keeps its qualifier; the field shows it again, as after a refused write.
+    if (field === 'qual' && !specificRuleHasQualifier({ qual: value })) {
+      if (input) input.value = current.qual;
+      return false;
+    }
     const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
     return commitPrepared(drawing, reviseRow(current, { [field]: nextValue, fromFile: false }), msg('Edit specific color rule'), () => {}, input).finally(() => {
       if (input?.isConnected && drawing.manualSpecificRules.includes(current)) input.value = current[field] ?? '';
@@ -846,7 +851,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (!newSpecRule.val) return;
+    // OV-2435: the Add button is disabled without a qualifier, by this same check.
+    if (!newSpecRule.val || !specificRuleHasQualifier(newSpecRule)) return;
 
     // One question names every reason the pattern may match slowly.
     const pattern = String(newSpecRule.val);
@@ -864,7 +870,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
         actions: [{ id: 'add', label: t('Add rule'), tone: 'primary' }],
         cancelLabel: t('Edit pattern')
       });
-      if (choice !== 'add' || newSpecRule.val !== pattern) return;
+      if (choice !== 'add' || newSpecRule.val !== pattern || !specificRuleHasQualifier(newSpecRule)) return;
       const busy = state.sessionOperationAvailability?.();
       if (busy) return busy;
     }

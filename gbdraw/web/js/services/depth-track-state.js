@@ -70,7 +70,6 @@ import { normalizeOptionalText } from './track-slot-display.js';
  * @property {DepthSlotRow[]} [slots]
  * @property {number} [removedIndex] The logical series that was removed.
  * @property {number} [activeCount] The series count after the removal.
- * @property {(slot: DepthSlotRow) => boolean} [managedPredicate]
  */
 
 /**
@@ -78,7 +77,6 @@ import { normalizeOptionalText } from './track-slot-display.js';
  * @property {DepthSlotRow[]} [slots]
  * @property {number} [activeCount] The drawing's series count.
  * @property {Iterable<number>} [sourced] Series indexes with a source; without it every series has one.
- * @property {(slot: DepthSlotRow) => boolean} [managedPredicate]
  */
 
 /**
@@ -86,7 +84,15 @@ import { normalizeOptionalText } from './track-slot-display.js';
  * @property {DepthSlotRow[]} [slots]
  * @property {Iterable<number>} [previousSourced] Series indexes with a source before.
  * @property {Iterable<number>} [sourced] Series indexes with a source after.
- * @property {(slot: DepthSlotRow) => boolean} [managedPredicate]
+ */
+
+/**
+ * What a removal of Depth sources does to a stack, read before it runs.
+ * @typedef {object} DepthSourceLoss
+ * @property {ReadonlySet<string>} leaving The slot ids it takes out of what the stack can draw.
+ * @property {ReadonlySet<string>} stayingOn The slot ids of the rows it leaves on, in the stack, with no source.
+ * @property {(turnedOff: ReadonlySet<string>) => readonly number[]} emptySeries The series that stay without a
+ *   file and that Generate then refuses, once the question's choice also turns off the rows `turnedOff`.
  */
 
 /**
@@ -672,8 +678,7 @@ const disableInvalidManualDepthSlot = (slot, removedTrackIndex = null) => {
 export const reindexDepthSlots = ({
   slots,
   removedIndex,
-  activeCount,
-  managedPredicate = isDefaultManagedDepthSlot
+  activeCount
 } = {}) => {
   const idx = Number(removedIndex);
   const count = Math.max(0, Number(activeCount) || 0);
@@ -688,7 +693,7 @@ export const reindexDepthSlots = ({
       return;
     }
     const oldTrackIndex = depthSlotTrackIndex(slot);
-    const isManaged = managedPredicate(slot);
+    const isManaged = isDefaultManagedDepthSlot(slot);
     if (oldTrackIndex === null || oldTrackIndex === idx) {
       if (!isManaged) nextSlots.push(disableInvalidManualDepthSlot(slot, oldTrackIndex ?? idx));
       return;
@@ -703,6 +708,63 @@ export const reindexDepthSlots = ({
     nextSlots.push(next);
   });
   return nextSlots;
+};
+
+/**
+ * The ids of the Depth rows a Depth source change takes out of what the stack
+ * can draw: a row on before and not on after, and a row of either state that
+ * has gone. The change itself builds `after`, so this restates no rule of it.
+ * @param {readonly DepthSlotRow[]} before
+ * @param {readonly DepthSlotRow[]} after
+ * @returns {Set<string>}
+ */
+export const depthRowsLeaving = (before, after) => {
+  const ids = new Set(after.map((slot) => String(slot.id)));
+  const on = new Set(after.filter((slot) => slot.enabled !== false).map((slot) => String(slot.id)));
+  return new Set(before
+    .filter((slot) => isDepthSlot(slot) && !on.has(String(slot.id)) && (slot.enabled !== false || !ids.has(String(slot.id))))
+    .map((slot) => String(slot.id)));
+};
+
+/**
+ * The removal of Depth series `removedIndex`, `activeCount` series staying
+ * (`reindexDepthSlots`). No series stays empty and no row stays on: its rows
+ * leave or turn off.
+ * @param {readonly DepthSlotRow[]} slots
+ * @param {number} removedIndex
+ * @param {number} activeCount
+ * @returns {DepthSourceLoss}
+ */
+export const depthSeriesRemovalLoss = (slots, removedIndex, activeCount) => ({
+  leaving: depthRowsLeaving(slots, reindexDepthSlots({ slots: [...slots], removedIndex, activeCount })),
+  stayingOn: new Set(),
+  emptySeries: () => []
+});
+
+/**
+ * A change of the series with a source, from the reconcile it runs. A series
+ * that loses its last source stays (PD-OI-025), and Generate refuses it when
+ * it asks for Depth (`drawsDepth`, read for the stack the change and the
+ * question's choice leave) while another series has a source; with no source
+ * left the drawing draws no Depth (`buildDepthResources` in session-request.js).
+ * @param {DepthSlotRow[]} slots
+ * @param {number[]} previousSourced
+ * @param {number[]} sourced
+ * @param {(rows: readonly DepthSlotRow[]) => boolean} drawsDepth Whether Generate asks for Depth with the stack's
+ *   rows `rows` (`draftDrawsDepth` of the drawing).
+ * @returns {DepthSourceLoss}
+ */
+export const depthSourceLoss = (slots, previousSourced, sourced, drawsDepth) => {
+  const lost = previousSourced.filter((trackIndex) => !sourced.includes(trackIndex));
+  const { slots: after } = reconcileManagedDepthSlots({ slots, previousSourced, sourced });
+  return {
+    leaving: depthRowsLeaving(slots, after),
+    stayingOn: new Set(after
+      .filter((slot) => isDepthSlot(slot) && slot.enabled !== false && lost.includes(/** @type {number} */ (depthSlotTrackIndex(slot))))
+      .map((slot) => String(slot.id))),
+    emptySeries: (turnedOff) => (sourced.length > 0
+      && drawsDepth(after.map((slot) => (turnedOff.has(String(slot.id)) ? { ...slot, enabled: false } : slot))) ? lost : [])
+  };
 };
 
 /**
@@ -721,13 +783,11 @@ const isDepthSlot = (slot) => Boolean(slot) && String(slot.renderer || '') === '
 
 // What a Depth row keeps when its series has no Depth source (PD-OI-058,
 // PD-OI-083, BA-OD94), the one rule of a Depth source change and of Load: a
-// managed row goes with the source; a manual row stays as the user set it, and
+// managed row goes with the source; a row turned off stays off, so a file added
+// again does not turn it back on; a manual row stays as the user set it, and
 // its row issue says that the series has no source.
-/**
- * @param {DepthSlotRow} slot
- * @param {(slot: DepthSlotRow) => boolean} managedPredicate
- */
-const keepsDepthRowWithoutSource = (slot, managedPredicate) => !managedPredicate(slot);
+/** @param {DepthSlotRow} slot */
+const keepsDepthRowWithoutSource = (slot) => slot.enabled === false || !isDefaultManagedDepthSlot(slot);
 
 // A stack's Depth rows fit to the drawing's `activeCount` series: a row of a
 // series without a source keeps or loses it by `keepsDepthRowWithoutSource`;
@@ -736,8 +796,7 @@ const keepsDepthRowWithoutSource = (slot, managedPredicate) => !managedPredicate
 export const dropInvalidManagedDepthSlots = ({
   slots,
   activeCount,
-  sourced,
-  managedPredicate = isDefaultManagedDepthSlot
+  sourced
 } = {}) => {
   const count = Math.max(0, Number(activeCount) || 0);
   /** @type {Set<number | null> | null} */
@@ -748,9 +807,9 @@ export const dropInvalidManagedDepthSlots = ({
       if (!isDepthSlot(slot)) return cloneSlot(slot);
       const trackIndex = depthSlotTrackIndex(slot);
       if (namesNoDepthSeries(slot, count)) {
-        return managedPredicate(slot) ? null : disableInvalidManualDepthSlot(slot, trackIndex);
+        return isDefaultManagedDepthSlot(slot) ? null : disableInvalidManualDepthSlot(slot, trackIndex);
       }
-      if (withSource && !withSource.has(trackIndex) && !keepsDepthRowWithoutSource(slot, managedPredicate)) return null;
+      if (withSource && !withSource.has(trackIndex) && !keepsDepthRowWithoutSource(slot)) return null;
       const next = cloneSlot(slot);
       next.params.track_index = trackIndex;
       return next;
@@ -762,7 +821,7 @@ export const dropInvalidManagedDepthSlots = ({
  * Managed Depth row lifecycle (PD-OI-058), shared by both modes. Only the
  * transitions that change Depth sources call it, with the logical series
  * indexes that had a source before and after the change:
- * - a series that loses its last source loses its managed rows;
+ * - a series that loses its last source loses its managed rows that are on;
  * - a series that gains its first source gets one managed row, returned in
  *   `additions`, unless a row (enabled or disabled) already references it.
  * Manual rows are never changed. A manual row left on a series without a
@@ -772,8 +831,7 @@ export const dropInvalidManagedDepthSlots = ({
 export const reconcileManagedDepthSlots = ({
   slots,
   previousSourced = [],
-  sourced = [],
-  managedPredicate = isDefaultManagedDepthSlot
+  sourced = []
 } = {}) => {
   // depthSlotTrackIndex returns null for a row bound to no series, so the lookups below may ask for null.
   /** @type {Set<number | null>} */
@@ -781,7 +839,7 @@ export const reconcileManagedDepthSlots = ({
   /** @type {Set<number | null>} */
   const after = new Set(sourced);
   const kept = (Array.isArray(slots) ? slots : []).filter((slot) => {
-    if (!isDepthSlot(slot) || keepsDepthRowWithoutSource(slot, managedPredicate)) return true;
+    if (!isDepthSlot(slot) || keepsDepthRowWithoutSource(slot)) return true;
     const trackIndex = depthSlotTrackIndex(slot);
     return !before.has(trackIndex) || after.has(trackIndex);
   });

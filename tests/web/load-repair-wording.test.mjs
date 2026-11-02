@@ -50,6 +50,12 @@ test('in Japanese, a repair sentence is translated whole, with no English word o
   }
 });
 
+test('a Session part with no wording of its own names its path once', () => {
+  assert.deepEqual(items([{ code: 'session-part-dropped', path: 'someSessionPart', effect: 'dropped' }]), [
+    'Session file: someSessionPart could not be read and is left out.'
+  ]);
+});
+
 test('the names in a repair sentence are a list: "a and b" in English, the locale pattern in Japanese', async () => {
   const fields = (count) => Array.from({ length: count }, (_, index) => (
     { code: 'session-field-dropped', path: `field${index + 1}`, effect: 'dropped' }

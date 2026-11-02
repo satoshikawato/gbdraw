@@ -21,6 +21,7 @@ const {
   buildSourceRecipe,
   quoteShellArg,
   reproducibilityLabel,
+  shownRunInfoNoteParts,
   summarizeLosatRuntimes
 } = await import(pathToFileURL(modulePath));
 const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
@@ -1753,4 +1754,44 @@ test('OV-1678: in Simplified Chinese the Run info shows its notes, files descrip
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }
+});
+
+// ui-copy-diet (2026-11-02): the Run info keeps every note; the tab shows only the notes a reader acts on, and
+// says what a Source recipe helper needs in one line.
+test('the Run info tab shows the notes a reader acts on, from the stored notes', async () => {
+  const { errorText } = await import(pathToFileURL(join(tempDir, 'js', 'utils', 'error-text.js')));
+  const helper = (count) => buildRunInfo({
+    mode: 'linear',
+    args: ['--gbk', '/seq_0.gb', '/seq_1.gb', ...Array.from({ length: count }, (_, index) => ['-b', `/blast_${index}.txt`]).flat()],
+    fileMetadata: {
+      '/seq_0.gb': { name: 'alpha.gb', slot: 'files.linearSeqs[0].gb', kind: 'uploaded' },
+      '/seq_1.gb': { name: 'beta.gb', slot: 'files.linearSeqs[1].gb', kind: 'uploaded' },
+      ...Object.fromEntries(Array.from({ length: count }, (_, index) => [`/blast_${index}.txt`,
+        { name: `pair_${index}.tsv`, slot: `generatedFiles.losat_blasts[${index}]`, kind: 'generated' }]))
+    },
+    losatComparisons: true
+  }).reproducibility;
+  for (const count of [1, 2]) {
+    const stored = helper(count);
+    assert.equal(stored.notes.length, 3, 'the stored notes keep the helper and Session restore notes');
+    assert.deepEqual(shownRunInfoNoteParts(stored.noteParts).map((part) => errorText([part])), [
+      count === 1
+        ? 'Needs pair_0.tsv from "Download reproducibility files"'
+        : 'Needs pair_0.tsv, pair_1.tsv from "Download reproducibility files"',
+      LOSAT_DATABASE_SCOPE_NOTE
+    ]);
+  }
+  const plain = buildRunInfo({ mode: 'circular', args: ['--gbk', '/seq.gb'], fileMetadata: { '/seq.gb': { name: 'seq.gb', kind: 'uploaded' } } });
+  assert.deepEqual(plain.reproducibility.notes, ['The Source recipe can be rerun with the uploaded file names shown here.']);
+  assert.deepEqual(shownRunInfoNoteParts(plain.reproducibility.noteParts), []);
+  const unread = { text: 'Some browser virtual paths could not be mapped to visible file names, so this command is only an approximation.' };
+  assert.deepEqual(shownRunInfoNoteParts([{ text: 'Source recipe unavailable: {reason}', params: { reason: { text: 'x' } } }, unread]), [unread]);
+});
+
+test('the download description counts its helper files', () => {
+  const exactFile = (name) => ({ name, slot: 'generatedFiles.canonical_render_session', kind: 'generated' });
+  const description = (paths) => buildRunInfo({ mode: 'circular', exactReplayArgs: ['--session', ...paths],
+    fileMetadata: Object.fromEntries(paths.map((path) => [path, exactFile(`${path.slice(1)}.json`)])) }).downloadBundle.descriptionParts.at(-1);
+  assert.equal(description(['/one']).text, 'Exact replay file: {files}.');
+  assert.equal(description(['/one', '/two']).text, 'Exact replay files: {files}.');
 });

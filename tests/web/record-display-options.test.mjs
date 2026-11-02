@@ -360,7 +360,7 @@ test('same-name, same-content source replacement does not retain old feature cap
   assert.equal(model.state.files.c_gb.name, model.file.name);
   assert.notEqual(model.state.files.c_gb, model.file);
   assert.deepEqual(model.enabled(), []);
-  assert.throws(() => model.actions.setPlacement([model.feature], 'main'), /Unavailable/);
+  assert.throws(() => model.actions.setPlacement([model.feature], 'main'), /A selected feature is not in the displayed Result\./);
 });
 
 test('isCurrentFeature is a pure check of the committed record, its bound source, and the saved resource', () => {
@@ -459,7 +459,7 @@ test('unsupported draft lanes remain unavailable independently of current placem
   model.state.form.track_type = 'tuckin';
   assert.equal(model.actions.valueFor(model.feature), 'outward');
   assert.deepEqual(model.enabled(), ['auto', 'main']);
-  assert.throws(() => model.actions.setPlacement([model.feature], 'inward'), /Unavailable/);
+  assert.throws(() => model.actions.setPlacement([model.feature], 'inward'), /The current track settings have no feature track for this placement\./);
 });
 
 

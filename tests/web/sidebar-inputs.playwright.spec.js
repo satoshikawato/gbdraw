@@ -59,7 +59,7 @@ test('OV-373: annotation rows name their record before Inspect', async ({ page }
   await loadSession(page, 'tobacco-chloroplast.gbdraw-session.json');
   const panel = page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
   await panel.locator('summary').first().click();
-  await expect(panel.locator('[data-annotation-record-caption]').first()).toHaveText('Record: NC_001879.2');
+  await expect(panel.locator('[data-annotation-record-caption]').first()).toHaveText('NC_001879.2');
   await expect(panel).not.toContainText('unavailable');
 });
 

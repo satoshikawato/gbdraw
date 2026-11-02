@@ -7,7 +7,7 @@ import {
   captureRightDrawerState,
   restoreRightDrawerState
 } from '../../gbdraw/web/js/services/right-drawer-state.js';
-import { settingApplicationNote } from '../../gbdraw/web/js/services/setting-application.js';
+import { settingApplicationHelp } from '../../gbdraw/web/js/services/setting-application.js';
 import { loadPageVue } from './helpers/vue-runtime.mjs';
 
 const ref = (value) => ({ value });
@@ -142,9 +142,9 @@ test('the Legend tab help does not claim a fill color edit it lacks (PV-12)', ()
   const end = html.indexOf('v-if="isFeatureDrawerMounted"', start);
   assert.ok(start >= 0 && end > start, 'the Legend tab markup is found');
   const legendTab = html.slice(start, end);
-  // The tab's help binds the SETTING_APPLICATION owner's note for the legend editor.
-  assert.match(legendTab, /<help-tip\b[^>]*:text="settingApplicationNote\('legend-editor'\)\.text/);
-  const help = settingApplicationNote('legend-editor').text;
+  // The tab's help binds the SETTING_APPLICATION owner's sentence for the legend editor.
+  assert.match(legendTab, /<help-tip\b[^>]*:text="settingApplicationHelp\('legend-editor'\)/);
+  const help = settingApplicationHelp('legend-editor');
   assert.match(help, /^Live edit:/);
   assert.match(legendTab, /renameLegendEntry\(|deleteLegendEntry\(|setLegendEntryStrokeColorValue\(/);
   const claimsFillColor = /\bcolou?rs?\b/i.test(help.replace(/\bstroke colou?rs?\b/gi, ''));
