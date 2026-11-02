@@ -545,7 +545,7 @@ File**, or both the **GFF3 File** and **FASTA File**; no separate load action is
 needed. **Source records** shows **Inspecting source records…** and then the
 count, such as **1 source record inspected**. Each record's rotation row
 appears at the same time, before **Generate Diagram**. A GFF3 file alone shows
-**Upload both GFF3 and FASTA files to inspect records.** Replacing the file
+no count until its FASTA file is chosen. Replacing the file
 inspects the new source. For GFF3 + FASTA, the records are the sequences that have GFF3 rows, in FASTA
 order, as on the command line. A FASTA sequence with no GFF3 row is not offered.
 To draw it, add a `region` row to the GFF3.
@@ -576,7 +576,7 @@ Canvas uses a grid. Turn it off to select one record.** Select **Show
 Multi-Record Canvas setting** to move to that checkbox.
 
 **Single-record crop, orientation and titles** contains **Record label**,
-**Subtitle**, **Region (optional)** with 1-based inclusive **Start** and **End**,
+**Subtitle**, **Region** with 1-based inclusive **Start** and **End**,
 and **Reverse complement**. These controls are editable only when the next
 diagram draws one record: **Multi-Record Canvas** is off, and the source has one
 record or **Record** names one. With several records and **All records**, the
@@ -1138,7 +1138,7 @@ drawn records up at one named feature, as `gbdraw linear --anchor_feature`
 does, with no comparison needed. Type a `KEY=VALUE` selector such as
 `gene=COX1` in **Align at feature** and choose **Align at feature…**. Python
 resolves it on the Result as drawn and lists, per record, whether it keeps its
-place or moves, and by how many px. **Apply** writes the record positions once,
+place or moves, and by how many px. **Align records** writes the record positions once,
 as one History step, and draws them; later changes do not align the records
 again. Applying clears an active Similarity alignment, as a record drag does.
 A selector that no record matches, matches at different starts in one record,
@@ -1192,8 +1192,8 @@ feature's type and those for every feature type (`*` in a color table), each
 once; choosing one puts the feature into that group with its name and its
 color. The **Legend name** field offers no suggestions while you type; the
 list is the only place that offers an existing group. When the
-feature has no label, one line names the reason, for example `No label shown (Show Labels = None).
-Choose On to show it.` The **Similarity group** section follows when the
+feature has no label, one line names the reason, for example `No label shown (Show Labels = None).`
+The **Similarity group** section follows when the
 feature belongs to one: one line with the group ID, its name, and **N genes in
 M records**, then **Show in editor** and **Align…**, with **Review alignment
 options…** under **Align…**. **More** holds **Highlight**, **Clear highlight**,
@@ -1328,7 +1328,7 @@ runtime starts. A legend row that a color rule draws under the name of a
 generated row in another color (the two are then numbered, such as `rRNA (1)`
 and `rRNA (2)`) belongs to that rule: renaming it or changing its color edits
 the rule, and the generated row stays a legend-only row. The color scope dialog offers **This feature only** first, then,
-under **All features that share:**, the matching **Color rule**, **Legend item**, **Label**, and **Source label**
+under **All features sharing**, the matching **Color rule**, **Legend item**, **Label**, and **Source label**
 with their feature counts. **Label** and **Source label** become
 one anchored qualifier rule only when the selected features share one feature
 type, qualifier, and value and that rule matches exactly the intended loaded
@@ -1563,9 +1563,9 @@ the renderer's text measurements; Generate applies it. **Undo** and **Redo** tra
 editor changes. Each change of a checkbox, radio button, select, or button is one step. This
 holds whether you use the pointer, click its label text, or use the keyboard,
 and also when a text field had focus. A text field's edit is its own step. A file chosen for an input is one step, also when a button or label
-opens the picker, such as **Add Seq** or an uploaded BLAST row's **Comparison
-sequence (optional)**. In a Session whose Circular rings replay saved LOSAT
-rows, Undo and Redo of a ring change, such as **Remove series** or **Add Seq**,
+opens the picker, such as **Add comparison sequence** or an uploaded BLAST row's **Comparison
+sequence**. In a Session whose Circular rings replay saved LOSAT
+rows, Undo and Redo of a ring change, such as **Remove series** or **Add comparison sequence**,
 also restore those rows, so a custom stack keeps its ring rows and the next
 Generate gives the loaded diagram. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS), also while a
 select has focus. In a text field these keys keep the browser's text undo. Undo and Redo, like a failed Session Load, restore each setting exactly as
@@ -1791,7 +1791,8 @@ input files.
 from the original input files and public CLI settings; **Exact replay** uses the
 saved Session and saved analysis files of that Result. Both downloads refer to the
 successful Result, even when controls hold a newer draft. An unavailable Source
-recipe includes a reason; it does not silently omit unsupported settings.
+recipe is not shown in the tab; the Run info keeps its reason
+(`sourceRecipe.unavailableReason`), and it never silently omits unsupported settings.
 **Search runtime** lists the program and runtime of each displayed LOSAT
 result: the browser Wasm (`wasm`) with the LOSAT build that searched it (a result
 that gbdraw 0.14.4 or earlier searched reads `version not recorded`), or the kind,

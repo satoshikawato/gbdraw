@@ -403,7 +403,7 @@
     },
     {
       "title": "Color the gene groups",
-      "body": "The preview colors features by type: every CDS is the same blue, with tRNA, rRNA, and repeat_region in their own default colors. Open Colors, choose Plastid gene classes in Preset scheme, and click Apply. The built-in plastid table replaces the specific rules and gives each chloroplast gene group, such as photosystem I and II, ribosomal proteins, and NADH dehydrogenase, its own color and legend entry. Click Generate Diagram.",
+      "body": "The preview colors features by type: every CDS is the same blue, with tRNA, rRNA, and repeat_region in their own default colors. Open Colors, choose Plastid gene classes in Preset scheme, and click Apply preset. The built-in plastid table replaces the specific rules and gives each chloroplast gene group, such as photosystem I and II, ribosomal proteins, and NADH dehydrogenase, its own color and legend entry. Click Generate Diagram.",
       "table": {
         "columns": [
           "Setting",
@@ -443,7 +443,7 @@
           "media": {
             "src": "./media/tobacco-chloroplast/manual-05-01-preset-scheme.webp",
             "alt": "Colors card with the Preset scheme menu open and Plastid gene classes highlighted.",
-            "caption": "Open Preset scheme, choose the highlighted Plastid gene classes option, and click Apply."
+            "caption": "Open Preset scheme, choose the highlighted Plastid gene classes option, and click Apply preset."
           },
           "capture": {
             "source": "webapp",
@@ -731,7 +731,7 @@
             },
             "visibleText": [
               "Download TSV",
-              "Record: NC_001879.2"
+              "NC_001879.2"
             ],
             "visibleControls": [
               {

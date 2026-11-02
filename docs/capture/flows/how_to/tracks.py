@@ -844,7 +844,7 @@ def capture_gui_annotation_tracks(
         chooser.value.set_files(GUI_ANNOTATION_TABLE_PATH)
         annotation_set_id = page.get_by_label("Annotation set id", exact=True)
         expect(annotation_set_id).to_have_value("plastome_regions")
-        legend_label = page.get_by_placeholder("Set legend label (optional)")
+        legend_label = page.get_by_placeholder("Legend label")
         legend_label.fill("Plastome structural regions")
         expect(legend_label).to_have_value("Plastome structural regions")
         # A one-record input names the record instead of offering a select.

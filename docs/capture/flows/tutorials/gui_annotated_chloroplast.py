@@ -267,7 +267,7 @@ def _configure_gallery_presentation(page: Page) -> None:
     toggle_disclosure(colors)
     preset = page.get_by_label("Preset scheme", exact=True)
     preset.select_option(PLASTID_PRESET_ID)
-    preset.locator("xpath=..").get_by_role("button", name="Apply", exact=True).click()
+    preset.locator("xpath=..").get_by_role("button", name="Apply preset", exact=True).click()
     page.wait_for_function(
         "(count) => window.__GBDRAW_APP__?.manualSpecificRules?.length === count",
         arg=PLASTID_RULE_COUNT,
