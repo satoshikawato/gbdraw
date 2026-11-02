@@ -2301,7 +2301,7 @@
                     </button>
                 </div>
                 <div class="app-file-actions ml-2 flex gap-0.5 border-l border-slate-300 pl-2">
-                    <button data-history-managed @click="requestResetSettings" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" :title="t('Reset Settings')" :aria-label="t('Reset Settings')" :disabled="!semanticMutationAvailable">
+                    <button data-history-managed @click="requestResetSettings" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" :title="t('Reset Settings')" :aria-label="t('Reset Settings')" :disabled="Boolean(sessionOperationAvailability('not-during-run'))">
                         <i class="ph ph-arrow-clockwise" aria-hidden="true"></i> {{ t('Reset Settings') }}
                     </button>
                     <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button disabled:opacity-40 disabled:cursor-wait" :title="t('Save the current Result and settings draft without generating')" :aria-label="t('Save Session')" aria-describedby="session-save-help">
@@ -3635,7 +3635,7 @@
                                         <ul class="space-y-0.5"><li v-for="line in featureAnchorPreviewLines" :key="line">{{ line }}</li></ul>
                                         <p v-if="featureAnchorPreview.clearsAlignment">{{ t('Apply clears the active similarity alignment.') }}</p>
                                         <div class="grid grid-cols-2 gap-1">
-                                            <button type="button" data-history-managed class="btn btn-primary px-1 py-0.5 text-[10px]" @click="applyFeatureAnchor" :disabled="featureAnchorBusy || !semanticMutationAvailable" data-testid="linear-anchor-feature-apply">{{ t('Apply') }}</button>
+                                            <button type="button" data-history-managed class="btn btn-primary px-1 py-0.5 text-[10px]" @click="applyFeatureAnchor" :disabled="featureAnchorBusy || Boolean(sessionOperationAvailability('not-during-run'))" data-testid="linear-anchor-feature-apply">{{ t('Apply') }}</button>
                                             <button type="button" data-history-managed class="btn btn-secondary px-1 py-0.5 text-[10px]" @click="cancelFeatureAnchor" :disabled="featureAnchorBusy">{{ t('Cancel') }}</button>
                                         </div>
                                     </div>
@@ -3795,8 +3795,8 @@
                         <setting-note setting="pairwise-comparisons" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable"> {{ t('Run LOSAT') }}</label>
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable"> {{ t('Upload BLAST TSV') }}</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable || processing"> {{ t('Run LOSAT') }}</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable || processing"> {{ t('Upload BLAST TSV') }}</label>
                             </div>
                             <div v-if="circularConservation.source === 'upload'" class="space-y-2">
                                 <file-uploader
@@ -3924,10 +3924,11 @@
                                             <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" :aria-label="t('Comparison gencode {n}', { n: row.index + 1 })" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6" :disabled="!semanticMutationAvailable">
                                         </div>
                                     </div>
+                                    <!-- While a Generate runs, the controls that rewrite the ring series (these, Add Seq, and the source radios) are disabled: the overlay stops the pointer, not the keyboard (OV-2446). -->
                                     <div class="flex items-center gap-0.5">
-                                        <button :aria-label="t('Move series outward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!semanticMutationAvailable || (!canMoveCircularConservationSeries(row.index, -1))" :title="t('Move series outward')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
-                                        <button :aria-label="t('Move series inward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!semanticMutationAvailable || (!canMoveCircularConservationSeries(row.index, 1))" :title="t('Move series inward')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
-                                        <button :aria-label="t('Remove series')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" :title="t('Remove series')" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Move series outward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, -1))" :title="t('Move series outward')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Move series inward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, 1))" :title="t('Move series inward')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Remove series')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" :title="t('Remove series')" :disabled="!semanticMutationAvailable || processing"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                     </div>
                                 </div>
                                 <input
@@ -3938,8 +3939,8 @@
                                     accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
                                     @change="addCircularConservationComparisonFile"
                                     class="hidden"
-                                 :disabled="!semanticMutationAvailable">
-                                <button v-if="circularConservation.source === 'losat'" type="button" data-history-ignore class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker" :disabled="!semanticMutationAvailable">
+                                 :disabled="!semanticMutationAvailable || processing">
+                                <button v-if="circularConservation.source === 'losat'" type="button" data-history-ignore class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker" :disabled="!semanticMutationAvailable || processing">
                                     <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add Seq') }}
                                 </button>
                             </div>
@@ -6767,7 +6768,7 @@
                                     <button type="button"
                                             data-history-managed
                                             @click="alignByClickedOrthogroup($event)"
-                                            :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
+                                            :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
                                             :aria-busy="similarityAlignmentBusy"
                                             aria-describedby="clicked-alignment-action-description"
                                             class="min-w-0 px-2 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
@@ -6780,7 +6781,7 @@
                                                 data-history-managed
                                                 data-similarity-alignment-popup-review
                                                 @click="alignByClickedOrthogroup($event, 'review')"
-                                                :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
+                                                :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
                                                 :aria-busy="similarityAlignmentBusy"
                                                 aria-describedby="clicked-alignment-action-description"
                                                 class="match-link focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
@@ -6958,7 +6959,7 @@
                                             class="rounded-md border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed">{{ t('Apply when I Generate') }}</button>
                                     <button type="button"
                                             @click="applyFeatureRecordRotation"
-                                            :disabled="!semanticMutationAvailable || (!featureRecordRotationDraft.canApply || featureRecordRotationDraft.pending)"
+                                            :disabled="Boolean(sessionOperationAvailability('not-during-run')) || !featureRecordRotationDraft.canApply || featureRecordRotationDraft.pending"
                                             aria-describedby="feature-record-rotation-reason feature-record-rotation-pending feature-record-rotation-preview"
                                             class="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed">
                                         {{ featureRecordRotationDraft.pending ? t('Applying…') : t('Apply now') }}
@@ -8114,7 +8115,7 @@
                                 class="btn btn-secondary py-2 text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">{{ t('Cancel') }}</button>
                         <button type="button"
                                 @click="applySimilarityAlignmentDraft"
-                                :disabled="!semanticMutationAvailable || (!canApplySimilarityAlignment)"
+                                :disabled="Boolean(sessionOperationAvailability('not-during-run')) || !canApplySimilarityAlignment"
                                 aria-describedby="similarity-alignment-apply-reason"
                                 class="btn btn-primary py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
                             <span v-if="similarityAlignmentStatus === 'applying'">{{ t('Applying…') }}</span>
@@ -8525,7 +8526,7 @@
                                     <button type="button"
                                             data-history-managed
                                             @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event)"
-                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy"
+                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
                                             :aria-busy="similarityAlignmentBusy"
                                             aria-describedby="similarity-alignment-drawer-reason"
                                             :title="t('Align to the selected exact feature')"
@@ -8537,7 +8538,7 @@
                                             data-history-managed
                                             data-similarity-alignment-drawer-review
                                             @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event, 'review')"
-                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy"
+                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
                                             :aria-busy="similarityAlignmentBusy"
                                             aria-describedby="similarity-alignment-drawer-reason"
                                             :title="t('Review alignment options for the selected exact feature')"
@@ -8761,7 +8762,7 @@
                 <operation-error v-if="similarityAlignmentError" :error="similarityAlignmentError" :recovery="generationFailureRecovery" tabindex="-1" data-similarity-alignment-reset-error class="mb-2 text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"></operation-error>
                 <div class="flex justify-end gap-2">
                     <button type="button" @click="cancelSimilarityAlignmentReset" :disabled="similarityAlignmentBusy" class="btn btn-secondary">{{ t('Cancel') }}</button>
-                    <button type="button" @click="applySimilarityAlignmentReset" :disabled="!semanticMutationAvailable || (similarityAlignmentBusy)" class="btn btn-primary">{{ similarityAlignmentBusy ? t('Resetting…') : similarityAlignmentResetScope === 'positions-and-directions' ? t('Reset positions and directions') : t('Reset positions') }}</button>
+                    <button type="button" @click="applySimilarityAlignmentReset" :disabled="Boolean(sessionOperationAvailability('not-during-run')) || similarityAlignmentBusy" class="btn btn-primary">{{ similarityAlignmentBusy ? t('Resetting…') : similarityAlignmentResetScope === 'positions-and-directions' ? t('Reset positions and directions') : t('Reset positions') }}</button>
                 </div>
             </footer>
         </section>

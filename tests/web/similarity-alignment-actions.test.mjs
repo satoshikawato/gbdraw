@@ -408,6 +408,30 @@ test('canceled or stale resolved completion cannot install a plan or Result', as
   assert.equal(applying.actions.summary.value, null);
 });
 
+// While a Generate runs, the run refuses an Align and a Reset (`sessionOperationAvailability('not-during-run')`):
+// a refusal, not a failure, so no error is published and the Result stays (OV-2446).
+test('an Align or Reset run refused while a Generate runs publishes no error and keeps the Result', async () => {
+  const busy = { status: 'busy', reason: 'Generating diagram. Retry after generation finishes.' };
+  let refuse = true;
+  const f = create({ generation: async () => (refuse ? busy : { status: 'ok' }) });
+  const prior = f.state.results.value;
+  assert.deepEqual(await startAlign(f), busy);
+  assert.equal(f.state.errorLog.value, null);
+  assert.equal(f.actions.error.value, null);
+  assert.equal(f.state.results.value, prior);
+  assert.equal(f.history.getUndoCount(), 0);
+  f.actions.cancel();
+  refuse = false;
+  await startReview(f); f.actions.setDirectionMode('left'); assert.equal((await f.actions.applyDraft()).status, 'ok');
+  const aligned = f.state.results.value;
+  refuse = true;
+  assert.deepEqual(await f.actions.resetAlignment('positions'), busy);
+  assert.equal(f.state.errorLog.value, null);
+  assert.equal(f.actions.error.value, null);
+  assert.equal(f.state.results.value, aligned);
+  assert.equal(f.history.getUndoCount(), 1);
+});
+
 test('busy is synchronous, duplicate starts are ignored, and exact popup reference survives', async () => {
   const pending = deferred();
   const fixture = create({ members: [reference, otherReference, targetA, targetC],

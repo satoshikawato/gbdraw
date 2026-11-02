@@ -36,12 +36,16 @@ test('availability derives Session exclusivity and preparation from existing own
   // PD-OI-051 (D-37): draft edits stay available while Generate runs. Undo and
   // Redo use History availability instead (D-28, next test).
   assert.equal(sessionOperationAvailability(), null);
+  // Reset Settings and the Rotate, Align, and Align at feature runs wait for a run only (OV-2446).
+  assert.match(sessionOperationAvailability('not-during-run').reason, /Generating/);
   state.processing.value = false;
   state.labelReflowProcessing.value = true;
   assert.match(sessionOperationAvailability('save').reason, /Updating/);
+  assert.equal(sessionOperationAvailability('not-during-run'), null);
   state.labelReflowProcessing.value = false;
   state.sessionSavePending.value = true;
   assert.deepEqual(sessionOperationAvailability(), saving);
+  assert.deepEqual(sessionOperationAvailability('not-during-run'), saving);
   state.sessionImportPending.value = true;
   assert.match(sessionOperationAvailability('save').reason, /Loading/);
   state.sessionImportPending.value = false;
