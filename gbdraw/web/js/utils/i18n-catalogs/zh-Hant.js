@@ -1065,7 +1065,7 @@ export default Object.freeze({
   "Its style applies when the line is shown.": "該行顯示時才會套用其樣式。",
   "Its text is set in {names}, which are not part of gbdraw and are not loaded in this page.": "其文字使用的字型 {names} 不屬於gbdraw，也未在此頁面中載入。",
   "Its text is set in {names}, which is not part of gbdraw and is not loaded in this page.": "其文字使用的字型 {names} 不屬於gbdraw，也未在此頁面中載入。",
-  "Keep": "保持",
+  "Keep": "保持原樣",
   "Keep BLAST TSV but do not use it for #{from} to #{to}": "保留BLAST TSV，但不用於#{from}到#{to}",
   "Keep Full Definition with Plot Title": "顯示圖表標題時保留完整定義",
   "Keep GC content": "保留GC含量",
