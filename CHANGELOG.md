@@ -100,7 +100,11 @@ write-up of a release.
   **Run LOSAT**, could draw a ring's search under another ring's name.
   **Move series outward**, **Move series inward**, **Remove series**,
   **Add Seq**, **Run LOSAT**, **Upload BLAST TSV**, and **Reset Settings** are
-  now disabled while a Generate runs (OV-2446).
+  now disabled while a Generate runs. So are **Apply now** of
+  **Rotate record using this feature** and **Apply** of the alignment review and
+  of **Align at feature**: Rotate, Align, and Align at feature do not run during
+  a Generate. A Rotate reached by keyboard there dropped the Generate's result
+  (OV-2446).
 - Fixed: a threaded LOSAT search in the Web app could stop with "memory access
   out of bounds" and run the whole pair again (the console said "running the
   pair again"), or fail after the third stop. In Chromium a copy into memory

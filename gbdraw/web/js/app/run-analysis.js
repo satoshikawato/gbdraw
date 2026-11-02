@@ -5870,7 +5870,8 @@ export const createRunAnalysis = ({
     // A target-record transform and a label reflow draw the committed Results
     // again, with the settings and edits of the drawing they belong to.
     const drawing = displayedArtifactDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    // A run started while a Generate runs would replace the Result that Generate adopts (OV-2446).
+    const sessionBusy = state.sessionOperationAvailability?.('not-during-run');
     if (sessionBusy) return sessionBusy;
     /** @type {Record<string, any> | null} */
     let outcome = null;

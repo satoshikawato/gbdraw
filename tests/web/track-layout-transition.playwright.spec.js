@@ -1615,10 +1615,11 @@ test('a Rotate after a Remove and an Add Seq puts no edit on another ring', asyn
   } finally { await page.context().close(); }
 });
 
-// While a Generate runs, every control that rewrites the ring series is disabled (Run LOSAT and Upload BLAST TSV,
-// Move series, Remove series, Add Seq) and Reset Settings is refused, so a keyboard user behind the overlay cannot
-// change the rings either. A row moves to its ring's new key only if the rings at adoption are the rings the request
-// was built from; that compare stays for a change that does not come through these controls.
+// While a Generate runs, Run LOSAT and Upload BLAST TSV, Move series, Remove series, Add Seq, and Reset Settings are
+// disabled, and Reset Settings is refused, so a keyboard user behind the overlay cannot change the rings with them.
+// The Apply buttons of Rotate, Align, and Align at feature are disabled and their runs refused too (Rotate: the test after next).
+// A row moves to its ring's new key only if the rings at adoption are the rings the request was built from; that
+// compare stays for a change that does not come through these controls.
 const revealRingControls = (page) => reveal(page.locator('button[aria-label="Add Seq"], button:has-text("Add Seq")').first());
 const expectEachRowOnItsRing = async (page) => {
   const rows = await ringRows(page);
@@ -1654,23 +1655,25 @@ const releaseSearch = async (page) => {
   await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 120000 });
   await settleLive(page);
 };
+// The stub search waits for `releaseSearch` when `holdNextSearch` asked it to.
+const makeSearchHoldable = (page) => page.evaluate(() => {
+  const search = window.__GBDRAW_LOSAT_EXECUTOR__;
+  window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+    if (window.__HOLD_SEARCH__) {
+      window.__HOLD_SEARCH__ = false;
+      await new Promise((resolve) => { window.__RELEASE_SEARCH__ = resolve; });
+      if (window.__FAIL_SEARCH__) throw new Error('stub search failure');
+    }
+    return search(jobs);
+  };
+});
 
 test('the ring controls are disabled while a Generate runs, and work again after it ends or fails', async ({ browser }) => {
   test.setTimeout(420000);
   const page = await loadAddedRings(browser);
   try {
     await revealRingControls(page);
-    await page.evaluate(() => {
-      const search = window.__GBDRAW_LOSAT_EXECUTOR__;
-      window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
-        if (window.__HOLD_SEARCH__) {
-          window.__HOLD_SEARCH__ = false;
-          await new Promise((resolve) => { window.__RELEASE_SEARCH__ = resolve; });
-          if (window.__FAIL_SEARCH__) throw new Error('stub search failure');
-        }
-        return search(jobs);
-      };
-    });
+    await makeSearchHoldable(page);
     let chosenFiles = 0;
     page.on('filechooser', async (chooser) => {
       chosenFiles += 1;
@@ -1709,10 +1712,55 @@ test('the ring controls are disabled while a Generate runs, and work again after
   } finally { await page.context().close(); }
 });
 
+// Rotate, Align, and Align at feature run the committed request again and replace the Result. While a Generate runs,
+// their Apply buttons are disabled and the run they start is refused, so the Generate keeps its Result and its rings.
+// This test reaches Rotate by keyboard; Align and Align at feature share the refusal (`runCommittedCanonicalCandidate`).
+test('Rotate Apply now reached by keyboard while a Generate runs is disabled and runs nothing', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await loadAddedRings(browser);
+  try {
+    await expectGenerates(page);
+    await revealRingControls(page);
+    await makeSearchHoldable(page);
+    // Out of file order, so a run that adopts other rings shows in the series.
+    await ringControls(page)[0].click();
+    expect(await ringLabels(page)).toEqual(['ringb', 'ringa', 'ringc']);
+    await page.evaluate(() => {
+      window.__GBDRAW_APP__.clearLosatCache();
+      window.__GBDRAW_APP__.richFeaturePopup = true;
+    });
+    await holdNextSearch(page);
+    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+    await page.waitForFunction(() => Boolean(window.__RELEASE_SEARCH__), null, { timeout: 120000 });
+    // A keyboard user reaches the feature popup behind the overlay: the feature search, Open active feature, Rotate.
+    await page.getByRole('searchbox', { name: 'Search features', exact: true }).evaluate((element) => element.focus());
+    await page.keyboard.type('tRNA');
+    await page.keyboard.press('Enter');
+    await pressOn(page, page.getByRole('button', { name: 'Open active feature', exact: true }), 'Enter');
+    await pressOn(page, page.getByRole('button', { name: 'Rotate record using this feature', exact: true }), 'Enter');
+    const applyNow = page.getByRole('region', { name: 'Rotate record using this feature', exact: true }).getByRole('button', { name: 'Apply now' });
+    await expect(applyNow, 'Apply now is disabled while the search runs').toBeDisabled();
+    await pressOn(page, applyNow, 'Enter');
+    expect(await page.evaluate(async () => (await import('./js/state.js')).state.processing.value), 'the Generate still runs').toBe(true);
+    expect(await page.evaluate(async () => (await window.__GBDRAW_APP__.applyFeatureRecordRotation()).status),
+      'the run that Apply now starts is refused while the search runs').toBe('busy');
+    expect(await ringLabels(page)).toEqual(['ringb', 'ringa', 'ringc']);
+    await releaseSearch(page);
+    expect(await page.evaluate(async () => (await import('./js/state.js')).state.errorLog.value)).toBeNull();
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel()), 'the Generate commits its Result; no Rotate step')
+      .toBe('Generate diagram');
+    // Each ring's name, file, and source are of one ring, in the order the Generate ran with.
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.circularConservation.series.map((entry) => (
+      [entry.label, String(entry.fileName).split('.')[0], String(entry.sourceKey).split('|')[0].split('.')[0]]))),
+    'the Generate keeps its rings').toEqual([['ringb', 'ringb', 'ringb'], ['ringa', 'ringa', 'ringa'], ['ringc', 'ringc', 'ringc']]);
+    await expectEachRowOnItsRing(page);
+  } finally { await page.context().close(); }
+});
+
 // A change through the hook, not a control: the compare at adoption replaces the rows instead of moving them to the
 // other ring's key. This checks the state right after that Generate only; the series it adopts still takes the draft's
-// entry at the same place (`adoptCanonicalRenderArtifacts`). No control in the Web UI rewrites the series while a
-// Generate runs: the ring controls and the source radios are disabled, and Reset Settings is refused.
+// entry at the same place (`adoptCanonicalRenderArtifacts`). The controls named above are disabled while a Generate
+// runs, and Reset Settings and the Rotate, Align, and Align at feature runs are refused; these tests check no other.
 test('a ring reorder after the request is built puts no row on another ring', async ({ browser }) => {
   test.setTimeout(420000);
   const page = await loadAddedRings(browser);
