@@ -99,11 +99,11 @@ write-up of a release.
   rings by keyboard, or a switch to **Upload BLAST TSV** and back to
   **Run LOSAT**, could draw a ring's search under another ring's name.
   **Move series outward**, **Move series inward**, **Remove series**,
-  **Add Seq**, **Run LOSAT**, **Upload BLAST TSV**, and **Reset Settings** are
+  **Add comparison sequence**, **Run LOSAT**, **Upload BLAST TSV**, and **Reset Settings** are
   now disabled while a Generate runs. So are **Apply now** of
   **Rotate record using this feature**, **Align…** and
   **Review alignment options…** in the Similarity groups editor and the feature
-  popup, and **Apply** of the alignment review and of **Align at feature**:
+  popup, **Apply** of the alignment review, and **Align records** of **Align at feature**:
   Rotate, Align, and Align at feature do not run during a Generate. A Rotate
   reached by keyboard there dropped the Generate's result (OV-2446).
 - Fixed: a threaded LOSAT search in the Web app could stop with "memory access
@@ -175,8 +175,18 @@ write-up of a release.
   stays until its next redraw, a later color edit on it, or Generate; until the next redraw or Generate stay the label text a Result was drawn
   with when Reset, Save, and Load pass before it is shown, and its **Label visibility** too when the Reset was made with the
   other drawing shown (in the drawing shown at the Reset, its redraw applies it), and a label text on a Result not shown when the
-  edit left, returned by an Undo of a later Generate. **Applies on Generate** settings still wait for Generate.
+  edit left, returned by an Undo of a later Generate. Settings with the **Applies on Generate** clock still wait for Generate.
 - Fixed: text typed in a Features list label input stays when a redraw finishes.
+- Fixed: the Web UI no longer accepts a specific color rule without a qualifier, which colored nothing;
+  **Add color rule** stays disabled while the qualifier is empty, and a hint says why (OV-2435).
+- Changed: Web UI: shorter text. Descriptive sentences are cut from the sidebar, dialogs, and
+  placeholders, and buttons name their action (**Add comparison sequence**, was **Add Seq**;
+  **Clear LOSAT results**, was **Clear Cache**). A setting that waits for **Generate Diagram** shows a
+  clock icon with an **Applies on Generate** tooltip instead of a text chip, a setting that applies at
+  once has no mark, and the empty Preview shows **Open Gallery example** above **Learn with tutorials**
+  in one box. Help tips are unchanged.
+- Added: Web app: a **History** button lists the Undo and Redo steps with the setting and value each step
+  set; a pick walks Undo or Redo to that step. The Undo and Redo tooltips use the same text.
 - Known issue: with **Auto Reflow** off, Circular and Linear, a label text that Generate places away from
   its feature with a leader stays without the leader, and a label with a leader keeps it for a text that
   fits, until the next placement or Generate, also when an Undo of a Generate returns it with **Auto Reflow**
@@ -191,11 +201,11 @@ write-up of a release.
   rule or another Legend name for its feature (for a row with no color rule, only when its whole row was renamed first and this rename applies to the whole row), and **Restore**, the next
   **Generate Diagram** fails with "The generated result could not be accepted", on Circular and Linear
   diagrams; a row without a stroke does not fail (OV-2412).
-- Known issue: Web app: with **Use custom stack** on, **Add Seq** after a ring search returns every ring to
+- Known issue: Web app: with **Use custom stack** on, **Add comparison sequence** after a ring search returns every ring to
   its sequence file and replaces the ring rows: their edits are lost, and a row anchored to one of them stops
   each **Generate Diagram** with "Track row N. Field: Enabled drawable anchor." until its anchor is chosen
   again (OV-2443).
-- Known issue: Web app: after any change to the comparison rings (a reorder, **Remove series**, or **Add Seq**),
+- Known issue: Web app: after any change to the comparison rings (a reorder, **Remove series**, or **Add comparison sequence**),
   a record rotation before the next **Generate Diagram** returns the rings of the last Generate and drops the
   change with no message, and after a reorder or a Remove the next Generate can draw a ring's rows under another ring's
   name (OV-2444).
