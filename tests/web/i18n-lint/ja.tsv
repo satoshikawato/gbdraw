@@ -13,3 +13,4 @@ ja-ascii-ellipsis	\.\.\.	u	Write … (U+2026), not three ASCII periods.	error
 ja-fullwidth-digit	[０-９]	u	Write ASCII digits 0-9 (STYLE 2.4).	error
 ja-long-vowel	(エディタ|フィルタ|レンダラ|レイヤ|ユーザ|サーバ|パラメータ|フォルダ|ヘッダ|マーカ)(?!ー)	u	Words ending in -er/-or/-ar take ー (エディター, フィルター, レンダラー, レイヤー, ユーザー, サーバー, パラメーター, フォルダー, ヘッダー, マーカー) (STYLE 2.1).	error
 ja-period-after-period	。 	u	No space follows 。 between two sentences (D-18).	error
+ja-label-colon-halfwidth	[\u3040-\u30ff\u4e00-\u9fff）」]:	u	A label colon is full-width, also before Latin: 例：NADH, 既定：out (STYLE 2.3).	error
