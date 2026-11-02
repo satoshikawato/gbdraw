@@ -27,5 +27,5 @@ test('the About section shows the analytics notice only when the flag is set', (
   assert.equal(html.indexOf("t('Hosted Site Analytics')", title + 1), -1, 'one notice');
   const open = html.lastIndexOf('<div', title);
   assert.match(html.slice(open, html.indexOf('>', open) + 1), /^<div v-if="hostedBuild\.googleAnalytics" /);
-  assert.ok(open > html.indexOf("t('Privacy & Security')"), 'after the Privacy & Security box');
+  assert.ok(open > html.indexOf('data-about-privacy'), 'after the privacy line');
 });

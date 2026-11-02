@@ -487,7 +487,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
   await expect(apply).toBeEnabled();
   await expect(apply).toHaveAttribute('aria-describedby', 'similarity-alignment-apply-reason');
-  await expect(page.locator('#similarity-alignment-apply-reason')).toHaveText('Nothing changes until Apply.');
+  await expect(page.locator('#similarity-alignment-apply-reason')).toHaveText('');
   await page.screenshot({
     path: testInfo.outputPath('desktop-ambiguity.png'),
     fullPage: true
@@ -675,9 +675,9 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(inspector).toBeVisible();
   // UX-B06: one line until opened; the reference and each record's rationale are inside.
   await expect(inspector.locator('summary')).toContainText(/^Aligned to .+ in .+$/);
-  await expect(inspector.getByText('Exact reference:')).toBeHidden();
+  await expect(inspector.getByText('Exact reference', { exact: true })).toBeHidden();
   await inspector.locator('summary').click();
-  await expect(inspector.getByText('Exact reference:')).toBeVisible();
+  await expect(inspector.getByText('Exact reference', { exact: true })).toBeVisible();
   await expect(inspector).toContainText('Selected by user');
   await expect(inspector).toContainText('Exact reference');
   await page.screenshot({ path: testInfo.outputPath('narrow-final.png'), fullPage: true });
@@ -849,7 +849,7 @@ test('exclusive direction modes and Custom follow keyboard choices without Worke
   await page.keyboard.press('ArrowDown');
   await expect(dialog.getByRole('radio', { name: /Select .*bp, strand/ }).nth(1)).toBeChecked();
   await page.keyboard.press('ArrowDown'); await expect(skip).toBeChecked();
-  await expect(dialog.locator('#alignment-direction-scope')).toContainText('1 record stays unchanged');
+  await expect(dialog.locator('#alignment-direction-scope')).toContainText('1 record unchanged');
   await modes.getByRole('radio', { name: 'Keep as is', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(modes.getByRole('radio', { name: 'All right', exact: true })).toBeChecked();

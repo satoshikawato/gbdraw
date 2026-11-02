@@ -159,7 +159,7 @@ run('species circular: a Species change is live and equals a Generate', TOBACCO,
 for (const [mode, file] of [['circular', TOBACCO], ['linear', LAMBDA]]) {
   run(`dinucleotide-window ${mode}: a Window change is live and equals a Generate`, file, async (page) => {
     if (mode === 'linear') {
-      const gc = page.locator('input[aria-describedby="help-linear-show-gc-content"]');
+      const gc = page.locator('input[aria-describedby~="help-linear-show-gc-content"]');
       await reveal(gc);
       if (!(await gc.isChecked())) await gc.click();
       await generateNow(page);
@@ -182,8 +182,8 @@ run('annotation-style circular: an annotation item Fill change is live and equal
 });
 run('annotation-style linear: an annotation item Fill change is live and equals a Generate', LAMBDA, async (page) => {
   const section = page.locator('[data-setting="region-annotations"]');
-  await reveal(section.locator('button', { hasText: 'Add set' }).first());
-  await section.locator('button', { hasText: 'Add set' }).first().click();
+  await reveal(section.locator('button', { hasText: 'Add annotation set' }).first());
+  await section.locator('button', { hasText: 'Add annotation set' }).first().click();
   await section.locator('button', { hasText: 'Coordinates' }).first().click();
   await commitValue(page.locator('input[aria-label="Annotation end (inclusive)"]').first(), 20000);
   const target = page.locator('select[aria-label="Annotation target record"]').first();

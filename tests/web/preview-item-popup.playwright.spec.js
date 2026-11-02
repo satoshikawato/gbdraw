@@ -108,7 +108,7 @@ test('a GC content or GC skew Legend row popup names its plot, not features', as
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('[data-preview-item-subtitle]')).toHaveText(subtitle);
     await expect(dialog.locator('[data-preview-legend-color-source]'))
-      .toHaveText('Changes this legend swatch only. The plot keeps the color set in Settings.');
+      .toHaveText('Changes the legend swatch only.');
     await page.keyboard.press('Escape');
     await expect(popup(page)).toHaveCount(0);
   }

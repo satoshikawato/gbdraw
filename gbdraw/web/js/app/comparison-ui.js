@@ -287,10 +287,10 @@ const projectFilterSummary = (filters) => {
       : defaults.alignment_length
   });
   const text = [
-    t('E-value <= {value}', { value: displayFilterValue(values.evalue) }),
-    t('Bitscore >= {value}', { value: displayFilterValue(values.min_bitscore) }),
-    t('Identity >= {value}%', { value: displayFilterValue(values.identity) }),
-    t('Length >= {value}', { value: displayFilterValue(values.alignment_length) })
+    t('E-value ≤ {value}', { value: displayFilterValue(values.evalue) }),
+    t('Bitscore ≥ {value}', { value: displayFilterValue(values.min_bitscore) }),
+    t('Identity ≥ {value}%', { value: displayFilterValue(values.identity) }),
+    t('Length ≥ {value}', { value: displayFilterValue(values.alignment_length) })
   ].join(' · ');
   // `values` has exactly the four keys of ComparisonState, built above.
   const isDefault = /** @type {(keyof ComparisonState)[]} */ (Object.keys(values)).every((key) => valuesEquivalent(values[key], defaults[key]));

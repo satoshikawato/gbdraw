@@ -51,7 +51,7 @@ const loadMode = async (page, mode) => {
   await expect(page.locator(`[data-capture^="${mode}-track-slot-"]`).first()).toBeVisible();
   await page.evaluate(() => document.querySelectorAll('details').forEach((details) => { details.open = true; }));
   const annotations = page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
-  await annotations.getByRole('button', { name: /Add set/ }).click();
+  await annotations.getByRole('button', { name: 'Add annotation set' }).click();
   await annotations.getByRole('button', { name: /Coordinates/ }).click();
 };
 
@@ -81,6 +81,11 @@ const auditPage = (page) => page.evaluate(() => {
     if (description && !description.hidden) problems.push('description is in the reading order');
     if (description && tip.contains(description)) problems.push('description inside the tip wrapper');
     if (tip.closest('label')) problems.push('inside label');
+    // A timing clock's line holds its wrapper (`data-timing-clock`).
+    const line = tip.parentElement.matches('[data-timing-clock]') ? tip.parentElement.parentElement : tip.parentElement;
+    // A tip needs the thing it explains on its line: a bare question mark on a
+    // line of its own explains nothing.
+    if (line.children.length === 1 && !text(line.textContent)) problems.push('alone on its line');
     if (tip.parentElement.closest('button, [role="button"]:not(summary)')) problems.push('inside a button');
     // A heading or summary computes its name from content, so one that holds a
     // tip keeps its visible name only through aria-label.
@@ -88,9 +93,14 @@ const auditPage = (page) => page.evaluate(() => {
     if (named && !text(named.getAttribute('aria-label'))) problems.push('changes a heading or summary name');
     // The nearest ancestor holding another interactive element is the tip's
     // field; when that field holds exactly one form control, the control is
-    // the one the tip explains.
+    // the one the tip explains. In a field caption other tips are not the
+    // field: a caption with a timing clock and a label help tip leads to the
+    // control both explain. The tips of a section heading or summary explain
+    // their section.
+    const fieldCaption = !line.closest('summary, h1, h2, h3, h4, h5, h6');
     const others = (element) => Array.from(element.querySelectorAll(`${CONTROLS}, button`))
-      .filter((candidate) => candidate !== button && visible(candidate));
+      .filter((candidate) => candidate !== button && visible(candidate)
+        && !(fieldCaption && candidate.matches('.help-tip > button')));
     let field = tip.parentElement;
     while (field && others(field).length === 0) field = field.parentElement;
     const interactive = field ? others(field) : [];
@@ -321,10 +331,37 @@ const windowTip = async (page) => {
   const section = page.locator('details').filter({ has: page.locator('summary[aria-label="Dinucleotide content/skew"]') });
   if (await section.getAttribute('open') === null) await section.locator(':scope > summary').press('Enter');
   const input = section.getByRole('spinbutton', { name: 'Window', exact: true });
-  const descriptionId = await input.getAttribute('aria-describedby', { timeout: 30_000 });
-  expect(descriptionId).toBeTruthy();
-  return { section, input, button: page.locator(`.help-tip > button[aria-describedby="${descriptionId}"]`) };
+  // The field references its label help tip and its timing clock.
+  const descriptionIds = (await input.getAttribute('aria-describedby', { timeout: 30_000 }) || '').split(/\s+/).filter(Boolean);
+  expect(descriptionIds.length).toBeGreaterThan(0);
+  const labelTips = descriptionIds.map((id) => `:not([data-timing-clock]) > .help-tip > button[aria-describedby="${id}"]`);
+  return { section, input, button: page.locator(labelTips.join(', ')) };
 };
+
+// A file zone hides its label until a file is chosen, so its help tip sits
+// beside the zone, and the zone (the control) references the tip text.
+test('Colors file zones show their help tip beside the button and reference its text', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  const section = page.locator('details').filter({ has: page.locator('summary[aria-label="Colors"]') });
+  if (await section.getAttribute('open') === null) await section.locator(':scope > summary').press('Enter');
+  for (const name of ['Default colors file', 'Specific rules file']) {
+    const group = section.getByRole('group', { name: `${name} selection`, exact: true });
+    await reveal(group);
+    const zone = group.getByRole('button', { name: `Choose ${name}`, exact: true });
+    await expect(zone).toBeVisible();
+    const tip = group.locator('.help-tip > button');
+    await expect(tip, `${name} help tip inside the uploader group`).toHaveCount(1);
+    const descriptionId = await tip.getAttribute('aria-describedby');
+    expect(descriptionId).toBeTruthy();
+    await expect(zone).toHaveAttribute('aria-describedby', descriptionId);
+    const zoneBox = await zone.boundingBox();
+    const tipBox = await tip.boundingBox();
+    expect(tipBox.x, `${name} help tip right of the zone`).toBeGreaterThanOrEqual(zoneBox.x + zoneBox.width - 1);
+    expect(tipBox.y + tipBox.height / 2).toBeGreaterThan(zoneBox.y);
+    expect(tipBox.y + tipBox.height / 2).toBeLessThan(zoneBox.y + zoneBox.height);
+  }
+});
 
 test('help tips open from the keyboard and on hover, and Escape closes them', async ({ page }) => {
   test.setTimeout(180_000);
@@ -579,13 +616,15 @@ test('disabled Single-record and LOSAT cache controls reference a visible reason
     { timeout: 120_000 }).toBeGreaterThan(0);
   await page.evaluate(() => document.querySelectorAll('details').forEach((details) => { details.open = true; }));
   for (const name of ['Circular record label', 'Circular record subtitle', 'Circular region start', 'Circular region end',
-    'Circular reverse complement', 'Save Raw LOSAT TSV', 'Clear Cache']) {
+    'Circular reverse complement', 'Save Raw LOSAT TSV', 'Clear LOSAT results']) {
+    // The LOSAT cache buttons name their reason in the one line "No LOSAT results yet".
+    const expected = /LOSAT/.test(name) ? /^No LOSAT results yet$/ : /^Available /;
     const control = page.getByLabel(name, { exact: true }).or(page.getByRole('button', { name, exact: true })).first();
     await expect(control, name).toBeDisabled();
     const reason = await control.evaluate((element) => (element.getAttribute('aria-describedby') || '').split(/\s+/)
       .map((id) => document.getElementById(id)).filter((target) => target?.checkVisibility()
-        && /^Available /.test(target.textContent.trim())).map((target) => target.textContent.trim())[0] || '');
-    expect(reason, `${name} names why it is disabled`).toMatch(/^Available /);
+        && /^(Available |No LOSAT results yet$)/.test(target.textContent.trim())).map((target) => target.textContent.trim())[0] || '');
+    expect(reason, `${name} names why it is disabled`).toMatch(expected);
   }
 });
 

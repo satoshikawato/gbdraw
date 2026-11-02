@@ -216,14 +216,14 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   await expect(commands.getByRole('button', {
     name: 'Run LOSAT for all adjacent pairs', exact: true
   })).toBeDisabled();
-  await expect(comparisonCard(page)).toContainText(
-    'Run LOSAT requires at least 2 loaded sequences.'
-  );
+  await expect(comparisonCard(page).locator('[data-linear-losat-needs-sequences]')).toHaveText('Needs 2 sequences');
   await expect(comparisonCard(page)).not.toContainText('Current:');
   await expect(commands.getByRole('status')).toHaveCount(0);
 
   await expect(comparisonSettings(page)).toHaveCount(1);
   await expect(comparisonSettings(page)).not.toHaveAttribute('open', '');
+  // With no comparison chosen there is nothing to set, so the Settings section is hidden.
+  await expect(comparisonSettings(page)).toBeHidden();
   await expect(page.getByRole('button', { name: 'Generate Diagram' })).toHaveCount(1);
 
   const order = await page.evaluate(() => {
@@ -515,7 +515,7 @@ test('imported comparison resolutions are explicit and create one History entry 
   await expect(resolution).toContainText('Saved comparison preserved as read-only');
   const historyBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
-  await expect(resolution).toContainText('Selected action: INHERIT');
+  await expect(resolution).toContainText('INHERIT');
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(historyBefore + 1);
 
@@ -554,7 +554,7 @@ test('imported comparison resolutions are explicit and create one History entry 
     .toBe(historyBeforeBlockedGenerate);
   const beforeReplace = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   await resolution.getByRole('button', { name: 'Replace with current controls' }).click();
-  await expect(resolution).toContainText('Selected action: REPLACE');
+  await expect(resolution).toContainText('REPLACE');
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(beforeReplace + 1);
 
@@ -585,7 +585,7 @@ test('imported comparison resolutions are explicit and create one History entry 
   });
   await expect(page.getByRole('region', { name: 'Result Preview' }))
     .toContainText('Last Successful Result');
-  await expect(resolution).toContainText('Selected action: REPLACE');
+  await expect(resolution).toContainText('REPLACE');
 
   // D-54 after Replace: an Upload pair without a file asks first. Setting it
   // to No comparison leaves the replacement empty, which is refused.
@@ -613,7 +613,7 @@ test('imported comparison resolutions are explicit and create one History entry 
   });
   expect(setToNone).toEqual({ status: 'error', code: 'COMPARISON_REPLACEMENT_EMPTY', undoAdded: 1 });
   await expect(missingTsvDialog).toHaveCount(0);
-  await expect(resolution).toContainText('Selected action: REPLACE');
+  await expect(resolution).toContainText('REPLACE');
 
   await setIntent(
     'DECISION_REQUIRED',
@@ -621,7 +621,7 @@ test('imported comparison resolutions are explicit and create one History entry 
   );
   const beforeClear = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   await resolution.getByRole('button', { name: 'Clear comparison' }).click();
-  await expect(resolution).toContainText('Selected action: CLEAR');
+  await expect(resolution).toContainText('CLEAR');
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(beforeClear + 1);
   await expect(comparisonCommands(page).getByRole('button', { name: 'Set no comparison' }))
@@ -1473,7 +1473,7 @@ test('with the icon rail, comparison issues and pair actions show their control 
     return app.linearSeqs.map((sequence) => sequence.uid);
   });
   await selectedPairs(page).evaluate((details) => { details.open = true; });
-  await selectedPairs(page).getByRole('button', { name: 'Add', exact: true }).click();
+  await selectedPairs(page).getByRole('button', { name: 'Add pair', exact: true }).click();
   await expect.poll(() => page.locator(`fieldset[data-edge-key="${first}->${second}"]`)
     .evaluate((element) => element.contains(document.activeElement))).toBe(true);
   expect(await focusInPanel(), 'the added pair is inside the panel').toBe(true);

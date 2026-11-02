@@ -81,7 +81,7 @@ const stackWithEveryRowKind = async (page, mode) => {
   }
   await openAllDetails(page);
   const annotations = page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
-  await annotations.getByRole('button', { name: /Add set/ }).click();
+  await annotations.getByRole('button', { name: 'Add annotation set' }).click();
   const panelButton = page.locator(`button[aria-controls="${mode}-custom-track-slots-panel"]`);
   await reveal(panelButton);
   if (await panelButton.getAttribute('aria-expanded') !== 'true') await panelButton.click();
@@ -333,8 +333,8 @@ const BUSY_ENABLED_CONTROLS = {
     // Exports read the settings and change nothing.
     'button:has(.ph-download-simple)'
   ],
-  // A link to another setting without aria-controls (it focuses that setting).
-  names: ['Show Multi-Record Canvas setting']
+  // Links to another setting without aria-controls (they focus that setting).
+  names: ['Show Multi-Record Canvas setting', 'Show Ticks slot']
 };
 
 for (const mode of ['circular', 'linear']) {

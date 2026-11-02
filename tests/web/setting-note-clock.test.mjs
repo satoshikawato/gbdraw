@@ -162,3 +162,26 @@ test('a long tooltip that would run off the top of the window opens below its ic
   assert.equal(above.transform, 'translate(-50%, -100%)');
   assert.equal(above.top, '488px');
 });
+
+// An Escape on a focused tip that closes nothing reaches the dialog that holds
+// the tip (the record chooser, the Linear File removal dialog); an Escape that
+// closes the open tooltip goes no further.
+test('a help tip stops Escape only while its tooltip is open', async () => {
+  const shown = render({ setting: 'inputs' });
+  const button = [...all(shown.root)].find((node) => node.tag === 'button');
+  const tooltipShown = () => [...all(shown.body)].some((node) => node.attributes.role === 'tooltip');
+  const escape = () => {
+    const event = { key: 'Escape', stopped: false, stopPropagation() { this.stopped = true; }, preventDefault() {} };
+    button.handlers.onKeydown(event);
+    return event.stopped;
+  };
+  assert.equal(escape(), false, 'a closed tooltip lets Escape through');
+  button.handlers.onClick({ stopPropagation() {}, preventDefault() {} });
+  await Vue.nextTick();
+  assert.ok(tooltipShown(), 'the tooltip opens');
+  assert.equal(escape(), true, 'Escape closes the open tooltip and stops there');
+  await Vue.nextTick();
+  assert.ok(!tooltipShown(), 'the tooltip closed');
+  assert.equal(escape(), false, 'the next Escape reaches the dialog');
+  shown.unmount();
+});

@@ -576,7 +576,7 @@ holds the same leaves as one without the option, besides the length.
 The Web app has no control for it yet. When it loads such a Session it draws the
 rows and lists the length under the settings that are not editable in the Web
 UI. Generate and **Save Session** keep it, as a config override in the saved
-request, and that row's **Reset** removes it.
+request, and that row's **Reset setting** removes it.
 When a record is cut, Generate stops with an error if the form asks for a Track
 layout of Middle or a bar scale, which cannot draw rows; the last Result stays.
 
@@ -853,8 +853,8 @@ In Web **Run Info**, **Source recipe** uses the original input filenames and
 public CLI settings. Keep those original files and download any listed
 generated helpers with **Download reproducibility files**. That bundle also
 includes the session that **Exact replay** refers to, with its embedded
-resources and saved analysis results. An unavailable Source recipe reports why
-it cannot express the committed settings losslessly.
+resources and saved analysis results. The Web Run Info tab shows nothing for a
+Source recipe that cannot express the committed settings losslessly.
 
 Both commands target the successful generation represented by Run Info, even
 after Undo/Redo or edits to the current controls. Exact replay reconstructs that

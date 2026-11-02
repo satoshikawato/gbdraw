@@ -910,7 +910,7 @@ test('the Load notice stays across Generate and clears on a mode switch and Rese
   await loadBaselineSession(page);
   await page.evaluate(() => { window.__GBDRAW_APP__.requestResetSettings(); });
   const reset = page.getByRole('dialog', { name: 'Reset all settings?', exact: true });
-  await expect(reset).toContainText('Linear comparisons, which turn off; their uploaded tables stay');
+  await expect(reset.locator('[data-choice-prompt-lines] li')).toHaveText(['Your edits are removed too', 'Undo restores them']);
   await reset.getByRole('button', { name: 'Reset all settings', exact: true }).click();
   await expect(notice).toHaveCount(0);
 });

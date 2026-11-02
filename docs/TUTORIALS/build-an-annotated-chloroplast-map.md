@@ -80,7 +80,7 @@ Set the main controls as follows:
 Set the four label offsets while **Circular Label Placement** is Horizontal,
 then change it to Radial. Under **Features**, keep `CDS`, `rRNA`, and `tRNA`; add `tmRNA`, `ncRNA`,
 `misc_RNA`, and `rep_origin`; remove `repeat_region`. Under **Colors**, choose
-Plastid gene classes in **Preset scheme** and select **Apply**. Under **Labels**,
+Plastid gene classes in **Preset scheme** and select **Apply preset**. Under **Labels**,
 upload `qualifier_priority.tsv` as **Priority File (TSV)**. These settings
 produce one legend entry per functional group and readable radial gene labels.
 

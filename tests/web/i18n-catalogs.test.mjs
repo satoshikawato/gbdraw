@@ -628,7 +628,7 @@ test('OV-1477: track, mode, control and setting names are not placeholders insid
   const inserted = [/\{track\}/, /\{control\}/, /No \{mode\} Result/, /^\{setting\} removes/, /\{mode\} track/, /\{topology\}/];
   assert.deepEqual(keys.filter((key) => inserted.some((pattern) => pattern.test(key))), []);
   for (const key of [
-    'Hide GC content?', 'Keep GC skew', 'Hidden: Hide GC Content is on.',
+    'Hide GC content?', 'Keep GC skew', 'Hidden by Hide GC Content',
     'Choosing "{setting}" removes the lane for {count} feature you placed manually.', 'This change removes the lane for {count} features you placed manually.'
   ]) assert.ok(keys.includes(key), key);
 });
@@ -646,7 +646,7 @@ test('the English cites the controls the UI has and names what each text describ
   ];
   assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
   for (const key of [
-    'Field to search', 'Tick Font Size', 'Annotation qualifier value', 'No feature types selected', 'Comparison ring color for {file}',
+    'Field to search', 'Tick Font Size', 'Annotation qualifier value', 'Comparison ring color for {file}',
     'Max hits per protein for groups', 'Color set on individual features',
     'Upload BLAST TSV', 'Advanced similarity group settings'
   ]) assert.ok(keys.includes(key), key);
@@ -828,7 +828,7 @@ test('a language with few and many forms: the `one` form is the text for exactly
 
 test('every `one` text of a tn() call is a catalog key', () => {
   const keys = new Set(sourceCalls().map((call) => call.key));
-  for (const key of ['From this color rule:', 'The chosen feature already points left.', '({count} record)']) assert.ok(keys.has(key), key);
+  for (const key of ['{count} color rule', 'The chosen feature already points left.', '({count} record)']) assert.ok(keys.has(key), key);
 });
 
 test('OV-1415: the words a declined label table names as changed are a key, shown in the UI language', async () => {
@@ -950,7 +950,7 @@ test('the record topology a file declares and the option values of an error are 
     'Choose Pairwise matches, Similarity groups, or Collinear blocks.', 'Choose Adjacent pairs or All records.',
     'Choose Auto, CDS, or Locus.', 'Choose All hits or Reciprocal best hits.', 'Choose Strand or Gene order.',
     'Choose Average identity, Orientation, or Orientation + identity.',
-    'Depth TSV for file {file}, series {series}', 'Depth TSV for sequence {sequence}, series {series}',
+    'Depth TSV for file {file}, series {series}', 'Depth TSV · series {series} for sequence {sequence}',
     'BLAST TSV for #{from} to #{to}',
     'vs {record}', 'Not moved: {reason}', 'Not moved', 'Session file: {path} could not be read and is left out.',
     'record direction\u0004forward', 'record direction\u0004reverse', 'collinearity block kind\u0004syntenic'
@@ -985,8 +985,8 @@ test('sentences with a count or a qualifier are whole keys, and none is built fr
     'The Source recipe references browser-generated files: {files}. Use "Download reproducibility files" to save them next to the uploaded inputs before running the command in a terminal.',
     'Exact replay references {files}, which is included in "Download reproducibility files".',
     'Exact replay references {files}, which are included in "Download reproducibility files".',
-    'This tool runs entirely in your browser.', 'It uses WebAssembly (Pyodide).',
-    'All features that share:',
+    'Your files never leave this device',
+    'All features sharing',
     'Room kept toward the center for the inside tracks: {px} px.',
     'Room kept toward the center for the inside tracks (among them GC content, GC skew, and the scale): {px} px.',
     'number of groups in a block\u0004Similarity groups'

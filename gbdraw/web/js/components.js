@@ -14,7 +14,7 @@ import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
 import { detectedTopologyNote } from './services/record-display-model.js';
 import { specificRuleHasQualifier } from './services/specific-color-rules.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
-import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsShortText, settingsView } from './services/settings-sections.js';
+import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsScrollOwner, settingsShortText, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote, settingClassNote, settingClockLabel } from './services/setting-application.js';
 import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
@@ -166,7 +166,8 @@ export const GbdrawLoader = {
 // aria-describedby. The description is a hidden element teleported to <body>,
 // so the text around the tip stays its visible label and screen readers do
 // not read the tip text twice. Mouse hover and keyboard focus show the
-// tooltip, a click or tap toggles it, and Escape or blur closes it. Place
+// tooltip, a click or tap toggles it, and Escape or blur closes it; an
+// Escape with the tooltip closed reaches the dialog around the tip. Place
 // tips outside <label> so they never change the accessible name of a label or
 // its control. The default slot replaces the question mark (the layout warning
 // beside the compact Generate button shows a warning mark).
@@ -231,11 +232,18 @@ export const HelpTip = {
       keyboardFocus.value = false;
       pinned.value = false;
     };
+    // Escape closes an open tooltip and goes no further; with the tooltip
+    // closed it reaches the dialog or popup that holds the tip.
+    const onEscape = (/** @type {KeyboardEvent} */ event) => {
+      if (!visible.value) return;
+      event.stopPropagation();
+      close();
+    };
     const toggle = () => { pinned.value = !pinned.value; };
     const readName = () => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); };
     onMounted(readName);
     watch(uiLocale, () => nextTick(readName));
-    return { descriptionId, name, visible, style, trigger, tooltip, onEnter, onLeave, onFocus, close, toggle };
+    return { descriptionId, name, visible, style, trigger, tooltip, onEnter, onLeave, onFocus, close, onEscape, toggle };
   }
 };
 
@@ -825,6 +833,8 @@ export const ColorValueControl = {
  *   file changes what every drawing loaded from it (OV-1280, D-15-51)
  * @property {(file: File | undefined) => unknown} [afterChange] runs after the selection is stored, and after
  *   a Remove with the removed file (OV-1280); a result of `false` is not committed
+ * @property {string} [help] help tip text, shown beside the zone (the label is hidden until a file is
+ *   chosen) and referenced by the zone through aria-describedby
  */
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
@@ -832,7 +842,8 @@ export const ColorValueControl = {
 // selected file whose inspection failed is not shown as ready (UI-08).
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'projectHistory', 'inspectionFailed'],
+  components: { HelpTip },
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'projectHistory', 'inspectionFailed', 'help'],
   emits: ['update:modelValue', 'clearRequest'],
   /**
    * @param {FileUploaderProps} props
@@ -840,6 +851,7 @@ export const FileUploader = {
    */
   setup(props, { emit }) {
     const input = ref(null);
+    const helpId = `file-help-${useId()}`;
     const uploadAvailable = computed(() => !state.sessionOperationAvailability());
     const selectedFiles = computed(() => {
       if (Array.isArray(props.modelValue)) return props.modelValue.filter(Boolean);
@@ -854,10 +866,49 @@ export const FileUploader = {
       const suffix = items.length > 2 ? ` +${items.length - 2}` : '';
       return t('{count} files: {names}', { count: items.length, names: `${firstNames}${suffix}` });
     });
+    // The label row appears above the zone once a file is chosen, and the settings above it keep changing
+    // while the file is inspected. When the user picks a file with focus in the component, hold the zone
+    // at the viewport position it had at the pick (Owner D-23): each frame, for up to 300 frames, scroll
+    // what scrolls the settings (`settingsScrollOwner`) by the drift (a drift it cannot take, such as one
+    // above the page top, waits), and stop at once when the user scrolls, touches, clicks, or types. The position is
+    // read at the pick because the parent's render moves the settings above the zone before this
+    // component's own watcher runs.
+    const root = ref(/** @type {HTMLElement | null} */ (null));
+    const zone = ref(/** @type {HTMLElement | null} */ (null));
+    const HOLD_MAX_FRAMES = 300;
+    const USER_SCROLL_EVENTS = ['wheel', 'touchstart', 'pointerdown', 'keydown'];
+    /** @param {number} top */
+    const holdZoneAt = (top) => {
+      const area = root.value;
+      const box = zone.value;
+      if (!area || !box) return;
+      const settings = box.closest('.settings-scroll');
+      const scroller = settings ? settingsScrollOwner(settings) : document.scrollingElement;
+      let frames = 0;
+      let stopped = false;
+      const stop = () => {
+        stopped = true;
+        USER_SCROLL_EVENTS.forEach((type) => window.removeEventListener(type, stop, true));
+      };
+      USER_SCROLL_EVENTS.forEach((type) => window.addEventListener(type, stop, { capture: true, passive: true }));
+      const hold = () => {
+        if (stopped) return;
+        if (!box.isConnected || !area.contains(document.activeElement) || ++frames > HOLD_MAX_FRAMES) {
+          stop();
+          return;
+        }
+        const drift = box.getBoundingClientRect().top - top;
+        if (scroller && Math.abs(drift) > 0.5) scroller.scrollTop += drift;
+        requestAnimationFrame(hold);
+      };
+      requestAnimationFrame(hold);
+    };
     const handleFile = (/** @type {{ target: HTMLInputElement }} */ e) => {
       const busy = state.sessionOperationAvailability();
       if (busy) { e.target.value = ''; return busy; }
       const nextFiles = Array.from(e.target.files || []);
+      const pickTop = !hasSelection.value && zone.value && root.value?.contains(document.activeElement)
+        ? zone.value.getBoundingClientRect().top : null;
       // A chosen input file makes a Generate likely: download the Worker's boot files now.
       if (nextFiles.length) prefetchPyodideBootAssets();
       const update = () => {
@@ -866,6 +917,7 @@ export const FileUploader = {
         } else if (nextFiles[0]) {
           emit('update:modelValue', nextFiles[0]);
         }
+        if (pickTop !== null) holdZoneAt(pickTop);
       };
       const history = window.__GBDRAW_HISTORY__;
       const apply = async () => {
@@ -905,7 +957,7 @@ export const FileUploader = {
         emit('update:modelValue', props.multiple ? [] : null);
       }
     };
-    return { input, handleFile, clearFile, hasSelection, selectedLabel, uploadAvailable };
+    return { input, root, zone, helpId, handleFile, clearFile, hasSelection, selectedLabel, uploadAvailable };
   }
 };
 

@@ -624,7 +624,7 @@ for (const mode of ['circular', 'linear']) {
       const start = await stackState(page, mode);
       const button = async () => {
         const section = await openDepthSources(page, mode);
-        return section.getByRole('button', { name: mode === 'circular' ? 'Remove' : 'Remove series', exact: true }).first();
+        return section.getByRole('button', { name: 'Remove series', exact: true }).first();
       };
       await exerciseAsk(page, mode, {
         trigger: async () => (await button()).click(),
@@ -967,7 +967,7 @@ const REACH_UNDO_ROUTES = {
   'Depth file removal': (page, mode) => removeDepthFile(page, mode),
   'Depth series removal': async (page, mode) => {
     const section = await openDepthSources(page, mode);
-    await section.getByRole('button', { name: mode === 'circular' ? 'Remove' : 'Remove series', exact: true }).first().click();
+    await section.getByRole('button', { name: 'Remove series', exact: true }).first().click();
   },
   'row removal': async (page, mode) => {
     await openStack(page, mode);
@@ -1175,7 +1175,7 @@ for (const mode of ['circular', 'linear']) {
       }, mode);
       await addReachRow(page, { id: 'mark', anchor: seriesRow, setId: setIdOf(mode), mode });
       const section = await openDepthSources(page, mode);
-      await section.getByRole('button', { name: mode === 'circular' ? 'Remove' : 'Remove series', exact: true }).first().click();
+      await section.getByRole('button', { name: 'Remove series', exact: true }).first().click();
       await expect(page.locator('[data-choice-prompt]')).toBeVisible();
       expect(await promptText(page)).not.toContain('stays empty');
       await page.locator('[data-choice-prompt]').getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -1620,7 +1620,7 @@ test('a Rotate after a Remove and an Add Seq puts no edit on another ring', asyn
 // The Apply buttons of Rotate, Align, and Align at feature are disabled and their runs refused too (Rotate: the test after next).
 // A row moves to its ring's new key only if the rings at adoption are the rings the request was built from; that
 // compare stays for a change that does not come through these controls.
-const revealRingControls = (page) => reveal(page.locator('button[aria-label="Add Seq"], button:has-text("Add Seq")').first());
+const revealRingControls = (page) => reveal(page.locator('button[aria-label="Add comparison sequence"], button:has-text("Add comparison sequence")').first());
 const expectEachRowOnItsRing = async (page) => {
   const rows = await ringRows(page);
   expect(rows.map((row) => row.file).sort()).toEqual(['ringa', 'ringb', 'ringc']);
@@ -1634,7 +1634,7 @@ const ringControls = (page) => [
   page.getByRole('button', { name: 'Move series inward', exact: true }).first(),
   page.getByRole('button', { name: 'Move series outward', exact: true }).nth(1),
   page.getByRole('button', { name: 'Remove series', exact: true }).last(),
-  page.getByRole('button', { name: 'Add Seq', exact: true }),
+  page.getByRole('button', { name: 'Add comparison sequence', exact: true }),
   page.getByRole('button', { name: 'Reset Settings', exact: true }),
   page.locator('[data-setting="pairwise-comparisons"]').getByRole('radio', { name: 'Upload BLAST TSV', exact: true }),
   page.locator('[data-setting="pairwise-comparisons"]').getByRole('radio', { name: 'Run LOSAT', exact: true })

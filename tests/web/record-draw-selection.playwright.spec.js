@@ -234,6 +234,47 @@ test('Choose records opens on its search field and Escape closes it', async ({ p
   await expect(list).toHaveCount(0);
 });
 
+// A help tip stops Escape only while its tooltip is open: on a focused timing
+// clock the first Escape closes the tooltip and the next one the dialog, in
+// the record chooser and in the File removal dialog of a File with Depth files.
+test('Escape on a timing clock closes its tooltip, then the dialog around it', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openLinear(page);
+  await uploadLinear(page, 'pair.gb', genbank(['A1', 'A2']));
+  const tooltip = page.locator('[role="tooltip"]');
+  const fileCard = page.locator('[data-linear-source-card]').first();
+  await fileCard.locator('[data-record-list-open]').click();
+  const list = page.locator('[data-record-list-dialog]');
+  await expect(list.getByLabel('Search record IDs', { exact: true })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(list.locator('[data-timing-clock] button')).toBeFocused();
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(tooltip).toHaveCount(0);
+  await expect(list).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(list).toHaveCount(0);
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const depth = ['reference_name\tposition\tdepth', 'A1\t1\t10', 'A1\t90\t20', ''].join('\n');
+    app.setLinearDepthFile(app.linearSeqs[0], 0, new File([depth], 'sample.depth.tsv', { type: 'text/plain' }));
+  });
+  await fileCard.getByRole('button', { name: 'Remove GenBank / DDBJ File', exact: true }).click();
+  const removal = page.locator('[data-linear-source-removal-dialog]');
+  const clock = removal.locator('[data-timing-clock] button');
+  await expect(clock).toBeVisible();
+  // The dialog opened from a pointer click: Enter on the focused clock opens its tooltip.
+  await clock.focus();
+  await page.keyboard.press('Enter');
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(tooltip).toHaveCount(0);
+  await expect(removal).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(removal).toHaveCount(0);
+});
+
 test('D-06 Remove File deletes one of two Files, and clears the only File', async ({ page }) => {
   test.setTimeout(180_000);
   await openLinear(page);

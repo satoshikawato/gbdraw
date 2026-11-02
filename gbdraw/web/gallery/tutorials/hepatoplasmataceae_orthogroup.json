@@ -95,7 +95,7 @@
               "linearSeqs.0.gb.name": "AP027078.gb",
               "linearSeqs.4.gb.name": "NZ_CP006932.gb"
             },
-            "visibleText": ["AP027078.gb", "Record options", "Organism / strain (optional)", "Subtitle / title (optional)", "Region (optional)"]
+            "visibleText": ["AP027078.gb", "Record options", "Organism / strain", "Subtitle / title", "Region"]
           }
         }
       ]

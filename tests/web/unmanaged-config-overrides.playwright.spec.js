@@ -104,7 +104,7 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });
   await expect(disclosure).toContainText(unmanagedPath);
 
-  await disclosure.getByRole('button', { name: `Reset preserved setting ${unmanagedPath}` })
+  await disclosure.getByRole('button', { name: `Reset setting ${unmanagedPath}` })
     .click();
   await expect(disclosure).toHaveCount(0);
   await page.getByRole('button', { name: 'Undo' }).click();

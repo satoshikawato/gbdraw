@@ -65,7 +65,7 @@
     },
     {
       "title": "Add the first genome",
-      "body": "Download the five GenBank files listed under Files. In File 1, click the GenBank / DDBJ File box and choose AP027078.gb. Leave Organism / strain and Subtitle / title empty: the app reads the organism and isolate or strain from the file and draws them as the record's name line.",
+      "body": "Download the five GenBank files listed under Files. In File 1, click Choose GenBank / DDBJ File and choose AP027078.gb. Leave Organism / strain and Subtitle / title empty: the app reads the organism and isolate or strain from the file and draws them as the record's name line.",
       "operations": [
         {
           "dataDependent": true,
@@ -105,9 +105,9 @@
             "visibleText": [
               "AP027078.gb",
               "Record options",
-              "Organism / strain (optional)",
-              "Subtitle / title (optional)",
-              "Region (optional)"
+              "Organism / strain",
+              "Subtitle / title",
+              "Region"
             ],
             "replayThrough": 2
           }

@@ -901,7 +901,7 @@ test('lambda: Lock Definition Column redraws the Linear Result without Generate 
     await generateNow(page);
     const before = await facts(page);
     const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
-    await clickControl(page, 'input[type="checkbox"][aria-describedby="linear-definition-lock-help"]');
+    await clickControl(page, 'input[type="checkbox"][aria-describedby~="linear-definition-lock-help"]');
     await expect.poll(async () => (await facts(page)).overrides?.[lockKey], { timeout: APPLY_TIMEOUT })
       .toBe(!before.overrides[lockKey]);
     await settleLive(page);

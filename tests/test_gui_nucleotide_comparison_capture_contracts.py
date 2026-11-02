@@ -198,7 +198,7 @@ def test_h_gui_03_to_06_flows_use_visible_controls_without_state_injection() -> 
         "expect(separate_strands).not_to_be_checked()",
         'track_preset.select_option("middle")',
         'expect(track_preset).to_have_value("middle")',
-        'name=re.compile(r"Add Seq")',
+        'name=re.compile(r"Add comparison sequence")',
         '"Priority File (TSV)", exact=True',
         'name="Pairwise match details", exact=True',
         "page.expect_file_chooser",
