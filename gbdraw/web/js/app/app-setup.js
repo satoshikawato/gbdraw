@@ -5566,7 +5566,7 @@ export const createAppSetup = () => {
   // comparisons are the Linear drawing's. The button asks first and says what
   // the reset keeps; `resetSettings` itself does not ask.
   const requestResetSettings = async () => {
-    const sessionBusy = sessionOperationAvailability();
+    const sessionBusy = sessionOperationAvailability('reset');
     if (sessionBusy) return sessionBusy;
     const choice = await askChoice({
       title: t('Reset all settings?'),
@@ -5588,7 +5588,7 @@ export const createAppSetup = () => {
   };
   const resetSettings = () => {
     const drawing = state.drawingOfMode('linear');
-    const sessionBusy = sessionOperationAvailability();
+    const sessionBusy = sessionOperationAvailability('reset');
     if (sessionBusy) return sessionBusy;
     // A notice (a loaded Session's warnings, a table import) described the
     // settings the reset replaces. Generate keeps it: it describes the Session.

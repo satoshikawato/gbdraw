@@ -1615,9 +1615,10 @@ test('a Rotate after a Remove and an Add Seq puts no edit on another ring', asyn
   } finally { await page.context().close(); }
 });
 
-// While a Generate runs, Move series, Remove series, and Add Seq are disabled, so a keyboard user behind the overlay
-// cannot change the rings either. A row moves to its ring's new key only if the rings at adoption are the rings the
-// request was built from; that compare stays for a change that does not come through these controls.
+// While a Generate runs, every control that rewrites the ring series is disabled (Run LOSAT and Upload BLAST TSV,
+// Move series, Remove series, Add Seq) and Reset Settings is refused, so a keyboard user behind the overlay cannot
+// change the rings either. A row moves to its ring's new key only if the rings at adoption are the rings the request
+// was built from; that compare stays for a change that does not come through these controls.
 const revealRingControls = (page) => reveal(page.locator('button[aria-label="Add Seq"], button:has-text("Add Seq")').first());
 const expectEachRowOnItsRing = async (page) => {
   const rows = await ringRows(page);
@@ -1626,12 +1627,16 @@ const expectEachRowOnItsRing = async (page) => {
     .toEqual(rows.map((row) => [row.file, row.file]));
 };
 const ringLabels = (page) => page.evaluate(() => window.__GBDRAW_APP__.circularConservation.series.map((entry) => entry.label));
-// Each control that changes the rings, as a keyboard user reaches it: Move series both ways, Remove series, Add Seq.
+// Each control that changes the rings, as a keyboard user reaches it: Move series both ways, Remove series, Add Seq,
+// Reset Settings, and the two source radios (last: Upload BLAST TSV would hide the others).
 const ringControls = (page) => [
   page.getByRole('button', { name: 'Move series inward', exact: true }).first(),
   page.getByRole('button', { name: 'Move series outward', exact: true }).nth(1),
   page.getByRole('button', { name: 'Remove series', exact: true }).last(),
-  page.getByRole('button', { name: 'Add Seq', exact: true })
+  page.getByRole('button', { name: 'Add Seq', exact: true }),
+  page.getByRole('button', { name: 'Reset Settings', exact: true }),
+  page.locator('[data-setting="pairwise-comparisons"]').getByRole('radio', { name: 'Upload BLAST TSV', exact: true }),
+  page.locator('[data-setting="pairwise-comparisons"]').getByRole('radio', { name: 'Run LOSAT', exact: true })
 ];
 // Focus the control by keyboard focus, not by pointer, and press the key; a disabled control takes no focus.
 const pressOn = async (page, control, key) => {
@@ -1672,16 +1677,26 @@ test('the ring controls are disabled while a Generate runs, and work again after
       await chooser.setFiles({ name: 'ringz.fasta', mimeType: 'text/plain', buffer: Buffer.from('>ringz\nACGTACGTACGTACGTACGTACGT\n') });
     });
     const generateButton = page.getByRole('button', { name: 'Generate Diagram', exact: true });
+    // Out of file order, so a control that derives the series again from the files changes it.
+    await ringControls(page)[0].click();
+    expect(await ringLabels(page)).toEqual(['ringb', 'ringa', 'ringc']);
     for (const fail of [true, false]) {
       await holdNextSearch(page, { fail });
       await generateButton.click();
       await page.waitForFunction(() => Boolean(window.__RELEASE_SEARCH__), null, { timeout: 120000 });
-      const [inward, outward, remove, addSeq] = ringControls(page);
+      const [inward, outward, remove, addSeq, reset, upload, losat] = ringControls(page);
       await pressOn(page, inward, 'Enter');
       await pressOn(page, outward, ' ');
       await pressOn(page, remove, 'Enter');
       await pressOn(page, addSeq, ' ');
-      expect(await ringLabels(page), 'no key press changes the rings while the search runs').toEqual(['ringa', 'ringb', 'ringc']);
+      await pressOn(page, reset, 'Enter');
+      await expect(page.getByRole('dialog', { name: 'Reset all settings?', exact: true }), 'Reset Settings asks nothing while the search runs')
+        .toHaveCount(0);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.resetSettings()), 'the owner refuses Reset Settings while the search runs')
+        .toEqual({ status: 'busy', reason: 'Generating diagram. Retry after generation finishes.' });
+      await pressOn(page, upload, ' ');
+      await pressOn(page, losat, ' ');
+      expect(await ringLabels(page), 'no key press changes the rings while the search runs').toEqual(['ringb', 'ringa', 'ringc']);
       expect(chosenFiles, 'Add Seq opens no file chooser while the search runs').toBe(0);
       for (const control of ringControls(page)) await expect(control).toBeDisabled();
       await releaseSearch(page);
@@ -1690,13 +1705,14 @@ test('the ring controls are disabled while a Generate runs, and work again after
     }
     await expectEachRowOnItsRing(page);
     await pressOn(page, ringControls(page)[0], 'Enter');
-    expect(await ringLabels(page), 'Move series works again by keyboard after the Generate').toEqual(['ringb', 'ringa', 'ringc']);
+    expect(await ringLabels(page), 'Move series works again by keyboard after the Generate').toEqual(['ringa', 'ringb', 'ringc']);
   } finally { await page.context().close(); }
 });
 
 // A change through the hook, not a control: the compare at adoption replaces the rows instead of moving them to the
 // other ring's key. This checks the state right after that Generate only; the series it adopts still takes the draft's
-// entry at the same place (`adoptCanonicalRenderArtifacts`), which no control reaches while a Generate runs.
+// entry at the same place (`adoptCanonicalRenderArtifacts`). No control in the Web UI rewrites the series while a
+// Generate runs: the ring controls and the source radios are disabled, and Reset Settings is refused.
 test('a ring reorder after the request is built puts no row on another ring', async ({ browser }) => {
   test.setTimeout(420000);
   const page = await loadAddedRings(browser);

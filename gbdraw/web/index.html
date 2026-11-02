@@ -2301,7 +2301,7 @@
                     </button>
                 </div>
                 <div class="app-file-actions ml-2 flex gap-0.5 border-l border-slate-300 pl-2">
-                    <button data-history-managed @click="requestResetSettings" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" :title="t('Reset Settings')" :aria-label="t('Reset Settings')" :disabled="!semanticMutationAvailable">
+                    <button data-history-managed @click="requestResetSettings" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" :title="t('Reset Settings')" :aria-label="t('Reset Settings')" :disabled="!semanticMutationAvailable || processing">
                         <i class="ph ph-arrow-clockwise" aria-hidden="true"></i> {{ t('Reset Settings') }}
                     </button>
                     <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button disabled:opacity-40 disabled:cursor-wait" :title="t('Save the current Result and settings draft without generating')" :aria-label="t('Save Session')" aria-describedby="session-save-help">
@@ -3795,8 +3795,8 @@
                         <setting-note setting="pairwise-comparisons" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable"> {{ t('Run LOSAT') }}</label>
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable"> {{ t('Upload BLAST TSV') }}</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable || processing"> {{ t('Run LOSAT') }}</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="upload" @change="changeCircularConservationSource()" class="text-blue-600" :disabled="!semanticMutationAvailable || processing"> {{ t('Upload BLAST TSV') }}</label>
                             </div>
                             <div v-if="circularConservation.source === 'upload'" class="space-y-2">
                                 <file-uploader
@@ -3924,7 +3924,7 @@
                                             <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" :aria-label="t('Comparison gencode {n}', { n: row.index + 1 })" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6" :disabled="!semanticMutationAvailable">
                                         </div>
                                     </div>
-                                    <!-- While a Generate runs, the ring controls (these and Add Seq) are disabled: the overlay stops the pointer, not the keyboard (OV-2446). -->
+                                    <!-- While a Generate runs, the controls that rewrite the ring series (these, Add Seq, and the source radios) are disabled: the overlay stops the pointer, not the keyboard (OV-2446). -->
                                     <div class="flex items-center gap-0.5">
                                         <button :aria-label="t('Move series outward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, -1))" :title="t('Move series outward')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
                                         <button :aria-label="t('Move series inward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, 1))" :title="t('Move series inward')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
