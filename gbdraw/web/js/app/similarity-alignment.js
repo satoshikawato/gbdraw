@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { AlignmentResetReceipt } from '../services/session-active-config-contract.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
-import { joinSentences, listText, msg, t, tm, tn } from '../utils/i18n.js';
+import { joinSentences, listText, msg, t, tm, tn, tx } from '../utils/i18n.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { recordTranslationsFor } from '../services/linear-record-layout.js';
@@ -249,6 +249,9 @@ const directionExclusionLabels = Object.freeze({
   unusable_anchor: msg('The selected anchor cannot be displayed.'),
   unknown_strand: msg('The selected anchor has no known direction; it is never guessed.')
 });
+
+/** @param {boolean} reversed Whether a record reads opposite to its source file. */
+const recordDirectionWord = (reversed) => reversed ? tx('record direction', 'reverse') : tx('record direction', 'forward');
 
 /** @param {unknown} arrow */
 const arrowLabel = (arrow) => arrow === 1 ? t('right-facing') : arrow === -1 ? t('left-facing') : t('unknown');
@@ -526,7 +529,7 @@ const successfulSummary = (plan, reversed) => {
     explicitlySkipped,
     noCandidate,
     reversed,
-    text: t('Alignment applied: {aligned} aligned, {unchanged} unchanged, {explicitlySkipped} explicitly skipped, {noCandidate} no-candidate, {reversed} reversed.',
+    text: t('Alignment applied: {aligned} aligned, {unchanged} unchanged, {explicitlySkipped} explicitly skipped, {noCandidate} without a candidate, {reversed} reversed.',
       { aligned, unchanged, explicitlySkipped, noCandidate, reversed })
   });
 };
@@ -1900,6 +1903,7 @@ export const createSimilarityAlignmentActions = ({
       return {recordKey: delta.recordKey, label: recordName?.label || t('Unavailable record'),
         name: shortRecordName(recordName) || t('Unavailable record'),
         current: baseReverseComplement(record), restored: delta.before,
+        currentWord: recordDirectionWord(baseReverseComplement(record)), restoredWord: recordDirectionWord(delta.before),
         laterManualEdit: baseReverseComplement(record) !== delta.after};
     });
     const count = targets.length;
@@ -2244,13 +2248,13 @@ export const createSimilarityAlignmentActions = ({
       // The direction is part of each whole sentence: a bare "right" or "left" is no key.
       effect = intent.mode === 'left'
         ? tn(eligible.length, 'Reverses {records} so the chosen feature points left.',
-          'Reverses {records} so all {count} chosen features point left.', { records: reversedText })
+          'Reverses {records} so the {count} chosen features point left.', { records: reversedText })
         : tn(eligible.length, 'Reverses {records} so the chosen feature points right.',
-          'Reverses {records} so all {count} chosen features point right.', { records: reversedText });
+          'Reverses {records} so the {count} chosen features point right.', { records: reversedText });
     } else if (sameAfter) {
       effect = joinSentences(t('No record is reversed.'), sameAfter === 'left'
-        ? tn(eligible.length, 'The chosen feature already points left.', 'All {count} chosen features already point left.')
-        : tn(eligible.length, 'The chosen feature already points right.', 'All {count} chosen features already point right.'));
+        ? tn(eligible.length, 'The chosen feature already points left.', 'The {count} chosen features already point left.')
+        : tn(eligible.length, 'The chosen feature already points right.', 'The {count} chosen features already point right.'));
     } else {
       effect = joinSentences(t('No record is reversed.'),
         tn(eligible.length, '{count} chosen feature keeps its current direction.', '{count} chosen features keep their current directions.'));

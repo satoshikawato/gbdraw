@@ -15,7 +15,8 @@ export const errorTextKeyTables = {
   FIELD_LABELS: Object.values(FIELD_LABELS),
   ORDINAL_LABELS: Object.values(ORDINAL_LABELS),
   SESSION_TABLE_LABELS: Object.values(SESSION_TABLE_LABELS),
-  SWITCHED_TRACKS: Object.values(SWITCHED_TRACKS).flatMap(({ name, remedy }) => [name, remedy]),
+  SWITCHED_TRACKS: Object.values(SWITCHED_TRACKS).map(({ remedy }) => remedy),
+  KEPT_INSIDE_AMONG: Object.values(KEPT_INSIDE_AMONG),
   PHRASES: Object.values(PHRASES),
   OPERATION_TITLES: Object.values(OPERATION_TITLES),
   RECOVERY_GUIDANCE: Object.values(RECOVERY_GUIDANCE)

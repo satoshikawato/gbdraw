@@ -15,7 +15,7 @@
 /** @import { RedrawnArtifact } from '../services/history-snapshot.js' */
 /** @import { GenerationPayload, RequestProgress } from '../services/diagram-generation.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
-import { msg, t, tm } from '../utils/i18n.js';
+import { msg, t, tm, tn } from '../utils/i18n.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { drawnInputSummaries, validateInputSummaries } from '../services/input-summary.js';
 import { draftDrawsDepth } from '../services/track-legend-rows.js';
@@ -3314,7 +3314,7 @@ export const createRunAnalysis = ({
                 const { wasmModule: _wasmModule, ...threadedStatus } = runtime.threaded;
                 losatThreadingStatus.value = threadedStatus;
               }
-              setProcessingStatus(t('Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed: 0, total: losatJobs.length }));
+              setProcessingStatus(tn(losatJobs.length, 'Running {program} comparisons for the circular diagram: {completed}/{total} job complete', 'Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed: 0, total: losatJobs.length }));
               const losatResults = await executeLosatJobs(losatJobs, {
                 concurrency: getLosatParallelWorkers(),
                 executionMode,
@@ -3327,7 +3327,7 @@ export const createRunAnalysis = ({
                 },
                 onProgress: ({ completed, total }) => {
                   if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
-                  setProcessingStatus(t('Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed, total }));
+                  setProcessingStatus(tn(total, 'Running {program} comparisons for the circular diagram: {completed}/{total} job complete', 'Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete', { program: circularLosatSuffix.toUpperCase(), completed, total }));
                 }
               });
               losatResults.forEach((result) => {
@@ -4472,7 +4472,7 @@ export const createRunAnalysis = ({
             await waitForCancelablePromise(losatRuntimeWarmup, generationAbortSignal);
             throwIfGenerationCanceled();
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
-            setProcessingStatus(t('Running LOSAT: {completed}/{total} source jobs complete', { completed: 0, total: sourceJobs.length }));
+            setProcessingStatus(tn(sourceJobs.length, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed: 0, total: sourceJobs.length }));
             const executionStartedAt = getNow();
             const sourceResults = await executeLosatJobs(sourceJobs.map(({ members, batch, ...job }) => job), {
               concurrency: getLosatParallelWorkers(),
@@ -4486,7 +4486,7 @@ export const createRunAnalysis = ({
               },
               onProgress: ({ completed, total }) => {
                 if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
-                setProcessingStatus(t('Running LOSAT: {completed}/{total} source jobs complete', { completed, total }));
+                setProcessingStatus(tn(total, 'Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete', { completed, total }));
               }
             });
             throwIfGenerationCanceled();

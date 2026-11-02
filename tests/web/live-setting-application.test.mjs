@@ -402,7 +402,7 @@ test('a live setting row the shown Result cannot draw says Applies on Generate',
   assert.equal(note('legend', single, false).text, 'Live edit');
   // OV-1077: during a Multi-Record Canvas change the positions apply on
   // Generate; the sizes, font sizes and the title text stay live.
-  const partial = { application: 'live', text: 'Live edit; the position applies on Generate after the Multi-Record Canvas change', qualified: true };
+  const partial = { application: 'live', text: 'Live edit; the position applies on Generate after the Multi-Record Canvas change.', qualified: true };
   assert.equal(request.liveSettingApplies(single, 'diagramOptions.output.legend', draft(true)), false);
   assert.equal(request.liveSettingApplies(single, 'diagramOptions.plotTitleFontSize', draft(true)), true);
   assert.deepEqual(note('legend', single, true), partial);

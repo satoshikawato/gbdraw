@@ -223,7 +223,7 @@ for (const operation of ['replacement', 'removal']) {
       expect(generated.committedPlacements).toEqual([]);
       expect(await placementKeys(page)).toEqual([]);
       await expect(page.getByTestId('feature-identity-notice')).toContainText(
-        'Removed 1 feature edit whose feature the replaced source no longer has.'
+        'Removed 1 feature edit whose feature is no longer in the records in use.'
       );
       // The removal is part of the Generate step: Undo restores the row and
       // clears the count with the previous Result, and Redo removes it again.

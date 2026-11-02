@@ -256,7 +256,7 @@ for (const width of [1440, 390]) {
     await fileInput.setInputFiles({ name: 'empty.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from('') });
     const removeAll = page.getByRole('dialog', { name: 'Remove all annotation sets?' });
     await expect(removeAll).toBeVisible();
-    await expect(removeAll).toContainText(`removes all ${beforeEmpty.draft.length} annotation ${beforeEmpty.draft.length === 1 ? 'set' : 'sets'}.`);
+    await expect(removeAll).toContainText(beforeEmpty.draft.length === 1 ? 'removes the annotation set.' : `removes the ${beforeEmpty.draft.length} annotation sets.`);
     await removeAll.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(removeAll).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.capturing.value)).toBe(false);

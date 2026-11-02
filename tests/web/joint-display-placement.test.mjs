@@ -196,7 +196,7 @@ test('Main, resolved side, bulk Auto and history share one draft owner', async (
   assert.equal(transactions.length, 2);
   assert.equal(Object.keys(transactions[1].before).length, 2);
   state.form.separate_strands = true;
-  assert.throws(() => actions.setPlacement(features, 'above'), /Unavailable/);
+  assert.throws(() => actions.setPlacement(features, 'above'), /no feature track for this placement/);
 });
 
 for (const mode of ['circular', 'linear']) {
@@ -217,7 +217,7 @@ for (const mode of ['circular', 'linear']) {
           assert.equal(actions.valueFor(feature), side);
         } else {
           const before = structuredClone(state.featurePlacementOverrides);
-          assert.throws(() => actions.setPlacement([feature], side), /current draft feature slot/);
+          assert.throws(() => actions.setPlacement([feature], side), /no feature track for this placement/);
           assert.deepEqual(state.featurePlacementOverrides, before);
         }
       }
@@ -249,7 +249,7 @@ for (const mode of ['circular', 'linear']) {
     check(false);
     slot.enabled = false;
     assert.deepEqual(actions.choices([feature]).filter((entry) => entry.enabled).map((entry) => entry.value), ['auto']);
-    assert.throws(() => actions.setPlacement([feature], 'main'), /Unavailable/);
+    assert.throws(() => actions.setPlacement([feature], 'main'), /no feature track for this placement/);
     assert.ok(actions.choices([{ ...feature, record_key: 'unknown' }]).every((entry) => !entry.enabled));
   });
 }
@@ -351,4 +351,27 @@ test('a blank Linear record gap projects its default, 24 px, and other values as
     state.linearRecordGap.value = value;
   }).layout.recordGapPx;
   assert.deepEqual(['', null, 0, 40, -5, 'abc', true].map(gapOf), [24, 24, 0, 40, 0, 0, 1]);
+});
+
+// The two causes are different: the settings as edited have no such track, or
+// the feature is not in the Result, which disables every choice with Auto.
+test('a placement choice says which cause disables it', () => {
+  const feature = { scope: 'linear', record_key: 'record-1', biological_feature_id: 'feature' };
+  const stateOf = () => ({ mode: { value: 'linear' }, form: createDefaultForm(), adv: createDefaultAdv('linear'),
+    featurePlacementOverrides: {}, featureCatalog: { value: { items: [{ recordKeys: ['record-1'] }] } },
+    trackSlotResolvedGeometry: { value: { mode: 'linear', records: [] } } });
+  const reasons = (actions) => Object.fromEntries(actions.choices([feature]).map(({ value, enabled, reason }) => [value, enabled ? '' : reason]));
+  const notInResult = 'A selected feature is not in the displayed Result.';
+  const stale = createFeaturePlacementActions({ state: withDrawings(stateOf()), getCommittedRequest: () => ({ mode: 'linear' }),
+    isCurrentFeature: () => false, runUndoable: (_label, fn) => fn() });
+  assert.deepEqual(reasons(stale), { auto: notInResult, main: notInResult, above: notInResult, below: notInResult });
+  const uncommitted = createFeaturePlacementActions({ state: withDrawings(stateOf()), getCommittedRequest: () => ({ mode: 'circular' }),
+    isCurrentFeature: () => true, runUndoable: (_label, fn) => fn() });
+  assert.deepEqual(reasons(uncommitted), { auto: '', main: notInResult, above: notInResult, below: notInResult });
+  const state = stateOf();
+  state.form.separate_strands = true;
+  const noTrack = createFeaturePlacementActions({ state: withDrawings(state), getCommittedRequest: () => ({ mode: 'linear' }),
+    isCurrentFeature: () => true, runUndoable: (_label, fn) => fn() });
+  assert.equal(reasons(noTrack).auto, '');
+  assert.equal(reasons(noTrack).above, 'The current track settings have no feature track for this placement.');
 });

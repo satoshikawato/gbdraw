@@ -7,7 +7,7 @@ import {
 } from '../services/drawing/palette.js';
 /** @import { PaletteDrawing } from '../services/drawing/palette.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
-import { listText, t } from '../utils/i18n.js';
+import { listText, tn } from '../utils/i18n.js';
 import { importedDefaultColors, withoutImportedDefaultColors } from '../services/file-imports.js';
 /** @import { FileImports } from '../services/file-imports.js' */
 
@@ -15,7 +15,7 @@ import { importedDefaultColors, withoutImportedDefaultColors } from '../services
 /** @param {string[]} keys */
 const describeKeys = (keys) => {
   const rest = keys.length - 3;
-  return listText(rest > 0 ? [...keys.slice(0, 3), t('{count} more', { count: rest })] : keys);
+  return listText(rest > 0 ? [...keys.slice(0, 3), tn(rest, 'one more', '{count} more')] : keys);
 };
 
 /**

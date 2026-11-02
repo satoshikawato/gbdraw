@@ -3214,7 +3214,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
     executorCallsUnchanged: true,
     committedResultPreserved: true
   });
-  expect(rejected.errorSummary).toMatch(/Pairwise max hits/i);
+  expect(rejected.errorSummary).toMatch(/Pairwise display max hits/i);
 });
 
 // OIC-015: observe the jobs submitted to LOSAT and the resulting typed render,

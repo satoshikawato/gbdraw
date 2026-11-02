@@ -138,6 +138,13 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   Settings marked **Applies on Generate** still wait for **Generate Diagram**.
 - **Web app: text typed in the Features list.** Text typed in a label input of the
   Features list and not yet committed stays when a redraw finishes.
+- **Web UI: English text that no translation could correct.** Popups and messages
+  showed raw values such as `circular`, `plus`, `reverse`, and `compress`; they
+  now show the names the controls use. The screen-reader labels of Depth and
+  BLAST file inputs are translated, counted sentences read correctly at 1, error
+  messages name a setting you can type or choose as its control does (`Ring Width`,
+  not `Comparison ring width`), and several words from the code in messages, such as
+  "materialized records" and "current writer", are replaced.
 
 ## Changed behavior
 

@@ -153,8 +153,8 @@ test('UX-B01: a collinear block leads with one summary and lists gene pairs by g
   assert.deepEqual(Object.fromEntries(block.detailRows.map((row) => [row.label, row.value])), {
     'Block ID': 'block_0386',
     Kind: 'cluster',
-    Orientation: 'plus',
-    'Color mode': 'orientation_identity',
+    Orientation: 'Same orientation',
+    'Color mode': 'Orientation + identity',
     'Average identity': '76.06%',
     'Aligned length': '5,831 aa',
     'Block score': '8448',
@@ -232,7 +232,7 @@ test('a popup built before a language switch keeps its hover rows: sections and 
     await setUiLocale('ja', async () => ({ default: catalog }));
     const japanese = buildMatchPopupPayload(element, options);
     assert.deepEqual(japanese.sections.slice(0, 2).map((entry) => [entry.id, entry.title]), [['Summary', 'S-ja'], ['Alignment', 'A-ja']]);
-    const expected = [['Kind', 'K-ja', 'pairwise'], ['Identity', 'I-ja', '91.2'], ['Query', 'Q-ja', '100..400'], ['Subject', 'Sub-ja', '200..500']];
+    const expected = [['Kind', 'K-ja', 'Pairwise match'], ['Identity', 'I-ja', '91.2'], ['Query', 'Q-ja', '100..400'], ['Subject', 'Sub-ja', '200..500']];
     const rowsOf = (payload) => buildPairwiseMatchHoverRows(payload).map((row) => [row.id, row.label, row.value]);
     assert.deepEqual(rowsOf(english), expected, 'an English payload shown after the switch');
     assert.deepEqual(rowsOf(japanese), expected);
@@ -241,7 +241,7 @@ test('a popup built before a language switch keeps its hover rows: sections and 
   }
   assert.deepEqual(
     buildPairwiseMatchHoverRows(english).map((row) => [row.label, row.value]),
-    [['Kind', 'pairwise'], ['Identity', '91.2'], ['Query', '100..400'], ['Subject', '200..500']]
+    [['Kind', 'Pairwise match'], ['Identity', '91.2'], ['Query', '100..400'], ['Subject', '200..500']]
   );
 });
 
@@ -249,7 +249,7 @@ test('the collinear block summary shows "vs" in the muted style before the subje
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const summary = html.slice(html.indexOf('data-collinear-summary'));
   const subjectLine = summary.split('\n').find((line) => line.includes('block.subject.recordId'));
-  assert.match(subjectLine, /<span class="match-muted">\{\{ t\('vs'\) \}\}\{\{ ' ' \}\}<\/span><span class="font-semibold">\{\{ clickedPairwiseMatch\.block\.subject\.recordId \}\}<\/span>/);
+  assert.match(subjectLine, /<i18n-text :text="t\('vs \{record\}'\)" text-class="match-muted"><template #record><span class="font-semibold">\{\{ clickedPairwiseMatch\.block\.subject\.recordId \}\}<\/span><\/template><\/i18n-text>/);
 });
 
 test('OV-1390: member roles and confidence levels show in the UI language; an unknown value shows as written', async () => {

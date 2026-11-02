@@ -20,7 +20,9 @@ import {
   CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, pluralTranslation, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
   uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
-import { memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { COLLINEAR_COLOR_MODE_TEXT, memberValueLabelKeys } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
+import { COLLINEARITY_COLOR_MODES } from '../../tools/i18n/collinearity-words.generated.mjs';
+import { detectedTopologyNote } from '../../gbdraw/web/js/services/record-display-model.js';
 import { CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, catalogStatus } from '../../tools/i18n/catalogs.mjs';
 import {
   PLACEHOLDER, VOID_TAGS, WEB_ROOT as webRoot, compiledHtml, elementEnd, extractCalls, sourceCalls, sourceFiles, sourceKeys, webPath
@@ -623,7 +625,7 @@ test('OV-1476: no key names a control, row or syntax the UI does not have', asyn
 // sentence; each case is a whole sentence of its own.
 test('OV-1477: track, mode, control and setting names are not placeholders inside sentences', () => {
   const keys = sourceCalls().map((call) => call.key).filter(Boolean);
-  const inserted = [/\{track\}/, /\{control\}/, /No \{mode\} Result/, /^\{setting\} removes/];
+  const inserted = [/\{track\}/, /\{control\}/, /No \{mode\} Result/, /^\{setting\} removes/, /\{mode\} track/, /\{topology\}/];
   assert.deepEqual(keys.filter((key) => inserted.some((pattern) => pattern.test(key))), []);
   for (const key of [
     'Hide GC content?', 'Keep GC skew', 'Hidden: Hide GC Content is on.', 'No Circular Result yet. Configure settings and click Generate.',
@@ -645,7 +647,7 @@ test('the English cites the controls the UI has and names what each text describ
   assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
   for (const key of [
     'Field to search', 'Tick Font Size', 'Annotation qualifier value', 'No feature types selected', 'Comparison ring color for {file}',
-    'Max hits per protein for groups', 'Protein BLASTP max hits per protein for groups', 'Color set on individual features',
+    'Max hits per protein for groups', 'Color set on individual features',
     'Upload BLAST TSV', 'Advanced similarity group settings'
   ]) assert.ok(keys.includes(key), key);
 });
@@ -845,4 +847,152 @@ test('OV-1690: the record list sentence is one key, joined to the next with the 
   assert.match(block, /<i18n-text :text="t\('\{file\}: \{records\}\.'\)">/);
   assert.match(block, /sentenceSeparator\(\) \+ settingApplicationSentence\('inputs'\)/);
   assert.doesNotMatch(block, /<\/span>\.|<\/strong>:/);
+});
+
+// A literal with words as a branch of a shown expression is English in every
+// locale: `{{ on ? 'reverse' : 'forward' }}`. A literal inside a call
+// (`t('…')`, `settingApplicationText(on ? 'live' : 'generate')`) and the right
+// side of a comparison are not branches.
+/**
+ * The word literals an expression can show: its whole value, or a branch of its
+ * outermost conditional.
+ * @param {string} expression
+ * @returns {string[]}
+ */
+const bareEnglishBranches = (expression) => {
+  /** @type {string[]} */
+  const found = [];
+  let depth = 0;
+  let afterBranch = true;
+  for (let at = 0; at < expression.length; at += 1) {
+    const char = expression[at];
+    if (char === '\'' || char === '"' || char === '`') {
+      let end = at + 1;
+      while (end < expression.length && expression[end] !== char) end += expression[end] === '\\' ? 2 : 1;
+      const literal = expression.slice(at, end + 1);
+      if (depth === 0 && afterBranch && /[A-Za-z]/.test(literal.replace(/\$\{[^}]*\}/g, ''))) found.push(literal);
+      afterBranch = false;
+      at = end;
+    } else if (/\s/.test(char)) {
+      continue;
+    } else {
+      if ('([{'.includes(char)) depth += 1;
+      if (')]}'.includes(char)) depth -= 1;
+      afterBranch = depth === 0 && (char === ':' || (char === '?' && expression[at + 1] !== '.' && expression[at + 1] !== '?' && expression[at - 1] !== '?'));
+    }
+  }
+  return found;
+};
+const SHOWN_BINDING = /\s:(aria-label|title|placeholder|label|alt|data-input-aria-label)="([^"]*)"/g;
+
+test('the bare English branch check finds a literal branch and leaves calls and comparisons alone', () => {
+  assert.deepEqual(bareEnglishBranches("on ? 'reverse' : 'forward'"), ["'reverse'", "'forward'"]);
+  assert.deepEqual(bareEnglishBranches("a ? t('A') : b === 'ready' ? t('B') : 'Align…'"), ["'Align…'"]);
+  assert.deepEqual(bareEnglishBranches('`Depth TSV for sequence ${index + 1}`'), ['`Depth TSV for sequence ${index + 1}`']);
+  assert.deepEqual(bareEnglishBranches("label(on ? 'live' : 'generate')"), []);
+  assert.deepEqual(bareEnglishBranches("a ? t('A') : t('B')"), []);
+  assert.deepEqual(bareEnglishBranches("index ? ', ' : ''"), []);
+  assert.deepEqual(bareEnglishBranches('unit ? ` ${unit}` : \'\''), []);
+  assert.deepEqual(bareEnglishBranches("a?.b ?? c"), []);
+});
+
+test('no mustache or shown attribute of index.html has a bare English literal as a branch', () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const lineOf = (/** @type {number} */ index) => html.slice(0, index).split('\n').length;
+  const found = [
+    ...[...html.matchAll(/\{\{([\s\S]*?)\}\}/g)].map((match) => [match.index, match[1]]),
+    ...[...html.matchAll(SHOWN_BINDING)].map((match) => [match.index, match[2]])
+  ].flatMap(([index, expression]) => bareEnglishBranches(String(expression)).map((literal) => `index.html:${lineOf(Number(index))}: ${literal}`));
+  assert.deepEqual(found, []);
+});
+
+test('the record row names the topology its file declares through one key per value', () => {
+  assert.deepEqual(['circular', 'linear', 'unknown', undefined].map(detectedTopologyNote),
+    ['(file: circular)', '(file: linear)', '(file: topology unknown)', '(file: topology unknown)']);
+});
+
+// A "Choose" sentence names the options as their controls show them: a label of
+// the page, or of the two option tables the page lists (comparison-ui, pairwise-match-popup).
+test('each name in a Choose sentence of an error is a control label', () => {
+  const read = (path) => readFileSync(new URL(`../../gbdraw/web/${path}`, import.meta.url), 'utf8');
+  const labels = [read('index.html'), read('js/app/comparison-ui.js'), read('js/app/pairwise-match-popup.js')].join('\n');
+  const sentences = [...read('js/utils/error-normalization.js').matchAll(/: '(Choose [A-Z][^']*)\.'/g)].map((match) => match[1])
+    .filter((sentence) => !sentence.includes(' for '));
+  assert.ok(sentences.length >= 11, String(sentences.length));
+  const isLabel = (name) => labels.includes(`'${name}')`) || labels.includes(`>${name}</option>`);
+  const missing = sentences.flatMap((sentence) => sentence.slice('Choose '.length).split(/, or |, | or /)
+    .filter((name) => !isLabel(name)).map((name) => `${sentence}: ${name}`));
+  assert.deepEqual(missing, []);
+});
+
+// Python's color modes reach the shared table through the generator, so a new mode fails here.
+test('the Collinear color mode table lists the modes Python writes', () => {
+  assert.deepEqual(Object.keys(COLLINEAR_COLOR_MODE_TEXT), [...COLLINEARITY_COLOR_MODES]);
+  const page = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  assert.match(page, /v-for="\[value, label\] in collinearColorModeOptions"/);
+  assert.doesNotMatch(page, /<option value="orientation_identity">/);
+});
+
+// The copied summary uses the keys of the popup that shows it.
+test('the copied Collinear block summary holds no English of its own', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/app/pairwise-match-popup.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /summaryText: `Collinear block:/);
+});
+
+// The sentences of the Source recipe name no mode: the recipe is of one diagram.
+test('the record topology a file declares and the option values of an error are whole keys', async () => {
+  const keys = [...(await sourceKeys()).keys.keys()];
+  for (const key of [
+    '(file: circular)', '(file: linear)', '(file: topology unknown)',
+    'Choose Error on overflow, Compress, or Clip.', 'Choose Foreground or Underlay.', 'Choose Auto (Default), Linear, or Equal.',
+    'Choose Above, Features on axis, or Below.', 'Choose Auto or Above Feature.',
+    'Choose Pairwise matches, Similarity groups, or Collinear blocks.', 'Choose Adjacent pairs or All records.',
+    'Choose Auto, CDS, or Locus.', 'Choose All hits or Reciprocal best hits.', 'Choose Strand or Gene order.',
+    'Choose Average identity, Orientation, or Orientation + identity.',
+    'Depth TSV for file {file}, series {series}', 'Depth TSV for sequence {sequence}, series {series}',
+    'BLAST TSV for #{from} to #{to}',
+    'vs {record}', 'Not moved: {reason}', 'Not moved', 'Session file: {path} could not be read and is left out.',
+    'record direction\u0004forward', 'record direction\u0004reverse', 'collinearity block kind\u0004syntenic'
+  ]) assert.ok(keys.includes(key), key);
+  const stale = [
+    /^Choose error, compress/, /^Choose foreground or/, /^Choose auto,/, /^Choose above, middle/, /^Choose auto or above_feature/,
+    /^Choose pairwise,/, /^Choose adjacent or all/, /^Choose all or rbh/, /^Choose strand or order/, /^Choose average_identity/,
+    /^vs$/, /^Not moved \(/, /^skipped$/, /\{name\} \(\{path\}\)/
+  ];
+  assert.deepEqual(keys.filter((key) => stale.some((pattern) => pattern.test(key))), []);
+});
+
+// A sentence reads whole in each case: no fragment takes its place, and a count is a tn() pair.
+test('sentences with a count or a qualifier are whole keys, and none is built from a translated fragment', async () => {
+  const { keys } = await sourceKeys();
+  const pairOf = (key) => keys.get(key)?.plural;
+  for (const [one, other] of [
+    ['The label reading "{text}"', 'All {count} labels reading "{text}"'],
+    ['The "{name}" feature', 'All {count} "{name}" features'],
+    ['one more', '{count} more'],
+    ['and one more', 'and {count} more'],
+    ['Running LOSAT: {completed}/{total} search complete', 'Running LOSAT: {completed}/{total} searches complete'],
+    ['Running {program} comparisons for the circular diagram: {completed}/{total} job complete', 'Running {program} comparisons for the circular diagram: {completed}/{total} jobs complete'],
+    ['Importing it removes the annotation set.', 'Importing it removes the {count} annotation sets.'],
+    ['The chosen feature already points left.', 'The {count} chosen features already point left.'],
+    ['The chosen feature already points right.', 'The {count} chosen features already point right.'],
+    ['Reverses {records} so the chosen feature points left.', 'Reverses {records} so the {count} chosen features point left.'],
+    ['Reverses {records} so the chosen feature points right.', 'Reverses {records} so the {count} chosen features point right.']
+  ]) assert.deepEqual(pairOf(other), { one, other }, other);
+  for (const key of [
+    'The Source recipe references a browser-generated file: {files}. Use "Download reproducibility files" to save it next to the uploaded inputs before running the command in a terminal.',
+    'The Source recipe references browser-generated files: {files}. Use "Download reproducibility files" to save them next to the uploaded inputs before running the command in a terminal.',
+    'Exact replay references {files}, which is included in "Download reproducibility files".',
+    'Exact replay references {files}, which are included in "Download reproducibility files".',
+    'This tool runs entirely in your browser.', 'It uses WebAssembly (Pyodide).',
+    '{feature} where a qualifier matches “{pattern}”', 'Any feature where a qualifier matches “{pattern}”',
+    'All features that share:',
+    'Room kept toward the center for the inside tracks: {px} px.',
+    'Room kept toward the center for the inside tracks (among them GC content, GC skew, and the scale): {px} px.',
+    'number of groups in a block\u0004Similarity groups'
+  ]) assert.ok(keys.has(key), key);
+  for (const key of [
+    '{first} and {second}', 'the scale', 'a qualifier', 'entirely in your browser', 'This tool runs {where} using WebAssembly (Pyodide).', 'All features with the same'
+  ]) assert.ok(!keys.has(key), key);
+  assert.deepEqual([...keys.keys()].filter((key) => /file\(s\)/.test(key)), []);
 });

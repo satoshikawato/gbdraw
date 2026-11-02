@@ -659,7 +659,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(summary).toContainText('1 aligned');
   await expect(summary).toContainText('1 unchanged');
   await expect(summary).toContainText('0 explicitly skipped');
-  await expect(summary).toContainText('0 no-candidate');
+  await expect(summary).toContainText('0 without a candidate');
   await expect(summary).toContainText('0 reversed');
   expect(await page.evaluate(
     () => window.__GBDRAW_HISTORY__.getUndoCount()
@@ -1531,7 +1531,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     app.rightDrawerTab = 'orthogroups';
     await window.Vue.nextTick();
     const labels = [...document.querySelectorAll(
-      '[data-similarity-alignment-plan-inspector] [data-alignment-record-key]:has([aria-label$=" reversed relative to source"])'
+      '[data-similarity-alignment-plan-inspector] [data-alignment-record-key]:has([aria-label$=" reversed relative to the source file"])'
     )].map((element) => element.dataset.alignmentRecordKey);
     app.showRightDrawer = previous.open;
     app.rightDrawerTab = previous.tab;
@@ -1933,7 +1933,7 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await dialog.getByRole('radio', { name: 'All right', exact: true }).check();
   await expect(unknown).toContainText('no known direction; it is never guessed');
   await expect(missing).toContainText('No usable candidate');
-  await expect(dialog.locator('#alignment-direction-scope')).toContainText('all 2 chosen features point right');
+  await expect(dialog.locator('#alignment-direction-scope')).toContainText('the 2 chosen features point right');
   const initial = await artifactSnapshot(page);
   const preview = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview);
   expect(preview.records.filter(r => r.beforeReverseComplement !== r.afterReverseComplement).map(r => r.recordKey)).toEqual(['record-1']);

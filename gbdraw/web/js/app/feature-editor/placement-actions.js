@@ -120,29 +120,29 @@ export const createFeaturePlacementActions = ({
   /** @param {DrawingState} drawing */
   const draft = (drawing) => ({ mode: state.mode.value, form: drawing.form, adv: drawing.adv });
   /**
-   * @param {DrawingState} drawing
+   * Whether the Result of this mode holds the features, so a lane can be chosen for them.
    * @param {PlacedFeature[]} features
    */
-  const targetsFor = (drawing, features) => {
-    const mode = state.mode.value;
-    if (!features.length || getCommittedRequest()?.mode !== mode) return [];
+  const inCommittedCatalog = (features) => {
+    if (!features.length || getCommittedRequest()?.mode !== state.mode.value) return false;
     /** @type {{ recordKeys: unknown[] }[]} */
     const items = state.featureCatalog.value?.items || [];
-    if (!features.every((feature) => items.some((item) => item.recordKeys.includes(feature?.record_key)))) return [];
-    return draftPlacementTargets(draft(drawing));
+    return features.every((feature) => items.some((item) => item.recordKeys.includes(feature?.record_key)));
   };
   /** @param {PlacedFeature[]} features */
   const choices = (features) => {
     const drawing = state.activeDrawing();
-    const targets = targetsFor(drawing, features);
+    const inCatalog = inCommittedCatalog(features);
+    const targets = inCatalog ? draftPlacementTargets(draft(drawing)) : [];
+    const current = features.length > 0 && features.every((feature) => Boolean(featureIdentityKeyOf(feature)) && isCurrentFeature(feature));
     return ['auto', 'main', ...SIDES[/** @type {DiagramMode} */ (state.mode.value)]].map((value) => {
-      const enabled = features.length > 0 && features.every((feature) => {
-        if (!featureIdentityKeyOf(feature) || !isCurrentFeature(feature)) return false;
-        if (value === 'auto') return true;
-        return targets.some((target) => value === 'main' ? target.kind === 'main' : target.side === value);
-      });
+      const enabled = current && (value === 'auto'
+        || targets.some((target) => value === 'main' ? target.kind === 'main' : target.side === value));
       return { value, enabled, label: value === 'auto' ? t('Auto') : value === 'main' ? t('Main') : LANE_ONE_LABEL[value](),
-      reason: enabled ? '' : t('Unavailable in the current draft feature slot.') };
+        reason: enabled ? '' : current && inCatalog
+          // The targets come from the settings as edited, not from the track as drawn.
+          ? t('The current track settings have no feature track for this placement.')
+          : t('A selected feature is not in the displayed Result.') };
     });
   };
   /**

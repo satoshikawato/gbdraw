@@ -99,14 +99,14 @@ test('a locale translates each part and the labels inside it; values stay as wri
       'Select Hide GC Content, or reduce GC Content Width (with Custom Track Slots on, the row width).',
       'Select Hide GC Skew, or reduce GC Skew Width (with Custom Track Slots on, the row width).'];
     assert.equal(room.summary, 'A circular track does not fit. Move the track, reduce widths, disable conflicting labels,'
-      + ' or place it on the other side of the Axis. Below it, 34 px are kept for the tracks inside it, among them GC content'
-      + ` and GC skew. To make room, do one of the following. ${remedies.join(' ')} Overlapping label pairs: 2.`);
-    // A list of names is nested `{first} and {second}` parts. Each remedy is a whole sentence with
-    // its control names inside it, so a translator never gets a fragment (review item 6).
+      + ' or place it on the other side of the Axis. Room kept toward the center for the inside tracks (among them GC content'
+      + ` and GC skew): 34 px. To make room, do one of the following. ${remedies.join(' ')} Overlapping label pairs: 2.`);
+    // Each set of named tracks and each remedy is a whole sentence with its names inside it,
+    // so a translator never gets a fragment (review item 6).
     // Python's label fit counts are shown as sent.
     assert.equal(errorText(room.summaryParts), '«A circular track does not fit.»«Move the track, reduce widths, disable'
-      + ' conflicting labels, or place it on the other side of the Axis.»«Below it, 34 px are kept for the tracks inside it,'
-      + ` among them ««GC content» and «GC skew»».»«To make room, do one of the following.»${remedies.map((text) => `«${text}»`).join('')}`
+      + ' conflicting labels, or place it on the other side of the Axis.»«Room kept toward the center for the inside tracks ('
+      + `among them GC content and GC skew): 34 px.»«To make room, do one of the following.»${remedies.map((text) => `«${text}»`).join('')}`
       + 'Overlapping label pairs: 2.');
     // OV-2179: the room labels not placed need is a key of its own with Python's value, not Python's sentence.
     const capacity = normalizeUserFacingError({ code: 'LABEL_LAYOUT',

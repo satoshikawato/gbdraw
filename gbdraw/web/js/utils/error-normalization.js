@@ -37,7 +37,7 @@ const REASONS = Object.freeze({
   DECORATION_TARGET: 'The decoration target is missing or ambiguous.',
   DECORATION_METADATA: 'Composition metadata is invalid or unavailable.',
   ANNOTATION_SET: 'Select an existing annotation set.', ANNOTATION_MARKS: 'Use supported annotation mark filters.',
-  OVERFLOW: 'Choose error, compress, or clip.', LAYER: 'Choose foreground or underlay.',
+  OVERFLOW: 'Choose Error on overflow, Compress, or Clip.', LAYER: 'Choose Foreground or Underlay.',
   OVERLAY_ANCHOR: 'Select an eligible enabled anchor for an annotation track whose placement is Overlay anchor (Circular) or On axis (Linear).',
   OVERLAY_SPAN: 'For Extend to, select an eligible enabled slot other than the anchor, or None.',
   OVERLAY_SIDE: 'Choose the placement Overlay anchor (Circular) or On axis (Linear) when an anchor or an Extend to slot is selected.',
@@ -47,15 +47,15 @@ const REASONS = Object.freeze({
   TRACK_LANE: 'Use a supported feature lane and matching side.', CONSERVATION_SOURCE: 'Use the supported conservation workflow and select a comparison source.',
   TICK_PARAMETER: 'Use large_tick_interval instead of tick_interval.', FEATURES_COUNT: 'Use the supported number of feature tracks for this layout.',
 
-  CIRCULAR_MULTI_RECORD_SIZE_MODE: 'Choose auto, linear, or equal.',
-  LINEAR_TRACK_LAYOUT: 'Choose above, middle, or below.',
-  LINEAR_LABEL_PLACEMENT: 'Choose auto or above_feature.',
-  PROTEIN_BLASTP_MODE: 'Choose pairwise, orthogroup, or collinear.',
-  COLLINEAR_SEARCH_SCOPE: 'Choose adjacent or all.',
-  COLLINEAR_UNIT_MODE: 'Choose auto, cds, or locus.',
-  COLLINEAR_ANCHOR_MODE: 'Choose all or rbh.',
-  COLLINEAR_MERGE_ORIENTATION: 'Choose strand or order.',
-  COLLINEAR_COLOR_MODE: 'Choose average_identity, orientation, or orientation_identity.',
+  CIRCULAR_MULTI_RECORD_SIZE_MODE: 'Choose Auto (Default), Linear, or Equal.',
+  LINEAR_TRACK_LAYOUT: 'Choose Above, Features on axis, or Below.',
+  LINEAR_LABEL_PLACEMENT: 'Choose Auto or Above Feature.',
+  PROTEIN_BLASTP_MODE: 'Choose Pairwise matches, Similarity groups, or Collinear blocks.',
+  COLLINEAR_SEARCH_SCOPE: 'Choose Adjacent pairs or All records.',
+  COLLINEAR_UNIT_MODE: 'Choose Auto, CDS, or Locus.',
+  COLLINEAR_ANCHOR_MODE: 'Choose All hits or Reciprocal best hits.',
+  COLLINEAR_MERGE_ORIENTATION: 'Choose Strand or Gene order.',
+  COLLINEAR_COLOR_MODE: 'Choose Average identity, Orientation, or Orientation + identity.',
   ORTHOGROUP_MEMBERSHIP_MODE: 'Choose anchor_core_v1.',
 
   UNKNOWN_CONFIG_PATH: 'Remove unknown configuration overrides or use a supported setting.',
@@ -86,7 +86,7 @@ const REASONS = Object.freeze({
   INVALID_ESCAPE: 'Check the escape sequence.', UNKNOWN_EXTENSION: 'Check the Python group syntax.',
   CHARACTER_RANGE: 'Check the character range.', GROUP_REFERENCE: 'Check the group reference.',
   GROUP_NAME: 'Check the group name.', SYNTAX_ERROR: 'Correct the Python regular expression.',
-  ADJACENT_ALL: 'Choose adjacent or all.', BLASTP_MODE: 'Choose pairwise, orthogroup, or collinear.',
+  ADJACENT_ALL: 'Choose Adjacent pairs or All records.', BLASTP_MODE: 'Choose Pairwise matches, Similarity groups, or Collinear blocks.',
   UNIQUE_IDS: 'Use distinct record or protein identifiers.', MATCH_IDS: 'Use matching protein FASTA and metadata identifiers.',
   SEARCH_FRAME: 'Use comparison coordinates within the selected and cropped record, counted on its source strand.',
   LOSAT_OPTION_PROGRAM: 'Use only the options of the selected LOSAT program.',
@@ -121,7 +121,7 @@ const REASONS = Object.freeze({
   ARRAY: 'Use a list.', OBJECT: 'Use an object.', FIELDS: 'Check the required fields.', REQUIRED: 'Supply the required value.',
   ORDER: 'The start or minimum must not exceed the end or maximum.', INCREASING: 'Use a minimum below the maximum.', RECORD_BOUNDS: 'Keep the region within the record length.',
   STRAND: 'Use -1, 1, or no strand.', DISPLAY_START_BOUNDS: 'Use a display start between 1 and the record length.', CROP_START_CONFLICT: 'Choose a crop or an explicit display start.',
-  REFERENCE_REQUIRED: 'Supply the depth reference column.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
+  REFERENCE_REQUIRED: 'Fill in the reference name on every row of the Depth TSV.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
   WORKSPACE: 'Retry the operation.', OUT_OF_RANGE: 'Choose a record within the loaded range.',
   NO_MATCH: 'Choose an available record.', AMBIGUOUS: 'Use #<number> to distinguish records with the same ID.',
   SELECTOR_FORMAT: 'Use #<number> or a record ID.', SELECT_ONE: 'Select exactly one record.',
@@ -228,7 +228,7 @@ const DEFINITIONS = Object.freeze({
   // The same request fails the same way until the setting or the mode changes.
   MODE_SETTING: ['A preserved session setting does not apply to this diagram mode.', ['edit-input']],
   // The Session's Reset alignment evidence is bound to the records and plan of the latest Align.
-  ALIGNMENT_RESET_EVIDENCE: ['The Reset alignment evidence of the latest Align does not match the current records or alignment plan. Undo the changes made after Align, or select Align… again.', ['edit-input']],
+  ALIGNMENT_RESET_EVIDENCE: ['What Reset alignment would restore no longer matches the current records or alignment plan. Undo the changes made after Align, or select Align… again.', ['edit-input']],
   REGEX_SYNTAX: ['Not a valid regular expression.', ['edit-pattern', 'retry']],
   RESOURCE_INVALID: ['Input resource preparation failed. Reselect the input and retry.', ['select-input', 'retry']],
   HELPER_PROTOCOL: ['The helper request is invalid. Retry the operation.', ['retry', 'save-session']],
@@ -246,21 +246,31 @@ const DEFINITIONS = Object.freeze({
 });
 
 /** @type {Readonly<Record<string, string>>} */
-const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits',
-  losatp_max_hits: 'Protein BLASTP Pairwise max hits', losatp_max_target_seqs: 'Protein BLASTP Max target seqs',
-  losatp_member_max_hits: 'Protein BLASTP max hits per protein for groups',
+const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Pairwise display max hits',
+  losatp_max_hits: 'Pairwise display max hits', losatp_max_target_seqs: 'LOSATP Max target seqs',
+  losatp_member_max_hits: 'Max hits per protein for groups',
   output_prefix: 'Output Prefix',
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',
   evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length', wrap_length: 'Bases per row', anchor_feature: 'Feature selector',
-  plot_title_font_size: 'Plot Title Font Size', font_family: 'Font', feature_width_circular: 'Feature Width',
+  plot_title_font_size: 'Plot Title Font Size', font_family: 'Font', feature_width_circular: 'Feature Track Width',
   depth_width_circular: 'Depth Width', gc_content_width_circular: 'GC Content Width',
   gc_content_radius_circular: 'GC Content Radius', gc_skew_width_circular: 'GC Skew Width',
-  gc_skew_radius_circular: 'GC Skew Radius', match_height: 'Pairwise Match Height',
-  conservation_ring_width: 'Comparison ring width', conservation_ring_gap: 'Comparison ring gap',
-  center_reserved_radius: 'Center Reserved Radius', multi_record_min_radius_ratio: 'Minimum radius ratio',
-  multi_record_column_gap_ratio: 'Column gap ratio', multi_record_row_gap_ratio: 'Row gap ratio' });
+  gc_skew_radius_circular: 'GC Skew Radius', match_height: 'Match height',
+  conservation_ring_width: 'Ring Width', conservation_ring_gap: 'Ring Gap',
+  center_reserved_radius: 'Center Reserved Radius', multi_record_min_radius_ratio: 'Min Radius Ratio',
+  multi_record_column_gap_ratio: 'Column Gap Ratio', multi_record_row_gap_ratio: 'Row Gap Ratio',
+  orthogroup_member_max_hits: 'Max hits per protein for groups', protein_blastp_candidate_limit: 'LOSATP Max target seqs',
+  protein_blastp_mode: 'LOSATP mode', collinear_min_anchors: 'Min block genes', collinear_max_unit_gap: 'Max unit gap',
+  collinear_max_diagonal_drift: 'Diagonal drift', collinear_max_conflicts: 'Merge conflicts',
+  collinear_max_paralog_links_per_orthogroup: 'Paralog links per group',
+  collinear_infer_orthogroups: 'Build similarity groups with within-record searches', collinear_search_scope: 'Search between',
+  collinear_unit_mode: 'Unit mode', collinear_anchor_mode: 'Anchor mode', collinear_merge_orientation: 'Merge orientation',
+  collinear_color_mode: 'Color mode', circular_multi_record_size_mode: 'Record Size Mode', linear_track_layout: 'Track Layout',
+  linear_label_placement: 'Label Placement', overflow: 'Overflow behavior', layer: 'Annotation layer', set_id: 'Annotation set',
+  anchor_slot: 'Enabled drawable anchor', to_slot: 'Extend to', renderer: 'Renderer', side: 'Track placement', spacing: 'Spacing',
+  depth_min: 'Depth Min', depth_max: 'Depth Max', min_depth: 'Depth Min', max_depth: 'Depth Max' });
 const CODES = new Set(Object.keys(DEFINITIONS));
 // Python exception classes the adapter may name for RENDER_FAILED (class names, never messages).
 const EXCEPTION_TYPES = new Set(`ValidationError ParseError ConfigError ExportError GbdrawError ZeroDivisionError
@@ -279,12 +289,24 @@ const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
 // placement names (`keptInsideTracks`, `slotTrack`; gbdraw/diagrams/circular/radial_layout.py
 // `SWITCHED_TRACK_IDS`), and the remedy: one sentence that names the control that turns it
 // off and the setting that narrows it, with the number of choices it offers.
-/** @typedef {{ name: string, remedy: string, options: number }} SwitchedTrack */
+/** @typedef {{ remedy: string, options: number }} SwitchedTrack */
 /** @type {Readonly<Record<string, SwitchedTrack>>} */
 const SWITCHED_TRACKS = Object.freeze({
-  gc_content: { name: 'GC content', remedy: 'Select Hide GC Content, or reduce GC Content Width (with Custom Track Slots on, the row width).', options: 2 },
-  gc_skew: { name: 'GC skew', remedy: 'Select Hide GC Skew, or reduce GC Skew Width (with Custom Track Slots on, the row width).', options: 2 },
-  ticks: { name: 'the scale', remedy: 'Clear Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row).', options: 1 }
+  gc_content: { remedy: 'Select Hide GC Content, or reduce GC Content Width (with Custom Track Slots on, the row width).', options: 2 },
+  gc_skew: { remedy: 'Select Hide GC Skew, or reduce GC Skew Width (with Custom Track Slots on, the row width).', options: 2 },
+  ticks: { remedy: 'Clear Show Coordinate Scale (with Custom Track Slots on, remove the Ticks row).', options: 1 }
+});
+// The room kept for the tracks inside a failed row, one whole sentence per set of switched tracks,
+// by their `SWITCHED_TRACKS` keys in that table's order (a sentence is never built from track names).
+/** @type {Readonly<Record<string, string>>} */
+const KEPT_INSIDE_AMONG = Object.freeze({
+  gc_content: 'Room kept toward the center for the inside tracks (among them GC content): {px} px.',
+  gc_skew: 'Room kept toward the center for the inside tracks (among them GC skew): {px} px.',
+  ticks: 'Room kept toward the center for the inside tracks (among them the scale): {px} px.',
+  'gc_content,gc_skew': 'Room kept toward the center for the inside tracks (among them GC content and GC skew): {px} px.',
+  'gc_content,ticks': 'Room kept toward the center for the inside tracks (among them GC content and the scale): {px} px.',
+  'gc_skew,ticks': 'Room kept toward the center for the inside tracks (among them GC skew and the scale): {px} px.',
+  'gc_content,gc_skew,ticks': 'Room kept toward the center for the inside tracks (among them GC content, GC skew, and the scale): {px} px.'
 });
 // The sentences of a summary other than the table rows above: each is one part
 // (`ErrorTextPart`) and a catalog key; `{name}` takes the part's value.
@@ -296,17 +318,15 @@ const PHRASES = Object.freeze({
   field: 'Field: {field}.', band: 'Available band: {inner}–{outer} px.',
   sessionTooNew: 'Session version {version} is newer than this gbdraw supports ({latest}).',
   sessionUnsupported: 'Unsupported session version: {version}. This gbdraw reads Session versions {versions}.',
-  keptBelow: 'Below it, {px} px are kept for the tracks inside it.',
-  keptBelowAmong: 'Below it, {px} px are kept for the tracks inside it, among them {tracks}.',
+  keptBelow: 'Room kept toward the center for the inside tracks: {px} px.',
   // OV-1389 review item 6: each remedy is a whole sentence of `SWITCHED_TRACKS`, after one of these.
   makeRoom: 'To make room, do the following.', makeRoomAny: 'To make room, do one of the following.',
   // OV-2179: the room the labels not placed need (CAPACITY-STOP), the largest of each side, as Python sends it.
   outerLabelRoom: 'Outer labels need about {ratio} times the room around the map.',
   innerLabelRoom: 'Inner labels need about {ratio} times the room around the map.',
-  and: '{first} and {second}',
   position: 'At character {position}.', requiredColumns: 'Required columns: {count}.', loadedRecords: 'Loaded records: {count}.',
   exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
-  schema: 'Load a supported Session file or recreate it with the current writer.',
+  schema: 'Load a Session file that this version of gbdraw supports.',
   notASession: 'This file is not a gbdraw Session: it is not valid JSON.',
   // OV-2240: Save refuses a Session that Load could not open (the cap of services/session-file.js).
   sessionNotSaved: 'The Session was not saved: it is {size} MB expanded, and the browser loads at most {limit} MB.',
@@ -375,12 +395,6 @@ const capParts = (parts, limit) => {
   const cut = renderErrorText(parts).slice(0, limit);
   return cut ? [{ text: cut, verbatim: true }] : [];
 };
-/**
- * Joins parts with `and` as English does: "A and B and C".
- * @param {ErrorTextPart[]} items at least one
- * @returns {ErrorTextPart}
- */
-const andPart = (items) => items.reduce((first, second) => ({ text: PHRASES.and, params: { first, second } }));
 // A rendered feature ID (gbdraw/svg/ids.py) and an INSDC or GFF3 feature type.
 const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
 const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
@@ -734,6 +748,17 @@ const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, 
   return null;
 };
 
+// The reasons only a Session load gives. `FIELDS` also comes from other work,
+// so it counts as a load only in the Load Session operation.
+const SESSION_LOAD_REASONS = new Set(['SESSION_FORMAT', 'SESSION_FIELDS', 'SESSION_TOO_NEW', 'SESSION_VERSION_UNSUPPORTED', 'SESSION_TOO_OLD']);
+/**
+ * @param {{ code: string, operation: string }} result
+ * @param {string | undefined} field
+ * @param {string | undefined} reason
+ */
+const sessionLoadRejected = ({ code, operation }, field, reason) => code === 'INPUT_INVALID' && field === 'schema'
+  && (SESSION_LOAD_REASONS.has(String(reason)) || (reason === 'FIELDS' && operation === 'session-load'));
+
 // OV-1274, OV-1276: the room a Circular placement keeps below its band for the
 // inside rows after it (other rows may share it), and the off controls and widths
 // of the failed row and the kept rows that have them.
@@ -744,9 +769,10 @@ const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, 
 const trackRoomParts = ({ keptInsidePx, keptInsideTracks, slotTrack }) => {
   const kept = keptInsidePx !== undefined && keptInsideTracks ? keptInsideTracks.split(',') : [];
   /** @type {ErrorTextPart[]} */
-  const parts = keptInsidePx === undefined ? [] : [kept.length
-    ? { text: PHRASES.keptBelowAmong, params: { px: keptInsidePx, tracks: andPart(kept.map((track) => ({ text: SWITCHED_TRACKS[track].name }))) } }
-    : { text: PHRASES.keptBelow, params: { px: keptInsidePx } }];
+  const parts = keptInsidePx === undefined ? [] : [{
+    text: kept.length ? KEPT_INSIDE_AMONG[Object.keys(SWITCHED_TRACKS).filter((track) => kept.includes(track)).join(',')] : PHRASES.keptBelow,
+    params: { px: keptInsidePx }
+  }];
   const tracks = [...new Set([...(slotTrack ? [slotTrack] : []), ...kept])].map((track) => SWITCHED_TRACKS[track]);
   if (!tracks.length) return parts;
   const options = tracks.reduce((count, track) => count + track.options, 0);
@@ -814,7 +840,7 @@ export const normalizeUserFacingError = (value, {
     featureName && { text: PHRASES.feature, params: { feature: featureName } },
     // `undefined > 1` is false: with no count there is no line.
     /** @type {number} */ (featureCount) > 1 && { text: PHRASES.featuresAffected, params: { count: /** @type {number} */ (featureCount) } },
-    field && { text: PHRASES.field, params: { field: FIELD_LABELS[field] ? { text: FIELD_LABELS[field] } : field } },
+    field && field !== 'schema' && { text: PHRASES.field, params: { field: FIELD_LABELS[field] ? { text: FIELD_LABELS[field] } : field } },
     sessionVersionGuidance(result.context)
       || (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null),
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
@@ -828,7 +854,7 @@ export const normalizeUserFacingError = (value, {
     recordCount !== undefined && { text: PHRASES.loadedRecords, params: { count: recordCount } },
     exceptionType && { text: PHRASES.exception, params: { type: exceptionType } },
     result.operation === 'align' && field === 'direction' && reason === 'SOURCE_VIEW_CONFLICT' && { text: PHRASES.applyAgain },
-    result.code === 'INPUT_INVALID' && field === 'schema' && { text: PHRASES.schema }
+    sessionLoadRejected(result, field, reason) && { text: PHRASES.schema }
   ];
   // A file chosen in Load Session that is not JSON is not a Session;
   // every other Session reason keeps its correction.
