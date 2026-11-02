@@ -113,12 +113,12 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   **Generate Diagram**, a reorder of the comparison rings by keyboard, or a
   switch to **Upload BLAST TSV** and back to **Run LOSAT**, could draw a ring's
   search under another ring's name. **Move series outward**,
-  **Move series inward**, **Remove series**, **Add Seq**, **Run LOSAT**,
+  **Move series inward**, **Remove series**, **Add comparison sequence**, **Run LOSAT**,
   **Upload BLAST TSV**, and **Reset Settings** are now disabled while a Generate
   runs. So are **Apply now** of **Rotate record using this feature**,
   **Align…** and **Review alignment options…** in the Similarity groups editor
-  and the feature popup, and **Apply** of the alignment review and of
-  **Align at feature**: Rotate, Align, and Align at feature do not run during a
+  and the feature popup, **Apply** of the alignment review, and **Align records**
+  of **Align at feature**: Rotate, Align, and Align at feature do not run during a
   Generate. A Rotate reached by keyboard there dropped the Generate's result.
 - **Web app: text left in English or hard to read in other languages.** The Undo
   and Redo tooltips of preserved settings, imported comparisons, and the
@@ -156,7 +156,7 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   - a label text on a Result not shown when the edit left, returned by an Undo of a
     later **Generate Diagram**.
 
-  Settings marked **Applies on Generate** still wait for **Generate Diagram**.
+  Settings with the **Applies on Generate** clock still wait for **Generate Diagram**.
 - **Web app: text typed in the Features list.** Text typed in a label input of the
   Features list and not yet committed stays when a redraw finishes.
 - **Web UI: English text that no translation could correct.** Popups and messages
@@ -166,6 +166,13 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   messages name a setting you can type or choose as its control does (`Ring Width`,
   not `Comparison ring width`), and several words from the code in messages, such as
   "materialized records" and "current writer", are replaced.
+- **Web app: a specific color rule without a qualifier (OV-2435).** The Web UI no
+  longer accepts a specific color rule without a qualifier, which colored nothing:
+  a rule matches one named qualifier of each feature. **Add color rule** stays
+  disabled while the qualifier field is empty, and a hint says why; clearing the
+  qualifier of a rule puts it back. A rule without a qualifier from an older
+  Session stays, with the same hint on its row. The command-line color table and
+  the Web TSV import already required a qualifier.
 
 ## Changed behavior
 
@@ -175,7 +182,7 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   file path works as before. In the Web app, **Colors > Preset scheme** lists
   "COG categories (Bakta)", "PHROG categories (Pharokka)", "Plastid gene
   classes", and "Mitochondrial gene classes" instead of "Pharokka
-  (function/phrog/vfdb)" and "Bakta (COG via note)"; **Apply** replaces the
+  (function/phrog/vfdb)" and "Bakta (COG via note)"; **Apply preset** replaces the
   specific rules with the table's rows. The COG preset keeps the old Bakta
   preset's CDS default `#cccccc`, Legend box, and font size 12. The old Bakta
   preset matched `/note` only and colored nothing on Bakta's default GenBank
@@ -235,6 +242,18 @@ packages, and [Installation](./INSTALL.md) explains each install route.
 - **Tobacco chloroplast tutorial and Gallery entry** use `-t builtin:plastid`
   (Web: **Plastid gene classes** in **Preset scheme**) instead of a downloaded
   color table. The figure keeps its layout and labels.
+- **Web app: shorter UI text.** Descriptive sentences under controls, in dialogs,
+  and in placeholders are cut throughout the Web UI, and buttons name their action:
+  **Add comparison sequence** was **Add Seq**, **Clear LOSAT results** was
+  **Clear Cache**, and **Align records** was **Apply** in **Align at feature**.
+  The **Applies on Generate** and **Live edit** chips are gone: a setting that
+  waits for **Generate Diagram** shows a clock icon whose tooltip says
+  **Applies on Generate** and gives any exception, and a setting that applies at
+  once has no mark. The empty Preview shows one box with **Open Gallery example**,
+  which opens the example chooser, above **Learn with tutorials**, which opens the
+  Interactive Gallery. The **Reset Settings** question is two lines, and About
+  says "Your files never leave this device". Help tips are unchanged. The new
+  text is translated into the 16 languages, still as LLM drafts.
 
 ## Added
 
@@ -310,7 +329,7 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   `--wrap_length` that cuts a record, and `--similarity_alignment_feature`. In
   the Web app, **Align at feature** at the end of **Record Layout** takes a
   `KEY=VALUE` selector, lists which records keep their place and which move by
-  how many px, and **Apply** writes the record translations as one History step;
+  how many px, and **Align records** writes the record translations as one History step;
   later changes do not align the records again. A Session saved with
   `--anchor_feature` stores the resulting record translations, not the option,
   and replays the same figure.
@@ -340,6 +359,12 @@ packages, and [Installation](./INSTALL.md) explains each install route.
 - **Web UI strings.** The comparison notice for a split figure points to the
   `canvas.linear.wrap_length` row under **Preserved session settings**, and the
   new strings are translated in the ten non-English languages.
+- **Web app: History list.** A **History** button after **Redo** lists the steps
+  that Undo and Redo walk, newest first, and marks the current state. Each row
+  names the setting and the value the step set (a color shows its swatch and hex
+  code, a checkbox `On` or `Off`). A pick runs Undo or Redo one step at a time to
+  the state right after that step. The Undo and Redo tooltips use the same text.
+  The list is not saved in the Session.
 
 The drawn figures are the same as before, except where listed above.
 
@@ -382,20 +407,20 @@ file. See
   **Generate Diagram** splits the card into one card per record.
 - After you choose to turn off a track that other rows reach in the dialog that
   asks first, an Overlay row you turn back on by hand, while its track is back,
-  returns in the Result at once, while the note beside the track stack still says
+  returns in the Result at once, while the clock beside the track stack still says
   **Applies on Generate**. The Result then equals the next Generate.
 - When two Legend rows share a name, a color rule edit or removal can number them
   in the opposite order until the next **Generate Diagram**. 0.14.3 does the same.
 - After you delete a Legend row, giving another color rule that row's name, or a
   new color to a rule of that name, can place the returning row last in the Legend
   until the next **Generate Diagram**. 0.14.3 does the same.
-- With **Use custom stack** on, **Add Seq** after a ring search returns every ring
+- With **Use custom stack** on, **Add comparison sequence** after a ring search returns every ring
   to its sequence file and replaces the ring rows: their edits are lost, and a row
   anchored to one of them stops each **Generate Diagram** with "Track row N.
   Field: Enabled drawable anchor." Choose the anchor again on that row, whose
   control shows `Invalid:` and the old row. 0.14.4 does the same.
 - After any change to the comparison rings (a reorder, **Remove series**, or
-  **Add Seq**), a record rotation before the next **Generate Diagram** returns the
+  **Add comparison sequence**), a record rotation before the next **Generate Diagram** returns the
   rings of the last Generate and drops the change with no message. After a
   reorder or a Remove, the next Generate can then draw a ring's rows under another ring's
   name. Press **Generate Diagram** before you rotate. 0.14.4 does the same.
