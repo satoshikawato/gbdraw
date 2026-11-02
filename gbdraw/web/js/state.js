@@ -960,17 +960,21 @@ const filteredEditableLabels = computed(() => {
 // 'history' words why History rejects Undo/Redo; History decides when (D-28).
 // `preparationBusyReason` words an edit still applying, whose owners only the
 // composition root holds: it passes it for Save and Load (R13). History words
-// its own pending edit the same way, so it passes none.
+// its own pending edit the same way, so it passes none. 'reset' (Reset Settings)
+// waits for a Generate only: the reset derives the ring series again, from which
+// the running Generate built its ring searches (OV-2446).
 /** @returns {SessionBusy | null} */
 export const sessionOperationAvailability = (
   operation = 'mutation',
   preparationBusyReason = /** @type {(() => string | null | undefined) | null} */ (null)
 ) => {
   let reason = '';
+  const generating = processing.value ? msg('Generating diagram. Retry after generation finishes.') : '';
   if (sessionImportPending.value) reason = msg('Loading session. Retry after loading finishes.');
   else if (sessionSavePending.value) reason = msg('Saving session. Retry after saving finishes.');
+  else if (operation === 'reset') reason = generating;
   else if (operation === 'save' || operation === 'load' || operation === 'history') {
-    if (processing.value) reason = msg('Generating diagram. Retry after generation finishes.');
+    if (generating) reason = generating;
     else if (labelReflowProcessing.value) reason = msg('Updating diagram. Retry after the update finishes.');
     else reason = preparationBusyReason?.() || '';
   }
