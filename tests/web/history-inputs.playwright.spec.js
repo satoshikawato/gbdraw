@@ -72,7 +72,9 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     await expect(select).toHaveValue('out');
     if (inputMethod === 'keyboard') {
       await summary.focus();
-      // The Labels and Label Mode help tips are tab stops before the select.
+      // The Labels timing clock and the Labels and Label Mode help tips are tab stops before the select.
+      await page.keyboard.press('Tab');
+      await expect(summary.getByRole('button', { name: 'Applies on Generate', exact: true })).toBeFocused();
       await page.keyboard.press('Tab');
       await expect(summary.getByRole('button', { name: 'Help: Labels', exact: true })).toBeFocused();
       await page.keyboard.press('Tab');
@@ -350,7 +352,8 @@ test('History shortcuts work on a focused select, and a text field keeps native 
   await preparePage(page);
   await loadSession(page, seed);
   const [baseline] = await historyCounts(page);
-  await page.locator('summary[aria-label="Labels"]').click();
+  // Enter opens the card; a click at the summary's centre lands on its tips.
+  await page.locator('summary[aria-label="Labels"]').press('Enter');
   const select = page.locator('#circular-label-mode');
   await expect(select).toHaveValue('out');
   await select.focus();

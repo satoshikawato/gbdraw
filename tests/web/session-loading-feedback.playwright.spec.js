@@ -621,6 +621,44 @@ const expectNewTab = async (link, href) => {
 };
 const tutorialHref = (page, id) => new URL(`/gbdraw/web/gallery/${id}#Tutorial`, page.url()).href;
 
+// PD-OI-108 rev 3: the empty Preview's box stacks Open Gallery example above
+// Learn with tutorials, both as wide as the wider of the two, and the box is
+// that width plus its padding and border.
+test('the empty Preview box stacks its two actions at the width of the wider one', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await blockExternalRequests(page);
+  await openApp(page);
+  const card = page.locator('[data-tutorial-card]');
+  await expect(card.getByRole('button', { name: 'Open Gallery example', exact: true })).toBeVisible();
+  const box = await card.evaluate((element) => {
+    const [example, link] = Array.from(element.children);
+    const width = (child) => child.getBoundingClientRect().width;
+    // The width each action takes on its own, without the grid stretching it.
+    const natural = [example, link].map((child) => {
+      child.style.justifySelf = 'start';
+      const value = width(child);
+      child.style.justifySelf = '';
+      return value;
+    });
+    const style = getComputedStyle(element);
+    const frame = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth']
+      .reduce((sum, key) => sum + parseFloat(style[key]), 0);
+    return {
+      order: [example.textContent.trim(), link.textContent.trim()],
+      above: example.getBoundingClientRect().bottom <= link.getBoundingClientRect().top,
+      widths: [width(example), width(link)],
+      wider: Math.max(...natural),
+      card: element.getBoundingClientRect().width,
+      frame
+    };
+  });
+  expect(box.order).toEqual(['Open Gallery example', 'Learn with tutorials']);
+  expect(box.above).toBe(true);
+  expect(Math.abs(box.widths[0] - box.widths[1])).toBeLessThan(0.5);
+  expect(Math.abs(box.widths[0] - box.wider)).toBeLessThan(0.5);
+  expect(Math.abs(box.card - (box.wider + box.frame))).toBeLessThan(0.5);
+});
+
 test('a loaded example links to its Gallery tutorial, and a Session from a file does not', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1440, height: 900 });

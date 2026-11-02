@@ -2,7 +2,7 @@
 // PD-OI-037 rev 3): a change that applies on Generate shows a clock icon, a
 // help tip named "Applies on Generate" whose description holds the note; a
 // change that applies at once shows no mark.
-const CLOCK = '.apply-note .help-tip-trigger';
+const CLOCK = '[data-timing-clock] .help-tip-trigger';
 
 /** The clocks inside `scope`, which may be a note itself. @param {import('@playwright/test').Locator} scope */
 const clocksIn = (scope) => scope.locator(`:scope${CLOCK}, ${CLOCK}`);

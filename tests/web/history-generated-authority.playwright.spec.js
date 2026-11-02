@@ -967,7 +967,8 @@ test('Undo and Redo are busy during Generate and leave the committed request unc
   try {
     await generate(page);
     const labels = page.locator('#circular-label-mode');
-    await page.locator('summary[aria-label="Labels"]').click();
+    // Enter opens the card; a click at the summary's centre lands on its tips.
+    await page.locator('summary[aria-label="Labels"]').press('Enter');
     for (const value of ['none', 'both']) {
       await labels.focus();
       await labels.selectOption(value);

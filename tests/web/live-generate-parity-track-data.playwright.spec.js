@@ -1126,9 +1126,11 @@ const hideInStack = async (page, box, choice) => {
   await page.getByRole('button', { name: choice, exact: true }).click();
   await settleLive(page);
 };
-// The text of the track toggles' scope (the Layout card may be closed).
+// The text of the track toggles' scope (the Layout card may be closed), with
+// the note of each timing clock in it, which its hidden description holds.
 const trackScopeText = (page) => page.evaluate(() => [...document.querySelectorAll('[data-setting="track-visibility"]')]
-  .map((scope) => scope.textContent).join(' | '));
+  .map((scope) => [scope.textContent, ...[...scope.querySelectorAll('[data-timing-clock] .help-tip-trigger')]
+    .map((clock) => document.getElementById(clock.getAttribute('aria-describedby'))?.textContent || '')].join(' ')).join(' | '));
 
 for (const mode of ['circular', 'linear']) {
   test(`GT B2: one of two Depth rows switched off and on applies live (${mode} stack)`, async ({ page }) => {

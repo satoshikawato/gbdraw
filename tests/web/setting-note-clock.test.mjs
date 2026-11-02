@@ -112,6 +112,19 @@ test('no live row renders "Live edit"; a live row with a Generate part shows the
   partial.unmount();
 });
 
+test('the id a control references names an element whether the note shows the clock or nothing', () => {
+  const byId = (shown, id) => [...all(shown.root), ...all(shown.body)].filter((node) => node.attributes.id === id);
+  // comparison-height applies at once while the Result draws it, and waits for Generate when it does not.
+  for (const [applies, clock] of [[() => true, false], [() => false, true]]) {
+    const shown = render({ setting: 'comparison-height', id: 'match-height-timing' }, applies);
+    const [target] = byId(shown, 'match-height-timing');
+    assert.ok(target, `the id has a target (clock ${clock})`);
+    if (clock) assert.match(textOf(target), /Applies on Generate/);
+    else assert.equal(textOf(target).trim(), '');
+    shown.unmount();
+  }
+});
+
 test('an export-only note stays a hint line, and a class that follows state shows the clock only while it waits', () => {
   const exportNote = render({ setting: 'font-embedding' });
   assert.equal(textOf(exportNote.root), 'Applies to SVG and Interactive SVG exports, not to Generate.');

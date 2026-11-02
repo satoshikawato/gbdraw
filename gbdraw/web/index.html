@@ -2985,7 +2985,7 @@
                                     <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
 
                             <details v-if="source.records.length > 1" data-setting="depth-sources" class="rounded border border-slate-200 bg-white/70 p-2">
-                                <summary>
+                                <summary :aria-label="t('Per-record Depth TSV')">
                                     <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                     {{ t('Per-record Depth TSV') }}
                                     <setting-note setting="depth-sources"></setting-note>
@@ -3223,8 +3223,8 @@
                                 </div>
                             </div>
                         </details>
-                        <section data-linear-comparison-card v-settings-section="'comparison'" data-setting="comparison" class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-heading">
-                            <div class="flex min-w-0 items-center gap-2"><div id="linear-comparison-heading" tabindex="-1" class="flex min-w-0 items-center gap-2 text-base font-bold text-slate-700 [&>i]:text-lg [&>i]:text-blue-600"><settings-section-title section="comparison"></settings-section-title></div><setting-note setting="comparison"></setting-note></div>
+                        <section data-linear-comparison-card v-settings-section="'comparison'" data-setting="comparison" class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-title">
+                            <div id="linear-comparison-heading" tabindex="-1" class="flex min-w-0 items-center gap-2"><div id="linear-comparison-title" class="flex min-w-0 items-center gap-2 text-base font-bold text-slate-700 [&>i]:text-lg [&>i]:text-blue-600"><settings-section-title section="comparison"></settings-section-title></div><setting-note setting="comparison"></setting-note></div>
                             <div
                                 v-if="importedComparisonNeedsResolution"
                                 data-imported-comparison-resolution
@@ -3439,9 +3439,9 @@
                                                 </select>
                                             </div>
                                             <div data-setting="comparison-height">
-                                                <span class="linear-primary-label mb-1">{{ t('Match height') }} <setting-note setting="comparison-height"></setting-note></span>
+                                                <span class="linear-primary-label mb-1">{{ t('Match height') }} <setting-note id="comparison-height-timing" setting="comparison-height"></setting-note></span>
                                                 <auto-value-field :visible="autoValueVisible(adv.comparison_height, 'pairwiseMatchHeight')" :text="autoValueText('pairwiseMatchHeight')">
-                                                    <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" :aria-label="t('Comparison match height')" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" :aria-label="t('Comparison match height')" aria-describedby="comparison-height-timing" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                                 <p v-if="comparisonHeightValidationError" class="mt-1 text-[10px] text-red-600">{{ comparisonHeightValidationError }}</p>
                                             </div>
@@ -4474,11 +4474,13 @@
                                         <span>{{ t('Multi-Record Canvas') }}</span>
                                     </label>
                                     <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :title="t('Suppress the GC content track.')">
-                                            <input type="checkbox" :checked="form.suppress_gc" @change="setCircularGcSuppressed($event.target.checked, $event)" class="form-checkbox" :aria-label="t('Hide GC Content')" :disabled="!semanticMutationAvailable">
-                                            <span>{{ t('Hide GC Content') }}</span>
+                                        <div class="flex items-center gap-2">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :title="t('Suppress the GC content track.')">
+                                                <input type="checkbox" :checked="form.suppress_gc" @change="setCircularGcSuppressed($event.target.checked, $event)" class="form-checkbox" :aria-label="t('Hide GC Content')" :disabled="!semanticMutationAvailable">
+                                                <span>{{ t('Hide GC Content') }}</span>
+                                            </label>
                                             <setting-note setting="track-visibility"></setting-note>
-                                        </label>
+                                        </div>
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :title="t('Suppress the GC skew track.')">
                                             <input type="checkbox" :checked="form.suppress_skew" @change="setCircularSkewSuppressed($event.target.checked, $event)" class="form-checkbox" :aria-label="t('Hide GC Skew')" :disabled="!semanticMutationAvailable">
                                             <span>{{ t('Hide GC Skew') }}</span>
@@ -6427,11 +6429,11 @@
                                 {{ t('{count} selected', { count: selectedFeatureCount }) }}
                             </span>
                             <span data-setting="feature-placement" class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1">
-                                    <select data-history-managed :aria-label="t('Selected feature placements')" :disabled="!semanticMutationAvailable" value="" @change="featurePlacementActions.setPlacement(selectedFeatures, $event.target.value); $event.target.value = ''" class="rounded border p-1 text-xs">
+                                    <select data-history-managed :aria-label="t('Selected feature placements')" aria-describedby="selected-feature-placement-timing" :disabled="!semanticMutationAvailable" value="" @change="featurePlacementActions.setPlacement(selectedFeatures, $event.target.value); $event.target.value = ''" class="rounded border p-1 text-xs">
                                     <option value="" disabled>{{ t('Placement…') }}</option>
                                     <option v-for="choice in featurePlacementActions.choices(selectedFeatures)" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
                                 </select>
-                                <setting-note setting="feature-placement"></setting-note>
+                                <setting-note id="selected-feature-placement-timing" setting="feature-placement"></setting-note>
                             </span>
 
                             <button type="button"
@@ -6895,8 +6897,8 @@
                         </section>
                         <section aria-labelledby="feature-popup-layout-heading" class="border-t border-slate-100 pt-3" data-feature-popup-group="layout" data-nodrag="true">
                             <h3 id="feature-popup-layout-heading" class="feature-popup-heading">{{ t('Layout') }}</h3>
-                            <div data-setting="feature-placement" class="block text-xs font-medium text-slate-500 mb-2"><span>{{ t('Feature placement') }} <setting-note setting="feature-placement"></setting-note></span>
-                                <select data-history-managed :aria-label="t('Feature placement')" :disabled="!semanticMutationAvailable" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="mt-1 block max-w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700">
+                            <div data-setting="feature-placement" class="block text-xs font-medium text-slate-500 mb-2"><span>{{ t('Feature placement') }} <setting-note id="feature-popup-placement-timing" setting="feature-placement"></setting-note></span>
+                                <select data-history-managed :aria-label="t('Feature placement')" aria-describedby="feature-popup-placement-timing" :disabled="!semanticMutationAvailable" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="mt-1 block max-w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700">
                                     <option v-for="choice in featurePlacementActions.choices([clickedFeature.feat])" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
                                 </select>
                             </div>
@@ -7198,26 +7200,26 @@
                                     <section v-if="previewItemView.draft" class="space-y-2 border-t border-slate-100 pt-3">
                                         <h3 class="feature-popup-heading">{{ t('Definition text') }}</h3>
                                         <div :data-setting="previewItemView.draft.fields.name.setting" class="text-xs text-slate-600">
-                                            <label for="preview-record-name">{{ previewItemView.draft.nameLabel }}</label> <setting-note :setting="previewItemView.draft.fields.name.setting"></setting-note>
-                                            <input id="preview-record-name" type="text" :value="previewItemView.draft.name"
+                                            <label for="preview-record-name">{{ previewItemView.draft.nameLabel }}</label> <setting-note id="preview-record-name-timing" :setting="previewItemView.draft.fields.name.setting"></setting-note>
+                                            <input id="preview-record-name" type="text" aria-describedby="preview-record-name-timing" :value="previewItemView.draft.name"
                                                    @change="setPreviewRecordField(previewItemView, 'name', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
                                         </div>
                                         <div :data-setting="previewItemView.draft.fields.subtitle.setting" class="text-xs text-slate-600">
-                                            <label for="preview-record-subtitle">{{ previewItemView.draft.subtitleLabel }}</label> <setting-note :setting="previewItemView.draft.fields.subtitle.setting"></setting-note>
-                                            <input id="preview-record-subtitle" type="text" :value="previewItemView.draft.subtitle"
+                                            <label for="preview-record-subtitle">{{ previewItemView.draft.subtitleLabel }}</label> <setting-note id="preview-record-subtitle-timing" :setting="previewItemView.draft.fields.subtitle.setting"></setting-note>
+                                            <input id="preview-record-subtitle" type="text" aria-describedby="preview-record-subtitle-timing" :value="previewItemView.draft.subtitle"
                                                    @change="setPreviewRecordField(previewItemView, 'subtitle', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
                                         </div>
                                         <div :data-setting="previewItemView.draft.fields.reverse.setting" class="flex items-center gap-2 text-xs text-slate-700">
-                                            <label class="flex items-center gap-2"><input type="checkbox" :checked="previewItemView.draft.reverse"
+                                            <label class="flex items-center gap-2"><input type="checkbox" :checked="previewItemView.draft.reverse" aria-describedby="preview-record-reverse-timing"
                                                    @change="setPreviewRecordField(previewItemView, 'reverse', $event.target.checked)"
                                                    :disabled="!semanticMutationAvailable || !previewItemView.draft.reverseAvailable"
-                                                   class="form-checkbox"> {{ t('Reverse complement') }}</label> <setting-note :setting="previewItemView.draft.fields.reverse.setting"></setting-note>
+                                                   class="form-checkbox"> {{ t('Reverse complement') }}</label> <setting-note id="preview-record-reverse-timing" :setting="previewItemView.draft.fields.reverse.setting"></setting-note>
                                         </div>
                                     </section>
                                     <div v-if="previewItemView.draft" class="match-actions">
@@ -8950,7 +8952,7 @@
             </p>
             <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <label class="text-xs font-semibold text-slate-600">{{ t('Search record IDs') }}
-                    <input type="search" data-history-ignore data-record-list-search
+                    <input type="search" data-history-ignore data-record-list-search data-dialog-initial-focus
                            :value="recordSelection.recordList.query" @input="recordSelection.setRecordListQuery($event.target.value)"
                            class="form-input mt-1 px-2 py-1 text-xs font-normal">
                 </label>
@@ -9215,20 +9217,20 @@
   <div class="min-w-0 space-y-2" :data-linear-record-names="seq.uid">
     <div data-setting="record-names">
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>{{ t('Organism / strain (optional)') }} <setting-note setting="record-names"></setting-note></span>
+        <span>{{ t('Organism / strain (optional)') }} <setting-note :id="`linear-definition-timing-${seq.uid}`" setting="record-names"></setting-note></span>
         <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
         <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="$emit('reset-definition', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>
-      <input type="text" v-model="seq.definition" :aria-label="t('Definition for sequence {n}', { n: idx + 1 })" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || t('e.g., {example}', { example: 'Escherichia coli O157:H7 Sakai' })" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
+      <input type="text" v-model="seq.definition" :aria-label="t('Definition for sequence {n}', { n: idx + 1 })" :aria-describedby="`linear-definition-timing-${seq.uid}`" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || t('e.g., {example}', { example: 'Escherichia coli O157:H7 Sakai' })" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
       <markup-preview :text="seq.definition || resolveLinearRecordEffectiveDefinition(seq, source)"></markup-preview>
     </div>
     <div data-setting="inputs">
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>{{ t('Subtitle / title (optional)') }} <setting-note setting="inputs"></setting-note></span>
+        <span>{{ t('Subtitle / title (optional)') }} <setting-note :id="`linear-subtitle-timing-${seq.uid}`" setting="inputs"></setting-note></span>
         <span v-if="!seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
         <button v-if="seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" type="button" @click="$emit('reset-subtitle', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>
-      <input type="text" v-model="seq.record_subtitle" :aria-label="t('Subtitle / title for sequence {n}', { n: idx + 1 })" :placeholder="getLinearSourceDefaultSubtitle(source) || t('e.g., Neomycin biosynthetic gene cluster')" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
+      <input type="text" v-model="seq.record_subtitle" :aria-label="t('Subtitle / title for sequence {n}', { n: idx + 1 })" :aria-describedby="`linear-subtitle-timing-${seq.uid}`" :placeholder="getLinearSourceDefaultSubtitle(source) || t('e.g., Neomycin biosynthetic gene cluster')" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
     </div>
   </div>
 </script>

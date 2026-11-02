@@ -37,7 +37,6 @@ const freshPage = async (browser) => {
 
 const FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
 const MODE_NAMES = { circular: 'Circular', linear: 'Linear' };
-const EMPTY_TEXT = (mode) => `No ${MODE_NAMES[mode]} Result yet. Configure settings and click Generate.`;
 
 const generate = async (page, options) => {
   const outcome = await generateAndWaitForResult(page, options);
@@ -86,7 +85,8 @@ const shown = (page) => page.evaluate(async () => {
 const expectEmptyPreview = async (page, mode) => {
   const state = await shown(page);
   expect(state).toMatchObject({ mode, count: 0, identity: null, hasSvg: false });
-  await expect(page.getByText(EMPTY_TEXT(mode), { exact: true })).toBeVisible();
+  // The empty Preview names no mode (PD-OI-108 rev 3); the shown state above does.
+  await expect(page.locator('[data-empty-preview]')).toBeVisible();
 };
 
 // A Legend or plot title drag in layout mode, as the pointer does it.

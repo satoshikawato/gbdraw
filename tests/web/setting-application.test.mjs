@@ -251,8 +251,10 @@ test('the Linear record names component gives each field the note of its popup r
   // A component template sits in a <script> the tree parser skips.
   const template = html.match(/<script type="text\/x-template" id="linear-record-names-template">([\s\S]*?)<\/script>/)[1];
   // Each field block: its scope, the note on its own caption line, then its input.
-  const blocks = [...template.matchAll(/<div data-setting="([^"]+)">\s*<div [^>]*>\s*<span>\{\{ t\('[^']+'\) \}\} <setting-note setting="([^"]+)"><\/setting-note><\/span>([\s\S]*?)\n {4}<\/div>\n/g)];
-  assert.deepEqual(blocks.map(([, scope, note, body]) => [scope, note, body.match(/v-model="seq\.(\w+)"/)?.[1]]), [
+  const blocks = [...template.matchAll(/<div data-setting="([^"]+)">\s*<div [^>]*>\s*<span>\{\{ t\('[^']+'\) \}\} <setting-note :id="`([\w-]+)-\$\{seq\.uid\}`" setting="([^"]+)"><\/setting-note><\/span>([\s\S]*?)\n {4}<\/div>\n/g)];
+  // The input references its note by the id the note names (R12).
+  for (const [, , id, , body] of blocks) assert.match(body, new RegExp(`:aria-describedby="\`${id}-\\$\\{seq\\.uid\\}\`"`), id);
+  assert.deepEqual(blocks.map(([, scope, , note, body]) => [scope, note, body.match(/v-model="seq\.(\w+)"/)?.[1]]), [
     [RECORD_POPUP_FIELDS.linear.name.setting, RECORD_POPUP_FIELDS.linear.name.setting, RECORD_POPUP_FIELDS.linear.name.key],
     [RECORD_POPUP_FIELDS.linear.subtitle.setting, RECORD_POPUP_FIELDS.linear.subtitle.setting, RECORD_POPUP_FIELDS.linear.subtitle.key]
   ], 'Organism / strain and Subtitle each sit in their own scope with its note on the caption line');

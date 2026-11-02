@@ -119,7 +119,9 @@ test('the index lists the sections of each mode in card order, before the settin
           return {
             key: section.dataset.settingsSection,
             heading: heading.textContent.replace(/\s+/g, ' ').trim(),
-            icon: iconOf(heading.querySelector(':scope > i')),
+            // The Comparison heading holds its title in the element that names the
+            // section, apart from its timing clock.
+            icon: iconOf(heading.querySelector(':scope > i, :scope > [id$="-title"] > i')),
             focusable: heading.matches('summary') || heading.tabIndex === -1
           };
         }),
