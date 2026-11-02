@@ -175,6 +175,7 @@ import {
 import { createResultsManager } from './results.js';
 import { createAuxiliaryFileImports, setupWatchers } from './watchers.js';
 import { createDialogChoice, setupHistoryInputs } from './history-inputs.js';
+import { createHistoryControls } from './history-list.js';
 import { createChoicePrompt, createNoticeBanner } from './app-messages.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
@@ -1788,28 +1789,11 @@ export const createAppSetup = () => {
   // is pure (services/feature-identity.js) over the record display's binding.
   /** @param {RecordKeyedFeature} feature */
   const isCurrentResultFeature = (feature) => isCurrentFeature(feature, recordDisplayControls.sourceBinding());
-  const canUndoHistory = computed(() => {
-    void history.revision.value;
-    return history.canUndo();
+  // Undo, Redo, and the History list (PD-OI-112).
+  const { canUndoHistory, canRedoHistory, undoHistoryTitle, redoHistoryTitle, undoHistory, redoHistory, historyList } = createHistoryControls({
+    revision: () => history.revision.value, canUndo: history.canUndo, canRedo: history.canRedo, undo: history.undo, redo: history.redo,
+    timeline: history.timeline, travelTo: history.travelTo, computed, ref, nextTick
   });
-  const canRedoHistory = computed(() => {
-    void history.revision.value;
-    return history.canRedo();
-  });
-  const undoHistoryTitle = computed(() => {
-    void history.revision.value;
-    // A step label is History's identity (services/history.js compares it):
-    // it stays English and is translated here, where it is shown.
-    const label = history.undoLabel();
-    return label ? t('Undo {action}', { action: tm(label) }) : t('Undo');
-  });
-  const redoHistoryTitle = computed(() => {
-    void history.revision.value;
-    const label = history.redoLabel();
-    return label ? t('Redo {action}', { action: tm(label) }) : t('Redo');
-  });
-  const undoHistory = () => history.undo();
-  const redoHistory = () => history.redo();
   // D-03: the Rich Feature Popup preference records no Undo step, but a change
   // of it is unsaved work that Load Session asks about (D-07 (b)).
   const markRichFeaturePopupChanged = () => history.markChangeOutsideHistory();
@@ -2161,7 +2145,7 @@ export const createAppSetup = () => {
       history,
       nextTick
     });
-    await history.captureBaseline('Initial state');
+    await history.captureBaseline(msg('Initial state'));
   });
   onUnmounted(() => {
     if (featureSearchDebounceId !== null) clearTimeout(featureSearchDebounceId);
@@ -3989,7 +3973,7 @@ export const createAppSetup = () => {
         settingsPaneActions.closeSettingsPopup();
         await nextTick();
         recordSessionLifecycleEvent('history-baseline-start');
-        if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
+        if (!await history.initializeIntentBaseline(msg('Loaded session'), { isCurrent: result.isCurrent })) {
           throw new Error('Session loading canceled.');
         }
         featureActions.clearSpecificRulePatternDrafts();
@@ -6150,7 +6134,7 @@ export const createAppSetup = () => {
     // The title is part of the History snapshot: a rename is its own step.
     const title = normalizeSessionTitle(input);
     if (title === normalizeSessionTitle(sessionTitle.value)) return;
-    return history.runUndoable(msg('Rename Session'), () => { sessionTitle.value = title; });
+    return history.runUndoable(msg('Rename Session'), () => { sessionTitle.value = title; }, { detail: () => ({ value: title }) });
   };
 
   const saveSessionWithTitle = () => exportSession(null, {
@@ -8066,6 +8050,7 @@ export const createAppSetup = () => {
     redoHistoryTitle,
     undoHistory,
     redoHistory,
+    historyList,
     manualPriorityRules: drawingMember('manualPriorityRules'),
     newPriorityRule,
     addPriorityRule
