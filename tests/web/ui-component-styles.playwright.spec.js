@@ -333,8 +333,8 @@ const BUSY_ENABLED_CONTROLS = {
     // Exports read the settings and change nothing.
     'button:has(.ph-download-simple)'
   ],
-  // A link to another setting without aria-controls (it focuses that setting).
-  names: ['Show Multi-Record Canvas setting']
+  // Links to another setting without aria-controls (they focus that setting).
+  names: ['Show Multi-Record Canvas setting', 'Show Ticks slot']
 };
 
 for (const mode of ['circular', 'linear']) {
