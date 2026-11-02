@@ -145,7 +145,7 @@ const SUPPRESS_TEXT_BY_RENDERER = {
     hide: () => t('Hide GC content'),
     hideWith: (rows) => t('Hide GC content and turn off {rows}', { rows }),
     keep: () => t('Keep GC content'),
-    hiddenBy: () => t('Hidden: Hide GC Content is on.')
+    hiddenBy: () => t('Hidden by Hide GC Content')
   },
   dinucleotide_skew: {
     title: () => t('Hide GC skew?'),
@@ -155,7 +155,7 @@ const SUPPRESS_TEXT_BY_RENDERER = {
     hide: () => t('Hide GC skew'),
     hideWith: (rows) => t('Hide GC skew and turn off {rows}', { rows }),
     keep: () => t('Keep GC skew'),
-    hiddenBy: () => t('Hidden: Hide GC Skew is on.')
+    hiddenBy: () => t('Hidden by Hide GC Skew')
   }
 };
 /** @type {Record<string, string>} */

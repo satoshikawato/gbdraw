@@ -2997,10 +2997,12 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
   await expect(
     page.locator('.run-info-panel').getByText('Reproducibility files', { exact: true })
   ).toBeVisible();
-  await expect(page.locator('.run-info-panel')).toContainText(
+  // The tab shows no download description and no note a reader does not act on (ui-copy-diet 2026-11-02);
+  // the Run info keeps them.
+  await expect(page.locator('.run-info-panel')).not.toContainText(
     'The Source recipe uses only the original source files.'
   );
-  await expect(page.locator('.run-info-panel')).toContainText('Exact replay file:');
+  await expect(page.locator('.run-info-panel')).not.toContainText('Exact replay file:');
   await expect(page.locator('.run-info-panel')).not.toContainText('Source recipe helper file');
   const sourceCopy = page.locator('.run-info-panel').getByTitle('Copy command');
   const replayCopy = page.locator('.run-info-panel').getByTitle('Copy exact replay command');
@@ -3045,7 +3047,7 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
       }
     };
   });
-  await expect(page.locator('.run-info-panel')).toContainText(
+  await expect(page.locator('.run-info-panel')).not.toContainText(
     'Source recipe helper file: browser-comparison.tsv.'
   );
 
@@ -3086,9 +3088,11 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
       }
     };
   });
-  await expect(page.locator('.run-info-panel')).toContainText(
+  // Without a Source recipe the tab has no Source recipe section (ui-copy-diet rows 91, 93).
+  await expect(page.locator('.run-info-panel')).not.toContainText(
     'multiple uploaded inputs use the visible filename "genome.gbk"'
   );
+  await expect(page.locator('.run-info-panel').getByText('Source recipe', { exact: true })).toHaveCount(0);
   await expect(page.locator('.run-info-panel').getByTitle('Copy command')).toHaveCount(0);
   await expect(page.locator('.run-info-panel').getByTitle('Copy exact replay command')).toBeVisible();
   for (const bands of [geometry.client, geometry.bbox]) {

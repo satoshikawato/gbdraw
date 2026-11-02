@@ -51,7 +51,7 @@ const loadMode = async (page, mode) => {
   await expect(page.locator(`[data-capture^="${mode}-track-slot-"]`).first()).toBeVisible();
   await page.evaluate(() => document.querySelectorAll('details').forEach((details) => { details.open = true; }));
   const annotations = page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
-  await annotations.getByRole('button', { name: /Add set/ }).click();
+  await annotations.getByRole('button', { name: 'Add annotation set' }).click();
   await annotations.getByRole('button', { name: /Coordinates/ }).click();
 };
 
@@ -570,7 +570,7 @@ test('the icon rail buttons have stable author-provided names', async ({ page })
 
 // UI-09: a control disabled for a reason the section does not show names it
 // in one visible line that the control references.
-test('disabled Single-record and LOSAT cache controls reference a visible reason', async ({ page }) => {
+test('disabled Single-record controls reference a visible reason', async ({ page }) => {
   test.setTimeout(180_000);
   await openApp(page);
   await page.getByLabel('GenBank/DDBJ File', { exact: true })
@@ -579,7 +579,7 @@ test('disabled Single-record and LOSAT cache controls reference a visible reason
     { timeout: 120_000 }).toBeGreaterThan(0);
   await page.evaluate(() => document.querySelectorAll('details').forEach((details) => { details.open = true; }));
   for (const name of ['Circular record label', 'Circular record subtitle', 'Circular region start', 'Circular region end',
-    'Circular reverse complement', 'Save Raw LOSAT TSV', 'Clear Cache']) {
+    'Circular reverse complement']) {
     const control = page.getByLabel(name, { exact: true }).or(page.getByRole('button', { name, exact: true })).first();
     await expect(control, name).toBeDisabled();
     const reason = await control.evaluate((element) => (element.getAttribute('aria-describedby') || '').split(/\s+/)

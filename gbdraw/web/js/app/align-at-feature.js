@@ -106,12 +106,12 @@ export const validateFeatureAnchorReply = (value, recordKeys) => {
  */
 const previewLine = (record, index) => {
   const name = `#${index + 1} ${record.recordId}`;
-  if (record.status === 'reference') return t('{record}: keeps its place (first record with the feature)', { record: name });
-  if (record.status === 'unmatched') return t('{record}: keeps its place (no matching feature)', { record: name });
+  if (record.status === 'reference') return t('{record} keeps its place (first record with the feature)', { record: name });
+  if (record.status === 'unmatched') return t('{record} keeps its place (no matching feature)', { record: name });
   const distance = Math.round((record.afterX - record.beforeX) * 10) / 10;
   return distance === 0
-    ? t('{record}: already aligned', { record: name })
-    : t('{record}: moves {distance} px', { record: name, distance: distance > 0 ? `+${distance}` : String(distance) });
+    ? t('{record} is already aligned', { record: name })
+    : t('{record} moves {distance} px', { record: name, distance: distance > 0 ? `+${distance}` : String(distance) });
 };
 
 /** @param {FeatureAnchorPorts} ports */

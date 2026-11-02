@@ -2118,6 +2118,25 @@ const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
 
 // PD-OI-018 revision 4 and D-40: the Web search database differs from the CLI.
 export const LOSAT_DATABASE_SCOPE_NOTE = msg('LOSAT E-values use the subject source file as the search database, without the query record when both records come from the same file.');
+const SOURCE_HELPER_FILE_NOTE = msg('The Source recipe references a browser-generated file: {files}. Use "Download reproducibility files" to save it next to the uploaded inputs before running the command in a terminal.');
+const SOURCE_HELPER_FILES_NOTE = msg('The Source recipe references browser-generated files: {files}. Use "Download reproducibility files" to save them next to the uploaded inputs before running the command in a terminal.');
+const UNMAPPED_PATHS_NOTE = msg('Some browser virtual paths could not be mapped to visible file names, so this command is only an approximation.');
+const NEEDS_HELPER_FILES = msg('Needs {files} from "Download reproducibility files"');
+
+/**
+ * The notes the Run info tab shows: the one owner of that choice. The stored Run info keeps every note
+ * (`reproducibility.notes` and `noteParts`, unchanged); the tab shows only the notes a reader acts on, and
+ * says what a Source recipe helper needs in one line. A note is known by its message key, the identity
+ * its part carries.
+ * @param {readonly ErrorTextPart[]} noteParts the stored `reproducibility.noteParts`
+ * @returns {ErrorTextPart[]}
+ */
+export const shownRunInfoNoteParts = (noteParts) => noteParts.flatMap((part) => {
+  if (part.text === SOURCE_HELPER_FILE_NOTE || part.text === SOURCE_HELPER_FILES_NOTE) {
+    return [{ text: NEEDS_HELPER_FILES, params: part.params }];
+  }
+  return part.text === UNMAPPED_PATHS_NOTE || part.text === LOSAT_DATABASE_SCOPE_NOTE ? [part] : [];
+});
 
 /** @type {Readonly<Record<string, string>>} */
 const LOSAT_RUNTIME_NAMES = Object.freeze({ losat: 'LOSAT', 'ncbi-blast': 'NCBI BLAST+' });
@@ -2301,9 +2320,7 @@ export const buildRunInfo = ({
   } else if (sourceHelpers.length > 0) {
     level = hasLosatHelpers ? 'session-recommended' : 'requires-helper-files';
     noteParts.push({
-      text: sourceHelpers.length === 1
-        ? msg('The Source recipe references a browser-generated file: {files}. Use "Download reproducibility files" to save it next to the uploaded inputs before running the command in a terminal.')
-        : msg('The Source recipe references browser-generated files: {files}. Use "Download reproducibility files" to save them next to the uploaded inputs before running the command in a terminal.'),
+      text: sourceHelpers.length === 1 ? SOURCE_HELPER_FILE_NOTE : SOURCE_HELPER_FILES_NOTE,
       params: { files: helperFileList(sourceHelpers) }
     });
     noteParts.push({
@@ -2312,7 +2329,7 @@ export const buildRunInfo = ({
   }
   if (source.unresolvedFileArgs.length > 0) {
     level = 'pseudo';
-    noteParts.push({ text: msg('Some browser virtual paths could not be mapped to visible file names, so this command is only an approximation.') });
+    noteParts.push({ text: UNMAPPED_PATHS_NOTE });
   }
   if (noteParts.length === 0) {
     noteParts.push({ text: msg('The Source recipe can be rerun with the uploaded file names shown here.') });

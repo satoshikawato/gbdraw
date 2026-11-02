@@ -157,7 +157,7 @@ const colorRuleText = (rule) => {
 // edits only the swatch (the plot's color is a Settings value).
 /** @type {Readonly<Record<DrawnTrack['kind'], string>>} */
 const TRACK_ROW_SUBTITLE = Object.freeze({ content: msg('Content plot'), skew: msg('Skew plot'), depth: msg('Depth plot') });
-const TRACK_ROW_COLOR_SOURCE = msg('Changes this legend swatch only. The plot keeps the color set in Settings.');
+const TRACK_ROW_COLOR_SOURCE = msg('Changes the legend swatch only.');
 
 /**
  * OIC-029: what the Legend item choice of the scope dialog and the Legend popup's Color do to a type's default
@@ -186,12 +186,13 @@ const buildLegendEntryView = ({
   const ruleLines = trackKind ? [] : rules.map(colorRuleText);
   const defaultColorLine = trackKind || ruleLines.length ? null : defaultColorScopeLine(defaultColorType, replacedDefaultColor);
   // OV-1336: the OIC-029 line, once shown, says where the color comes from by itself; the caption gives way.
+  // One rule line says where the color comes from by itself too; several get their count.
   const colorSource = defaultColorLine
     ? null
     : trackKind
       ? tm(TRACK_ROW_COLOR_SOURCE)
       : ruleLines.length
-        ? tn(ruleLines.length, 'From this color rule:', 'From these {count} color rules:')
+        ? (ruleLines.length > 1 ? tn(ruleLines.length, '{count} color rule', '{count} color rules') : null)
         : featureTypes.has(key)
           ? t('Default color of {type} features', { type: key })
           : t('Color set on individual features');

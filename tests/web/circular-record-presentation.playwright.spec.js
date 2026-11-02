@@ -233,7 +233,6 @@ test('grid and explicit batch explain applicability outside disclosure and requi
   const action = await page.evaluate(() => window.__GBDRAW_APP__.setCircularRecordPresentationSelector('BGC0000708'));
   expect(action.status).toBe('unavailable');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.form.circular_record_selector)).toBe('');
-  await expect(page.getByText('Multi-Record Canvas uses a grid. Turn it off to select one record.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Show Multi-Record Canvas setting' }).click();
   const grid = page.locator('[data-circular-canvas-setting]');
   await expect(grid).toBeFocused();

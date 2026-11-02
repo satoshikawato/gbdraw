@@ -2459,9 +2459,8 @@
                                 <span v-else-if="circularRecordDiscoveryState.status === 'loading'">{{ t('Inspecting source records…') }}</span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'ready'">{{ tn(circularRecordDiscoveryState.records.length, '{count} source record inspected', '{count} source records inspected') }}<template v-if="circularRecordDiscoveryState.records.length > 1"> · <span data-circular-records-drawn>{{ tn(circularRecordDiscoveryState.records.length, '{drawn} of {count} record drawn', '{drawn} of {count} records drawn', { drawn: circularDrawnRecordCount }) }}</span></template></span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'error'" class="text-red-600">{{ (circularRecordDiscoveryState.error && errorText(circularRecordDiscoveryState.error.summaryParts)) || t('Source inspection failed. Retry or replace the input.') }}</span>
-                                <span v-else>{{ cInputType === 'gff' ? t('Upload both GFF3 and FASTA files to inspect records.') : t('Upload a source file to inspect records.') }}</span>
                             </p>
-                            <button v-if="circularRecordDiscoveryState.hasInput" data-circular-inspect type="button" data-history-ignore @click="inspectCircularSourceRecords" :aria-disabled="!circularRecordInspectionEnabled" :aria-busy="circularRecordDiscoveryState.status === 'loading'" :class="circularRecordInspectionEnabled ? 'text-blue-600' : 'text-slate-400'" class="text-xs">{{ circularRecordDiscoveryState.status === 'error' ? t('Retry source inspection') : circularRecordDiscoveryState.status === 'ready' ? t('Inspect source records again') : t('Inspect source records') }}</button>
+                            <button v-if="circularRecordDiscoveryState.hasInput" data-circular-inspect type="button" data-history-ignore @click="inspectCircularSourceRecords" :aria-disabled="!circularRecordInspectionEnabled" :aria-busy="circularRecordDiscoveryState.status === 'loading'" :class="circularRecordInspectionEnabled ? 'text-blue-600' : 'text-slate-400'" class="text-xs">{{ circularRecordDiscoveryState.status === 'error' ? t('Retry source inspection') : circularRecordDiscoveryState.status === 'ready' ? t('Inspect again') : t('Inspect source records') }}</button>
                             </div>
                             <div>
                                 <div class="flex items-center justify-between gap-2">
@@ -2489,8 +2488,7 @@
                                         :value="option.value"
                                     >{{ option.label }}</option>
                                 </select>
-                                <p v-if="form.multi_record_canvas" class="ui-hint mt-1">{{ t('Multi-Record Canvas uses a grid. Turn it off to select one record.') }}</p>
-                                <p v-else-if="circularRecordPresentationError" class="mt-1 text-[9px] text-red-600">{{ circularRecordPresentationError }}</p>
+                                <p v-if="!form.multi_record_canvas && circularRecordPresentationError" class="mt-1 text-[9px] text-red-600">{{ circularRecordPresentationError }}</p>
                                 <button v-if="form.multi_record_canvas" type="button" data-history-ignore @click="showCircularCanvasSetting" class="mt-1 text-xs text-blue-600">{{ t('Show Multi-Record Canvas setting') }}</button>
                                 <p v-if="!form.multi_record_canvas && circularRecordDiscoveryState.status === 'ready' && !circularSingleRecordPresentationEnabled" class="ui-hint mt-1">{{ t('Select one record to edit crop, orientation, and title lines.') }}</p>
                             </div>
@@ -2535,7 +2533,7 @@
                                     </div>
                                     <div class="pt-1 border-t border-slate-200 border-dashed">
                                         <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                                            <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">{{ t('Region (optional)') }}</span>
+                                            <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">{{ t('Region') }}</span>
                                             <help-tip id="help-circular-region" :text="t('Use 1-based inclusive coordinates of the selected record. Both values are required. An End past the record end is drawn to the record end; a Start past it is refused.')"></help-tip>
                                         </div>
                                         <div class="grid grid-cols-2 gap-2">
@@ -2645,7 +2643,7 @@
                                     <div class="flex items-center justify-between gap-2">
                                         <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ depthSeriesName(track.index) }}</div>
                                         <button type="button" @click="removeCircularDepthTrack(track.index)" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1" :disabled="!semanticMutationAvailable">
-                                            <i class="ph ph-trash" aria-hidden="true"></i> {{ t('Remove') }}
+                                            <i class="ph ph-trash" aria-hidden="true"></i> {{ t('Remove series') }}
                                         </button>
                                     </div>
                                     <div class="grid grid-cols-[1fr_44px] gap-1.5 items-end">
@@ -2837,7 +2835,7 @@
                                     <markup-preview :text="getLinearSourceDefaultDefinition(source)"></markup-preview>
                                 </div>
                                 <div>
-                                    <label class="text-[9px] font-semibold text-slate-500 block mb-0.5">{{ t('Subtitle / title (optional)') }}</label>
+                                    <label class="text-[9px] font-semibold text-slate-500 block mb-0.5">{{ t('Subtitle / title') }}</label>
                                     <input
                                         type="text"
                                         :value="getLinearSourceDefaultSubtitle(source)"
@@ -3009,13 +3007,13 @@
                             <linear-record-names v-if="!linearFileCardRecord(source)" :seq="seq" :idx="idx" :source="source" :disabled="!semanticMutationAvailable" @reset-definition="resetLinearRecordDefinition" @reset-subtitle="resetLinearRecordSubtitle"></linear-record-names>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                                    <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">{{ t('Region (optional)') }}</span>
+                                    <i class="ph ph-crop" aria-hidden="true"></i> <span class="whitespace-nowrap">{{ t('Region') }}</span>
                                     <help-tip :id="`help-linear-region-${seq.uid}`" :text="t('Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #<number>. A region that reaches past the record end is drawn to the record end.')"></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
                                     <div class="grid grid-cols-1 gap-1">
                                         <div class="min-w-0">
-                                            <label class="text-[9px] block">{{ t('Record (optional)') }}</label>
+                                            <label class="text-[9px] block">{{ t('Record') }}</label>
                                             <select
                                                 :value="seq.region_record_id"
                                                 @change="setLinearRecordSelector(seq, $event.target.value)"
@@ -3237,9 +3235,9 @@
                                         : t('Saved comparison needs a decision') }}
                                 </div>
                                 <p>{{ tm(importedComparisonIntent.message) }}</p>
-                                <p>{{ t('The controls below are a replacement draft. The saved comparison and last successful Result remain unchanged until Generate succeeds.') }}</p>
+                                <p>{{ t('The saved comparison stays until Generate succeeds.') }}</p>
                                 <p v-if="importedComparisonIntent.action" class="font-semibold">
-                                    {{ t('Selected action: {action}', { action: importedComparisonActionText }) }}
+                                    {{ importedComparisonActionText }}
                                 </p>
                                 <div class="flex flex-wrap gap-1.5" role="group" :aria-label="t('Resolve saved comparison')">
                                     <button
@@ -3269,7 +3267,7 @@
                                 <button type="button" :aria-label="t('Set no comparison')" :aria-pressed="linearComparisonGlobalAction === 'none'" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm" :disabled="!semanticMutationAvailable">{{ t('No comparison') }}</button>
                                 <button type="button" :aria-label="t('Use uploaded BLAST TSV for all adjacent pairs')" :aria-pressed="linearComparisonGlobalAction === 'upload'" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm" :disabled="!semanticMutationAvailable">{{ t('Upload BLAST TSV') }}</button>
                             </div>
-                            <p v-if="!canRunLinearLosat" class="ui-hint">{{ t('Run LOSAT requires at least 2 loaded sequences.') }}</p>
+                            <p v-if="!canRunLinearLosat" class="ui-hint flex items-center gap-1" data-linear-losat-needs-sequences><i class="ph ph-prohibit" aria-hidden="true"></i> {{ t('Needs 2 sequences') }}</p>
                             <!-- The pressed action shows the intent; only Custom needs a badge. Screen readers hear the issue count here; without the badge the row takes no space. -->
                             <div :class="linearComparisonUi.intentKey === 'custom' ? 'flex min-w-0 flex-wrap items-center gap-1.5' : 'sr-only'" role="status" aria-live="polite" data-linear-comparison-status>
                                 <span v-if="linearComparisonUi.intentKey === 'custom'" class="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700">{{ t('Custom') }}</span>
@@ -3337,8 +3335,6 @@
                                         </select>
                                     </div>
 
-                                    <p v-if="linearComparisonUi.sectionKeys.settings.length === 0" class="ui-hint">{{ t('Choose Run LOSAT or Upload BLAST TSV to configure comparisons.') }}</p>
-
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('blastn-task')">
                                         <span class="linear-primary-label mb-1">{{ t('LOSATN task') }} <help-tip id="help-comparison-losatn-task" :text="t('megablast is fastest for highly similar nucleotide sequences; blastn is more sensitive.')"></help-tip></span>
                                         <select v-model="losat.blastn.task" :aria-label="t('LOSATN task')" aria-describedby="help-comparison-losatn-task" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
@@ -3349,7 +3345,7 @@
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('record-genetic-codes')" class="rounded border border-slate-200 bg-slate-50 p-2 text-[10px] leading-snug text-slate-600">
-                                        <i18n-text :text="t('Set the translation table for each sequence in its {options}.')"><template #options><strong>{{ t('Record options') }}</strong></template></i18n-text>{{ sentenceSeparator() + t('When TLOSATX needs a translation table that a record lacks, Gencode required appears beside its file name.') }}
+                                        <i18n-text :text="t('Set the translation table for each sequence in its {options}.')"><template #options><strong>{{ t('Record options') }}</strong></template></i18n-text>
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('blastp-max-hits')">
@@ -3562,7 +3558,7 @@
                                             >{{ t('Keep file but do not use') }}</button>
                                         </div>
                                         <div v-if="pair.draft?.file && !(pair.source === 'upload' && pair.draft.fileActive)" class="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded bg-amber-50 px-1.5 py-1 text-[9px] text-amber-800">
-                                            <span class="min-w-0 flex-1 truncate" :title="pair.draft.file.name">{{ t('Retained, inactive BLAST TSV: {name}', { name: pair.draft.file.name }) }}</span>
+                                            <span class="min-w-0 flex-1 truncate" :title="pair.draft.file.name">{{ t('Not used · {name}', { name: pair.draft.file.name }) }}</span>
                                             <button type="button" class="btn btn-secondary shrink-0 px-1 py-0.5 text-[9px]" :aria-label="t('Reuse BLAST TSV for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })" @click="reuseLinearComparisonFile(pair.draft.id)" :disabled="!semanticMutationAvailable">{{ t('Reuse TSV') }}</button>
                                         </div>
                                         <div v-if="pair.source === 'losat'" :data-linear-raw-result="pair.edgeKey" class="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
@@ -3597,13 +3593,13 @@
                                             </details>
                                         </div>
                                         <div v-else-if="pair.draft?.losatFilename" :data-linear-raw-result="pair.edgeKey" class="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded bg-amber-50 px-1.5 py-1 text-[9px] text-amber-800">
-                                            <span class="min-w-0 flex-1 truncate" :title="pair.draft.losatFilename">{{ t('Retained, inactive filename: {name}', { name: pair.draft.losatFilename }) }}</span>
+                                            <span class="min-w-0 flex-1 truncate" :title="pair.draft.losatFilename">{{ t('Not used · {name}', { name: pair.draft.losatFilename }) }}</span>
                                             <button type="button" class="btn btn-secondary shrink-0 px-1 py-0.5 text-[9px]" :aria-label="t('Reuse Raw LOSAT filename for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })" @click="reuseLinearComparisonLosatFilename(pair.draft.id)" :disabled="!semanticMutationAvailable">{{ t('Reuse name') }}</button>
                                         </div>
                                     </fieldset>
                                 </section>
                                 </template>
-                                <button type="button" class="btn btn-secondary min-w-0 w-full px-1.5 py-1 text-[9px] whitespace-normal" @click="addLinearComparison()" :disabled="!semanticMutationAvailable">{{ t('Add') }}</button>
+                                <button type="button" class="btn btn-secondary min-w-0 w-full px-1.5 py-1 text-[9px] whitespace-normal" @click="addLinearComparison()" :disabled="!semanticMutationAvailable">{{ t('Add pair') }}</button>
                                 <div class="grid min-w-0 grid-cols-1 gap-1">
                                     <button type="button" class="btn btn-secondary min-w-0 px-1 py-1 text-[9px] whitespace-normal" @click="addLinearComparisonBatch(false)" :disabled="!semanticMutationAvailable">{{ t('Adjacent-row pairs (same position in each row)') }}</button>
                                     <button type="button" class="btn btn-secondary min-w-0 px-1 py-1 text-[9px] whitespace-normal" @click="addLinearComparisonBatch(true)" :disabled="!semanticMutationAvailable">{{ t('All adjacent-row pairs (cross-product)') }}</button>
@@ -3643,7 +3639,7 @@
                     <div class="space-y-2">
                         <div data-setting="output-prefix">
                             <span class="input-label"><label for="output-prefix">{{ t('Output Prefix') }}</label> <setting-note setting="output-prefix"></setting-note> <help-tip id="help-output-prefix" :text="mode === 'circular' ? t('Prefix for output files. Leave empty to use record IDs; separate diagrams add deterministic suffixes when IDs collide.') : t('Prefix for output files. Leave empty to use out.')"></help-tip></span>
-                            <input id="output-prefix" type="text" v-model="form.prefix" aria-describedby="help-output-prefix" class="form-input" :placeholder="mode === 'circular' ? t('Optional (Default: Record ID)') : t('Optional (Default: out)')" :disabled="!semanticMutationAvailable">
+                            <input id="output-prefix" type="text" v-model="form.prefix" aria-describedby="help-output-prefix" class="form-input" :placeholder="mode === 'circular' ? t('Record ID') : DEFAULT_LINEAR_OUTPUT_PREFIX" :disabled="!semanticMutationAvailable">
                         </div>
 
                         <div v-if="mode === 'circular'" data-setting="species-strain" class="space-y-2">
@@ -3704,7 +3700,7 @@
                                         <ul class="space-y-0.5"><li v-for="line in featureAnchorPreviewLines" :key="line">{{ line }}</li></ul>
                                         <p v-if="featureAnchorPreview.clearsAlignment">{{ t('Apply clears the active similarity alignment.') }}</p>
                                         <div class="grid grid-cols-2 gap-1">
-                                            <button type="button" data-history-managed class="btn btn-primary px-1 py-0.5 text-[10px]" @click="applyFeatureAnchor" :disabled="featureAnchorBusy || Boolean(sessionOperationAvailability('not-during-run'))" data-testid="linear-anchor-feature-apply">{{ t('Apply') }}</button>
+                                            <button type="button" data-history-managed class="btn btn-primary px-1 py-0.5 text-[10px]" @click="applyFeatureAnchor" :disabled="featureAnchorBusy || Boolean(sessionOperationAvailability('not-during-run'))" data-testid="linear-anchor-feature-apply">{{ t('Align records') }}</button>
                                             <button type="button" data-history-managed class="btn btn-secondary px-1 py-0.5 text-[10px]" @click="cancelFeatureAnchor" :disabled="featureAnchorBusy">{{ t('Cancel') }}</button>
                                         </div>
                                     </div>
@@ -3715,8 +3711,7 @@
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">{{ t('LOSAT cache') }}</div>
-                                <p class="ui-hint">{{ tn(losatCacheInfo.length, '{count} LOSAT result is cached and reused when the inputs and settings match.', '{count} LOSAT results are cached and reused when the inputs and settings match.') }}</p>
-                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)"><i class="ph ph-trash" aria-hidden="true"></i> {{ t('Clear Cache') }}</button>
+                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)"><i class="ph ph-trash" aria-hidden="true"></i> {{ tn(losatCacheInfo.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}</button>
                             </section>
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('collinear-details') || linearComparisonUi.sectionKeys.advanced.includes('paralog-links')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
@@ -3769,21 +3764,19 @@
                         <summary :aria-label="t('Region Annotations')"><settings-section-title section="region-annotations"></settings-section-title> <setting-note setting="region-annotations"></setting-note> <help-tip :text="t('Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement.')"></help-tip></summary>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex flex-wrap gap-1">
-                                <button type="button" class="btn btn-secondary text-[10px] flex-auto px-2" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add set') }}</button>
+                                <button type="button" class="btn btn-secondary text-[10px] flex-auto px-2" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add annotation set') }}</button>
                                 <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-auto px-2" @click="$refs.annotationTsvInput.click()" :disabled="!semanticMutationAvailable"><i aria-hidden="true" class="ph ph-upload-simple"></i> {{ t('Import TSV') }}</button>
                                 <input ref="annotationTsvInput" data-history-managed type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile">
-                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-auto px-2" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> {{ t('Download TSV') }}</button>
+                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-auto px-2" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()"><i aria-hidden="true" class="ph ph-download-simple"></i> {{ t('Download TSV') }}</button>
                             </div>
                             <p role="status" aria-live="polite" aria-atomic="true" class="text-[10px] text-slate-600 break-words">{{ annotationImportNotice }}</p>
-                            <p v-if="!canDownloadAnnotationTable()" id="annotation-download-help" class="ui-hint">{{ t('Add an annotation row to download TSV.') }}</p>
-                            <div v-if="annotationSets.length === 0" class="ui-hint rounded border border-dashed border-slate-200 p-2">{{ t('No annotation sets.') }}</div>
                             <div v-for="set in annotationSets" :key="set.id" class="rounded border border-slate-200 bg-white p-2 space-y-2">
                                 <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
                                     <input :value="set.id" @change="renameAnnotationSet(set, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" :aria-label="t('Annotation set id')" :disabled="!semanticMutationAvailable">
                                     <button :aria-label="t('Duplicate set')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="duplicateAnnotationSet(set)" :title="t('Duplicate set')" :disabled="!semanticMutationAvailable"><i class="ph ph-copy" aria-hidden="true"></i></button>
                                     <button :aria-label="t('Delete set')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotationSet(set)" :title="t('Delete set')" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                 </div>
-                                <input :value="set.legendLabel" @input="setAnnotationSetLegendLabel(set, $event.target.value)" :aria-label="t('Set legend label')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Set legend label (optional)')" :disabled="!semanticMutationAvailable">
+                                <input :value="set.legendLabel" @input="setAnnotationSetLegendLabel(set, $event.target.value)" :aria-label="t('Set legend label')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Legend label')" :disabled="!semanticMutationAvailable">
                                 <div v-for="item in set.annotations" :key="item.id" data-annotation-row class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
                                     <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1.15fr)_auto_1.5rem] items-center gap-1" :class="{ '!grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_1.5rem]': item.target.kind === 'featureIdentity' }">
                                         <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" :aria-label="t('Annotation id')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Name')" :disabled="!semanticMutationAvailable">
@@ -3807,7 +3800,7 @@
                                             <option value="coordinateSpan">{{ t('Coordinates') }}</option><option value="featureSpan">{{ t('Feature') }}</option>
                                             <option v-if="item.target.kind === 'featureIdentity'" value="featureIdentity" disabled>{{ t('Selected feature') }}</option>
                                         </select>
-                                        <p v-if="item.target.kind !== 'featureIdentity' && annotationRecordCaption(item)" data-annotation-record-caption class="min-w-0 truncate text-[9px] text-slate-500" :title="annotationRecordCaption(item)">{{ annotationRecordCaption(item) }}</p>
+                                        <p v-if="item.target.kind !== 'featureIdentity' && annotationRecordCaption(item)" data-annotation-record-caption class="min-w-0 truncate text-[9px] text-slate-500" :title="annotationRecordCaption(item)"><i class="ph ph-file-text" aria-hidden="true"></i> {{ annotationRecordCaption(item) }}</p>
                                     </div>
                                     <div v-if="item.target.kind !== 'featureIdentity' && annotationRecordShowsSelect(item)">
                                         <label class="mb-0.5 flex items-center gap-1 text-[9px] text-slate-500">
@@ -3831,7 +3824,7 @@
                                         <p v-if="annotationRecordMissing(item)" class="mt-0.5 text-[9px] text-red-600">{{ annotationRecordMissingMessage(item) }}</p>
                                     </div>
                                     <details class="text-[10px]" data-annotation-style>
-                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span><i18n-text :text="t('Style: {mark}')"><template #mark><span class="capitalize">{{ item.mark }}</span></template></i18n-text><template v-if="item.label"> · {{ item.label }}</template></span></summary>
+                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span><i class="ph ph-paint-brush" aria-hidden="true"></i> <span class="capitalize">{{ item.mark }}</span><template v-if="item.label"> · {{ item.label }}</template></span></summary>
                                         <div class="mt-1 space-y-1">
                                             <div class="grid grid-cols-2 gap-1">
                                                 <select :value="item.mark" @change="setAnnotationField(set, item, 'mark', $event.target.value)" :aria-label="t('Annotation mark')" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="highlight">{{ t('Highlight (behind features)') }}</option><option value="band">{{ t('Band (annotation lane)') }}</option><option value="line">{{ t('Line') }}</option><option value="bracket">{{ t('Bracket') }}</option></select>
@@ -3907,14 +3900,13 @@
                                     </div>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
-                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatCacheInfo.length === 0" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
+                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatCacheInfo.length === 0">
                                         <i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}
                                     </button>
-                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
-                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ t('Clear Cache') }}
+                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)">
+                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ tn(losatCacheInfo.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}
                                     </button>
                                 </div>
-                                <p v-if="losatCacheInfo.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ t('Available after a LOSAT comparison has run.') }}</p>
                             </div>
                             <div v-if="circularConservation.source === 'upload' && circularConservationSeriesRows.length === 0">
                                 <span class="text-[9px] flex items-center">{{ t('Series names') }} <help-tip id="help-circular-comparison-series-names" :text="t('Optional fallback names for rings, one per source. Use new lines or commas.')"></help-tip></span>
@@ -3979,7 +3971,7 @@
                                         <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
                                         <label v-if="circularConservation.source === 'upload'"
                                                class="flex items-center gap-1 text-[9px] text-slate-500 cursor-pointer">
-                                            <span class="shrink-0">{{ t('Comparison sequence (optional)') }}</span>
+                                            <span class="shrink-0">{{ t('Comparison sequence') }}</span>
                                             <span class="truncate text-slate-600">{{ row.comparisonSequenceFilename || t('Choose file…') }}</span>
                                             <input type="file"
                                                    class="hidden"
@@ -4008,7 +4000,7 @@
                                     class="hidden"
                                  :disabled="!semanticMutationAvailable || processing">
                                 <button v-if="circularConservation.source === 'losat'" type="button" data-history-ignore class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker" :disabled="!semanticMutationAvailable || processing">
-                                    <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add Seq') }}
+                                    <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add comparison sequence') }}
                                 </button>
                             </div>
                         </div>
@@ -4050,7 +4042,7 @@
                                     :aria-label="t('Reset preserved setting {path}', { path: entry.path })"
                                     @click="resetUnmanagedConfigOverride(entry.path)"
                                  :disabled="!semanticMutationAvailable">
-                                    {{ t('Reset') }}
+                                    {{ t('Reset setting') }}
                                 </button>
                             </div>
                         </div>
@@ -4194,9 +4186,6 @@
                                                     <help-tip :text="t('Rows before Axis render above it; rows after Axis render below it. A Depth slot selects one global series and does not control vertical order. A record without a Depth TSV for that series does not draw it, but its space in the stack stays reserved.')"></help-tip>
                                                 </div>
                                                 <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ linearTrackSlots().length }}</span>
-                                            </div>
-                                            <div v-if="linearTrackSlots().length === 0" class="ui-hint rounded border border-dashed border-slate-200 bg-slate-50 px-2 py-1">
-                                                {{ t('No tracks') }}
                                             </div>
                                             <div
                                                 v-for="entry in linearTrackStackEntries()"
@@ -4534,7 +4523,7 @@
                                         </div>
                                     </div>
                                     <div v-if="circularTrackSlotsPanelOpen" id="circular-custom-track-slots-panel" class="space-y-1.5" data-action-menu-list>
-                                        <p class="flex items-center gap-1 text-[10px] text-slate-500">{{ t('Width and Radius: px or ×R') }} <help-tip id="circular-measure-help" :label="t('Help: Width and Radius')" :text="t('Width and Radius: px or ×R, where R is the base circular radius. Paste 20px or 65% (0.65 ×R). Changing units keeps the number. Blank means Auto; its unit selection is for the next input only.')"></help-tip></p>
+                                        <p class="flex items-center gap-1 text-[10px] text-slate-500">{{ t('Width and Radius in px or ×R') }} <help-tip id="circular-measure-help" :label="t('Help: Width and Radius')" :text="t('Width and Radius: px or ×R, where R is the base circular radius. Paste 20px or 65% (0.65 ×R). Changing units keeps the number. Blank means Auto; its unit selection is for the next input only.')"></help-tip></p>
                                         <div v-if="!adv.circular_track_slots_enabled" class="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-700">
                                             {{ t('Custom stack is saved but inactive; generation uses the simple track controls.') }}
                                         </div>
@@ -4567,9 +4556,6 @@
                                                     <help-tip :text="t('Rows above Axis are outside the circular axis; rows below Axis are inside it. Arrow buttons reorder within the current side only. Use Move outside Axis or Move inside Axis to cross the Axis.')"></help-tip>
                                                 </div>
                                                 <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ circularTrackSlots().length }}</span>
-                                            </div>
-                                            <div v-if="circularTrackSlots().length === 0" class="ui-hint rounded border border-dashed border-slate-200 bg-slate-50 px-2 py-1">
-                                                {{ t('No tracks') }}
                                             </div>
                                             <div
                                                 v-for="entry in circularTrackStackEntries()"
@@ -4872,10 +4858,7 @@
                                                 {{ t('Reload Records') }}
                                             </button>
                                         </div>
-                                        <div v-if="adv.multi_record_positions.length === 0" class="ui-hint bg-slate-50 border border-slate-200 rounded p-1.5">
-                                            {{ t('Upload a sequence file to load records.') }}
-                                        </div>
-                                        <div v-else class="space-y-1 bg-slate-50 border border-slate-200 rounded p-1.5">
+                                        <div v-if="adv.multi_record_positions.length > 0" class="space-y-1 bg-slate-50 border border-slate-200 rounded p-1.5">
                                             <div
                                                 v-for="(position, idx) in adv.multi_record_positions"
                                                 :key="`record-order-${position.selector}-${idx}`"
@@ -4924,7 +4907,7 @@
                                     <option v-for="choice in fontSettings.choices.value" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
                                 </select>
                             </label>
-                            <p v-if="!fontSettings.localFontsSupported" class="text-[10px] text-slate-500" data-font-installed-unavailable>{{ t('Installed fonts can be chosen in Chrome and Edge. Use Load font file in this browser.') }}</p>
+                            <p v-if="!fontSettings.localFontsSupported" class="text-[10px] text-slate-500 flex items-center gap-1" data-font-installed-unavailable><i class="ph ph-prohibit" aria-hidden="true"></i> {{ t('Needs Chrome or Edge') }}</p>
                             <p v-if="fontSettings.loading.value" class="text-[10px] text-slate-500" role="status">{{ t('Loading the font…') }}</p>
                             <p v-if="fontSettings.loadError.value" class="text-[10px] text-red-600" role="alert" data-font-load-error>{{ fontSettings.loadError.value }}</p>
                             <p v-if="fontSettings.customFontSelected.value" class="text-[10px] text-amber-700" data-font-custom-note><i class="ph ph-warning" aria-hidden="true"></i> {{ t('This font is not part of gbdraw. A saved Session keeps only its name, not the font file: to open it elsewhere, the same font must be available there, or it is replaced with the nearest available font.') }}</p>
@@ -4959,7 +4942,7 @@
                                             : t('Global title shown once for the whole linear plot.')"></help-tip>
                                     </span>
                                     <auto-value-field :visible="autoValueVisible(form.plot_title, 'plotTitle')" :text="autoValueText('plotTitle')">
-                                        <input type="text" v-model="form.plot_title" class="form-input form-input-compact auto-value-input" :aria-label="t('Plot Title')" aria-describedby="help-title-text" :placeholder="mode === 'circular' ? '' : t('Optional plot title')" :disabled="!semanticMutationAvailable">
+                                        <input type="text" v-model="form.plot_title" class="form-input form-input-compact auto-value-input" :aria-label="t('Plot Title')" aria-describedby="help-title-text" :placeholder="mode === 'circular' ? '' : t('Plot title')" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                     <markup-preview :text="form.plot_title"></markup-preview>
                                 </div>
@@ -5102,10 +5085,10 @@
                                     <button @click="applySpecificRulePreset" class="btn btn-primary text-xs h-7 px-3 shrink-0 shadow-md shadow-blue-200" :disabled="!semanticMutationAvailable || (!selectedSpecificPreset || specificRulePresetLoading)">
                                         <i class="ph ph-magic-wand" aria-hidden="true"></i>
                                         <span v-if="specificRulePresetLoading">{{ t('Applying...') }}</span>
-                                        <span v-else>{{ t('Apply') }}</span>
+                                        <span v-else>{{ t('Apply preset') }}</span>
                                     </button>
                                 </div>
-                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules; the palette is unchanged.') }}<template v-if="selectedSpecificPreset === 'cog'">{{ sentenceSeparator() }}{{ t('Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.') }}</template></p>
+                                <p data-preset-scheme-effects class="ui-hint mt-1.5">{{ t('Replaces the specific rules') }}<template v-if="selectedSpecificPreset === 'cog'">{{ sentenceSeparator() }}{{ t('Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.') }}</template></p>
                             </div>
 
                             <div>
@@ -5172,14 +5155,13 @@
                                         <input type="color" v-model="newColorVal" :aria-label="t('Add key color')" class="h-8 w-10 p-0 border border-slate-300 rounded cursor-pointer" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <button @click.prevent="addCustomColor" class="btn btn-secondary text-xs h-8 shrink-0" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add') }}
+                                        <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add color') }}
                                     </button>
                                 </div>
                                 <div class="mt-2">
                                     <file-uploader :label="t('Default colors file')" :model-value="files.d_color" @update:model-value="importAuxiliaryTable('d_color', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
                                         <help-tip :text="t('Tab-separated value (TSV) file of feature type and color. Feature types not listed keep the selected palette colors.')"></help-tip>
-                                        {{ t('Optional TSV of default colors.') }}
                                     </div>
                                 </div>
                             </div>
@@ -5198,13 +5180,13 @@
                                     <option v-for="value in specificRuleQualifierSuggestions" :key="`specific-rule-qual-${value}`" :value="value"></option>
                                 </datalist>
 
-                                <p v-if="new Set(manualSpecificRules.map((rule) => rule.qual)).size < manualSpecificRules.length" data-specific-rule-order-hint class="mb-2 ui-hint break-words">{{ t('Rules on the same qualifier: the first match wins.') }}</p>
+                                <p v-if="new Set(manualSpecificRules.map((rule) => rule.qual)).size < manualSpecificRules.length" data-specific-rule-order-hint class="mb-2 ui-hint break-words">{{ t('On the same qualifier, the first matching rule wins.') }}</p>
                                 <div class="mb-2 bg-slate-50 p-2 rounded border border-slate-200" data-specific-rule-add>
                                     <div class="grid grid-cols-2 gap-1 mb-1">
                                         <select v-model="newSpecRule.feat" :aria-label="t('New color rule feature type')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                             <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                         </select>
-                                        <input v-model="newSpecRule.qual" list="specific-rule-qualifier-options" :placeholder="t('Qualifier (choose or type)')" :aria-label="t('Qualifier name')" :aria-describedby="specificRuleHasQualifier(newSpecRule) ? undefined : 'new-specific-rule-qualifier-hint'" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                        <input v-model="newSpecRule.qual" list="specific-rule-qualifier-options" :placeholder="t('Qualifier')" :aria-label="t('Qualifier name')" :aria-describedby="specificRuleHasQualifier(newSpecRule) ? undefined : 'new-specific-rule-qualifier-hint'" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <!-- OV-2435: Add is disabled without a qualifier, by the check the action uses; this says why. -->
                                     <p v-if="!specificRuleHasQualifier(newSpecRule)" id="new-specific-rule-qualifier-hint" data-specific-rule-qualifier-hint class="mb-1 ui-hint break-words">{{ t('Choose or type a qualifier. A rule without one colors nothing.') }}</p>
@@ -5213,7 +5195,7 @@
                                         <input type="color" v-model="newSpecRule.color" :aria-label="t('New color rule color')" class="h-6 w-7 p-0 border rounded cursor-pointer shrink-0" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div class="flex gap-1">
-                                        <input v-model="newSpecRule.cap" :aria-label="t('New color rule legend name')" :placeholder="t('Legend name (optional)')" class="form-input form-input-compact min-w-0 flex-grow" :disabled="!semanticMutationAvailable">
+                                        <input v-model="newSpecRule.cap" :aria-label="t('New color rule legend name')" :placeholder="t('Legend name')" class="form-input form-input-compact min-w-0 flex-grow" :disabled="!semanticMutationAvailable">
                                         <button :aria-label="t('Add color rule')" @click="addSpecificRule" :aria-describedby="specificRuleHasQualifier(newSpecRule) ? undefined : 'new-specific-rule-qualifier-hint'" class="btn btn-secondary h-7 whitespace-nowrap px-2 text-xs" :disabled="!semanticMutationAvailable || !specificRuleHasQualifier(newSpecRule)"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add color rule') }}</button>
                                     </div>
                                 </div>
@@ -5227,7 +5209,6 @@
                                     <file-uploader :label="t('Specific rules file')" :model-value="files.t_color" @update:model-value="importAuxiliaryTable('t_color', $event)" :after-change="waitForAuxiliaryFileImport" :project-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
                                         <help-tip :text="t('TSV file of rules: feature type, qualifier, regular expression, color, and optional legend name.')"></help-tip>
-                                        {{ t('Optional TSV of specific rules.') }}
                                     </div>
                                 </div>
                             </div>
@@ -5259,14 +5240,13 @@
                                             <i class="ph ph-x" aria-hidden="true"></i>
                                         </button>
                                     </span>
-                                    <span v-if="adv.features.length === 0" class="ui-hint italic py-1">{{ t('No feature types selected') }}</span>
                                 </div>
                                 <div class="flex gap-2">
                                     <select v-model="newFeatureToAdd" :aria-label="t('Feature type to add')" aria-describedby="help-feature-feature-types" class="form-input text-xs py-0.5 px-2 h-7" :disabled="!semanticMutationAvailable">
                                         <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                     </select>
                                     <button @click.prevent="addFeature" class="btn btn-secondary text-xs h-7 shrink-0" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add') }}
+                                        <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add type') }}
                                     </button>
                                 </div>
                             </div>
@@ -5370,7 +5350,6 @@
                                             </select>
                                         </div>
                                     </div>
-                                    <div v-if="featureVisibilityManualRules.length === 0" class="ui-hint italic text-center py-2">{{ t('No manual visibility rules') }}</div>
                                 </div>
                             </div>
 
@@ -5477,9 +5456,8 @@
                                     </div>
 
                                     <div v-if="filterMode === 'Blacklist'" class="space-y-2 bg-white p-2 rounded border">
-                                        <p class="ui-hint">{{ t('Exclude labels containing these keywords.') }}</p>
                                         <textarea :value="manualBlacklist" @input="setBlacklistText($event.target.value)" class="form-input h-20" :placeholder="t('hypothetical, unknown')" :disabled="!semanticMutationAvailable"></textarea>
-                                        <div class="ui-hint text-center">{{ t('- OR -') }}</div>
+                                        <div class="ui-hint text-center">{{ t('or') }}</div>
                                         <file-uploader :label="t('Blacklist File')" :model-value="files.blacklist" @update:model-value="importAuxiliaryTable('blacklist', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
                                     </div>
 
@@ -5492,7 +5470,7 @@
                                             <button @click="removeWhitelistRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1">×</button>
                                         </div>
                                         <button @click="addWhitelistRule" :disabled="!semanticMutationAvailable" class="text-xs text-blue-600 font-bold">{{ t('+ Add Rule') }}</button>
-                                        <div class="ui-hint text-center mt-2">{{ t('- OR -') }}</div>
+                                        <div class="ui-hint text-center mt-2">{{ t('or') }}</div>
                                         <file-uploader :label="t('Whitelist File')" :model-value="files.whitelist" @update:model-value="importAuxiliaryTable('whitelist', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     </div>
                                 </div>
@@ -5506,7 +5484,6 @@
                                             <span class="flex-grow text-slate-600 truncate font-mono" :title="rule.order">{{rule.order}}</span>
                                             <button :aria-label="t('Remove priority rule')" @click="removePriorityRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                         </div>
-                                        <div v-if="manualPriorityRules.length === 0" class="ui-hint italic text-center py-2">{{ t('No priority rules defined') }}</div>
                                     </div>
 
                                     <div class="bg-slate-50 p-2 rounded border border-slate-200 mb-2">
@@ -5519,7 +5496,7 @@
                                         </div>
                                     </div>
 
-                                    <div class="ui-hint text-center mb-1">{{ t('- OR UPLOAD FILE -') }}</div>
+                                    <div class="ui-hint text-center mb-1">{{ t('or') }}</div>
                                     <file-uploader :label="t('Priority File (TSV)')" :model-value="files.qualifier_priority" @update:model-value="importAuxiliaryTable('qualifier_priority', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                 </div>
 
@@ -5688,10 +5665,6 @@
                                     </div>
                                 </div>
                             </div>
-
-                            <p v-if="(mode === 'linear' ? form.show_labels_linear : form.labels_mode) === 'none'" class="ui-hint bg-slate-50 border border-slate-200 rounded p-2">
-                                {{ t('Enable labels to configure filtering, qualifier priority, text settings, and circular label geometry. A feature whose Label visibility is On still shows its label with these settings, except filtering: filters do not apply to that label.') }}
-                            </p>
                         </div>
                     </details>
                 </div>
@@ -5860,12 +5833,13 @@
                                 </label>
                                 <help-tip id="help-circular-axis-show-coordinate-scale" :text="t('Show primary coordinate ticks and labels in simple mode. The circular genome axis remains visible when this is off.')"></help-tip>
                             </div>
-                            <p
+                            <button
                                 v-if="adv.circular_track_slots_enabled"
-                                class="rounded border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] text-sky-800"
-                                data-scale-visibility-note>
-                                {{ t('Custom Track Slots are active. Use an enabled Ticks slot to control coordinate-scale visibility.') }}
-                            </p>
+                                type="button"
+                                data-history-ignore
+                                data-scale-visibility-note
+                                @click="showCircularTicksSlot"
+                                class="text-xs text-blue-600 text-left">{{ t('Show Ticks slot') }}</button>
                             <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
@@ -6036,10 +6010,7 @@
                         <summary><settings-section-title section="about"></settings-section-title></summary>
                         <div class="mt-4 space-y-4 pt-4 border-t border-slate-200 text-xs text-slate-600">
 
-                            <div class="bg-blue-50 text-blue-800 p-2.5 rounded-lg border border-blue-100 leading-relaxed">
-                                <strong class="flex items-center gap-1 mb-1"><i class="ph ph-lock-key" aria-hidden="true"></i> {{ t('Privacy & Security') }}</strong>
-                                <strong>{{ t('This tool runs entirely in your browser.') }}</strong>{{ sentenceSeparator() + t('It uses WebAssembly (Pyodide).') + sentenceSeparator() + t('Uploaded genomic data is processed locally and never leaves your device.') }}
-                            </div>
+                            <p data-about-privacy class="bg-blue-50 text-blue-800 p-2.5 rounded-lg border border-blue-100 leading-relaxed font-semibold flex items-center gap-1"><i class="ph ph-lock-key" aria-hidden="true"></i> {{ t('Your files never leave this device') }}</p>
                             <div v-if="hostedBuild.googleAnalytics" class="bg-amber-50 text-amber-900 p-2.5 rounded-lg border border-amber-200 leading-relaxed">
                                 <strong class="flex items-center gap-1 mb-1"><i class="ph ph-chart-line" aria-hidden="true"></i> {{ t('Hosted Site Analytics') }}</strong>
                                 <i18n-text :text="t('The hosted {site} deployment uses Google Analytics 4 for aggregate page-usage metrics.')"><template #site><strong>gbdraw.app</strong></template></i18n-text> {{ t('Uploaded genome files and generated diagrams are still processed locally in your browser and are not sent to Google Analytics by gbdraw.') }}
@@ -6047,26 +6018,22 @@
 
                             <div>
                                 <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-quotes" aria-hidden="true"></i> {{ t('How to cite') }}</strong>
-                                <p class="mb-1.5 text-[11px]">{{ t('If you use gbdraw in your research, please cite the preprint:') }}</p>
                                 <div class="bg-white p-2 rounded border border-slate-200 font-mono text-[10px] select-all text-slate-500 break-all">
                                     Kawato, S. (2026). gbdraw: a genome diagram generator for microbes and organelles. bioRxiv. https://doi.org/10.64898/2026.04.07.716863
                                 </div>
-                                <p class="mt-1.5 text-[11px]">
-                                    DOI:
+                                <p class="mt-1.5 text-[11px] flex items-center gap-1">
+                                    <i class="ph ph-link" aria-hidden="true"></i>
                                     <a href="https://doi.org/10.64898/2026.04.07.716863" target="_blank" rel="noopener noreferrer" class="text-blue-700 hover:text-blue-800 underline">
                                         https://doi.org/10.64898/2026.04.07.716863
                                     </a>
                                 </p>
-                                <p class="mt-1 text-[11px] text-slate-500">
-                                    {{ t('Source code:') }} <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="text-blue-700 hover:text-blue-800 underline">https://github.com/satoshikawato/gbdraw</a>
+                                <p class="mt-1 text-[11px] text-slate-500 flex items-center gap-1">
+                                    <i class="ph ph-github-logo" aria-hidden="true"></i> <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="text-blue-700 hover:text-blue-800 underline">https://github.com/satoshikawato/gbdraw</a>
                                 </p>
                             </div>
 
                             <div>
                                 <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-scroll" aria-hidden="true"></i> {{ t('License & Notices') }}</strong>
-                                <p class="mb-2 text-[11px]">
-                                    {{ t('gbdraw is released under the MIT License. Open source notices for the hosted app, vendored browser assets, and bundled fonts are available on a local static page.') }}
-                                </p>
                                 <div class="flex flex-wrap gap-2">
                                     <a href="./open-source-notices.html" class="btn btn-secondary btn-sm justify-center flex-auto">
                                         <i class="ph ph-book-open-text text-lg" aria-hidden="true"></i> {{ t('Open Source Notices') }}
@@ -6166,7 +6133,7 @@
                             <span v-else-if="results.length === 1">{{ t('Result Preview') }}</span>
                             <span v-else>
                                 <select data-history-ignore :disabled="!semanticMutationAvailable" :value="selectedResultIndex" @change="selectResult($event.target.value)" :aria-label="t('Displayed Result')" class="bg-white border border-slate-300 text-slate-800 text-sm font-semibold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-blue-500 max-w-full">
-                                    <option v-for="(res, idx) in results" :key="idx" :value="idx">{{ t('Preview: {name}', { name: res.name }) }}</option>
+                                    <option v-for="(res, idx) in results" :key="idx" :value="idx">{{ res.name }}</option>
                                 </select>
                             </span>
                         </h2>
@@ -6572,7 +6539,6 @@
                             </div>
                             <div></div>
                         </div>
-                        <p class="ui-hint mt-2 text-center">{{ t('Space around the diagram, in pixels') }}</p>
                     </div>
 
                     <div class="preview-canvas absolute inset-0 overflow-auto flex p-2 custom-scrollbar"
@@ -6769,7 +6735,7 @@
                                 {{ t('Generate the diagram again to edit this feature\'s visibility.') }}
                             </p>
                             <p v-else-if="!featureListState(clickedFeature.feat).drawn" data-feature-hidden-note class="feature-popup-note">
-                                {{ t('This feature is hidden. Choose On to show it.') }}
+                                {{ t('This feature is hidden.') }}
                             </p>
                         </div>
                         <div>
@@ -7168,9 +7134,9 @@
                                                    class="h-7 w-10 cursor-pointer rounded border border-slate-300 p-0">
                                             <span id="preview-legend-color-value" :class="previewItemView.swatch.none ? 'text-xs text-slate-600' : 'match-mono'" :data-color-none="previewItemView.swatch.none ? '' : null">{{ previewItemView.swatch.label }}</span>
                                         </div>
-                                        <p class="match-muted mt-1" data-preview-legend-color-source><default-color-scope-line v-if="previewItemView.defaultColorLine" :line="previewItemView.defaultColorLine"></default-color-scope-line><template v-else>{{ previewItemView.colorSource }}</template></p>
+                                        <p v-if="previewItemView.defaultColorLine || previewItemView.colorSource" class="match-muted mt-1" data-preview-legend-color-source><default-color-scope-line v-if="previewItemView.defaultColorLine" :line="previewItemView.defaultColorLine"></default-color-scope-line><template v-else>{{ previewItemView.colorSource }}</template></p>
                                         <ul v-if="previewItemView.ruleLines.length" class="mt-1 space-y-0.5 text-xs text-slate-700">
-                                            <li v-for="line in previewItemView.ruleLines" :key="line" class="match-mono">{{ line }}</li>
+                                            <li v-for="line in previewItemView.ruleLines" :key="line" class="match-mono flex items-start gap-1"><i class="ph ph-funnel mt-0.5" aria-hidden="true"></i><span>{{ line }}</span></li>
                                         </ul>
                                     </section>
                                     <section>
@@ -7504,7 +7470,7 @@
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="feature-visibility-scope-title" class="text-lg font-bold text-slate-800 mb-2">{{ t('Feature Visibility Scope') }}</h3>
                             <p id="feature-visibility-scope-description" class="text-sm text-slate-600 mb-4">
-                                {{ t('Apply this visibility to:') }}
+                                {{ t('Apply to') }}
                             </p>
                             <div class="flex flex-col gap-2">
                                 <button v-for="(scope, index) in featureVisibilityScopeDialog.scopes"
@@ -7656,7 +7622,7 @@
                                 </button>
 
                                 <p v-if="featureStyleScopeDialog.matchingRule || featureStyleScopeDialog.siblingCount > 0 || featureStyleScopeLabelOptions.displayLabel || featureStyleScopeLabelOptions.annotationLabel"
-                                   class="choice-group-label">{{ t('All features that share:') }}</p>
+                                   class="choice-group-label">{{ t('All features sharing') }}</p>
 
                                 <button v-if="featureStyleScopeDialog.matchingRule"
                                         @click="handleFeatureStyleScopeChoice('rule')"
@@ -7904,24 +7870,18 @@
                             </ul>
                         </div>
 
-                        <div class="space-y-2">
+                        <div v-if="lastRunInfo.sourceRecipe?.available !== false" class="space-y-2" data-run-info-source-recipe>
                             <div class="flex items-center justify-between gap-2">
                                 <div class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ t('Source recipe') }}</div>
-                                <button v-if="lastRunInfo.sourceRecipe?.available !== false"
-                                        type="button"
+                                <button type="button"
                                         @click="copyRunCommand"
                                         class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
                                         :title="t('Copy command')">
                                     <i class="ph ph-copy" aria-hidden="true"></i>
-                                    <span>{{ runInfoCopyStatus || t('Copy') }}</span>
+                                    <span>{{ runInfoCopyStatus || t('Copy command') }}</span>
                                 </button>
                             </div>
-                            <pre v-if="lastRunInfo.sourceRecipe?.available !== false"
-                                 class="h-28 overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-950 text-slate-100 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.sourceRecipe?.command || lastRunInfo.command }}</pre>
-                            <div v-else
-                                 class="rounded border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
-                                {{ errorText(lastRunInfo.sourceRecipe.unavailableReasonParts) }}
-                            </div>
+                            <pre class="h-28 overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-950 text-slate-100 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.sourceRecipe?.command || lastRunInfo.command }}</pre>
                         </div>
 
                         <div v-if="lastRunInfo.exactReplay?.command || lastRunInfo.sessionCommand" class="space-y-2">
@@ -7932,7 +7892,7 @@
                                         class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
                                         :title="t('Copy exact replay command')">
                                     <i class="ph ph-copy" aria-hidden="true"></i>
-                                    <span>{{ exactReplayCopyStatus || t('Copy') }}</span>
+                                    <span>{{ exactReplayCopyStatus || t('Copy command') }}</span>
                                 </button>
                             </div>
                             <pre class="overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-50 text-slate-700 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.exactReplay?.command || lastRunInfo.sessionCommand }}</pre>
@@ -7949,15 +7909,13 @@
                                     <span>{{ t('Download reproducibility files') }}</span>
                                 </button>
                             </div>
-                            <p class="text-xs leading-relaxed text-emerald-800">{{ errorText(lastRunInfo.downloadBundle.descriptionParts) }}</p>
                         </div>
 
                         <div class="space-y-1 text-xs text-slate-500 leading-relaxed">
-                            <p v-for="(note, idx) in lastRunInfo.reproducibility.noteParts" :key="`run-info-note-${idx}`">{{ errorText([note]) }}</p>
+                            <p v-for="(note, idx) in shownRunInfoNoteParts(lastRunInfo.reproducibility.noteParts)" :key="`run-info-note-${idx}`">{{ errorText([note]) }}</p>
                         </div>
                     </div>
                     <div v-else class="h-full flex items-center justify-center text-slate-500 text-sm">
-                        {{ t('Run info is available after a successful manual generation.') }}
                     </div>
                 </div>
 
@@ -8159,7 +8117,7 @@
                     </div>
                     <footer>
                         <p id="similarity-alignment-apply-reason" :class="{ 'is-need': !canApplySimilarityAlignment }">
-                            {{ canApplySimilarityAlignment ? t('Nothing changes until Apply.') : similarityAlignmentApplyDisabledReason }}
+                            {{ canApplySimilarityAlignment ? '' : similarityAlignmentApplyDisabledReason }}
                         </p>
                         <button type="button"
                                 @click="cancelSimilarityAlignmentDialog"
@@ -8281,7 +8239,7 @@
                                     </button>
                                 </div>
                             <div v-if="isLegendStrokeOptionsOpen(entry)" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
-                                    <span class="text-slate-500 shrink-0">{{ t('Stroke:') }}</span>
+                                    <span class="text-slate-500 shrink-0">{{ t('Stroke') }}</span>
                                     <color-value-control
                                         :model-value="getLegendEntryStrokeColor(idx)"
                                         fallback="#000000"
@@ -8295,7 +8253,6 @@
                                     </button>
                                 </div>
                             </div>
-                            <div v-if="legendEntries.length === 0" class="text-center text-slate-400 text-sm py-4">{{ t('No legend entries found') }}</div>
                             <div v-if="deletedLegendEntries.length > 0" class="pt-2 border-t border-slate-200">
                                 <div class="flex items-center justify-between mb-1">
                                     <span id="deleted-legend-items-label" class="text-[10px] font-bold text-slate-500 uppercase">{{ t('Deleted items') }}</span>
@@ -8440,7 +8397,7 @@
                                     </summary>
                                     <div class="space-y-2 border-t border-blue-100 px-2 py-2 text-[11px] text-slate-600">
                                         <div>
-                                            <span class="font-semibold text-slate-700">{{ t('Exact reference:') }}</span> <span class="break-words">{{ similarityAlignmentPlanInspector.reference.recordLabel }} · {{ similarityAlignmentPlanInspector.reference.label }}</span>
+                                            <span class="font-semibold text-slate-700">{{ t('Exact reference') }}</span> <span class="break-words">{{ similarityAlignmentPlanInspector.reference.recordLabel }} · {{ similarityAlignmentPlanInspector.reference.label }}</span>
                                         </div>
                                         <ul :aria-label="t('Aligned records')" class="divide-y divide-slate-100 rounded border border-blue-100 bg-white">
                                             <li v-for="record in similarityAlignmentPlanInspector.records"
@@ -8490,7 +8447,7 @@
                         </div>
 
                         <div v-if="orthogroupDormantNames.length" class="flex items-start justify-between gap-2 px-3 py-1.5 text-[11px] text-slate-600 border-b border-slate-100" role="status">
-                            <span class="min-w-0">{{ t('Saved names waiting for their original members: {names}', { names: orthogroupDormantNames.join(', ') }) }}</span>
+                            <span class="min-w-0">{{ t('Names waiting for their original members · {names}', { names: orthogroupDormantNames.join(', ') }) }}</span>
                             <button type="button" @click="clearOrthogroupDormantOverrides" class="btn btn-secondary px-2 py-1 text-[10px]" :disabled="!semanticMutationAvailable">{{ t('Clear') }}</button>
                         </div>
                         <!-- The list and the selected group's detail share the free height; each scrolls on its own. -->
@@ -8515,7 +8472,6 @@
                                 <div class="truncate text-[11px] text-slate-500">{{ row.countsLabel }}<template v-if="row.scopeLabel"> · {{ row.scopeLabel }}</template></div>
                             </button>
                             </template>
-                            <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-500 text-xs">{{ t('No similarity groups found') }}</div>
                         </div>
 
                         <div v-if="selectedOrthogroup" data-similarity-group-detail class="flex-[3_1_0%] min-h-[9rem] overflow-y-auto p-3 space-y-4 custom-scrollbar">
@@ -8571,7 +8527,7 @@
                                             :selected="option.key === similarityAlignmentDrawerReferenceKey">{{ option.label }}</option>
                                 </select>
                                 <p id="similarity-alignment-drawer-reason" class="ui-hint">
-                                    {{ similarityAlignmentDrawer.disabledReason || t('The selected exact feature will remain fixed as the reference.') }}
+                                    {{ similarityAlignmentDrawer.disabledReason }}
                                 </p>
                                 <div class="grid grid-cols-2 gap-2">
                                     <button type="button"
@@ -8613,7 +8569,6 @@
                                             {{ t('{genes} · {records} · score {score}', { genes: tn(Number(candidate.memberCount), '{count} gene', '{count} genes'), records: tn(Number(candidate.recordCoverageCount), '{count} record', '{count} records'), score: Number(candidate.score || 0).toFixed(1) }) }}
                                         </div>
                                     </div>
-                                    <div v-if="!(selectedOrthogroup.nameCandidates || []).length" class="text-xs text-slate-500">{{ t('No suggestions') }}</div>
                                 </div>
                             </details>
 
@@ -8656,7 +8611,7 @@
                         </div>
 
                         <div v-if="selectedOrthogroup" data-similarity-group-actions class="px-3 py-2 border-t border-slate-200 bg-slate-50 shrink-0">
-                            <div class="mb-1.5 truncate text-[11px] text-slate-500">{{ t('Selected group:') }} <span class="font-semibold text-slate-700">{{ resolveOrthogroupName(selectedOrthogroup) }}</span></div>
+                            <div class="mb-1.5 truncate text-[11px] text-slate-500">{{ t('Selected group') }} <span class="font-semibold text-slate-700">{{ resolveOrthogroupName(selectedOrthogroup) }}</span></div>
                             <div class="grid grid-cols-2 gap-2">
                                 <button @click="highlightOrthogroupById(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
                                     <i class="ph ph-target" aria-hidden="true"></i> {{ t('Highlight') }}
@@ -8750,12 +8705,12 @@
         <span>
             <strong>{{ t('Disclaimer:') }}</strong> {{ t('This tool is provided "as is" without warranty of any kind.') }}
         </span>
-        <span>
-            <!-- A line breaks only between the items: each link stays whole and keeps its separator at its end (OV-1517). -->
-            {{ t('License:') }} <a href="./open-source-notices.html" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Open Source Notices') }}</a>&nbsp;|
-            <a :href="INTERACTIVE_GALLERY_URL" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Interactive Gallery') }}</a>&nbsp;|
-            <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('MIT on GitHub') }}</a>&nbsp;|
-            {{ t('Author:') }} <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Satoshi Kawato') }}</a>
+        <!-- A line breaks only between the items, and each item stays whole on its line (OV-1517); spacing separates them. -->
+        <span data-footer-links class="inline-flex flex-wrap items-baseline justify-center gap-x-4">
+            <span data-footer-item class="whitespace-nowrap">{{ t('License:') }} <a href="./open-source-notices.html" class="hover:underline hover:text-slate-700">{{ t('Open Source Notices') }}</a></span>
+            <a :href="INTERACTIVE_GALLERY_URL" data-footer-item target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Interactive Gallery') }}</a>
+            <a data-footer-item href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('MIT on GitHub') }}</a>
+            <span data-footer-item class="whitespace-nowrap">{{ t('Author:') }} <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">{{ t('Satoshi Kawato') }}</a></span>
         </span>
         <!-- GBDRAW_HOSTED_BUILD_LABEL -->
     </footer>
@@ -8859,11 +8814,10 @@
             </section>
         </div>
         <!-- Generate asks about pairs set to Upload BLAST TSV without a file: one row per pair -->
-        <choice-dialog v-if="missingBlastTsvDialog.show" :busy="dialogChoicePending" labelledby="missing-blast-tsv-title" describedby="missing-blast-tsv-description"
+        <choice-dialog v-if="missingBlastTsvDialog.show" :busy="dialogChoicePending" labelledby="missing-blast-tsv-title"
              @cancel="resolveMissingBlastTsv('cancel')" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
             <h2 id="missing-blast-tsv-title" class="text-base font-bold text-slate-800">{{ t('BLAST TSV missing') }}</h2>
-            <p id="missing-blast-tsv-description" class="mt-2 text-sm leading-relaxed text-slate-600">{{ t('Choose a BLAST TSV for each pair, or skip these comparisons.') }}</p>
             <ul class="mt-3 divide-y divide-slate-200 rounded border border-slate-200" data-missing-blast-tsv-rows>
                 <li v-for="row in missingBlastTsvRows" :key="row.edgeKey" :data-missing-blast-tsv-row="row.edgeKey" class="flex min-w-0 items-center gap-2 px-2 py-1.5 text-sm">
                     <span class="min-w-0 flex-1">
@@ -8893,8 +8847,8 @@
             <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">{{ labelFitDialog.capacity
                 ? t('Nothing was drawn. These labels need much more room than the map has, so placing them was not tried.')
                 : labelFitDialog.drawn
-                ? t('The figure is drawn. Choose a fix to Generate again, or keep it as drawn.')
-                : t('Nothing was drawn. Choose a fix to Generate again.') }}</p>
+                ? t('The figure is drawn.')
+                : t('Nothing was drawn.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
                 <li v-for="record in labelFitDialog.records" :key="`${record.recordIndex}:${record.recordId}:${record.labelKindTitle}`">
                     <i18n-text v-if="record.capacity" :text="labelCapacityText(record.capacity)"><template #record><span class="font-semibold text-slate-700">{{ record.recordId }}</span></template></i18n-text>
@@ -9005,13 +8959,10 @@
             </div>
         </choice-dialog>
         <!-- UJ-06: the Gallery examples this origin serves -->
-        <choice-dialog v-if="exampleChooserOpen" labelledby="example-chooser-title" describedby="example-chooser-description"
+        <choice-dialog v-if="exampleChooserOpen" labelledby="example-chooser-title"
              @cancel="closeExampleChooser" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
             <h2 id="example-chooser-title" class="text-base font-bold text-slate-800">{{ t('Choose an example') }}</h2>
-            <p id="example-chooser-description" class="mt-2 text-sm leading-relaxed text-slate-600">
-                {{ t('Each example opens its Gallery Session: the inputs, settings, and Result.') }}
-            </p>
             <ul class="mt-3 max-h-[60vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
                 <li v-for="example in galleryExamples" :key="example.id" class="flex items-center">
                     <button type="button" data-history-managed :data-gallery-example="example.id" @click="loadExampleSession(example)"
@@ -9087,6 +9038,9 @@
             <h2 id="choice-prompt-title" class="text-base font-bold text-slate-800">{{ choicePrompt.title }}</h2>
             <div id="choice-prompt-description" class="mt-2 text-sm leading-relaxed text-slate-600">
                 <p v-if="choicePrompt.description">{{ choicePrompt.description }}</p>
+                <ul v-if="choicePrompt.lines.length" class="space-y-1" data-choice-prompt-lines>
+                    <li v-for="(line, index) in choicePrompt.lines" :key="index" class="flex items-center gap-2"><i class="ph" :class="line.icon" aria-hidden="true"></i><span>{{ line.text }}</span></li>
+                </ul>
                 <ul v-if="choicePrompt.items.length" class="mt-1 list-disc space-y-0.5 pl-5">
                     <li v-for="(item, index) in choicePrompt.items" :key="index">{{ item }}</li>
                 </ul>
@@ -9182,7 +9136,7 @@
                     <select :value="rule.feat" @change="$emit('set-field', i, 'feat', $event.target.value, $event.target)" :aria-label="t('Color rule {n} feature type', { n: i + 1 })" class="form-input form-input-compact" :disabled="!available">
                         <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                     </select>
-                    <input :value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" :placeholder="t('Qualifier (choose or type)')" :aria-label="t('Qualifier name')" :aria-describedby="specificRuleHasQualifier(rule) ? undefined : `${fieldId(rule)}-qualifier`" class="form-input form-input-compact" :disabled="!available">
+                    <input :value="rule.qual" @change="$emit('set-field', i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" :placeholder="t('Qualifier')" :aria-label="t('Qualifier name')" :aria-describedby="specificRuleHasQualifier(rule) ? undefined : `${fieldId(rule)}-qualifier`" class="form-input form-input-compact" :disabled="!available">
                 </div>
                 <input :id="fieldId(rule)" :disabled="!available" :value="patternText(rule)" @input="$emit('edit-pattern', rule, $event.target.value)" @change="$emit('retry-pattern', rule)" :aria-label="t('Color rule {n} pattern', { n: i + 1 })" :aria-describedby="patternDraft(rule) ? `${fieldId(rule)}-status` : undefined" :aria-invalid="patternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="patternDraft(rule)?.pending ? 'true' : undefined" :placeholder="t('Regular expression')" data-history-ignore class="form-input form-input-compact w-full font-mono">
                 <!-- The pattern's state under its field, once; the rule for what Save Session, Generate and the downloads use sits in the help tip. -->
@@ -9209,7 +9163,6 @@
         <p v-if="!specificRuleHasQualifier(rule)" :id="`${fieldId(rule)}-qualifier`" data-color-rule-qualifier-hint class="ui-hint break-words leading-snug">{{ t('Choose or type a qualifier. A rule without one colors nothing.') }}</p>
         </div>
     </div>
-    <div v-if="rules.length === 0" class="ui-hint italic text-center py-2">{{ t('No rules added') }}</div>
 </div>
 </script>
 
@@ -9217,7 +9170,7 @@
   <div class="min-w-0 space-y-2" :data-linear-record-names="seq.uid">
     <div data-setting="record-names">
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>{{ t('Organism / strain (optional)') }} <setting-note :id="`linear-definition-timing-${seq.uid}`" setting="record-names"></setting-note></span>
+        <span>{{ t('Organism / strain') }} <setting-note :id="`linear-definition-timing-${seq.uid}`" setting="record-names"></setting-note></span>
         <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
         <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="$emit('reset-definition', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>
@@ -9226,7 +9179,7 @@
     </div>
     <div data-setting="inputs">
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>{{ t('Subtitle / title (optional)') }} <setting-note :id="`linear-subtitle-timing-${seq.uid}`" setting="inputs"></setting-note></span>
+        <span>{{ t('Subtitle / title') }} <setting-note :id="`linear-subtitle-timing-${seq.uid}`" setting="inputs"></setting-note></span>
         <span v-if="!seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
         <button v-if="seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" type="button" @click="$emit('reset-subtitle', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>
@@ -9340,9 +9293,9 @@
 
 <script type="text/x-template" id="file-uploader-template">
     <div class="w-full" data-history-managed role="group" :aria-label="t('{name} selection', { name: $attrs['data-input-aria-label'] || label })">
-        <div class="flex justify-between items-end mb-1">
+        <div v-if="hasSelection" class="flex justify-between items-end mb-1">
             <label class="input-label mb-0">{{ label }}</label>
-            <button v-if="hasSelection" @click.stop="clearFile" :disabled="!uploadAvailable" :aria-label="t('Remove {name}', { name: $attrs['data-input-aria-label'] || label })" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> {{ t('Remove') }}</button>
+            <button @click.stop="clearFile" :disabled="!uploadAvailable" :aria-label="t('Remove {name}', { name: $attrs['data-input-aria-label'] || label })" class="text-[10px] text-red-600 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> {{ t('Remove') }}</button>
         </div>
         <div
             class="upload-zone"
@@ -9358,7 +9311,7 @@
             <input type="file" ref="input" :multiple="multiple" :disabled="!uploadAvailable" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" :aria-label="$attrs['data-input-aria-label'] || label" @change="handleFile" :data-testid="testId || undefined" class="hidden">
             <div v-if="!hasSelection" class="flex items-center justify-center gap-1.5 text-slate-500">
                 <i class="ph ph-upload-simple" aria-hidden="true"></i>
-                <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">{{ t('Click to Browse') }}</span>
+                <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">{{ t('Choose {name}', { name: label }) }}</span>
             </div>
             <div v-else-if="inspectionFailed" class="upload-zone-failed-label font-bold truncate w-full px-2 flex items-center justify-center gap-1.5" :class="small ? 'text-[10px]' : 'text-xs'">
                 <i class="ph ph-warning-circle" aria-hidden="true"></i>

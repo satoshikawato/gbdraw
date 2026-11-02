@@ -430,7 +430,7 @@ test('the popup note names why the diagram draws no label for the feature', () =
   clicked.labelKey = 'label-1';
   assert.equal(hint(), '');
   clicked.labelKey = '';
-  assert.equal(hint(), 'No label shown. Choose On to show it.');
+  assert.equal(hint(), 'No label shown.');
   clicked.labelVisibility = 'off';
   assert.equal(hint(), '');
   clicked.labelVisibility = 'on';
@@ -463,7 +463,7 @@ test('OV-1679: the popup label note and the Label Not Shown dialog are shown in 
     const { state, actions } = buildHarness({ diagramOptions });
     const clicked = state.clickedFeature.value;
     clicked.labelKey = '';
-    assert.equal(actions.clickedFeatureLabelHint.value, `${zhHans['No label shown.']}${zhHans['Choose On to show it.']}`);
+    assert.equal(actions.clickedFeatureLabelHint.value, zhHans['No label shown.']);
     clicked.feat = featureFor(featureId, 'repeat_region');
     clicked.labelVisibility = 'on';
     setRow(state, featureId, { labelVisibility: 'on' });

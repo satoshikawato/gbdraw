@@ -43,7 +43,7 @@ test('FL-12 two or more specific rules show one line on what Move rule up/down o
     await expect(hint).toHaveCount(1);
     await hint.evaluate(element => { for (let node = element.closest('details'); node; node = node.parentElement?.closest('details')) node.open = true; });
     await expect(hint).toBeVisible();
-    await expect(hint).toContainText('Rules on the same qualifier: the first match wins.');
+    await expect(hint).toContainText('On the same qualifier, the first matching rule wins.');
   } finally {
     await page.context().close();
   }

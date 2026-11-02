@@ -214,7 +214,7 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
     const name = record?.recordId || annotationRecordSelectorValue(annotation?.target?.record);
     if (!name) return '';
     const unread = current.status !== 'ready' && !discoveryPending(current);
-    return unread ? t('Record: {name} (record list unavailable)', { name }) : t('Record: {name}', { name });
+    return unread ? t('{name} (record list unavailable)', { name }) : name;
   };
   return {
     showsSelect,

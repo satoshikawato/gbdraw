@@ -118,7 +118,7 @@ test('adjacent LOSAT keeps selection intent separate from resolved work', () => 
   assert.equal(projection.topologyPairLabel, '2 adjacent pairs');
   assert.equal(projection.activePairCount, 2);
   assert.equal(projection.activeLosatModeLabel, 'LOSATN');
-  assert.match(projection.filterSummary, /^E-value <= /);
+  assert.match(projection.filterSummary, /^E-value ≤ /);
 
   const oneRecordResolution = resolveLinearComparisonPlan({
     plan,
@@ -424,10 +424,10 @@ test('filter summary always reports actual values and compares against mode-prof
   assert.equal(defaultProjection.filterSummaryIsDefault, true);
   assert.equal(
     defaultProjection.filterSummary,
-    `E-value <= ${linearDefaults.evalue} · ` +
-      `Bitscore >= ${linearDefaults.min_bitscore} · ` +
-      `Identity >= ${linearDefaults.identity}% · ` +
-      `Length >= ${linearDefaults.alignment_length}`
+    `E-value ≤ ${linearDefaults.evalue} · ` +
+      `Bitscore ≥ ${linearDefaults.min_bitscore} · ` +
+      `Identity ≥ ${linearDefaults.identity}% · ` +
+      `Length ≥ ${linearDefaults.alignment_length}`
   );
 
   const custom = project(plan, {
@@ -441,7 +441,7 @@ test('filter summary always reports actual values and compares against mode-prof
   assert.equal(custom.filterSummaryIsDefault, false);
   assert.equal(
     custom.filterSummary,
-    'E-value <= 1e-20 · Bitscore >= 85 · Identity >= 97.5% · Length >= 120'
+    'E-value ≤ 1e-20 · Bitscore ≥ 85 · Identity ≥ 97.5% · Length ≥ 120'
   );
 });
 

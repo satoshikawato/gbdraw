@@ -411,7 +411,7 @@ test('each Circular LOSAT ring file added through Add Seq is one Undo step', asy
   await loadSession(page, conservationSession);
   const [baseline] = await historyCounts(page);
   const initial = await ringRows(page);
-  const addSeq = page.locator('button', { hasText: 'Add Seq' });
+  const addSeq = page.locator('button', { hasText: 'Add comparison sequence' });
   await reveal(addSeq);
   const ringInput = page.locator('input[type="file"][accept^=".fa,.fas,.fasta,.fna,.ffn,.gb"]');
   const states = [initial];
@@ -454,7 +454,7 @@ test('an uploaded BLAST row comparison sequence chosen through its label is one 
   const sequenceSources = () => page.evaluate(() => (
     window.__GBDRAW_APP__.files.c_conservation_sequence_sources || []
   ).map((file) => file?.name || null));
-  const companion = page.locator('label', { hasText: 'Comparison sequence (optional)' })
+  const companion = page.locator('label', { hasText: 'Comparison sequence' })
     .locator('input[type="file"]');
   await expect(companion).toHaveCount(1);
   await expect.poll(sequenceSources).toEqual([]);
@@ -504,7 +504,7 @@ test('a GenBank or DDBJ ring added through Add Seq keeps its record label throug
   await loadSession(page, conservationSession);
   const [baseline] = await historyCounts(page);
   const initial = await ringRows(page);
-  await reveal(page.locator('button', { hasText: 'Add Seq' }));
+  await reveal(page.locator('button', { hasText: 'Add comparison sequence' }));
   const ringInput = page.locator('input[type="file"][accept^=".fa,.fas,.fasta,.fna,.ffn,.gb"]');
   const added = (state, name, label) => ({ files: [...state.files, name], rows: [...state.rows, label] });
   const expectState = async (state, undo, redo, message) => {

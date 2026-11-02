@@ -237,9 +237,9 @@ test('a Circular record popup without its own fields names the cause', () => {
   assert.equal(hint('not-inspected'), 'Inspect source records in the sidebar to edit this record\'s label.');
   assert.equal(hint('multi-record-canvas'), 'Multi-Record Canvas uses a grid. Turn it off to select one record.');
   assert.equal(hint('no-single-record'), 'Select one record to edit crop, orientation, and title lines.');
-  for (const cause of ['multi-record-canvas', 'no-single-record']) {
-    assert.ok(sidebar.includes(`>{{ t('${hint(cause)}') }}</p>`), `the sidebar shows the ${cause} sentence`);
-  }
+  assert.ok(sidebar.includes(`>{{ t('${hint('no-single-record')}') }}</p>`), 'the sidebar shows the no-single-record sentence');
+  // The sidebar offers the Multi-Record Canvas link in place of the sentence (ui-copy-diet D-03).
+  assert.ok(sidebar.includes(`@click="showCircularCanvasSetting" class="mt-1 text-xs text-blue-600">{{ t('Show Multi-Record Canvas setting') }}</button>`));
 });
 
 // A Linear file that draws several records: the drawn record id names the
@@ -290,7 +290,7 @@ test('the legend-entry view names the rule behind the color and the feature coun
     rules: [{ feat: 'CDS', qual: 'gene_kind', val: 'biosynthetic$' }]
   }), { kind: 'legend-entry', key: 'Core biosynthetic genes' });
   assert.equal(ruled.subtitle, '16 features');
-  assert.equal(ruled.colorSource, 'From this color rule:');
+  assert.equal(ruled.colorSource, null);
   assert.deepEqual(ruled.ruleLines, ['CDS where gene_kind matches “biosynthetic$”']);
   assert.equal(ruled.dialogLabel, 'Legend item: Core biosynthetic genes');
 
@@ -381,7 +381,7 @@ test('the legend-entry view of a track row names its plot, not features (OV-1272
   const views = ['GC content', 'GC skew (+)', 'Depth'].map((key) => openView(created, { kind: 'legend-entry', key }));
   assert.deepEqual(views.map((view) => view.subtitle), ['Content plot', 'Skew plot', 'Depth plot']);
   views.forEach((view) => {
-    assert.equal(view.colorSource, 'Changes this legend swatch only. The plot keeps the color set in Settings.');
+    assert.equal(view.colorSource, 'Changes the legend swatch only.');
     assert.deepEqual(view.ruleLines, []);
   });
   assert.deepEqual([views[0].title, views[0].name, views[0].dialogLabel], ['GC content', 'GC content', 'Legend item: GC content']);
@@ -411,7 +411,7 @@ test('a feature row named like a track row keeps the feature view (OV-1272)', ()
   assert.equal(feature.subtitle, '3 features');
   assert.notEqual(feature.colorSource, track.colorSource);
   assert.equal(track.subtitle, 'Content plot');
-  assert.equal(track.colorSource, 'Changes this legend swatch only. The plot keeps the color set in Settings.');
+  assert.equal(track.colorSource, 'Changes the legend swatch only.');
 });
 
 test('the record-definition view lists the facts of the displayed Result', () => {

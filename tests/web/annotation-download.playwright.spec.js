@@ -50,9 +50,8 @@ for (const width of [1440, 390]) {
     await panelSummary(page).press('Enter');
     const button = panel(page).getByRole('button', { name: 'Download TSV', exact: true });
     await expect(button).toBeDisabled();
-    await expect(button).toHaveAccessibleDescription('Add an annotation row to download TSV.');
     await page.evaluate(() => window.__GBDRAW_APP__.downloadAnnotationTable());
-    await panel(page).getByRole('button', { name: /Add set/ }).click();
+    await panel(page).getByRole('button', { name: 'Add annotation set' }).click();
     await expect(button).toBeDisabled();
     await page.evaluate(() => window.__GBDRAW_APP__.downloadAnnotationTable());
     expect(downloads).toHaveLength(0);

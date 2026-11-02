@@ -1620,7 +1620,7 @@ test('a Rotate after a Remove and an Add Seq puts no edit on another ring', asyn
 // The Apply buttons of Rotate, Align, and Align at feature are disabled and their runs refused too (Rotate: the test after next).
 // A row moves to its ring's new key only if the rings at adoption are the rings the request was built from; that
 // compare stays for a change that does not come through these controls.
-const revealRingControls = (page) => reveal(page.locator('button[aria-label="Add Seq"], button:has-text("Add Seq")').first());
+const revealRingControls = (page) => reveal(page.locator('button[aria-label="Add comparison sequence"], button:has-text("Add comparison sequence")').first());
 const expectEachRowOnItsRing = async (page) => {
   const rows = await ringRows(page);
   expect(rows.map((row) => row.file).sort()).toEqual(['ringa', 'ringb', 'ringc']);
@@ -1634,7 +1634,7 @@ const ringControls = (page) => [
   page.getByRole('button', { name: 'Move series inward', exact: true }).first(),
   page.getByRole('button', { name: 'Move series outward', exact: true }).nth(1),
   page.getByRole('button', { name: 'Remove series', exact: true }).last(),
-  page.getByRole('button', { name: 'Add Seq', exact: true }),
+  page.getByRole('button', { name: 'Add comparison sequence', exact: true }),
   page.getByRole('button', { name: 'Reset Settings', exact: true }),
   page.locator('[data-setting="pairwise-comparisons"]').getByRole('radio', { name: 'Upload BLAST TSV', exact: true }),
   page.locator('[data-setting="pairwise-comparisons"]').getByRole('radio', { name: 'Run LOSAT', exact: true })

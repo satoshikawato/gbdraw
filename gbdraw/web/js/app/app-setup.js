@@ -36,6 +36,7 @@ import {
 import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
+import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../services/session-request.js';
 import { admitFeatureCatalog, biologicalFeatureKey, resultCatalogFeatures } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { inputSummaryOf } from '../services/input-summary.js';
@@ -163,7 +164,7 @@ import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
 /** @import { PopupPlacement } from '../utils/popup-bounds.js' */
-import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
+import { formatElapsedMs, reproducibilityLabel, shownRunInfoNoteParts } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
@@ -5554,16 +5555,10 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     const choice = await askChoice({
       title: t('Reset all settings?'),
-      description: joinSentences(t('Circular and Linear both return to their default settings.'), t('This also removes your edits:')),
-      items: [
-        t('Colors, color rules, and the palette'),
-        t('Labels, Feature visibility, and Feature placements'),
-        t('Legend names, deleted Legend rows, Similarity group names, and Region Annotations'),
-        t('Linear record definitions, subtitles, regions, reverse complement, and alignment'),
-        t('Linear comparisons, which turn off; their uploaded tables stay'),
-        t('The Default colors, Specific rules, Blacklist, Whitelist, and Priority files, with the settings they loaded')
+      lines: [
+        { icon: 'ph-warning', text: t('Your edits are removed too') },
+        { icon: 'ph-arrow-counter-clockwise', text: t('Undo restores them') }
       ],
-      note: joinSentences(t('Input files (genome, Depth, and comparison files for circular diagrams), the records you chose, and File defaults stay.'), t('Undo brings the settings back.')),
       actions: [{ id: 'reset', label: t('Reset all settings'), tone: 'danger' }],
       cancelLabel: t('Keep settings')
     });
@@ -6078,7 +6073,7 @@ export const createAppSetup = () => {
       const result = await exportMethod(snapshot, fontPorts);
       if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
       if (result.fontWarnings.length > 0) {
-        showNotice({ text: joinSentences(t('Exported {file}.', { file: result.filename }), t('Find it in your browser\'s downloads.')), items: result.fontWarnings });
+        showNotice({ text: t('Exported {file}.', { file: result.filename }), items: result.fontWarnings });
       }
       return result;
     } catch (error) {
@@ -6191,7 +6186,7 @@ export const createAppSetup = () => {
       history.markSavePoint();
       // D-02: a font gbdraw does not bundle is saved by name only (receipt 〔警告〕).
       showNotice({
-        text: joinSentences(t('Session saved: {file}.', { file: filename }), t('Find it in your browser\'s downloads.')),
+        text: t('Session saved: {file}.', { file: filename }),
         // Each drawing's font, and the font of the shown Result, whose committed
         // request the Session saves too (OV-742).
         items: customFontSaveWarnings(
@@ -6461,6 +6456,31 @@ export const createAppSetup = () => {
       return { status: 'unavailable' };
     }
     await settingsPaneActions.revealSetting(control);
+    return { status: 'ok' };
+  };
+  // With Custom Track Slots on, a Ticks row owns the coordinate scale: the link beside Show Coordinate Scale
+  // reveals that row (the first enabled one, else the first), or the Custom Track Slots panel when the stack
+  // has none. It changes no setting.
+  const showCircularTicksSlot = async () => {
+    const drawing = state.drawingOfMode('circular');
+    if (mode.value !== 'circular' || !drawing.adv.circular_track_slots_enabled) return { status: 'unavailable' };
+    circularTrackSlotsPanelOpen.value = true;
+    await nextTick();
+    /** @type {CircularTrackSlot[]} */
+    const slots = Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [];
+    const ticks = slots.filter((slot) => slot.renderer === 'ticks');
+    const slot = ticks.find((candidate) => candidate.enabled) || ticks[0];
+    const row = slot ? document.querySelector(`[data-capture="circular-track-slot-${CSS.escape(slot.id)}"]`) : null;
+    const panel = document.getElementById('circular-custom-track-slots-panel');
+    const toggle = /** @type {HTMLElement | null} */ (document.querySelector('[aria-controls="circular-custom-track-slots-panel"]'));
+    const control = /** @type {HTMLElement | null} */ (row?.querySelector('input, select, button') ?? null);
+    if (row instanceof HTMLElement && control) {
+      await settingsPaneActions.revealSetting(row, { focus: control });
+    } else if (panel && toggle) {
+      await settingsPaneActions.revealSetting(panel, { align: 'start', focus: toggle });
+    } else {
+      return { status: 'unavailable' };
+    }
     return { status: 'ok' };
   };
   watch(() => [mode.value, circularSingleRecordPresentationEnabled.value,
@@ -7016,7 +7036,7 @@ export const createAppSetup = () => {
     const drawing = state.activeDrawing();
     return (
       linearSourceMovePlan(drawing, 0, 1).reason === 'custom-layout'
-        ? t('Files cannot be moved while Record Layout does not give each File its own consecutive rows. Change the rows in Advanced comparison and layout → Record Layout.')
+        ? t('Files cannot be moved while Record Layout does not give each File its own consecutive rows. Change the rows in Record Layout under Advanced comparison and layout.')
         : ''
     );
   });
@@ -7700,6 +7720,8 @@ export const createAppSetup = () => {
     inspectCircularSourceRecords,
     circularRecordSelectionEnabled,
     showCircularCanvasSetting,
+    showCircularTicksSlot,
+    DEFAULT_LINEAR_OUTPUT_PREFIX,
     setCircularRecordPresentationSelector,
     changeCircularMultiRecordCanvas,
     setCircularSourceFile,
@@ -8024,6 +8046,7 @@ export const createAppSetup = () => {
     downloadCliHelperFiles,
     runInfoElapsedText,
     runInfoReproducibilityText,
+    shownRunInfoNoteParts,
     runInfoHasCliHelperFiles,
     resetSettings,
     requestResetSettings,

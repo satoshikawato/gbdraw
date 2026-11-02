@@ -31,12 +31,12 @@ test('OV-373: a saved annotation target before Inspect is not called unavailable
   });
   const selector = createAnnotationRecordSelector({ getCatalog: () => pending });
   assert.equal(selector.showsSelect(savedTarget()), false);
-  assert.equal(selector.captionFor(savedTarget()), 'Record: NC_001879.2');
+  assert.equal(selector.captionFor(savedTarget()), 'NC_001879.2');
 
   // A catalog that failed to read its records says so beside the name.
   const failed = { status: 'error', records: [], issues: [], requiresSelection: false };
   assert.equal(createAnnotationRecordSelector({ getCatalog: () => failed }).captionFor(savedTarget()),
-    'Record: NC_001879.2 (record list unavailable)');
+    'NC_001879.2 (record list unavailable)');
 
   // After Inspect the one record resolves; a single-record input needs no select.
   const ready = buildAnnotationRecordCatalog({
@@ -49,7 +49,7 @@ test('OV-373: a saved annotation target before Inspect is not called unavailable
   const readySelector = createAnnotationRecordSelector({ getCatalog: () => ready });
   assert.equal(readySelector.valueFor(savedTarget()), ready.records[0].key);
   assert.equal(readySelector.showsSelect(savedTarget()), false);
-  assert.equal(readySelector.captionFor(savedTarget()), 'Record: NC_001879.2');
+  assert.equal(readySelector.captionFor(savedTarget()), 'NC_001879.2');
 
   // Several records keep the select.
   const multi = buildAnnotationRecordCatalog({
