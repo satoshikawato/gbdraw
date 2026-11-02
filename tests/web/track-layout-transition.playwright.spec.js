@@ -1510,6 +1510,111 @@ test('a ring search that writes other rows keeps the managed ring row, its edits
   } finally { await page.context().close(); }
 });
 
+const addRing = (page, name) => evaluateWithRetainedPromise(page, async ({ name }) => {
+  const file = new File([`>${name}\nACGTACGTACGTACGTACGTACGT\n`], `${name}.fasta`, { type: 'text/plain', lastModified: 5 });
+  await window.__GBDRAW_APP__.addCircularConservationComparisonFile({ target: { files: [file], value: '' } });
+}, { name });
+// HmmtDNA, whose tRNA features give Rotate a target, with three rings from Add Seq on the custom stack.
+const loadAddedRings = async (browser) => {
+  const page = await load(browser, HMMT);
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.losatExecution.executionMode = 'serial';
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => jobs.map((job, index) => ({
+      cacheKey: job.cacheKey,
+      text: `${job.queryName || 'query'}\tNC_012920.1\t99\t${2100 + index}\t3\t0\t1\t${2100 + index}\t1\t${2100 + index}\t1e-20\t500\n`
+    }));
+  });
+  for (const name of ['ringa', 'ringb', 'ringc']) await addRing(page, name);
+  await page.locator('[data-setting="region-annotations"] input[type=file]').first().setInputFiles({
+    name: 'regions.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from('set_id\tid\tmark\trecord\tstart\tend\nmarks\tm1\thighlight\tNC_012920.1\t100\t900\n')
+  });
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().annotationSets.length)).toBeGreaterThan(0);
+  await page.evaluate(() => window.__GBDRAW_APP__.setCircularTrackSlotsEnabled(true));
+  return page;
+};
+const ringRows = (page) => page.evaluate(async () => {
+  const { state } = await import('./js/state.js');
+  return state.activeDrawing().adv.circular_track_slots.flatMap((row) => (
+    row.renderer === 'sequence_conservation' ? [{ id: row.id, width: row.width, file: String(row.params.series_key).split('.')[0], label: row.params.label }]
+      : []
+  ));
+});
+const setRingWidth = (page, id, width) => page.evaluate(async ({ id, width }) => {
+  const { state } = await import('./js/state.js');
+  state.activeDrawing().adv.circular_track_slots.find((row) => row.id === id).width = width;
+}, { id, width });
+const rotateByTrna = async (page) => {
+  await page.evaluate(() => { window.__GBDRAW_APP__.richFeaturePopup = true; });
+  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+  await search.fill('tRNA');
+  await search.press('Enter');
+  await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+  await page.getByRole('button', { name: 'Rotate record using this feature', exact: true }).click();
+  await page.getByRole('region', { name: 'Rotate record using this feature', exact: true }).getByRole('button', { name: 'Apply now' }).click();
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 120000 });
+  await settleLive(page);
+  expect(await page.evaluate(async () => (await import('./js/state.js')).state.errorLog.value?.code ?? null)).toBeNull();
+};
+// Each drawn ring by its row, with its colors and radii.
+const drawnRings = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const doc = new DOMParser().parseFromString(String(app.currentResults()[app.selectedResultIndex].content), 'image/svg+xml');
+  return [...doc.querySelectorAll('g[id*="_conservation_"]')].map((group) => {
+    const paths = [...group.querySelectorAll('path')];
+    return {
+      row: group.id.replace(/^track_slot_[0-9a-f]+_/, ''),
+      fills: [...new Set(paths.map((path) => path.getAttribute('fill')))],
+      radii: [...new Set(paths.flatMap((path) => [...String(path.getAttribute('d')).matchAll(/A\s*([\d.]+),/g)].map((match) => match[1])))]
+    };
+  });
+});
+
+test('a Rotate after a ring reorder leaves each ring its own row, width, and anchor', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await loadAddedRings(browser);
+  try {
+    await expectGenerates(page);
+    await setRingWidth(page, 'conservation_ringa', '30px');
+    await addReachRow(page, { id: 'mark', anchor: 'conservation_ringa', setId: 'marks', mode: 'circular' });
+    await expectGenerates(page);
+    await settleLive(page);
+    const before = await ringRows(page);
+    expect(before.map((row) => [row.id, row.file, row.width])).toEqual([
+      ['conservation_ringa', 'ringa', '30px'], ['conservation_ringb', 'ringb', null], ['conservation_ringc', 'ringc', null]
+    ]);
+    const drawn = await drawnRings(page);
+    expect(drawn.map((ring) => ring.row)).toEqual(before.map((row) => row.id));
+    await page.evaluate(() => window.__GBDRAW_APP__.moveCircularConservationSeries(0, 1));
+    await rotateByTrna(page);
+    expect(await ringRows(page), 'the Rotate adopts the committed rings, and each row stays on its own').toEqual(before);
+    await expectGenerates(page);
+    await settleLive(page);
+    const after = await ringRows(page);
+    expect(after.map((row) => [row.id, row.label, row.width])).toEqual(before.map((row) => [row.id, row.label, row.width]));
+    expect(await drawnRings(page), 'the next Generate draws each row as before the Rotate').toEqual(drawn);
+    expect(await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().adv.circular_track_slots.find((row) => row.id === 'mark').params.anchor_slot))
+      .toBe('conservation_ringa');
+  } finally { await page.context().close(); }
+});
+
+test('a Rotate after a Remove and an Add Seq puts no edit on another ring', async ({ browser }) => {
+  test.setTimeout(420000);
+  const page = await loadAddedRings(browser);
+  try {
+    await expectGenerates(page);
+    await settleLive(page);
+    await page.evaluate(() => window.__GBDRAW_APP__.removeCircularConservationSource(0));
+    await addRing(page, 'ringz');
+    const added = (await ringRows(page)).find((row) => row.file === 'ringz');
+    await setRingWidth(page, added.id, '7px');
+    await rotateByTrna(page);
+    expect((await ringRows(page)).map((row) => [row.file, row.label, row.width]), 'the edit of ringz is not on a committed ring').toEqual([
+      ['ringa', 'ringa', null], ['ringb', 'ringb', null], ['ringc', 'ringc', null]
+    ]);
+  } finally { await page.context().close(); }
+});
+
 test('rev 7: Circular removing a comparison source no row reaches asks nothing', async ({ browser }) => {
   test.setTimeout(420000);
   const page = await loadRingSession(browser);

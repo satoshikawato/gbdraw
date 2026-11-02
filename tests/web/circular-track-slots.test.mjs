@@ -444,6 +444,19 @@ test('a managed Conservation row keeps its id and edits when its ring gets anoth
   assert.equal(state.adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation').length, 1);
 });
 
+test('a ring whose key does not change keeps its row parameters object', () => {
+  const state = createState({
+    slots: [featureSlot(), conservationSlot(), gcSlot()],
+    conservationEnabled: true,
+    conservationFiles: [{ name: 'pair.tsv', size: 1, lastModified: 0 }]
+  });
+  const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
+  const row = state.adv.circular_track_slots.find((slot) => slot.id === 'conservation_pair');
+  const { params } = row;
+  editor.keepCircularConservationRowsThrough(state.drawingOfMode('circular'), () => false);
+  assert.strictEqual(row.params, params);
+});
+
 test('a change of the ring count moves no managed Conservation row', () => {
   const state = createState({
     slots: [featureSlot(), conservationSlot(), gcSlot()],

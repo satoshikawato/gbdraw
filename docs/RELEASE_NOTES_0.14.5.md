@@ -378,6 +378,16 @@ file. See
 - After you delete a Legend row, giving another color rule that row's name, or a
   new color to a rule of that name, can place the returning row last in the Legend
   until the next **Generate Diagram**. 0.14.3 does the same.
+- With **Use custom stack** on, **Add Seq** after a ring search returns every ring
+  to its sequence file and replaces the ring rows: their edits are lost, and a row
+  anchored to one of them stops each **Generate Diagram** with an error on
+  `anchor_slot`. Choose the anchor again on that row, whose control shows
+  `Invalid:` and the old row. 0.14.4 does the same.
+- After you reorder the comparison rings, or remove one and add another, a record
+  rotation before the next **Generate Diagram** returns the rings of the last
+  Generate and drops the change with no message. The next Generate can then draw
+  a ring's rows under another ring's name. Press **Generate Diagram** before you
+  rotate. 0.14.4 does the same.
 - LOSAT's build does not guard `memory.init`. LOSAT reads this as safe but has
   not measured it. If a threaded search still stops on "memory access out of
   bounds", the Web app runs the pair again and fails after the third stop.
@@ -385,9 +395,10 @@ file. See
 Carried from 0.14.1:
 
 - A Session saved by 0.14.0 with a crop and ring LOSAT still holds unconverted
-  rows. Its ring draws as in 0.14.0 on a forward crop, and at another
-  unconverted place on a reverse-complemented crop, until the next **Generate
-  Diagram**, which runs the ring search again and converts the new rows.
+  rows. After Load its ring draws as in 0.14.0. A redraw keeps that place on a
+  forward crop and moves the ring to another unconverted place on a
+  reverse-complemented crop. The next **Generate Diagram** runs the ring search
+  again and converts the new rows.
 
 Carried from 0.14.0:
 

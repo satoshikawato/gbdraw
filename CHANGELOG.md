@@ -180,6 +180,12 @@ write-up of a release.
   rule or another Legend name for its feature (for a row with no color rule, only when its whole row was renamed first and this rename applies to the whole row), and **Restore**, the next
   **Generate Diagram** fails with "The generated result could not be accepted", on Circular and Linear
   diagrams; a row without a stroke does not fail (OV-2412).
+- Known issue: Web app: with **Use custom stack** on, **Add Seq** after a ring search returns every ring to
+  its sequence file and replaces the ring rows: their edits are lost, and a row anchored to one of them stops
+  each **Generate Diagram** with an error on `anchor_slot` until its anchor is chosen again (OV-2443).
+- Known issue: Web app: after the comparison rings are reordered, or one is removed and another added, a record
+  rotation before the next **Generate Diagram** returns the rings of the last Generate and drops the change
+  with no message, and the next Generate can draw a ring's rows under another ring's name (OV-2444).
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

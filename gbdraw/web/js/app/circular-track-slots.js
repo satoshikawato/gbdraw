@@ -964,10 +964,13 @@ export const createCircularTrackSlotEditor = ({
   );
 
   /**
-   * A change that gives each comparison ring another source file and keeps the rings and their order: a Generate
-   * that adopts a LOSAT result, whose rows take the place of the FASTA or of the rows an earlier search wrote. A
-   * managed row names its ring by the source file's key (`series_key`), so it moves to the new key here and keeps
-   * its id, by which other rows anchor to it, and its edits (OV-2442).
+   * A Generate's adoption of the LOSAT result it built from the current draft, whose rows take the place of the FASTA
+   * or of the rows an earlier search wrote. A managed row names its ring by the source file's key (`series_key`), so it
+   * moves to the new key here and keeps its id, by which other rows anchor to it, and its edits (OV-2442).
+   * Precondition, which the caller knows: the draft's ring at each place in the series is the new request's ring at
+   * that place, because the request was built from this draft. Do not call it for a request built earlier, such as the
+   * committed one a rotation, an alignment, or a placement adopts: the draft may have reordered or replaced its rings
+   * since, and a row would move to another ring.
    * @template T
    * @param {DrawingState} drawing @param {() => T} replaceSources
    * @returns {T}
@@ -979,8 +982,9 @@ export const createCircularTrackSlotEditor = ({
     if (before.length !== after.length) return replaced;
     const keyAfter = new Map(before.map((entry, index) => [String(entry.sourceKey), String(after[index].sourceKey)]));
     drawing.adv.circular_track_slots.forEach((/** @type {CircularTrackSlot} */ slot) => {
-      const key = keyAfter.get(managedConservationSlotKey(slot));
-      if (isManagedConservationSlot(slot) && key) slot.params = { ...slot.params, series_key: key };
+      const current = managedConservationSlotKey(slot);
+      const key = keyAfter.get(current);
+      if (isManagedConservationSlot(slot) && key && key !== current) slot.params = { ...slot.params, series_key: key };
     });
     return replaced;
   };
