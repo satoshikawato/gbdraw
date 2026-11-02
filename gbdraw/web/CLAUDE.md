@@ -145,7 +145,7 @@ in the same change.
 | Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
 | Load's reading of saved color and stroke edits (a Legend row's `colorOverrides` and `strokeOverrides`, a feature's stroke overrides) for Session Load and the Session 46 Legend reading | `js/services/style-overrides.js` (Python: `_legend_color_overrides`, `_stroke_override_map`, `_stroke_width` in `gbdraw/session_io.py`) |
-| History transactions and availability: one History per drawing and the project stream behind one router, with a shared byte budget and file retention | `js/services/history.js` (`createHistoryRouter`), `js/app/history-inputs.js`, `js/services/history-snapshot.js` |
+| History transactions and availability: one History per drawing and the project stream behind one router, with a shared byte budget and file retention | `js/services/history.js` (`createHistoryRouter`), `js/app/history-inputs.js`, `js/services/history-snapshot.js`; the header's Undo and Redo controls and the History list (PD-OI-112) are `js/app/history-list.js` (`createHistoryControls`) |
 | Error producer contract and user-facing wording | `js/utils/error-normalization.js` (`diagnosticError`, `normalizeUserFacingError`) |
 | Numeric draft projection | `js/utils/optional-positive-number.js` (`projectOptionalNumber`) |
 | GenBank header reading | `js/services/genbank-header.js` |
@@ -684,6 +684,17 @@ or Reset Settings).
   (PD-OI-090, OIC-030): Undo takes the newer top step of the two, Redo the
   older. A new project step clears every Redo; a new drawing step clears its
   own and the project's.
+- The History list (`createHistoryControls` in `app/history-list.js`,
+  PD-OI-112) shows the steps Undo and Redo take, in the order they take them,
+  and the state before them (`timeline`); a row is a step's `sequence`. A pick
+  walks Undo or Redo one step at a time to the state right after the picked
+  step (`travelTo`). The pick records no step. The walk settles the open step
+  first and stops at a step it cannot apply, with that step's own warning, or
+  at a step that is no longer the next one. While it runs, Undo and Redo are
+  unavailable. The Undo and Redo titles and the rows read one text per step
+  (`stepText`): the detail a control gave its step (its name and value,
+  `describeControl` in `app/history-inputs.js`), read when the step ends and
+  dropped when an action renames the step, or else the step's label.
 - A step that changes a value of a drawing belongs whole to that drawing; the
   Session-level values it also changes are part of its entry and are restored
   with it where they are still as it left them. A project step is one of:
@@ -785,7 +796,9 @@ Guards:
 
 - `tests/web/history-inputs.test.mjs` and
   `tests/web/history-inputs.playwright.spec.js`: control kind, input means, focus
-  state, and last-in-first-out Undo; each changed control adds exactly one step.
+  state, and last-in-first-out Undo; each changed control adds exactly one step;
+  the name and value a control gives its step, and the History list in the
+  browser.
 - `tests/web/history-generated-authority.playwright.spec.js`: checkpoint Undo and
   Redo, a drawing round trip that records no step, and Undo while Generate runs.
 - `tests/web/history-per-drawing.test.mjs`: Undo and Redo walk the shown
@@ -795,7 +808,9 @@ Guards:
   step are one project step each, and while a card's file is shared by every
   drawing (R10) so is a card import's Retry; a Session-level
   edit is a project step; the project step limit and the slot port of a
-  drawing that is not shown.
+  drawing that is not shown; the History list's order, a walk to a picked
+  step and where it stops, and the start row after the limits and the byte
+  budget drop steps.
 - `tests/web/multi-result-edit-matrix.playwright.spec.js`: Undo and Redo of
   drags on one batch Result while another Result is displayed (B17), a
   Result switch after a legend sort that records no step (B18), Undo and Redo
