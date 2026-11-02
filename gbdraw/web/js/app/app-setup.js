@@ -6462,7 +6462,7 @@ export const createAppSetup = () => {
   // reveals that row (the first enabled one, else the first), or the Custom Track Slots panel when the stack
   // has none. It changes no setting.
   const showCircularTicksSlot = async () => {
-    const drawing = state.drawingOfMode('circular');
+    const drawing = state.activeDrawing();
     if (mode.value !== 'circular' || !drawing.adv.circular_track_slots_enabled) return { status: 'unavailable' };
     circularTrackSlotsPanelOpen.value = true;
     await nextTick();
