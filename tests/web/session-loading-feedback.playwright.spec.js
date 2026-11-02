@@ -600,7 +600,7 @@ test('Open Gallery example is absent where this origin serves no Gallery catalog
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
   expect(diagnostics.pageErrors).toEqual([]);
   // PD-OI-108 rev 3: the empty Preview has no sentence; only its icon stays.
-  await expect(page.locator('main .ph-dna')).toBeVisible();
+  await expect(page.locator('[data-empty-preview] .ph-dna')).toBeVisible();
   await expect(exampleControls(page).example).toHaveCount(0);
   await expect(exampleControls(page).header).toHaveCount(0);
   // #1383 (PD-OI-108 rev 3): the header still opens gbdraw.app's Gallery; the box

@@ -20,6 +20,7 @@ import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { TranslationParams } from './utils/i18n.js' */
 /** @import { SettingApplicationClass, SettingApplicationId } from './services/setting-application.js' */
+/** @import { Ref } from './utils/reactivity.js' */
 /** @import { LiveSettingItem } from './services/session-request.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
@@ -183,6 +184,7 @@ export const HelpTip = {
     const visible = computed(() => hovered.value || keyboardFocus.value || pinned.value);
     const style = reactive({ top: '0px', left: '0px' });
     const trigger = ref(null);
+    const tooltip = /** @type {Ref<HTMLElement | null>} */ (ref(null));
     const position = () => {
       if (!trigger.value) return;
       const rect = trigger.value.getBoundingClientRect();
@@ -205,9 +207,11 @@ export const HelpTip = {
         left = viewportWidth - halfWidth - 10;
       }
 
-      // Prevent overflow at the top (if too close to top edge, show below)
-      // Considering header and browser frame, if y < 60px, show below
-      if (rect.top < 60) {
+      // Prevent overflow at the top: show below when the icon is within 60 px
+      // of it (header and browser frame) or the shown tooltip would not fit
+      // above (OV-2449: a long timing note).
+      const height = tooltip.value ? tooltip.value.offsetHeight : 0;
+      if (rect.top < 60 || rect.top - gap - height < 8) {
         top = rect.bottom + gap;
         transform = 'translate(-50%, 0)'; // transform for below display
       }
@@ -216,7 +220,8 @@ export const HelpTip = {
       style.left = `${left}px`;
       style.transform = transform;
     };
-    watch(visible, (/** @type {boolean} */ open) => { if (open) position(); });
+    // Again once the tooltip is shown, with its height.
+    watch(visible, (/** @type {boolean} */ open) => { if (open) { position(); void nextTick(position); } });
     // A touch tap also reports pointerenter; only a hovering pointer shows it.
     const onEnter = (/** @type {PointerEvent} */ event) => { hovered.value = event.pointerType !== 'touch'; };
     const onLeave = () => { hovered.value = false; };
@@ -230,7 +235,7 @@ export const HelpTip = {
     const readName = () => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); };
     onMounted(readName);
     watch(uiLocale, () => nextTick(readName));
-    return { descriptionId, name, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
+    return { descriptionId, name, visible, style, trigger, tooltip, onEnter, onLeave, onFocus, close, toggle };
   }
 };
 

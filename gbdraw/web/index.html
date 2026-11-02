@@ -8720,7 +8720,7 @@
                 </div>
             </div>
 
-            <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
+            <div v-else data-empty-preview class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
                 <i class="ph ph-dna text-6xl mb-4 text-slate-200" aria-hidden="true"></i>
                 <!-- #1383 (PD-OI-108 rev 3): a Gallery example in the app, above the tutorials behind the examples. -->
                 <div v-if="galleryExamples.length" data-tutorial-card class="tutorial-card">
@@ -9329,7 +9329,7 @@
         </button>
         <Teleport to="body">
             <span :id="descriptionId" hidden>{{ text }}</span>
-            <div v-if="visible" :style="style" role="tooltip" aria-hidden="true" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-left leading-relaxed">
+            <div v-if="visible" ref="tooltip" :style="style" role="tooltip" aria-hidden="true" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-left leading-relaxed">
                  {{ text }}
             </div>
         </Teleport>

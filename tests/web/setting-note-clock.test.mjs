@@ -20,7 +20,12 @@ const helpTipTemplate = html.match(/<script type="text\/x-template" id="help-tip
 
 // A minimal host: elements with attributes, children and text. HelpTip reads
 // the name of its holder (`closest`) only when it has no `label`.
-const element = (tag) => ({ tag, attributes: {}, children: [], parent: null, text: '', closest: () => null, matches: () => false });
+// `layout` gives every element the box a test sets (OV-2449).
+const layout = { rect: { top: 400, bottom: 416, left: 100, width: 16 }, height: 40 };
+const element = (tag) => ({
+  tag, attributes: {}, children: [], parent: null, text: '', handlers: {}, style: {}, closest: () => null, matches: () => false,
+  getBoundingClientRect: () => layout.rect, get offsetHeight() { return layout.height; }
+});
 const nodeOps = {
   createElement: (tag) => element(tag),
   createText: (text) => ({ ...element('#text'), text }),
@@ -40,7 +45,8 @@ const nodeOps = {
   nextSibling: (node) => (node.parent ? node.parent.children[node.parent.children.indexOf(node) + 1] ?? null : null),
   querySelector: () => body,
   patchProp: (node, key, previous, next) => {
-    if (/^on[A-Z]/.test(key)) return;
+    if (/^on[A-Z]/.test(key)) { node.handlers[key] = next; return; }
+    if (key === 'style') { node.style = { ...next }; return; }
     if (next === null || next === undefined || next === false) delete node.attributes[key];
     else node.attributes[key] = String(next);
   }
@@ -118,4 +124,28 @@ test('an export-only note stays a hint line, and a class that follows state show
   assert.equal(textOf(live.root), '');
   assert.ok(![...all(live.root)].some((node) => node.tag === 'button'));
   live.unmount();
+});
+
+test('a long tooltip that would run off the top of the window opens below its icon (OV-2449)', async () => {
+  const open = async (rect, height) => {
+    layout.rect = rect;
+    layout.height = height;
+    const shown = render({ setting: 'track-slots' });
+    const button = [...all(shown.root)].find((node) => node.tag === 'button');
+    button.handlers.onClick({ stopPropagation() {}, preventDefault() {} });
+    for (let i = 0; i < 3; i += 1) await Vue.nextTick();
+    const tooltip = [...all(shown.body)].find((node) => node.attributes.role === 'tooltip');
+    assert.ok(tooltip, 'the tooltip opens');
+    const style = { ...tooltip.style };
+    shown.unmount();
+    return style;
+  };
+  // 330 px of note above an icon 130 px from the top would start off screen.
+  const below = await open({ top: 130, bottom: 146, left: 100, width: 16 }, 330);
+  assert.equal(below.transform, 'translate(-50%, 0)');
+  assert.equal(below.top, '158px');
+  // With room above, it stays above.
+  const above = await open({ top: 500, bottom: 516, left: 100, width: 16 }, 330);
+  assert.equal(above.transform, 'translate(-50%, -100%)');
+  assert.equal(above.top, '488px');
 });
