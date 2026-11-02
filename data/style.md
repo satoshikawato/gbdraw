@@ -242,8 +242,11 @@ nothing states that they are reviewed.
   or the Office command form (セッションを保存, サンプルを読み込む, 元に戻す).
   No です・ます and no final 。 in a label.
 - Help texts, notices, dialogs and error messages: です・ます in complete
-  sentences ending with 。. An English imperative becomes 〜してください
-  (hiragana ください). No 〜しましょう, no 〜して下さい.
+  sentences ending with 。. An instruction to the user becomes 〜してください
+  (hiragana ください): キーと値を確認してください。 A help text that says what
+  its control does takes 〜します, even when the English is an imperative:
+  Exclude labels containing these keywords. → これらのキーワードを含むラベルを除外します。
+  (Owner 2026-11-02). No 〜しましょう, no 〜して下さい.
 - Status and progress: 〜中… for work in progress (保存中…, 読み込み中…,
   生成中…, 適用中…; with an object: セッションを保存中…, 図を生成中…).
   Completion: 〜しました。 Busy reasons: 図を生成中です。生成が終わってから再試行してください。
@@ -254,7 +257,8 @@ nothing states that they are reviewed.
   sentences (D-18). Parentheses are full-width when they
   hold Japanese (領域（任意）, 自動（既定）) and half-width, with no
   space, when they hold Latin, a number or a unit (許容値(bp), 最低一致率(%)).
-  A label colon is full-width (状態：) unless Latin follows it directly. The spaced slash of
+  A label colon is full-width, also before Latin: 状態：, 例：NADH, 既定：out
+  (Owner 2026-11-02). The spaced slash of
   the source stays: 生物名 / 株名, as in the seed 二塩基含量 / スキュー.
 - **No half-width space between Latin or digits and Japanese**, matching the
   maintainer's seeds: GC含量, LOSATを実行, 10件, BLAST TSVを選択 (the space
