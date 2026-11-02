@@ -146,8 +146,9 @@ write-up of a release.
   edited label text, and after a Session load the Legend rows of removed color rules until the next
   Generate. The display redraws once when the Result was drawn with such an edit, even where the redraw
   changes nothing. A failed redraw does not run again at the next display. A Result whose redraw failed
-  stays until its next redraw, a later color edit on it, or Generate; until the next redraw or Generate stay the label texts and **Label visibility** a Result was drawn
-  with when Reset, Save, and Load pass before it is shown, and a label text on a Result not shown when the
+  stays until its next redraw, a later color edit on it, or Generate; until the next redraw or Generate stay the label text a Result was drawn
+  with when Reset, Save, and Load pass before it is shown, and its **Label visibility** too when the Reset was made in the
+  other drawing (in the reset drawing, the redraw applies it), and a label text on a Result not shown when the
   edit left, returned by an Undo of a later Generate. **Applies on Generate** settings still wait for Generate.
 - Fixed: text typed in a Features list label input stays when a redraw finishes.
 - Known issue: with **Auto Reflow** off, Circular and Linear, a label text that Generate places away from
@@ -161,7 +162,7 @@ write-up of a release.
 - Known issue: with **Auto Reflow** on, on Circular and Linear diagrams, after a Legend drag and a label
   text edit, the Undo that should return the Legend does nothing and uses up its step (OV-2437).
 - Known issue: after a Legend row with a stroke is deleted, a Generate, the removal or recaption of its color
-  rule or another Legend name for its feature (also for a row with no color rule), and **Restore**, the next
+  rule or another Legend name for its feature (for a row with no color rule, only when its whole row was renamed first and this rename applies to the whole row), and **Restore**, the next
   **Generate Diagram** fails with "The generated result could not be accepted", on Circular and Linear
   diagrams; a row without a stroke does not fail (OV-2412).
 

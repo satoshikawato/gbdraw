@@ -128,9 +128,10 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   redraw reports its failure and does not run again at the next display. These stay
   until the next redraw of that Result or **Generate Diagram**:
   - a Result whose redraw failed (a later color edit on it can also correct it);
-  - the label texts and **Label visibility** a Result was drawn with, when **Reset
-    Settings**, Save, and Load pass before it is shown again (it still draws the
-    features it lacks);
+  - the label text a Result was drawn with, when **Reset Settings**, Save, and Load
+    pass before it is shown again (it still draws the features it lacks), and its
+    **Label visibility** too when the Reset was made in the other drawing (in the
+    reset drawing, the redraw applies it);
   - a label text on a Result not shown when the edit left, returned by an Undo of a
     later **Generate Diagram**.
 
@@ -333,7 +334,7 @@ file. See
   uses up its step, so the Legend stays where you dragged it. 0.14.4 does the same.
 - After you set a stroke on a Legend row, delete the row, press **Generate Diagram**,
   then remove or recaption its color rule or give its feature another Legend name
-  (also for a row with no color rule), and press **Restore**, the next **Generate
+  (for a row with no color rule, only when its whole row was renamed first and this rename applies to the whole row), and press **Restore**, the next **Generate
   Diagram** fails with "The generated result could not be accepted", on Circular and
   Linear diagrams. A Legend row without a stroke does not fail; set no stroke on a
   row you delete. 0.14.4 does the same.
