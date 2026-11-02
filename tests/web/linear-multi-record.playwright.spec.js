@@ -361,7 +361,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await expect(lock).toBeChecked();
   // PD-OI-024 revision 3: one text source feeds the help-tip and the
   // checkbox's accessible description instead of an always-on paragraph.
-  await expect(lock).toHaveAttribute('aria-describedby', 'linear-definition-lock-help');
+  await expect(lock).toHaveAttribute('aria-describedby', 'linear-definition-lock-help linear-definition-lock-timing');
   await expect(lock).toHaveAccessibleDescription(new RegExp(['ON aligns Linear definitions in a common left column',
     'OFF centers them in a common column width and follows row offsets'].join('.*')));
   const helpButton = page.locator('.help-tip > button[aria-describedby="linear-definition-lock-help"]');

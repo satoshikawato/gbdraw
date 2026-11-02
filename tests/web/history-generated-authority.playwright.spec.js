@@ -156,7 +156,8 @@ test('Live palette and its History keep the scale draft out of the committed req
     await page.locator('summary[aria-label="Colors"]').press('Enter');
     const paletteHelp=page.locator('[data-palette-application-help]');
     // PD-OI-037 rev 3: a live palette shows no mark; a waiting one shows the clock.
-    await expect(paletteHelp).toHaveCount(0);
+    await expect(paletteHelp.locator('[data-timing-clock], .help-tip-trigger')).toHaveCount(0);
+    await expect(paletteHelp).toBeHidden();
     await page.getByText('Palette instant preview',{exact:true}).click();
     await expect(paletteHelp.locator('.help-tip-trigger')).toHaveAccessibleName('Applies on Generate');
     const applied=await page.evaluate(()=>window.__GBDRAW_APP__.currentResults()[0].content);
@@ -183,7 +184,8 @@ test('Live palette and its History keep the scale draft out of the committed req
     });
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.currentResults()[0].content)).toBe(applied);
     await page.getByText('Palette instant preview',{exact:true}).click();
-    await expect(paletteHelp).toHaveCount(0);
+    await expect(paletteHelp.locator('[data-timing-clock], .help-tip-trigger')).toHaveCount(0);
+    await expect(paletteHelp).toBeHidden();
     await expect(page.locator('[data-default-color-application-help]')).toHaveCount(0);
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.currentResults()[0].content)).not.toBe(applied);
     await noDerivedStatus(page);

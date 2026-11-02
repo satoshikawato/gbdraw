@@ -3777,7 +3777,7 @@ test('TK-03: stepping a Depth row track index past the series adds no series', a
   }, { a: depthTsv(10), b: depthTsv(20) });
   const seriesCount = () => page.evaluate(() => window.__GBDRAW_APP__.adv.depth_tracks.length);
   await expect.poll(seriesCount).toBe(2);
-  const toggle = await reveal(page.locator('[aria-controls="circular-custom-track-slots-panel"]'));
+  const toggle = await reveal(page.locator('button[aria-controls="circular-custom-track-slots-panel"]'));
   if (await page.locator('#circular-custom-track-slots-panel').count() === 0) await toggle.click();
   await page.getByRole('checkbox', { name: 'Use custom stack', exact: true }).check();
   const trackIndex = page.getByLabel('Depth track index depth_2', { exact: true });
