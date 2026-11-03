@@ -31,9 +31,6 @@
       "services/diagram-generation.js",
       "workers/diagram-generation-worker.js"
     ],
-    "services/gallery-session-migration.js": [
-      "services/config.js"
-    ],
     "services/history-snapshot.js": [
       "app/app-setup.js"
     ],

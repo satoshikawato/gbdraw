@@ -635,15 +635,7 @@ test('privileged capability owners and importers stay within their allowlists', 
     assert.deepEqual(actual.filter((path) => !allowedSet.has(path)), [], label);
   };
 
-  // An importer key that no detector lists and whose file is gone waits for a
-  // policy-only removal (the Gate retires it then); every other key must match.
-  const isRetiredImporterKey = (target) => (
-    !WEB_PRIVILEGED_IMPORT_TARGETS.includes(target)
-    && !existsSync(join(JAVASCRIPT_ROOT, target))
-  );
-  const policyImporterKeys = Object.keys(WEB_CHANGE_POLICY.allowedPrivilegedImporters)
-    .filter((target) => !isRetiredImporterKey(target))
-    .sort();
+  const policyImporterKeys = Object.keys(WEB_CHANGE_POLICY.allowedPrivilegedImporters).sort();
   assert.deepEqual(policyImporterKeys, WEB_PRIVILEGED_IMPORT_TARGETS);
   policyImporterKeys.forEach((target) => {
     assertSubset(
