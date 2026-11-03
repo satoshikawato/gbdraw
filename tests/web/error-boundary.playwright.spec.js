@@ -418,9 +418,9 @@ test('a Linear Generate failure about a File card ends when its file is read aga
   await expect(alert).toHaveCount(0, { timeout: 120000 });
 });
 
-// OV-1258: a GenBank file that cannot be drawn names the cause: a gzip file at
-// inspection, a record without sequence at Generate (not an engine failure).
-test('a gzip GenBank and a GenBank record without sequence name their cause', async ({ page }) => {
+// OV-1258: a GenBank record without sequence names its cause at Generate (not
+// an engine failure); a gzip GenBank is inspected like a plain one.
+test('a gzip GenBank is inspected and a GenBank record without sequence names its cause', async ({ page }) => {
   test.setTimeout(180000);
   await openApp(page);
   const genbank = page.getByLabel('GenBank/DDBJ File', { exact: true });
@@ -429,7 +429,7 @@ test('a gzip GenBank and a GenBank record without sequence name their cause', as
     buffer: require('node:zlib').gzipSync(require('node:fs').readFileSync('tests/test_inputs/HmmtDNA.gbk'))
   });
   const status = page.locator('[data-circular-discovery-status]');
-  await expect(status).toContainText('The file is gzip-compressed.', { timeout: 120000 });
+  await expect(status).toContainText('1 source record inspected', { timeout: 120000 });
   await genbank.setInputFiles({
     name: 'no-sequence.gb', mimeType: 'text/plain',
     buffer: Buffer.from('LOCUS       X 10 bp DNA linear 01-JAN-2000\nFEATURES\nORIGIN\n//\n')

@@ -726,42 +726,37 @@ def _read_tsv_table(
 ) -> tuple[Path, tuple[str, ...], list[_RawRow]]:
     table_path = Path(str(path))
     try:
-        handle = open_input_text(table_path, encoding="utf-8-sig", newline="")
-    except OSError as exc:
+        with open_input_text(table_path, encoding="utf-8-sig", newline="") as handle:
+            rows = list(enumerate(csv.reader(handle, delimiter="\t"), start=1))
+    except (OSError, *GZIP_ERRORS) as exc:  # Also a gzip table cut off or damaged.
         raise ValidationError(f"Could not read {table_name}: {table_path}") from exc
 
-    with handle:
-        reader = csv.reader(handle, delimiter="\t")
-        header: tuple[str, ...] | None = None
-        raw_rows: list[_RawRow] = []
-        try:
-            rows = list(enumerate(reader, start=1))
-        except GZIP_ERRORS as exc:  # A gzip table cut off or damaged.
-            raise ValidationError(f"Could not read {table_name}: {table_path}") from exc
-        for line_number, cells in rows:
-            if _cells_are_blank(cells):
-                continue
-            if header is None:
-                header = tuple(cell.strip() for cell in cells)
-                _validate_header(table_path, header, allowed_columns)
-                continue
-            if len(cells) > len(header) and any(cell.strip() for cell in cells[len(header):]):
-                raise ValidationError(
-                    f"{table_path}: row {line_number} has more columns than the header."
-                )
-            values = {
-                column: (cells[index].strip() if index < len(cells) else "")
-                for index, column in enumerate(header)
-            }
-            if all(value == "" for value in values.values()):
-                continue
-            raw_rows.append(
-                _RawRow(
-                    row_index=len(raw_rows),
-                    row_number=line_number,
-                    values=values,
-                )
+    header: tuple[str, ...] | None = None
+    raw_rows: list[_RawRow] = []
+    for line_number, cells in rows:
+        if _cells_are_blank(cells):
+            continue
+        if header is None:
+            header = tuple(cell.strip() for cell in cells)
+            _validate_header(table_path, header, allowed_columns)
+            continue
+        if len(cells) > len(header) and any(cell.strip() for cell in cells[len(header):]):
+            raise ValidationError(
+                f"{table_path}: row {line_number} has more columns than the header."
             )
+        values = {
+            column: (cells[index].strip() if index < len(cells) else "")
+            for index, column in enumerate(header)
+        }
+        if all(value == "" for value in values.values()):
+            continue
+        raw_rows.append(
+            _RawRow(
+                row_index=len(raw_rows),
+                row_number=line_number,
+                values=values,
+            )
+        )
     if header is None:
         raise ValidationError(f"{table_path}: {table_name} is empty or has no header row.")
     return table_path, header, raw_rows
