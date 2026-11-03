@@ -575,8 +575,11 @@ def center_preview_diagram(page: Page, *, label: str) -> dict[str, float]:
     """Pan the current zoom until the whole diagram is centered and unclipped.
 
     The frame lies between the export row and the floating zoom controls. The
-    drag is symmetric about the frame center so both ends stay inside the
-    preview, and the pointer then leaves the preview so no hover hint remains.
+    drag is symmetric about the frame center unless that start is on the
+    diagram, where a press can select its text instead of panning (OV-2452);
+    it then starts at the nearest point of empty canvas. Every point of the
+    drag stays on the canvas, so the canvas receives each move and the release.
+    The pointer then leaves the preview so no hover hint remains.
     """
 
     frame = _visible_preview_frame(page)
@@ -590,18 +593,52 @@ def center_preview_diagram(page: Page, *, label: str) -> dict[str, float]:
     frame_center_y = frame["y"] + (frame["height"] / 2)
     delta_x = frame_center_x - (diagram["x"] + (diagram["width"] / 2))
     delta_y = frame_center_y - (diagram["y"] + (diagram["height"] / 2))
-    if abs(delta_x) >= frame["width"] or abs(delta_y) >= frame["height"]:
+    steps = 12
+    start = page.get_by_role("region", name="Result Preview", exact=True).evaluate(
+        """
+        (region, { frame, deltaX, deltaY, steps }) => {
+          const canvas = region.querySelector('.preview-canvas');
+          const margin = 16;
+          const inFrame = (x, y) => x >= frame.x + margin && x <= frame.x + frame.width - margin
+            && y >= frame.y + margin && y <= frame.y + frame.height - margin;
+          const onCanvas = (x, y) => {
+            const hit = document.elementFromPoint(x, y);
+            return Boolean(hit && canvas?.contains(hit));
+          };
+          const usable = ({ x, y }) => {
+            if (!inFrame(x, y) || !inFrame(x + deltaX, y + deltaY)) return false;
+            const hit = document.elementFromPoint(x, y);
+            if (!hit || !canvas?.contains(hit) || hit.closest('svg, button, input, select, a')) return false;
+            for (let step = 1; step <= steps; step += 1) {
+              if (!onCanvas(x + (deltaX * step) / steps, y + (deltaY * step) / steps)) return false;
+            }
+            return true;
+          };
+          const symmetric = {
+            x: frame.x + frame.width / 2 - deltaX / 2,
+            y: frame.y + frame.height / 2 - deltaY / 2,
+          };
+          const candidates = [];
+          for (let y = frame.y + margin; y <= frame.y + frame.height - margin; y += margin) {
+            for (let x = frame.x + margin; x <= frame.x + frame.width - margin; x += margin) {
+              candidates.push({ x, y });
+            }
+          }
+          const distance = ({ x, y }) => Math.hypot(x - symmetric.x, y - symmetric.y);
+          candidates.sort((a, b) => distance(a) - distance(b));
+          return [symmetric, ...candidates].find(usable) ?? null;
+        }
+        """,
+        {"frame": frame, "deltaX": delta_x, "deltaY": delta_y, "steps": steps},
+    )
+    if start is None:
         raise AssertionError(
-            f"Centering the {label} requires an unsafe drag: "
+            f"Centering the {label} finds no empty canvas to drag from: "
             f"diagram={diagram!r}; frame={frame!r}"
         )
-    page.mouse.move(frame_center_x - (delta_x / 2), frame_center_y - (delta_y / 2))
+    page.mouse.move(start["x"], start["y"])
     page.mouse.down()
-    page.mouse.move(
-        frame_center_x + (delta_x / 2),
-        frame_center_y + (delta_y / 2),
-        steps=12,
-    )
+    page.mouse.move(start["x"] + delta_x, start["y"] + delta_y, steps=steps)
     page.mouse.up()
     page.mouse.move(VIEWPORT_WIDTH - 40, VIEWPORT_HEIGHT - 20)
     page.wait_for_timeout(250)

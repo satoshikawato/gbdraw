@@ -529,3 +529,15 @@ rows of the earlier sections; those rows stay as history.
 | `BGC0000708-BGC0000713` | `manual-08-01-feature-popup.webp` (was `manual-12-01-feature-popup.webp`) | Recapture; recipe unchanged except `replayThrough` 7 | Exact Session replayed through step 7 (every CDS still blue); the capture clicks the livE CDS of BGC0000708 by its feature id (`fed46a3a6_record_1`) with the **Search features** bar hidden, and opens **Qualifiers** with `gene` `livE` and `gene_kind` `biosynthetic` | Recaptured at DSF 3, 2511x945; compared by eye |
 | `BGC0000708-BGC0000713` | `manual-09-01-specific-rules-all.webp`, `manual-09-02-preview-colors.webp`, `manual-10-01-show-labels-first.webp`, `manual-10-02-preview-labels.webp`, `manual-11-01-arrow-shaft-width.webp`, `manual-11-02-scale-style-ruler.webp`, `manual-11-03-plot-title.webp`, `manual-11-04-preview-final.webp`, `manual-12-01-orthogroup-popup.webp` (were `manual-08-01`, `08-02`, `09-01`, `09-02`, `10-01`, `10-02`, `10-03`, `10-04`, `11-01`) | Rename; keep bytes | The same states one step number later | Renamed with the committed bytes; `--check` passes |
 | `BGC0000708-BGC0000713` | Media of steps 1-7 | Keep | Unchanged recipes and Session | Committed bytes |
+
+## Capture repairs (2026-11-03)
+
+OV-2450, OV-2453, OV-2454. The capture tool waits only for the CSS transitions
+the page renders: a transition inside a closed `<details>` never settles, and a
+rendered one that does not finish within 5 s now stops the capture with its
+name instead of a silent 2 s cap.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `tobacco-chloroplast` | `manual-06-01-region-annotations.webp` | Recrop; recipe changed | Session; clip from the **Region Annotations** header through the `plastome_regions` set to the `plastome_tint` id row (`clipSelectors`), with the card scrolled to the top of the settings pane. The earlier crop was the whole card, taller than the 1200 px page, with the Generate bar over its lower rows | Captured at DSF 3; accepted |
+| `hepatoplasmataceae_collinear` | `manual-08-01-collinear-block-popup.webp` | Recapture; the step script checks the block id, both records, the orientation, and the gene-pair count, not the popup title (now **Collinear block**) | Session alone, as before | Captured at DSF 3; accepted |

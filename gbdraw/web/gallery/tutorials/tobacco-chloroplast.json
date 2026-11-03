@@ -712,7 +712,12 @@
           "capture": {
             "source": "webapp",
             "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
-            "cardTitle": "Region Annotations",
+            "selector": "[data-capture='annotation-set-plastome_regions']",
+            "clipSelectors": [
+              "[data-setting='region-annotations'] > details > summary",
+              "[data-capture='annotation-set-plastome_regions']",
+              "[data-capture='annotation-set-plastome_tint-id']"
+            ],
             "openDetails": [
               "Region Annotations"
             ],
@@ -767,6 +772,10 @@
               {
                 "type": "waitForFunction",
                 "script": "() => { const app = window.__GBDRAW_APP__; const set = app?.annotationSets?.find((entry) => entry.id === 'plastome_regions'); return app?.circularRecordList?.length === 1 && set?.annotations?.map((entry) => entry.id).join(',') === 'lsc,irb,ssc,ira'; }"
+              },
+              {
+                "type": "evaluate",
+                "script": "const card = document.querySelector(\"[data-setting='region-annotations']\"); const inputs = [...(card?.querySelectorAll(\"input[aria-label='Annotation set id']\") || [])]; const byId = (id) => inputs.find((input) => input.value === id); const regions = byId('plastome_regions'); const tint = byId('plastome_tint'); if (!regions || !tint) throw new Error('Annotation sets plastome_regions and plastome_tint are unavailable.'); regions.parentElement.parentElement.setAttribute('data-capture', 'annotation-set-plastome_regions'); tint.parentElement.setAttribute('data-capture', 'annotation-set-plastome_tint-id'); card.scrollIntoView({ block: 'start' });"
               }
             ]
           }
