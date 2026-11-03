@@ -414,7 +414,6 @@ const isNameRefusal = (error) => error instanceof Error && 'stage' in error && e
   && 'context' in error && typeof error.context === 'object' && error.context !== null && 'reason' in error.context
   && (error.context.reason === 'BLANK_NAME' || error.context.reason === 'REPEATED_NAME');
 
-
 /**
  * One tab of the drawing bar. `label` is the name as the tab shows it: a
  * default name ("Circular", "Linear 2") in the UI language, any other name as
