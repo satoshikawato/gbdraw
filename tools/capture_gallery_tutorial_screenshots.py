@@ -1380,22 +1380,35 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
 def wait_for_css_transitions(page) -> None:
     """Let running CSS transitions end, so a crop never shows a control mid-change.
 
-    The caret of a card or section turns over 200 ms after it opens.
+    The caret of a card or section turns over 200 ms after it opens. A transition inside a
+    closed <details> never settles, because the browser skips that content, and the reader
+    never sees it: wait only for the transitions the page renders (OV-2450).
     """
 
-    page.evaluate(
+    unfinished = page.evaluate(
         """
-        () => Promise.race([
-          Promise.all(
-            document.getAnimations()
-              .filter((animation) => animation instanceof CSSTransition)
-              .map((animation) => animation.finished.catch(() => undefined)),
-          ),
-          // A finished promise can stay pending when the page paints no frame; stop waiting.
-          new Promise((resolve) => setTimeout(resolve, 2000)),
-        ])
+        () => {
+          const running = new Set(
+            document.getAnimations().filter(
+              (animation) => animation instanceof CSSTransition && animation.effect?.target?.checkVisibility(),
+            ),
+          );
+          const settled = [...running].map((animation) => animation.finished
+            .catch(() => undefined)
+            .then(() => running.delete(animation)));
+          const describe = () => [...running].map((animation) => {
+            const target = animation.effect.target;
+            return `${target.tagName.toLowerCase()}${target.id ? `#${target.id}` : ''} ${animation.transitionProperty}`;
+          });
+          return Promise.race([
+            Promise.all(settled).then(() => []),
+            new Promise((resolve) => setTimeout(() => resolve(describe()), 5000)),
+          ]);
+        }
         """
     )
+    if unfinished:
+        raise RuntimeError(f"CSS transitions did not finish in 5 s: {', '.join(unfinished)}")
 
 
 def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], base_url: str, quality: int) -> Path:

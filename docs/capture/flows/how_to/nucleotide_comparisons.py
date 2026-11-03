@@ -6,6 +6,7 @@ import csv
 import hashlib
 import re
 import xml.etree.ElementTree as ET
+from collections import Counter
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -218,8 +219,10 @@ def _assert_comparison_svg_download(
 
 def _assert_tlosatx_download(path: Path) -> dict[str, Any]:
     contents = path.read_bytes()
+    # TLOSATX writes rows with equal scores in no fixed order (OV-2451), so the rows are compared
+    # as a multiset, as the native LOSAT test does.
     expected = TLOSATX_REFERENCE_PATH.read_bytes()
-    if contents != expected:
+    if Counter(contents.splitlines()) != Counter(expected.splitlines()):
         raise AssertionError("Browser TLOSATX TSV differs from the frozen qualified evidence")
     rows = _read_blast_rows(path)
     if len(rows) != 397:
@@ -277,6 +280,8 @@ def _set_linear_comparison_filter(page: Page, minimum_length: int) -> None:
     )
     minimum.fill(str(minimum_length))
     minimum.press("Tab")
+    # Tab lands on the Identity scale help tip, which opens while it has focus.
+    page.evaluate("() => document.activeElement?.blur()")
     expect(minimum).to_have_value(str(minimum_length))
 
 
