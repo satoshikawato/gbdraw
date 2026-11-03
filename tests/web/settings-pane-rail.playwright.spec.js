@@ -557,15 +557,18 @@ test('phone width shows the stacked settings without the switch, whatever is rem
   await expect(toStacked(page)).toHaveCount(0);
   await expect(closeSection(page)).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
-  // An entry opens its section below the sticky header, as the stacked row does.
+  // An entry opens its section below the sticky header, as the stacked row does; a section near the end of the
+  // settings goes as far as the page scrolls (PD-OI-092).
   await entry(page, 'Labels').click();
   const labels = await page.evaluate(() => {
     const section = document.querySelector('[data-settings-section="labels"]');
     return { open: section.querySelector(':scope > details').open,
-      belowHeader: Math.round(section.getBoundingClientRect().top - document.querySelector('.app-header').getBoundingClientRect().bottom) };
+      belowHeader: Math.round(section.getBoundingClientRect().top - document.querySelector('.app-header').getBoundingClientRect().bottom),
+      atPageEnd: Math.abs(window.scrollY - (document.documentElement.scrollHeight - innerHeight)) <= 1 };
   });
   expect(labels.open).toBe(true);
-  expect(Math.abs(labels.belowHeader)).toBeLessThanOrEqual(2);
+  expect(labels.belowHeader).toBeGreaterThanOrEqual(-2);
+  if (!labels.atPageEnd) expect(labels.belowHeader).toBeLessThanOrEqual(2);
 
   // A wide window shows the remembered rail with Input docked; narrow again, every section is back.
   await page.setViewportSize({ width: 1280, height: 800 });

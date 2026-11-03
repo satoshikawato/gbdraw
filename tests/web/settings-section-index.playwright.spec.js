@@ -403,11 +403,14 @@ test.describe('390 px touch', () => {
         open: section.querySelector(':scope > details').open,
         focused: document.activeElement === summary,
         belowHeader: Math.round(section.getBoundingClientRect().top - document.querySelector('.app-header').getBoundingClientRect().bottom),
+        atPageEnd: Math.abs(window.scrollY - (document.documentElement.scrollHeight - innerHeight)) <= 1,
         pageOverflow: document.documentElement.scrollWidth - innerWidth
       };
     });
     expect(state).toMatchObject({ open: true, focused: true });
-    expect(Math.abs(state.belowHeader), 'the section top is just below the sticky header').toBeLessThanOrEqual(2);
+    // A section near the end of the settings goes as far as the page scrolls (PD-OI-092).
+    expect(state.belowHeader, 'the section top is not under the sticky header').toBeGreaterThanOrEqual(-2);
+    if (!state.atPageEnd) expect(state.belowHeader, 'the section top is just below the sticky header').toBeLessThanOrEqual(2);
     expect(state.pageOverflow, 'no horizontal page scroll').toBeLessThanOrEqual(0);
     await expect(tip(page)).toBeHidden();
     await expectMarked(page, 'Labels');

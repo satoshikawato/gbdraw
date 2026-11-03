@@ -2379,9 +2379,12 @@
         .settings-pane { --generate-room: 5.875rem; }
         .generate-bar-short { display: none; }
         /* "Generate Diagram" wraps in a window at most 240 px wide: the bar shows "Generate" there (OV-1772). */
+        /* A section heading there has no room for its title's longest word, the timing clock, and the help
+           icon on one line: the icons go to the next line instead of past the window's edge (OV-1810). */
         @media (max-width: 240px) {
             .generate-bar .generate-bar-long { display: none; }
             .generate-bar .generate-bar-short { display: inline; }
+            .settings-scroll [data-settings-section] > details > summary { flex-wrap: wrap; }
         }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) { --generate-room: 4.5rem; }
         .settings-scroll, .settings-pane[data-settings-display="rail"] > .settings-index { margin-bottom: var(--generate-room); }

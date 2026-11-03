@@ -776,7 +776,7 @@ const loadedWithWrittenHeight = async (browser, testInfo, options) => {
 // What decides the drawing: the request's options, as a Save writes them, and
 // the drawn size. A later Generate's SVG text is reserialized, so its bytes differ.
 const drawnFrom = async (page, file) => ({
-  options: (await savedSession(page, file)).renderRequest.diagramOptions,
+  options: shownSavedDrawing(await savedSession(page, file)).renderRequest.diagramOptions,
   viewBox: await page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelector('svg').getAttribute('viewBox').split(' ').map(Number))
 });
 
