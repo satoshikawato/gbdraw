@@ -59,6 +59,12 @@ length. SVG, Interactive SVG, EPS, and PS have no such limit.
 An unwrapped PDF over 14,400 pt is still written, as before; some PDF viewers
 may refuse such a page.
 
+The Web app checks the same limits before it draws a PNG or a wrapped figure's
+PDF, and downloads nothing when a figure is over. Its PNG has the SVG size times
+the chosen DPI / 96 pixels per side, so the message names the highest DPI that
+fits when one does, and for a wrapped figure a longer row length that should
+fit. SVG downloads have no limit.
+
 ## Static, interactive, and raster output
 
 Static SVG contains the diagram and supported semantic groups but no embedded

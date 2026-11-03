@@ -1151,6 +1151,42 @@ or records that share a row or that `canvas.linear.wrap_length` splits over
 several rows, are refused with the reason. See [Record selection and
 layout](command-line.md#record-selection-and-layout) for the matching rules.
 
+### Wrap Rows
+
+**Wrap Rows** in the Linear **Layout** card draws each record over rows of one
+length, as `gbdraw linear --wrap_length` does (see [Wrap one record over several
+rows](command-line.md#wrap-one-record-over-several-rows)). It starts off. Turned
+on, the length is empty, which means Auto; type a length and choose bp, kbp, or
+Mbp to set one. Python decides the rows: Auto takes the shortest of 10, 20 and
+50 kbp that keeps the longest record within five rows, else 50 kbp, and cuts
+nothing when every record is 10 kbp or shorter. After Generate the field shows
+what Auto drew, such as "10 kbp per row, 5 rows (auto)" or "One row (auto)". A
+Session stores the length in bp; the unit is not saved, and a loaded length
+shows in the largest unit that holds it whole.
+
+Turning Wrap Rows on sets, in the same edit, **Track Layout** to Above (Below
+stays), **Scale Style** to Ruler (Ticks), **Normalize Record Lengths** off, and
+**Ruler on Axis** on, also when no record is cut, so the figure is drawn with
+the values the form shows. While it is on, Features on axis and Bar (Simple)
+are unavailable and the other two are fixed, each with a note. Turning it off
+writes only the length; one Undo returns all five settings to their values
+before it was turned on.
+
+Wrap Rows cannot be turned on, or its length changed, while the drawing has
+comparisons (BLAST, comparison pairs, LOSAT, Similarity groups, or a Similarity
+alignment), a Record Layout row with several records, records that **Align at
+feature** placed (until that step is undone; the app does not know it after
+the Session is loaded again), or a feature track on the axis in Custom Track
+Slots. The note under the field names what to remove. Turning it off is always
+possible. When one of these is added after Wrap Rows is on and Generate cuts a
+record, Generate stops with the same message and keeps the last Result, and
+**Align at feature…** on a Result whose records are cut is refused.
+
+A feature cut over two rows stays one feature: its popup, highlight, selection,
+label, and editor rows are the feature's, and any of its pieces opens them. A
+PNG or PDF over its format's size limit is refused before a file is made; see
+[PNG and PDF size limits](output-formats-and-export.md#png-and-pdf-size-limits).
+
 ## Preview, search, and editor
 
 **Result Preview** exposes records, feature and quantitative tracks,

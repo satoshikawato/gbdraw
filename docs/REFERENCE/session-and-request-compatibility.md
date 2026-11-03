@@ -592,12 +592,16 @@ the file holds the one record and the length. The file also holds the layout and
 scale style the figure drew with, so a Session of a figure with nothing to cut
 holds the same leaves as one without the option, besides the length.
 
-The Web app has no control for it yet. When it loads such a Session it draws the
-rows and lists the length under the settings that are not editable in the Web
-UI. Generate and **Save Session** keep it, as a config override in the saved
-request, and that row's **Reset setting** removes it.
-When a record is cut, Generate stops with an error if the form asks for a Track
-layout of Middle or a bar scale, which cannot draw rows; the last Result stays.
+The Web app shows the length in **Wrap Rows** (see [Wrap Rows](web-app.md#wrap-rows)).
+Load reads it into that field from the form key or the config leaf, including a
+Session written by `--save_session`, by the Python API, or by the Web app of
+gbdraw 0.14.5, which kept the length under the settings that are not editable in
+the Web UI. A length stored in another form that Python accepts, such as `"5kb"`
+or `"Auto"`, reads as Python reads it; a value Python refuses is dropped, with a
+row in the Load dialog. **Save Session** writes the field's value, in bp or
+`"auto"`, as the form key and the config leaf.
+When a record is cut, Generate stops with an error and keeps the last Result if
+the request holds a setting that rows cannot draw.
 
 ## Fonts
 

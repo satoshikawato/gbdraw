@@ -28,6 +28,10 @@ write-up of a release.
   Sessions are saved as Session version 51, which gbdraw 0.14.x cannot open;
   Sessions saved by 0.14.x (46 to 50) open as before.
 - Changed: the drawing bar replaces the Circular and Linear mode buttons.
+- Added: Web app: **Wrap Rows** in the Linear Layout card draws long records
+  over several rows (Auto, or a length in bp, kbp, or Mbp), with the same rules
+  as `--wrap_length`. A PNG or PDF export over its size limit is refused before
+  a file is made.
 
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
 
