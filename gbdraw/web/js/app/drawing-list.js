@@ -554,7 +554,10 @@ export const createDrawingBar = ({
       const name = tabs().find((tab) => tab.kind === 'drawing' && tab.id === drawingId)?.label ?? drawingId;
       const choice = await askChoice({
         title: t('Delete {name}?', { name }),
-        description: t('Its settings, edits, and Result are removed from this Session. Undo brings the drawing back.'),
+        lines: [
+          { icon: 'ph-warning', text: t('Its edits and Result are removed') },
+          { icon: 'ph-arrow-counter-clockwise', text: t('Undo restores the drawing') }
+        ],
         actions: [{ id: 'delete', label: t('Delete drawing'), tone: 'danger' }],
         cancelLabel: t('Keep drawing')
       });

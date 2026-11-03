@@ -20,7 +20,7 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-globalThis.document = { createElement: () => ({ click: () => {} }), querySelector: () => null };
+globalThis.document = { createElement: () => ({ click: () => {} }), querySelector: () => null, documentElement: { setAttribute: () => {} } };
 installFakeSvgDom();
 globalThis.File = File;
 
@@ -912,6 +912,22 @@ test('an uploader asks whether to replace a file another drawing uses for this d
   await ask('asked-cancel.gb', 'cancel');
   assert.equal(copy.files.c_gb, shared, 'Cancel changes nothing');
   assert.equal(history.undoLabel(), before, 'and records no step');
+  // The question names the other drawings as their tabs show them: a default
+  // name in the UI language, not the stored name.
+  const { setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
+  await setUiLocale('ja');
+  try {
+    const label = app.drawingBar.tabs().find((tab) => tab.id === 'circular')?.label ?? '';
+    assert.notEqual(label, state.drawingTabOf('circular').name, 'a default name shows in the UI language');
+    const pending = app.uploadCircularSourceFile('c_gb', genbank('asked-label.gb'));
+    await settle();
+    assert.ok(app.choicePrompt.description.includes(label), app.choicePrompt.description);
+    app.resolveChoicePrompt('cancel');
+    await pending;
+    await settle();
+  } finally {
+    await setUiLocale('en');
+  }
   await ask('asked-one.gb', 'drawing');
   assert.notEqual(copy.files.c_gb?.fileId, shared.fileId, 'This drawing only replaces the shown drawing');
   assert.equal(circular.files.c_gb, shared, 'and leaves the other drawing');
