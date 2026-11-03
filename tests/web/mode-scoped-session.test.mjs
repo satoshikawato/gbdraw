@@ -1127,7 +1127,10 @@ test('a Session 51 keeps each Linear drawing\'s 0.14.4 Web LOSAT entries reusabl
     for (const key of [entry.key, `${entry.key}-second`]) {
       const cached = state.losatCache.value.get(key);
       assert.deepEqual(cached?.runtime, entry.runtime, `${opened}: ${key}`);
-      assert.equal(isReusableLosatEntry(cached), true, `${opened}: ${key}`);
+      // OV-2377: the 0.14.4 Wasm's rows are reused for LOSATP only. The fixture's entries are LOSATN, so they
+      // are searched again; the LOSATP spelling of the same record is reusable.
+      assert.equal(isReusableLosatEntry(cached), false, `${opened}: ${key}`);
+      assert.equal(isReusableLosatEntry({ ...cached, program: 'blastp' }), true, `${opened}: ${key}`);
     }
     const result = await exportSession(`losat-runtime-${opened}`, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
     assert.equal(result.status, 'saved', JSON.stringify(result));
