@@ -501,7 +501,7 @@ def _verify_direction_reset(page: Page) -> None:
           const {state} = await import('./js/state.js');
           return {plan: state.similarityAlignmentPlan.value,
             receipt: state.similarityAlignmentResetReceipt.value,
-            directions: state.linearSeqs.map(seq => Boolean(seq.region_reverse)),
+            directions: state.activeDrawing().linearSeqs.map(seq => Boolean(seq.region_reverse)),
             svg: window.__GBDRAW_APP__.currentResults()[0].content,
             translations: state.linearRecordTranslations.value};
         }""")
