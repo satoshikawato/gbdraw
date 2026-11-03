@@ -3007,7 +3007,7 @@ export const createAppSetup = () => {
   /** @param {DrawingState} drawing */
   const keptLinearSeriesCount = (drawing) => Math.max(0, linearDepthLogicalWidth(drawing) - 1);
   /** @param {DrawingState} drawing @param {number} index @param {() => void} [turnOffReaching] */
-  const removeCircularDepthSeries = (drawing, index, turnOffReaching) => {
+  const removeCircularDepthTrack = (drawing, index, turnOffReaching) => {
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) return;
     // Removing a series retires the Legend styles of its rows (OV-65).
@@ -3044,9 +3044,9 @@ export const createAppSetup = () => {
   };
   // A series removal asks first when it leaves track rows that Generate refuses.
   /** @param {number} index */
-  const removeCircularDepthTrack = (index) => shownAction('circular', (drawing) => {
+  const askingRemoveCircularDepthTrack = (index) => shownAction('circular', (drawing) => {
     const idx = Number(index);
-    if (!Number.isInteger(idx) || idx < 0) return removeCircularDepthSeries(drawing, index);
+    if (!Number.isInteger(idx) || idx < 0) return removeCircularDepthTrack(drawing, index);
     const ports = askingStackPorts('circular_track_slots');
     return askTrackSourceRemoval(ports, {
       kind: 'depth-series',
@@ -3054,11 +3054,11 @@ export const createAppSetup = () => {
       loss: depthSeriesRemovalLoss(ports.rows(), idx, circularSeriesRemoval(drawing, idx).keptSeries),
       sources: () => circularDepthSources(drawing),
       label: msg('Remove Depth series'),
-      apply: (turnOffReaching) => removeCircularDepthSeries(drawing, index, turnOffReaching)
-    }) ?? removeCircularDepthSeries(drawing, index);
+      apply: (turnOffReaching) => removeCircularDepthTrack(drawing, index, turnOffReaching)
+    }) ?? removeCircularDepthTrack(drawing, index);
   });
   /** @param {DrawingState} drawing @param {number} index @param {() => void} [turnOffReaching] */
-  const removeLinearDepthSeries = (drawing, index, turnOffReaching) => {
+  const removeLinearDepthTrack = (drawing, index, turnOffReaching) => {
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) return;
     const logicalWidth = linearDepthLogicalWidth(drawing);
@@ -3103,9 +3103,9 @@ export const createAppSetup = () => {
     });
   };
   /** @param {number} index */
-  const removeLinearDepthTrack = (index) => shownAction('linear', (drawing) => {
+  const askingRemoveLinearDepthTrack = (index) => shownAction('linear', (drawing) => {
     const idx = Number(index);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= linearDepthLogicalWidth(drawing)) return removeLinearDepthSeries(drawing, index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= linearDepthLogicalWidth(drawing)) return removeLinearDepthTrack(drawing, index);
     const ports = askingStackPorts('linear_track_slots');
     return askTrackSourceRemoval(ports, {
       kind: 'depth-series',
@@ -3113,8 +3113,8 @@ export const createAppSetup = () => {
       loss: depthSeriesRemovalLoss(ports.rows(), idx, keptLinearSeriesCount(drawing)),
       sources: () => linearDepthSources(drawing),
       label: msg('Remove Depth series'),
-      apply: (turnOffReaching) => removeLinearDepthSeries(drawing, index, turnOffReaching)
-    }) ?? removeLinearDepthSeries(drawing, index);
+      apply: (turnOffReaching) => removeLinearDepthTrack(drawing, index, turnOffReaching)
+    }) ?? removeLinearDepthTrack(drawing, index);
   });
   // Each drawing holds a series for each of its own mode's Depth sources. A
   // new drawing holds its mode default's one series (`createDefaultAdv`,
@@ -7795,8 +7795,8 @@ export const createAppSetup = () => {
     syncDepthTrackSlotLabel,
     addCircularDepthTrack,
     addLinearDepthTrack,
-    removeCircularDepthTrack,
-    removeLinearDepthTrack,
+    removeCircularDepthTrack: askingRemoveCircularDepthTrack,
+    removeLinearDepthTrack: askingRemoveLinearDepthTrack,
     getCircularDepthFile,
     setCircularDepthFile,
     getLinearDepthFile,

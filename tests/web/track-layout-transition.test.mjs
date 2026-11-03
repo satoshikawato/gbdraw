@@ -214,7 +214,7 @@ const laneSidesOf = (state) => MODES.map((mode) => draftPlacementTargets({ mode,
 // Depth rows, Generate's in-place canonical stack), or a payload migration or
 // field list that writes no input. A new writer fails here.
 const WRITERS = {
-  'app/app-setup.js': { removeCircularDepthSeries: 'reconcile', removeLinearDepthSeries: 'reconcile' },
+  'app/app-setup.js': { removeCircularDepthTrack: 'reconcile', removeLinearDepthTrack: 'reconcile' },
   'app/feature-editor/placement-actions.js': { changeLayoutSetting: 'transition', restoreTrackLayout: 'transition' },
   'app/run-analysis.js': { runAnalysisInternal: 'reconcile' },
   'services/config.js': { applyConfigData: 'restore',

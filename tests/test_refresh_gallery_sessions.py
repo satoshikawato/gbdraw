@@ -1280,7 +1280,7 @@ def test_gallery_refresh_refuses_a_session_27_44(
     with pytest.raises(subprocess.CalledProcessError):
         _refresh_one_session(source, destination_path=destination)
 
-    assert "Gallery publication supports Sessions 46-50" in capfd.readouterr().err
+    assert "Gallery publication supports Sessions 46-51" in capfd.readouterr().err
     assert not destination.exists()
 
 
