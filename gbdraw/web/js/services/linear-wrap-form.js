@@ -95,9 +95,9 @@ export const linearWrapFormPatch = (form, value) => (value === null
 /**
  * What the shown Linear drawing holds that rows cannot draw with, each read from the owner its request reads.
  * @typedef {object} LinearWrapBlockerInputs
- * @property {boolean} comparisons BLAST, comparison pairs, LOSAT or Similarity groups.
+ * @property {boolean} comparisons BLAST, comparison pairs, LOSAT, Similarity groups or a Similarity alignment.
  * @property {boolean} sharedRecordRow Record Layout puts several records in one row.
- * @property {boolean} featureAlignment Records aligned at a feature (a similarity alignment).
+ * @property {boolean} featureAlignment Records where Align at feature put them.
  * @property {boolean} featureTrackOnAxis Custom Track Slots put the feature track on the axis (side overlay).
  */
 /**

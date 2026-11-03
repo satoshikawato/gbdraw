@@ -68,7 +68,7 @@ const REASONS = Object.freeze({
   WRAP_NORMALIZE_LENGTH: 'Wrapped rows draw at one scale. Turn Normalize Record Lengths off, or turn Wrap Rows off.',
   WRAP_GRID_ROW: 'A wrapped record needs a Record Layout row of its own. Give each record its own row, or turn Wrap Rows off.',
   // Align at feature and gbdraw linear --anchor_feature (gbdraw/api/record_planning.py, gbdraw/layout/linear_wrap.py).
-  WRAP_ANCHOR_FEATURE: 'A wrapped record cannot be aligned at a feature. Reset the alignment, or turn Wrap Rows off.',
+  WRAP_ANCHOR_FEATURE: 'A wrapped record cannot be aligned at a feature. Undo Align at feature, or turn Wrap Rows off.',
   // A PNG or PDF over its format's size limit (gbdraw/render/export_limits.py). The limit and the advice are the
   // EXPORT_LIMIT phrases: a row length or DPI is advised only when Python found one that fits (D-46).
   PNG_SIZE: 'Use SVG, which has no size limit.',

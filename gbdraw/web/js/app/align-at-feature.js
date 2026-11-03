@@ -129,16 +129,17 @@ export const createFeatureAnchorAction = ({
   const error = ref(null);
   /** @type {Ref<{ text: string, written: FeatureAnchorTranslation[] }>} */
   const noticeState = ref({ text: '', written: [] });
-  // The notice holds while the records are where Apply put them: Undo, a drag, or a Load retires it.
-  const notice = computed(() => {
-    const { text, written } = noticeState.value;
+  // Align at feature holds while the records are where Apply put them: Undo, a drag, or a Load retires it.
+  // Its notice shows then, and Wrap Rows reads it as Align at feature being present (PD-OI-113).
+  const applied = computed(() => {
+    const { written } = noticeState.value;
     const drawn = recordTranslations();
-    const holds = drawn.length === written.length && written.every((entry, index) => {
+    return written.length > 0 && drawn.length === written.length && written.every((entry, index) => {
       const current = drawn[index];
       return isObject(current) && current.recordKey === entry.recordKey && current.x === entry.x && current.y === entry.y;
     });
-    return holds ? text : '';
   });
+  const notice = computed(() => (applied.value ? noticeState.value.text : ''));
   let actionId = 0;
   const busy = computed(() => status.value === 'resolving' || status.value === 'applying');
   const previewLines = computed(() => (preview.value ? preview.value.reply.records.map(previewLine) : []));
@@ -230,5 +231,5 @@ export const createFeatureAnchorAction = ({
     return { status: String(outcome?.status || 'error') };
   };
 
-  return { selector, status, busy, preview, previewLines, error, notice, resolve, apply, cancel };
+  return { selector, status, busy, preview, previewLines, error, notice, applied, resolve, apply, cancel };
 };

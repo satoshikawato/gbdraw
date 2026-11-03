@@ -25,7 +25,7 @@ const WRAP_REFUSALS = Object.freeze({
   WRAP_SCALE_STYLE: ['INPUT_INVALID', 'Set Scale Style to Ruler (Ticks), or turn Wrap Rows off.'],
   WRAP_NORMALIZE_LENGTH: ['INPUT_INVALID', 'Turn Normalize Record Lengths off, or turn Wrap Rows off.'],
   WRAP_GRID_ROW: ['INPUT_INVALID', 'Give each record its own row, or turn Wrap Rows off.'],
-  WRAP_ANCHOR_FEATURE: ['INPUT_INVALID', 'Reset the alignment, or turn Wrap Rows off.']
+  WRAP_ANCHOR_FEATURE: ['INPUT_INVALID', 'Undo Align at feature, or turn Wrap Rows off.']
 });
 
 test('each wrap refusal names what rows cannot draw and the way out, the text its hint shows', () => {

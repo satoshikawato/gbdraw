@@ -93,6 +93,20 @@ test('Apply over an active Similarity alignment writes the translations without 
   assert.equal(action.notice.value, '');
 });
 
+test('applied holds while the records keep the positions Apply wrote, which Wrap Rows reads as Align at feature', async () => {
+  const { page, action } = fixture();
+  assert.equal(action.applied.value, false, 'nothing applied yet');
+  action.selector.value = 'gene=COX1';
+  await action.resolve();
+  assert.equal(action.applied.value, false, 'a preview moves nothing');
+  await action.apply();
+  assert.equal(action.applied.value, true);
+  // Undo (or a Load) puts other positions back: Align at feature no longer holds.
+  page.drawn = [{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 12, y: 3 }];
+  assert.equal(action.applied.value, false);
+  assert.equal(action.notice.value, '');
+});
+
 test('Apply without an active plan clears nothing', async () => {
   const { page, action } = fixture();
   action.selector.value = 'gene=COX1';

@@ -2633,7 +2633,9 @@ export const createAppSetup = () => {
       { enabled: Boolean(drawing.linearRecordLayoutEnabled.value) }
     );
   });
-  // Wrap Rows (PD-OI-113): its blockers read the owners the request reads.
+  // Wrap Rows (PD-OI-113): its blockers read the owners the request reads. A Similarity alignment is a
+  // comparison input to Python's refusal; Align at feature is the positions its Apply wrote, while they hold
+  // (`featureAnchor`, set up below; read only once the page renders).
   const linearWrapField = createLinearWrapField({
     state,
     changeLayoutSetting: featureActions.placementActions.changeLayoutSetting,
@@ -2641,9 +2643,9 @@ export const createAppSetup = () => {
     blockerInputs: () => {
       const drawing = state.activeDrawing();
       return {
-        comparisons: drawing.linearComparisonResolution.value.hasComparisonIntent,
+        comparisons: drawing.linearComparisonResolution.value.hasComparisonIntent || state.similarityAlignmentPlan.value !== null,
         sharedRecordRow: linearLabelHasSharedRow.value,
-        featureAlignment: state.similarityAlignmentPlan.value !== null,
+        featureAlignment: featureAnchor.applied.value,
         featureTrackOnAxis: Boolean(drawing.adv.linear_track_slots_enabled)
           && effectiveLinearSlotPlacement(draftFeatureSlot({ mode: drawing.mode, form: drawing.form, adv: drawing.adv })) === 'overlay'
       };
