@@ -7208,7 +7208,9 @@ export const createAppSetup = () => {
         title: t('Replace input file?'),
         description: t('{name} is also used in {drawings}.', {
           name: previous.name,
-          drawings: listText(state.drawingTabs.value.filter((tab) => otherDrawingIds.includes(tab.id)).map((tab) => tab.name))
+          // Named as their tabs show them: a default name in the UI language.
+          drawings: listText(drawingBar.tabs().flatMap((tab) => (
+            tab.kind === 'drawing' && otherDrawingIds.includes(tab.id) ? [tab.label] : [])))
         }),
         actions: [
           { id: 'drawing', label: t('This drawing only'), tone: 'secondary' },
