@@ -76,11 +76,10 @@ const PRIVILEGED_CAPABILITY_SPECS = Object.freeze([
     name: 'Session',
     importTargets: Object.freeze([
       'services/config.js',
-      'services/gallery-session-migration.js',
       'services/session-authority.js',
       'services/session-file.js'
     ]),
-    operatorPattern: /\b(?:exportSession|compressSessionData|migrateSessionDataToCurrent|migratePersistedGalleryConfig)\b/g
+    operatorPattern: /\b(?:exportSession|compressSessionData|migrateSessionDataToCurrent)\b/g
   }),
   Object.freeze({
     name: 'Canonical editor state',
@@ -134,7 +133,6 @@ export const detectPrivilegedWebCapabilities = (sources) => {
 
 const SESSION_SOURCE_PATHS = new Set([
   'services/config.js',
-  'services/gallery-session-migration.js',
   'services/session-authority.js',
   'services/session-file.js',
   'services/session-request.js'

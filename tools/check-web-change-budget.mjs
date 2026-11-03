@@ -1337,12 +1337,15 @@ const policyContractions = [];
 const policyExpansions = [];
 const missingPolicyKeys = [];
 const addedPolicyKeys = [];
-// A capability key that this (trusted) detector does not define authorizes nothing.
+// A capability key that this (trusted) detector does not define authorizes nothing, and
+// neither does an importer key that it does not list for a file the head no longer has.
 const retiredPolicyKeys = [];
 const detectedCapabilityKeys = new Set(WEB_PRIVILEGED_CAPABILITY_KEYS);
-const isRetiredPolicyKey = (section, name) => (
-  section === 'allowedPrivilegedOwners' && !detectedCapabilityKeys.has(name)
-);
+const detectedImportTargets = new Set(WEB_PRIVILEGED_IMPORT_TARGETS);
+const isRetiredPolicyKey = (section, name) => {
+  if (section === 'allowedPrivilegedOwners') return !detectedCapabilityKeys.has(name);
+  return !detectedImportTargets.has(name) && readHeadFile(`gbdraw/web/js/${name}`) === null;
+};
 let policyTopLevelKeysMatch = true;
 // Every policy value outside the two privileged sections stays unchanged in a safe contraction.
 let policyOtherSectionsMatch = true;
