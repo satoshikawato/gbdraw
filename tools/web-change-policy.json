@@ -55,8 +55,7 @@
     ],
     "services/session-request.js": [
       "app/run-analysis.js",
-      "services/config.js",
-      "services/gallery-session-migration.js"
+      "services/config.js"
     ],
     "services/svg-result-ingestion.js": [
       "app/candidate-render.js",
@@ -108,8 +107,7 @@
     ],
     "Render request": [
       "app/run-analysis.js",
-      "services/config.js",
-      "services/gallery-session-migration.js"
+      "services/config.js"
     ],
     "Resource staging": [
       "services/config.js",
@@ -134,7 +132,6 @@
     "Session": [
       "app/app-setup.js",
       "services/config.js",
-      "services/gallery-session-migration.js",
       "services/session-file.js"
     ]
   },
