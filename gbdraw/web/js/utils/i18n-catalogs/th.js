@@ -2302,7 +2302,6 @@ export default Object.freeze({
   "The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.": "ในการเปรียบเทียบ ฟีเจอร์ที่ปลายเส้นเชื่อมไม่ตรงกับฟีเจอร์ที่แสดงอยู่ ตรวจสอบอินพุตที่ใช้เปรียบเทียบและการแปลงการแสดงผล หากยังเกิดขึ้นอีกให้บันทึกเซสชันไว้",
   "The figure is drawn.": "วาดแผนภาพแล้ว",
   "The file is empty.": "ไฟล์ว่างเปล่า",
-  "The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.": "ไฟล์นี้บีบอัดด้วย gzip คลายการบีบอัดก่อน (เช่น ใช้ gunzip) อินพุต GenBank/DDBJ ต้องเป็นไฟล์ข้อความที่ไม่ได้บีบอัด",
   "The file is not a GenBank/DDBJ flat file: it has no record header line.": "ไฟล์นี้ไม่ใช่ไฟล์ข้อความ GenBank/DDBJ เนื่องจากไม่มีบรรทัดส่วนหัวของระเบียน",
   "The font could not be loaded.": "โหลดแบบอักษรไม่ได้",
   "The font of all diagram text: labels, titles, legend, and scale.": "แบบอักษรของข้อความทั้งหมดในแผนภาพ: ป้ายกำกับ ชื่อเรื่อง คำอธิบายสัญลักษณ์ และมาตราส่วน",

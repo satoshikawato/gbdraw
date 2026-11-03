@@ -159,7 +159,6 @@ const REASONS = Object.freeze({
   EMPTY_FILE: 'The file is empty.', NOT_GENBANK: 'The file is not a GenBank/DDBJ flat file: it has no record header line.',
   FASTA_IN_GENBANK: 'This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.',
   // OV-1258, OV-1257: what a GenBank/DDBJ, GFF3, or FASTA slot file lacks.
-  GZIP_INPUT: 'The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.',
   GENBANK_PARSE: 'The GenBank/DDBJ file could not be parsed: it may be cut off or damaged. Download or export it again.',
   SEQUENCE_UNDEFINED: 'Sequence content is undefined: a record has no sequence after ORIGIN. Use a GenBank/DDBJ file that includes the sequence.',
   GFF_NO_FEATURES: 'The GFF3 file has no feature lines.',

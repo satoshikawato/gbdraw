@@ -23,6 +23,7 @@ from gbdraw.core.record_metadata import (
     _stamp_source_feature_hash,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.input_text import GZIP_ERRORS, open_input_text
 from gbdraw.io.record_select import RecordSelector, parse_record_selector, select_record
 from .ids import (
     SourceFeatureHash,
@@ -274,11 +275,11 @@ def read_identity_table(
         raw_rows = table.to_dict("records")
     else:
         try:
-            with open(table, encoding="utf-8-sig", newline="") as handle:
+            with open_input_text(table, encoding="utf-8-sig", newline="") as handle:
                 reader = csv.DictReader(handle, delimiter="\t")
                 header = list(reader.fieldnames or [])
                 raw_rows = list(reader)
-        except (OSError, UnicodeDecodeError, csv.Error) as exc:
+        except (OSError, UnicodeDecodeError, csv.Error, *GZIP_ERRORS) as exc:
             raise invalid(f"Cannot read {table_name}: {exc}") from exc
     if len(set(header)) != len(header) or set(header) - set(columns):
         raise invalid(f"{table_name} has duplicate or unknown columns; use {', '.join(columns)}.")

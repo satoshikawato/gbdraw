@@ -16,6 +16,7 @@ from pandas import DataFrame
 
 from gbdraw.core.record_metadata import _read_coord_map, _source_to_local_index
 from gbdraw.exceptions import ParseError, ValidationError
+from gbdraw.io.input_text import GZIP_ERRORS, open_input_text
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 
 DEPTH_COLUMNS = ["reference_name", "position", "depth"]
@@ -45,9 +46,9 @@ def _is_float_like(value: str) -> bool:
 
 def _first_line_has_header(path: Path) -> bool:
     try:
-        with path.open("rt", encoding="utf-8") as handle:
+        with open_input_text(path, encoding="utf-8") as handle:
             first_line = handle.readline()
-    except OSError as exc:
+    except (OSError, *GZIP_ERRORS) as exc:
         raise ParseError(
             f"Unable to read depth file '{path}': {exc}", diagnostic=_UNREADABLE
         ) from exc
@@ -93,22 +94,23 @@ def _parse_depth_file(resolved_path: str) -> DataFrame:
     depth_path = Path(resolved_path)
     skiprows = 1 if _first_line_has_header(depth_path) else 0
     try:
-        depth_table = pd.read_csv(
-            depth_path,
-            sep="\t",
-            header=None,
-            names=DEPTH_COLUMNS,
-            usecols=[0, 1, 2],
-            skiprows=skiprows,
-            dtype={
-                # A few names repeat on every row: codes, not one string per row.
-                "reference_name": "category",
-                "position": "int64",
-                "depth": "float64",
-            },
-            **EXACT_FLOAT_READ_OPTIONS,
-        )
-    except ValueError as exc:
+        with open_input_text(depth_path, encoding="utf-8") as handle:
+            depth_table = pd.read_csv(
+                handle,
+                sep="\t",
+                header=None,
+                names=DEPTH_COLUMNS,
+                usecols=[0, 1, 2],
+                skiprows=skiprows,
+                dtype={
+                    # A few names repeat on every row: codes, not one string per row.
+                    "reference_name": "category",
+                    "position": "int64",
+                    "depth": "float64",
+                },
+                **EXACT_FLOAT_READ_OPTIONS,
+            )
+    except (ValueError, *GZIP_ERRORS) as exc:
         raise ParseError(
             f"Unable to parse depth file '{resolved_path}': {exc}",
             diagnostic=_invalid_depth("DEPTH_VALUES"),

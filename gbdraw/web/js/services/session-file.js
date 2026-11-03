@@ -1,8 +1,8 @@
 // @ts-check
 import { diagnosticError } from '../utils/error-normalization.js';
+import { GZIP_SIGNATURE, isGzipBytes } from './byte-utils.js';
 import { testSessionByteCap } from './runtime-test-hooks.js';
 
-const GZIP_MAGIC = Object.freeze([0x1f, 0x8b]);
 // The largest Session file, gzip or plain, that Load reads; Save refuses to
 // write a larger one (OV-2245).
 const MAX_SESSION_FILE_BYTES = 200 * 1024 * 1024;
@@ -60,9 +60,8 @@ const readUtf8Stream = async (stream, maxBytes) => {
 
 /** @param {Blob} file */
 const isGzipFile = async (file) => {
-  if (file.size < GZIP_MAGIC.length) return false;
-  const header = new Uint8Array(await file.slice(0, GZIP_MAGIC.length).arrayBuffer());
-  return GZIP_MAGIC.every((byte, index) => header[index] === byte);
+  if (file.size < GZIP_SIGNATURE.length) return false;
+  return isGzipBytes(new Uint8Array(await file.slice(0, GZIP_SIGNATURE.length).arrayBuffer()));
 };
 
 /**

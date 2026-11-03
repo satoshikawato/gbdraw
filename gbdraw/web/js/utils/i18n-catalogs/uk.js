@@ -2302,7 +2302,6 @@ export default Object.freeze({
   "The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.": "Ознаки на кінцях ліній порівняння не збігаються з показаними ознаками. Перевірте вхідні дані порівняння та перетворення відображення; якщо проблема повторюється, збережіть сеанс.",
   "The figure is drawn.": "Діаграму намальовано.",
   "The file is empty.": "Файл порожній.",
-  "The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.": "Файл стиснено за допомогою gzip. Спочатку розпакуйте його (наприклад, за допомогою gunzip); вхідні дані GenBank/DDBJ мають бути нестисненим плоским файлом.",
   "The file is not a GenBank/DDBJ flat file: it has no record header line.": "Файл не є плоским файлом GenBank/DDBJ: у ньому немає рядка заголовка запису.",
   "The font could not be loaded.": "Не вдалося завантажити шрифт.",
   "The font of all diagram text: labels, titles, legend, and scale.": "Шрифт усього тексту діаграми: підписів, заголовків, легенди та шкали.",

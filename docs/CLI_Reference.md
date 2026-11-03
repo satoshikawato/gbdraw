@@ -227,11 +227,14 @@ options:
   --display_start_coordinate DISPLAY_START_COORDINATE
                         1-based source coordinate at the display start;
                         requires one complete circular record.
-  --gbk [GBK_FILE ...]  GenBank, DDBJ, or EMBL flat file
+  --gbk [GBK_FILE ...]  GenBank, DDBJ, or EMBL flat file, plain or gzip-
+                        compressed
   --gff [GFF3_FILE ...]
-                        GFF3 file (instead of --gbk; --fasta is required)
+                        GFF3 file, plain or gzip-compressed (instead of --gbk;
+                        --fasta is required)
   --fasta [FASTA_FILE ...]
-                        FASTA file (required with --gff)
+                        FASTA file, plain or gzip-compressed (required with
+                        --gff)
   --records_table TSV   TSV manifest for row-based input records and circular
                         placement metadata.
   -o, --output OUTPUT   output file prefix (default: accession number of the
@@ -1192,11 +1195,14 @@ options:
   --display_start_coordinate DISPLAY_START_COORDINATE
                         1-based source coordinate at the display start;
                         requires one complete circular record.
-  --gbk [GBK_FILE ...]  GenBank, DDBJ, or EMBL flat file
+  --gbk [GBK_FILE ...]  GenBank, DDBJ, or EMBL flat file, plain or gzip-
+                        compressed
   --gff [GFF3_FILE ...]
-                        GFF3 file (instead of --gbk; --fasta is required)
+                        GFF3 file, plain or gzip-compressed (instead of --gbk;
+                        --fasta is required)
   --fasta [FASTA_FILE ...]
-                        FASTA file (required with --gff)
+                        FASTA file, plain or gzip-compressed (required with
+                        --gff)
   --records_table TSV   TSV manifest for row-based input records and per-
                         record options.
   --multi_record_position SELECTOR@ROW

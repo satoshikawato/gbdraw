@@ -94,19 +94,19 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--gbk",
         metavar="GBK_FILE",
-        help='GenBank, DDBJ, or EMBL flat file',
+        help='GenBank, DDBJ, or EMBL flat file, plain or gzip-compressed',
         type=str,
         nargs='*')
     parser.add_argument(
         "--gff",
         metavar="GFF3_FILE",
-        help="GFF3 file (instead of --gbk; --fasta is required)",
+        help="GFF3 file, plain or gzip-compressed (instead of --gbk; --fasta is required)",
         type=str,
         nargs='*')
     parser.add_argument(
         "--fasta",
         metavar="FASTA_FILE",
-        help="FASTA file (required with --gff)",
+        help="FASTA file, plain or gzip-compressed (required with --gff)",
         type=str,
         nargs='*')
 

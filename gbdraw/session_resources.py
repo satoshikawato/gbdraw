@@ -18,6 +18,7 @@ from typing import Callable, Collection, Mapping
 from gbdraw import session_io
 from gbdraw.session_io import SessionResourceDescriptor
 from gbdraw.io.filenames import safe_embedded_filename, unique_filename
+from gbdraw.io.input_text import GZIP_ERRORS, read_input_bytes
 from gbdraw.session_contract import SESSION_ID_RE
 from gbdraw.session_request_codec import (
     CanonicalRequestEncodingError,
@@ -356,8 +357,8 @@ def _resource_bytes(resource: CanonicalRequestResource) -> bytes:
         return resource.content
     assert resource.source_path is not None
     try:
-        return resource.source_path.read_bytes()
-    except OSError as exc:
+        return read_input_bytes(resource.source_path)
+    except (OSError, *GZIP_ERRORS) as exc:
         raise CanonicalRequestEncodingError(
             f"Could not read canonical resource: {resource.source_path}"
         ) from exc

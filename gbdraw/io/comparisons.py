@@ -20,6 +20,7 @@ from pandas import DataFrame
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
 from ..exceptions import ValidationError
+from .input_text import GZIP_ERRORS, read_input_bytes
 from .table_text import EXACT_FLOAT_READ_OPTIONS
 
 logger = logging.getLogger(__name__)
@@ -268,7 +269,7 @@ def read_comparison_table(
 ) -> DataFrame:
     """Read one BLAST outfmt 6/7 table into the 12 typed comparison columns.
 
-    ``source`` is a UTF-8 file path or an ``io.StringIO`` buffer. Lines whose
+    ``source`` is a UTF-8 file path, plain or gzip, or an ``io.StringIO`` buffer. Lines whose
     first non-blank character is ``#`` are outfmt 7 comments; blank and
     comment-only tables have no rows. Columns after the first 12 are ignored
     with an INFO log. A missing or unreadable file, a row with fewer than 12
@@ -288,8 +289,8 @@ def read_comparison_table(
                     f"{name}: the comparison file does not exist or is not a file.",
                     diagnostic=_UNREADABLE,
                 )
-            data = path.read_bytes()
-    except (OSError, UnicodeError) as exc:
+            data = read_input_bytes(path)
+    except (OSError, UnicodeError, *GZIP_ERRORS) as exc:
         raise ValidationError(
             f"{name}: the comparison file could not be read: {exc}", diagnostic=_UNREADABLE
         ) from exc

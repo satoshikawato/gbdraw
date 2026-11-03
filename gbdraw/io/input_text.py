@@ -4,14 +4,19 @@ GenBank, DDBJ and EMBL flat files are read with Biopython, GFF3 with BCBio-GFF.
 Some writers lay out lines those parsers refuse or misread; this module is the one
 owner of the repairs made to the text before they read it, and of the feature-type
 spelling after they read it. A line that needs no repair reaches the parser as
-written, so the text is streamed, never held twice.
+written, so the text is streamed, never held twice. An input file may be
+gzip-compressed, whatever its name: ``open_input_text`` and ``read_input_bytes``
+expand one, told by its first two bytes, and every reader opens its file there.
 """
 
 from __future__ import annotations
 
+import gzip
 import io
 import re
+import zlib
 from collections.abc import Iterator
+from os import PathLike
 from typing import Literal, TextIO
 
 from Bio.SeqFeature import SeqFeature
@@ -47,6 +52,46 @@ _INSDC_FEATURE_KEYS = (
     "tRNA", "unsure", "V_region", "V_segment", "variation", "3'UTR", "5'UTR",
 )
 _CANONICAL_FEATURE_TYPES = {key.lower(): key for key in _INSDC_FEATURE_KEYS}
+
+# A gzip stream starts with these two bytes (RFC 1952), whatever the file is named.
+GZIP_SIGNATURE = b"\x1f\x8b"
+# What reading a gzip stream that is cut off or damaged raises, beside the
+# ValueError (UnicodeDecodeError) a plain file raises; BadGzipFile is an OSError.
+# A reader spreads it into its except tuple: ``except (ValueError, *GZIP_ERRORS)``.
+GZIP_ERRORS = (EOFError, zlib.error, gzip.BadGzipFile)
+
+
+def is_gzip_file(path: str | PathLike[str]) -> bool:
+    """Whether the file starts with the gzip signature; its name does not count."""
+
+    with open(path, "rb") as handle:
+        return handle.read(len(GZIP_SIGNATURE)) == GZIP_SIGNATURE
+
+
+def open_input_text(
+    path: str | PathLike[str], *, encoding: str | None = None, newline: str | None = None
+) -> TextIO:
+    """An input file opened as text, expanded when it is gzip-compressed.
+
+    Every reader of an input file (sequence, annotation, table, depth, Session)
+    opens it here, so a gzip file reads wherever a plain one does, streamed as a
+    plain one is. Reading a gzip stream that is cut off or damaged raises one of
+    ``GZIP_ERRORS``.
+    """
+
+    if is_gzip_file(path):
+        return gzip.open(path, "rt", encoding=encoding, newline=newline)
+    return open(path, "r", encoding=encoding, newline=newline)
+
+
+def read_input_bytes(path: str | PathLike[str]) -> bytes:
+    """The bytes of an input file, expanded when it is gzip-compressed (see ``open_input_text``)."""
+
+    if is_gzip_file(path):
+        with gzip.open(path, "rb") as handle:
+            return handle.read()
+    with open(path, "rb") as handle:
+        return handle.read()
 
 
 def flat_file_format(first_line: str) -> FlatFileFormat:
@@ -204,11 +249,16 @@ def gff3_stream(lines: Iterator[str]) -> LineStream:
 __all__ = [
     "FLAT_FILE_FORMAT_NAMES",
     "FlatFileFormat",
+    "GZIP_ERRORS",
+    "GZIP_SIGNATURE",
     "LineStream",
     "canonical_feature_type",
     "canonicalize_feature_types",
     "flat_file_format",
     "flat_file_stream",
     "gff3_stream",
+    "is_gzip_file",
+    "open_input_text",
+    "read_input_bytes",
     "text_lines",
 ]

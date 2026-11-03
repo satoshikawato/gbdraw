@@ -2302,7 +2302,6 @@ export default Object.freeze({
   "The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.": "Các feature ở hai đầu liên kết so sánh không khớp với các feature đang hiển thị. Xem lại dữ liệu đầu vào của so sánh và các phép biến đổi hiển thị; nếu lỗi vẫn tiếp diễn, hãy lưu một phiên.",
   "The figure is drawn.": "Đã vẽ sơ đồ.",
   "The file is empty.": "Tệp trống.",
-  "The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.": "Tệp được nén bằng gzip. Hãy giải nén trước (ví dụ bằng gunzip); đầu vào GenBank/DDBJ phải là tệp phẳng (flat file) không nén.",
   "The file is not a GenBank/DDBJ flat file: it has no record header line.": "Tệp không phải là tệp phẳng (flat file) GenBank/DDBJ: không có dòng mở đầu bản ghi.",
   "The font could not be loaded.": "Không tải được phông chữ.",
   "The font of all diagram text: labels, titles, legend, and scale.": "Phông chữ của mọi văn bản trên sơ đồ: nhãn, tiêu đề, chú giải và thang đo.",

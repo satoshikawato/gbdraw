@@ -224,12 +224,17 @@ def test_undecodable_input_is_unreadable_not_unclassified_validation(helpers, tm
     wrapped = ValidationError('Could not decode PRIVATE')
     wrapped.__cause__ = error
     assert serialize_web_error(wrapped, operation='generate', stage='request-validation')['code'] == 'INPUT_UNREADABLE'
-    gzipped = tmp_path / 'PRIVATE.gbk'
-    gzipped.write_bytes(b'\x1f\x8b\x08\x00' + bytes(range(128, 256)))
-    result = json.loads(helpers['list_sequence_records'](str(gzipped), 'genbank'))
-    # OV-1258: the inspection says the file is gzip-compressed.
+    damaged = tmp_path / 'PRIVATE.gbk'
+    damaged.write_bytes(b'\x1f\x8b\x08\x00' + bytes(range(128, 256)))
+    result = json.loads(helpers['list_sequence_records'](str(damaged), 'genbank'))
+    # A gzip file reads like a plain one; a damaged gzip stream is a file cut off or damaged (OV-1258).
     assert result['error'] == {'code': 'INPUT_UNREADABLE', 'operation': 'listSequenceRecords',
-                               'stage': 'helper', 'context': {'reason': 'GZIP_INPUT'}}
+                               'stage': 'helper', 'context': {'reason': 'GENBANK_PARSE'}}
+    import gzip
+    gzipped = tmp_path / 'PRIVATE.gbk.gz'
+    gzipped.write_bytes(gzip.compress(HMMT_GENBANK.read_bytes()))
+    listed = json.loads(helpers['list_sequence_records'](str(gzipped), 'genbank'))
+    assert [record['record_id'] for record in listed['records']] == ['NC_012920.1']
 
 
 HMMT_GENBANK = Path(__file__).resolve().parent / 'test_inputs' / 'HmmtDNA.gbk'

@@ -2302,7 +2302,6 @@ export default Object.freeze({
   "The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.": "比较连线两端的特征与显示的特征不一致。请检查比较输入和显示变换；如果问题仍然存在，可保存会话。",
   "The figure is drawn.": "图谱已绘制。",
   "The file is empty.": "该文件为空。",
-  "The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.": "该文件经过gzip压缩。请先解压（例如使用gunzip）；GenBank/DDBJ输入必须是未压缩的平面文件。",
   "The file is not a GenBank/DDBJ flat file: it has no record header line.": "该文件不是GenBank/DDBJ平面文件：缺少记录头行。",
   "The font could not be loaded.": "无法加载该字体。",
   "The font of all diagram text: labels, titles, legend, and scale.": "图谱中所有文本的字体：标签、标题、图例和比例尺。",

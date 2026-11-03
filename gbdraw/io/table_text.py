@@ -22,6 +22,7 @@ from typing import Any, Callable, Iterator, NamedTuple, Sequence
 import pandas as pd
 
 from ..exceptions import ParseError
+from .input_text import GZIP_ERRORS, open_input_text
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +48,14 @@ def read_table_lines(filepath: str) -> list[str]:
     so line numbers in later error messages still match the file. A leading
     UTF-8 byte order mark is dropped, so it cannot hide a first-line comment.
     """
-    with open(filepath, "r", encoding="utf-8-sig") as handle:
-        return [
-            "\n" if not raw_line.strip() or raw_line.lstrip().startswith("#") else raw_line
-            for raw_line in handle
-        ]
+    try:
+        with open_input_text(filepath, encoding="utf-8-sig") as handle:
+            return [
+                "\n" if not raw_line.strip() or raw_line.lstrip().startswith("#") else raw_line
+                for raw_line in handle
+            ]
+    except GZIP_ERRORS as exc:  # A gzip table cut off or damaged.
+        raise ParseError(f"Table {filepath} could not be read: {exc}", diagnostic={"code": "INPUT_UNREADABLE"}) from exc
 
 
 def table_text_stream(lines: list[str]) -> io.StringIO:

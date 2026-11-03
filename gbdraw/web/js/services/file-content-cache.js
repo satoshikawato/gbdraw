@@ -11,6 +11,7 @@ import {
   base64ToBytes,
   bytesToBase64,
   bytesToText,
+  expandGzipBytes,
   sha256Hex,
   textToBase64,
   textToBytes
@@ -54,6 +55,10 @@ const asCacheKey = (file) => (
 );
 
 /**
+ * The bytes of an uploaded File, the one place they are read: a gzip file
+ * (NCBI's `.gbff.gz`, `.fna.gz`, `.gff.gz`) reads as the plain file it holds,
+ * told by its first two bytes, so every browser reader, the Worker and the
+ * Session see the plain bytes.
  * @param {unknown} file A `File`, a Session resource view, or any value (rejected unless it has `arrayBuffer()`).
  * @returns {Promise<Uint8Array>}
  */
@@ -76,7 +81,8 @@ export const readFileBytes = (file) => {
       pending = Promise.resolve()
         // The `typeof` check above holds here; narrowing does not reach the closure.
         .then(() => /** @type {{ arrayBuffer: () => Promise<ArrayBuffer> }} */ (file).arrayBuffer())
-        .then(asBytes);
+        .then(asBytes)
+        .then(expandGzipBytes);
       fileByteCache.set(key, pending);
       pending.catch(() => {
         if (fileByteCache.get(key) === pending) fileByteCache.delete(key);

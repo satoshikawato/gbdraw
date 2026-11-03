@@ -2302,7 +2302,6 @@ export default Object.freeze({
   "The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.": "Fitur di ujung tautan perbandingan tidak sesuai dengan fitur yang ditampilkan. Tinjau input perbandingan dan transformasi tampilan; simpan sesi jika masalah berlanjut.",
   "The figure is drawn.": "Diagram digambar.",
   "The file is empty.": "File kosong.",
-  "The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.": "File dikompresi dengan gzip. Ekstrak file terlebih dahulu (misalnya dengan gunzip); input GenBank/DDBJ harus berupa flat file yang tidak dikompresi.",
   "The file is not a GenBank/DDBJ flat file: it has no record header line.": "File bukan flat file GenBank/DDBJ: tidak ada baris header record.",
   "The font could not be loaded.": "Font tidak dapat dimuat.",
   "The font of all diagram text: labels, titles, legend, and scale.": "Font untuk semua teks diagram: label, judul, legenda, dan skala.",

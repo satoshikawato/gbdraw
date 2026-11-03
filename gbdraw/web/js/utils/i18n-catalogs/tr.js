@@ -2302,7 +2302,6 @@ export default Object.freeze({
   "The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.": "Karşılaştırma bağlantılarının uçlarındaki özellikler görüntülenen özelliklerle eşleşmiyor. Karşılaştırma girdilerini ve görüntü dönüşümlerini gözden geçirin; sorun sürerse bir oturum kaydedin.",
   "The figure is drawn.": "Diyagram çizildi.",
   "The file is empty.": "Dosya boş.",
-  "The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.": "Dosya gzip ile sıkıştırılmış. Önce sıkıştırmayı kaldırın (örneğin gunzip ile); GenBank/DDBJ girdisi sıkıştırılmamış bir flat file olmalıdır.",
   "The file is not a GenBank/DDBJ flat file: it has no record header line.": "Dosya bir GenBank/DDBJ flat file değil: kayıt başlık satırı yok.",
   "The font could not be loaded.": "Yazı tipi yüklenemedi.",
   "The font of all diagram text: labels, titles, legend, and scale.": "Tüm diyagram metninin yazı tipi: etiketler, başlıklar, gösterge ve ölçek.",

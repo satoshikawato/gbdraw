@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Added: gzip-compressed input files (`.gbff.gz`, `.fna.gz`, `.gff.gz`, gzip
+  TSV tables and depth files) are read as the plain files they hold, in the
+  CLI, the Python API, and the Web app; a saved Session keeps the plain file.
+  The "decompress it first" error is gone.
 - Added: one Session now holds several drawings, each with its own settings,
   files, Result, and History. In the Web app, a new Session has one Circular
   drawing and a Linear tab with a plus icon that adds a Linear drawing. A tab's

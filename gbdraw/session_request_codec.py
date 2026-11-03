@@ -74,6 +74,7 @@ from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
+from gbdraw.io.input_text import GZIP_ERRORS, open_input_text, read_input_bytes
 from gbdraw.session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
@@ -1168,7 +1169,7 @@ def _encode_records(
                     f"record-{first}-{kind}",
                     kind=kind,
                     name=Path(path).name,
-                    content=Path(path).read_bytes(),
+                    content=read_input_bytes(path),
                 )
             ids = [str(record.annotations.get("gbdraw_source_record_id", record.id))
                    for record in members_records]
@@ -4040,8 +4041,9 @@ def _nucleotide_blast_resource(
         return resources.add_path(resource_id, kind="nucleotide-blast", value=path)
     source = Path(str(path))
     try:
-        text = source.read_text(encoding="utf-8-sig")
-    except (OSError, UnicodeError) as exc:
+        with open_input_text(source, encoding="utf-8-sig") as handle:
+            text = handle.read()
+    except (OSError, UnicodeError, *GZIP_ERRORS) as exc:
         raise CanonicalRequestEncodingError(
             f"Could not read comparison table {source} for the Session."
         ) from exc
