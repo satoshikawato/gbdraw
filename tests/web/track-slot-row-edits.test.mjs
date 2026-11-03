@@ -38,7 +38,7 @@ const { normalizeLinearTrackSlots, placeLinearStackForGenerate } = await import(
 const depthFile = { name: 'a.depth.tsv', size: 1, lastModified: 1 };
 
 const circularState = (slots, { showDepth = false, depthFiles = [] } = {}) => withDrawings({
-  mode: { value: 'circular' },
+  mode: 'circular',
   form: { track_type: 'tuckin', show_depth: showDepth, suppress_gc: false, suppress_skew: false, show_scale: true, separate_strands: true },
   adv: {
     circular_track_slots_enabled: true,
@@ -62,7 +62,7 @@ const circularState = (slots, { showDepth = false, depthFiles = [] } = {}) => wi
 });
 
 const linearState = (slots, { showDepth = false, depthFiles = [] } = {}) => withDrawings({
-  form: { linear_track_layout: 'middle', show_depth: showDepth, show_gc: true, show_skew: true },
+  mode: 'linear', form: { linear_track_layout: 'middle', show_depth: showDepth, show_gc: true, show_skew: true },
   adv: {
     nt: 'GC',
     linear_track_slots_enabled: true,
@@ -720,7 +720,7 @@ for (const mode of ['circular', 'linear']) {
     const depth = editor.slots().find((slot) => slot.id === 'depth');
     depth.z = 7;
     depth.params.legend_label = 'pending';
-    editor.editor[mode === 'circular' ? 'normalizeCircularTrackSlots' : 'normalizeLinearTrackSlots']();
+    editor.editor[mode === 'circular' ? 'normalizeCircularTrackSlots' : 'normalizeLinearTrackSlots'](editor.state);
     editor.state.form[form] = 'middle';
     editor.state.adv.nt = 'AT';
     const others = () => structuredClone({ form: editor.state.form, nt: editor.state.adv.nt,
@@ -858,11 +858,11 @@ for (const mode of ['circular', 'linear']) {
 
 test('the rows a Depth file removal takes out: the series managed row while no file is left, in both editors', () => {
   const circular = MODES.circular(REACH_ROWS.circular(), { showDepth: true, depthFiles: [depthFile] });
-  assert.deepEqual([...circular.editor.circularDepthSourceLoss(circular.state.drawingOfMode('circular'), [[null]]).leaving], ['depth']);
-  assert.deepEqual([...circular.editor.circularDepthSourceLoss(circular.state.drawingOfMode('circular'), [[depthFile]]).leaving], []);
+  assert.deepEqual([...circular.editor.circularDepthSourceLoss(circular.state.activeDrawing(), [[null]]).leaving], ['depth']);
+  assert.deepEqual([...circular.editor.circularDepthSourceLoss(circular.state.activeDrawing(), [[depthFile]]).leaving], []);
   const linear = MODES.linear(REACH_ROWS.linear(), { showDepth: true, depthFiles: [depthFile] });
   linear.state.linearSeqs.push({ depth: [depthFile] });
-  const drawing = linear.state.drawingOfMode('linear');
+  const drawing = linear.state.activeDrawing();
   // Another File still holds the series.
   assert.deepEqual([...linear.editor.linearDepthSourceLoss(drawing, [[null], [depthFile]]).leaving], []);
   assert.deepEqual([...linear.editor.linearDepthSourceLoss(drawing, [[null], [null]]).leaving], ['depth']);
@@ -936,7 +936,7 @@ for (const mode of ['circular', 'linear']) {
 const secondDepthFile = { ...depthFile, name: 'b.depth.tsv' };
 const firstFileRemovalQuestion = async (mode, { stackOn, showDepth, rows = REACH_ROWS[mode]() }) => {
   const harness = MODES[mode](rows, { showDepth, depthFiles: [depthFile, secondDepthFile] });
-  const drawing = harness.state.drawingOfMode(mode);
+  const drawing = harness.state.activeDrawing();
   drawing.adv[`${mode}_track_slots_enabled`] = stackOn;
   const loss = mode === 'circular'
     ? harness.editor.circularDepthSourceLoss(drawing, [null, secondDepthFile])
@@ -972,7 +972,7 @@ test('circular: the managed ring rows a comparison change takes out, read by the
   const ring = (id, key) => ({ id, renderer: 'sequence_conservation', enabled: true, side: 'inside', params: { managed: 'circular_conservation', series_key: key } });
   const rows = [...REACH_ROWS.circular(), ring('ring_a', 'a'), ring('ring_b', 'b'), ring('ring_dup', 'a')];
   const { editor, state } = MODES.circular(rows, { showDepth: true, depthFiles: [depthFile] });
-  const drawing = state.drawingOfMode('circular');
+  const drawing = state.activeDrawing();
   drawing.adv.circular_track_slots_enabled = false;
   assert.deepEqual([...editor.circularConservationRowsLeaving(drawing, [{ sourceKey: 'b' }])], []);
   drawing.adv.circular_track_slots_enabled = true;
@@ -989,7 +989,7 @@ const generateLinearDraft = (drawing, depthTracks) => {
 
 test('linear: a Generate writes the series height into a blank Depth row, as a request and Session hold it, and the row stays managed', () => {
   const linear = MODES.linear(REACH_ROWS.linear(), { showDepth: true, depthFiles: [depthFile] });
-  const drawing = linear.state.drawingOfMode('linear');
+  const drawing = linear.state.activeDrawing();
   const row = () => drawing.adv.linear_track_slots.find((slot) => slot.id === 'depth');
   drawing.adv.depth_tracks = [{ label: 's1', height: 10 }];
   generateLinearDraft(drawing, drawing.adv.depth_tracks);
@@ -1001,16 +1001,16 @@ test('linear: a Generate writes the series height into a blank Depth row, as a r
 
 test('linear: a Depth row with a typed height leaves with its last file, and its series keeps the height', () => {
   const linear = MODES.linear(REACH_ROWS.linear(), { showDepth: true, depthFiles: [depthFile] });
-  const drawing = linear.state.drawingOfMode('linear');
+  const drawing = linear.state.activeDrawing();
   const row = () => drawing.adv.linear_track_slots.find((slot) => slot.id === 'depth');
   linear.editor.setLinearTrackSlotHeight(row(), '40');
   assert.equal(drawing.adv.depth_tracks[0].height, 40);
   assert.equal(isDefaultManagedDepthSlot(row()), true);
   assert.deepEqual([...linear.editor.linearDepthSourceLoss(drawing, [[null]]).leaving], ['depth']);
-  linear.editor.changeLinearDepthSources(() => { linear.state.linearSeqs[0].depth = [null]; });
+  linear.editor.changeLinearDepthSources(drawing, () => { linear.state.linearSeqs[0].depth = [null]; });
   assert.equal(row(), undefined);
   assert.equal(drawing.adv.depth_tracks[0].height, 40);
-  linear.editor.changeLinearDepthSources(() => { linear.state.linearSeqs[0].depth = [depthFile]; });
+  linear.editor.changeLinearDepthSources(drawing, () => { linear.state.linearSeqs[0].depth = [depthFile]; });
   assert.equal(row().height, '', 'the file coming back makes a managed row');
   assert.equal(isDefaultManagedDepthSlot(row()), true);
   assert.equal(drawing.adv.depth_tracks[0].height, 40);
@@ -1022,7 +1022,7 @@ test('linear: a Depth row with a typed height leaves with its last file, and its
 test('linear: after a series removal each Depth row takes its series height, with or without one before', () => {
   const rows = [linearRow('depth_1', 'depth', { track_index: 0 }), { ...linearRow('cov', 'depth', { track_index: 1 }), height: '30' }];
   const linear = MODES.linear(rows, { showDepth: true, depthFiles: [depthFile, depthFile] });
-  const drawing = linear.state.drawingOfMode('linear');
+  const drawing = linear.state.activeDrawing();
   drawing.adv.depth_tracks = [{ label: 'a', height: 10 }, { label: 'b', height: 44 }];
   linear.editor.syncLinearDepthSlotHeightsFromDepthTracks();
   const heights = Object.fromEntries(drawing.adv.linear_track_slots.map((slot) => [slot.id, slot.height]));
@@ -1047,7 +1047,7 @@ const LEAVES_WITH_FILE = [
 for (const [name, row, leaves] of LEAVES_WITH_FILE) {
   test(`one answer to "managed": a Linear Depth row with ${name} ${leaves ? 'leaves with' : 'stays without'} its last file, and its series removal agrees`, () => {
     const linear = MODES.linear([linearRow('features', 'features', {}, 'overlay'), row], { showDepth: true, depthFiles: [depthFile] });
-    const drawing = linear.state.drawingOfMode('linear');
+    const drawing = linear.state.activeDrawing();
     assert.equal(isDefaultManagedDepthSlot(row), leaves);
     assert.deepEqual([...linear.editor.linearDepthSourceLoss(drawing, [[null]]).leaving], leaves ? [row.id] : []);
     const { slots } = reconcileManagedDepthSlots({ slots: drawing.adv.linear_track_slots, previousSourced: [0], sourced: [] });

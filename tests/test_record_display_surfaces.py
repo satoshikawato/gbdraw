@@ -15,6 +15,7 @@ from gbdraw.api.requests import CircularDiagramRequest, InMemoryRecordSource, Re
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_request_codec import encode_canonical_request
 from gbdraw.session_io import load_session
+from tests.utils.session_drawing_view import drawing_view
 
 
 def record():
@@ -180,7 +181,7 @@ def test_api_session_save_preserves_display(mode, tmp_path):
                                                display=RecordDisplayOptions(None, 1)),))
     path = tmp_path / 'session.json'
     save_session_document(path, request)
-    assert load_session(path)['renderRequest']['records'][0]['display']['startCoordinate'] == 1
+    assert drawing_view(load_session(path))['renderRequest']['records'][0]['display']['startCoordinate'] == 1
 
 
 @pytest.mark.parametrize('mode', ['circular', 'linear'])
@@ -192,7 +193,7 @@ def test_cli_session_save_preserves_display(mode, tmp_path):
     session = tmp_path / 'session.json'
     getattr(cli, f'{mode}_main')(['--gbk', str(path), '--display_start_coordinate', '25',
                                     '-o', str(tmp_path / 'diagram'), '--session_output', str(session)])
-    assert load_session(session)['renderRequest']['records'][0]['display']['startCoordinate'] == 25
+    assert drawing_view(load_session(session))['renderRequest']['records'][0]['display']['startCoordinate'] == 25
 
 
 @pytest.mark.parametrize('mode', ['circular', 'linear'])

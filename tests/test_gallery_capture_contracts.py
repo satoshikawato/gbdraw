@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 
 import tools.capture_gallery_tutorial_screenshots as capture_tool
+from tests.utils.session_drawing_view import drawing_view
 from tools.capture_gallery_tutorial_screenshots import (
     DEFAULT_MAX_FILE_SIZE_KB,
     DEFAULT_MAX_IMAGE_HEIGHT,
@@ -344,7 +345,7 @@ def test_bgc_session_holds_the_mibig_files_with_record_reverse_complement() -> N
     sample = load_ready_examples("BGC0000708-BGC0000713")[0]
     session_path = resolve_gallery_reference(str(sample["session"]))
     assert session_path is not None
-    session = json.loads(session_path.read_text(encoding="utf-8"))
+    session = drawing_view(json.loads(session_path.read_text(encoding="utf-8")))
     records = session["renderRequest"]["records"]
     assert [record["presentation"]["reverseComplement"] for record in records] == [
         False,
@@ -369,7 +370,7 @@ def test_bgc_finish_step_types_the_arrow_geometry_of_the_published_figure() -> N
     sample = load_ready_examples("BGC0000708-BGC0000713")[0]
     session_path = resolve_gallery_reference(str(sample["session"]))
     assert session_path is not None
-    session = json.loads(session_path.read_text(encoding="utf-8"))
+    session = drawing_view(json.loads(session_path.read_text(encoding="utf-8")))
     published = session["renderRequest"]["diagramOptions"]["configOverrides"]
     step = _load_tutorial(sample)["manualSteps"][10]
     typed = {action["selector"]: action["value"] for action in step["replay"] if action["type"] == "fill"}
@@ -388,7 +389,7 @@ def test_vibrio_capture_keeps_publication_comparisons_active() -> None:
     session_path = resolve_gallery_reference(str(sample["session"]))
     assert session_path is not None
     with gzip.open(session_path, "rt", encoding="utf-8") as handle:
-        session = json.load(handle)
+        session = drawing_view(json.load(handle))
     assert session["modes"]["linear"]["config"]["linearComparisonPlan"] == {
         "mode": "adjacent",
         "defaultSource": "losat",
@@ -602,7 +603,7 @@ def test_basic_gallery_capture_session_contains_the_named_record(
     sample = load_ready_examples(example_id)[0]
     session_path = resolve_gallery_reference(str(sample["session"]))
     assert session_path is not None
-    session = json.loads(session_path.read_text(encoding="utf-8"))
+    session = drawing_view(json.loads(session_path.read_text(encoding="utf-8")))
     resource = session["resources"]["record-1-genbank"]
 
     assert resource["encoding"] == "base64"
@@ -867,13 +868,13 @@ def test_reset_settings_waits_for_the_diagram_update_to_finish() -> None:
 
     capture_tool.apply_capture_action(FakePage(), {"type": "resetSettings"})
 
-    assert events[:3] == ["click Reset Settings", "click Reset all settings", "wait_for hidden"]
+    assert events[:3] == ["click Reset Settings", "click Reset all drawings", "wait_for hidden"]
     waits = [event for event in events[3:] if "labelReflowProcessing" in event]
     assert len(waits) == 1
     assert "processing" in waits[0].replace("labelReflowProcessing", "")
     # After the redraw, History can stay busy for many seconds (OV-1700); the replay's next
-    # step needs the mode buttons, so Reset also waits until they are enabled.
-    switch_waits = [event for event in events[3:] if ".app-mode-button" in event]
+    # step needs the drawing tabs, so Reset also waits until they are enabled.
+    switch_waits = [event for event in events[3:] if ".drawing-bar [role=" in event]
     assert len(switch_waits) == 1 and "disabled" in switch_waits[0]
 
 
@@ -947,6 +948,32 @@ def test_vnig_palette_select_reads_the_app_palette_list() -> None:
 
     assert len(specs) == 1
     assert "options" not in specs[0]
+
+
+@pytest.mark.parametrize(
+    "example_id",
+    [
+        "BGC0000708-BGC0000713",
+        "hepatoplasmataceae_collinear",
+        "hepatoplasmataceae_orthogroup",
+        "majanivirus_orthogroup",
+    ],
+)
+def test_linear_drawing_bar_crop_is_taken_from_a_new_page_after_the_plus_linear_click(
+    example_id: str,
+) -> None:
+    sample = load_ready_examples(example_id)[0]
+    tutorial = _load_tutorial(sample)
+    captures = [
+        operation["capture"]
+        for _, operation in iter_operation_contexts(sample, tutorial)
+        if operation.get("media", {}).get("src", "").endswith("manual-01-01-linear-mode.webp")
+    ]
+    assert len(captures) == 1
+    capture = captures[0]
+    assert capture["freshPage"] is True
+    assert "session" not in capture and "replayThrough" not in capture
+    assert capture["actions"][0]["selector"].endswith('[data-drawing-offer="linear"]')
 
 
 def test_capture_clip_refuses_a_crop_that_cuts_a_clipped_element() -> None:

@@ -143,9 +143,10 @@ def test_cli_session_resave_keeps_the_other_mode_result_set(tmp_path: Path) -> N
     )
     document = load_session_document(resaved)
     # The re-save replaces the Linear drawing's set where it lives and keeps
-    # the drawing order and the shown mode (``ui.mode``).
+    # the drawing order and the shown drawing (``ui.activeDrawingId``, Session 49;
+    # ``ui.mode`` of the Session 46 source).
     assert [drawing.id for drawing in document.drawings] == ["circular", "linear"]
-    assert document.to_dict()["ui"]["mode"] == session["ui"]["mode"] == "circular"
+    assert document.to_dict()["ui"]["activeDrawingId"] == session["ui"]["mode"] == "circular"
     circular = session_drawing_artifacts(document, "circular").fields
     assert circular["renderRequest"] == session["renderRequest"]
     assert circular["results"] == session["results"]

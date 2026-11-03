@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import {
   readCircularMeasure, writeCircularMeasureValue,
   changeCircularMeasureUnit, projectCircularMeasureDraft
@@ -139,9 +140,10 @@ test('Auto has no canonical unit; explicit clear returns null while typed empty 
   }
 });
 
-const tobacco = JSON.parse(await readFile(new URL(
+const tobaccoSaved = JSON.parse(await readFile(new URL(
   '../../gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json', import.meta.url
 )));
+const tobacco = savedDrawingView(tobaccoSaved, tobaccoSaved.ui.activeDrawingId);
 
 test('tobacco Gallery pairs and precision survive read and real canonical request projection without mutation', () => {
   const expected = [

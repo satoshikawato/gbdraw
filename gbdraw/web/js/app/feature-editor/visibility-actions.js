@@ -284,10 +284,10 @@ export const createFeatureVisibilityActions = ({
   // Legend source of the features each Result's catalog draws against the
   // source of the features the resolver draws now, under the current rules.
   // Python redraws the Legend in the automatic rerender.
-  /** @param {FeatureDrawnContext} context */
-  const legendSourceChanged = (context) => !sameLegendSources(
-    resultLegendSources(state, context, { asRendered: true }),
-    resultLegendSources(state, context)
+  /** @param {DrawingState} drawing @param {FeatureDrawnContext} context */
+  const legendSourceChanged = (drawing, context) => !sameLegendSources(
+    resultLegendSources(state, drawing.mode, context, { asRendered: true }),
+    resultLegendSources(state, drawing.mode, context)
   );
 
   // The live projection of what the label rerender and Generate draw (R3):
@@ -306,16 +306,18 @@ export const createFeatureVisibilityActions = ({
    */
   const needsRerenderFor = (drawing, features, { targeted = false, legend = true } = {}) => {
     const context = featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions });
-    const catalogFeatures = resultCatalogFeatures(state);
+    const catalogFeatures = resultCatalogFeatures(state, drawing.mode);
     return features.some((feature) => {
       if (!catalogFeatures || catalogFeatures.renderedByIdentity.has(stableFeatureOverrideKey(feature))) return false;
       const drawn = resolveFeatureDrawn(feature, context);
       return drawn === true || (targeted && drawn === null);
-    }) || (legend && legendSourceChanged(context));
+    }) || (legend && legendSourceChanged(drawing, context));
   };
-  // Every catalog feature of the displayed Result, as drawn where it is drawn.
-  const displayedFeatures = () => {
-    const catalogFeatures = resultCatalogFeatures(state);
+  // Every catalog feature of the displayed Result, as drawn where it is drawn;
+  // `drawing` owns the displayed Result.
+  /** @param {DrawingState} drawing */
+  const displayedFeatures = (drawing) => {
+    const catalogFeatures = resultCatalogFeatures(state, drawing.mode);
     return catalogFeatures
       ? catalogFeatures.biological.map((/** @type {VisibilityTarget} */ feature) => (
         catalogFeatures.renderedByIdentity.get(stableFeatureOverrideKey(feature)) || feature
@@ -506,7 +508,7 @@ export const createFeatureVisibilityActions = ({
     }
     if (ruleTableError && state.errorLog?.value === ruleTableError) state.errorLog.value = null;
     ruleTableError = null;
-    return { status: 'projected', projection: projectDrawn(drawing, displayedFeatures(), { legend, show }) };
+    return { status: 'projected', projection: projectDrawn(drawing, displayedFeatures(drawing), { legend, show }) };
   };
   // Waits for the newest run, following it while a later run replaces it.
   // True when that run was a Result display of `drawing` that projected and
@@ -523,7 +525,7 @@ export const createFeatureVisibilityActions = ({
       outcome = await followed.outcome;
     }
     return Boolean(followed && !followed.asks && followed.drawing === drawing && outcome?.status === 'projected')
-      && needsRerenderFor(drawing, displayedFeatures(), { legend: true });
+      && needsRerenderFor(drawing, displayedFeatures(drawing), { legend: true });
   };
 
   // The one projection of this domain (R3), which History apply, the display

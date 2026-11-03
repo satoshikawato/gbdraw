@@ -17,14 +17,14 @@
   "manualSteps": [
     {
       "title": "Select Circular mode",
-      "body": "Open gbdraw.app and select Circular. This workflow uses one annotated GenBank file and does not need Pairwise Comparisons.",
+      "body": "Open gbdraw.app; the Circular drawing is shown when it opens. This workflow uses one annotated GenBank file and does not need Pairwise Comparisons.",
       "operations": [
         {
           "genericMedia": true,
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-01-01-circular-mode.webp",
-            "alt": "Mode selector with Circular selected.",
-            "caption": "Select Circular mode."
+            "alt": "Drawing bar with the Circular drawing tab selected and the + Linear tab beside it.",
+            "caption": "The Circular drawing is shown when the app opens."
           }
         }
       ]

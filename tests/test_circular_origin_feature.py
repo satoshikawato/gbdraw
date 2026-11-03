@@ -206,7 +206,7 @@ def test_a_session_stores_the_start_and_replays_the_figure(tmp_path: Path) -> No
     assert "originFeature" not in encoded and "origin_feature" not in encoded
     session = tmp_path / "saved.gbdraw-session.json"
     rotated = _cli_svg(tmp_path, "origin", "--origin_feature", "gene=psbA", "--session_output", str(session))
-    stored = load_session(session)["renderRequest"]
+    stored = load_session(session)["drawings"][0]["renderRequest"]
     assert stored["records"][0]["display"]["startCoordinate"] == _PSBA_START
     assert "originFeature" not in stored["diagramOptions"]
     completed = subprocess.run(

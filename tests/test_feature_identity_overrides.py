@@ -45,6 +45,7 @@ from gbdraw.features.overrides import FeatureOverride, bind_feature_overrides
 from gbdraw.features.ids import compute_feature_hash
 from gbdraw.features.source import FeatureIdentity, IdentityBinding, resolve_feature_identities
 from gbdraw.io.regions import parse_region_spec
+from tests.utils.session_drawing_view import session_view
 
 FIXTURES = Path(__file__).parent / "fixtures"
 INPUTS = Path(__file__).parent / "test_inputs"
@@ -599,7 +600,7 @@ def test_cli_session_replay_applies_rows_and_logs_notices(tmp_path, caplog):
     )
     session = tmp_path / "identity.gbdraw-session.json"
     document = save_session_document(session, request)
-    assert document.to_dict()["renderRequest"]["diagramOptions"]["featureOverrides"] == [
+    assert session_view(document.to_dict())["renderRequest"]["diagramOptions"]["featureOverrides"] == [
         row.to_mapping() for row in request.options.feature_overrides
     ]
     prefix = tmp_path / "replayed"
@@ -657,7 +658,7 @@ def test_session_catalog_of_cropped_same_coordinate_features_beside_another_reco
         "-o", str(tmp_path / "out"), "-f", "svg", "--session_output", str(session),
     ])
 
-    item = json.loads(session.read_text(encoding="utf-8"))["editorState"]["featureCatalog"]["items"][0]
+    item = session_view(json.loads(session.read_text(encoding="utf-8")))["editorState"]["featureCatalog"]["items"][0]
     twins = sorted(
         (feature["svgId"], feature["biologicalFeatureId"])
         for feature in item["features"]

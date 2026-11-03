@@ -9,7 +9,14 @@ const {
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const {
+  CURRENT_REQUEST_SCHEMA: CURRENT_RENDER_REQUEST_SCHEMA,
+  CURRENT_SESSION_VERSION,
+  evaluateWithRetainedPromise,
+  expectSessionLoadedWithoutWarnings,
+  generatedConstant
+} = require('./helpers/app-lifecycle.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const fixtureDir = join(repoRoot, 'tests', 'fixtures', 'sessions');
@@ -21,10 +28,10 @@ const expected = JSON.parse(readFileSync(join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.expected.json'
 ), 'utf8'));
-const CURRENT_SESSION_VERSION = 50;
-const CURRENT_RENDER_REQUEST_SCHEMA = 9;
-const CURRENT_PROTEIN_RAW_SCHEMA = 4;
-const CURRENT_PROTEIN_DERIVED_SCHEMA = 3;
+// The cache and manifest schemas the current writer stores (contracts/schema.generated.js).
+const CURRENT_PROTEIN_RAW_SCHEMA = generatedConstant('PROTEIN_LOSAT_CACHE_SCHEMA');
+const CURRENT_PROTEIN_DERIVED_SCHEMA = generatedConstant('LOSAT_DERIVED_CACHE_SCHEMA');
+const CURRENT_PROTEIN_IDENTITY_MANIFEST_SCHEMA = generatedConstant('PROTEIN_IDENTITY_MANIFEST_SCHEMA');
 
 let sourceSession;
 let savedSessionCount = 0;
@@ -170,6 +177,7 @@ const assertHydratedUtf8PromptBoundary = async (page) => {
 const installUserUploadedTsv = async (page) => page.evaluate(
   async ({ filename, text }) => {
     const bytes = new TextEncoder().encode(text);
+    const { state } = await import('/gbdraw/web/js/state.js');
     const app = window.__GBDRAW_APP__;
     app.losatProgram = 'blastn';
     const file = new File(
@@ -187,7 +195,8 @@ const installUserUploadedTsv = async (page) => page.evaluate(
       fileActive: true,
       losatFilenameActive: false,
       source: 'upload',
-      file,
+      // An edge's file field holds an InputFileRef of the project's file store.
+      file: state.inputFiles.registerFile(file),
       losatFilename: ''
     });
     return Array.from(
@@ -201,7 +210,8 @@ const installUserUploadedTsv = async (page) => page.evaluate(
 );
 
 const readFirstUploadedTsv = async (page) => page.evaluate(async () => {
-  const file = window.__GBDRAW_APP__.linearComparisonPlan.edges[0]?.file;
+  const { state } = await import('/gbdraw/web/js/state.js');
+  const file = state.inputFiles.fileOf(window.__GBDRAW_APP__.linearComparisonPlan.edges[0]?.file);
   const { readFileBytes } = await import('/gbdraw/web/js/services/file-content-cache.js');
   return {
     name: file?.name || '',
@@ -210,11 +220,12 @@ const readFirstUploadedTsv = async (page) => page.evaluate(async () => {
 });
 
 const assertCurrentSessionBoundary = (session) => {
-  const rawEntries = session.losatCache?.entries || [];
-  const derivedEntries = session.losatDerivedCache?.entries || [];
+  const drawing = shownSavedDrawing(session);
+  const rawEntries = drawing.losatCache.entries;
+  const derivedEntries = drawing.losatDerivedCache?.entries || [];
   expect(session.format).toBe('gbdraw-session');
   expect(session.version).toBe(CURRENT_SESSION_VERSION);
-  expect(session.renderRequest?.schema).toBe(CURRENT_RENDER_REQUEST_SCHEMA);
+  expect(drawing.renderRequest.schema).toBe(CURRENT_RENDER_REQUEST_SCHEMA);
   expect(rawEntries.every((entry) => (
     entry?.identityKind !== 'protein' ||
     entry?.schema === CURRENT_PROTEIN_RAW_SCHEMA
@@ -245,13 +256,14 @@ const assertRenamedZeroMtimeResources = (session) => {
 
 const assertCurrentProteinArtifacts = (session) => {
   assertCurrentSessionBoundary(session);
-  const manifest = session.proteinIdentityManifest;
-  const entries = session.losatCache?.entries || [];
-  const derivedEntries = session.losatDerivedCache?.entries || [];
-  expect(manifest?.schema).toBe(2);
+  const drawing = shownSavedDrawing(session);
+  const manifest = drawing.proteinIdentityManifest;
+  const entries = drawing.losatCache.entries;
+  const derivedEntries = drawing.losatDerivedCache?.entries || [];
+  expect(manifest?.schema).toBe(CURRENT_PROTEIN_IDENTITY_MANIFEST_SCHEMA);
   expect(entries).toHaveLength(expected.totalPairs);
   expect(entries.every((entry) => (
-    entry?.schema === 4 &&
+    entry?.schema === CURRENT_PROTEIN_RAW_SCHEMA &&
     entry?.kind === 'raw-losat' &&
     entry?.identityKind === 'protein' &&
     entry?.idEncoding === 'runtime-handle-v1' &&
@@ -684,14 +696,21 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   await importSession(page, fixturePath);
 
   const renamed = await page.evaluate(async () => {
+    // A row's file field holds an InputFileRef of the project's file store;
+    // the store's `fileOf` names the stored file (a File or, after a Session
+    // Load, a Session resource view), and `readFileBytes` reads either, as the app does.
+    const { state } = await import('./js/state.js');
+    const { readFileBytes } = await import('./js/services/file-content-cache.js');
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, state.inputFiles);
     const app = window.__GBDRAW_APP__;
     for (let index = 0; index < app.linearSeqs.length; index += 1) {
-      const source = app.linearSeqs[index].gb;
-      app.linearSeqs[index].gb = new File(
-        [await source.arrayBuffer()],
+      const source = state.inputFiles.fileOf(app.linearSeqs[index].gb);
+      if (!source) throw new Error(`Linear row ${index + 1} holds no loaded GenBank file.`);
+      app.linearSeqs[index].gb = bound(new File(
+        [await readFileBytes(source)],
         `renamed-cache-input-${index + 1}.gbk`,
         { type: source.type || 'text/plain', lastModified: 0 }
-      );
+      ));
     }
     return app.linearSeqs.map((record) => ({
       name: record.gb.name,
@@ -768,7 +787,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
 
   const expectedUploadBytes = await installUserUploadedTsv(page);
   const uploadedSessionPath = await saveSession(page);
-  expect(readSession(uploadedSessionPath).losatDerivedCache?.entries || []).toEqual([]);
+  expect(shownSavedDrawing(readSession(uploadedSessionPath)).losatDerivedCache?.entries || []).toEqual([]);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, uploadedSessionPath);

@@ -19036,6 +19036,49 @@
    }
   },
   {
+   "id": "sparse-config-flat-null-blacklist",
+   "base": "HmmtDNA_basic_circular@10d3a3d2",
+   "edits": [
+    {
+     "path": [
+      "diagramOptions",
+      "config"
+     ],
+     "delete": true
+    },
+    {
+     "path": [
+      "diagramOptions",
+      "configOverrides"
+     ],
+     "value": {
+      "label_blacklist": null,
+      "show_gc": null
+     }
+    }
+   ],
+   "expect": {
+    "values": [
+     [
+      [
+       "diagramOptions",
+       "configOverrides"
+      ],
+      {
+       "label_blacklist": null,
+       "show_gc": null,
+       "canvas.show_gc": true,
+       "canvas.show_skew": true
+      }
+     ]
+    ],
+    "repairs": []
+   },
+   "python": {
+    "equal": true
+   }
+  },
+  {
    "id": "sparse-comparison-and-shape-defaults",
    "base": "HmmtDNA_basic_circular@6b89c781",
    "edits": [

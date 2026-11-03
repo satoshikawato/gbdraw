@@ -2,6 +2,8 @@ const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 // F-4 (OD-3, #694): a LOSAT derived payload holds the displayed direction of
 // each record pair and, for Collinear blocks, whether a CLI grid limits the
@@ -150,7 +152,7 @@ const PAIR_SOURCES = [
 const openSimilarityGroups = async (page, rows) => {
   await installProteinExecutor(page);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   for (const [index, source] of PAIR_SOURCES.entries()) {
     if (index > 0) await page.getByRole('button', { name: 'Add sequence' }).first().click();
     const chooser = page.waitForEvent('filechooser');
@@ -269,7 +271,7 @@ const ORIGIN_SOURCES = [
 const openOriginCds = async (page, mode) => {
   await installProteinExecutor(page);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   for (const [index, source] of ORIGIN_SOURCES.entries()) {
     if (index > 0) await page.getByRole('button', { name: 'Add sequence' }).first().click();
     const chooser = page.waitForEvent('filechooser');
@@ -381,18 +383,18 @@ test('The Web reuses every raw LOSATP search of a CLI Session over a multi-recor
   expect(run.links.length).toBeGreaterThan(0);
 
   const session = JSON.parse(readFileSync(sessionPath, 'utf8'));
-  expect(session.renderRequest.records.map((record) => [record.source.resourceId, record.selector]))
+  expect(shownSavedDrawing(session).renderRequest.records.map((record) => [record.source.resourceId, record.selector]))
     .toEqual([
       ['record-1-genbank', { kind: 'recordId', value: 'FileA1' }],
       ['record-1-genbank', { kind: 'recordId', value: 'FileA2' }],
       ['record-3-genbank', null]
     ]);
   // Nine record-pair entries; the four between the files carry the file database.
-  expect(session.losatCache.entries).toHaveLength(9);
-  expect(session.losatCache.entries.filter((entry) => entry.searchContext)).toHaveLength(4);
+  expect(shownSavedDrawing(session).losatCache.entries).toHaveLength(9);
+  expect(shownSavedDrawing(session).losatCache.entries.filter((entry) => entry.searchContext)).toHaveLength(4);
 
   // Run Info shows the runtime that the CLI recorded (D9/D10), with its path.
-  const recorded = session.losatCache.entries[0].runtime;
+  const recorded = shownSavedDrawing(session).losatCache.entries[0].runtime;
   expect(recorded).toMatchObject({ kind: 'losat', source: 'explicit', program: 'blastp' });
   const runtimes = await page.evaluate(() => (
     JSON.parse(JSON.stringify(window.__GBDRAW_APP__.lastRunInfo.losatRuntimes))

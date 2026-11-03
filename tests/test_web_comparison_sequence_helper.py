@@ -19,6 +19,7 @@ from gbdraw.io.comparison_sequences import read_comparison_sequence_file
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.error_adapter import serialize_web_error
 from tests.test_comparison_sequences import ddbj_flat_file
+from tests.utils.session_drawing_view import drawing_view
 from tests.test_losat_linear_nucleotide import _fake_losat, _fresh_probe_caches, _searches  # noqa: F401
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -141,7 +142,7 @@ def test_helper_query_has_the_cli_ring_raw_key(tmp_path: Path) -> None:
     # One genome in three layouts is one raw key: one search, one entry.
     assert len(_searches(log)) == 1
     session = json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8"))
-    entries = session["losatCache"]["entries"]
+    entries = drawing_view(session)["losatCache"]["entries"]
     assert {entry["queryCanonicalHash"] for entry in entries} == helper_hashes
     for entry in entries:
         assert entry["key"] == nucleotide_losat_cache_key(

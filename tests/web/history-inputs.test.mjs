@@ -21,6 +21,11 @@ for (const name of ['history.js', 'history-files.js', 'runtime-test-hooks.js']) 
     await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', name), 'utf8')
   );
 }
+await mkdir(join(tempDir, 'utils'), { recursive: true });
+await writeFile(
+  join(tempDir, 'utils', 'error-normalization.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8')
+);
 const { createHistoryManager } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
 
 const createSelectHarness = async (attributes = {}) => {

@@ -18,6 +18,7 @@ from gbdraw.api.requests import (
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.session import build_session_document
+from tests.utils.session_drawing_view import session_view
 from gbdraw.web_support.feature_catalog import build_feature_catalog_item
 from gbdraw.web_support.request_render import (
     render_embedded_canonical_web_request,
@@ -172,7 +173,7 @@ def test_renderer_emits_unique_catalog_refs_for_exact_feature_collisions(
     tmp_path: Path,
 ) -> None:
     source = _colliding_record()
-    document = build_session_document(
+    document = session_view(build_session_document(
         CircularDiagramRequest(
             records=(_input(source),),
             output=RenderOutputRequest(
@@ -180,7 +181,7 @@ def test_renderer_emits_unique_catalog_refs_for_exact_feature_collisions(
                 formats=("svg",),
             ),
         )
-    ).to_dict()
+    ).to_dict())
 
     response = render_embedded_canonical_web_request(
         document["renderRequest"],

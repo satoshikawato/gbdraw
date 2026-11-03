@@ -777,7 +777,7 @@ def test_the_web_reply_names_the_rows(tmp_path: Path) -> None:
             )
         ).to_dict()
         return render_embedded_canonical_web_request(
-            document["renderRequest"], resources=document["resources"], workspace=tmp_path / "workspace"
+            document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "workspace"
         )["metadata"]
 
     assert reply(**{WRAP: "auto"})["linearWrap"] == [

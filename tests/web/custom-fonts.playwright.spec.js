@@ -3,6 +3,7 @@ const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { resolve } = require('node:path');
 const { readFileSync, writeFileSync } = require('node:fs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const {
   openApp, reveal, generateAndWaitForResult, expectSessionLoadedWithoutWarnings, assertSessionLoadLeftWorkerIdle
 } = require('./helpers/app-lifecycle.cjs');
@@ -177,9 +178,10 @@ test('a Session with a font that is not available asks first, and Load with the 
   test.setTimeout(300_000);
   const MISSING = "'Garamond Premier Pro', serif";
   const session = JSON.parse(readFileSync(SESSION, 'utf8'));
-  session.modes.circular.config.adv.font_family = MISSING;
-  session.renderRequest.diagramOptions.configOverrides = {
-    ...session.renderRequest.diagramOptions.configOverrides, 'objects.text.font_family': MISSING
+  const drawing = shownSavedDrawing(session);
+  drawing.config.adv.font_family = MISSING;
+  drawing.renderRequest.diagramOptions.configOverrides = {
+    ...drawing.renderRequest.diagramOptions.configOverrides, 'objects.text.font_family': MISSING
   };
   const sessionFile = testInfo.outputPath('garamond.gbdraw-session.json');
   writeFileSync(sessionFile, JSON.stringify(session));

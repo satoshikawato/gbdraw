@@ -71,7 +71,6 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  * The refs and reactive objects of `state.js` this module reads. A ref is
  * `{ value }` because Vue comes from `window.Vue`, which is `any`.
  * @typedef {object} LosatSettingsState
- * @property {LinearSeq[]} linearSeqs
  * @property {() => LosatSettingsDrawing} activeDrawing
  * @property {LosatExecutionValues} losatExecution
  * @property {{ value?: { state?: string } }} [losatThreadingStatus]
@@ -84,16 +83,14 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  * @property {LosatSettingsValues} losat
  * @property {{ value: string }} losatProgram
  * @property {readonly string[]} [recordsOff]
+ * @property {readonly LinearSeq[]} linearSeqs its record rows
  */
 
 /**
  * @param {{ state: LosatSettingsState }} options
  */
 export const createLosatSettings = ({ state }) => {
-  const {
-    linearSeqs,
-    losatExecution
-  } = state;
+  const { losatExecution } = state;
 
   // `state.js` always provides the computed plan.
   /** @param {LosatSettingsDrawing} drawing */
@@ -118,8 +115,8 @@ export const createLosatSettings = ({ state }) => {
     if (resolution.valid === false || !resolution.hasLosatIntent) return 0;
     const program = drawing.losatProgram.value;
     try {
-      const drawn = drawnLinearSequences(linearSeqs, drawing.recordsOff);
-      const search = losatSearchSequences(drawn, linearSeqs);
+      const drawn = drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff);
+      const search = losatSearchSequences(drawn, drawing.linearSeqs);
       const specs = buildLosatJobSpecs({
         resolution,
         recordCount: drawn.length,

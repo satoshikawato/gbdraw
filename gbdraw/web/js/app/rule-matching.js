@@ -11,6 +11,7 @@ import {
 /** @import { FeatureLike } from '../services/feature-utils.js' */
 /** @import { ColorRule, RuleFeature, VisibilityRule } from '../services/rule-matchers.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { DrawingState, LinearSeq } from '../state.js' */
 /** @import { JoinedLegendRow, RuleFeaturePayload, SynthesizeColorRulesRequest, SynthesizedColorRules } from '../contracts/rule-synthesis.generated.js' */
 
 // A feature of a catalog before schema 5 has no drawn selector values. Where
@@ -313,27 +314,36 @@ export const createRulePreparation = ({
   const drawingInputs = Object.entries(drawingInputReaders).map(([key, read]) => (
     /** @type {[string, { value: string }]} */ ([key, computed(() => JSON.stringify(read(state.activeDrawing())))])
   ));
+  // The shown drawing's inputs only: its rows match on its own input type,
+  // records, and cards, never another drawing's (R16-4).
   /** @returns {RuleInputsSnapshot} */
-  const snapshot = () => ({
-    catalog: state.extractedFeatures.value,
-    biology: state.biologicalFeatures?.value,
-    result: state.svgResultIdentity?.value,
-    mode: state.mode?.value,
-    inputKinds: JSON.stringify([state.cInputType?.value, state.lInputType?.value]),
-    file: state.files?.t_color,
-    linearFiles: [...(state.linearSeqs || [])].flatMap(sequence => [sequence.gb, sequence.gff, sequence.fasta]),
-    resultNames: JSON.stringify((state.results?.value || []).map((/** @type {{ name?: unknown }} */ result) => result.name)),
-    selectedResult: state.selectedResultIndex?.value,
-    ...Object.fromEntries(drawingInputs.map(([key, input]) => [key, input.value])),
-    // Physical source, palette, and selector inputs retain their identity while
-    // request-owned comparison artifacts are published independently.
-    inputFiles: [
-      state.files?.c_gb, state.files?.c_gff, state.files?.c_fasta, state.files?.c_depth,
-      state.files?.d_color, state.files?.blacklist, state.files?.whitelist, state.files?.qualifier_priority,
-      state.files?.c_conservation_blasts, state.files?.c_conservation_blasts_source,
-      state.files?.c_conservation_fastas, state.files?.c_conservation_sequence_sources
-    ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
-  });
+  const snapshot = () => {
+    /** @type {DrawingState} */
+    const drawing = state.activeDrawing();
+    const { files } = drawing;
+    return {
+      catalog: state.extractedFeatures.value,
+      biology: state.biologicalFeatures?.value,
+      result: state.svgResultIdentity?.value,
+      mode: state.mode?.value,
+      inputKind: drawing.inputType.value,
+      // The Specific rules file (R16-4).
+      file: files.t_color,
+      linearFiles: drawing.linearSeqs
+        .flatMap((/** @type {LinearSeq} */ sequence) => [sequence.gb, sequence.gff, sequence.fasta]),
+      resultNames: JSON.stringify((state.results?.value || []).map((/** @type {{ name?: unknown }} */ result) => result.name)),
+      selectedResult: state.selectedResultIndex?.value,
+      ...Object.fromEntries(drawingInputs.map(([key, input]) => [key, input.value])),
+      // Physical source, palette, and selector inputs retain their identity while
+      // request-owned comparison artifacts are published independently.
+      inputFiles: /** @type {unknown[]} */ ([
+        files.c_gb, files.c_gff, files.c_fasta, files.c_depth,
+        files.c_conservation_blasts, files.c_conservation_blasts_source,
+        files.c_conservation_fastas, files.c_conservation_sequence_sources,
+        files.d_color, files.blacklist, files.whitelist, files.qualifier_priority
+      ]).flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
+    };
+  };
   /** @type {RulePreparation['isCurrent']} */
   const isCurrent = (before) => {
     const after = snapshot();

@@ -1,3 +1,4 @@
+import { pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
@@ -5,6 +6,8 @@ import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -21,10 +24,15 @@ globalThis.File = File;
 globalThis.alert = () => {};
 
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { importSession } = callerSession(sessionConfig, state);
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const session = await readFile(
   'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
   'utf8'
@@ -37,18 +45,32 @@ const imported = await importSession({
 });
 
 assert.equal(imported.status, 'ok');
-assert.equal(state.files.c_gb instanceof File, false);
-assert.equal(typeof state.files.c_gb.arrayBuffer, 'undefined');
-assert.ok(Object.isFrozen(state.files.c_gb));
+const circularGenome = modeDrawing(state, 'circular').files.c_gb;
+assert.equal(circularGenome instanceof File, false);
+assert.equal(typeof circularGenome.arrayBuffer, 'undefined');
+assert.ok(Object.isFrozen(circularGenome));
 assert.ok(state.extractedFeatures.value.length > 0);
-assert.equal(state.featureEditorStatus.status, 'summary-ready');
-assert.equal(state.featureEditorStatusText.value, `${state.extractedFeatures.value.length} features ready`);
+assert.deepEqual(state.featureEditorStatus.value, { status: 'summary-ready', error: null });
 assert.equal(state.featureExtractionPending.value, false);
-assert.equal(state.featureExtractionError.value, null);
+const loadedFeatureCount = state.extractedFeatures.value.length;
+assert.equal(state.featureEditorStatusText.value, `${loadedFeatureCount} features ready`);
 
-// The Legend edits are the Circular drawing's (Session 46 `modes.circular`).
+// OV-1762: the Editor's feature count is the shown drawing's (its `extractedFeatures`), not the count the
+// last Load or Generate in any drawing wrote. A drawing switch swaps the artifact slots.
+const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const slotSnapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value });
+// The Load made no Linear drawing (D-15-120); the offer tab makes it.
+(await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder())();
+const circularSlot = slotSnapshots.captureArtifactSlot();
+slotSnapshots.installArtifactSlot(null, { drawing: modeDrawing(state, 'linear') });
+assert.equal(state.featureEditorStatusText.value, 'No features ready', 'the Linear drawing has no Result');
+slotSnapshots.installArtifactSlot(circularSlot, { drawing: modeDrawing(state, 'circular') });
+assert.equal(state.featureEditorStatusText.value, `${loadedFeatureCount} features ready`);
+
+// The Legend edits are the shown Circular drawing's (Session 49 `drawings[]`, by ID).
 const maliciousLegendSession = JSON.parse(session);
-const circularSlice = maliciousLegendSession.modes.circular;
+const circularSlice = maliciousLegendSession.drawings.find((entry) => entry.id === maliciousLegendSession.ui.activeDrawingId);
 circularSlice.editorState = { ...(circularSlice.editorState || {}) };
 circularSlice.editorState.legend = {
   entries: [{

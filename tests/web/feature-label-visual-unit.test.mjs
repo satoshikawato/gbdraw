@@ -73,7 +73,6 @@ const buildHarness = ({
   const mutations = { commit: 0 };
   const state = {
     mode: ref('linear'),
-    generatedMode: ref('linear'),
     results: ref([{ content: '<svg></svg>' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? svg : null) }),
@@ -1045,7 +1044,6 @@ test('a curved Circular region label is never an editable feature label (OV-1210
   ].join(''), 'image/svg+xml').documentElement;
   const harness = buildHarness({ svg, featureId: 'labeled' });
   harness.state.mode.value = 'circular';
-  harness.state.generatedMode.value = 'circular';
   harness.state.extractedFeatures.value = [featureFor('labeled'), featureFor('unlabeled')];
   harness.actions.syncLabelEditor();
   const byId = (id) => svg.querySelector(`#${id}`);

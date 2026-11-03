@@ -4,6 +4,7 @@
 // notes the user sees.
 const { test, expect } = require('@playwright/test');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { load, seeds } = require('./helpers/mode-transition.cjs');
 const { clocksIn, clockNotes } = require('./helpers/timing-notes.cjs');
 
@@ -20,8 +21,7 @@ test('the Layout card says its settings apply on Generate, the track toggles are
     ['linear', ['Show GC Content', 'Show GC Skew', 'Show Depth']],
     ['circular', ['Hide GC Content', 'Hide GC Skew', 'Show Depth']]
   ]) {
-    await page.locator(`button.app-mode-button[aria-label="${mode === 'linear' ? 'Linear' : 'Circular'}"]`).click();
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
+    await showDrawing(page, { kind: mode });
     const layout = await openLayout(page);
     // The clock sits in the section's heading, named Applies on Generate.
     const layoutNote = layout.locator(':scope > details > summary [data-applies-on-generate="layout"]');

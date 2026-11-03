@@ -1,0 +1,112 @@
+{
+  "purpose": "Positive fixture of a released-Web Session 48 with BOTH diagram modes used (Circular and Linear) and Linear shown, for DRAWINGS-B's Session 48 to 49 migration (failing-first case).",
+  "history": "tag v0.14.0, first-parent main, 9fdab5f4d (Session 48 as written by the released Web app)",
+  "route": [
+    "Web app at v0.14.0 (detached worktree at the tag, browser wheel prepared), fresh page, Circular mode",
+    "Circular: upload tests/test_inputs/SARS-CoV-2.gbk into 'GenBank/DDBJ File'",
+    "Circular: Default colors card file default-colors.tsv (CDS #123456, tRNA #654321), wait for the import",
+    "Circular: changed setting form.track_type = 'tuckin' (labels_mode 'out' failed with LABEL_LAYOUT, so not used)",
+    "Circular: Generate (runAnalysis, status ok)",
+    "Click Linear; set two GenBank files via setLinearSeqPrimaryFile (SARS-CoV-1.gbk, SARS-CoV-2.gbk), lInputType gb",
+    "Linear: setLinearComparisonGlobalAction('losat'); losatExecution.executionMode = 'serial' (headless Chromium has no SharedArrayBuffer, so the default threaded mode fails with LOSAT_THREADING_UNAVAILABLE); form.show_labels_linear = 'first' to reveal the label filter",
+    "Linear: open the Labels disclosure, click Blacklist, upload blacklist.txt ('hypothetical'), wait for the import, then form.show_labels_linear = 'none' (first-record labels failed with LABEL_LAYOUT)",
+    "Linear: Generate (LOSAT blastn megablast run in the browser, status ok); Linear stays shown",
+    "exportSession('two-mode linear shown') from services/config.js; the blob bytes are written unchanged"
+  ],
+  "script": "generate-v48-two-mode.playwright.spec.js (this folder)",
+  "command": "copy the script to tests/web/ of the v0.14.0 worktree, run GBDRAW_WEB_TEST_PORT=5211 V48_FIXTURE_OUT=<path> playwright test tests/web/generate-v48-two-mode.playwright.spec.js --workers=1 through heavy, then delete the copy",
+  "inputs": {
+    "tests/test_inputs/SARS-CoV-2.gbk": "87744b176aa9ce71350c8becf0d062950dbc485a59766fcfe723ec859f6b6d5c",
+    "tests/test_inputs/SARS-CoV-1.gbk": "69118f0140697ea87f56c08ce604714375a18f1b27594864a00c1d980d804a4a",
+    "Default colors file (Circular)": "CDS\\t#123456\\ntRNA\\t#654321\\n",
+    "Blacklist File (Linear)": "hypothetical\\n"
+  },
+  "compression": "the Web writer's gzip, kept unchanged (starts 1f8b)",
+  "fixtures": {
+    "two-mode-linear-shown.v48.gbdraw-session.json.gz": {
+      "sessionVersion": 48,
+      "compressedBytes": 119490,
+      "decompressedBytes": 418532,
+      "decompressedSha256": "23db8500f3cbc0866805185bdee17201988e9c8a875ed73c7c9a4d310b459540"
+    }
+  },
+  "checks": {
+    "version==48": true,
+    "ui.mode": "linear",
+    "modes keys": [
+      "circular",
+      "linear"
+    ],
+    "circular fileImports.d_color": true,
+    "linear fileImports.blacklist": true,
+    "webFiles.bindings d_color / blacklist non-null": [
+      true,
+      true
+    ],
+    "losatCache.entries": 1,
+    "NOTE": "In v48 the per-mode renderRequest and results are NOT under modes.*: only the shown mode's (Linear) top-level renderRequest (mode linear) and results[1] are saved; modes.circular holds config/features/editorState/ui only. No otherModeResult (its shape accepts only versions 27-30). So the brief's check 'both modes have a renderRequest and results' cannot hold for the format."
+  },
+  "keySummary": {
+    "top": [
+      "format",
+      "version",
+      "createdAt",
+      "title",
+      "ui",
+      "renderRequest",
+      "resources",
+      "webFiles",
+      "results",
+      "runMetadata",
+      "editorState",
+      "orthogroupState",
+      "modes",
+      "losatCache",
+      "losatDerivedCache",
+      "proteinIdentityManifest"
+    ],
+    "modes.circular": [
+      "config",
+      "features",
+      "editorState",
+      "ui"
+    ],
+    "modes.linear": [
+      "config",
+      "features",
+      "editorState",
+      "ui"
+    ],
+    "ui": [
+      "mode",
+      "zoom",
+      "canvasPan",
+      "selectedResultIndex",
+      "generatedLegendPosition",
+      "generatedMultiRecordCanvas",
+      "generatedCircularPlotTitlePosition",
+      "featurePanelTab",
+      "cInputType",
+      "lInputType",
+      "downloadDpi",
+      "autoLabelReflow",
+      "paletteInstantPreviewEnabled",
+      "appliedPaletteName",
+      "appliedPaletteColors",
+      "losatExecution",
+      "richFeaturePopup"
+    ],
+    "counts": {
+      "results": 1,
+      "renderRequest.records": 2,
+      "resources": 5,
+      "losatCache.entries": 1,
+      "circular config fileImports keys": [
+        "d_color"
+      ],
+      "linear config fileImports keys": [
+        "blacklist"
+      ]
+    }
+  }
+}

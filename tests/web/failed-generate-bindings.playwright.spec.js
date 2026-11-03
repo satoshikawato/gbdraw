@@ -3,11 +3,12 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { answerChoicePrompt, answerSessionTitle, openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
-const loadedAnnotationCount = JSON.parse(require('node:fs').readFileSync(fixture, 'utf8'))
-  .modes.circular.config.annotationSets.reduce((total, set) => total + set.annotations.length, 0);
+const loadedAnnotationCount = shownSavedDrawing(JSON.parse(require('node:fs').readFileSync(fixture, 'utf8')))
+  .config.annotationSets.reduce((total, set) => total + set.annotations.length, 0);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const input = 'input[accept^=".json,"]';
 
@@ -111,12 +112,14 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
   expect(workerAfterSaveAndExport.settledHelpers).toBe(workerAfterSaveAndExport.helpers);
   expect(workerAfterSaveAndExport.settledRuns).toBe(workerAfterSaveAndExport.runs);
   expect(resourceHashes(failedSaved)).toEqual(resourceHashes(beforeSaved));
-  expect(failedSaved.renderRequest).toEqual(beforeSaved.renderRequest);
-  expect(failedSaved.results).toEqual(beforeSaved.results);
-  expect(failedSaved.modes.circular.config.adv.circular_track_slots.find(row => row.id === 'gc_content').width)
-    .toEqual(beforeSaved.modes.circular.config.adv.circular_track_slots.find(row => row.id === 'gc_content').width);
-  expect(failedSaved.modes.circular.config.adv.multi_record_positions).toEqual(failed.positions);
-  expect(failedSaved.modes.circular.config.annotationSets.flatMap(set => set.annotations.map(annotation =>
+  const failedDrawing = savedDrawing(failedSaved, 'circular');
+  const beforeDrawing = savedDrawing(beforeSaved, 'circular');
+  expect(failedDrawing.renderRequest).toEqual(beforeDrawing.renderRequest);
+  expect(failedDrawing.results).toEqual(beforeDrawing.results);
+  expect(failedDrawing.config.adv.circular_track_slots.find(row => row.id === 'gc_content').width)
+    .toEqual(beforeDrawing.config.adv.circular_track_slots.find(row => row.id === 'gc_content').width);
+  expect(failedDrawing.config.adv.multi_record_positions).toEqual(failed.positions);
+  expect(failedDrawing.config.annotationSets.flatMap(set => set.annotations.map(annotation =>
     annotation.metadata?._gbdraw_web_target_record_key))).toEqual(keys);
 
   const freshContext = await browser.newContext({ baseURL, acceptDownloads: true });
@@ -132,8 +135,8 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
     expect(await exportSvg(fresh)).toBe(oldExport);
     const resaved = await save(fresh, info.outputPath('reloaded.gbdraw-session.json.gz'));
     expect(resourceHashes(resaved)).toEqual(resourceHashes(beforeSaved));
-    expect(resaved.renderRequest).toEqual(beforeSaved.renderRequest);
-    expect(resaved.results).toEqual(beforeSaved.results);
+    expect(savedDrawing(resaved, 'circular').renderRequest).toEqual(savedDrawing(beforeSaved, 'circular').renderRequest);
+    expect(savedDrawing(resaved, 'circular').results).toEqual(savedDrawing(beforeSaved, 'circular').results);
   } finally {
     await freshContext.close();
   }
@@ -204,8 +207,8 @@ test('canceled post-response Generate keeps valid bindings and old artifact thro
     && annotation.key?.endsWith('::[0,"NC_001879.2",155943]'))).toBe(true);
   const canceledFile = info.outputPath('canceled.gbdraw-session.json.gz');
   const saved = await save(page, canceledFile);
-  expect(saved.renderRequest).toEqual(before.request);
-  expect(saved.modes.circular.config.adv.multi_record_positions).toEqual(canceled.positions);
+  expect(savedDrawing(saved, 'circular').renderRequest).toEqual(before.request);
+  expect(savedDrawing(saved, 'circular').config.adv.multi_record_positions).toEqual(canceled.positions);
   expect(await exportSvg(page)).toBe(oldExport);
   const freshContext = await browser.newContext({ baseURL, acceptDownloads: true });
   try {
@@ -251,9 +254,9 @@ test('failed multi-record Generate retains a validated binding to the selected s
   page.on('dialog', dialog => dialog.accept());
   await page.addInitScript(() => { window.__GBDRAW_TEST_HOOKS__ = {}; });
   await openApp(page);
-  await page.evaluate(content => {
+  await page.evaluate(async content => {
     const app = window.__GBDRAW_APP__;
-    app.files.c_gb = new File([content], 'two-records.gb', { type: 'text/plain', lastModified: 1 });
+    app.setCircularSourceFile('c_gb', new File([content], 'two-records.gb', { type: 'text/plain', lastModified: 1 }));
     Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'none' });
     const set = app.addAnnotationSet('s04');
     const annotation = app.addCoordinateAnnotation(set, { start: 1, end: 10 });
@@ -292,8 +295,8 @@ test('failed multi-record Generate retains a validated binding to the selected s
   const failedFile = info.outputPath('multi-failed.gbdraw-session.json.gz');
   const failedSaved = await save(page, failedFile, { again: true });
   expect(resourceHashes(failedSaved)).toEqual(resourceHashes(beforeSaved));
-  expect(failedSaved.renderRequest).toEqual(beforeSaved.renderRequest);
-  expect(failedSaved.results).toEqual(beforeSaved.results);
+  expect(savedDrawing(failedSaved, 'circular').renderRequest).toEqual(savedDrawing(beforeSaved, 'circular').renderRequest);
+  expect(savedDrawing(failedSaved, 'circular').results).toEqual(savedDrawing(beforeSaved, 'circular').results);
   const freshContext = await browser.newContext({ baseURL, acceptDownloads: true });
   try {
     const fresh = await freshContext.newPage();

@@ -173,6 +173,7 @@ const readState = (page) => page.evaluate(async () => {
   })).sort((left, right) => (left.label < right.label ? -1 : left.label > right.label ? 1 : 0));
   return {
     drawing: state.activeDrawing().id,
+    mode: state.activeDrawing().mode,
     features,
     resultCount: app.results.length,
     resultIndex: app.selectedResultIndex,
@@ -280,7 +281,7 @@ export const nextStep = (random, state, kind, { fixture, canUndo }) => {
       if (!others.length) throw new Error(`a Result switch needs two Results; the drawing shows ${state.resultCount}`);
       return { kind, index: random.pick(others) };
     }
-    case 'drawingSwitch': return { kind, drawing: otherMode(state.drawing) };
+    case 'drawingSwitch': return { kind, mode: otherMode(state.mode) };
     case 'reset':
     case 'load':
       return { kind };
@@ -590,7 +591,7 @@ const resetKeepingGenerateSettings = async (page) => {
 const runStep = async (page, step, sessionPath) => {
   switch (step.kind) {
     case 'resultSwitch': await showResult(page, step.index); return [];
-    case 'drawingSwitch': await switchDrawing(page, step.drawing); return [];
+    case 'drawingSwitch': await switchDrawing(page, step.mode); return [];
     // A click on Save Session behind an open dialog has no timeout of its own.
     case 'load': await withinStepTimeout(page, () => saveAndLoad(page, sessionPath)); return [];
     case 'reset': return resetKeepingGenerateSettings(page);
@@ -671,7 +672,7 @@ export const whyNotApplicable = (step, state, { canUndo }) => {
     case 'undo': case 'undoRedo': return step.prepare || canUndo ? '' : 'Undo is at its floor';
     case 'resultSwitch':
       return step.index < state.resultCount && step.index !== state.resultIndex ? '' : `Result ${step.index} is shown or absent`;
-    case 'drawingSwitch': return step.drawing !== state.drawing ? '' : `the ${step.drawing} drawing is shown`;
+    case 'drawingSwitch': return step.mode !== state.mode ? '' : `the ${step.mode} drawing is shown`;
     default: return '';
   }
 };

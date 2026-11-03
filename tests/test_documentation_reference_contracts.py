@@ -17,7 +17,7 @@ from gbdraw.io.cli_tables import (
     _CONSERVATION_COLUMNS,
     _RECORDS_COLUMNS,
 )
-from gbdraw.session_io import CURRENT_SESSION_VERSION, SUPPORTED_SESSION_VERSIONS
+from gbdraw.session_io import CURRENT_SESSION_VERSION, MODE_SCOPED_SESSION_MAX_VERSION, SUPPORTED_SESSION_VERSIONS
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
@@ -93,10 +93,10 @@ def test_session_reference_matches_current_implementation_constants() -> None:
     assert f"session version {CURRENT_SESSION_VERSION}" in source
     assert f"`renderRequest` schema {CANONICAL_REQUEST_SCHEMA}" in source
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49, 50}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49, 50, 51}
     )
     assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7, 8, 9})
-    assert "27–33, 39–42, 44, and 46–50" in source
+    assert "27–33, 39–42, 44, and 46–51" in source
     assert "1, 2, 5, 6, 7, 8, and 9" in source
 
 
@@ -104,14 +104,15 @@ def test_reference_pages_name_the_current_session_version() -> None:
     """OV-1243: three pages named Session 46 or 47 as current after the writer moved to 48."""
 
     current = CURRENT_SESSION_VERSION
+    mode_scoped = MODE_SCOPED_SESSION_MAX_VERSION
     statements = {
-        "command-line.md": f"Session {current} holds at most",
+        "command-line.md": f"Sessions 46 to {mode_scoped} hold at most",
         "typed-requests.md": f"The current Session version, {current}, holds",
         "web-app.md": f"(Session {current}, [compatibility]",
     }
     for page, statement in statements.items():
         assert statement in _read(page), page
-    assert f"rejects what version {current} cannot hold" in _read("typed-requests.md")
+    assert f"rejects what version {mode_scoped} cannot hold" in _read("typed-requests.md")
 
 
 def test_input_reference_lists_parser_owned_table_columns() -> None:

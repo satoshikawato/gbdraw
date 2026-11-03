@@ -5,6 +5,7 @@
 // identity fails the table (see the last test). The derived protein payload
 // identity has its Python owner and its table in
 // tests/test_derived_losatp_identity.py (OV-1063).
+import { createTestInputStore } from './helpers/input-files.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -96,7 +97,8 @@ test('raw LOSAT search identity changes with every scientific input (G-F(1))', a
 });
 
 test('a source batch searches a different database when a record of it changes (G-F(1))', async () => {
-  const sources = { a: { name: 'a.gb' }, b: { name: 'b.gb' } };
+  const inputFiles = createTestInputStore();
+  const sources = { a: inputFiles.registerFile({ name: 'a.gb', size: 0 }), b: inputFiles.registerFile({ name: 'b.gb', size: 0 }) };
   const hashText = async (text) => createHash('sha256').update(text).digest('hex');
   const contexts = async (uids, specs, fastaFor) => (await prepareLosatSourceBatches({
     sequences: uids.map((uid) => ({ uid, gb: sources[uid[0]], gff: null, fasta: null })), specs,

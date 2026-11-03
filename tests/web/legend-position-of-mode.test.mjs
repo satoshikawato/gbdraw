@@ -20,6 +20,7 @@ globalThis.window = {
 
 const webRoot = join(process.cwd(), 'gbdraw', 'web');
 const { state, createDefaultForm } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const layout = await import('../../gbdraw/web/js/services/layout-preferences.js');
 const { SETTINGS_SLICE } = await import('../../gbdraw/web/js/services/drawing/settings.js');
 const { LEGEND_POSITIONS } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
@@ -158,7 +159,7 @@ test('a drawing never holds a position outside its mode: the Position control an
 test('a stored generated position outside its mode reads as the side an unset one had', () => {
   const read = (generatedMode, generatedLegendPosition) => {
     state.generatedLegendPosition.value = 'right';
-    applyUiStateData(modeDrawing(state, generatedMode), { generatedMode, generatedLegendPosition });
+    applyUiStateData(modeDrawing(state, generatedMode), { generatedDrawingId: modeDrawing(state, generatedMode).id, generatedLegendPosition });
     return state.generatedLegendPosition.value;
   };
   assert.equal(read('linear', 'Upper_Left'), 'bottom');
@@ -190,9 +191,9 @@ const genbank = () => ({
 // The request of `mode` from `drawing` (default: that mode's drawing), as Generate builds it.
 const requestLegend = (mode, drawing = modeDrawing(state, mode)) => {
   installShownDrawing(mode);
-  state.cInputType.value = 'gb';
-  state.lInputType.value = 'gb';
-  state.circularRecordList.value = [];
+  modeDrawing(state, 'circular').inputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
+  drawing.circularRecordList.value = [];
   const filesData = mode === 'circular'
     ? { c_gb: genbank(), linearSeqs: [] }
     : {

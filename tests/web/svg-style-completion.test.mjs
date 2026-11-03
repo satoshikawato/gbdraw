@@ -17,7 +17,7 @@ test('a palette keeps the skew slot colors of the request that drew the displaye
   const circular = draft('circular', { positive_color: '#00aa00' });
   const linear = draft('linear', { negative_color: '#0000aa' });
   withModeDrawings(state, { circular, linear });
-  state.generatedMode = { value: 'circular' };
+  state.generatedDrawingId = { value: 'circular' };
   state.mode.value = 'linear';
   actions.applyPaletteToSvg();
   assert.deepEqual(skewFills, ['#112233', '#445566']);

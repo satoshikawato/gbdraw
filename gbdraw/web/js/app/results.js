@@ -315,6 +315,8 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
   return {
     importDefaultColors,
     removeImportedDefaultColors,
+    /** The colors of a drawing's palette (a style copy takes back a Default colors file with them). @param {ResultsManagerDrawing} drawing */
+    paletteColorsOf: (drawing) => getPaletteBaseColors(paletteNameOf(drawing)),
     requestPaletteChange,
     selectPalette,
     requestResetColors,

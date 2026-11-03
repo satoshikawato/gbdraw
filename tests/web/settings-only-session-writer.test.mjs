@@ -4,6 +4,8 @@ import { gunzipSync } from 'node:zlib';
 import { readFile } from 'node:fs/promises';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
 
 // Exercise the existing coordinator and gzip writer with browser I/O stubbed.
 globalThis.window = {
@@ -21,7 +23,7 @@ globalThis.document = {
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { SESSION_VERSION, buildConfigData, installShownDrawing } = sessionConfig;
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 globalThis.alert = () => {};
 installSessionImportWorker();
 const { adoptCurrentSessionDocument, validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
@@ -36,19 +38,35 @@ const savedDocument = async title => {
 // Load and fail the check.
 const refuseLoadDialog = async () => false;
 
+// A Session 49 has no settings-only form (its drawing without a request holds
+// no Results), so the settings-only rules of Session 46-48 are checked on the
+// one-drawing view of the saved drawing, stated as the last version that has
+// the form.
+const LAST_SETTINGS_ONLY_VERSION = 48;
+// A Session 48 names both modes' inputs in one inventory; the circular
+// drawing's bindings hold the Linear rows of no Linear drawing as empty lists.
+const asSettingsOnly = (view) => {
+  const bindings = { linearSeqs: [], linearComparisons: [], ...view.webFiles.bindings };
+  return { ...view, version: LAST_SETTINGS_ONLY_VERSION, webFiles: { ...view.webFiles, bindings } };
+};
+const settingsOnlyView = (saved, id) => asSettingsOnly(savedDrawingView(saved, id));
+
 // E-OD02, E-OD06: Save refuses a settings-only Session 46 without the
 // settings of its mode; Load reads a missing `form` or `adv` as its default.
 test('OV-591: Save writes form and adv in the settings of its mode, as Python requires; Load reads them as defaults', async () => {
   // gbdraw/session_io.py `_validate_settings_only_session`: "requires an active Web configuration and mode".
-  const fresh = await savedDocument('settings of its mode');
+  // A Session 49 holds each drawing's settings in its one-drawing view; Save checks the shown drawing's view.
+  const saved = await savedDocument('settings of its mode');
+  const fresh = settingsOnlyView(saved, 'circular');
   for (const [name, mutate] of [
     ['config {}', d => { d.modes.circular.config = {}; }],
     ['no form', d => { delete d.modes.circular.config.form; }],
     ['no adv', d => { delete d.modes.circular.config.adv; }]
   ]) {
-    const document = structuredClone(fresh);
-    mutate(document);
-    assert.throws(() => validateSessionAuthorityInventory(structuredClone(document), SESSION_VERSION), /settings of its mode/, name);
+    const view = structuredClone(fresh);
+    mutate(view);
+    assert.throws(() => validateSessionAuthorityInventory(structuredClone(view), LAST_SETTINGS_ONLY_VERSION), /settings of its mode/, name);
+    const document = withSavedDrawingView(saved, 'circular', mutate);
     const loaded = await importSession({
       target: { files: [new Blob([JSON.stringify(document)], { type: 'application/json' })], value: 'selected' }
     }, { confirmLoadRepairs: refuseLoadDialog });
@@ -57,24 +75,25 @@ test('OV-591: Save writes form and adv in the settings of its mode, as Python re
   }
   // The other mode's slice may hold less: Load fills it with that mode's defaults.
   const other = structuredClone(fresh);
-  other.modes.linear.config = {};
-  assert.equal(adoptCurrentSessionDocument(other, SESSION_VERSION).canonical, null);
-  validateSessionAuthorityInventory(other, SESSION_VERSION);
+  other.modes.linear = { config: {} };
+  assert.equal(adoptCurrentSessionDocument(other, LAST_SETTINGS_ONLY_VERSION).canonical, null);
+  validateSessionAuthorityInventory(other, LAST_SETTINGS_ONLY_VERSION);
 });
 
 test('OV-612: Save names the mode slice of a settings-only Session 46 by a string that is a key of modes', async () => {
   // `modes[ui.mode]` converted `["circular"]` to the key "circular"; Python requires `ui.mode` to be a diagram mode.
-  const fresh = await savedDocument('mode key');
+  const fresh = settingsOnlyView(await savedDocument('mode key'), 'circular');
   for (const mode of [['circular'], [['linear']], 'constructor', '__proto__', 0]) {
     const document = structuredClone(fresh);
     document.ui.mode = mode;
-    assert.throws(() => validateSessionAuthorityInventory(document, SESSION_VERSION), /settings of its mode/, JSON.stringify(mode));
+    assert.throws(() => validateSessionAuthorityInventory(document, LAST_SETTINGS_ONLY_VERSION), /settings of its mode/, JSON.stringify(mode));
   }
 });
 
 test('source-free Save emits no render metadata and preserves valid raw scalar drafts', async () => {
   const freshConfig = buildConfigData(state.activeDrawing());
-  const fresh = await savedDocument('fresh settings');
+  // A Session 49 holds the shown drawing in its drawing entry, read as a one-drawing view.
+  const fresh = savedDrawingView(await savedDocument('fresh settings'), 'circular');
   assert.equal(fresh.renderRequest, null);
   assert.equal(fresh.runMetadata, undefined);
   // The shown mode's drawing is its slice (Session 46).
@@ -89,7 +108,7 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
     inner_gap_px: null, outer_gap_px: null, z: 0, params: { lane_direction: 'inside' }
   });
   const before = buildConfigData(state.activeDrawing());
-  const saved = await savedDocument('typed text settings');
+  const saved = savedDrawingView(await savedDocument('typed text settings'), 'circular');
   assert.deepEqual(saved.modes.circular.config, JSON.parse(JSON.stringify(before)));
   assert.deepEqual(buildConfigData(state.activeDrawing()), before);
   assert.deepEqual(saved.results, []);
@@ -97,9 +116,9 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
   assert.equal(saved.runMetadata, undefined);
   assert.equal(adoptCurrentSessionDocument(saved, SESSION_VERSION).canonical, null);
 
-  const forbiddenMetadata = structuredClone(saved);
+  const forbiddenMetadata = asSettingsOnly(structuredClone(saved));
   forbiddenMetadata.runMetadata = { annotationWarnings: [] };
-  assert.throws(() => adoptCurrentSessionDocument(forbiddenMetadata, SESSION_VERSION), /committed render artifacts/);
+  assert.throws(() => adoptCurrentSessionDocument(forbiddenMetadata, LAST_SETTINGS_ONLY_VERSION), /committed render artifacts/);
   state.activeDrawing().adv.circular_track_slots[0].width = { value: '1e', unit: 'px' };
   await assert.rejects(exportSession('unfinished settings'), /width|positive|scalar/i);
   assert.deepEqual(state.activeDrawing().adv.circular_track_slots[0].width, { value: '1e', unit: 'px' });
@@ -121,6 +140,8 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
     [changeCircularMeasureUnit({ value: '1e-3', unit: 'factor' }, 'px'), { value: 0.001, unit: 'px' }],
     [writeCircularMeasureValue('65%', 'px'), { value: 0.65, unit: 'factor' }]
   );
+  // The test installs each mode's drawing; a Load makes only its own (D-15-120), so the offer tab's drawing is added.
+  (await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder())();
   for (const [mode, enabled] of [['circular', true], ['circular', false], ['linear', false]]) {
     installShownDrawing(mode);
     const slot = state.activeDrawing().adv.circular_track_slots[0];
@@ -129,7 +150,7 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
       slot.width = structuredClone(scalar);
       slot.radius = structuredClone(scalar);
       const before = buildConfigData(state.activeDrawing());
-      const saved = await savedDocument(`scalar settings ${mode} ${enabled} ${index}`);
+      const saved = savedDrawingView(await savedDocument(`scalar settings ${mode} ${enabled} ${index}`), mode);
       const adopted = adoptCurrentSessionDocument(saved, SESSION_VERSION);
       assert.equal(adopted.canonical, null);
       const restored = projectSettingsOnlySession(adopted.document);
@@ -152,7 +173,8 @@ test('writer and current admission reject invalid scalar drafts without altering
   slot.enabled = true;
   slot.width = writeCircularMeasureValue('1.', 'px');
   slot.radius = null;
-  const valid = await savedDocument('valid scalar settings');
+  const validDocument = await savedDocument('valid scalar settings');
+  const valid = savedDrawingView(validDocument, 'circular');
   for (const scalar of [
     writeCircularMeasureValue('1e', 'px'), writeCircularMeasureValue('0', 'factor'),
     writeCircularMeasureValue('-1', 'px'), writeCircularMeasureValue('Infinity', 'factor'),
@@ -168,8 +190,8 @@ test('writer and current admission reject invalid scalar drafts without altering
     // cannot write is the writer's check only).
     const text = JSON.stringify(scalar);
     if (text === undefined || text === 'null' || /null/.test(text)) continue;
-    const invalid = structuredClone(valid);
-    invalid.modes.circular.config.adv.circular_track_slots[0].width = scalar;
+    const mutate = (view) => { view.modes.circular.config.adv.circular_track_slots[0].width = scalar; };
+    const invalid = withSavedDrawingView(validDocument, 'circular', mutate);
     const invalidBefore = structuredClone(invalid);
     /** @type {unknown} */
     let listed = null;

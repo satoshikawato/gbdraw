@@ -1,0 +1,16 @@
+{
+  "purpose": "Positive fixture of the released flat Session 50 (tag v0.14.5): a Linear CLI Session with a wrap length, italic gene names and a fixed identity scale, read into a drawings project (Session 51, D-15-190)",
+  "sourceCommit": "033a3aa89",
+  "history": "release tag v0.14.5 (first-parent main)",
+  "writer": "gbdraw/linear.py --save_session (CLI sidecar), run from a worktree of v0.14.5 on PYTHONPATH",
+  "command": "PYTHONPATH=<worktree at v0.14.5> python -P -c 'from gbdraw.cli import main; main()' linear --gbk HmmtDNA.gbk --wrap_length 5kb --italic_gene_labels --identity_scale 60 95 -o cli-linear-wrapped -f svg --save_session",
+  "workingDirectory": "a scratch folder holding a copy of tests/test_inputs/HmmtDNA.gbk (input paths stay relative in cliInvocation)",
+  "inputs": {
+    "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
+  },
+  "values": "renderRequest.diagramOptions.config: canvas.linear.wrap_length 5000, labels.linear.italic_gene_labels true, objects.blast_match.identity_scale [60.0, 95.0]",
+  "decompressedSha256": "ecf4cd705e409d8c7829f5fbc7e559bf2e1cf528135997cd89182a0041686b17",
+  "compression": "gzip -n -9",
+  "sessionVersion": 50,
+  "requestSchema": 9
+}

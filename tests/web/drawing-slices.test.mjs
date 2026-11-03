@@ -23,9 +23,11 @@ import { webLayerOf } from '../../tools/web-owner-graph-detectors.mjs';
 import { DRAWING_EDITOR_KEYS, DRAWING_SLICES, modeDrawing } from './helpers/drawing-state.mjs';
 import { memberWriteSites, refValueWriteSites, templateMemberWrites } from './helpers/drawing-writes.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { withBootPalettes } from './helpers/boot-palettes.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -50,10 +52,14 @@ const { normalizeAnnotationSets } = await import('../../gbdraw/web/js/services/a
 const { normalizeFeatureVisibilityRule } = await import('../../gbdraw/web/js/services/feature-visibility.js');
 const { normalizeSpecificRule } = await import('../../gbdraw/web/js/services/specific-color-rules.js');
 const { normalizePaletteColors } = await import('../../gbdraw/web/js/utils/color-utils.js');
+const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+// The Circular and Linear pair a case works on (a one-mode Load makes no drawing of the other mode).
+const addPairDrawings = await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder();
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const JS = join(ROOT, 'gbdraw', 'web', 'js');
@@ -118,16 +124,16 @@ test('install(capture(x)) gives back x, also after reset, on the Session 46 fixt
   for (const name of fixtureNames) {
     const loaded = await load(name);
     assert.equal(loaded?.status, 'ok', `${name}: ${loaded?.error?.message ?? loaded?.status}`);
-    for (const mode of MODES) {
+    for (const drawing of state.drawingList()) {
       for (const [sliceName, slice] of SLICES) {
-        const handle = modeDrawing(state, mode).slices[sliceName];
+        const handle = drawing.slices[sliceName];
         const captured = slice.capture(handle);
         const json = JSON.stringify(captured);
         slice.install(handle, captured);
-        assert.equal(JSON.stringify(slice.capture(handle)), json, `${name} ${mode} ${sliceName}: install(capture(x))`);
+        assert.equal(JSON.stringify(slice.capture(handle)), json, `${name} ${drawing.id} ${sliceName}: install(capture(x))`);
         slice.reset(handle);
         slice.install(handle, JSON.parse(json));
-        assert.equal(JSON.stringify(slice.capture(handle)), json, `${name} ${mode} ${sliceName}: after reset`);
+        assert.equal(JSON.stringify(slice.capture(handle)), json, `${name} ${drawing.id} ${sliceName}: after reset`);
       }
     }
   }
@@ -206,6 +212,7 @@ test('the slice write scan flags a planted write and leaves reads alone', () => 
 // templates; it does not see a write through an alias held under another
 // name (`const m = state.mode; m.value = ...`).
 test('the shown drawing is drawings[activeDrawingId], mode follows it, and one writer installs it', () => {
+  addPairDrawings();
   const shown = state.activeDrawingId.value;
   for (const id of MODES) {
     installShownDrawing(id);
@@ -230,6 +237,22 @@ test('the shown drawing is drawings[activeDrawingId], mode follows it, and one w
   assert.ok(refValueWriteSites(source, names).length > 0, 'installShownDrawing writes the ID');
   const html = readFileSync(join(ROOT, 'gbdraw', 'web', 'index.html'), 'utf8');
   assert.deepEqual(templateMemberWrites(html, names), []);
+});
+
+// A drawing's tab name has one owner (`state.drawingTabOf`): Save's drawing
+// entry and the Run info replay read it there, and an unknown drawing ID is a
+// typed refusal, not a bare Error.
+test('a drawing\'s tab name is read through one owner, which refuses an unknown drawing', () => {
+  addPairDrawings();
+  for (const id of MODES) {
+    assert.equal(state.drawingTabOf(id), state.drawingTabs.value.find((tab) => tab.id === id));
+  }
+  assert.throws(() => state.drawingTabOf('none'),
+    (error) => error.code === 'INPUT_INVALID' && error.context?.reason === 'UNKNOWN_DRAWING');
+  const readers = webModules().filter((file) => file !== 'state.js')
+    .filter((file) => /drawingTabs\.value\.find\(/.test(readFileSync(join(JS, file), 'utf8')));
+  assert.deepEqual(readers, [], 'a module finds a drawing\'s tab itself: read state.drawingTabOf');
+  assert.doesNotMatch(readFileSync(join(JS, 'app/run-analysis.js'), 'utf8'), /new Error\(`Unknown drawing/);
 });
 
 test('the shown-drawing write scan finds each write form and leaves reads alone', () => {
@@ -286,13 +309,22 @@ const SAMPLES = {
   annotationSets: () => ({ annotationSets: normalizeAnnotationSets([{ id: 'sample-set', legendLabel: 'Sample', annotations: [
     { id: 'region_1', target: { kind: 'coordinateSpan', start: 10, end: 20 }, label: 'Sample region' }
   ] }]) }),
-  // Load keeps a Linear group's name only for a group of the saved Result
-  // (`orthogroupEditsOf`); the fixture holds none.
-  groupNames: (mode) => ({
-    orthogroupNameOverrides: mode === 'linear' ? {} : { 'sample-group': 'Sample name' },
-    orthogroupDescriptionOverrides: mode === 'linear' ? {} : { 'sample-group': 'Sample description' },
+  // Load keeps a drawing's group name only for a group of its saved Result
+  // (`orthogroupEditsOf`); no drawing of the fixture holds one.
+  groupNames: () => ({
+    orthogroupNameOverrides: {},
+    orthogroupDescriptionOverrides: {},
     orthogroupDormantOverrides: { '["sample-member"]': { name: 'Dormant name', description: 'Dormant description' } }
   }),
+  // A file bound in the drawing's own input fields: a Circular drawing's
+  // GenBank file, a Linear drawing's one record row. The store registers it.
+  inputs: (mode) => {
+    const inputs = DRAWING_SLICES.inputs.capture(modeDrawing(state, mode).slices.inputs);
+    const file = state.inputFiles.registerFile(new File([`LOCUS       sample_${mode}\n//\n`], `sample-${mode}.gb`, { lastModified: 1 }));
+    return mode === 'linear'
+      ? { ...inputs, linearSeqs: [createLinearSeq({ uid: 'sample-row', gb: file })] }
+      : { ...inputs, files: { ...inputs.files, c_gb: file }, circularRecordDiscovery: { ...inputs.circularRecordDiscovery, primaryFile: file } };
+  },
   canvas: () => ({ canvasPadding: { top: 12, right: 3, bottom: 7, left: 5 } }),
   // Load keeps the rows `canonicalFeatureOverrides` and the placement reader
   // of the drawing's mode accept.
@@ -332,7 +364,17 @@ const plain = (value) => {
   if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 && 'value' in value) return plain(value.value);
   return value;
 };
-const captures = (mode) => JSON.stringify(SLICES.map(([name, slice]) => slice.capture(modeDrawing(state, mode).slices[name])));
+// A capture as JSON without the store's file IDs: a Load binds each input
+// file again, under a new ref of the same file. A record row without a file
+// is a placeholder (a Circular drawing saves no rows), new at each Load.
+const refFree = (value) => JSON.stringify(value, (key, entry) => {
+  if (entry && typeof entry === 'object' && typeof entry.fileId === 'string' && typeof entry.sourceId === 'string') {
+    return { name: entry.name, type: entry.type, size: entry.size, lastModified: entry.lastModified };
+  }
+  if (key === 'linearSeqs') return entry.map((row) => (row.gb || row.gff || row.fasta ? row : { ...row, uid: '' }));
+  return entry;
+});
+const captures = (mode) => refFree(SLICES.map(([name, slice]) => slice.capture(modeDrawing(state, mode).slices[name])));
 // Each Save names its own file: Save asks before downloading a file name again.
 let saves = 0;
 const saveSession = async () => {
@@ -342,9 +384,16 @@ const saveSession = async () => {
   return new Blob([gunzipSync(Buffer.from(await saved.blob.arrayBuffer()))], { type: 'application/json' });
 };
 
-test('a slice edit shows in its drawing, survives Save and Load, and leaves the other drawing unchanged', async () => {
+// Before Load the edit is undone: by the slice's reset, or, for the inputs
+// slice, whose reset keeps every binding (PD-OI-070), by a new drawing's inputs.
+const undo = (name, slice, handle) => (name === 'inputs' ? slice.install(handle, slice.capture(slice.create().handle)) : slice.reset(handle));
+// A one-mode fixture loads no drawing of the other mode (D-15-120): the case
+// adds it after each Load as the offer tab makes it, at the defaults with the
+// boot palettes, so Save does not write it.
+test('a slice edit shows in its drawing, survives Save and Load, and leaves the other drawing unchanged', () => withBootPalettes(state, async () => {
   assert.deepEqual(Object.keys(SAMPLES).sort(), SLICES.map(([name]) => name).sort(), 'every slice has a sample');
   assert.equal((await load(fixtureNames[0]))?.status, 'ok');
+  addPairDrawings();
   for (const mode of MODES) {
     const other = MODES.find((candidate) => candidate !== mode);
     for (const [name, slice] of SLICES) {
@@ -359,19 +408,20 @@ test('a slice edit shows in its drawing, survives Save and Load, and leaves the 
         `${mode} ${name}: the drawing shows it`);
       assert.equal(captures(other), untouched, `${mode} ${name}: the ${other} drawing is unchanged`);
       const session = await saveSession();
-      slice.reset(drawing.slices[name]);
+      undo(name, slice, drawing.slices[name]);
       assert.notEqual(JSON.stringify(slice.capture(drawing.slices[name])), json, `${mode} ${name}: the sample is no default`);
       const reloaded = await importSession({ target: { files: [session], value: 'selected' } },
         { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
       assert.equal(reloaded?.status, 'ok', `${mode} ${name}: ${reloaded?.error?.message ?? reloaded?.status}`);
-      assert.equal(JSON.stringify(slice.capture(modeDrawing(state, mode).slices[name])), json, `${mode} ${name}: Save then Load`);
+      addPairDrawings();
+      assert.equal(refFree(slice.capture(modeDrawing(state, mode).slices[name])), refFree(sample), `${mode} ${name}: Save then Load`);
       assert.equal(captures(other), untouched, `${mode} ${name}: Load leaves the ${other} drawing as saved`);
       // Back to the loaded fixture, which a Save and Load keep as it is (Load
       // resolves the defaults Reset gives, such as the track placements).
       slice.install(modeDrawing(state, mode).slices[name], JSON.parse(loaded));
     }
   }
-});
+}));
 
 // 7. Reset Settings returns the settings a Reset owns and keeps the record
 // gap and rows, the OFF records, and the comparison edges that hold a file
@@ -391,7 +441,7 @@ test('Reset Settings keeps the record layout, the OFF records, and the compariso
       edge('with-file', { file }), edge('with-name', { losatFilename: 'pair.losat' }), edge('empty', { losatFilename: ' ' })
     ] }
   });
-  resetSettings(state);
+  resetSettings(state, modeDrawing(state, 'linear'));
   const after = settings.capture(handle);
   assert.deepEqual([after.form.plot_title, after.losatProgram], ['', 'blastn']);
   assert.deepEqual([after.linearRecordGap, after.linearRecordRows, after.recordsOff], [40, [{ uid: 'card-a', row: 2 }], ['card-b']]);

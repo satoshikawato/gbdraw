@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test('real Python adapters retain causes through one lazy Worker and successful retry', async ({ page }) => {
   test.setTimeout(180000);
@@ -27,7 +28,8 @@ test('real Python adapters retain causes through one lazy Worker and successful 
       }
     }
     const session = await (await fetch('/gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')).json();
-    const request = structuredClone(session.renderRequest);
+    const drawing = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
+    const request = structuredClone(drawing.renderRequest);
     request.diagramOptions.colors.colorTable = { resourceId: 'error-colors', representation: 'canonicalTsv' };
     const resource = (value) => {
       const bytes = new TextEncoder().encode(`feature_type\tqualifier_key\tvalue\tcolor\tcaption\nCDS\tproduct\t${value}\t#ff0000\t\n`);
@@ -73,7 +75,7 @@ test('real Python adapters retain causes through one lazy Worker and successful 
 test('Generate without input fails before the diagram Worker starts', async ({ page }) => {
   await openApp(page);
   for (const mode of ['circular', 'linear']) {
-    await page.evaluate((target) => window.__GBDRAW_APP__.selectDrawing(target), mode);
+    await showDrawing(page, { kind: mode });
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const outcome = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
       expect(outcome).toMatchObject({ status: 'error', error: { code: 'INPUT_REQUIRED', operation: 'generate' },
@@ -301,6 +303,15 @@ test('table import failures retain exact cause and concrete retry without a draf
   const alert=page.getByRole('alert',{name:'Rule error'});
   await expect(alert).toContainText('Not a valid regular expression',{timeout:180000});
   await expect(alert.getByRole('button',{name:'Retry table import',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.history);
+  // D-15-126: the failure is the Circular drawing's card state: not shown on another drawing, shown again with its Retry.
+  // Making the Linear drawing is a project step of its own (R11); the History baseline follows it.
+  await showDrawing(page,{kind:'linear'});
+  await expect(alert).toHaveCount(0);
+  await showDrawing(page,{kind:'circular'});
+  await expect(alert).toContainText('Not a valid regular expression');
+  await expect(alert.getByRole('button',{name:'Retry table import',exact:true})).toBeVisible();
+  before.history=await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount());
   await page.evaluate(()=>{window.__S03_PREVIOUS_IMPORT_ERROR__=window.__GBDRAW_APP__.errorLog;});
   await alert.getByRole('button',{name:'Retry table import',exact:true}).click();
   await page.waitForFunction(()=>window.__GBDRAW_APP__.errorLog!==window.__S03_PREVIOUS_IMPORT_ERROR__ && !window.__GBDRAW_APP__.files.t_color);
@@ -392,7 +403,7 @@ test('a GFF3 without features names the GFF3 file, and replacing an input ends t
 test('a Linear Generate failure about a File card ends when its file is read again', async ({ page }) => {
   test.setTimeout(180000);
   await openApp(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('linear'))).toEqual({ status: 'ok' });
+  await showDrawing(page, { kind: 'linear' });
   const card = page.locator('[data-linear-source-card]').first();
   const noSequence = (name) => card.locator('input[type="file"]').first().setInputFiles({
     name, mimeType: 'text/plain', buffer: Buffer.from('LOCUS       X 10 bp DNA linear 01-JAN-2000\nFEATURES\nORIGIN\n//\n')

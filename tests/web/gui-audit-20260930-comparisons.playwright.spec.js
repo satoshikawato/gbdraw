@@ -6,8 +6,9 @@ const { execFile } = require('node:child_process');
 const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { promisify } = require('node:util');
-const { answerSessionTitle, evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_SESSION_VERSION, answerSessionTitle, evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -21,7 +22,7 @@ const bgc = (id) => ({ name: `${id}.gbk`, text: readFileSync(path.join(root, 'te
 
 const openLinearWith = async (page, files) => {
   await openFresh(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await page.evaluate(async (items) => {
     const app = window.__GBDRAW_APP__;
@@ -432,7 +433,7 @@ test('a Session 47 with protein results of a reversed record shows its figure, t
   const { stdout } = await promisify(execFile)('python', ['-c', PROTEIN_RESOURCES_CHECK, file, fixture],
     { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
   const saved = JSON.parse(stdout.trim().split('\n').pop());
-  expect(saved.version).toBe(50);
+  expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   expect(saved.web).toEqual(saved.python);
   expect(saved.web).not.toEqual(saved.stored);
   // A Generate reads the converted results and draws like the CLI replay of the Session.
@@ -459,7 +460,7 @@ test('a main Session 39 with a protein table of a reversed record converts it at
   const { stdout } = await promisify(execFile)('python', ['-c', PROTEIN_RESOURCES_CHECK, file, fixture],
     { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
   const saved = JSON.parse(stdout.trim().split('\n').pop());
-  expect(saved.version).toBe(50);
+  expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   expect(saved.web).toEqual(saved.python);
   expect(saved.web).not.toEqual(saved.stored);
 });
@@ -517,7 +518,7 @@ test('a Web Similarity groups Generate stores a cropped reversed record in its s
   const { stdout } = await promisify(execFile)('python', ['-c', SEARCH_FRAME_CHECK, file, directory],
     { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
   const stored = JSON.parse(stdout.trim().split('\n').pop());
-  expect(stored).toEqual(expect.objectContaining({ version: 50, reverse: true, same: true, unmatched: 0 }));
+  expect(stored).toEqual(expect.objectContaining({ version: CURRENT_SESSION_VERSION, reverse: true, same: true, unmatched: 0 }));
   expect(stored.members).toBeGreaterThan(0);
   expect(stored.inSearchFrame).toBe(stored.members);
   const cli = await svgRibbons(page, readFileSync(path.join(directory, 'cli.svg'), 'utf8'));

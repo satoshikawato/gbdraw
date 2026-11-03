@@ -158,7 +158,7 @@ def test_web_reply_carries_the_lines_and_warnings_the_cli_logs(tmp_path: Path) -
 
     document = build_session_document(request).to_dict()
     reply = render_embedded_canonical_web_request(
-        document["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
+        document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
     )
     summary = rendered.input_summary
     assert reply["metadata"]["inputSummaries"] == [{
@@ -183,7 +183,7 @@ def test_web_reply_carries_the_lines_and_warnings_the_cli_logs(tmp_path: Path) -
         paths[resource_id].symlink_to(token)
         names[resource_id] = entry["name"]
     staged = _render_staged_canonical_web_request_with_prepared_inputs(
-        document["renderRequest"], resource_paths=paths, workspace=workspace, _resource_names=names,
+        document["drawings"][0]["renderRequest"], resource_paths=paths, workspace=workspace, _resource_names=names,
     )
     assert staged["metadata"]["inputSummaries"] == reply["metadata"]["inputSummaries"]
 
@@ -196,7 +196,7 @@ def test_web_reply_warns_about_a_record_with_no_feature(tmp_path: Path) -> None:
         output=RenderOutputRequest(output_prefix="empty", formats=("svg",)),
     )).to_dict()
     reply = render_embedded_canonical_web_request(
-        document["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
+        document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
     )
 
     assert reply["metadata"]["inputSummaries"][0]["warnings"] == [

@@ -2,6 +2,7 @@
 import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection.js';
 import { msg } from '../utils/i18n.js';
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
+/** @import { InputFileRef } from './history-files.js' */
 /** @import { CanonicalProteinComparisonSettings } from '../contracts/request.generated.js' */
 /** @typedef {(leaf: FieldLeaf) => void} PlanLossCollector Told each stored value the plan does not use as stored. */
 /**
@@ -9,8 +10,9 @@ import { msg } from '../utils/i18n.js';
  * @typedef {'losat' | 'upload'} LinearComparisonSource
  */
 /**
- * One draft pair of the Linear comparison plan. `file` is the uploaded BLAST
- * TSV File (a Web File object, or null).
+ * One draft pair of the Linear comparison plan. `file` names the uploaded
+ * BLAST TSV by ref (`state.inputFiles`), or is null. A Load candidate's edge
+ * holds its loaded file until `bindLoadedInputs` registers it at install.
  * @typedef {object} LinearComparisonEdge
  * @property {string} id
  * @property {string} queryUid
@@ -19,7 +21,7 @@ import { msg } from '../utils/i18n.js';
  * @property {boolean} fileActive
  * @property {boolean} losatFilenameActive
  * @property {LinearComparisonSource} source
- * @property {any} file
+ * @property {InputFileRef | null} file
  * @property {string} losatFilename
  */
 /**
@@ -54,7 +56,7 @@ import { msg } from '../utils/i18n.js';
  * @property {number} ordinal
  * @property {LinearComparisonSource} source
  * @property {boolean} included
- * @property {any} file
+ * @property {InputFileRef | null} file
  * @property {boolean} fileActive
  * @property {string} losatFilename
  * @property {boolean} losatFilenameActive
@@ -112,6 +114,15 @@ export const LINEAR_COMPARISON_SOURCES = Object.freeze({
   LOSAT: 'losat',
   UPLOAD: 'upload'
 });
+
+/**
+ * The fields of a Session 27-44 draft that held its comparisons before the
+ * comparison plan: the migration to the plan reads them and removes them
+ * (Python's `_migrate_legacy_linear_comparison_draft` in `session_io`), so no
+ * settings reader reads them (dotted paths in the draft `config`).
+ * @type {readonly string[]}
+ */
+export const LEGACY_COMPARISON_SOURCE_FIELDS = Object.freeze(['blastSource', 'adv.blastSource', 'linearRecordLayout.comparisons']);
 
 /** @type {Set<string>} */
 const VALID_MODES = new Set(Object.values(LINEAR_COMPARISON_MODES));
@@ -202,21 +213,33 @@ export const createLinearComparisonEdge = ({
   fileActive: fileActive === true,
   losatFilenameActive: losatFilenameActive === true,
   source: normalizeSource(source, LINEAR_COMPARISON_SOURCES.UPLOAD),
-  file: file || null,
+  // A binding's ref, or the loaded file of a Load candidate (see the typedef).
+  file: /** @type {InputFileRef | null} */ (file || null),
   losatFilename: String(losatFilename || '')
 });
 
 /**
- * An edge's uploaded BLAST TSV, the one place that sets it: a file is the
- * edge's active upload; none leaves the edge with no file and none active.
- * The pair card's file input and its Remove set it, and so does Load where it
- * drops the edge's file binding (OV-899).
+ * An edge's uploaded BLAST TSV, as an upload sets it: a file is the edge's
+ * active upload; none leaves the edge with no file and none active. The pair
+ * card's file input and its Remove set it, and so does Load where it drops the
+ * edge's file binding (OV-899).
  * @param {LinearComparisonEdge} edge Changed in place.
- * @param {File | null} file
+ * @param {InputFileRef | null} file The ref of the file (`state.inputFiles.registerFile`).
  */
 export const setComparisonEdgeFile = (edge, file) => {
   edge.file = file || null;
   edge.fileActive = Boolean(file);
+};
+
+/**
+ * An edge's bound file swapped for another (an input file replacement,
+ * PD-OI-090 〔入力ファイル〕): only the file changes; the edge keeps its
+ * source, inclusion, and file state (R17-28).
+ * @param {LinearComparisonEdge} edge Changed in place.
+ * @param {InputFileRef} file The ref of the new file.
+ */
+export const swapComparisonEdgeFile = (edge, file) => {
+  edge.file = file;
 };
 
 /** @param {unknown} value */
@@ -477,7 +500,8 @@ export const validateLinearComparisonEdges = ({
 
 /**
  * @param {{
- *   edge: LinearComparisonEdgeInit | null | undefined, queryUid: string, subjectUid: string,
+ *   edge: (Omit<LinearComparisonEdgeInit, 'file'> & { file?: InputFileRef | null }) | null | undefined,
+ *   queryUid: string, subjectUid: string,
  *   queryIndex: number | undefined, subjectIndex: number | undefined, source: LinearComparisonSource, ordinal: number
  * }} input
  */

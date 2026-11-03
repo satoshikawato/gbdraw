@@ -6,11 +6,6 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const source = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
-const numericConstant = (text, name) => {
-  const matches = [...text.matchAll(new RegExp(`\\bconst\\s+${name}\\s*=\\s*(\\d+)\\s*;`, 'g'))];
-  assert.equal(matches.length, 1, `Expected one declaration of ${name}`);
-  return Number(matches[0][1]);
-};
 
 // Load the fallback's declarations without selecting an adapter or a browser.
 // Compare independent schema namespaces; released input fixtures keep their
@@ -28,13 +23,26 @@ print(json.dumps({
 }))
 `], { cwd: root, encoding: 'utf8' }));
 
-test('Node LOSAT acceptance expects the current writer for every output schema', () => {
+test('Node LOSAT acceptance expects the current writer for every output schema', async () => {
   const adapter = source('tests/web/losat-cache-migration.playwright.spec.js');
+  // The Session version and the request schema come from the generated
+  // contract through the shared Playwright helper, not from a copy in the spec.
+  for (const name of ['CURRENT_SESSION_VERSION', 'CURRENT_RENDER_REQUEST_SCHEMA']) {
+    assert.doesNotMatch(adapter, new RegExp(`\\bconst\\s+${name}\\s*=`), `${name} is copied into the spec`);
+  }
+  assert.match(adapter, /CURRENT_REQUEST_SCHEMA: CURRENT_RENDER_REQUEST_SCHEMA,\s*CURRENT_SESSION_VERSION,[^}]*\} = require\('\.\/helpers\/app-lifecycle\.cjs'\)/);
+  const helper = source('tests/web/helpers/app-lifecycle.cjs');
+  assert.match(helper, /const CURRENT_REQUEST_SCHEMA = generatedConstant\('CANONICAL_REQUEST_SCHEMA'\);/);
+  assert.match(helper, /const CURRENT_SESSION_VERSION = generatedConstant\('SESSION_VERSION'\);/);
+  // The protein cache schemas come from the generated contract too.
+  assert.match(adapter, /const CURRENT_PROTEIN_RAW_SCHEMA = generatedConstant\('PROTEIN_LOSAT_CACHE_SCHEMA'\);/);
+  assert.match(adapter, /const CURRENT_PROTEIN_DERIVED_SCHEMA = generatedConstant\('LOSAT_DERIVED_CACHE_SCHEMA'\);/);
+  const generated = await import('../../gbdraw/web/js/contracts/schema.generated.js');
   assert.deepEqual({
-    session: numericConstant(adapter, 'CURRENT_SESSION_VERSION'),
-    request: numericConstant(adapter, 'CURRENT_RENDER_REQUEST_SCHEMA'),
-    proteinRaw: numericConstant(adapter, 'CURRENT_PROTEIN_RAW_SCHEMA'),
-    proteinDerived: numericConstant(adapter, 'CURRENT_PROTEIN_DERIVED_SCHEMA')
+    session: generated.SESSION_VERSION,
+    request: generated.CANONICAL_REQUEST_SCHEMA,
+    proteinRaw: generated.PROTEIN_LOSAT_CACHE_SCHEMA,
+    proteinDerived: generated.LOSAT_DERIVED_CACHE_SCHEMA
   }, python.writer);
 });
 

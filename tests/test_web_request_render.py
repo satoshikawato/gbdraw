@@ -20,6 +20,7 @@ from gbdraw.api import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.session import build_session_document
+from tests.utils.session_drawing_view import drawing_view
 import gbdraw.web_support.request_render as web_request_render
 from gbdraw.web_support.request_render import (
     render_embedded_canonical_web_request,
@@ -30,7 +31,7 @@ from gbdraw.web_support.request_render import (
 def test_embedded_web_request_renders_through_typed_api(tmp_path) -> None:
     record = SeqRecord(Seq("ATGC" * 25), id="web-record")
     record.annotations["molecule_type"] = "DNA"
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
             output=RenderOutputRequest(
@@ -38,7 +39,7 @@ def test_embedded_web_request_renders_through_typed_api(tmp_path) -> None:
                 formats=("svg",),
             ),
         )
-    ).to_dict()
+    ).to_dict())
 
     workspace = tmp_path / "render-workspace"
     result = render_embedded_canonical_web_request(
@@ -55,7 +56,7 @@ def test_embedded_web_request_renders_through_typed_api(tmp_path) -> None:
 def test_staged_web_request_renders_and_cleans_worker_workspace(tmp_path) -> None:
     record = SeqRecord(Seq("ATGC" * 25), id="staged-web-record")
     record.annotations["molecule_type"] = "DNA"
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
             output=RenderOutputRequest(
@@ -63,7 +64,7 @@ def test_staged_web_request_renders_and_cleans_worker_workspace(tmp_path) -> Non
                 formats=("svg",),
             ),
         )
-    ).to_dict()
+    ).to_dict())
     workspace = tmp_path / "gbdraw-web-render-1"
     resources_directory = workspace / "resources"
     resources_directory.mkdir(parents=True)
@@ -153,12 +154,12 @@ def test_staged_web_request_rejects_an_overlong_output_prefix_before_rendering(t
 
     record = SeqRecord(Seq("ATGC" * 25), id="staged-web-record")
     record.annotations["molecule_type"] = "DNA"
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
             output=RenderOutputRequest(output_prefix="staged", formats=("svg",)),
         )
-    ).to_dict()
+    ).to_dict())
     workspace = tmp_path / "gbdraw-web-render-1"
     resources_directory = workspace / "resources"
     resources_directory.mkdir(parents=True)
@@ -212,11 +213,11 @@ def test_staged_web_request_preserves_workspace_without_worker_marker(tmp_path) 
 def test_embedded_web_request_rejects_duplicate_materialized_names(tmp_path) -> None:
     record = SeqRecord(Seq("ATGC" * 25), id="web-record")
     record.annotations["molecule_type"] = "DNA"
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
         )
-    ).to_dict()
+    ).to_dict())
     resources = dict(document["resources"])
     resource_id, entry = next(iter(resources.items()))
     resources["duplicate-resource"] = dict(entry)
@@ -240,11 +241,11 @@ def test_embedded_web_request_refuses_and_preserves_preexisting_workspace(
 ) -> None:
     record = SeqRecord(Seq("ATGC" * 25), id="web-record")
     record.annotations["molecule_type"] = "DNA"
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
         )
-    ).to_dict()
+    ).to_dict())
     workspace = tmp_path / "preexisting-workspace"
     workspace.mkdir()
     sentinel = workspace / "owner-data.txt"
@@ -269,11 +270,11 @@ def test_embedded_web_request_reports_cleanup_failure_after_success(
 ) -> None:
     record = SeqRecord(Seq("ATGC" * 25), id="web-record")
     record.annotations["molecule_type"] = "DNA"
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
         )
-    ).to_dict()
+    ).to_dict())
     workspace = tmp_path / "cleanup-failure-workspace"
 
     def fail_cleanup(_path) -> None:
@@ -301,11 +302,11 @@ def test_embedded_web_request_preserves_render_error_when_cleanup_fails(
 ) -> None:
     record = SeqRecord(Seq("ATGC" * 25), id="web-record")
     record.annotations["molecule_type"] = "DNA"
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
         )
-    ).to_dict()
+    ).to_dict())
     resources = dict(document["resources"])
     _, entry = next(iter(resources.items()))
     resources["duplicate-resource"] = dict(entry)
@@ -374,7 +375,7 @@ def test_embedded_web_request_preserves_in_memory_comparison_metadata(
             }
         ]
     )
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         LinearDiagramRequest(
             records=tuple(
                 RecordInput(source=InMemoryRecordSource(record))
@@ -386,7 +387,7 @@ def test_embedded_web_request_preserves_in_memory_comparison_metadata(
                 formats=("svg",),
             ),
         )
-    ).to_dict()
+    ).to_dict())
 
     workspace = tmp_path / "comparison-workspace"
     result = render_embedded_canonical_web_request(
@@ -416,7 +417,7 @@ def test_web_request_carries_unmatched_comparison_table_id_warnings(tmp_path) ->
             [[query, subject, 99.0, 1000, 0, 0, 2001, 3000, 1, 1000, 1e-100, 1800.0]],
             columns=COMPARISON_COLUMNS,
         )
-        document = build_session_document(
+        document = drawing_view(build_session_document(
             LinearDiagramRequest(
                 records=tuple(
                     RecordInput(source=InMemoryRecordSource(record)) for record in records
@@ -424,7 +425,7 @@ def test_web_request_carries_unmatched_comparison_table_id_warnings(tmp_path) ->
                 options=LinearDiagramOptions(linear_comparisons=(LinearComparison(0, 1, hits),)),
                 output=RenderOutputRequest(output_prefix="web-ids", formats=("svg",)),
             )
-        ).to_dict()
+        ).to_dict())
         return render_embedded_canonical_web_request(
             document["renderRequest"],
             resources=document["resources"],
@@ -488,7 +489,7 @@ def test_web_request_returns_one_base_svg_and_compact_catalog(
             ),
         ],
     )
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(
                 RecordInput(
@@ -501,7 +502,7 @@ def test_web_request_returns_one_base_svg_and_compact_catalog(
                 formats=formats,
             ),
         )
-    ).to_dict()
+    ).to_dict())
 
     response = render_embedded_canonical_web_request(
         document["renderRequest"],
@@ -562,7 +563,7 @@ def test_web_circular_batch_has_one_catalog_item_per_logical_result(tmp_path) ->
                 record_key=f"batch-record-key-{index + 1}",
             )
         )
-    document = build_session_document(
+    document = drawing_view(build_session_document(
         CircularBatchRequest(
             records=tuple(records),
             outputs=tuple(
@@ -573,7 +574,7 @@ def test_web_circular_batch_has_one_catalog_item_per_logical_result(tmp_path) ->
                 for index in range(2)
             ),
         )
-    ).to_dict()
+    ).to_dict())
 
     response = render_embedded_canonical_web_request(
         document["renderRequest"],
@@ -648,7 +649,7 @@ def test_web_warning_metadata_reuses_one_resolution_and_one_load_per_source(
         request = (
             LinearDiagramRequest if mode == "linear" else CircularDiagramRequest
         )(records=inputs, options=options, output=output)
-    document = build_session_document(request).to_dict()
+    document = drawing_view(build_session_document(request).to_dict())
     loads = 0
     resolutions = 0
     original_load = request_renderer.load_gbks
@@ -741,7 +742,7 @@ def test_web_request_does_not_build_derived_losat_entries(
 
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
     request, _identities = _request(mode, tmp_path)
-    document = build_session_document(request).to_dict()
+    document = drawing_view(build_session_document(request).to_dict())
 
     def render(workspace: str) -> object:
         return render_embedded_canonical_web_request(

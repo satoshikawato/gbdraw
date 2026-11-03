@@ -4,7 +4,7 @@
 // trimmed, values as a Session holds them, and an entry without a usable value
 // left out. Session Load (`normalizeEditorStateData`, services/config.js) and
 // the Session 46 Legend reading (`legendEditsByRowKey`,
-// services/mode-scoped-migration.js) read through it. Python twins:
+// services/session-drawings-upgrade.js) read through it. Python twins:
 // `_legend_color_overrides`, `_stroke_override_map`, `_stroke_width` in
 // gbdraw/session_io.py.
 import { normalizeOptionalHexColor } from '../utils/color-utils.js';

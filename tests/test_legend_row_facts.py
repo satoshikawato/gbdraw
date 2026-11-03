@@ -237,10 +237,11 @@ def test_a_drawing_without_facts_reports_empty_lists():
 
 def test_the_web_request_carries_the_facts_in_run_metadata(tmp_path):
     from gbdraw.session import build_session_document
+    from tests.utils.session_drawing_view import session_view
     from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 
     request = _circular(tmp_path, feature_visibility_table=_hide("rec", "repeat_region"))
-    document = build_session_document(request).to_dict()
+    document = session_view(build_session_document(request).to_dict())
     response = render_embedded_canonical_web_request(
         document["renderRequest"], resources=document["resources"], workspace=tmp_path / "workspace"
     )

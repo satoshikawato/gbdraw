@@ -52,6 +52,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentReferenceError
 from gbdraw.session import build_session_document, materialize_session, session_to_request
+from tests.utils.session_drawing_view import session_view
 from gbdraw.session_request_codec import (
     CanonicalRequestEncodingError,
     encode_canonical_request,
@@ -409,7 +410,7 @@ def test_saved_requests_store_the_resolved_plan_never_the_reference(
 
     document = build_session_document(request)
     assert analysis_calls == [3]
-    payload = document.to_dict()
+    payload = session_view(document.to_dict())
     assert payload["renderRequest"]["layout"]["similarityAlignment"]["groupId"] == "og_1"
     assert "SimilarityAlignmentReference" not in str(payload)
     with materialize_session(document, output_directory=tmp_path) as materialized:
@@ -452,7 +453,7 @@ def _stored_tables(request: LinearDiagramRequest) -> list[DataFrame]:
 
     import pandas as pd
 
-    payload = build_session_document(request).to_dict()
+    payload = session_view(build_session_document(request).to_dict())
     return [
         pd.read_csv(StringIO(base64.b64decode(payload["resources"][item["resourceId"]]["data"]).decode()), sep="\t")
         for item in payload["renderRequest"]["comparisons"]

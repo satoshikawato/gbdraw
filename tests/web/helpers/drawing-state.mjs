@@ -5,7 +5,10 @@
 // key is a generated artifact, a project input or cache, an app setting or
 // catalog, transient, or the drawing store. Each diagram mode has its own
 // drawing (PR-1, Session 46 `modes`).
-import { drawingIdOfMode } from '../../../gbdraw/web/js/services/drawing-view.js';
+import { allocateDrawingId } from '../../../gbdraw/web/js/services/drawing-view.js';
+
+// The ID of a mode's first drawing, as a new store allocates it.
+const firstDrawingId = (mode) => allocateDrawingId(mode, []);
 import { CANVAS_SLICE } from '../../../gbdraw/web/js/services/drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from '../../../gbdraw/web/js/services/drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from '../../../gbdraw/web/js/services/drawing/annotation-sets.js';
@@ -16,6 +19,7 @@ import { LABEL_TABLES_SLICE } from '../../../gbdraw/web/js/services/drawing/labe
 import { FEATURE_EDITS_SLICE } from '../../../gbdraw/web/js/services/drawing/feature-edits.js';
 import { PAINT_SLICE } from '../../../gbdraw/web/js/services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../../../gbdraw/web/js/services/drawing/settings.js';
+import { INPUTS_SLICE } from '../../../gbdraw/web/js/services/drawing/inputs.js';
 
 // The slices of a drawing (gbdraw/web/js/services/drawing/), by the name of
 // their handle in `drawing.slices`: the editor slices, which alone write their
@@ -24,7 +28,7 @@ export const DRAWING_SLICES = Object.freeze({
   visibilityRules: VISIBILITY_RULES_SLICE, colorRules: COLOR_RULES_SLICE, palette: PALETTE_SLICE, labelTables: LABEL_TABLES_SLICE,
   annotationSets: ANNOTATION_SETS_SLICE,
   groupNames: GROUP_NAMES_SLICE, canvas: CANVAS_SLICE, featureEdits: FEATURE_EDITS_SLICE, paint: PAINT_SLICE,
-  settings: SETTINGS_SLICE
+  settings: SETTINGS_SLICE, inputs: INPUTS_SLICE
 });
 
 // The calls of a slice module that only read or build a value: each slice's
@@ -44,11 +48,13 @@ export const SLICE_READERS = Object.freeze([
   'labelTextEditsData', 'queuedPaletteData', 'createDefaultLabelFilters', 'createDefaultPaletteData'
 ]);
 
-// The members of a drawing, as its slices name them: the settings (the draft
-// keys) and the editor slices' members, in the order the drawing spreads them.
-export const DRAWING_DRAFT_KEYS = SETTINGS_SLICE.members;
+// The members of a drawing, as its slices name them: the members its controls
+// write (the draft keys: the settings, then the inputs) and the editor slices'
+// members, which only their slice writes, in the order the drawing spreads them.
+const CONTROL_WRITTEN_SLICES = Object.freeze(['settings', 'inputs']);
+export const DRAWING_DRAFT_KEYS = Object.freeze(CONTROL_WRITTEN_SLICES.flatMap((name) => DRAWING_SLICES[name].members));
 export const DRAWING_EDITOR_KEYS = Object.freeze(Object.entries(DRAWING_SLICES)
-  .filter(([name]) => name !== 'settings').flatMap(([, slice]) => slice.members));
+  .filter(([name]) => !CONTROL_WRITTEN_SLICES.includes(name)).flatMap(([, slice]) => slice.members));
 
 // Computed from the members above (and project inputs); each drawing derives its own.
 export const DRAWING_DERIVED_KEYS = Object.freeze([
@@ -78,13 +84,12 @@ export const ARTIFACT_KEYS = Object.freeze([
   'appliedPaletteName', 'appliedPaletteColors', 'extractedFeatures', 'biologicalFeatures', 'featureCatalog',
   'featureRecordIds', 'editableLabels', 'originalLegendOrder', 'originalLegendColors', 'originalSvgStroke',
   'legendCurrentOffset', 'diagramOffset', 'lengthBarUserOffset', 'plotTitleUserOffset',
-  'generatedLegendPosition', 'generatedMode', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition'
+  'generatedLegendPosition', 'generatedDrawingId', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition'
 ]);
 
 // Inputs and caches that every drawing shares.
 export const PROJECT_KEYS = Object.freeze([
-  'sessionTitle', 'files', 'linearSeqs', 'cInputType', 'lInputType', 'circularRecordList',
-  'circularRecordDiscovery', 'losatCache', 'losatDerivedCache', 'losatCacheInfo', 'proteinIdentityManifest',
+  'sessionTitle', 'inputFiles', 'losatCache', 'losatDerivedCache', 'losatCacheInfo', 'proteinIdentityManifest',
   'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'
 ]);
 
@@ -101,7 +106,7 @@ export const UI_KEYS = Object.freeze([
 // dialogs, popups, drag and view state, and views derived from the others.
 export const TRANSIENT_KEYS = Object.freeze([
   'loadedFonts', 'processing', 'processingStatus', 'labelCapacityNotices', 'sessionSavePending', 'sessionImportPending', 'sessionOperationAvailability',
-  'generationCancelRequested', 'errorLog', 'semanticFileWatchersSuppressed', 'sessionResourceDiscoveryDeferred',
+  'generationCancelRequested', 'errorLog', 'semanticFileWatchersSuppressed',
   'sessionImportRollbackInProgress', 'failedGeneratePreservedResult', 'generationFailureRecovery',
   'resultPanelTab', 'matchSequenceRegistry', 'svgContent', 'svgResultIdentity', 'zoom', 'layoutRepositionMode',
   'isPanning', 'panStart', 'canvasPan', 'canvasContainerRef',
@@ -110,8 +115,8 @@ export const TRANSIENT_KEYS = Object.freeze([
   'newSpecRule', 'specificRuleQualifierSuggestions', 'selectedSpecificPreset', 'specificRulePresetLoading',
   'featuresBySvgId', 'selectedFeatureIds', 'selectedFeatureAnchorId', 'featureSelectionStatus',
   'featureSelectionSuppressNextClick', 'featureSelectionDrag', 'selectedFeatureCount', 'selectedFeatures',
-  'hasFeatureSelection', 'featureEditorStatus', 'featureEditorStatusText', 'featureExtractionPending',
-  'featureExtractionError', 'selectedFeatureRecordIdx', 'resultGenerationKey', 'featurePanelTab',
+  'hasFeatureSelection', 'featureEditorStatus', 'setFeatureEditorStatus', 'featureEditorStatusText', 'featureExtractionPending',
+  'selectedFeatureRecordIdx', 'resultGenerationKey', 'featurePanelTab',
   'featureSearchInput', 'featureSearch', 'previewFeatureSearchInput', 'previewFeatureSearchQuery',
   'previewFeatureSearchField', 'previewFeatureSearchQualifierKey', 'previewFeatureSearchUseRegex',
   'previewFeatureSearchMatches', 'previewFeatureSearchMatchDetails', 'previewFeatureSearchActiveIndex',
@@ -134,8 +139,12 @@ export const TRANSIENT_KEYS = Object.freeze([
   'filteredEditableLabels', 'ruleMatchingPending', 'downloadWhiteBackground'
 ]);
 
-// The drawing store itself.
-export const STORE_KEYS = Object.freeze(['drawingList', 'drawingOf', 'drawingOfMode', 'activeDrawing']);
+// The drawing store itself: the drawings by ID, their tab order and names
+// (`drawingTabs`), and the store writers.
+export const STORE_KEYS = Object.freeze([
+  'drawingTabs', 'drawingTabOf', 'drawingList', 'drawingOf', 'activeDrawing',
+  'replaceDrawings', 'addDrawing', 'removeDrawing', 'moveDrawing', 'renameDrawing'
+]);
 
 // A `state`-shaped node fixture's drawing: its own drawing members, by reference.
 export const fixtureDrawing = (fixture) => Object.freeze(withSliceHandles(Object.fromEntries(
@@ -149,6 +158,17 @@ export const fixtureDrawing = (fixture) => Object.freeze(withSliceHandles(Object
 // its members; a drawing that has handles keeps them.
 const withSliceHandles = (drawing) => {
   if (!drawing || typeof drawing !== 'object' || 'slices' in drawing || Object.isFrozen(drawing)) return drawing;
+  // Every drawing holds its inputs (its record rows: one empty row by
+  // default); a fixture that names none gets the default, not enumerable.
+  const inputs = INPUTS_SLICE.create().view;
+  INPUTS_SLICE.members.filter((key) => !(key in drawing)).forEach((key) => {
+    Object.defineProperty(drawing, key, { value: inputs[key], configurable: true, writable: true });
+  });
+  // A fixture's `files` names the fields its test reads; the slice's other
+  // fields hold their defaults, as every drawing's do (the capture copies them).
+  if (drawing.files && typeof drawing.files === 'object' && !Object.isFrozen(drawing.files)) {
+    Object.entries(inputs.files).filter(([key]) => !(key in drawing.files)).forEach(([key, value]) => { drawing.files[key] = value; });
+  }
   const handles = {};
   const slices = {};
   for (const [name, slice] of Object.entries(DRAWING_SLICES)) {
@@ -166,30 +186,65 @@ const withSliceHandles = (drawing) => {
   return Object.defineProperty(drawing, 'slices', { value: Object.freeze(slices), configurable: true });
 };
 
+// A new Session holds one Circular drawing (PD-OI-090); a test that works on
+// the Circular and Linear pair adds the Linear drawing to the real store, as
+// the store held it before the offer tab (a drawing of its mode at
+// `createDrawingState`, named "Linear", after the Circular tab), with no
+// History step. Call it once the test has set up `window` and imported state.js.
+export const addStartLinearDrawing = async () => {
+  const { state, createDrawingState } = await import('../../../gbdraw/web/js/state.js');
+  const id = firstDrawingId('linear');
+  if (state.drawingTabs.value.some((tab) => tab.id === id)) return;
+  state.addDrawing(createDrawingState(id, 'linear'), 'Linear', state.drawingTabs.value.length);
+};
+
+// A one-mode Load makes no drawing of the other mode (D-15-120). A test that
+// works on the Circular and Linear pair after one gets this adder once (after
+// it has set up `window`) and calls it to add the pair's missing drawing as
+// the bar's offer tab makes it (a new drawing at its mode's defaults,
+// `withNewDrawingDefaults`), Circular first, with no History step.
+export const modeDrawingsAdder = async () => {
+  const { state, createDrawingState } = await import('../../../gbdraw/web/js/state.js');
+  const { withNewDrawingDefaults } = await import('../../../gbdraw/web/js/services/reset.js');
+  return () => {
+    for (const mode of ['circular', 'linear']) {
+      const id = firstDrawingId(mode);
+      if (state.drawingTabs.value.some((tab) => tab.id === id)) continue;
+      state.addDrawing(withNewDrawingDefaults(state, createDrawingState(id, mode)), mode === 'circular' ? 'Circular' : 'Linear',
+        mode === 'circular' ? 0 : state.drawingTabs.value.length);
+    }
+  };
+};
+
 // The drawing of a diagram mode in a `state`-shaped value (the real state or a
 // fixture from `withDrawings` / `withModeDrawings`): the drawing whose ID the
 // mode names.
-export const modeDrawing = (state, mode) => state.drawingOf(drawingIdOfMode(mode));
+export const modeDrawing = (state, mode) => state.drawingOf(firstDrawingId(mode));
 
 // The drawing store as state.js builds it: the drawings by ID in creation
-// order, read through `drawingList`, `drawingOf`, and `drawingOfMode`. A fake
+// order, read through `drawingList`, `drawingOf`, and `drawingOf`. A fake
 // `state` spreads it.
 export const drawingStore = (circular, linear) => {
-  const drawings = new Map([[drawingIdOfMode('circular'), circular], [drawingIdOfMode('linear'), linear]]);
+  const drawings = new Map([[firstDrawingId('circular'), circular], [firstDrawingId('linear'), linear]]);
   const drawingOf = (id) => {
     if (!drawings.has(id)) throw new Error(`Unknown drawing ${id}`);
     return drawings.get(id);
   };
   return {
     drawingList: () => [...drawings.values()],
-    drawingOf,
-    drawingOfMode: (mode) => drawingOf(drawingIdOfMode(mode))
+    drawingOf
   };
 };
 
 // The store's members as non-enumerable properties of a fixture.
 const storeProperties = (circular, linear) => Object.fromEntries(Object.entries(drawingStore(circular, linear))
   .map(([key, value]) => [key, { value, configurable: true }]));
+
+// The drawing the displayed Result belongs to (state.generatedDrawingId), the
+// Circular drawing unless the fixture names one, as in state.js.
+const generatedDrawingProperty = (fixture) => (Object.hasOwn(fixture, 'generatedDrawingId') ? {} : {
+  generatedDrawingId: { value: { value: firstDrawingId('circular') }, configurable: true, writable: true }
+});
 
 // The fixture with the drawing store that services and owners read
 // (`state.drawingOf`, `state.drawingList()`, `state.activeDrawing()`): the
@@ -199,7 +254,8 @@ const storeProperties = (circular, linear) => Object.fromEntries(Object.entries(
 // members.
 export const withDrawings = (fixture) => Object.defineProperties(withSliceHandles(fixture), {
   ...storeProperties(fixture, fixture),
-  ...(Object.hasOwn(fixture, 'id') ? {} : { id: { value: drawingIdOfMode('circular'), configurable: true } }),
+  ...(Object.hasOwn(fixture, 'id') ? {} : { id: { value: firstDrawingId('circular'), configurable: true } }),
+  ...generatedDrawingProperty(fixture),
   activeDrawing: { value: () => fixture, configurable: true }
 });
 
@@ -207,5 +263,6 @@ export const withDrawings = (fixture) => Object.defineProperties(withSliceHandle
 // follows `fixture.mode.value`.
 export const withModeDrawings = (fixture, { circular, linear }) => Object.defineProperties(fixture, {
   ...storeProperties(withSliceHandles(circular), withSliceHandles(linear)),
+  ...generatedDrawingProperty(fixture),
   activeDrawing: { value: () => (fixture.mode?.value === 'linear' ? linear : circular), configurable: true }
 });

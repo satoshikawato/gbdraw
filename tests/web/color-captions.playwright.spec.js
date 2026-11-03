@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { execFileSync } = require('node:child_process');
 const { load, generate, download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { evaluateWithRetainedPromise, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 
 // A rule edit that changes the Legend asks for the automatic rerender (OV-42,
@@ -27,7 +28,7 @@ const inspectNow = page => page.evaluate(async () => {
     dual:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>e.getAttribute('data-legend-key'))),
     dualStyles:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}))),
     names:names(result), mountedNames:names(root),
-    svg:window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value].content, fileName:s.files.t_color?.name};
+    svg:window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value].content, fileName:s.activeDrawing().files.t_color?.name};
 });
 const reveal = async locator => {
   for(const details of await locator.locator('xpath=ancestor::details').all()) {
@@ -58,6 +59,7 @@ for(const width of [1440,390]) {
         return {ids,text:original+'\n'+ids.slice(0,2).map((id,i)=>['CDS','hash',id,['#112233','#445566'][i],'Color group'].join('\t')).join('\n')+'\n'};
       });
       const before=await inspect(page);
+      await showPhonePane(page,'settings');
       const input=page.getByLabel('Specific rules file',{exact:true});
       await reveal(input);
       const picker=page.getByRole('button',{name:'Choose Specific rules file',exact:true});
@@ -86,6 +88,7 @@ for(const width of [1440,390]) {
           .filter(element=>element.hasAttribute('fill')).map(element=>element.getAttribute('fill')))]);
       },source.ids);
       expect(fills).toEqual([['#112233'],['#445566'],['#778899']]);
+      await showPhonePane(page,'preview');
       const extents=await page.evaluate(captions=>{
         const svg=window.__GBDRAW_APP__.svgContainer.querySelector('svg'),bounds=svg.getBoundingClientRect();
         return captions.map(caption=>{
@@ -132,7 +135,7 @@ for(const width of [1440,390]) {
       expect(tsv).toContain('\tPrimary complex\n');
       expect(tsv).toContain('\t#445566\tColor group\n');
       expect(tsv).not.toContain(' [#');
-      expect(await page.evaluate(async()=>{const {readFileText}=await import('./js/services/file-content-cache.js');return readFileText(window.__GBDRAW_APP__.files.t_color);})).toBe(source.text);
+      expect(await page.evaluate(async()=>{const {readFileText}=await import('./js/services/file-content-cache.js');const {state}=await import('./js/state.js');return readFileText(state.inputFiles.fileOf(window.__GBDRAW_APP__.files.t_color));})).toBe(source.text);
       expect(final.fileName).toBe('multicolor.tsv');
       const sessionPath=testInfo.outputPath('canonical.gbdraw-session.json.gz');
       await download(page,'Save Session',sessionPath);

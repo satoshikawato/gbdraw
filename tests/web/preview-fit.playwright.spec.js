@@ -182,6 +182,54 @@ test('Fit shows the whole Linear comparison centred, left of an open Editor', as
   expect(beside.zoom).toBeLessThanOrEqual(plain.zoom);
 });
 
+// R17-25 (OV-1809): a Session file Load with a Result fits the figure to the
+// shown Preview at every width; Generate keeps 100 %.
+const circularSession = join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
+for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
+  test(`a Session file Load fits the figure to the Preview at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test.setTimeout(180000);
+    await page.setViewportSize(viewport);
+    await openApp(page);
+    page.on('dialog', (dialog) => dialog.dismiss());
+    await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+      .setInputFiles(circularSession);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+    await settle(page);
+    const loaded = await fitGeometry(page);
+    expect(loaded.zoom, JSON.stringify(loaded)).toBeLessThan(1);
+    expectFitted(loaded, `Load ${viewport.width}x${viewport.height}`);
+  });
+}
+
+// R17-25 covers a file Session Load with a Result: a legacy configuration Load
+// brings no Result, so the generated figure the user zoomed keeps its zoom.
+// (After a Session Load the held view refits to the room the notice changes,
+// so this case starts from a Generate.) OV-2201: the R17-25 Fit that ran for a
+// legacy Load too refitted it (zoom 1.3 -> 0.43).
+test('a legacy configuration Load keeps the zoom of the figure already shown', async ({ page }) => {
+  test.setTimeout(240000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApp(page);
+  page.on('dialog', (dialog) => dialog.dismiss());
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true }).click();
+  await (await chooser).setFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: Buffer.from(hmmt) });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length),
+    { timeout: 60000 }).toBeGreaterThan(0);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const zoomIn = page.getByRole('button', { name: 'Zoom in', exact: true });
+  for (let step = 0; step < 3; step += 1) await zoomIn.click();
+  const zoomed = await appZoom(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles({
+    name: 'legacy-config.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ form: {} }))
+  });
+  await expect(page.getByText('Configuration loaded from an older gbdraw.', { exact: false }).first()).toBeVisible();
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  expect(await appZoom(page)).toBe(zoomed);
+});
+
 // GX-02: the buttons keep the wheel's range and 0.1 steps.
 test('Zoom in stops at 500% and Zoom out at 10%, on exact 0.1 steps', async ({ page }) => {
   test.setTimeout(180000);

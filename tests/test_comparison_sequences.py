@@ -13,6 +13,7 @@ from gbdraw.circular import circular_main
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparison_sequences import read_comparison_sequence_file
 from gbdraw.session_io import canonicalize_cli_invocation
+from tests.utils.session_drawing_view import session_view
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TUTORIAL = REPO_ROOT / "gbdraw" / "web" / "tutorial-data"
@@ -206,7 +207,7 @@ def test_saved_session_keeps_the_persisted_wire_name(tmp_path: Path) -> None:
         "--conservation_sequence", str(DANIO_GENBANK), "--conservation_reference", "subject",
         "-o", str(prefix), "-f", "svg", "--save_session",
     ])
-    session = json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8"))
+    session = session_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
     options = session["renderRequest"]["diagramOptions"]
     assert options["conservationFastaFiles"] == [
         {"resourceId": "conservation-fasta-files-1", "representation": "file"}

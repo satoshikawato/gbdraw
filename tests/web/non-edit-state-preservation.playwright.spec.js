@@ -98,6 +98,8 @@ const historyCounts = (page) => page.evaluate(() => [
 // R11, PD-OI-090: a drawing switch writes no setting and records no step in
 // either drawing's History.
 const drawingRoundTrip = async (page) => {
+  expect(await page.evaluate(async () => (await import('./js/state.js')).state.drawingList().length),
+    'the round trip switches between drawings the project holds').toBe(2);
   const records = await page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length);
   const counts = await historyCounts(page);
   await switchMode(page, 'linear');
@@ -105,6 +107,14 @@ const drawingRoundTrip = async (page) => {
   expect(await historyCounts(page), 'a drawing round trip records no step').toEqual(counts);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(records);
   await settle(page);
+};
+
+// A new Session holds one Circular drawing. The round trip's Linear drawing is
+// made in the setup, the way a user makes it (the Linear offer tab), so the
+// observed operation only switches; making it is a project step of its own.
+const makeLinearDrawing = async (page) => {
+  await switchMode(page, 'linear');
+  await switchMode(page, 'circular');
 };
 
 const ROWS = [
@@ -175,6 +185,7 @@ const ROWS = [
       await openWithGenBank(page, HMMT);
       await generateAndWaitForResult(page);
       await settle(page);
+      await makeLinearDrawing(page);
     },
     operation: drawingRoundTrip
   },
@@ -191,6 +202,7 @@ const ROWS = [
       ))).toEqual(['#2', '#1']);
       await generateAndWaitForResult(page);
       await settle(page);
+      await makeLinearDrawing(page);
     },
     operation: drawingRoundTrip
   },
@@ -225,6 +237,7 @@ const ROWS = [
     setup: async (page) => {
       await openWithGenBank(page, HMMT, labelsOut);
       await generateAndWaitForResult(page);
+      await makeLinearDrawing(page);
       const start = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
       await editFirstCdsLabel(page, 'UNDO_REDO_CHAIN');
       // A `ui` edit: the canvas padding.
@@ -277,6 +290,58 @@ const ROWS = [
         await settle(page);
       }
       expect(await historyCounts(page), 'Redo returns to the Reset step').toEqual(counts);
+    }
+  },
+  {
+    // R17-5 (PD-OI-090 〔Reset〕): Reset this drawing is one step of the
+    // shown drawing; it keeps PNG DPI, a value one per Session, and its Undo
+    // restores the drawing exactly. The Linear drawing records no step.
+    name: 'an Undo of Reset this drawing restores the shown drawing; the Session values and the other drawing stay',
+    setup: async (page) => {
+      await openWithGenBank(page, HMMT, labelsOut);
+      await generateAndWaitForResult(page);
+      await editFirstCdsLabel(page, 'RESET_THIS_LABEL');
+      // A Session-level edit is a project step of its own (R11).
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.runProjectStep('Change setting', () => {
+        window.__GBDRAW_APP__.downloadDpi = 600;
+      }));
+    },
+    operation: async (page) => {
+      await switchMode(page, 'linear');
+      const linearCounts = await historyCounts(page);
+      await switchMode(page, 'circular');
+      await settle(page);
+      const counts = await historyCounts(page);
+      await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+      await answerChoicePrompt(page, 'Reset settings?', 'reset-drawing');
+      await settle(page);
+      expect(await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.undoLabel(),
+        window.__GBDRAW_APP__.downloadDpi])).toEqual([counts[0] + 1, 'Reset this drawing', 600]);
+      await switchMode(page, 'linear');
+      expect(await historyCounts(page), 'the Linear drawing records no Reset step').toEqual(linearCounts);
+      await switchMode(page, 'circular');
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+      await settle(page);
+      expect(await historyCounts(page), 'one Undo takes the Reset step').toEqual([counts[0], 1]);
+    }
+  },
+  {
+    // PD-OI-090 〔Reset〕: Cancel changes nothing and records no step.
+    name: 'Cancel in the Reset dialog changes nothing and records no step',
+    setup: async (page) => {
+      await openWithGenBank(page, HMMT, labelsOut);
+      await generateAndWaitForResult(page);
+      await editFirstCdsLabel(page, 'RESET_CANCEL_LABEL');
+    },
+    operation: async (page) => {
+      const counts = await historyCounts(page);
+      await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+      const prompt = page.locator('[data-choice-prompt]');
+      await expect(prompt.getByRole('heading', { name: 'Reset settings?', exact: true })).toBeVisible();
+      await prompt.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(prompt.getByRole('heading', { name: 'Reset settings?', exact: true })).toHaveCount(0);
+      await settle(page);
+      expect(await historyCounts(page)).toEqual(counts);
     }
   }
 ];

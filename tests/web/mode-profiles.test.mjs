@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { bindDrawingInputFile } from '../../gbdraw/web/js/services/drawing/inputs.js';
 
 const repoRoot = process.cwd();
 const semanticParity = JSON.parse(await readFile(
@@ -162,7 +163,7 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-const { createDefaultAdv, createDefaultForm, createDefaultLosat, state } = await import(
+const { createDefaultAdv, createDefaultForm, createDefaultLosat, createDrawingState, state } = await import(
   pathToFileURL(join(tempDir, 'js', 'state.js'))
 );
 const { installShownDrawing } = await import(pathToFileURL(join(tempDir, 'js', 'services', 'config.js')));
@@ -174,6 +175,8 @@ assert.equal(
 // Each mode has its own drawing (PR-1). A drawing starts from its mode's
 // profile, and its `form.legend` and `adv.plot_title_position` read and write
 // its own mode's layout slot, whichever mode is shown.
+const linearId = 'linear';
+state.addDrawing(createDrawingState(linearId, 'linear'), 'Linear', state.drawingTabs.value.length);
 const circularDrawing = modeDrawing(state, 'circular');
 const linearDrawing = modeDrawing(state, 'linear');
 assert.notEqual(circularDrawing, linearDrawing);
@@ -263,7 +266,7 @@ assert.deepEqual(
 );
 
 {
-  const { resetSettings } = await import(
+  const { resetProject, resetSettings } = await import(
     pathToFileURL(join(tempDir, 'js', 'services', 'reset.js'))
   );
   installShownDrawing('circular');
@@ -310,7 +313,7 @@ assert.deepEqual(
     }
   );
   const retainedFile = { name: 'retained.gb' };
-  state.files.c_gb = retainedFile;
+  const retainedRef = bindDrawingInputFile(state.inputFiles, circularDrawing.slices.inputs, 'c_gb', retainedFile);
   const retainedComparisonFile = { name: 'retained-comparison.tsv' };
   state.activeDrawing().linearComparisonPlan.mode = 'selected';
   state.activeDrawing().linearComparisonPlan.defaultSource = 'upload';
@@ -354,7 +357,9 @@ assert.deepEqual(
   state.activeDrawing().losat.blastp.collinearSearchScope = 'adjacent';
   state.activeDrawing().unmanagedConfigOverrides['objects.gc_content.percent_background_opacity'] = 0.42;
 
-  resetSettings(state);
+  // Reset all: the one-per-Session values, then every drawing.
+  resetProject(state);
+  state.drawingList().forEach((drawing) => resetSettings(state, drawing));
   assert.equal(state.activeDrawing().form.multi_record_canvas, true);
   assert.equal(state.activeDrawing().linearRecordLayoutEnabled.value, true);
 
@@ -394,7 +399,7 @@ assert.deepEqual(
     state.activeDrawing().adv.linear_track_slots_axis_index,
     resetAdvDefaults.linear_track_slots_axis_index
   );
-  assert.equal(state.files.c_gb, retainedFile);
+  assert.equal(circularDrawing.files.c_gb, retainedRef);
   assert.equal(state.activeDrawing().linearComparisonPlan.mode, 'none');
   assert.equal(state.activeDrawing().linearComparisonPlan.defaultSource, 'losat');
   assert.deepEqual(
@@ -510,9 +515,9 @@ for (const modeName of ['circular', 'linear']) {
   installShownDrawing(modeName);
   Object.assign(state.activeDrawing().form, createDefaultForm());
   Object.assign(state.activeDrawing().adv, createDefaultAdv(modeName));
-  state.cInputType.value = 'gb';
-  state.lInputType.value = 'gb';
-  state.circularRecordList.value = [];
+  modeDrawing(state, 'circular').inputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
+  circularDrawing.circularRecordList.value = [];
   state.activeDrawing().linearRecordLayoutEnabled.value = false;
   if (modeName === 'linear') {
     state.activeDrawing().linearComparisonPlan.mode = 'adjacent';
@@ -633,7 +638,7 @@ assert.equal(
   installShownDrawing('circular');
   Object.assign(state.activeDrawing().form, createDefaultForm());
   Object.assign(state.activeDrawing().adv, createDefaultAdv('circular'));
-  state.cInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
   for (const [stored, flag] of [[-5, null], [0, null], [250, '250']]) {
     const loaded = structuredClone(buildConfigData(state.activeDrawing()));
     loaded.adv.scale_interval = stored;

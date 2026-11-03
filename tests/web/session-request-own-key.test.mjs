@@ -17,6 +17,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { bindDrawingInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { serializeActiveRenderFiles, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const {
   buildCanonicalRenderRequest, compareCanonicalRenderRequests, decodeCanonicalResourceText,
@@ -35,9 +36,9 @@ const drawing = modeDrawing(state, 'circular');
 // Every case starts from one Circular GenBank file and its own form values.
 const circularState = (form) => {
   installShownDrawing('circular');
-  state.cInputType.value = 'gb';
-  state.files.c_gb = genbank;
-  state.circularRecordList.value = [];
+  modeDrawing(state, 'circular').inputType.value = 'gb';
+  bindDrawingInputFile(state.inputFiles, drawing.slices.inputs, 'c_gb', genbank);
+  drawing.circularRecordList.value = [];
   Object.assign(drawing.form, {
     labels_mode: 'none', circular_record_selector: '', multi_record_canvas: false,
     circular_region_start: '', circular_region_end: '', ...form
@@ -45,9 +46,9 @@ const circularState = (form) => {
 };
 const buildWithFiles = async () => buildCanonicalRenderRequest({
   state, drawing, comparisonPlanSnapshot: null, recordDisplayRows: [],
-  filesData: await serializeActiveRenderFiles('circular', state, drawing, null)
+  filesData: await serializeActiveRenderFiles(state, drawing, null)
 });
-const emptyRecordFiles = () => ({ c_gb: state.files.c_gb, circularRecords: [] });
+const emptyRecordFiles = () => ({ c_gb: state.inputFiles.fileOf(drawing.files.c_gb), circularRecords: [] });
 
 test('OV-563: a Labels mode outside the table writes the scope none', async () => {
   circularState({ labels_mode: 'toString' });

@@ -2,13 +2,16 @@
 
 # Session and request compatibility
 
-Current writers emit session version 50 and canonical `renderRequest` schema 9.
+Current writers emit session version 51 and canonical `renderRequest` schema 9.
+Session 51 lists the drawings of a project in `drawings`. The Web app and Python
+read a Session 46–50 into drawings themselves; a Session 27–44 is converted by
+Python, once, at Load (the Web app waits for it); a Session 45 is not read.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 50 | 27–33, 39–42, 44, and 46–50 |
+| gbdraw session | 51 | 27–33, 39–42, 44, and 46–51 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–50 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–51 |
 
 Session 50 stores the Linear **wrap length** (see
 [Linear wrap length](#linear-wrap-length)): the Linear slice's form key
@@ -25,15 +28,20 @@ is saved in the render request as `objects.blast_match.identity_scale`
 (Linear) or `objects.conservation.identity_scale` (Circular), and no scale is
 left out of the request. A Session up to 49 loads without a fixed scale.
 gbdraw 0.14.4 and earlier refuse a Session 50 file.
+Session 51 keeps these three values in each drawing (`config.form.linear_wrap_length`,
+`config.adv.italic_gene_labels`, `config.adv.identity_scale`, and the config leaf
+`canvas.linear.wrap_length`); reading a Session 50 moves each slice's values there.
 
 Session 49 stores the Circular **Show Definition** setting in each Circular
 slice (`modes.circular.config.adv.show_definition`). Off is saved in the
 render request as `objects.definition.circular.show: false`; on is left out
 of the request, as earlier writers left it. An older Session reads it as on and
 draws as before. gbdraw 0.14.3 and 0.14.4 write Session 49; gbdraw 0.14.0 to 0.14.2 read
-Sessions up to 48 and refuse a Session 49 file.
+Sessions up to 48 and refuse a Session 49 file. Session 51 keeps the setting in
+each Circular drawing's `config.adv.show_definition`; reading a Session 49 moves
+it there.
 
-Session 48 stores the saved protein results (LOSATP tables, Similarity groups,
+Sessions 48 and 49 store the saved protein results (LOSATP tables, Similarity groups,
 Collinear blocks) of a reverse-complemented Linear record in the record's
 search frame, as it stores comparison tables. Sessions 46 and 47 stored them
 after the reverse complement. A replay of an older Session draws as before,
@@ -84,7 +92,7 @@ is now off by default on every surface; a Session, request or recorded command
 that names Collinear without it replays with inference on, as it was drawn.
 
 Session 44 documents written with canonical request schema 7 or 8 remain
-readable. Current saves promote that request to schema 9 and the Session to 50,
+readable. Current saves promote that request to schema 9 and the Session to 51,
 and keep the saved preview until the next Generate. Schema 9 adds
 `diagramOptions.featureOverrides` (see
 [Feature identity overrides](typed-requests.md#feature-identity-overrides));
@@ -113,6 +121,17 @@ Web app still loads a Session that holds such a form; until the Web repairs it
 at Load, Generate and any re-render of the stored request (label reflow,
 alignment, record transform) show "An input value is invalid"
 (`INPUT_INVALID`, field `schema`).
+
+Session 51 holds a project and its list of drawings. The project keeps
+`format`, `version`, `createdAt`, `title`, `resources`, `ui` (with
+`ui.activeDrawingId`, the drawing that opens), and `legacyArtifacts`. Each entry
+of `drawings` is one drawing in tab order: its `id`, `name`, and `mode`
+(`circular` or `linear`), and its own request, Results, settings (`config`),
+per-feature edits (`features`), editor state, view (`ui`), file bindings
+(`webFiles`), and saved LOSAT results. A project may hold several drawings of one
+mode. The top-level `modes`, `otherModeResult`, `renderRequest`, `results`,
+`config`, and `features` of Sessions 46 to 50 are not part of Session 51.
+Reading a Session 46 to 50 moves each mode's part into its own drawing.
 
 Sessions 46 to 50 keep the Web app's settings and edits of each diagram mode in its
 own slice, `modes.circular` and `modes.linear`:
@@ -559,7 +578,7 @@ its components for rendering.
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings keep their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.
-Schema 2 is accepted with sessions 41–42, 44, and 46–50. Python refuses unknown or malformed
+Schema 2 is accepted with sessions 41–42, 44, and 46–51. Python refuses unknown or malformed
 bindings; the Web app drops each one and lists it in the **Load this file?** dialog
 before the import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
@@ -699,9 +718,10 @@ this variant. Auxiliary files retain their ordinary resource bindings and bytes.
 Python can load and materialize a settings-only Session. CLI replay,
 `session_to_request()` and `render_session()` report that it has no biological
 render request. Existing supported full Sessions remain readable. Current
-settings-only writers emit session 50, while current readers also accept the
-session-42, session-44, and session-46 to session-49 forms. Readers whose
-maximum version is 42, 44, or 46 to 49 reject newly written session-50 files.
+writers emit a session 51 whose drawing holds no request, while current readers
+also accept the session-42, session-44, and session-46 to session-50
+settings-only forms. Readers whose maximum version is 42, 44, or 46 to 50
+reject newly written session-51 files.
 
 Older settings JSON without a `format` field (containing `form` or `adv`) still
 uses the legacy configuration import. It does not need a render request. This
@@ -753,7 +773,7 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46–50;
+envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46–51;
 versions 27–30 have no `renderRequest`: the CLI replays them, and the Web app
 loads them from their saved settings. A Linear replay that combines `--region`,
 `--reverse_complement 1`, and `-b` or `--comparisons_table` now crops before it

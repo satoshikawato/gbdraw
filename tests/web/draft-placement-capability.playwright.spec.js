@@ -4,6 +4,7 @@ const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 
 for (const mode of ['circular', 'linear']) {
   test(`${mode} draft placement capability survives history and dirty session restore`, async ({ browser, baseURL }, testInfo) => {
@@ -331,7 +332,7 @@ test('an unsupported lane from a loaded Session names the feature on Generate (O
     const { product } = await placeOutward(page);
     const saved = testInfo.outputPath('outward.gbdraw-session.json');
     const session = JSON.parse(gunzipSync(await download(page, 'Save Session', saved)));
-    session.modes.circular.config.form.track_type = 'spreadout';
+    savedDrawing(session, 'circular').config.form.track_type = 'spreadout';
     const edited = testInfo.outputPath('outward-spreadout.gbdraw-session.json');
     await fs.writeFile(edited, JSON.stringify(session));
     await page.context().close();

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { legendEditsByRowKey, sessionLegendEditsByRowKey } from '../../gbdraw/web/js/services/mode-scoped-migration.js';
+import { legendEditsByRowKey, sessionLegendEditsByRowKey } from '../../gbdraw/web/js/services/session-drawings-upgrade.js';
 import { MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION } from '../../gbdraw/web/js/contracts/schema.generated.js';
 
 /** @type {{ readsSessionVersion: number, cases: { name: string, legend: Record<string, unknown>, expected: Record<string, unknown>, outcomes: unknown[] }[] }} */

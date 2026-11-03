@@ -32,6 +32,45 @@ export const recordTranslationsFor = (stored, recordKeys) => recordKeys.flatMap(
 });
 
 /**
+ * A row field that the Web fills from run-time identities, and that a reader
+ * empties when its list arranges nothing: every entry holds exactly
+ * `entryKeys`, and its `positionKey` is its 1-based position in the list
+ * (`normalize` of gbdraw/data/mode-slice-defaults.json).
+ * @typedef {{
+ *   domain: string, path: string, field: string,
+ *   emptyWhenUnarranged: { entryKeys: string[], positionKey: string },
+ *   reason: string
+ * }} UnarrangedFieldRule
+ */
+
+/**
+ * `value` with the field of each rule of `row` emptied when its list arranges
+ * nothing. The one Web evaluation of the rule: the defaults generator
+ * (tools/generate_mode_slice_defaults.mjs) and the Session 46-48 fast path
+ * (session-drawings-upgrade.js) read it; its Python twin is
+ * `gbdraw.session_drawings._normalized`, held equal by the generator's `--check`.
+ * @param {readonly UnarrangedFieldRule[]} rules
+ * @param {{ domain: string, path: string }} row
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+export const withoutUnarrangedEntries = (rules, row, value) => rules
+  .filter((rule) => rule.domain === row.domain && rule.path === row.path)
+  .reduce((current, rule) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return current;
+    const holder = /** @type {Record<string, unknown>} */ (current);
+    const entries = holder[rule.field];
+    const { entryKeys, positionKey } = rule.emptyWhenUnarranged;
+    const keys = [...entryKeys].sort().join('\0');
+    const unarranged = Array.isArray(entries) && entries.every((entry, index) => (
+      entry !== null && typeof entry === 'object' && !Array.isArray(entry)
+      && Object.keys(entry).sort().join('\0') === keys
+      && /** @type {Record<string, unknown>} */ (entry)[positionKey] === index + 1
+    ));
+    return unarranged ? { ...holder, [rule.field]: [] } : holder;
+  }, value);
+
+/**
  * @param {unknown} value
  * @param {number} [fallback]
  */

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { bindingDrawings } from './helpers/input-files.mjs';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
@@ -8,6 +9,7 @@ import { buildSessionResources } from '../../gbdraw/web/js/services/session-reso
 import { adoptCurrentSessionResources } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { projectSettingsOnlySession } from '../../gbdraw/web/js/services/session-request.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
+import { createInputFileStore } from '../../gbdraw/web/js/services/history-files.js';
 import { unreadFieldRepairs } from '../../gbdraw/web/js/services/config-field-readers.js';
 import { createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 
@@ -31,7 +33,10 @@ test('auxiliary file bytes and metadata round trip through the existing resource
   const file = Object.assign(new Blob([bytes], { type: 'text/tab-separated-values' }), {
     name: 'priority.tsv', lastModified: 123456
   });
-  const resources = await buildSessionResources({ files: { qualifier_priority: file }, linearSeqs: [] }, null);
+  // The card names its file by ref of the input file store.
+  const inputFiles = createInputFileStore();
+  const resources = await buildSessionResources({ inputFiles }, null,
+    bindingDrawings({ files: { qualifier_priority: inputFiles.registerFile(file) } }));
   const document = { ...structuredClone(settings), ...resources };
   assert.equal(adoptCurrentSessionDocument(document, 42).canonical, null);
   const projected = projectSettingsOnlySession(document, adoptCurrentSessionResources(document.resources));
@@ -40,7 +45,9 @@ test('auxiliary file bytes and metadata round trip through the existing resource
   assert.equal(restored.name, file.name);
   assert.equal(restored.type, file.type);
   assert.equal(restored.lastModified, file.lastModified);
-  const again = await buildSessionResources({ files: projected.files, linearSeqs: [] }, null);
+  // Load binds the loaded file to the card by ref.
+  const again = await buildSessionResources({ inputFiles }, null,
+    bindingDrawings({ files: { qualifier_priority: inputFiles.registerFile(restored) } }));
   assert.deepEqual(again, resources);
 });
 
@@ -50,8 +57,8 @@ test('inactive biological inputs cannot be classified or saved as settings-only'
     { c_conservation_fastas: [null, {}] }, { c_conservation_sequence_sources: [{}] },
     { linearSeqs: [{ gb: {} }] }, { linearSeqs: [{ gff: {}, fasta: {} }] }
   ]) {
+    // Save writes them as a drawing's draft request or bindings, not as settings only (DESIGN §4.4).
     assert.equal(hasBiologicalSessionInputs(inventory), true);
-    await assert.rejects(buildSessionResources({ files: inventory, linearSeqs: inventory.linearSeqs }, null), /canonical render request/);
   }
   const inactive = structuredClone(full);
   inactive.ui = { mode: 'linear' };

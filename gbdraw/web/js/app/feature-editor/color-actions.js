@@ -813,12 +813,8 @@ export const createFeatureColorActions = ({
     const legendEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === sourceKey);
     if (!legendEntry) return false;
     // An entry without a key record (an older editor row) records its key
-    // first. The rename's own step holds it. PAINT_INTENT_WRITERS does not
-    // list this writer: before the paint slice it wrote through the row, and
-    // the R2 guard sees neither that nor a handle held under another name.
-    // Listing it is an authority change (open: A1 STATUS M3.10, R2 rename).
-    const legendPaint = drawing.slices.paint;
-    renameListedLegendRow(legendPaint, legendEntry, { caption: /** @type {LegendCaption} */ (newCaption), originalCaption: sourceKey });
+    // first. The rename's own step holds it.
+    renameListedLegendRow(drawing.slices.paint, legendEntry, { caption: /** @type {LegendCaption} */ (newCaption), originalCaption: sourceKey });
     showEditorIntent?.({ domains: RENAMED_ROW_DOMAINS });
     return true;
   };

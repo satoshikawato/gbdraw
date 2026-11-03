@@ -6,6 +6,11 @@ import {
   createDefaultSpecificRule
 } from '../state.js';
 /** @import { DrawingState, state as AppState } from '../state.js' */
+/**
+ * The applied palette a drawing's Result takes when the drawing is reset; the
+ * caller writes it into that drawing's artifact (the shown one, or its slot).
+ * @typedef {{ appliedPaletteName: string, appliedPaletteColors: Record<string, string> }} DrawingResetArtifact
+ */
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './drawing/visibility-rules.js';
@@ -15,6 +20,7 @@ import { LABEL_TABLES_SLICE } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
 import { resetPaintEdits } from './drawing/paint.js';
 import { SETTINGS_SLICE } from './drawing/settings.js';
+import { INPUTS_SLICE } from './drawing/inputs.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 
@@ -58,26 +64,35 @@ const defaultPaletteColors = (state) => {
 /**
  * @param {typeof AppState} state
  * @param {DrawingState} drawing
+ * @returns {DrawingResetArtifact}
  */
 const resetPaletteState = (state, drawing) => {
-  const defaults = createDefaultPaletteDraftState();
   const colors = defaultPaletteColors(state);
 
   // The default palette, with its colors.
   PALETTE_SLICE.install(drawing.slices.palette, { ...createDefaultPaletteData(), currentColors: colors });
-  state.paletteInstantPreviewEnabled.value = defaults.paletteInstantPreviewEnabled;
-  state.appliedPaletteName.value = defaults.appliedPaletteName;
-  state.appliedPaletteColors.value = { ...colors };
+  return { appliedPaletteName: createDefaultPaletteDraftState().appliedPaletteName, appliedPaletteColors: { ...colors } };
 };
 
-
 /**
+ * A new drawing at its mode's defaults: the drawing state `createDrawingState`
+ * just made takes its default palette's colors (a new drawing state has
+ * none). It is the drawing `tools/generate_mode_slice_defaults.mjs` reads as a
+ * mode's default, so Save counts it as unused (R16-8, OV-1811). The drawing
+ * list's New takes it.
  * @param {typeof AppState} state
- * @param {DrawingState} drawing
+ * @param {DrawingState} drawing A new drawing state.
+ * @returns {DrawingState} The same drawing.
  */
-const resetRuleDraftState = (state, drawing) => {
+export const withNewDrawingDefaults = (state, drawing) => {
+  resetPaletteState(state, drawing);
+  return drawing;
+};
+
+// The rule drafts of the editor forms (one form for every drawing).
+/** @param {typeof AppState} state */
+const resetRuleDrafts = (state) => {
   const editorDefaults = createDefaultEditorDraftState();
-  COLOR_RULES_SLICE.reset(drawing.slices.colorRules);
   replaceReactiveObject(state.newSpecRule, createDefaultSpecificRule());
   state.selectedSpecificPreset.value = editorDefaults.selectedSpecificPreset;
   state.specificRulePresetLoading.value = editorDefaults.specificRulePresetLoading;
@@ -87,66 +102,76 @@ const resetRuleDraftState = (state, drawing) => {
   state.newFeatureToAdd.value = editorDefaults.newFeatureToAdd;
 };
 
-/**
- * @param {typeof AppState} state
- * @param {DrawingState} drawing
- */
-const resetEditorDraftState = (state, drawing) => {
-  const editorDefaults = createDefaultEditorDraftState();
+/** @param {DrawingState} drawing */
+const resetEditorDraftState = (drawing) => {
   VISIBILITY_RULES_SLICE.reset(drawing.slices.visibilityRules);
   // R15-14: every renamed row, a feature row's or a track row's, returns to
   // the caption Python draws, its key.
   resetPaintEdits(drawing.slices.paint);
+};
 
-  state.autoLabelReflowEnabled.value = false;
+// The editor's page-level state: searches, the open panel tab, and the
+// clicked feature, label, and alignment feature.
+/** @param {typeof AppState} state */
+const resetEditorUiState = (state) => {
+  const editorDefaults = createDefaultEditorDraftState();
+  state.selectedAnnotation.value = null;
   state.labelReflowLastError.value = null;
 
   state.featureSearch.value = '';
   state.labelSearch.value = '';
   state.featurePanelTab.value = editorDefaults.featurePanelTab;
-  state.downloadDpi.value = editorDefaults.downloadDpi;
   state.clickedFeature.value = null;
   state.clickedLabel.value = null;
 
   state.selectedOrthogroupAlignmentFeature.value = '';
 };
 
-// Reset Settings returns both drawings to their own mode's defaults
-// (PD-OI-070), and the app-level LOSAT execution and popup settings.
 /**
- * The uploaded tables whose rows become settings (Default colors, Specific
- * color rules, Blacklist, Whitelist, Priority File). Reset Settings, which a
- * Session replace also runs, clears those settings, so the cards go with them
- * (OV-1267); a card that stayed would name a table its rules no longer hold.
- * @param {Record<'d_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority', unknown>} files
+ * The project part of Reset all drawings: the one-per-Session values (LOSAT
+ * execution, Rich Feature Popup, Auto Reflow, PNG DPI, palette Instant
+ * Preview) return to their defaults, as 0.14.0 Reset Settings did, and so do
+ * the page-level editor drafts. Reset this drawing keeps them (R17-5); it
+ * writes no drawing.
+ * @param {typeof AppState} state
  */
-const clearSettingTableFiles = (files) => {
-  files.d_color = null;
-  files.t_color = null;
-  files.blacklist = null;
-  files.whitelist = null;
-  files.qualifier_priority = null;
-};
-
-/** @param {typeof AppState} state */
-export const resetSettings = (state) => {
-  clearSettingTableFiles(state.files);
+export const resetProject = (state) => {
   Object.assign(state.losatExecution, createDefaultLosatExecution());
   state.richFeaturePopup.value = true;
-  state.drawingList().forEach((drawing) => {
-    SETTINGS_SLICE.reset(drawing.slices.settings);
-    ANNOTATION_SETS_SLICE.reset(drawing.slices.annotationSets);
-    FEATURE_EDITS_SLICE.reset(drawing.slices.featureEdits);
-    // The label tables (the bulk label edits, a loaded Session's saved label
-    // table, and the filters) and the Similarity group names, the dormant
-    // ones included, return to a new drawing's (R15-21).
-    LABEL_TABLES_SLICE.reset(drawing.slices.labelTables);
-    GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
-    state.selectedAnnotation.value = null;
-    resetPaletteState(state, drawing);
-    resetRuleDraftState(state, drawing);
-    resetEditorDraftState(state, drawing);
-  });
+  state.autoLabelReflowEnabled.value = false;
+  state.downloadDpi.value = createDefaultEditorDraftState().downloadDpi;
+  state.paletteInstantPreviewEnabled.value = createDefaultPaletteDraftState().paletteInstantPreviewEnabled;
+  resetRuleDrafts(state);
+  resetEditorUiState(state);
+};
+
+/**
+ * Reset Settings of one drawing: its settings and edits return to a new
+ * drawing's of its mode (PD-OI-070); no other drawing and no one-per-Session
+ * value changes. Reset all drawings runs `resetProject` and this for every
+ * drawing; the caller runs the mode's follow-ups and writes the returned
+ * applied palette into the drawing's artifact.
+ * @param {typeof AppState} state
+ * @param {DrawingState} drawing
+ * @returns {DrawingResetArtifact}
+ */
+export const resetSettings = (state, drawing) => {
+  SETTINGS_SLICE.reset(drawing.slices.settings);
+  ANNOTATION_SETS_SLICE.reset(drawing.slices.annotationSets);
+  FEATURE_EDITS_SLICE.reset(drawing.slices.featureEdits);
+  // The label tables (the bulk label edits, a loaded Session's saved label
+  // table, and the filters) and the Similarity group names, the dormant
+  // ones included, return to a new drawing's (R15-21).
+  LABEL_TABLES_SLICE.reset(drawing.slices.labelTables);
+  GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
+  COLOR_RULES_SLICE.reset(drawing.slices.colorRules);
+  // The uploaded tables whose rows become settings (Default colors, Specific
+  // rules, Blacklist, Whitelist, Priority) go with the settings they loaded
+  // (OV-1267, D-15-78): a card that stayed would name a table its rules no
+  // longer hold. The drawing's other input bindings stay.
+  INPUTS_SLICE.reset(drawing.slices.inputs);
+  resetEditorDraftState(drawing);
+  return resetPaletteState(state, drawing);
 };
 
 /** @param {Pick<typeof AppState, 'zoom' | 'isPanning' | 'panStart' | 'canvasPan' | 'showCanvasControls'>} state */

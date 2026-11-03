@@ -5,6 +5,8 @@ const { pathToFileURL } = require('node:url');
 const { promisify } = require('node:util');
 const { gunzipSync } = require('node:zlib');
 const { test, expect } = require('@playwright/test');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const {
   CURRENT_FEATURE_CATALOG_SCHEMA,
   CURRENT_REQUEST_SCHEMA,
@@ -350,9 +352,9 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   const savedPath = await (await pendingSave).path();
   const saved = JSON.parse(gunzipSync(fs.readFileSync(savedPath)));
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
-  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
-  expect(saved.renderRequest.records[0].display.startCoordinate).toBe(expectedStart);
-  expect(saved.modes[saved.ui.mode].config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
+  expect(shownSavedDrawing(saved).renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
+  expect(shownSavedDrawing(saved).renderRequest.records[0].display.startCoordinate).toBe(expectedStart);
+  expect(shownSavedDrawing(saved).config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
     schema: 1,
     placement: 'anchor',
     anchor: 'midpoint',
@@ -621,7 +623,7 @@ test('both modes record rotation resolves the same circular source anchor', asyn
     await installDiagramRequestObserver(page);
     await openApp(page);
     if (mode === 'linear') {
-      await page.getByRole('button', { name: 'Linear', exact: true }).click();
+      await showDrawing(page, { kind: 'linear' });
     }
     const upload = mode === 'linear'
       ? page.getByTestId('linear-genbank-1')
@@ -760,7 +762,7 @@ test('Linear Record actions rotate a circular record of a loaded Session without
   await installRecordReadCounter(page);
   await installDiagramRequestObserver(page);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByTestId('linear-genbank-1').setInputFiles({
     name: 'loaded-linear.gbk',
     mimeType: 'text/plain',
@@ -868,7 +870,7 @@ test('Linear CLI Session that draws some records of a file loads and generates o
   await loadSessionFile(page, session);
   const linearRows = () => page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.linearSeqs.map((seq) => [seq.uid, seq.gb?.name, seq.region_record_id]);
+    return state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.map((seq) => [seq.uid, seq.gb?.name, seq.region_record_id]);
   });
   await expect(page.locator('[data-linear-source-records]')).toHaveCount(2);
   expect(await linearRows()).toEqual([
@@ -1656,8 +1658,8 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     state.selectedResultIndex.value = 0;
     state.svgContainer.value = container;
     state.featureCatalog.value = catalog;
-    state.activeDrawing().featureOverrides[JSON.stringify([state.generatedMode.value, 'record-a', 'biological-a'])] = {
-      scope: state.generatedMode.value,
+    state.activeDrawing().featureOverrides[JSON.stringify([state.drawingOf(state.generatedDrawingId.value).mode, 'record-a', 'biological-a'])] = {
+      scope: state.drawingOf(state.generatedDrawingId.value).mode,
       recordKey: 'record-a',
       biologicalFeatureId: 'biological-a',
       featureVisibility: null,
@@ -1679,7 +1681,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     URL.revokeObjectURL = () => {};
     HTMLAnchorElement.prototype.click = () => {};
     try {
-      await downloadInteractiveSVG(captureSvgExport(state, state.drawingOfMode(state.generatedMode.value), { interactive: true }));
+      await downloadInteractiveSVG(captureSvgExport(state, state.drawingOf(state.generatedDrawingId.value), { interactive: true }));
       const svgText = await downloadedBlob.text();
       const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
       const metadata = doc.querySelector('#gbdraw-interactive-feature-metadata');

@@ -17,6 +17,7 @@ const { answerSessionTitle, evaluateWithRetainedPromise, expectNoLoadRepairDialo
 const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   SINGLE_FIXTURE, open, openBothDrawings, otherMode, switchDrawing, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
   legendRowColor, FL1_ALPHA, renameRow, legendRowStrokeColor, editorLegendRows, switchPalette, deleteLegendRow,
@@ -807,11 +808,17 @@ const LABEL_SETTINGS = Object.freeze([
 ]);
 const readLabelSettings = (page) => page.evaluate(async (settings) => {
   const { state } = await import('/gbdraw/web/js/state.js');
-  return settings.map(([drawingMode, group, name]) => [drawingMode, group, name, window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name]]);
+  // The first drawing of each mode; a project without a drawing of that mode keeps no value for it.
+  return settings.flatMap(([drawingMode, group, name]) => {
+    const drawing = state.drawingList().find((entry) => entry.mode === drawingMode);
+    return drawing ? [[drawingMode, group, name, window.Vue.unref(drawing[group])[name]]] : [];
+  });
 }, LABEL_SETTINGS);
 const writeLabelSettings = (page, values) => page.evaluate(async (written) => {
   const { state } = await import('/gbdraw/web/js/state.js');
-  written.forEach(([drawingMode, group, name, value]) => { window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name] = value; });
+  written.forEach(([drawingMode, group, name, value]) => {
+    window.Vue.unref(state.drawingList().find((drawing) => drawing.mode === drawingMode)[group])[name] = value;
+  });
 }, values);
 // Reset writes Auto Reflow off and default label settings. A case keeps both, so
 // its display runs with the state its title names.
@@ -1629,9 +1636,9 @@ test('Palette color None and the live edits after it show the Legend row Generat
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await openFresh(page);
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async ({ first, second }) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     await window.Vue.nextTick();
     if (app.linearSeqs.length < 2) app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));
@@ -2064,8 +2071,10 @@ test.describe('the warm app page', () => {
     return {
       mode: app.mode,
       results: app.results.length,
-      linearSources: state.linearSeqs.filter((seq) => seq.gb || seq.gff || seq.fasta).length,
-      showLabelsLinear: state.drawingOf('linear').form.show_labels_linear,
+      // A new Session holds one Circular drawing; a case's Linear drawing must be gone after the restore.
+      drawingKinds: state.drawingList().map((drawing) => drawing.mode),
+      linearSources: state.drawingList().filter((drawing) => drawing.mode === 'linear')
+        .flatMap((drawing) => drawing.linearSeqs).filter((seq) => seq.gb || seq.gff || seq.fasta).length,
       undo: window.__GBDRAW_HISTORY__.getUndoCount(),
       leftByCase: window.leftByCase ?? null
     };
@@ -2082,7 +2091,7 @@ test.describe('the warm app page', () => {
     expect(warmPage()).toBe('reused');
     await openFresh(page);
     expect(await freshBootView(page)).toEqual({
-      mode: 'circular', results: 0, linearSources: 0, showLabelsLinear: 'none', undo: 0, leftByCase: null
+      mode: 'circular', results: 0, drawingKinds: ['circular'], linearSources: 0, undo: 0, leftByCase: null
     });
     await page.evaluate(() => { window.leftByCase = true; });
   });

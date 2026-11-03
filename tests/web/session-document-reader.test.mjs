@@ -4,6 +4,7 @@
 // hand-written checks of the input files and the committed Result sets repair
 // before the dialog what Save refuses.
 import assert from 'node:assert/strict';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
@@ -203,7 +204,11 @@ test('run notices that do not match their Results are dropped before the dialog 
     assert.throws(() => validateSessionAuthorityInventory(stale, stale.version), field);
   }
   // The other mode's set: its stale notices are dropped and the set is kept.
-  const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
+  // The one-drawing view of the bundled Session 49, in the 46 layout this case builds `otherModeResult` on.
+  const gallery = (name) => {
+    const saved = JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
+    return { ...savedDrawingView(saved, saved.ui.activeDrawingId), version: 46 };
+  };
   const circular = gallery('HmmtDNA_basic_circular.gbdraw-session.json');
   const linear = gallery('lambda_basic_linear.gbdraw-session.json');
   const other = {
@@ -246,7 +251,11 @@ test('a Session 27-39 Result set Load could not admit is read again without its 
 });
 
 test('a Result set Load\'s composition transform could not compose is read again without its Results (A20, E-OD16)', () => {
-  const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
+  // The one-drawing view of the bundled Session 49, in the 46 layout this case builds `otherModeResult` on.
+  const gallery = (name) => {
+    const saved = JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}`, import.meta.url), 'utf8'));
+    return { ...savedDrawingView(saved, saved.ui.activeDrawingId), version: 46 };
+  };
   const circular = gallery('HmmtDNA_basic_circular.gbdraw-session.json');
   const linear = gallery('lambda_basic_linear.gbdraw-session.json');
   const other = {

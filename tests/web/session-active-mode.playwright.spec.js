@@ -5,9 +5,11 @@ const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { promisify } = require('node:util');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 const {
   CURRENT_SESSION_VERSION,
-  assertSessionLoadLeftWorkerIdle,
+  assertLegacyLoadConvertedOnce,
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
   getDiagramWorkerActivity,
@@ -42,21 +44,24 @@ const snapshot = page => page.evaluate(async () => {
   const { readFileBytes } = await import('./js/services/file-content-cache.js');
   const digest = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
     .map(byte => byte.toString(16).padStart(2, '0')).join('');
+  const circularDrawing = state.drawingList().find((drawing) => drawing.mode === 'circular');
+  const linearDrawing = state.drawingList().find((drawing) => drawing.mode === 'linear');
   const fileInfo = async file => file ? {
     name: file.name, type: file.type, lastModified: file.lastModified,
     bytes: await digest(await readFileBytes(file))
   } : null;
   return {
     mode: state.mode.value,
-    generatedMode: state.generatedMode.value,
+    generatedDrawingId: state.generatedDrawingId.value,
     config: buildConfigData(state.activeDrawing()),
     request: getCommittedCanonicalRenderRequest(),
     results: window.__GBDRAW_APP__.currentResults().map(result => ({ name: result.name, content: result.content })),
     selectedResultIndex: state.selectedResultIndex.value,
     featurePanelTab: state.featurePanelTab.value,
     downloadDpi: state.downloadDpi.value,
-    circularSource: await fileInfo(state.files.c_gb),
-    linearSource: await fileInfo(state.linearSeqs[0]?.gb),
+    // null: the project has no drawing of that mode (a one-mode Load makes none for the other mode).
+    circularSource: circularDrawing ? await fileInfo(state.inputFiles.fileOf(circularDrawing.files.c_gb)) : null,
+    linearSource: linearDrawing ? await fileInfo(state.inputFiles.fileOf(linearDrawing.linearSeqs[0]?.gb)) : null,
     history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]
   };
 });
@@ -66,7 +71,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   await openApp(page);
   await load(page, divergentFixture);
   const circular = await snapshot(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByTestId('linear-genbank-1').setInputFiles(linearSource);
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -78,7 +83,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   const before = await snapshot(page);
   // E1: Linear shows its own empty Result slot; the Circular Result waits in its slot.
   expect(before.mode).toBe('linear');
-  expect(before.generatedMode).toBe('linear');
+  expect(before.generatedDrawingId).toBe('linear');
   expect(before.request).toBeNull();
   expect(before.results).toEqual([]);
   expect(before.config.adv.scale_font_size).toBe(19);
@@ -88,11 +93,11 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   const firstFile = info.outputPath('linear-draft.gbdraw-session.json.gz');
   const first = await save(page, firstFile);
   expect(first.version).toBe(CURRENT_SESSION_VERSION);
-  expect(first.ui.mode).toBe('linear');
-  expect(first.renderRequest.mode).toBe('circular');
-  // The Linear drawing is the Linear slice (Session 46); the Circular slice keeps its own.
-  expect(first.modes.linear.config.adv.scale_font_size).toBe(19);
-  expect(first.modes.circular.config.adv.scale_font_size).not.toBe(19);
+  expect(first.ui.activeDrawingId).toBe('linear');
+  expect(savedDrawing(first, 'circular').renderRequest.mode).toBe('circular');
+  // Each drawing keeps its own settings (Session 49).
+  expect(savedDrawing(first, 'linear').config.adv.scale_font_size).toBe(19);
+  expect(savedDrawing(first, 'circular').config.adv.scale_font_size).not.toBe(19);
 
   const context = await browser.newContext({
     baseURL: `http://127.0.0.1:${process.env.GBDRAW_WEB_TEST_PORT || 4173}`,
@@ -107,47 +112,73 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(loadWorker.constructions).toBeLessThanOrEqual(1);
     expect(loadWorker.instances.flatMap(instance => instance.helpers.map(helper => helper.operation)))
       .toEqual(loadWorker.helpers ? ['validateConfigOverrides'] : []);
-    // E1 (contract): a Session with a Result opens on that Result's mode.
+    // PD-OI-090 (Session 49): Load opens the drawing shown at Save, here Linear with its draft.
     const restored = await snapshot(fresh);
-    expect(restored.mode).toBe('circular');
-    expect(restored.generatedMode).toBe('circular');
+    expect(restored.mode).toBe('linear');
+    expect(restored.generatedDrawingId).toBe('linear');
     expect(restored.circularSource).toEqual(before.circularSource);
     expect(restored.linearSource).toEqual(before.linearSource);
-    expect(restored.request).toEqual(circular.request);
-    expect(restored.results).toEqual(circular.results);
-    expect(restored.selectedResultIndex).toBe(circular.selectedResultIndex);
+    // The Linear drawing's own saved request, with no Result drawn from it.
+    expect(restored.request).toEqual(savedDrawing(first, 'linear').renderRequest);
+    expect(restored.request.mode).toBe('linear');
+    expect(restored.results).toEqual([]);
+    // Load restores a drawing that holds a request over its request's
+    // projection, which resolves its track stacks (`resolvedTrackStacks`): an
+    // unset axis index of the draft is installed as the index Generate infers
+    // (OV-1786, OV-1870), and an unset slot placement as the one it resolves.
+    // The Linear drawing Load added beside the Circular Session is a new
+    // drawing at its mode's defaults, whose placements are unset (D-15-120).
+    expect(before.config.adv.circular_track_slots_axis_index).toBeNull();
+    expect(before.config.adv.linear_track_slots_axis_index).toBeNull();
+    const resolvedStacks = await fresh.evaluate(async ({ adv, form }) => {
+      const { resolvedTrackStacks } = await import('./js/services/config-field-readers.js');
+      const stacks = resolvedTrackStacks(adv, form);
+      return {
+        circular_track_slots_axis_index: stacks.circularAxis, circular_track_slots: stacks.circularSlots,
+        linear_track_slots_axis_index: stacks.linearAxis, linear_track_slots: stacks.linearSlots
+      };
+    }, before.config);
+    expect(resolvedStacks.circular_track_slots_axis_index).toBe(0);
+    expect(resolvedStacks.linear_track_slots_axis_index).toBe(0);
+    expect(restored.config).toEqual({ ...before.config, adv: { ...before.config.adv, ...resolvedStacks } });
+    expect(restored.config.adv.scale_font_size).toBe(19);
     expect(restored.featurePanelTab).toBe(before.featurePanelTab);
     expect(restored.downloadDpi).toBe(before.downloadDpi);
     expect(restored.history).toEqual([0, 0]);
-    // The Linear draft waits in the Linear drawing.
-    await fresh.getByRole('button', { name: 'Linear', exact: true }).click();
-    const linearDraft = await snapshot(fresh);
-    expect(linearDraft.mode).toBe('linear');
-    expect(linearDraft.results).toEqual([]);
-    expect(linearDraft.config).toEqual(before.config);
-    expect(linearDraft.config.adv.scale_font_size).toBe(19);
+    // The Circular drawing kept its own Result.
+    await showDrawing(fresh, { kind: 'circular' });
+    const circularResult = await snapshot(fresh);
+    expect(circularResult.mode).toBe('circular');
+    expect(circularResult.generatedDrawingId).toBe('circular');
+    expect(circularResult.request).toEqual(circular.request);
+    expect(circularResult.results).toEqual(circular.results);
+    expect(circularResult.selectedResultIndex).toBe(circular.selectedResultIndex);
+    await showDrawing(fresh, { kind: 'linear' });
 
     const second = await save(fresh, info.outputPath('linear-draft-resaved.gbdraw-session.json.gz'));
-    expect(second.ui.mode).toBe('linear');
+    expect(second.ui.activeDrawingId).toBe('linear');
     // Load opens the Linear typography unlinked, as the draft's scale and ruler
     // label sizes differ (the step above set only the scale size).
-    expect(first.modes.linear.ui.linearTypographyLinked).toBe(true);
-    expect(second.modes.linear.ui.linearTypographyLinked).toBe(false);
-    const linked = { ...second.modes.linear, ui: { ...second.modes.linear.ui, linearTypographyLinked: true } };
-    expect({ ...second.modes, linear: linked }).toEqual(first.modes);
-    expect(second.modes.linear.config.adv.scale_font_size).toBe(19);
-    expect(second.renderRequest).toEqual(first.renderRequest);
-    expect(second.results).toEqual(first.results);
+    expect(savedDrawing(first, 'linear').ui.linearTypographyLinked).toBe(true);
+    expect(savedDrawing(second, 'linear').ui.linearTypographyLinked).toBe(false);
+    const linked = { ...savedDrawing(second, 'linear'), ui: { ...savedDrawing(second, 'linear').ui, linearTypographyLinked: true } };
+    // The re-save writes every drawing back, each with its own request
+    // metadata (OV-1872); the Linear draft holds the track stacks Load resolved.
+    const firstResolved = first.drawings.map(drawing => (drawing.id === 'linear'
+      ? { ...drawing, config: { ...drawing.config, adv: { ...drawing.config.adv, ...resolvedStacks } } }
+      : drawing));
+    expect(second.drawings.map(drawing => (drawing.id === 'linear' ? linked : drawing))).toEqual(firstResolved);
+    expect(savedDrawing(second, 'linear').config.adv.scale_font_size).toBe(19);
     expect(second.resources).toEqual(first.resources);
-    expect(second.webFiles.bindings.c_gb).toEqual(first.webFiles.bindings.c_gb);
-    expect(second.webFiles.bindings.linearSeqs[0].gb).toEqual(first.webFiles.bindings.linearSeqs[0].gb);
-    expect(second.webFiles.resourceOriginalNames).toEqual(first.webFiles.resourceOriginalNames);
-    expect(second.ui.selectedResultIndex).toBe(first.ui.selectedResultIndex);
+    expect(savedDrawing(second, 'circular').webFiles.bindings.c_gb).toEqual(savedDrawing(first, 'circular').webFiles.bindings.c_gb);
+    expect(savedDrawing(second, 'linear').webFiles.bindings.linearSeqs[0].gb).toEqual(savedDrawing(first, 'linear').webFiles.bindings.linearSeqs[0].gb);
+    expect(second.webFiles?.resourceOriginalNames).toEqual(first.webFiles?.resourceOriginalNames);
+    expect(savedDrawing(second, 'circular').ui.selectedResultIndex).toBe(savedDrawing(first, 'circular').ui.selectedResultIndex);
 
     await generateAndWaitForResult(fresh);
     const generated = await snapshot(fresh);
     expect(generated.mode).toBe('linear');
-    expect(generated.generatedMode).toBe('linear');
+    expect(generated.generatedDrawingId).toBe('linear');
     expect(generated.request.mode).toBe('linear');
     expect(generated.request.diagramOptions.configOverrides['objects.scale.font_size.short']).toBe(19);
     expect(generated.request.diagramOptions.configOverrides['objects.scale.font_size.long']).toBe(19);
@@ -180,19 +211,19 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
   expect(circular).toMatchObject({ title: 'Circular title', titleFont: 32, definitionFont: 28 });
 
   // The fixture omits config.linearRecordLayout; Linear starts from fresh defaults.
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   expect(await draft(page)).toEqual({ title: '', titleFont: null, definitionFont: null, rows: true, replicon: false });
   await expect(plotTitle).toHaveValue('');
   await plotTitle.fill('Linear title');
   await plotTitle.press('Tab');
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await showDrawing(page, { kind: 'circular' });
   expect(await draft(page)).toMatchObject({ title: 'Circular title', titleFont: 32, definitionFont: 28 });
 
   const file = info.outputPath('per-mode-title.gbdraw-session.json.gz');
   const saved = await save(page, file);
-  // Each mode's drawing is its slice (Session 46).
-  expect(saved.modes.circular.config.form.plot_title).toBe('Circular title');
-  expect(saved.modes.linear.config.form.plot_title).toBe('Linear title');
+  // Each drawing holds its own settings (Session 49).
+  expect(savedDrawing(saved, 'circular').config.form.plot_title).toBe('Circular title');
+  expect(savedDrawing(saved, 'linear').config.form.plot_title).toBe('Linear title');
   const context = await browser.newContext({
     baseURL: `http://127.0.0.1:${process.env.GBDRAW_WEB_TEST_PORT || 4173}`
   });
@@ -201,7 +232,7 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
     await openApp(fresh);
     await load(fresh, file);
     expect(await draft(fresh)).toMatchObject({ title: 'Circular title', titleFont: 32, definitionFont: 28 });
-    await fresh.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(fresh, { kind: 'linear' });
     expect(await draft(fresh)).toEqual({ title: 'Linear title', titleFont: null, definitionFont: null, rows: true, replicon: false });
   } finally {
     await context.close();
@@ -213,20 +244,20 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
   await openApp(page);
   await load(page, fixture);
   let state = await snapshot(page);
-  expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
+  expect([state.mode, state.generatedDrawingId, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
   const previewWorker = await getDiagramWorkerActivity(page);
   expect(previewWorker.runs).toBe(0);
   expect(previewWorker.constructions).toBeLessThanOrEqual(1);
 
   const current = await save(page, info.outputPath('matching.gbdraw-session.json.gz'));
-  expect(current.ui.mode).toBe('circular');
+  expect(current.ui.activeDrawingId).toBe('circular');
   await load(page, info.outputPath('matching.gbdraw-session.json.gz'));
   state = await snapshot(page);
-  expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
+  expect([state.mode, state.generatedDrawingId, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
 
   await load(page, path.join(process.cwd(), 'tests/fixtures/sessions/single.v41-bindings1.json'));
   state = await snapshot(page);
-  expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
+  expect([state.mode, state.generatedDrawingId, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
 
   const cliPrefix = info.outputPath('cli-origin');
   const cliFile = `${cliPrefix}.gbdraw-session.json`;
@@ -238,13 +269,7 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
   expect(cli.config).toBeUndefined();
   await load(page, cliFile);
   state = await snapshot(page);
-  expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
-  delete cli.ui.mode;
-  const missingModeFile = info.outputPath('cli-origin-missing-ui-mode.gbdraw-session.json');
-  await fs.writeFile(missingModeFile, JSON.stringify(cli));
-  await load(page, missingModeFile);
-  state = await snapshot(page);
-  expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
+  expect([state.mode, state.generatedDrawingId, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
 
   const settingsFile = path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz');
   const settings = await readSession(settingsFile);
@@ -270,7 +295,7 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
         ? settings.config.adv.axis_stroke_color
         : settings.config.modeProfiles.profiles[mode].values.axis_stroke_color);
     }
-    await assertSessionLoadLeftWorkerIdle(fresh);
+    await assertLegacyLoadConvertedOnce(fresh);
   } finally {
     await context.close();
   }
@@ -280,13 +305,13 @@ test('failed import after draft application restores the prior mode, profiles, s
   test.setTimeout(240_000);
   await openApp(page);
   await load(page, fixture);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByTestId('linear-genbank-1').setInputFiles(linearSource);
   const before = await snapshot(page);
   const failure = await evaluateWithRetainedPromise(page, async () => {
     const name = 'tobacco-chloroplast.gbdraw-session.json';
     const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
-    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
+    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {
       // A Gallery Session loads without a dialog; one would cancel the Load.
       confirmLoadRepairs: async () => false,
@@ -297,7 +322,7 @@ test('failed import after draft application restores the prior mode, profiles, s
   expect(failure).toMatchObject({ status: 'error', error: { code: 'UNKNOWN', stage: 'request-validation' } });
   expect(JSON.stringify(failure)).not.toContain('S02 forced rollback');
   const restored = await snapshot(page);
-  for (const key of ['mode', 'generatedMode', 'config', 'request', 'selectedResultIndex',
+  for (const key of ['mode', 'generatedDrawingId', 'config', 'request', 'selectedResultIndex',
     'featurePanelTab', 'downloadDpi', 'circularSource', 'linearSource', 'history']) {
     expect(restored[key], `rollback ${key}`).toEqual(before[key]);
   }
@@ -317,6 +342,6 @@ test('failed import after draft application restores the prior mode, profiles, s
   expect((await canonicalSvgHashes(restored.results)).map(digest))
     .toEqual((await canonicalSvgHashes(before.results)).map(digest));
   const saved = await save(page, info.outputPath('after-rollback.gbdraw-session.json.gz'));
-  expect(saved.ui.mode).toBe('linear');
-  expect(saved.renderRequest.mode).toBe('circular');
+  expect(saved.ui.activeDrawingId).toBe('linear');
+  expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
 });

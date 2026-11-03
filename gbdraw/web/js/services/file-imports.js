@@ -279,6 +279,8 @@ export const parseBlacklistWords = (text) => {
 // Whitelist or priority row without a mark (Sessions before 48, hand rows) is
 // the user's.
 /** @typedef {'d_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority'} FileImportCard */
+/** The table cards; each binds one input file (`state.files[card]`). @type {readonly FileImportCard[]} */
+export const FILE_IMPORT_CARDS = Object.freeze(/** @type {FileImportCard[]} */ (['d_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority']));
 /** @typedef {'t_color' | 'whitelist' | 'qualifier_priority'} RowFileCard A card whose file adds rows. */
 /** @typedef {{ fromFile?: boolean, importedFrom?: string }} CardMarkedRow */
 /** @typedef {{ color: string, handColor: string | null }} ImportedDefaultColor */
@@ -424,3 +426,29 @@ export const removeImportedPriorityRows = (rows) => {
  * @returns {T[]}
  */
 export const withoutImportedRows = (rows, card) => rows.filter((row) => !isCardRow(row, card));
+
+/**
+ * The five card tables of a drawing's draft (`buildConfigData`) and what its
+ * Default colors and Blacklist files set.
+ * @typedef {{ colors: Readonly<Record<string, string>>, rules: readonly CardMarkedRow[],
+ *   qualifierPriorityRules: readonly PriorityRuleRow[], whitelist: readonly WhitelistRuleRow[], blacklistText: string,
+ *   fileImports: Readonly<FileImports> }} CardTables
+ */
+/**
+ * The five tables with only the rows the user entered (R17-4): without what
+ * each card's file put in, taken back as Remove on the card takes it back.
+ * @param {Readonly<CardTables>} tables
+ * @param {Readonly<Record<string, string>>} paletteColors The colors of the drawing's palette.
+ * @returns {Omit<CardTables, 'fileImports'>}
+ */
+export const userTableRows = ({ colors, rules, qualifierPriorityRules, whitelist, blacklistText, fileImports }, paletteColors) => {
+  const priority = qualifierPriorityRules.map((row) => ({ ...row }));
+  removeImportedPriorityRows(priority);
+  return {
+    colors: fileImports.d_color ? withoutImportedDefaultColors(colors, fileImports.d_color, paletteColors) : { ...colors },
+    rules: withoutImportedRows(rules, 't_color'),
+    qualifierPriorityRules: priority,
+    whitelist: withoutImportedRows(whitelist, 'whitelist'),
+    blacklistText: fileImports.blacklist ? withoutImportedBlacklistWords(blacklistText, fileImports.blacklist) : blacklistText
+  };
+};

@@ -18,6 +18,7 @@ from docs.recipes._scenario_support import (
 )
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from tests.utils.session_drawing_view import drawing_view
 
 
 pytestmark = pytest.mark.recipe
@@ -274,9 +275,10 @@ def test_typed_session_artifact_is_current_and_deterministic() -> None:
     assert payload["format"] == "gbdraw-session"
     assert payload["version"] == CURRENT_SESSION_VERSION
     assert payload["createdAt"] == "2026-08-03T00:00:00+00:00"
-    assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
-    assert payload["renderRequest"]["mode"] == "circular"
-    assert payload["renderRequest"]["grouping"] == "single"
+    request = drawing_view(payload, payload["ui"]["activeDrawingId"])["renderRequest"]
+    assert request["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert request["mode"] == "circular"
+    assert request["grouping"] == "single"
     assert len(payload["resources"]) == 1
     assert b"<svg" in svg_path.read_bytes()[:512]
 

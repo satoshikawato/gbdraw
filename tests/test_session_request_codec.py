@@ -90,6 +90,7 @@ from gbdraw.session_request_codec import (
     encode_canonical_request,
     encode_canonical_table,
     encode_canonical_typed_resource,
+    migrate_flat_config_overrides,
 )
 from gbdraw.tracks import (
     CircularTrackSlot,
@@ -2778,6 +2779,20 @@ def test_supported_schemas_migrate_legacy_flat_label_settings(
     assert latest["schema"] == CANONICAL_REQUEST_SCHEMA
     assert latest_overrides[scope_path] == expected_scope
     assert not set(legacy_overrides) & set(latest_overrides)
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [(None, []), ("hypothetical, putative", ["hypothetical", "putative"])],
+)
+def test_a_stored_flat_label_blacklist_reads_as_the_web_wrote_it(stored, expected) -> None:
+    """The Web writer stored ``label_blacklist`` null for a filter mode other
+    than Blacklist: no blacklist, not the packaged one."""
+
+    migrated = migrate_flat_config_overrides(
+        {"label_blacklist": stored}, mode="circular", path="diagramOptions.configOverrides",
+    )
+    assert migrated == {"labels.filtering.blacklist_keywords": expected}
 
 
 @pytest.mark.parametrize("schema", sorted(SUPPORTED_CANONICAL_REQUEST_SCHEMAS))

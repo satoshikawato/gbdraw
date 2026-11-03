@@ -1,7 +1,9 @@
 const { expect, test } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
+const { showDrawing, showPhonePane } = require('./drawing-bar.cjs');
 const { answerSessionTitle, assertOperationHealth, openApp, readErrorSignature } = require('./app-lifecycle.cjs');
+const { shownSavedDrawing } = require('./saved-session.cjs');
 
 const seeds = {
   circular: 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
@@ -28,6 +30,8 @@ const load = async (browser, file = seeds.circular, viewport = { width: 1600, he
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180000 }).toBe(true);
+  // On a phone a Load with a Result shows the Preview pane; the specs start from Settings, as a user taps it.
+  await showPhonePane(page, 'settings');
   return page;
 };
 
@@ -43,15 +47,17 @@ const generate = async (page, health = {}) => {
 };
 
 const switchMode = async (page, mode) => {
-  await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
-  await expect.poll(() => page.evaluate(async () =>
-    (await import('./js/state.js')).state.circularRecordDiscovery.status)).not.toBe('loading');
+  await showDrawing(page, { kind: mode });
+  // Every Circular drawing the project holds (a one-mode Load makes none for the other mode).
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.drawingList()
+    .filter((drawing) => drawing.mode === 'circular')
+    .map((drawing) => drawing.circularRecordDiscovery.status))).not.toContain('loading');
   // Settle the Vue render and its asynchronous preview binder, without a time delay.
   await page.evaluate(async () => { await window.Vue.nextTick(); });
 };
 
 const popup = async (page, index = 0) => {
+  await showPhonePane(page, 'preview');
   if (!await page.locator('.right-drawer').isVisible()) await page.locator('.drawer-toggle').click();
   await page.locator('.right-drawer').getByRole('button', { name: 'Edit', exact: true }).nth(index).click();
   await expect(page.locator('.feature-popup')).toBeVisible();
@@ -112,10 +118,11 @@ const loadEditorLegendRows = async (page, rows) => {
   const bytes = await download(page, 'Save Session', path);
   const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
   saved.title = title;
-  expect(saved.renderRequest.mode, 'the saved Results are the shown drawing\'s').toBe(mode);
-  saved.modes[mode].editorState.legend.entries.push(...rows.map(([caption, color]) => (
+  const shown = shownSavedDrawing(saved);
+  expect(shown.renderRequest.mode, 'the saved Results are the shown drawing\'s').toBe(mode);
+  shown.editorState.legend.entries.push(...rows.map(([caption, color]) => (
     { caption, originalCaption: caption, color, featureIds: [] })));
-  saved.results = await page.evaluate(async ({ results, added }) => {
+  shown.results = await page.evaluate(async ({ results, added }) => {
     const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/services/legend-svg.js');
     return results.map((result) => {
       const svg = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
@@ -136,7 +143,7 @@ const loadEditorLegendRows = async (page, rows) => {
       });
       return { ...result, content: new XMLSerializer().serializeToString(svg) };
     });
-  }, { results: saved.results, added: rows });
+  }, { results: shown.results, added: rows });
   await fs.writeFile(path, JSON.stringify(saved));
   await page.locator('input[accept^=".json,"]').setInputFiles(path);
   await expect.poll(() => page.evaluate(captions => {

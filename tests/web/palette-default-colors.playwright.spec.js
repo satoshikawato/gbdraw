@@ -4,6 +4,7 @@
 // before it drops them; a dialog choice is one History step and Cancel records
 // none (PD-OI-088). Node cases: tests/web/palette-default-colors.test.mjs.
 const { test, expect } = require('@playwright/test');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { deleteLegendRow, generate, history, open, renameRow } = require('./helpers/live-generate-parity-steps.cjs');
@@ -249,9 +250,9 @@ test('a palette queued in the hidden drawing is drawn once Instant Preview is on
   });
   expect(await cdsFills()).not.toContain(queuedCds);
 
-  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.selectDrawing('linear'))).toEqual({ status: 'ok' });
+  await showDrawing(page, { kind: 'linear' });
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setPaletteInstantPreview(true));
-  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.selectDrawing('circular'))).toEqual({ status: 'ok' });
+  await showDrawing(page, { kind: 'circular' });
   await settleLive(page);
   await expect.poll(cdsFills).toContain(queuedCds);
   expect(await page.evaluate(() => ({

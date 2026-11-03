@@ -4,6 +4,7 @@ const { readFileSync } = require('node:fs');
 const { readPdfText } = require('./helpers/pdf-text.cjs');
 const { openApp, generateAndWaitForResult, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const session = async (page, name = 'HmmtDNA_basic_circular.gbdraw-session.json') => {
   page.on('dialog', (dialog) => dialog.dismiss());
@@ -132,8 +133,8 @@ test('similarity group names and descriptions survive temporary mode changes', a
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(0);
   }
   const before = await page.evaluate(() => ({ names: { ...window.__GBDRAW_APP__.orthogroupNameOverrides }, descriptions: { ...window.__GBDRAW_APP__.orthogroupDescriptionOverrides }, count: window.__GBDRAW_APP__.orthogroupCount }));
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'circular' });
+  await showDrawing(page, { kind: 'linear' });
   const inspect = () => page.evaluate(() => ({ names: { ...window.__GBDRAW_APP__.orthogroupNameOverrides }, descriptions: { ...window.__GBDRAW_APP__.orthogroupDescriptionOverrides }, count: window.__GBDRAW_APP__.orthogroupCount }));
   await expect.poll(inspect).toEqual(before);
   await generateAndWaitForResult(page);

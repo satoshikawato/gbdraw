@@ -120,6 +120,25 @@ result = validate_web_config_overrides_json(payload['mode'], json.dumps(payload[
 `, payload));
 
 /**
+ * Python's split of a flat Web draft into Session 46 mode slices.
+ * @param {unknown} input the flat draft
+ * @param {{ committedMode: unknown, modeProfiles?: unknown, depthSources?: unknown, paletteColors?: unknown }} context
+ * @returns {Promise<import('../../../gbdraw/web/js/services/gallery-session-publication.js').PublicationSplitDraft>}
+ */
+export const pythonDraftSplit = async (input, context) => JSON.parse(await evaluatePython(`
+import json
+from gbdraw.session_io import split_draft_into_modes
+context = payload['context']
+result = json.dumps(split_draft_into_modes(
+    payload['input'],
+    committed_mode=context['committedMode'],
+    mode_profiles=context.get('modeProfiles'),
+    depth_sources=context.get('depthSources'),
+    palette_colors=context.get('paletteColors'),
+))
+`, { input, context }));
+
+/**
  * The Worker's `synthesizeColorRules` helper (OV-244), for a rule preparation's `synthesize`.
  * @param {unknown} request
  */
@@ -143,6 +162,21 @@ export const groupColorRulesOver = (preparation, labelsOf = () => [], rowRules =
   const joined = joins === null ? null : joinedLegendRow(rowRules(joins), current, []);
   const { table } = await preparation.synthesizeGroup({ scope, features, labels: features.map(labelsOf), color, caption, joins: joined, drawn: [] }, current);
   return synthesizedRuleTable(table, current);
+};
+
+// Load of a Session 27-44 (DESIGN 4.3): the Worker port as the composition
+// root sets it, with Python's upgrade evaluated here; a helper error is
+// thrown as the Worker client throws it. `calls` collects each document sent.
+export const pythonLegacySessionUpgrader = (calls = []) => async ({ document, storedRequestSchema }) => {
+  calls.push(document);
+  const reply = JSON.parse(await evaluatePython(`
+import json
+from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
+request = json.loads(payload)
+result = legacy_session_to_drawings_json(json.dumps(request["document"]), json.dumps(request["storedRequestSchema"]))
+`, JSON.stringify({ document, storedRequestSchema: storedRequestSchema ?? null })));
+  if (reply.error) throw reply.error;
+  return { result: reply };
 };
 
 /**

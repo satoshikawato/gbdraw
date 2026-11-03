@@ -318,6 +318,24 @@ export const distinctLoadRepairs = (repairs) => [...new Map(repairs.map((repair)
   JSON.stringify([repair.code, repair.path, repair.effect, repair.stored, repair.used, repair.count, repair.label, repair.mode, repair.line]), repair
 ])).values()];
 
+/** @type {ReadonlySet<unknown>} */
+const EFFECTS = new Set(/** @type {LoadRepairEffect[]} */ (['dropped', 'defaulted', 'changed', 'kept']));
+
+/**
+ * A record another producer sent (Python's conversion of a Session 27-44):
+ * a code this module words, a path, an effect, and a count when it has one;
+ * null for a value of another shape. The producer owns the path.
+ * @param {unknown} value
+ * @returns {LoadRepair | null}
+ */
+export const readSentLoadRepair = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const { code, path, effect, count } = /** @type {Record<string, unknown>} */ (value);
+  if (typeof code !== 'string' || !Object.hasOwn(WORDING, code) || typeof path !== 'string' || !EFFECTS.has(effect)
+    || (count !== undefined && (!Number.isSafeInteger(count) || Number(count) < 1))) return null;
+  return loadRepair(/** @type {LoadRepair} */ ({ code, path, effect, ...(count === undefined ? {} : { count }) }));
+};
+
 /**
  * The records the dialog lists.
  * @param {readonly LoadRepair[]} repairs

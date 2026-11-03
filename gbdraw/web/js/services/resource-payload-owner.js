@@ -1,5 +1,6 @@
 // @ts-check
 import { getSessionResourceSource } from './file-content-cache.js';
+/** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 
 /**
  * What owns a resource's payload bytes: the File the user chose, or another
@@ -69,3 +70,33 @@ export const resourceIdOwnedBy = (resources, file, kind) => {
       && /** @type {{ kind?: unknown }} */ (descriptor).kind === kind && getResourcePayloadIdentity(descriptor) === identity;
   }) ?? null;
 };
+
+/**
+ * The source a request names a record by when it draws these files: a GenBank
+ * file, or a GFF3 file and its FASTA file (`fastaFile`), each by the id of the
+ * resource of `resources` that holds it (`resourceIdOwnedBy`); null when one
+ * of them holds no file. Both Generate's staging and the live record names
+ * read a card's files through it.
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources
+ * @param {object | null | undefined} sourceFile
+ * @param {object | null | undefined} fastaFile
+ * @returns {CanonicalRecordSource | null}
+ */
+export const recordSourceOwnedBy = (resources, sourceFile, fastaFile) => {
+  if (!fastaFile) {
+    const resourceId = resourceIdOwnedBy(resources, sourceFile, 'genbank');
+    return resourceId ? { kind: 'genbank', resourceId } : null;
+  }
+  const gffResourceId = resourceIdOwnedBy(resources, sourceFile, 'gff3');
+  const fastaResourceId = resourceIdOwnedBy(resources, fastaFile, 'fasta');
+  return gffResourceId && fastaResourceId ? { kind: 'gffFasta', gffResourceId, fastaResourceId } : null;
+};
+
+/**
+ * The resource ids a record source names, in request order.
+ * @param {CanonicalRecordSource} source
+ * @returns {string[]}
+ */
+export const recordSourceResourceIds = (source) => (
+  source.kind === 'genbank' ? [source.resourceId] : [source.gffResourceId, source.fastaResourceId]
+);

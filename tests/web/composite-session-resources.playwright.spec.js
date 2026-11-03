@@ -6,6 +6,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerChoicePrompt, answerLoadRepairs, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 // Three single-record GenBank files: Circular binds them as one composite File.
 const seed = 'tests/fixtures/sessions/composite-circular-three-files.v44-schema8.gbdraw-session.json.gz';
@@ -51,7 +52,7 @@ const load = async (browser, file, contexts, viewport = { width: 1600, height: 1
   const genomeReads = await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     const { getSessionResourceSource } = await import('./js/services/file-content-cache.js');
-    const source = getSessionResourceSource(state.files.c_gb);
+    const source = getSessionResourceSource(state.inputFiles.fileOf(state.activeDrawing().files.c_gb));
     const ids = (source?.descriptors || (source?.descriptor ? [source] : [])).map(part => part.resourceId);
     // The later definition-preview helper legitimately consumes source bytes.
     // Observe metadata projection at its boundary, independent of trace overhead.
@@ -69,18 +70,18 @@ const snapshot = page => page.evaluate(async () => {
     .map(byte => byte.toString(16).padStart(2, '0')).join('');
   const identity = async descriptor => ({ size: descriptor.size,
     sha256: await digest(Uint8Array.from(atob(descriptor.data), char => char.charCodeAt(0))) });
-  const source = getSessionResourceSource(state.files.c_gb);
+  const source = getSessionResourceSource(state.inputFiles.fileOf(state.activeDrawing().files.c_gb));
   const components = source?.descriptors || (source?.descriptor ? [source] : []);
   const committed = getCommittedCanonicalSession();
   return {
     components: await Promise.all(components.map(async ({ resourceId, descriptor, name, type, lastModified }) => ({
       resourceId, name, type, lastModified, ...await identity(descriptor)
     }))),
-    source: { name: state.files.c_gb.name, size: state.files.c_gb.size,
-      type: state.files.c_gb.type, lastModified: state.files.c_gb.lastModified,
-      isArray: Array.isArray(state.files.c_gb),
-      sha256: await digest(await readFileBytes(state.files.c_gb)) },
-    records: state.circularRecordList.value.map(record => ({ id: record.id, recordKey: record.recordKey })),
+    source: { name: state.activeDrawing().files.c_gb.name, size: state.activeDrawing().files.c_gb.size,
+      type: state.activeDrawing().files.c_gb.type, lastModified: state.activeDrawing().files.c_gb.lastModified,
+      isArray: Array.isArray(state.activeDrawing().files.c_gb),
+      sha256: await digest(await readFileBytes(state.inputFiles.fileOf(state.activeDrawing().files.c_gb))) },
+    records: state.activeDrawing().circularRecordList.value.map(record => ({ id: record.id, recordKey: record.recordKey })),
     request: committed.renderRequest,
     resources: Object.fromEntries(await Promise.all(Object.entries(committed.resources)
       .map(async ([id, descriptor]) => [id, await identity(descriptor)]))),
@@ -154,7 +155,7 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
         .toEqual(seedIds.map(id => resourceIdentity(seedSession.resources[id])));
       if (journey === 'minimal') {
         const control = await save(page, testInfo, 'before-generate');
-        expect(control.session.results).toHaveLength(1);
+        expect(shownSavedDrawing(control.session).results).toHaveLength(1);
       }
       await generate(page);
       if (journey === 'grid-batch-grid') {
@@ -170,8 +171,8 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       expect(generated.results).toHaveLength(1);
       expect(generated.components).toEqual(original.components);
       const { saved, session, metrics } = await save(page, testInfo, 'generated', { again: journey === 'minimal' });
-      expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([CURRENT_SESSION_VERSION, 2, CURRENT_REQUEST_SCHEMA]);
-      const composite = session.webFiles.bindings.c_gb;
+      expect([session.version, shownSavedDrawing(session).webFiles.bindings.schema, shownSavedDrawing(session).renderRequest.schema]).toEqual([CURRENT_SESSION_VERSION, 2, CURRENT_REQUEST_SCHEMA]);
+      const composite = shownSavedDrawing(session).webFiles.bindings.c_gb;
       expect(composite.kind).toBe('composite');
       expect(composite.components).toHaveLength(recordCount);
       expect(composite.components.map(part => resourceIdentity(session.resources[part.resourceId])))
@@ -189,11 +190,11 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       for (const component of original.components) {
         expect(Object.values(resources)).toContainEqual({ size: component.size, sha256: component.sha256 });
       }
-      expect(session.renderRequest).toEqual(generated.request);
+      expect(shownSavedDrawing(session).renderRequest).toEqual(generated.request);
       await fs.writeFile(testInfo.outputPath('resource-inspection.json'), JSON.stringify({
         original: { ...original, results: original.results.map(hash) },
         generated: { ...generated, results: generated.results.map(hash) },
-        resources, webFiles: session.webFiles
+        resources, webFiles: shownSavedDrawing(session).webFiles
       }, null, 2));
       expect(external).toEqual([]);
       await page.context().close();
@@ -206,9 +207,9 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       expect(loaded.request).toEqual(generated.request);
       expect(loaded.resultNames).toEqual(generated.resultNames);
       expect(loaded.source.isArray).toBe(false);
-      expect(loaded.results).toEqual(session.results.map(result => result.content));
+      expect(loaded.results).toEqual(shownSavedDrawing(session).results.map(result => result.content));
       const resaved = await save(restored.page, testInfo, 'restored');
-      expect(resaved.session.webFiles.bindings.c_gb).toEqual(composite);
+      expect(shownSavedDrawing(resaved.session).webFiles.bindings.c_gb).toEqual(composite);
       await generate(restored.page);
       const regenerated = await snapshot(restored.page);
       expect(regenerated.records).toEqual(generated.records);
@@ -221,9 +222,9 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
           buffer: Buffer.from(seedSession.resources[seedIds[0]].data, 'base64')
         });
         const replaced = await save(restored.page, testInfo, 'replaced', { again: true });
-        expect(replaced.session.webFiles.bindings.c_gb.kind).toBeUndefined();
-        expect(replaced.session.webFiles.bindings.c_gb.components).toBeUndefined();
-        expect(resourceIdentity(replaced.session.resources[replaced.session.webFiles.bindings.c_gb.resourceId]))
+        expect(shownSavedDrawing(replaced.session).webFiles.bindings.c_gb.kind).toBeUndefined();
+        expect(shownSavedDrawing(replaced.session).webFiles.bindings.c_gb.components).toBeUndefined();
+        expect(resourceIdentity(replaced.session.resources[shownSavedDrawing(replaced.session).webFiles.bindings.c_gb.resourceId]))
           .toEqual(resourceIdentity(seedSession.resources[seedIds[0]]));
         const mobile = await load(browser, saved, contexts, { width: 390, height: 844 });
         const mobileState = await snapshot(mobile.page);
@@ -262,18 +263,18 @@ test('Session CLI sidecar preserves the composite draft for fresh Web Load and G
     });
     await fs.writeFile(testInfo.outputPath('cli.log'), stdout + stderr);
     const replayed = JSON.parse(gunzipSync(await fs.readFile(sidecar)));
-    expect([replayed.version, replayed.webFiles.bindings.schema, replayed.renderRequest.schema]).toEqual([CURRENT_SESSION_VERSION, 2, CURRENT_REQUEST_SCHEMA]);
-    const expected = session.webFiles.bindings.c_gb;
-    const actual = replayed.webFiles.bindings.c_gb;
+    expect([replayed.version, shownSavedDrawing(replayed).webFiles.bindings.schema, shownSavedDrawing(replayed).renderRequest.schema]).toEqual([CURRENT_SESSION_VERSION, 2, CURRENT_REQUEST_SCHEMA]);
+    const expected = shownSavedDrawing(session).webFiles.bindings.c_gb;
+    const actual = shownSavedDrawing(replayed).webFiles.bindings.c_gb;
     expect(actual.components).toHaveLength(recordCount);
     expect(actual.components.map(({ resourceId, ...metadata }) => metadata))
       .toEqual(expected.components.map(({ resourceId, ...metadata }) => metadata));
     expect(actual.components.map(part => resourceIdentity(replayed.resources[part.resourceId])))
       .toEqual(expected.components.map(part => resourceIdentity(session.resources[part.resourceId])));
     expect({ ...actual, components: [] }).toEqual({ ...expected, components: [] });
-    expect(replayed.results[0].content).toBe(await fs.readFile(`${prefix}.svg`, 'utf8'));
-    expect(replayed.results[0].name).toBe(path.basename(prefix));
-    expect(replayed.editorState.featureCatalog.items[0].resultName).toBe(path.basename(prefix));
+    expect(shownSavedDrawing(replayed).results[0].content).toBe(await fs.readFile(`${prefix}.svg`, 'utf8'));
+    expect(shownSavedDrawing(replayed).results[0].name).toBe(path.basename(prefix));
+    expect(shownSavedDrawing(replayed).editorState.featureCatalog.items[0].resultName).toBe(path.basename(prefix));
     const restored = await load(browser, sidecar, contexts);
     const loaded = await snapshot(restored.page);
     expect(loaded.source).toEqual(original.source);
@@ -283,9 +284,9 @@ test('Session CLI sidecar preserves the composite draft for fresh Web Load and G
     const admittedContents = await restored.page.evaluate(async results => {
       const { sanitizeSvgContent } = await import('./js/services/svg-sanitization.js');
       return results.map(result => sanitizeSvgContent(result.content, window.DOMPurify));
-    }, replayed.results);
+    }, shownSavedDrawing(replayed).results);
     expect(loaded.results.map(hash)).toEqual(admittedContents.map(hash));
-    expect(loaded.request).toEqual(replayed.renderRequest);
+    expect(loaded.request).toEqual(shownSavedDrawing(replayed).renderRequest);
     await generate(restored.page);
     expect((await snapshot(restored.page)).records).toEqual(original.records);
     expect(restored.external).toEqual([]);
@@ -306,30 +307,30 @@ test('Session import lists malformed composite bindings and Cancel keeps existin
     const before = await snapshot(page);
     const beforeHistory = await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount());
     const seedSession = JSON.parse(await fs.readFile(seedPath));
-    const resourceId = seedSession.renderRequest.records[0].source.resourceId;
+    const resourceId = shownSavedDrawing(seedSession).renderRequest.records[0].source.resourceId;
+    const at = `drawings[${seedSession.drawings.indexOf(shownSavedDrawing(seedSession))}]`;
     const leaf = { resourceId, name: 'part.gb', type: 'text/plain', lastModified: 0 };
 
-    const inventoryDropped = ['Session file: the field webFiles.bindings could not be read and was left out.'];
-    const entryDropped = slot => [`Input files: 1 entry of webFiles.bindings.${slot} could not be read and was dropped.`];
+    const inventoryDropped = [`Session file: the field ${at}.webFiles.bindings could not be read and was left out.`];
+    const entryDropped = slot => [`Input files: 1 entry of ${at}.webFiles.bindings.${slot} could not be read and was dropped.`];
     const mutations = {
-      schema: s => { s.webFiles.bindings.schema = 99; },
-      kind: s => { s.webFiles.bindings.c_gb.kind = 'unknown'; },
-      nested: s => { s.webFiles.bindings.c_gb.components[0] = structuredClone(s.webFiles.bindings.c_gb); },
-      empty: s => { s.webFiles.bindings.c_gb.components = []; },
-      singleton: s => { s.webFiles.bindings.c_gb.components.length = 1; },
-      missing: s => { delete s.webFiles.bindings.c_gb; },
-      dangling: s => { s.webFiles.bindings.c_gb.components[0].resourceId = 'missing'; },
-      null: s => { s.webFiles.bindings.c_gb.components[0] = null; },
-      metadata: s => { s.webFiles.bindings.c_gb.lastModified = -1; },
-      mixed: s => { s.webFiles.bindings.c_gb.resourceId = resourceId; },
-      slot: s => { s.webFiles.bindings.c_fasta = s.webFiles.bindings.c_gb; },
+      schema: s => { shownSavedDrawing(s).webFiles.bindings.schema = 99; },
+      kind: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.kind = 'unknown'; },
+      nested: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.components[0] = structuredClone(shownSavedDrawing(s).webFiles.bindings.c_gb); },
+      empty: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.components = []; },
+      singleton: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.components.length = 1; },
+      missing: s => { delete shownSavedDrawing(s).webFiles.bindings.c_gb; },
+      dangling: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.components[0].resourceId = 'missing'; },
+      null: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.components[0] = null; },
+      metadata: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.lastModified = -1; },
+      mixed: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.resourceId = resourceId; },
+      slot: s => { shownSavedDrawing(s).webFiles.bindings.c_fasta = shownSavedDrawing(s).webFiles.bindings.c_gb; },
       payload: s => { s.resources[resourceId].encoding = 'unsupported'; }
     };
     const rows = {
       schema: inventoryDropped, missing: inventoryDropped, slot: entryDropped('c_fasta'),
       payload: [
-        'Saved diagram: the settings of the saved diagram (renderRequest) could not be read. The file loads as settings only;'
-          + ' the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.',
+        `Saved diagram: the settings of the saved diagram (${at}.renderRequest) could not be read. The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.`,
         `Input files: 1 entry of resources.${resourceId} could not be read and was dropped.`,
         ...entryDropped('c_gb')
       ]
@@ -337,8 +338,9 @@ test('Session import lists malformed composite bindings and Cancel keeps existin
     const canceled = [];
     for (const [label, mutate] of Object.entries(mutations)) {
       const invalid = structuredClone(seedSession);
-      invalid.webFiles ||= {};
-      invalid.webFiles.bindings = { schema: 2, c_gb: { kind: 'composite',
+      const invalidDrawing = shownSavedDrawing(invalid);
+      invalidDrawing.webFiles ||= {};
+      invalidDrawing.webFiles.bindings = { schema: 2, c_gb: { kind: 'composite',
         components: [structuredClone(leaf), structuredClone(leaf)],
         name: 'logical.gb', type: 'text/plain', lastModified: 0 } };
       mutate(invalid);

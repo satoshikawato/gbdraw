@@ -182,14 +182,14 @@ const MITOGENOME = Object.freeze([{ selector: '#1', record_id: 'mito', record_le
 /** @param {DiscoveredRecords} records @param {ReturnType<typeof circularDrawing>} drawing */
 const featureWidthEstimate = (records, drawing, shownRequest = null, resultIndex = 0) => {
   const state = withDrawings({
-    mode: { value: 'circular' }, ...drawing,
+    mode: 'circular', ...drawing,
     form: { ...createDefaultForm(), ...drawing.form }, adv: { ...createDefaultAdv('circular'), ...drawing.adv }
   });
   const editor = createCircularTrackSlotEditor({
     state,
     estimateRecordLengths: () => circularEstimateLengths(circularRequestDiagrams(records, drawing), shownRequest, resultIndex)
   });
-  editor.normalizeCircularTrackSlots();
+  editor.normalizeCircularTrackSlots(state);
   const features = state.adv.circular_track_slots.findIndex((/** @type {{ renderer: string }} */ slot) => slot.renderer === 'features');
   return editor.circularTrackSlotGeometryAutoText(state.adv.circular_track_slots[features], features, 'width');
 };

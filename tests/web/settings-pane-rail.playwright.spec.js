@@ -9,6 +9,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 // A click on a button that is not there fails at once instead of at the test's own limit.
 test.use({ actionTimeout: 20_000 });
@@ -38,7 +39,7 @@ const toRail = (page) => page.getByRole('button', { name: 'Collapse settings to 
 const toStacked = (page) => page.getByRole('button', { name: 'Expand settings', exact: true });
 const closeSection = (page) => page.getByRole('button', { name: 'Close section', exact: true });
 const generate = (page) => page.getByRole('button', { name: 'Generate Diagram', exact: true });
-const setMode = (page, mode) => page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
+const setMode = (page, mode) => showDrawing(page, { kind: mode });
 const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
 
 const loadSession = async (page, name) => {
@@ -203,9 +204,13 @@ for (const mode of ['circular', 'linear']) {
       const about = buttons.at(-1);
       return { width: Math.round(wrap.width), first: document.querySelector('.settings-index button').getAttribute('aria-label'),
         inside: buttons.every((box) => box.left >= wrap.left && box.right <= wrap.right && box.top >= wrap.top && box.bottom <= wrap.bottom),
-        aboutAtBottom: Math.round(wrap.bottom - about.bottom) <= 8, entryHeight: Math.round(buttons[1].height) };
+        aboutAtBottom: Math.round(wrap.bottom - about.bottom) <= 8, entryHeight: buttons[1].height };
     });
-    expect(column).toEqual({ width: 60, first: 'Expand settings', inside: true, aboutAtBottom: true, entryHeight: 48 });
+    // Below the drawing bar a docked Linear rail is about 9 px short of 48 px entries at 1600x1000 (OV-1785 A:
+    // only windows at most 800 px high are compacted), so its entries shrink a little; Circular's keep 48 px.
+    expect(column).toMatchObject({ width: 60, first: 'Expand settings', inside: true, aboutAtBottom: true });
+    if (mode === 'circular') expect(Math.round(column.entryHeight), 'entry height').toBe(48);
+    else expect(column.entryHeight, 'entry height').toBeGreaterThanOrEqual(47);
     // The hidden control is the same node with its draft.
     expect(await prefix.evaluate((element) => [element.dataset.probe, element.value, element.checkVisibility()]))
       .toEqual(['kept', 'rail-draft', false]);
@@ -552,15 +557,18 @@ test('phone width shows the stacked settings without the switch, whatever is rem
   await expect(toStacked(page)).toHaveCount(0);
   await expect(closeSection(page)).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
-  // An entry opens its section below the sticky header, as the stacked row does.
+  // An entry opens its section below the sticky header, as the stacked row does; a section near the end of the
+  // settings goes as far as the page scrolls (PD-OI-092).
   await entry(page, 'Labels').click();
   const labels = await page.evaluate(() => {
     const section = document.querySelector('[data-settings-section="labels"]');
     return { open: section.querySelector(':scope > details').open,
-      belowHeader: Math.round(section.getBoundingClientRect().top - document.querySelector('.app-header').getBoundingClientRect().bottom) };
+      belowHeader: Math.round(section.getBoundingClientRect().top - document.querySelector('.app-header').getBoundingClientRect().bottom),
+      atPageEnd: Math.abs(window.scrollY - (document.documentElement.scrollHeight - innerHeight)) <= 1 };
   });
   expect(labels.open).toBe(true);
-  expect(Math.abs(labels.belowHeader)).toBeLessThanOrEqual(2);
+  expect(labels.belowHeader).toBeGreaterThanOrEqual(-2);
+  if (!labels.atPageEnd) expect(labels.belowHeader).toBeLessThanOrEqual(2);
 
   // A wide window shows the remembered rail with Input docked; narrow again, every section is back.
   await page.setViewportSize({ width: 1280, height: 800 });

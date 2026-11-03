@@ -1413,30 +1413,30 @@ export const catalogNameIndex = (catalog) => {
 // default) from the admitted catalog, or null without a catalog: `biological`
 // in source order, `rendered` by rendered ID, and `renderedByIdentity`, the
 // rendered feature of each source identity the Result draws. `results` is the
-// Result list the admission matches by name (the state's by default).
+// Result list the admission matches by name (the state's by default). `mode`
+// is the mode of the drawing that owns the Result, given by the caller that
+// holds that drawing; it names the catalog's records ("File N:" in Linear).
 /**
  * The state fields this module reads; the app state and a drawing satisfy it.
  * @typedef {object} CatalogStateView
  * @property {{ value?: unknown }} [selectedResultIndex]
  * @property {{ value?: unknown }} [results]
  * @property {{ value?: FeatureCatalog | null }} [featureCatalog]
- * @property {{ value?: string | null }} [generatedMode]
  */
 
 /**
  * @param {CatalogStateView | null | undefined} state
+ * @param {string} mode The mode of the drawing that owns the Result.
  * @param {unknown} [resultIndex]
  * @param {unknown} [results]
  */
-export const resultCatalogFeatures = (state, resultIndex = state?.selectedResultIndex?.value, results = state?.results?.value) => {
+export const resultCatalogFeatures = (state, mode, resultIndex = state?.selectedResultIndex?.value, results = state?.results?.value) => {
   const catalog = toRaw(state?.featureCatalog?.value);
   if (!catalog) return null;
   const index = Number(resultIndex) || 0;
   try {
     // `catalog` is set, so `state` is not null. A `results` that is not an array makes the admission throw, caught below.
-    const admission = admitFeatureCatalog(catalog, /** @type {FeatureCatalogResult[]} */ (toRaw(results) || []), {
-      mode: /** @type {CatalogStateView} */ (state).generatedMode?.value || ''
-    });
+    const admission = admitFeatureCatalog(catalog, /** @type {FeatureCatalogResult[]} */ (toRaw(results) || []), { mode });
     const rendered = admission.renderedFeaturesByResult[index];
     return rendered ? {
       biological: admission.biologicalFeaturesByResult[index] || [],
@@ -1451,10 +1451,11 @@ export const resultCatalogFeatures = (state, resultIndex = state?.selectedResult
 // The rendered features of one committed Result by rendered ID; null without a catalog.
 /**
  * @param {CatalogStateView | null | undefined} state
+ * @param {string} mode The mode of the drawing that owns the Result.
  * @param {unknown} [resultIndex]
  */
-export const resultRenderedFeatures = (state, resultIndex) => (
-  resultCatalogFeatures(state, resultIndex)?.rendered || null
+export const resultRenderedFeatures = (state, mode, resultIndex) => (
+  resultCatalogFeatures(state, mode, resultIndex)?.rendered || null
 );
 
 export const featureCatalogReloadMessage = FEATURE_CATALOG_RELOAD_MESSAGE;

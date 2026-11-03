@@ -64,7 +64,7 @@ const MODES = {
   circular: {
     create: (rows, sourced, width) => {
       const state = {
-        mode: { value: 'circular' },
+        mode: 'circular',
         form: { track_type: 'tuckin', show_depth: true, suppress_gc: false, suppress_skew: true, show_scale: true, separate_strands: true },
         adv: {
           circular_track_slots_enabled: true,
@@ -92,13 +92,13 @@ const MODES = {
         circularRecordList: { value: [] }
       };
       const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
-      editor.normalizeCircularTrackSlots();
+      editor.normalizeCircularTrackSlots(state);
       return {
         state,
         slots: () => state.adv.circular_track_slots,
-        change: (nextSourced, nextWidth) => editor.changeCircularDepthSources(() => {
+        change: (nextSourced, nextWidth, change) => editor.changeCircularDepthSources(state, () => {
           state.files.c_depth = sourceRow(nextSourced, nextWidth);
-        }),
+        }, change),
         issue: (index) => editor.circularTrackSlotIssue(state.adv.circular_track_slots[index], index),
         duplicate: (index) => editor.duplicateCircularTrackSlot(index)
       };
@@ -107,7 +107,7 @@ const MODES = {
   linear: {
     create: (rows, sourced, width) => {
       const state = {
-        form: { linear_track_layout: 'middle', show_depth: true, show_gc: true, show_skew: false },
+        mode: 'linear', form: { linear_track_layout: 'middle', show_depth: true, show_gc: true, show_skew: false },
         adv: {
           nt: 'GC',
           linear_track_slots_enabled: true,
@@ -129,10 +129,10 @@ const MODES = {
       return {
         state,
         slots: () => state.adv.linear_track_slots,
-        change: (nextSourced, nextWidth) => editor.changeLinearDepthSources(() => {
+        change: (nextSourced, nextWidth, change) => editor.changeLinearDepthSources(state, () => {
           // PD-OI-025: clearing a source keeps the logical series width.
           state.linearSeqs[0].depth = sourceRow(nextSourced, nextWidth);
-        }),
+        }, change),
         issue: (index) => editor.linearTrackSlotIssue(state.adv.linear_track_slots[index], index),
         duplicate: (index) => editor.duplicateLinearTrackSlot(index)
       };
@@ -216,6 +216,71 @@ for (const [mode, adapter] of Object.entries(MODES)) {
       }
     });
   }
+}
+
+// PD-OI-090 (D-15-183): Show Depth turns On when the first Depth file enters
+// the drawing, in the transition every Depth source write runs; a file that
+// replaces one (the replacement port's swap) keeps Show Depth as it is, also Off.
+for (const [mode, adapter] of Object.entries(MODES)) {
+  test(`${mode}: the first Depth file turns Show Depth on, and a replaced file keeps it off`, () => {
+    const first = adapter.create([], [], undefined);
+    first.state.form.show_depth = false;
+    first.change([0]);
+    assert.equal(first.state.form.show_depth, true);
+
+    const replaced = adapter.create([{ id: 'depth', track: 0 }], [0], 1);
+    replaced.state.form.show_depth = false;
+    replaced.change([0], 1);
+    assert.equal(replaced.state.form.show_depth, false);
+  });
+
+  // D-15-183 (2026-10-29 reading): a Depth file the user sets in the shown
+  // drawing turns Show Depth on, first file or not, as on dev; the write the
+  // "Every drawing that uses this file" replacement makes in another drawing
+  // ("C copy", not shown) keeps that drawing's Show Depth Off.
+  test(`${mode}: a Depth file set in the shown drawing turns Show Depth on; another drawing keeps it off`, () => {
+    const shown = adapter.create([{ id: 'depth', track: 0 }], [0], 1);
+    shown.state.form.show_depth = false;
+    shown.change([0], 1, { setsFile: true, series: 'same' });
+    assert.equal(shown.state.form.show_depth, true, 'the shown drawing\'s own upload into slot 0 again');
+
+    const copy = adapter.create([{ id: 'depth', track: 0 }], [0], 1);
+    copy.state.form.show_depth = false;
+    Object.defineProperty(copy.state, 'activeDrawing', { value: () => ({ id: 'circular-c', mode }), configurable: true });
+    copy.change([0], 1, { setsFile: true, series: 'same' });
+    assert.equal(copy.state.form.show_depth, false, '"C copy" written by the replacement from C');
+  });
+}
+
+// Adding or removing a series states `series` in the change; the Depth source
+// change owner alone sets Show Depth from it (no writer outside the owners).
+for (const [mode, adapter] of Object.entries(MODES)) {
+  test(`${mode}: adding a series while files exist turns Show Depth on; with none it stays off`, () => {
+    const withFile = adapter.create([{ id: 'depth', track: 0 }], [0], 1);
+    withFile.state.form.show_depth = false;
+    withFile.change([0], 1, { setsFile: false, series: 'added' });
+    assert.equal(withFile.state.form.show_depth, true);
+
+    const none = adapter.create([], [], 1);
+    none.state.form.show_depth = false;
+    none.change([], 2, { setsFile: false, series: 'added' });
+    assert.equal(none.state.form.show_depth, false);
+  });
+
+  test(`${mode}: removing a series turns Show Depth off when no file is left, and keeps it with files`, () => {
+    const emptied = adapter.create([], [], 1);
+    emptied.state.form.show_depth = true;
+    emptied.change([], 1, { setsFile: false, series: 'removed' });
+    assert.equal(emptied.state.form.show_depth, false, 'no file left, with or without a transition');
+
+    const kept = adapter.create([{ id: 'depth', track: 0 }], [0, 1], 2);
+    kept.state.form.show_depth = true;
+    kept.change([0], 1, { setsFile: false, series: 'removed' });
+    assert.equal(kept.state.form.show_depth, true);
+    kept.state.form.show_depth = false;
+    kept.change([0], 1, { setsFile: false, series: 'removed' });
+    assert.equal(kept.state.form.show_depth, false, 'a removal does not turn it on');
+  });
 }
 
 // OV-1099: a Linear copy of an unedited Depth row is named `depth_2`, so it is

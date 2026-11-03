@@ -12,6 +12,10 @@ import sys
 from Bio import SeqIO
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from gbdraw.session_io import CURRENT_SESSION_VERSION  # noqa: E402
 SOURCES = [
     "GCF_000196095.1_ASM19609v1_genomic.gbff",
     "GCF_000354175.2_ASM35417v2_genomic.gbff",
@@ -152,22 +156,24 @@ def main():
         subprocess.run(command, cwd=ROOT, check=True)
     expanded = gzip.decompress(fixture.read_bytes())
     document = json.loads(expanded)
+    assert document["version"] == CURRENT_SESSION_VERSION
+    (drawing,) = document["drawings"]
     features = sum(
         len(i.get("biologicalFeatures", []))
-        for i in document["editorState"]["featureCatalog"]["items"]
+        for i in drawing["editorState"]["featureCatalog"]["items"]
     )
-    assert len(document["results"]) == 1
+    assert len(drawing["results"]) == 1
     assert (
-        document["results"][0]["content"]
+        drawing["results"][0]["content"]
         == (out / "real-full-pairwise.svg").read_text()
     )
-    cache = document["losatCache"]["entries"]
+    cache = drawing["losatCache"]["entries"]
     pairs = {
         (e["queryRecordInstanceKey"], e["subjectRecordInstanceKey"]) for e in cache
     }
-    assert len(document["renderRequest"]["records"]) == 12 and features >= 25000
+    assert len(drawing["renderRequest"]["records"]) == 12 and features >= 25000
     record_keys = {
-        record["recordKey"] for record in document["renderRequest"]["records"]
+        record["recordKey"] for record in drawing["renderRequest"]["records"]
     }
     required_pairs = {(a, b) for a in record_keys for b in record_keys if a != b}
     nonself_pairs = {(a, b) for a, b in pairs if a != b}
@@ -177,7 +183,7 @@ def main():
     assert len(cache) == len(pairs) == 144
     assert len(expanded) <= 512 * 1024 * 1024
     assert fixture.stat().st_size <= 200 * 1024 * 1024
-    assert document["version"] == 49 and document["renderRequest"]["schema"] == 9
+    assert drawing["renderRequest"]["schema"] == 9
     manifest.update(
         {
             "fixtureSha256": sha(fixture),

@@ -2,7 +2,12 @@
 import { CONSERVATION_TEN_COLORS } from '../utils/conservation-colors.generated.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 
-/** @import { FileLike } from './session-resource-backing.js' */
+/**
+ * What a comparison source slot holds, as these helpers read it (its name,
+ * size and date): an `InputFileRef` in the project's bindings, a File or
+ * Session resource view while a Session is decoded.
+ * @typedef {{ readonly name?: string, readonly size?: number, readonly lastModified?: number }} ConservationFile
+ */
 
 /**
  * One comparison ring: the source file it reads and how it is drawn.
@@ -18,8 +23,14 @@ import { resolveColorToHex } from '../utils/color-utils.js';
  * }} RawConservationSeriesEntry
  */
 /** @typedef {{ series?: RawConservationSeriesEntry[] | null, labels?: unknown }} CircularConservationLike */
-/** @typedef {{ file: FileLike, sourceKey: string, sourceIndex: number, fileName: string, defaultLabel: string }} ConservationSourceDescriptor */
-/** @typedef {ConservationSourceDescriptor & Omit<ConservationSeriesEntry, 'sourceKey' | 'fileName' | 'sourceIndex'> & { orderIndex: number }} OrderedConservationSource */
+/**
+ * @template {ConservationFile} [F=ConservationFile]
+ * @typedef {{ file: F, sourceKey: string, sourceIndex: number, fileName: string, defaultLabel: string }} ConservationSourceDescriptor
+ */
+/**
+ * @template {ConservationFile} [F=ConservationFile]
+ * @typedef {ConservationSourceDescriptor<F> & Omit<ConservationSeriesEntry, 'sourceKey' | 'fileName' | 'sourceIndex'> & { orderIndex: number }} OrderedConservationSource
+ */
 
 export const CONSERVATION_SLOT_MANAGER = 'circular_conservation';
 
@@ -29,13 +40,13 @@ const CONSERVATION_SERIES_COLORS = [0, 1, 5, 3, 2, 7, 6, 9, 8, 4].map((index) =>
 
 /**
  * @template T
- * @param {T | T[] | null | undefined} files
+ * @param {T | (T | null)[] | null | undefined} files a null place is dropped
  * @returns {T[]}
  */
-export const normalizeFileList = (files) => (Array.isArray(files) ? files.filter(Boolean) : (files ? [files] : []));
+export const normalizeFileList = (files) => (Array.isArray(files) ? files.filter(/** @returns {file is T} */ (file) => Boolean(file)) : (files ? [files] : []));
 
 /**
- * @template {FileLike} T
+ * @template {ConservationFile} T
  * @param {(T | null)[] | null | undefined} files An empty place is kept as one.
  * @param {CircularConservationLike | null | undefined} circularConservation
  * @returns {(T | null)[]}
@@ -151,7 +162,7 @@ const normalizePositiveInteger = (value, fallback = 1) => {
 };
 
 /**
- * @param {FileLike} file `normalizeFileList` drops falsy entries
+ * @param {ConservationFile} file `normalizeFileList` drops falsy entries
  * @param {unknown} index
  */
 const fileSignature = (file, index) => {
@@ -162,8 +173,9 @@ const fileSignature = (file, index) => {
 };
 
 /**
- * @param {FileLike | FileLike[] | null | undefined} sourceFiles
- * @returns {ConservationSourceDescriptor[]}
+ * @template {ConservationFile} F
+ * @param {F | F[] | null | undefined} sourceFiles
+ * @returns {ConservationSourceDescriptor<F>[]}
  */
 export const conservationSourceDescriptors = (sourceFiles) => {
   /** @type {Map<string, number>} */
@@ -205,7 +217,7 @@ const mergeSeriesEntry = (descriptor, previousEntry, orderIndex, legacyLabel = n
 
 /**
  * @param {{
- *   sourceFiles: FileLike | FileLike[] | null | undefined,
+ *   sourceFiles: ConservationFile | ConservationFile[] | null | undefined,
  *   previousSeries: RawConservationSeriesEntry[] | null | undefined,
  *   legacyLabels: string[] | null | undefined
  * }} options
@@ -273,8 +285,8 @@ export const reconcileConservationSeries = ({
 /**
  * @param {{
  *   series: ConservationSeriesEntry[] | null | undefined,
- *   sourceFiles: FileLike | FileLike[] | null | undefined,
- *   file: FileLike | null | undefined,
+ *   sourceFiles: ConservationFile | ConservationFile[] | null | undefined,
+ *   file: ConservationFile | null | undefined,
  *   recordLabel: unknown
  * }} options
  */
@@ -291,25 +303,26 @@ export const applyComparisonSequenceRecordLabel = ({ series, sourceFiles, file, 
 };
 
 /**
- * @param {FileLike | FileLike[] | null | undefined} sourceFiles
+ * @template {ConservationFile} F
+ * @param {F | F[] | null | undefined} sourceFiles
  * @param {CircularConservationLike | null | undefined} circularConservation
- * @returns {OrderedConservationSource[]}
+ * @returns {OrderedConservationSource<F>[]}
  */
 export const orderedConservationSources = (sourceFiles, circularConservation) => {
   const descriptors = conservationSourceDescriptors(sourceFiles);
   const legacyLabels = parseConservationLabelText(circularConservation?.labels);
   const descriptorByKey = new Map(descriptors.map((descriptor) => [descriptor.sourceKey, descriptor]));
-  /** @type {Map<string, ConservationSourceDescriptor[]>} */
+  /** @type {Map<string, ConservationSourceDescriptor<F>[]>} */
   const descriptorsByFileName = new Map();
   descriptors.forEach((descriptor) => {
     if (!descriptorsByFileName.has(descriptor.fileName)) descriptorsByFileName.set(descriptor.fileName, []);
     // Set just above when absent.
-    /** @type {ConservationSourceDescriptor[]} */ (descriptorsByFileName.get(descriptor.fileName)).push(descriptor);
+    /** @type {ConservationSourceDescriptor<F>[]} */ (descriptorsByFileName.get(descriptor.fileName)).push(descriptor);
   });
 
   /** @type {Set<string>} */
   const usedKeys = new Set();
-  /** @type {OrderedConservationSource[]} */
+  /** @type {OrderedConservationSource<F>[]} */
   const entries = [];
   const series = Array.isArray(circularConservation?.series) ? circularConservation.series : [];
   series.forEach((entry, seriesIndex) => {

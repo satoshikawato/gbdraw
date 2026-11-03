@@ -20,6 +20,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const genbank = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'));
 const depthTsv = ['reference_name\tposition\tdepth', 'NC_012920.1\t1\t10', 'NC_012920.1\t8000\t20', ''].join('\n');
@@ -61,12 +62,12 @@ const prepare = async (page) => {
 // A custom stack with Depth, skew, and annotation rows (Linear: Features, GC, skew, Depth).
 const stackWithEveryRowKind = async (page, mode) => {
   await openApp(page);
+  if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
   await page.evaluate(({ mode, genbank, depthTsv }) => {
     const app = window.__GBDRAW_APP__;
     const file = (text, name) => new File([text], name, { type: 'text/plain' });
     if (mode === 'linear') {
-      app.selectDrawing('linear');
-      app.lInputType = 'gb';
+      app.setLinearInputType('gb');
       app.setLinearSeqPrimaryFile(0, 'gb', file(genbank, 'HmmtDNA.gbk'));
       app.setLinearDepthFile(app.linearSeqs[0], 0, file(depthTsv, 'sample.depth.tsv'));
     } else {
@@ -419,7 +420,7 @@ test('an upload zone whose file failed inspection does not look ready (UI-08)', 
   await expect(zone).not.toHaveClass(/\bfailed\b/);
   await expect(zone.locator('.ph-check-circle')).toHaveCount(1);
 
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByTestId('linear-genbank-1')
     .setInputFiles({ name: 'bad.gbk', mimeType: 'text/plain', buffer: Buffer.from('hello world\n') });
   const linearZone = page.getByRole('button', { name: 'Choose GenBank / DDBJ File', exact: true }).first();
@@ -458,7 +459,7 @@ test('an upload zone cuts a long file name at its end and keeps its icon (OV-600
   await expect(zone).toHaveClass(/\bready\b/, { timeout: 120_000 });
   expect(await shown(zone), 'Circular, ready').toEqual(cutAtTheEnd);
 
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   const linearZone = page.getByRole('button', { name: 'Choose GenBank / DDBJ File', exact: true }).first();
   await page.getByTestId('linear-genbank-1')
     .setInputFiles({ name: longName, mimeType: 'text/plain', buffer: genbank });

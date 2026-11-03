@@ -467,7 +467,6 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     featureOverrides: overrides,
     featureVisibilityScopeDialog: {},
     featureCatalog: ref(catalog),
-    generatedMode: ref('circular'),
     resultGenerationKey: ref('generation-1'),
     results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
     selectedResultIndex: ref(0),
@@ -492,7 +491,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   });
   // The root registers the port after both owners exist.
   ports.applyFeatureVisibilityToLabels = (options) => follows.push(options);
-  const featureOf = (id) => resultCatalogFeatures(portState).biological
+  const featureOf = (id) => resultCatalogFeatures(portState, 'circular').biological
     .find((feature) => feature.biological_feature_id === id);
   setFeatureVisibilityOverride(editsOf(overrides), featureOf('B'), 'off');
 
@@ -572,7 +571,6 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     featureOverrides: {},
     featureVisibilityScopeDialog: {},
     featureCatalog: ref(catalog),
-    generatedMode: ref('circular'),
     labelReflowProcessing: ref(false),
     resultGenerationKey: ref('generation-1'),
     results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
@@ -664,7 +662,6 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     featureOverrides: {},
     featureVisibilityScopeDialog: {},
     featureCatalog: ref(catalog),
-    generatedMode: ref('circular'),
     labelReflowProcessing: ref(false),
     resultGenerationKey: ref('generation-1'),
     results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
@@ -673,7 +670,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     errorLog: ref(null)
   };
   // Python's rule matches are evaluated over the catalog's biological features.
-  displayState.biologicalFeatures = ref(resultCatalogFeatures(displayState).biological);
+  displayState.biologicalFeatures = ref(resultCatalogFeatures(displayState, 'circular').biological);
   // While `holding`, each prepareDrawn call waits for its own release.
   const basePreparation = rulePreparationFor(displayState);
   const held = [];

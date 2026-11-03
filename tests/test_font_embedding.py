@@ -23,6 +23,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.linear import linear_main
 from gbdraw.render import font_embedding
 from gbdraw.web_support import export_fonts
+from tests.utils.session_drawing_view import session_view
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "gbdraw" / "data"
 FONT_FACE = re.compile(r"@font-face\s*\{([^}]*)\}")
@@ -678,7 +679,7 @@ def test_cli_session_keeps_the_family_name_and_a_font_file_draws_it_again(
 
     # D-02: the name only; no font file, its path, or embedded font data.
     assert "The Session stores the font name 'Gbdraw Session Serif' but not the font file" in caplog.text
-    assert "'Gbdraw Session Serif', serif" in json.dumps(json.loads(saved)["renderRequest"])
+    assert "'Gbdraw Session Serif', serif" in json.dumps(session_view(json.loads(saved))["renderRequest"])
     assert str(font) not in saved and "--font_file" not in saved and "--no_font_embedding" not in saved
     assert "@font-face" not in saved
 

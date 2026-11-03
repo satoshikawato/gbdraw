@@ -74,10 +74,12 @@ const readsOf = (run) => {
 const fixture = (catalog) => {
   const group = { id: 'og-1', members, orthologEdges: [] };
   let request = { records: ['a', 'b'].map((recordKey) => ({ recordKey, presentation: { reverseComplement: false } })) };
+  const linearSeqs = ['a', 'b'].map((uid) => ({ uid, region_reverse: false }));
   const state = {
+    activeDrawing: () => ({ mode: 'linear', recordsOff: [], linearSeqs }),
     mode: ref('linear'), featureCatalog: ref(catalog), selectedOrthogroupId: ref('og-1'),
     similarityAlignmentPlan: ref(null), similarityAlignmentResetReceipt: ref(null), errorLog: ref(null),
-    linearRecordTranslations: ref([]), linearSeqs: ['a', 'b'].map((uid) => ({ uid, region_reverse: false })),
+    linearRecordTranslations: ref([]),
     results: ref(results)
   };
   const actions = createSimilarityAlignmentActions({
@@ -166,7 +168,7 @@ test('a record with its own accession does not walk its catalog rows for one', (
     Object.defineProperty(feature, 'record_id', { enumerable: true, get: () => { recordIdReads.count += 1; return ''; } });
   });
   const { state, labels } = fixture(admitted(catalog));
-  state.linearSeqs[0].accession = 'SEQ-A';
+  state.activeDrawing().linearSeqs[0].accession = 'SEQ-A';
   recordIdReads.count = 0;
   assert.deepEqual(labels(), ['SEQ-A · gene-x', 'ACC-b · gene-y']);
   assert.deepEqual(labels(), ['SEQ-A · gene-x', 'ACC-b · gene-y']);

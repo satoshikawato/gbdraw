@@ -94,11 +94,10 @@ const createPopup = ({
     clickedPairwiseMatch: { value: null },
     svgContainer: { value: definitionGroup && { querySelector: () => definitionGroup } },
     mode: { value: mode },
-    linearSeqs: [sequence],
     extractedFeatures: { value: featureTypes.map((type) => ({ type })) },
     paletteDefinitions: { value: palettes },
     appliedPaletteName: { value: appliedPalette },
-    activeDrawing: () => ({ form, legendEntries: { value: entries } })
+    activeDrawing: () => ({ form, legendEntries: { value: entries }, linearSeqs: [sequence] })
   };
   const popup = createPreviewItemPopup({
     state,

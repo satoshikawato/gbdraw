@@ -6,6 +6,7 @@ globalThis.window = { Vue: {
   computed: getter => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { buildConfigData, applyCapturedConfigData, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistoryManager, createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
 // One History per drawing, as the app has (PD-OI-090): the router walks the shown drawing's.
@@ -15,10 +16,10 @@ const routerOver = (snapshotService, options = {}) => createHistoryRouter({
   managerOptions: (drawingId) => ({ ...snapshotService.drawingHistory(drawingId), ...options }),
   sessionHistory: snapshotService.sessionHistory()
 });
-const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const snapshots = createHistorySnapshotService({
-  state, fileStore: createHistoryFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
+  state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
 });
 const history = routerOver(snapshots, {
   buildCheckpoint: () => assert.fail('Form edits must use intent History'),
@@ -85,7 +86,7 @@ for (const [domain, key, first, second] of [
   const { RECORD_SETTINGS_DEFAULTS, removeRecordEdits } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
   const { removeAnnotations } = await import('../../gbdraw/web/js/services/drawing/annotation-sets.js');
   const editorSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData,
+    state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData,
     buildFeatureStateData: config.buildFeatureStateData, applyFeatureStateData: config.applyFeatureStateData,
     buildEditorStateData: config.buildEditorStateData, applyEditorStateData: config.applyEditorStateData
   });
@@ -96,7 +97,7 @@ for (const [domain, key, first, second] of [
   // The record settings are the Linear drawing's: its History records them.
   installShownDrawing('linear');
   const drawing = modeDrawing(state, 'linear');
-  const card = state.linearSeqs[0];
+  const card = modeDrawing(state, 'linear').linearSeqs[0];
   const uid = card.uid;
   card.definition = 'Kept organism';
   card.losat_gencode = 11;
@@ -120,7 +121,7 @@ for (const [domain, key, first, second] of [
   assert.equal(drawing.featureOverrides[key], undefined);
   assert.equal(drawing.annotationSets[0].annotations.length, 0);
   await editorHistory.undo();
-  const restored = state.linearSeqs.find((sequence) => sequence.uid === uid);
+  const restored = modeDrawing(state, 'linear').linearSeqs.find((sequence) => sequence.uid === uid);
   assert.equal(restored.definition, 'Kept organism');
   assert.equal(restored.losat_gencode, 11);
   assert.equal(drawing.featureOverrides[key]?.featureVisibility, 'off');
@@ -217,7 +218,7 @@ console.log('History restores nullable config values and preserves key guards.')
   assert.strictEqual(liveCatalog(), catalog);
 
   const artifactSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData,
+    state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData,
     buildEditorStateData, applyEditorStateData
   });
   const artifactHistory = createHistoryManager({
@@ -283,7 +284,7 @@ console.log('History restores nullable config values and preserves key guards.')
     config: buildConfigData(state.activeDrawing()), layoutPreferences: buildUiStateData(state.activeDrawing()).layoutPreferences
   });
   const restoreSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData,
+    state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData,
     buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData
   });
   const restoreHistory = createHistoryManager({
@@ -333,6 +334,39 @@ console.log('History restores nullable config values and preserves key guards.')
   console.log('History Undo and Redo keep unset settings unset.');
 }
 
+// OIC-030, DESIGN §1: a drawing's History step holds its own input type, from
+// its inputs slice, not the field of its mode: with two Linear drawings of
+// different input types, the step of one and its Undo keep the other's.
+{
+  const { buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData } = await import('../../gbdraw/web/js/services/config.js');
+  const { createDrawingState } = await import('../../gbdraw/web/js/state.js');
+  installShownDrawing('linear');
+  const linear = state.drawingOf('linear');
+  const second = createDrawingState('linear-2', 'linear');
+  state.addDrawing(second, 'Linear 2', state.drawingTabs.value.length);
+  linear.inputType.value = 'gff';
+  second.inputType.value = 'gb';
+  const typeSnapshots = createHistorySnapshotService({
+    state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData,
+    applyConfigData: applyCapturedConfigData, buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData
+  });
+  const typeHistory = createHistoryManager({ ...typeSnapshots.drawingHistory('linear'), signatureFor: typeSnapshots.snapshotSignature });
+  await typeHistory.captureBaseline();
+  await typeHistory.initializeIntentBaseline();
+  const intent = typeSnapshots.drawingHistory('linear').buildIntent();
+  assert.equal(intent.files.inputType, 'gff', 'the step holds the drawing\'s own input type');
+  assert.equal(Object.hasOwn(intent.ui, 'lInputType') || Object.hasOwn(intent.ui, 'cInputType'), false, 'no mode field');
+  await typeHistory.runUndoable('Input type', () => { linear.inputType.value = 'gb'; });
+  await typeHistory.undo();
+  assert.equal(linear.inputType.value, 'gff', 'Undo restores the drawing\'s own input type');
+  assert.equal(second.inputType.value, 'gb', 'the other Linear drawing keeps its input type');
+  await typeHistory.redo();
+  assert.equal(linear.inputType.value, 'gb');
+  linear.inputType.value = 'gb';
+  state.removeDrawing('linear-2', { takeSlot: () => null });
+  console.log('A History step holds its drawing\'s own input type.');
+}
+
 // D-03 (Q-R1): the Rich Feature Popup is a UI preference outside History. A
 // toggle records no step, Undo and Redo of other steps leave it as set, and
 // the checkbox opens no History transaction.
@@ -340,7 +374,7 @@ console.log('History restores nullable config values and preserves key guards.')
   const { readFile } = await import('node:fs/promises');
   const { buildUiStateData, applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
   const preferenceSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData, buildUiStateData, applyUiStateData
+    state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData, buildUiStateData, applyUiStateData
   });
   const preferenceHistory = createHistoryManager({
     ...preferenceSnapshots.drawingHistory(state.activeDrawing().id),

@@ -23,6 +23,7 @@ from gbdraw.api.requests import (
 from gbdraw.session import (
     SessionResourceError,
     _build_session_document_from_resolved_request,
+    _mode_scoped_document_of_request,
     build_session_document,
     load_session_document,
     materialize_session,
@@ -207,7 +208,9 @@ def test_a_request_reference_must_resolve() -> None:
 # table existed (3522c0bc): a table without seed resources must reproduce the
 # single-request writer byte for byte. A codec change that changes a fixture's
 # single-request output updates its digest here; so does a Session version
-# bump (46, 47, 48, 49, 50: only the version field changed) and a change of the packaged
+# bump (46, 47, 48, 49, 50: only the version field changed; this checked document
+# is the mode-scoped Session the writer produced before drawings, so it stays at
+# the last mode-scoped version, 50, when the writer moves on to 51) and a change of the packaged
 # config a stored full config is completed with (the label style keys, LP-D98;
 # the Linear box default, LP-D106; the Circular track narrowing leaves, PD-OI-078;
 # the Circular definition show leaf, PD-OI-109; the ring colour scheme leaf, PD-OI-110;
@@ -233,8 +236,10 @@ def test_a_single_request_session_is_byte_identical(fixture: str, tmp_path: Path
             # A file resource stores its modification time.
             os.utime(path, (1_700_000_000, 1_700_000_000))
         request = session_to_request(materialized)
-        document = build_session_document(
+        # The checked mode-scoped Session 48, before the move to drawings.
+        document = _mode_scoped_document_of_request(
             request,
+            resolved=False,
             created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
         ).to_dict()
     text = json.dumps(document, sort_keys=True, separators=(",", ":"))

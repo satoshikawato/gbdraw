@@ -4,6 +4,8 @@ const zlib = require('node:zlib');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp, openLinearFileCards, reveal } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
@@ -89,7 +91,7 @@ for (const mode of ['circular', 'linear']) {
       window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent: (event) => window.__JOINT_LIFECYCLE__.push(event) };
     });
     await openApp(page);
-    if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1')
       : page.getByLabel('GenBank/DDBJ File', { exact: true });
     await upload.setInputFiles({ name: 'shared.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
@@ -161,12 +163,12 @@ for (const mode of ['circular', 'linear']) {
     const bytes = await fs.readFile(savedPath);
     const session = JSON.parse((bytes[0] === 0x1f ? zlib.gunzipSync(bytes) : bytes).toString());
     expect(session.version).toBe(CURRENT_SESSION_VERSION);
-    expect(session.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
-    expect(session.renderRequest.records[0].display.startCoordinate).toBe(71);
-    expect(session.renderRequest.diagramOptions.featurePlacements).toHaveLength(1);
-    expect(session.renderRequest.diagramOptions.configOverrides['canvas.feature_overlap_tolerance_bp']).toBe(1);
-    expect(session.modes[session.ui.mode].config.recordDisplayDrafts.some((draft) => draft.startCoordinate === 91)).toBe(true);
-    expect(session.results[0].content).toBe(savedResult);
+    expect(shownSavedDrawing(session).renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
+    expect(shownSavedDrawing(session).renderRequest.records[0].display.startCoordinate).toBe(71);
+    expect(shownSavedDrawing(session).renderRequest.diagramOptions.featurePlacements).toHaveLength(1);
+    expect(shownSavedDrawing(session).renderRequest.diagramOptions.configOverrides['canvas.feature_overlap_tolerance_bp']).toBe(1);
+    expect(shownSavedDrawing(session).config.recordDisplayDrafts.some((draft) => draft.startCoordinate === 91)).toBe(true);
+    expect(shownSavedDrawing(session).results[0].content).toBe(savedResult);
     await page.screenshot({ path: testInfo.outputPath('joint-controls.png'), fullPage: true });
     const context = await browser.newContext();
     const loaded = await context.newPage();
@@ -208,10 +210,10 @@ test('historical v40/schema6 saves as the joint format without Generate', async 
   const bytes = await fs.readFile(savedPath);
   const saved = JSON.parse(zlib.gunzipSync(bytes));
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
-  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
-  expect(saved.renderRequest.records.every((record) => record.display.isCircular === null
+  expect(shownSavedDrawing(saved).renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
+  expect(shownSavedDrawing(saved).renderRequest.records.every((record) => record.display.isCircular === null
     && record.display.startCoordinate === null)).toBe(true);
-  expect(saved.renderRequest.diagramOptions.featurePlacements).toEqual([]);
+  expect(shownSavedDrawing(saved).renderRequest.diagramOptions.featurePlacements).toEqual([]);
   // This CLI fixture validates preserved config through the existing helper;
   // promotion must never submit a diagram generation request.
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__.instances
@@ -222,7 +224,7 @@ for (const mode of ['circular', 'linear']) {
   test(`${mode} duplicate source records keep independent starts through replacement and Undo`, async ({ page }, testInfo) => {
     test.setTimeout(180000);
     await openApp(page);
-    if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1')
       : page.getByLabel('GenBank/DDBJ File', { exact: true });
     const bytes = Buffer.from(source + source);
@@ -274,7 +276,7 @@ for (const mode of ['circular', 'linear']) {
   test(`${mode} real topology reset bulk placement and Auto history`, async ({ page }, testInfo) => {
     test.setTimeout(180000);
     await openApp(page);
-    if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
     await upload.setInputFiles({ name: 'shared.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
     if (mode === 'linear') await page.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
@@ -292,8 +294,8 @@ for (const mode of ['circular', 'linear']) {
     const inactivePath = testInfo.outputPath(inactiveDownload.suggestedFilename());
     await inactiveDownload.saveAs(inactivePath);
     const inactive = JSON.parse(zlib.gunzipSync(await fs.readFile(inactivePath)));
-    expect(inactive.results).toEqual([]);
-    expect(inactive.modes[inactive.ui.mode].config.recordDisplayDrafts[0]).toMatchObject({ topologyOverride: false, startCoordinate: 71 });
+    expect(shownSavedDrawing(inactive).results).toEqual([]);
+    expect(shownSavedDrawing(inactive).config.recordDisplayDrafts[0]).toMatchObject({ topologyOverride: false, startCoordinate: 71 });
     await page.getByRole('button', { name: 'Reset to detected', exact: true }).click();
     await expect(start).toBeEnabled();
     await expect(start).toHaveValue('71');
@@ -387,7 +389,7 @@ for (const mode of ['circular', 'linear']) for (const intent of ['rotation', 'pl
   test(`${mode} ${intent} alone exports working Source recipe and Exact replay`, async ({ page }, testInfo) => {
     test.setTimeout(180000);
     await openApp(page);
-    if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
     await upload.setInputFiles({ name: 'shared.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
     if (intent === 'rotation') {

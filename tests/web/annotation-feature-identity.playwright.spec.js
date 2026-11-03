@@ -9,6 +9,7 @@ const { spawnSync } = require('node:child_process');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const records = (file) => readFileSync(file, 'utf8').split(/^\/\/\s*$/m)
   .map((chunk) => chunk.trim()).filter((chunk) => chunk.startsWith('LOCUS')).map((chunk) => `${chunk}\n//\n`);
@@ -25,7 +26,7 @@ const TWINS = TESTA.replace(
 
 const openLinear = async (page, texts, configure) => {
   await openFresh(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await page.evaluate(async (inputs) => {
     const app = window.__GBDRAW_APP__;
@@ -90,7 +91,7 @@ const drawnAnnotations = (page) => page.evaluate(async () => {
   const { admitFeatureCatalog } = await import('/gbdraw/web/js/services/feature-catalog.js');
   const raw = (value) => window.Vue.toRaw(value);
   return admitFeatureCatalog(raw(state.featureCatalog.value), raw(window.__GBDRAW_APP__.currentResults()), {
-    mode: state.generatedMode.value
+    mode: state.drawingOf(state.generatedDrawingId.value).mode
   }).annotations.map((item) => ({ id: item.id, recordIndex: item.record_index, segments: item.segments }));
 });
 
@@ -270,8 +271,7 @@ test('a Circular annotation of a selected feature waits in the draft while anoth
 test('OV-21: an annotation of a selected Circular feature stays out of Linear requests with the same record key', async ({ page }) => {
   test.setTimeout(360_000);
   const switchMode = async (mode) => {
-    await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
-    await page.waitForFunction((expected) => window.__GBDRAW_APP__?.mode === expected, mode);
+    await showDrawing(page, { kind: mode });
     await settle(page);
   };
   const requestTargets = () => page.evaluate(async () => {

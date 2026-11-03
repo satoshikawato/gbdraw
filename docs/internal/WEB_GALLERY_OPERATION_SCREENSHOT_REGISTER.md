@@ -76,7 +76,7 @@ Recaptured at the tool default scale; an image is kept only when it visibly diff
 | `HmmtDNA_ATskew` | `manual-10-01-feature-popup.webp` | Recapture; recipe corrected | RNR2 **Details** popup left of the highlighted l-rRNA; the recipe pans the feature to a fixed place in the preview before the click, where it left the place to the scroll that the click does on a feature outside the visible preview (three different outcomes seen, one capture run timed out) | Accepted at 3153x903; two runs byte-identical |
 | `HmmtDNA_ATskew` | `post-02-01-legend-editor.webp` | Recapture; recipe added | Exact Session; **Editor** drawer open on **Legend**; list scrolled to the AT skew rows; crop from the drawer header to the last row | Accepted; the AT skew swatches show the GC skew colors (Product bug, see the handoff) |
 
-The capture tool's `resetSettings` action confirms the in-app **Reset all settings?** dialog; the tool no longer expects a browser dialog.
+The capture tool's `resetSettings` action confirms the in-app **Reset settings?** dialog with **Reset all drawings**; the tool no longer expects a browser dialog.
 
 ## BGC progressive tutorial (Gallery revision 2026-10-11)
 

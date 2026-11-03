@@ -66,8 +66,8 @@ for (const example of commonExamples) {
           svg: String(selected?.content || ''),
           mode: state.mode.value,
           recordCount: state.mode.value === 'linear'
-            ? state.linearSeqs.length
-            : state.circularRecordList.value.length,
+            ? state.activeDrawing().linearSeqs.length
+            : state.activeDrawing().circularRecordList.value.length,
           slotIds: state.activeDrawing().adv.circular_track_slots.map(({ id }) => id),
           annotationSetIds: state.activeDrawing().annotationSets.map(({ id: setId }) => setId),
           legend: state.activeDrawing().form.legend,

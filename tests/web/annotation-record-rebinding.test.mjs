@@ -25,6 +25,7 @@ installFakeSvgDom();
 globalThis.File = File;
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
 const { coordinateTarget } = await import('../../gbdraw/web/js/app/annotations/target-actions.js');
@@ -46,7 +47,7 @@ test('a Linear multi-record expansion binds an annotation to its record card, an
   app.addLinearSeq();
   app.setLinearSeqPrimaryFile(1, 'gb', genbank(['chr1', 50], ['chr2', 60]));
   await app.refreshLinearRecordSelectors();
-  const card = state.linearSeqs.find((seq) => seq.region_record_id === 'chr2');
+  const card = modeDrawing(state, 'linear').linearSeqs.find((seq) => seq.region_record_id === 'chr2');
   assert.ok(card, 'the file expands into one card per record');
   const [set] = drawing.annotationSets;
   const bound = annotationRecordBinding(set.annotations[0]);

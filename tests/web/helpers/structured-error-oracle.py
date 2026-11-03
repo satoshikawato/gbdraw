@@ -19,6 +19,7 @@ from gbdraw.api import CircularDiagramOptions, CircularDiagramRequest, ColorOpti
 from gbdraw import exceptions
 from gbdraw.session import build_session_document
 from gbdraw.web_support import request_render
+from tests.utils.session_drawing_view import drawing_view
 
 # A native failure inside a real engine phase: the phase function it replaces.
 ENGINE_PHASES = {'render': 'render_request', 'result-admission': 'build_feature_catalog_item'}
@@ -34,12 +35,13 @@ def python_helpers():
 def render_failure(namespace, pattern, display_start=None, genbank_text=None, config_overrides=None):
     record = SeqRecord(Seq('ATGC' * 25), id='PRIVATE_RECORD_SENTINEL')
     record.annotations['molecule_type'] = 'DNA'
-    document = build_session_document(CircularDiagramRequest(
+    # The one drawing of the Session 49 the Python writer writes, as its one-drawing view.
+    document = drawing_view(build_session_document(CircularDiagramRequest(
         records=(RecordInput(source=InMemoryRecordSource(record)),),
         options=CircularDiagramOptions(colors=ColorOptions(color_table=DataFrame([
             dict(feature_type='CDS', qualifier_key='product', value='VALID_PLACEHOLDER', color='#ff0000', caption='')
         ]))),
-    )).to_dict()
+    )).to_dict())
     if display_start is not None:
         document['renderRequest']['records'][0]['display']['startCoordinate'] = display_start
     if config_overrides is not None:

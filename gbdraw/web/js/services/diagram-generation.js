@@ -113,7 +113,7 @@ import { toRaw } from '../utils/vue-raw.js';
  */
 
 export { DIAGRAM_HELPER_OPERATIONS } from './diagram-worker-protocol.js';
-export { resourceIdOwnedBy } from './diagram-resource-staging.js';
+export { recordSourceOwnedBy, recordSourceResourceIds } from './diagram-resource-staging.js';
 
 export class DiagramGenerationCanceledError extends Error {
   constructor(message = 'Diagram generation was canceled.') {

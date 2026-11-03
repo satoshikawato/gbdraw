@@ -137,13 +137,15 @@ test('each default of the request description fits its field', () => {
 });
 
 /**
- * The renderRequest of a Session and of its other mode's Result.
+ * The renderRequest of a Session 49's drawings, and of a 46-48 Session and of
+ * its other mode's Result.
  * @param {unknown} session
  * @returns {[string, unknown][]}
  */
 const storedRequests = (session) => {
   if (typeof session !== 'object' || session === null) return [];
-  const { renderRequest, otherModeResult } = /** @type {{ renderRequest?: unknown, otherModeResult?: unknown }} */ (session);
+  const { renderRequest, otherModeResult, drawings } = /** @type {{ renderRequest?: unknown, otherModeResult?: unknown, drawings?: { id: string, renderRequest?: unknown }[] }} */ (session);
+  if (Array.isArray(drawings)) return drawings.map((drawing) => [`drawings[${drawing.id}].renderRequest`, drawing.renderRequest]);
   const other = typeof otherModeResult === 'object' && otherModeResult !== null
     ? /** @type {{ renderRequest?: unknown }} */ (otherModeResult).renderRequest
     : undefined;

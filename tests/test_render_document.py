@@ -35,6 +35,7 @@ from gbdraw.api.diagram import (
     assemble_circular_diagram_from_records,
     build_linear_diagram,
 )
+from tests.utils.session_drawing_view import drawing_view
 from gbdraw.circular import circular_main
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.exceptions import ExportError
@@ -456,7 +457,7 @@ def test_placed_contents_are_content_pieces_and_other_children_raw() -> None:
 def _session_drawings(name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[Drawing]:
     path = SESSIONS / name
     with (gzip.open(path, "rt", encoding="utf-8") if name.endswith(".gz") else path.open(encoding="utf-8")) as handle:
-        document = json.load(handle)
+        document = drawing_view(json.load(handle))
     drawings: list[Drawing] = []
     original = api_render.write_svg_document
 

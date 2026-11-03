@@ -83,7 +83,7 @@ test('a row the request draws no track for takes no palette color from its capti
 });
 
 test('the tracks of the HmmtDNA_ATskew Gallery Session name the slot and the own colors of each track', () => {
-  assert.deepEqual(drawnTracks(HMMT_AT_SKEW.renderRequest), [
+  assert.deepEqual(drawnTracks(HMMT_AT_SKEW.drawings.find((entry) => entry.id === HMMT_AT_SKEW.ui.activeDrawingId).renderRequest), [
     { slotId: 'gc_content', kind: 'content', nt: 'GC', label: 'GC content', positiveColor: null, negativeColor: null },
     { slotId: 'gc_skew', kind: 'skew', nt: 'GC', label: 'GC skew', positiveColor: null, negativeColor: null },
     { slotId: 'a_skew_2', kind: 'skew', nt: 'AT', label: 'AT skew', positiveColor: '#deaf6e', negativeColor: '#7294e3' }

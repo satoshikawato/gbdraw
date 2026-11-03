@@ -3,9 +3,11 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync, gzipSync } = require('node:zlib');
 const {
-  openApp, expectNoLoadRepairDialog, expectSessionLoadedWithoutWarnings, generateAndWaitForResult, answerLoadRepairs
+  openApp, expectNoLoadRepairDialog, expectSessionLoadedWithoutWarnings, generateAndWaitForResult, answerLoadRepairs,
+  waitForPreviewAtRest
 } = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionInputSelector =
@@ -333,7 +335,7 @@ test('a Session load error does not follow a switch to the other diagram mode', 
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false
     && window.__GBDRAW_APP__?.errorLog !== null);
   await expect(page.locator('.result-pane [role="alert"]')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await expect(page.locator('.result-pane [role="alert"]')).toHaveCount(0);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
@@ -743,31 +745,28 @@ test('the header gives way by icons, never by narrowing the Session title', asyn
   await expect.poll(fitOf).toEqual([false, false, false]);
   await expect(words).toBeVisible();
   const roomyTitle = await titleWidth();
-  await page.setViewportSize({ width: 1366, height: 900 });
+  // Widths are measured on the one-row header with the Circular/Linear buttons
+  // in the drawing bar (PD-OI-090) and the History button (PD-OI-112, 34 px):
+  // the Gallery cap alone from about 978 px, the file icons from about 842 px,
+  // the title alone from about 822 px (English).
+  await page.setViewportSize({ width: 880, height: 900 });
   await expect.poll(fitOf).toEqual([false, true, false]);
   await expect(words).toBeHidden();
   await expect(page.getByRole('link', { name: 'Gallery & tutorials', exact: true })).toBeVisible();
   expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
 
-  // French at 1280 px: the cap alone left the Session block no width.
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.locator('[data-ui-language]').selectOption('fr');
-  await expect.poll(fitOf).toEqual([true, false, false]);
-  await expect(header.locator('.app-file-actions .app-config-button').first()).toHaveCSS('width', '32px');
-  expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
-
-  // Vietnamese at 1024 px: the cap and the icons still narrowed the title and
-  // wrapped the mode names until the toolbar's groups closed up. PD-OI-112: the
-  // History button takes 34 px of the header, so these widths add 34 px.
-  await page.locator('[data-ui-language]').selectOption('vi');
-  await page.setViewportSize({ width: 1058, height: 768 });
+  // Where the cap alone still narrows the title, the file buttons show their
+  // icons. PD-OI-112: the History button takes 34 px of the header, so these
+  // two widths add 34 px.
+  await page.setViewportSize({ width: 833, height: 900 });
   await expect.poll(fitOf).toEqual([true, true, false]);
+  await expect(header.locator('.app-file-actions .app-config-button').first()).toHaveCSS('width', '32px');
   await expect(header.locator('.app-toolbar')).toHaveCSS('column-gap', '4px');
   expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
 
   // TL-D06: where the icons and the closed-up gaps still narrow the title, its
   // "Session" caption hides, so the title takes that width.
-  await page.setViewportSize({ width: 934, height: 768 });
+  await page.setViewportSize({ width: 812, height: 768 });
   await expect.poll(fitOf).toEqual([true, true, true]);
   await expect(header.locator('.app-session-label')).toBeHidden();
   await expect(header.locator('.app-toolbar')).toHaveCSS('column-gap', '2px');
@@ -878,6 +877,9 @@ test('the first feature popup after a Session load says it is preparing and keep
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false
     && (window.__GBDRAW_APP__?.results || []).length > 0);
+  // The Load's Fit (R17-25) moves the figure after the Load ends; a click aimed
+  // during it lands on what passes under the point (OV-2457).
+  await waitForPreviewAtRest(page);
   // The livE CDS of record 1; no ribbon lies under its centre.
   const feature = page.locator('.gbdraw-preview-surface svg path[id="fed46a3a6_record_1"]');
   await feature.click({ force: true });
@@ -902,15 +904,17 @@ test('the Load notice stays across Generate and clears on a mode switch and Rese
   await expect(page.locator('[data-app-notice-announcer]')).toHaveText(/^Session loaded/);
   await generateAndWaitForResult(page);
   await expect(notice).toContainText('Session loaded');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('linear'))).toEqual({ status: 'ok' });
+  await showDrawing(page, { kind: 'linear' });
   await expect(notice).toHaveCount(0);
   await expect(page.locator('[data-app-notice-announcer]')).toHaveCount(1);
 
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'))).toEqual({ status: 'ok' });
+  await showDrawing(page, { kind: 'circular' });
   await loadBaselineSession(page);
   await page.evaluate(() => { window.__GBDRAW_APP__.requestResetSettings(); });
-  const reset = page.getByRole('dialog', { name: 'Reset all settings?', exact: true });
-  await expect(reset.locator('[data-choice-prompt-lines] li')).toHaveText(['Your edits are removed too', 'Undo restores them']);
-  await reset.getByRole('button', { name: 'Reset all settings', exact: true }).click();
+  const reset = page.getByRole('dialog', { name: 'Reset settings?', exact: true });
+  await expect(reset.locator('[data-choice-prompt-lines] li')).toHaveText([
+    'Your edits are removed too', 'Undo restores them', 'Reset all drawings also resets the settings every drawing shares'
+  ]);
+  await reset.getByRole('button', { name: 'Reset all drawings', exact: true }).click();
   await expect(notice).toHaveCount(0);
 });

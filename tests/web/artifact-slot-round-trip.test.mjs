@@ -1,5 +1,5 @@
 // A mode switch keeps the displayed artifact under the drawing it belongs to:
-// the drawing of its mode (`generatedMode`), which may differ from the drawing
+// its drawing by ID (`generatedDrawingId`), which may differ from the drawing
 // shown. A Load of a Session with no Result whose request mode differs from
 // `ui.mode` leaves that state; a round trip through the other mode must give
 // each drawing its own artifact back (A2 I1 review, Medium 1). This checks the
@@ -23,23 +23,24 @@ installFakeSvgDom();
 globalThis.File = File;
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 
 test('a round trip gives the artifact of the other mode back to its own drawing', async () => {
   const app = createAppSetup();
   // As such a Load leaves it: Circular shown, its displayed artifact the Linear one, with no Result.
-  state.generatedMode.value = 'linear';
+  state.generatedDrawingId.value = 'linear';
   state.generatedLegendPosition.value = 'top';
 
   app.selectDrawing('linear');
-  assert.equal(state.generatedMode.value, 'linear', 'the Linear drawing shows its own artifact');
+  assert.equal(state.generatedDrawingId.value, 'linear', 'the Linear drawing shows its own artifact');
   assert.equal(state.generatedLegendPosition.value, 'top');
   // A Linear Generate.
   const linearResult = { name: 'linear.svg', content: '<svg id="linear"/>' };
   state.results.value = [linearResult];
 
   app.selectDrawing('circular');
-  assert.equal(state.generatedMode.value, 'circular', 'the Circular drawing comes back with its own empty artifact');
+  assert.equal(state.generatedDrawingId.value, 'circular', 'the Circular drawing comes back with its own empty artifact');
   assert.deepEqual(state.results.value, []);
 
   app.selectDrawing('linear');

@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createHash } from 'node:crypto';
 
 const {
-  convertMainSessionComparisonFrames, convertStoredProteinResultFrames, storesDrawnFrameProteinResults, withConvertedResources
+  convertStoredProteinResultFrames, storesDrawnFrameProteinResults, withConvertedResources
 } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
 const { MAIN_DISPLAY_FRAME_SESSION_VERSION } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 
@@ -28,78 +28,6 @@ const session = ({ version = MAIN_DISPLAY_FRAME_SESSION_VERSION, mode = 'linear'
     q: { encoding: 'base64', data: base64('LOCUS q'), name: 'q.gb', size: 7 },
     s: { encoding: 'base64', data: base64('LOCUS s'), name: 's.gb', size: 7 },
     table: { encoding: 'base64', data: base64(TABLE), name: 'table.tsv', size: TABLE.length, checksum: digest(TABLE) }
-  }
-});
-
-const recordingConverter = () => {
-  const calls = [];
-  const convertTable = async (request) => {
-    calls.push(request);
-    return { result: { tsv: 'converted\n' } };
-  };
-  return { calls, convertTable };
-};
-const NO_DISCOVERY = {
-  sequence: async () => { throw new Error('no record discovery expected'); },
-  gffFasta: async () => { throw new Error('no record discovery expected'); }
-};
-
-test('a stored table of a reversed record is rewritten in the search frame, its checksum following the bytes (OV-1182)', async () => {
-  const { calls, convertTable } = recordingConverter();
-  const stored = session();
-  const read = await convertMainSessionComparisonFrames(stored, { convertTable, discover: NO_DISCOVERY });
-  assert.deepEqual(calls, [{ tableText: TABLE, queryFrame: { length: 20, reverse: true }, subjectFrame: { length: 0, reverse: false } }]);
-  assert.deepEqual(read.resources.table, {
-    encoding: 'base64', data: base64('converted\n'), name: 'table.tsv', size: 10, checksum: digest('converted\n')
-  });
-  assert.equal(read.resources.q, stored.resources.q);
-  assert.equal(stored.resources.table.data, base64(TABLE), 'the stored document is not changed');
-});
-
-test('a Session the conversion does not read is returned as it is', async () => {
-  const { calls, convertTable } = recordingConverter();
-  for (const stored of [
-    session({ version: MAIN_DISPLAY_FRAME_SESSION_VERSION + 1 }),
-    session({ mode: 'circular' }),
-    session({ reverse: false })
-  ]) {
-    assert.equal(await convertMainSessionComparisonFrames(stored, { convertTable, discover: NO_DISCOVERY }), stored);
-  }
-  assert.deepEqual(calls, []);
-});
-
-// `readSessionDocument` drops a resource whose descriptor cannot be read; the
-// request's references to it are its reader's (`readSessionRequests`), which
-// reads the request after this conversion.
-test('a comparison whose table the Session does not hold is left to the request reader', async () => {
-  const { calls, convertTable } = recordingConverter();
-  const stored = session();
-  delete stored.resources.table;
-  assert.equal(await convertMainSessionComparisonFrames(stored, { convertTable, discover: NO_DISCOVERY }), stored);
-  assert.deepEqual(calls, []);
-});
-
-test('a stored record index is read as a property key, as the stored request was always read', async () => {
-  for (const [index, convertedCount] of [['0', 1], [null, 0], [0.5, 0]]) {
-    const { calls, convertTable } = recordingConverter();
-    const stored = session();
-    stored.renderRequest.comparisons[0].queryRecordIndex = index;
-    await convertMainSessionComparisonFrames(stored, { convertTable, discover: NO_DISCOVERY });
-    assert.equal(calls.length, convertedCount, JSON.stringify(index));
-  }
-});
-
-// OV-869: a reversed record with no region reads its length from its record
-// file; one the Session does not hold (`readSessionDocument` dropped it) leaves
-// the comparison to the request reader, which drops it with its row.
-test('a comparison whose reversed record file the Session does not hold is left to the request reader (OV-869)', async () => {
-  for (const source of [{ kind: 'genbank', resourceId: 'q' }, { kind: 'gffFasta', gffResourceId: 'q', fastaResourceId: 's' }]) {
-    const { calls, convertTable } = recordingConverter();
-    const stored = session();
-    stored.renderRequest.records[0] = { source, presentation: { reverseComplement: true } };
-    delete stored.resources.q;
-    assert.equal(await convertMainSessionComparisonFrames(stored, { convertTable, discover: NO_DISCOVERY }), stored, source.kind);
-    assert.deepEqual(calls, []);
   }
 });
 
@@ -172,30 +100,30 @@ test('Python converts each drawing whose protein results touch a reversed record
   const kept = protein(47, true, 'precomputedProteinComparison');
   const forward = protein(47, false);
   const { calls, convert } = proteinConverter({ table: { data: base64('F\n'), size: 2 } });
-  const converted = await convertStoredProteinResultFrames(47, [shown, null, forward, kept], { convert });
+  const converted = await convertStoredProteinResultFrames({ version: 47, inDrawnFrame: true }, [shown, null, forward, kept], { convert });
   assert.deepEqual(calls, [
     { version: 47, canonicalRequest: shown.renderRequest, resources: shown.resources },
     { version: 47, canonicalRequest: kept.renderRequest, resources: kept.resources }
   ]);
   assert.deepEqual([...converted], [['table', { data: base64('F\n'), size: 2 }]]);
   // A Session 48 and a drawing that touches no reversed record start nothing.
-  assert.equal((await convertStoredProteinResultFrames(48, [shown], { convert })).size, 0);
-  assert.equal((await convertStoredProteinResultFrames(47, [forward], { convert: null })).size, 0);
+  assert.equal((await convertStoredProteinResultFrames({ version: 48, inDrawnFrame: false }, [shown], { convert })).size, 0);
+  assert.equal((await convertStoredProteinResultFrames({ version: 47, inDrawnFrame: true }, [forward], { convert: null })).size, 0);
   assert.equal(calls.length, 2);
 });
 
 test('a conversion that fails or returns unreadable bytes changes nothing and is reported (OV-1145)', async () => {
   const shown = protein(47);
   const failure = (code) => ({ code, stage: 'helper', operation: 'convertStoredProteinResultFrames' });
-  await assert.rejects(convertStoredProteinResultFrames(47, [shown], { convert: null }), failure('HELPER_PROTOCOL'));
+  await assert.rejects(convertStoredProteinResultFrames({ version: 47, inDrawnFrame: true }, [shown], { convert: null }), failure('HELPER_PROTOCOL'));
   for (const resources of [null, { table: { data: 1, size: 2 } }, { table: { data: base64('F\n'), size: -1 } }]) {
-    await assert.rejects(convertStoredProteinResultFrames(47, [shown], proteinConverter(resources)),
+    await assert.rejects(convertStoredProteinResultFrames({ version: 47, inDrawnFrame: true }, [shown], proteinConverter(resources)),
       failure('RESULT_INVALID'), JSON.stringify(resources));
   }
   // Two drawings that store one resource ID must agree on its bytes.
   let call = 0;
   const convert = async () => ({ result: { resources: { table: { data: base64(call++ ? 'B\n' : 'A\n'), size: 2 } } } });
-  await assert.rejects(convertStoredProteinResultFrames(47, [shown, protein(47)], { convert }), failure('RESULT_INVALID'));
+  await assert.rejects(convertStoredProteinResultFrames({ version: 47, inDrawnFrame: true }, [shown, protein(47)], { convert }), failure('RESULT_INVALID'));
 });
 
 test('the converted bytes replace a resource under its stored ID with its size and checksum (OV-1145)', async () => {

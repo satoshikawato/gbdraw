@@ -34,6 +34,22 @@ const POPUP_EXPECTED_HEIGHT = 360;
  * @property {SettingsSectionKey | null} docked The docked rail entry.
  * @property {SettingsSectionKey | null} floating The section in the popup beside the Result; the pane does not show it.
  * @property {boolean} switchable Whether the display can be switched here.
+ * @property {PhonePane} pane The pane the phone layout shows; wider layouts show both and ignore it.
+ */
+
+/**
+ * The pane the phone layout (<= 768 px, decided by the stylesheet) shows: the
+ * settings or the Preview. A view choice only: not in the Session, not a
+ * History step, the same for every drawing, and not remembered by the browser.
+ * @typedef {'settings' | 'preview'} PhonePane
+ */
+
+/**
+ * Shows `pane` in the phone layout. Showing the Preview brings its workspace
+ * (the canvas, and the Editor when open) to the top of the pane, as entering
+ * it does; `{ workspace: false }` leaves the pane where it is (a Generate that
+ * has not produced its Result yet).
+ * @typedef {(pane: PhonePane, options?: { workspace?: boolean }) => void} ShowPhonePane
  */
 
 /**
@@ -80,6 +96,19 @@ export const createSettingsPaneController = ({ state }) => {
   // scroll there), so its breakpoint stays in the stylesheet.
   /** @type {{ value: boolean }} */
   const phoneLayout = ref(false);
+  /** @type {{ value: PhonePane }} */
+  const phonePane = ref('settings');
+  /** @type {ShowPhonePane} */
+  const showPhonePane = (pane, { workspace = true } = {}) => {
+    phonePane.value = pane;
+    if (pane !== 'preview' || !workspace) return;
+    void nextTick(() => {
+      const resultPane = document.getElementById('result-pane');
+      const top = resultPane?.querySelector('.preview-workspace')?.getBoundingClientRect().top;
+      if (!phoneLayout.value || !resultPane || top === undefined) return;
+      resultPane.scrollBy({ top: top - resultPane.getBoundingClientRect().top, behavior: 'instant' });
+    });
+  };
   const settingsArea = () => document.querySelector('.settings-scroll');
   const popupElement = () => document.getElementById('settings-popup');
   // What had the focus when the popup opened: it takes the focus back.
@@ -103,7 +132,8 @@ export const createSettingsPaneController = ({ state }) => {
       display: rail ? 'rail' : 'stacked',
       docked: rail ? state.settingsPaneDocked.value : null,
       floating: state.settingsPopup.value?.section ?? null,
-      switchable: !phoneLayout.value
+      switchable: !phoneLayout.value,
+      pane: phonePane.value
     };
   });
 
@@ -149,6 +179,8 @@ export const createSettingsPaneController = ({ state }) => {
     await returnToPane(section?.dataset.settingsSection);
     const area = section?.closest('.settings-scroll');
     if (!section || !area) return focus.focus();
+    // A setting is shown in the settings pane, so the phone layout shows that pane before it is measured.
+    showPhonePane('settings');
     for (let details = focus.closest('details'); details && area.contains(details);
       details = details.parentElement?.closest('details') ?? null) {
       details.open = true;
@@ -231,7 +263,7 @@ export const createSettingsPaneController = ({ state }) => {
   onUnmounted(() => window.removeEventListener('resize', readLayout));
 
   return {
-    settingsPane, showSettingsPaneRail, showSettingsPaneStacked, closeDockedSettings, revealSetting, revealSettingsSection,
+    settingsPane, showPhonePane, showSettingsPaneRail, showSettingsPaneStacked, closeDockedSettings, revealSetting, revealSettingsSection,
     showSettingsBesideResult, closeSettingsPopup,
     // A drag of the popup by its heading.
     moveSettingsPopup: (/** @type {PopupPlacement} */ placement) => moveSettingsPopup(state, placement)

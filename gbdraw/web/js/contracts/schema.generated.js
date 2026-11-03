@@ -3,11 +3,11 @@
 // above each constant; do not edit manually.
 
 // gbdraw/session_io.py: CURRENT_SESSION_VERSION
-export const SESSION_VERSION = 50;
+export const SESSION_VERSION = 51;
 
 // gbdraw/session_io.py: SUPPORTED_SESSION_VERSIONS
 /** @type {readonly number[]} */
-export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49, 50]);
+export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49, 50, 51]);
 
 // gbdraw/session_io.py: TYPED_DRAFT_SESSION_MIN_VERSION
 export const TYPED_DRAFT_SESSION_VERSION = 44;
@@ -75,7 +75,8 @@ export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({
   47: 5,
   48: 5,
   49: 5,
-  50: 5
+  50: 5,
+  51: 5
 });
 
 // gbdraw/analysis/protein_colinearity.py: PROTEIN_LOSAT_CACHE_SCHEMA
@@ -93,6 +94,9 @@ export const ORTHOGROUP_INFERENCE_VERSION = 'anchor_core_v1';
 // gbdraw/comparisons/losat_jobs.py: NUCLEOTIDE_LOSAT_CACHE_SCHEMA
 export const NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2;
 
+// gbdraw/comparisons/circular_losat.py: CIRCULAR_CONSERVATION_FLOW
+export const CIRCULAR_CONSERVATION_FLOW = 'circular-conservation';
+
 // gbdraw/analysis/protein_artifacts.py: CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
 export const LOSAT_DERIVED_CACHE_SCHEMA = 3;
 
@@ -107,6 +111,9 @@ export const DEPTH_FILE_SCHEMA = 1;
 
 // gbdraw/session_io.py: DEPTH_FILE_ENCODING
 export const DEPTH_FILE_ENCODING = 'gbdraw-depth-table-v1';
+
+// gbdraw/session_contract.py: GALLERY_SESSION_DRAWN_DRAWINGS
+export const GALLERY_SESSION_DRAWN_DRAWINGS = 1;
 
 // gbdraw/api/options.py: LEGEND_POSITIONS
 /** @type {Readonly<Record<'circular' | 'linear', readonly string[]>>} */
@@ -261,6 +268,39 @@ export const LEGACY_REQUEST_TABLES = Object.freeze({
   collinearityStandardParalogLinks: 'maxParalogLinksPerOrthogroup',
   paralogLinksSetting: 'collinearMaxParalogLinksPerOrthogroup',
   paralogLinksDefault: 2
+});
+
+// gbdraw/session_drawings.py: describe_session_drawings_layout()
+export const SESSION_DRAWINGS_LAYOUT = Object.freeze({
+  version: 51,
+  drawingNames: Object.freeze({
+    circular: 'Circular',
+    linear: 'Linear'
+  }),
+  setFields: Object.freeze(['cliInvocation', 'renderRequest', 'results', 'runMetadata']),
+  setEditorFields: Object.freeze(['alignmentResetReceipt', 'featureCatalog', 'originalSvgStroke']),
+  projectFields: Object.freeze(['createdAt', 'format', 'legacyArtifacts', 'resources', 'title', 'version']),
+  projectUiFields: Object.freeze(['autoLabelReflow', 'downloadDpi', 'featurePanelTab', 'losatExecution', 'paletteInstantPreviewEnabled', 'richFeaturePopup']),
+  projectWebFilesFields: Object.freeze(['resourceOriginalNames']),
+  drawingFields: Object.freeze(['cliInvocation', 'cliOptions', 'losatCache', 'losatDerivedCache', 'orthogroupState', 'proteinIdentityManifest', 'renderRequest', 'results', 'runMetadata']),
+  viewFields: Object.freeze(['cliInvocation', 'cliOptions', 'createdAt', 'editorState', 'format', 'legacyArtifacts', 'losatCache', 'losatDerivedCache', 'modes', 'orthogroupState', 'proteinIdentityManifest', 'renderRequest', 'resources', 'results', 'runMetadata', 'title', 'ui', 'version', 'webFiles']),
+  drawingWebFileKeys: Object.freeze(['bindings', 'circularInputOriginalName', 'circularOutputPrefixExplicit', 'conservationBlastSource', 'conservationLosatFastaSources', 'conservationSequenceSources', 'linearRecordMetadata', 'resourceOriginalNames']),
+  drawingWebFilesFields: Object.freeze({
+    circular: Object.freeze(['circularInputOriginalName', 'circularOutputPrefixExplicit', 'conservationBlastSource', 'conservationLosatFastaSources', 'conservationSequenceSources']),
+    linear: Object.freeze(['linearRecordMetadata'])
+  }),
+  inputTypeFields: Object.freeze({
+    circular: 'cInputType',
+    linear: 'lInputType'
+  }),
+  bindingCardSlots: Object.freeze(['blacklist', 'd_color', 'qualifier_priority', 't_color', 'whitelist']),
+  bindingModeSlots: Object.freeze({
+    circular: Object.freeze(['c_conservation_blasts', 'c_conservation_blasts_source', 'c_conservation_fastas', 'c_conservation_sequence_sources', 'c_depth', 'c_fasta', 'c_gb', 'c_gff']),
+    linear: Object.freeze(['linearComparisons', 'linearSeqs'])
+  }),
+  resourceReferenceFields: Object.freeze(['fastaResourceId', 'gffResourceId', 'resourceId']),
+  resourceIdListFields: Object.freeze(['conservationLosatFastaSources', 'conservationSequenceSources']),
+  drawingResourceFields: Object.freeze(['renderRequest', 'webFiles', 'results'])
 });
 
 // gbdraw/session_request_codec.py: describe_fresh_protein_comparison()

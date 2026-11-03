@@ -5,7 +5,7 @@ import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { fixtureDrawing } from './helpers/drawing-state.mjs';
+import { bindingDrawings } from './helpers/input-files.mjs';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -16,7 +16,20 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-session-resources-'));
 await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
-const { buildSessionResources } = await import(
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { bindLoadedInputs } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+// A state as the app binds it: each input file is registered in the store and named by its ref.
+const boundState = (source, store = createInputFileStore()) => {
+  const bound = bindLoadedInputs(store, {
+    files: source.files || {}, linearSeqs: source.linearSeqs || [],
+    linearComparisonPlan: source.linearComparisonPlan || { edges: [] }, circularRecordDiscovery: {}
+  });
+  return {
+    ...source, inputFiles: store, files: bound.files, linearSeqs: bound.linearSeqs,
+    ...(source.linearComparisonPlan ? { linearComparisonPlan: bound.linearComparisonPlan } : {})
+  };
+};
+const { buildSessionDrawingResources, buildSessionResources } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-resources.js'))
 );
 
@@ -135,7 +148,9 @@ const committed = {
   }
 };
 
-const state = {
+// The table cards name their files by ref of the input file store.
+const inputFiles = createInputFileStore();
+const state = boundState({
   files: {
     c_gb: activeFile,
     c_gff: sameMetadataDifferentA,
@@ -145,11 +160,11 @@ const state = {
     c_conservation_blasts_source: 'losat-cache',
     c_conservation_fastas: [makeFile('>subject\nATGC\n', 'subject.fa')],
     c_conservation_sequence_sources: [makeFile('>source\nATGC\n', 'source.fa')],
-    d_color: activeFile,
-    t_color: makeFile('CDS\t#ffffff\n', 'specific.tsv'),
-    blacklist: makeFile('hypothetical', 'blacklist.txt'),
-    whitelist: makeFile('CDS\tgene\tfoo\n', 'whitelist.tsv'),
-    qualifier_priority: makeFile('CDS\tgene\n', 'priority.tsv'),
+    d_color: inputFiles.registerFile(activeFile),
+    t_color: inputFiles.registerFile(makeFile('CDS\t#ffffff\n', 'specific.tsv')),
+    blacklist: inputFiles.registerFile(makeFile('hypothetical', 'blacklist.txt')),
+    whitelist: inputFiles.registerFile(makeFile('CDS\tgene\tfoo\n', 'whitelist.tsv')),
+    qualifier_priority: inputFiles.registerFile(makeFile('CDS\tgene\n', 'priority.tsv')),
     linearCanonicalComparisons: [{
       kind: 'collinearityResult',
       encoding: 'canonicalJson',
@@ -189,9 +204,9 @@ const state = {
       losatFilename: ''
     }]
   }
-};
+}, inputFiles);
 
-const built = await buildSessionResources(state, committed, fixtureDrawing(state));
+const built = await buildSessionResources(state, committed, bindingDrawings(state));
 const bindings = built.webFiles.bindings;
 assert.equal(bindings.schema, 2);
 assert.equal(activeReads, 1, 'one File object used in several roles is read once');
@@ -312,7 +327,7 @@ dormantComparisonFile.arrayBuffer = async () => {
   dormantComparisonReads += 1;
   return dormantComparisonArrayBuffer();
 };
-const dormantSaveState = {
+const dormantSaveState = boundState({
   ...state,
   linearComparisonPlan: {
     mode: 'none',
@@ -329,14 +344,14 @@ const dormantSaveState = {
       losatFilename: 'retained.raw.tsv'
     }]
   }
-};
+}, inputFiles);
 const dormantCommitted = structuredClone(committed);
 dormantCommitted.renderRequest.mode = 'linear';
 dormantCommitted.renderRequest.comparisons = [];
 const dormantSaved = await buildSessionResources(
   dormantSaveState,
   dormantCommitted,
-  fixtureDrawing(dormantSaveState)
+  bindingDrawings(dormantSaveState)
 );
 assert.equal(
   dormantComparisonReads,
@@ -367,7 +382,8 @@ const frozen = JSON.parse(frozenBytes);
 const frozenLeaf = frozen.webFiles.bindings.c_gb;
 const frozenTable = backing.adoptCurrentSessionResources(frozen.resources);
 const oldFile = backing.createSessionResourceFileView(frozenTable, frozenLeaf.resourceId, frozenLeaf);
-const promoted = await buildSessionResources({ files: { c_gb: oldFile } }, authority.adoptRuntimeCanonicalSession(frozen));
+const promotedState = boundState({ files: { c_gb: oldFile } });
+const promoted = await buildSessionResources(promotedState, authority.adoptRuntimeCanonicalSession(frozen), bindingDrawings(promotedState));
 assert.equal(promoted.webFiles.bindings.schema, 2);
 assert.deepEqual(promoted.webFiles.bindings.c_gb, frozenLeaf);
 
@@ -386,9 +402,9 @@ for (const adopted of [false, true]) {
   const file = backing.createCombinedSessionResourceFileView(table, components, {
     name: '', type: '', lastModified: 0.25
   });
-  const state = { files: { c_gb: file, c_fasta: makeFile('A\n', 'independent.fa') } };
+  const state = boundState({ files: { c_gb: file, c_fasta: makeFile('A\n', 'independent.fa') } });
   const canonical = adopted ? authority.adoptRuntimeCanonicalSession(committed) : committed;
-  const first = await buildSessionResources(state, canonical, fixtureDrawing(state));
+  const first = await buildSessionResources(state, canonical, bindingDrawings(state));
   const binding = first.webFiles.bindings.c_gb;
   assert.equal(binding.kind, 'composite');
   assert.equal(binding.name, '');
@@ -405,10 +421,11 @@ for (const adopted of [false, true]) {
   const loaded = backing.createCombinedSessionResourceFileView(
     backing.adoptCurrentSessionResources(first.resources), binding.components, binding
   );
-  const second = await buildSessionResources({ files: { c_gb: loaded } }, authority.adoptRuntimeCanonicalSession(first));
+  const secondState = boundState({ files: { c_gb: loaded } });
+  const second = await buildSessionResources(secondState, authority.adoptRuntimeCanonicalSession(first), bindingDrawings(secondState));
   assert.deepEqual(second.webFiles.bindings.c_gb, binding);
-  state.files.c_gb = makeFile('native replacement\n', 'replacement.gb');
-  const replaced = await buildSessionResources(state, canonical, fixtureDrawing(state));
+  state.files.c_gb = state.inputFiles.registerFile(makeFile('native replacement\n', 'replacement.gb'));
+  const replaced = await buildSessionResources(state, canonical, bindingDrawings(state));
   assert.equal(replaced.webFiles.bindings.c_gb.kind, undefined);
   assert.equal(replaced.webFiles.bindings.c_gb.components, undefined);
   assert.equal(replaced.resources[replaced.webFiles.bindings.c_gb.resourceId].data, base64('native replacement\n'));
@@ -443,11 +460,11 @@ for (const adopted of [false, true]) {
     resources: { 'record-1-genbank': genbank('LINEAR', 'record-1.gb'), 'record-2-genbank': genbank('SHARED', 'record-2.gb') },
     webFiles: { resourceOriginalNames: { 'record-1-genbank': 'linear.gb' }, linearRecordMetadata: [{ recordKey: 'record-1' }] }
   };
-  const noInputs = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
+  const noInputs = boundState({ files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } });
   const recordResource = (built, renderRequest, index) => built.resources[renderRequest.records[index].source.resourceId];
   const text = (descriptor) => Buffer.from(descriptor.data, 'base64').toString();
 
-  const both = await buildSessionResources(noInputs, circular, fixtureDrawing(noInputs), linear);
+  const both = await buildSessionResources(noInputs, circular, bindingDrawings(noInputs), linear);
   assert.equal(text(recordResource(both, both.renderRequest, 0)), 'CIRCULAR');
   assert.equal(text(recordResource(both, both.otherRenderRequest, 0)), 'LINEAR');
   assert.notEqual(both.renderRequest.records[0].source.resourceId, both.otherRenderRequest.records[0].source.resourceId);
@@ -469,7 +486,7 @@ for (const adopted of [false, true]) {
   const adopted = await buildSessionResources(
     noInputs,
     adoptRuntimeCanonicalSession({ renderRequest: circular.renderRequest, resources: table, webFiles: {} }),
-    fixtureDrawing(noInputs),
+    bindingDrawings(noInputs),
     adoptRuntimeCanonicalSession({ renderRequest: linearRequest, resources: table, webFiles: {} })
   );
   assert.strictEqual(adopted.renderRequest, circular.renderRequest);
@@ -506,10 +523,38 @@ for (const adopted of [false, true]) {
     resources: { 'record-1-genbank': genbank('NEW LINEAR', 'new.gb') },
     webFiles: {}
   };
-  const draft = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
-  const built = await buildSessionResources(draft, loadedCircular, fixtureDrawing(draft), freshLinear);
+  const draft = boundState({ files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } });
+  const built = await buildSessionResources(draft, loadedCircular, bindingDrawings(draft), freshLinear);
   const written = Object.values(built.resources).map((descriptor) => Buffer.from(descriptor.data, 'base64').toString()).sort();
   assert.deepEqual(written, ['CIRCULAR', 'NEW LINEAR']);
+}
+
+// One identical file in two drawings is stored once (D-220): two adopted
+// requests of one mode name it under different IDs, and each drawing's request
+// and original name then name the one kept resource.
+{
+  const { adoptRuntimeCanonicalSession } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'session-authority.js'))
+  );
+  const stored = (name) => ({
+    kind: 'genbank', name, type: 'text/x-genbank', size: 4, lastModified: 0, encoding: 'base64', data: base64('SAME')
+  });
+  const adopted = (id) => adoptRuntimeCanonicalSession({
+    renderRequest: {
+      schema: 9, mode: 'linear', diagramOptions: {}, layout: {}, comparisons: [],
+      records: [{ recordKey: 'record-1', source: { kind: 'genbank', resourceId: id } }],
+      output: { prefix: id, formats: ['svg'], overwrite: false }
+    },
+    resources: { [id]: stored(`${id}.gb`) },
+    webFiles: { resourceOriginalNames: { [id]: 'same.gb' } }
+  });
+  const built = await buildSessionDrawingResources(boundState({ files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } }), [
+    { drawing: null, committed: adopted('first') },
+    { drawing: null, committed: adopted('second') }
+  ]);
+  assert.deepEqual(Object.keys(built.resources), ['first']);
+  assert.deepEqual(built.written.map((drawing) => drawing.renderRequest.records[0].source.resourceId), ['first', 'first']);
+  assert.deepEqual(built.written.map((drawing) => drawing.webFiles.resourceOriginalNames), [{ first: 'same.gb' }, { first: 'same.gb' }]);
 }
 
 // E1 (REVIEW-2 W): a Circular Result kept in `otherModeResult` while Linear is
@@ -539,15 +584,15 @@ for (const adopted of [false, true]) {
     resources: { 'record-1-genbank': genbank('CIRCULAR', 'circular.gb') },
     webFiles: { circularInputOriginalName: 'genome.gbk', conservationBlastSource: 'losat-cache' }
   };
-  const draft = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
-  const saved = await buildSessionResources(draft, shownLinear, fixtureDrawing(draft), keptCircular);
+  const draft = boundState({ files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } });
+  const saved = await buildSessionResources(draft, shownLinear, bindingDrawings(draft), keptCircular);
   assert.equal(saved.webFiles.circularInputOriginalName, 'genome.gbk');
   assert.equal(saved.webFiles.conservationBlastSource, 'losat-cache');
   assert.deepEqual(saved.webFiles.linearRecordMetadata, shownLinear.webFiles.linearRecordMetadata);
   const loaded = (renderRequest) => adoptRuntimeCanonicalSession({
     renderRequest, resources: saved.resources, webFiles: saved.webFiles
   });
-  const resaved = await buildSessionResources(draft, loaded(saved.renderRequest), fixtureDrawing(draft), loaded(saved.otherRenderRequest));
+  const resaved = await buildSessionResources(draft, loaded(saved.renderRequest), bindingDrawings(draft), loaded(saved.otherRenderRequest));
   assert.equal(resaved.webFiles.circularInputOriginalName, 'genome.gbk');
   assert.equal(resaved.webFiles.conservationBlastSource, 'losat-cache');
 }
@@ -586,14 +631,14 @@ for (const adopted of [false, true]) {
   } };
   const table = backing.adoptCurrentSessionResources(resources);
   const view = (id) => backing.createSessionResourceFileView(table, id);
-  const draft = {
+  const draft = boundState({
     files: {},
     linearSeqs: [1, 2].map((n) => ({ uid: `uid-${n}`, gb: view(`record-${n}-genbank`),
       depth: [view(`depth-tracks-1-source-record-${n}`), view(`depth-tracks-2-source-record-${n}`)] })),
     linearComparisonPlan: { edges: [] }
-  };
+  });
   const committedRequest = authority.adoptRuntimeCanonicalSession({ renderRequest, resources, webFiles });
-  const saved = await buildSessionResources(draft, committedRequest, fixtureDrawing(draft));
+  const saved = await buildSessionResources(draft, committedRequest, bindingDrawings(draft));
   const tracks = saved.renderRequest.diagramOptions.depthTracks;
   const kept = 'depth-tracks-1-source-record-1';
   assert.deepEqual(tracks.map((t) => t.source[0].resourceId), [kept, kept], 'one resource for equal bytes');
@@ -614,12 +659,12 @@ for (const adopted of [false, true]) {
   assert.deepEqual(loadedDepth, ['chr\t1\t5\n', 'chr\t1\t5\n', 'chr\t1\t6\n', 'chr\t1\t7\n']);
   // A second Save of the loaded Session writes the same table and request.
   const reloaded = backing.adoptCurrentSessionResources(saved.resources);
-  const redraft = { ...draft, linearSeqs: saved.webFiles.bindings.linearSeqs.map((seq) => ({ uid: seq.uid,
+  const redraft = boundState({ files: {}, linearComparisonPlan: { edges: [] }, linearSeqs: saved.webFiles.bindings.linearSeqs.map((seq) => ({ uid: seq.uid,
     gb: backing.createSessionResourceFileView(reloaded, seq.gb.resourceId, seq.gb),
-    depth: seq.depth.map((b) => backing.createSessionResourceFileView(reloaded, b.resourceId, b)) })) };
+    depth: seq.depth.map((b) => backing.createSessionResourceFileView(reloaded, b.resourceId, b)) })) });
   const resaved = await buildSessionResources(redraft, authority.adoptRuntimeCanonicalSession({
     renderRequest: saved.renderRequest, resources: saved.resources, webFiles: saved.webFiles
-  }), fixtureDrawing(redraft));
+  }), bindingDrawings(redraft));
   assert.deepEqual(Object.keys(resaved.resources).sort(), Object.keys(saved.resources).sort());
   assert.strictEqual(resaved.renderRequest, saved.renderRequest);
 }
@@ -636,10 +681,10 @@ for (const adopted of [false, true]) {
       records: [], diagramOptions: { depthTracks: ids.map((resourceId, index) => ({ id: `t${index}`, source: { resourceId } })) },
       output: { prefix: 'x', formats: ['svg'], overwrite: false } };
     const resources = Object.fromEntries(entries.map(([id, kind]) => [id, descriptorOf(kind, id)]));
-    const draft = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
+    const draft = boundState({ files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } });
     const saved = await buildSessionResources(draft, authority.adoptRuntimeCanonicalSession({
       renderRequest, resources, webFiles: { resourceOriginalNames: names }
-    }), fixtureDrawing(draft));
+    }), bindingDrawings(draft));
     return saved.renderRequest.diagramOptions.depthTracks.map((track) => track.source.resourceId);
   };
   const depthKind = 'depth-track-file';

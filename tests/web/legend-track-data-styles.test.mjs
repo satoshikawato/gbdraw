@@ -3,14 +3,16 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import {
   buildLegendStyleRetirement,
+  createDrawingLegendRetirement,
   trackDataLegendCaptions
 } from '../../gbdraw/web/js/app/legend/track-data-styles.js';
 import { PAINT_SLICE } from '../../gbdraw/web/js/services/drawing/paint.js';
 
 // A drawing whose paint is these members (the fixture's own objects).
 const paintDrawing = (members) => ({ slices: { paint: PAINT_SLICE.create(members).handle } });
-import { getDepthTrackFileBaseName, isDepthTrackAutoLabel } from '../../gbdraw/web/js/app/depth-tracks.js';
-import { depthSeriesLegendCaptions, ensureDepthTrackConfigCount } from '../../gbdraw/web/js/services/depth-track-state.js';
+import {
+  depthSeriesLegendCaptions, ensureDepthTrackConfigCount, getDepthTrackFileBaseName, isDepthTrackAutoLabel
+} from '../../gbdraw/web/js/services/depth-track-state.js';
 
 test('track data names the legend labels of annotation sets and the sourced Depth series (OV-65)', () => {
   const captions = trackDataLegendCaptions({
@@ -231,4 +233,36 @@ test('a change that hides no drawn track leaves the list as it was and projects 
   port.run(() => undefined);
   assert.deepEqual(port.legendEntries.value, [{ caption: 'depth', originalCaption: 'depth' }]);
   assert.equal(port.projections(), 0);
+});
+
+// Review S2: drawings C (shown) and "C copy" share the Depth file `a.tsv`, and
+// "C copy" has a Legend color on the auto-named series "a". Replacing the file
+// from C with "Every drawing" renames the series in both; each drawing's port
+// measures its own captions, so "C copy"'s paint under "a" is retired like C's.
+// Only the shown drawing relists and projects (they read the displayed Result).
+test('the Legend port retires the captions of the drawing it is given, also when that drawing is not shown (review S2)', () => {
+  const depthDrawing = (id, color, entries = []) => {
+    const members = { legendColorOverrides: { a: color }, legendStrokeOverrides: {}, legendEntries: { value: entries } };
+    return { id, label: 'a', members, slices: { paint: PAINT_SLICE.create(members).handle } };
+  };
+  const shown = depthDrawing('circular', '#111111');
+  const copy = depthDrawing('circular-2', '#222222', [{ caption: 'Coverage', originalCaption: 'a' }]);
+  const calls = [];
+  const retire = createDrawingLegendRetirement({
+    shownDrawingId: () => shown.id,
+    namedCaptions: (drawing) => new Set([drawing.label]),
+    hiddenRows: () => [],
+    relistLegendEntries: () => calls.push('relist'),
+    projectLegendEntries: () => calls.push('project')
+  });
+  retire(copy, () => { copy.label = 'b'; });
+  assert.deepEqual(copy.members.legendColorOverrides, {});
+  assert.deepEqual(copy.members.legendEntries.value, [{ caption: 'a', originalCaption: 'a' }]);
+  assert.deepEqual(shown.members.legendColorOverrides, { a: '#111111' }, 'the shown drawing keeps its paint');
+  assert.deepEqual(calls, [], 'a drawing that is not shown neither relists nor projects the displayed Result');
+
+  shown.members.legendEntries.value = [{ caption: 'Coverage', originalCaption: 'a' }];
+  retire(shown, () => { shown.label = 'b'; });
+  assert.deepEqual(shown.members.legendColorOverrides, {});
+  assert.deepEqual(calls, ['project'], 'the shown drawing projects its retired rename');
 });

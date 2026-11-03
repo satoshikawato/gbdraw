@@ -6,6 +6,7 @@ const { execFileSync } = require('node:child_process');
 const { copyFileSync, readFileSync } = require('node:fs');
 const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
 
 const root = path.resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -17,10 +18,9 @@ const INPUTS = [
 
 const openTwoMitogenomes = async (page) => {
   await openFresh(page);
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async (files) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
-    await window.Vue.nextTick();
     if (app.linearSeqs.length < 2) app.addLinearSeq();
     files.forEach(({ name, text }, index) => app.setLinearSeqPrimaryFile(index, 'gb', new File([text], name, { type: 'text/plain' })));
     await window.Vue.nextTick();
@@ -54,7 +54,7 @@ const cliTranslations = (recipe, testInfo) => {
   execFileSync(process.env.PYTHON || 'python', [
     '-m', 'gbdraw.cli', 'linear', ...args, '--anchor_feature', 'gene=COX1', '--save_session', '--session_output', session
   ], { cwd: directory, stdio: 'pipe', env: { ...process.env, PYTHONPATH: root } });
-  return JSON.parse(readFileSync(session, 'utf8')).renderRequest.layout.recordTranslations;
+  return JSON.parse(readFileSync(session, 'utf8')).drawings[0].renderRequest.layout.recordTranslations;
 };
 
 // Open the Record Layout controls, type the selector, and resolve it.

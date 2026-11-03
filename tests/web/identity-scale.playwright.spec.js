@@ -11,16 +11,18 @@ const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { switchPalette } = require('./helpers/live-generate-parity-steps.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const root = path.resolve(process.env.GBDRAW_REPO || process.cwd());
 const examples = path.join(root, 'examples');
 
 const openLinearComparison = async (page) => {
   await openFresh(page);
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async ({ first, second, table }) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
-    await window.Vue.nextTick();
+    // A file put in the plan directly is registered as the upload control registers it.
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     if (app.linearSeqs.length < 2) app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));
     app.setLinearSeqPrimaryFile(1, 'gb', new File([second], 'MelaMJNV.gb', { type: 'text/plain' }));
@@ -29,7 +31,7 @@ const openLinearComparison = async (page) => {
     app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length, {
       id: 'identity-scale-edge', queryUid: app.linearSeqs[0].uid, subjectUid: app.linearSeqs[1].uid,
       included: true, fileActive: true, losatFilenameActive: false, source: 'upload',
-      file: new File([table], 'MjeNMV.MelaMJNV.tblastx.out', { type: 'text/plain' }), losatFilename: ''
+      file: bound(new File([table], 'MjeNMV.MelaMJNV.tblastx.out', { type: 'text/plain' })), losatFilename: ''
     });
     app.form.show_labels_linear = 'none';
     await window.Vue.nextTick();

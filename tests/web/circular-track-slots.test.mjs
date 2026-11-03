@@ -116,7 +116,7 @@ const createState = ({
   conservationEnabled = false,
   conservationFiles = []
 } = {}) => ({
-  mode: { value: 'circular' },
+  mode: 'circular',
   form: {
     track_type: 'tuckin',
     show_depth: showDepth,
@@ -262,7 +262,7 @@ test('managed Depth insertion preserves the existing Axis sides', () => {
   const state = createState({ showDepth: true });
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
-  editor.changeCircularDepthSources(() => {
+  editor.changeCircularDepthSources(state, () => {
     state.files.c_depth = [depthFile('depth.tsv')];
   });
 
@@ -292,7 +292,7 @@ test('managed Depth insertion stays after an on-Axis Tick', () => {
   });
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
-  editor.changeCircularDepthSources(() => {
+  editor.changeCircularDepthSources(state, () => {
     state.files.c_depth = [depthFile('depth-a.tsv'), depthFile('depth-b.tsv')];
   });
 
@@ -312,7 +312,7 @@ test('managed Depth insertion stays after an on-Axis Tick', () => {
 });
 
 test('managed Depth removal rebases the Axis only when the row is before it', () => {
-  const removeSource = (state) => createCircularTrackSlotEditor({ state: withDrawings(state) }).changeCircularDepthSources(() => {
+  const removeSource = (state) => createCircularTrackSlotEditor({ state: withDrawings(state) }).changeCircularDepthSources(state, () => {
     state.files.c_depth = [];
   });
   const beforeState = createState({
@@ -349,7 +349,7 @@ test('managed Conservation insertion preserves the existing Axis sides', () => {
   });
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
-  editor.syncCircularConservationSlots();
+  editor.syncCircularConservationSlots(state);
 
   const managed = state.adv.circular_track_slots.find(
     (slot) => slot.renderer === 'sequence_conservation'
@@ -375,7 +375,7 @@ test('managed Conservation insertion stays after an on-Axis Tick', () => {
   });
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
 
-  editor.syncCircularConservationSlots();
+  editor.syncCircularConservationSlots(state);
 
   const managed = state.adv.circular_track_slots.find(
     (slot) => slot.renderer === 'sequence_conservation'
@@ -400,7 +400,7 @@ test('managed Conservation removal rebases the Axis only when the row is before 
     slots: [conservationSlot('outside'), featureSlot(), spacerSlot(), gcSlot()],
     axisIndex: 3
   });
-  createCircularTrackSlotEditor({ state: withDrawings(beforeState) }).syncCircularConservationSlots();
+  createCircularTrackSlotEditor({ state: withDrawings(beforeState) }).syncCircularConservationSlots(beforeState);
   assert.equal(beforeState.adv.circular_track_slots_axis_index, 2);
   assert.deepEqual(slotSides(beforeState), {
     features: 'outside',
@@ -412,7 +412,7 @@ test('managed Conservation removal rebases the Axis only when the row is before 
     slots: [featureSlot(), spacerSlot(), gcSlot(), conservationSlot()],
     axisIndex: 2
   });
-  createCircularTrackSlotEditor({ state: withDrawings(afterState) }).syncCircularConservationSlots();
+  createCircularTrackSlotEditor({ state: withDrawings(afterState) }).syncCircularConservationSlots(afterState);
   assert.equal(afterState.adv.circular_track_slots_axis_index, 2);
   assert.deepEqual(slotSides(afterState), {
     features: 'outside',
@@ -430,13 +430,13 @@ test('a managed Conservation row keeps its id and edits when its ring gets anoth
     conservationFiles: [{ name: 'pair.tsv', size: 1, lastModified: 0 }]
   });
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
-  const drawing = state.drawingOfMode('circular');
+  const drawing = state.activeDrawing();
   const adopted = editor.keepCircularConservationRowsThrough(drawing, () => {
     state.files.c_conservation_blasts = [{ name: 'pair.tsv', size: 99, lastModified: 0 }];
     return true;
   });
   assert.equal(adopted, true);
-  editor.syncCircularConservationSlots();
+  editor.syncCircularConservationSlots(state);
   const [row] = state.adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation');
   assert.equal(row.id, 'conservation_pair');
   assert.equal(row.width, '9px');
@@ -453,7 +453,7 @@ test('a ring whose key does not change keeps its row parameters object', () => {
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
   const row = state.adv.circular_track_slots.find((slot) => slot.id === 'conservation_pair');
   const { params } = row;
-  editor.keepCircularConservationRowsThrough(state.drawingOfMode('circular'), () => false);
+  editor.keepCircularConservationRowsThrough(state.activeDrawing(), () => false);
   assert.strictEqual(row.params, params);
 });
 
@@ -464,7 +464,7 @@ test('a change of the ring count moves no managed Conservation row', () => {
     conservationFiles: [{ name: 'pair.tsv', size: 1, lastModified: 0 }]
   });
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
-  editor.keepCircularConservationRowsThrough(state.drawingOfMode('circular'), () => {
+  editor.keepCircularConservationRowsThrough(state.activeDrawing(), () => {
     state.files.c_conservation_blasts = [];
   });
   assert.equal(state.adv.circular_track_slots.find((slot) => slot.id === 'conservation_pair').params.series_key, 'pair.tsv|1|0|0');

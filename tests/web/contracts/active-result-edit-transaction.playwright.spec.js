@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { shownSavedDrawing } = require('../helpers/saved-session.cjs');
 const {
   CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openApp
 } = require('../helpers/app-lifecycle.cjs');
@@ -326,13 +327,13 @@ test.describe('active Result Feature fill transaction', () => {
     const savedSessionPath = await sessionDownload.path();
     expect(savedSessionPath).toBeTruthy();
     const savedSession = readSavedSession(savedSessionPath);
-    // The shown mode's edits are its slice (Session 46).
-    const savedSlice = savedSession.modes[savedSession.ui.mode];
+    // The shown drawing's edits are its entry (Session 49).
+    const savedSlice = shownSavedDrawing(savedSession);
     expect(savedSession).toMatchObject({
       format: 'gbdraw-session',
-      version: CURRENT_SESSION_VERSION,
-      renderRequest: { schema: CURRENT_REQUEST_SCHEMA }
+      version: CURRENT_SESSION_VERSION
     });
+    expect(savedSlice.renderRequest).toMatchObject({ schema: CURRENT_REQUEST_SCHEMA });
     expect(String(savedSlice.config.colors[TARGET_CAPTION]).toLowerCase()).toBe(AFTER_COLOR);
     expect(savedSlice.editorState?.legend?.colorOverrides?.[TARGET_CAPTION]).toBeUndefined();
     for (const { key } of inventory.targets) {
@@ -340,7 +341,7 @@ test.describe('active Result Feature fill transaction', () => {
     }
     const savedRules = savedSlice.config.rules.filter((rule) => rule.feat === TARGET_CAPTION);
     expect(savedRules).toEqual([]);
-    expect(savedSession.results[savedSession.ui.selectedResultIndex].content)
+    expect(savedSlice.results[savedSlice.ui.selectedResultIndex].content)
       .toContain(AFTER_COLOR);
     await assertNoUnexpectedErrors(page, initialDiagnostics);
 

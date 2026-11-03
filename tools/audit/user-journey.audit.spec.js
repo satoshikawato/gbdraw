@@ -284,11 +284,12 @@ const historyDepth = (page) => page.evaluate(() => ({
 
 const readDrawings = (page, paths) => page.evaluate(async (fieldPaths) => {
   const { state } = await import('/gbdraw/web/js/state.js');
-  const { drawingIdOfMode } = await import('/gbdraw/web/js/services/drawing-view.js');
+  const { allocateDrawingId } = await import('/gbdraw/web/js/services/drawing-view.js');
   const unwrap = (value) => (value && typeof value === 'object' && value.__v_isRef ? value.value : value);
   const at = (drawing, path) => path.split('.').reduce((value, key) => unwrap(value)?.[key], drawing);
   const pick = (mode) => {
-    const drawing = state.drawingOf(drawingIdOfMode(mode));
+    // The mode's first drawing.
+    const drawing = state.drawingOf(allocateDrawingId(mode, []));
     return Object.fromEntries(fieldPaths.map((path) => [path, JSON.parse(JSON.stringify(at(drawing, path) ?? null))]));
   };
   return { mode: state.mode.value, circular: pick('circular'), linear: pick('linear') };
@@ -642,7 +643,7 @@ journey('J5', 'Feature editing and Reset', 20, async ({ page, steps }) => {
     await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
     await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
     await settleLive(page);
-    return { prompt: 'Reset all settings?' };
+    return { prompt: 'Reset settings?' };
   });
   // PD-OI-066: right after Reset Settings, the shown Result and the Legend list
   // equal what the next Generate draws from the reset draft (OV-287, OV-289, OV-290).

@@ -201,11 +201,12 @@ output path of every selected drawing is checked before the first file is
 written, and each embedded resource is parsed once for all drawings. The
 result maps drawing IDs to render results in document order.
 
-The current Session version, 50, holds at most one drawing of each mode: a
-Circular drawing with ID `circular` and name `Circular`, and a Linear drawing
-with ID `linear` and name `Linear`. The Web app writes the second drawing's
-Result set in `otherModeResult`. Each drawing keeps its settings and Legend
-edits in its mode's slice of `modes`; both drawings share the LOSAT caches.
+The current Session version, 51, holds its drawings in `drawings`: each has
+an ID from its mode (`circular`, `linear`, `linear-2`, …), a name, its request
+and Results, and its settings and Legend edits; the drawings share the
+resources. Python builds a new Session as the mode-scoped Session 50 that holds
+the drawings and moves it to drawings as Load moves a Session 50: a Circular
+drawing with ID `circular` and a Linear drawing with ID `linear`.
 `build_session_document(drawings=[...])` takes typed requests or
 `SessionDrawingSpec(request, mode=, id=, name=, state=)` values, where `state`
 holds Web-owned drawing fields such as `results`, `editorState`, or the
@@ -226,8 +227,8 @@ Results are dropped until the next render. A drawing whose Results are dropped
 gets one line in `warnings` that names each dropped Result, and the line is
 logged as a warning. Render the drawing and save the Session to write new
 Results. Sessions 27–30 have no canonical request and raise
-`SessionVersionError`. A Session 46 to 49 keeps its drawings and is written as
-Session 50 ([compatibility](session-and-request-compatibility.md)).
+`SessionVersionError`. A Session 46 to 50 moves each mode's part into its own drawing and is written as
+Session 51 ([compatibility](session-and-request-compatibility.md)).
 
 Request schemas 6 and 7 record each input's runtime cardinality. This lets a
 selectorless source retain `RecordCardinality.ALL` until record planning expands

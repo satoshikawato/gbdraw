@@ -2,6 +2,8 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { showDrawing, takeLinearOffer } = require('./helpers/drawing-bar.cjs');
 
 const fixture = (name = 'HmmtDNA_basic_circular') => ({
   name: `${name}.gbdraw-session.json`, mimeType: 'application/json',
@@ -25,7 +27,7 @@ const capture = page => page.evaluate(async () => {
     canonical: config.getCommittedCanonicalSession(),
     request: config.getCommittedCanonicalRenderRequest(),
     resources: config.getCommittedCanonicalSession()?.resources,
-    results: state.results.value, file: state.files.c_gb,
+    results: state.results.value, file: state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb,
     cache: state.losatCache.value, evidence: state.proteinIdentityManifest.value,
     undo: history.getUndoCount(), redo: history.getRedoCount(),
     config: JSON.stringify(config.buildConfigData(state.activeDrawing()))
@@ -41,7 +43,7 @@ const intact = page => page.evaluate(async () => {
     request: before.request === config.getCommittedCanonicalRenderRequest(),
     resources: before.resources === config.getCommittedCanonicalSession()?.resources,
     results: before.results === state.results.value,
-    file: before.file === state.files.c_gb,
+    file: before.file === state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb,
     cache: before.cache === state.losatCache.value,
     evidence: before.evidence === state.proteinIdentityManifest.value,
     history: before.undo === history.getUndoCount() && before.redo === history.getRedoCount(),
@@ -55,9 +57,11 @@ const expectIntact = async page => {
 
 // Each case represents an independently reachable owner, rather than a disabled
 // template assertion. Invalid arguments deliberately ensure busy wins admission.
-const blockedActions = [
+// `selectDrawing` names a drawing that exists (an unknown one throws before
+// the busy check, OV-2151), so each case fills in the Linear drawing it makes.
+const blockedActions = (linearId) => [
   ['selectResult', [0]], ['setOptionalNumberInputValue', [null, 'label_rotation', '45', true]],
-  ['selectDrawing', ['linear']], ['setCircularInputType', ['gff']],
+  ['selectDrawing', [linearId]], ['setCircularInputType', ['gff']],
   ['runAnalysis', []], ['cancelGeneration', []],
   ['setLabelFilterMode', ['Whitelist']], ['addWhitelistRule', []],
   ['removeWhitelistRule', [0]], ['removePriorityRule', [0]], ['resetSettings', []], ['resetLayout', []],
@@ -79,9 +83,12 @@ const blockedActions = [
 for (const operation of ['save', 'load']) {
   test(`${operation} occupies all semantic owners and keeps browsing available`, async ({ page }, info) => {
     await setup(page);
+    // The Session holds one Circular drawing; the switch target is a Linear one.
+    const linearId = await takeLinearOffer(page);
+    await showDrawing(page, { kind: 'circular' });
     await capture(page);
     await page.evaluate(async operation => {
-      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       let release;
       const gate = new Promise(resolve => { release = resolve; });
       window.releaseSession = release;
@@ -105,12 +112,12 @@ for (const operation of ['save', 'load']) {
       values.push(['feature placement', await app.featurePlacementActions.setPlacement([], 'invalid')]);
       values.push(['undo', await history.undo()], ['redo', await history.redo()]);
       values.push(['history action', await history.runUndoable('forbidden', () => { throw new Error('ran'); })]);
-      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       values.push(['cross operation', app.sessionSavePending
         ? await service.importSession({ target: { files: [new File(['{}'], 'other.json')], value: '' } }, { confirmLoadRepairs: async () => false })
         : await service.exportSession('cross-save')]);
       return values;
-    }, blockedActions);
+    }, blockedActions(linearId));
     for (const [name, result] of outcomes) {
       expect(result?.status, name).toBe('busy');
       expect(result.reason, name).toMatch(/Retry after/);
@@ -146,7 +153,7 @@ for (const operation of ['save', 'load']) {
       await download.saveAs(path);
       const saved = JSON.parse(gunzipSync(readFileSync(path)));
       expect(saved.ui.zoom).not.toBe(browsedZoom);
-      expect(saved.modes[saved.ui.mode].config).toEqual(JSON.parse(await page.evaluate(() => window.beforeSession.config)));
+      expect(shownSavedDrawing(saved).config).toEqual(JSON.parse(await page.evaluate(() => window.beforeSession.config)));
     }
     await expectIntact(page);
     await expect(page.getByRole('button', { name: 'Load Session', exact: true })).toBeEnabled();
@@ -167,7 +174,7 @@ test('failed adoption restores source before transients and preserves all admitt
   await capture(page);
   const replacement = fixture('lambda_basic_linear').buffer.toString('utf8');
   const outcome = await evaluateWithRetainedPromise(page, async text => {
-    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     return service.importSession({ target: { files: [new File([text], 'replacement.json')], value: '' } }, {
       confirmLoadRepairs: async () => false,
       beforePreviewMount: () => { throw new Error('controlled adoption failure'); }
@@ -200,7 +207,7 @@ test('Generate rejects Save and Load from processing publication through settlem
   });
   await page.waitForFunction(() => window.generateGateReached);
   const busy = await evaluateWithRetainedPromise(page, async () => {
-    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     return [await service.exportSession('blocked'), await service.importSession({
       target: { files: [new File(['{}'], 'blocked.json')], value: '' }
     })];
@@ -232,7 +239,7 @@ test('Generate rejects Save and Load from processing publication through settlem
   });
   await page.waitForFunction(() => window.reflowRunHeld);
   const reflowBusy = await evaluateWithRetainedPromise(page, async () => {
-    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     return [await service.exportSession('blocked-reflow'), await service.importSession({
       target: { files: [new File(['{}'], 'blocked.json')], value: '' }
     })];
@@ -252,7 +259,7 @@ test('Generate rejects Save and Load from processing publication through settlem
 test('teardown releases pending and canceled Save cannot download or clear a newer operation', async ({ page }) => {
   await setup(page);
   const outcome = await evaluateWithRetainedPromise(page, async () => {
-    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const { state } = await import('/gbdraw/web/js/state.js');
     let release;
     const gate = new Promise(resolve => { release = resolve; });
@@ -287,7 +294,7 @@ for (const failure of ['baseline-error', 'teardown-during-baseline']) {
     await capture(page);
     const replacement = fixture('lambda_basic_linear').buffer.toString('utf8');
     const outcome = await evaluateWithRetainedPromise(page, async ({ text, failure }) => {
-      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       const history = window.__GBDRAW_HISTORY__;
       const initialize = history.initializeIntentBaseline;
       history.initializeIntentBaseline = async (...args) => {
@@ -313,12 +320,13 @@ test('uncataloged multi-record draft Save prepares records privately without exp
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
   const text = readFileSync('tests/fixtures/sessions/cli-web-mito.gb', 'utf8');
+  await takeLinearOffer(page);
   const download = page.waitForEvent('download');
   await page.evaluate(async text => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     app.sessionTitle = 'Private draft';
-    app.linearSeqs[0].gb = new File([text, text], 'two-records.gb');
+    app.linearSeqs[0].gb = bound(new File([text, text], 'two-records.gb'));
     window.draftSource = app.linearSeqs[0];
     window.privateSaveEvents = [];
     window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent: event => {
@@ -332,10 +340,10 @@ test('uncataloged multi-record draft Save prepares records privately without exp
   const file = info.outputPath('private-draft.json.gz');
   await (await download).saveAs(file);
   const saved = JSON.parse(gunzipSync(readFileSync(file)));
-  expect(saved.renderRequest.records).toHaveLength(1);
-  expect(saved.renderRequest.records[0]).toMatchObject({ cardinality: 'all', selector: null });
-  const resourceId = saved.renderRequest.records[0].source.resourceId;
+  expect(shownSavedDrawing(saved).renderRequest.records).toHaveLength(1);
+  expect(shownSavedDrawing(saved).renderRequest.records[0]).toMatchObject({ cardinality: 'all', selector: null });
+  const resourceId = shownSavedDrawing(saved).renderRequest.records[0].source.resourceId;
   expect(Buffer.from(saved.resources[resourceId].data, 'base64').toString('utf8')).toBe(text + text);
-  expect(saved.results).toEqual([]);
+  expect(shownSavedDrawing(saved).results).toEqual([]);
   expect(await page.evaluate(() => privateSaveEvents)).toEqual([{ count: 1, sameSource: true }]);
 });
