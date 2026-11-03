@@ -2633,25 +2633,6 @@ export const createAppSetup = () => {
       { enabled: Boolean(drawing.linearRecordLayoutEnabled.value) }
     );
   });
-  // Wrap Rows (PD-OI-113): its blockers read the owners the request reads. A Similarity alignment is a
-  // comparison input to Python's refusal; Align at feature is the positions its Apply wrote, while they hold
-  // (`featureAnchor`, set up below; read only once the page renders).
-  const linearWrapField = createLinearWrapField({
-    state,
-    changeLayoutSetting: featureActions.placementActions.changeLayoutSetting,
-    shownWrap: () => shownLinearWrapReading.value,
-    blockerInputs: () => {
-      const drawing = state.activeDrawing();
-      return {
-        comparisons: drawing.linearComparisonResolution.value.hasComparisonIntent || state.similarityAlignmentPlan.value !== null,
-        sharedRecordRow: linearLabelHasSharedRow.value,
-        featureAlignment: featureAnchor.applied.value,
-        featureTrackOnAxis: Boolean(drawing.adv.linear_track_slots_enabled)
-          && effectiveLinearSlotPlacement(draftFeatureSlot({ mode: drawing.mode, form: drawing.form, adv: drawing.adv })) === 'overlay'
-      };
-    },
-    watch
-  });
   /** @param {unknown} mode */
   const linearLabelVisibilitySummary = (mode) => describeLinearLabelVisibility(mode, {
     hasSharedRow: linearLabelHasSharedRow.value
@@ -5477,6 +5458,24 @@ export const createAppSetup = () => {
     notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
     projectPlacement: projectCommittedSimilarityAlignment,
     recordTranslations: () => state.linearRecordTranslations.value
+  });
+  // Wrap Rows (PD-OI-113): its blockers read the owners the request reads. A Similarity alignment is a
+  // comparison input to Python's refusal; Align at feature is the positions its Apply wrote, while they hold.
+  const linearWrapField = createLinearWrapField({
+    state,
+    changeLayoutSetting: featureActions.placementActions.changeLayoutSetting,
+    shownWrap: () => shownLinearWrapReading.value,
+    blockerInputs: () => {
+      const drawing = state.activeDrawing();
+      return {
+        comparisons: drawing.linearComparisonResolution.value.hasComparisonIntent || state.similarityAlignmentPlan.value !== null,
+        sharedRecordRow: linearLabelHasSharedRow.value,
+        featureAlignment: featureAnchor.applied.value,
+        featureTrackOnAxis: Boolean(drawing.adv.linear_track_slots_enabled)
+          && effectiveLinearSlotPlacement(draftFeatureSlot({ mode: drawing.mode, form: drawing.form, adv: drawing.adv })) === 'overlay'
+      };
+    },
+    watch
   });
   // Generate asks about Upload pairs without a file: each pair's row
   // takes its own file; Skip sets the pairs still without one to No comparison
