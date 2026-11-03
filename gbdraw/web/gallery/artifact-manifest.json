@@ -38,7 +38,7 @@
     },
     "gallery/examples/hepatoplasmataceae_orthogroup.svg": {
       "bytes": 16665616,
-      "sha256": "13280a7d13c2f5d5c27c5b1c0210383a0a59a70fe291c0eb300516e27f570364"
+      "sha256": "d58482368e6e99874936b2cb3dff8a1330a4da6364d1eb3176ab9ea12a973651"
     },
     "gallery/examples/lambda_basic_linear.svg": {
       "bytes": 869931,
@@ -53,48 +53,48 @@
       "sha256": "4f71a5994a79f1dfe31d0214d94a2f5cee42d61b8bd9683690f820317f5ab96f"
     },
     "gallery/examples/vibrio-harveyi-group-collinear.svg": {
-      "bytes": 14496740,
-      "sha256": "2562a680691f20c202efac01bc129b9982a5e63ab93c1d6675eae829e225ce19"
+      "bytes": 14496749,
+      "sha256": "2632668e658a25efa2cab8781b9e1a3b154cf4ff8dad2547e4e8745de9c53083"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 3017633,
-      "sha256": "24430e615f9ed85c7b37b927a0cb7b20f40ae3b73b4b672b6c667a7aea25b393"
+      "bytes": 3017682,
+      "sha256": "1cb876206dac351c7a0d22dd2ae9e1c74566be58a1316cdba8fe969d85123414"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
-      "bytes": 278084,
-      "sha256": "1775f6fbf1a5d517f522118a5f6b541af6ae58c9e4a6286e0c69eca9e447234d"
+      "bytes": 278133,
+      "sha256": "227c12af3b05536c8e2570c2c62d41e36decbbab6bf725638a2ec2089a7e4bbd"
     },
     "gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": {
-      "bytes": 252941,
-      "sha256": "6c192d554e671139fd40b6c5cc1f073b927467a438d7346e95c92e0b2e3b771f"
+      "bytes": 252990,
+      "sha256": "43976f4274bf319b9ef08a5d5fadc34d0bb929575785a20d31356af552455bd9"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
-      "bytes": 11121801,
-      "sha256": "7eb0e62a42a194193b3c12c691914ad56ff972e9f4204ff19c862aac3f7c5f90"
+      "bytes": 11121815,
+      "sha256": "5d611535b3ffebcd6bc9b9f4aa584f30e21c94f80d45503265b36d03eb12fa0b"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
-      "bytes": 10733586,
-      "sha256": "bcba4a4e29d643c742d31cbd9cc7441312cc247a65e54cc7ae8008140929481b"
+      "bytes": 10733698,
+      "sha256": "928689f009a1ef70cd8b2ebc6a043965fa202b2e3e93c97a065fa7e5f47ccdf2"
     },
     "gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 14011255,
-      "sha256": "a1e722e2806671c87501d11ebbe0bfafc910f162dcc9d052f4b9c8ac1e945587"
+      "bytes": 14010902,
+      "sha256": "f5a92a4bc62e1f9587e462db03756b4ce71da35138cfa5582845340031f72728"
     },
     "gallery/sessions/lambda_basic_linear.gbdraw-session.json": {
-      "bytes": 851786,
-      "sha256": "20b4e925bbb90199ad90a4bd3dda72954f3dff557f8171926ff06686ae89bd05"
+      "bytes": 851835,
+      "sha256": "3bfa97da3482523f9205ec7b4308e608c100decfb8969cef767471c86b85bda1"
     },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 6222722,
-      "sha256": "4c2cf680b210a0bd0bccfdc5447953ef1a6622fa802c8a3ef53a7cc93cd881c2"
+      "bytes": 6222443,
+      "sha256": "c5adcb4c1c5e87e4a111a618d963b75266011d6b652833b2456358c7e48efb4a"
     },
     "gallery/sessions/tobacco-chloroplast.gbdraw-session.json": {
-      "bytes": 1588192,
-      "sha256": "432623c81ce7db9f42056ec84663cf6ea5c45b43cce33fff5c9e15f2f664251f"
+      "bytes": 1588241,
+      "sha256": "5d2244eb9fec8422224ce9226b1cfeff3a163aacbdc7736bb57455bc596246b4"
     },
     "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": {
-      "bytes": 28185663,
-      "sha256": "58e38a48559b4f0b943c4c3c67eda69e3c2d1da5d244f6eb8404e51f2d0f906c"
+      "bytes": 28185021,
+      "sha256": "e7be3bbbf475c976a8966d07494eb2b82a0252d8132f2fa2e2b37f871deca1c9"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
       "bytes": 234947,
@@ -133,8 +133,8 @@
       "sha256": "1a0c2a3830a965c7a8fff70b6db8836ab8458a092a76ac7ded2686c04a272081"
     },
     "gallery/sources/vibrio-harveyi-group-collinear.svg": {
-      "bytes": 4699407,
-      "sha256": "265290c1ed7351b0b60a96acd796828a8b9b858af667883dc3d91412372b0e2a"
+      "bytes": 4699396,
+      "sha256": "d78d4865486be8dbb77239b485052d9a446e15950a491f9dd43aec159e530cbc"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
       "bytes": 18904,
