@@ -18,19 +18,42 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {string} message
  */
 /**
+ * The rows a wrapped Linear Result drew (gbdraw/api/input_summary.py `LinearWrapPayload`).
+ * @typedef {object} LinearWrapSummary
+ * @property {number} rowLength The bases per row.
+ * @property {number} rowCount
+ * @property {'auto' | number} requested What the request asked for: `'auto'` or a length in bp.
+ * @property {readonly number[]} recordRows The rows of each drawn record, in drawing order (the summary's
+ *   `records`).
+ * @property {number} drawnAxisLength The bases on the longest drawn axis, which sizes and ticks follow.
+ */
+/**
+ * One drawn record (gbdraw/api/input_summary.py `RecordPayload`).
+ * @typedef {object} RecordSummary
+ * @property {number} drawnLength The bases drawn.
+ * @property {number} sourceLength The bases of its source record.
+ * @property {{ start: number, end: number } | null} region The region of the source the request asked for (1-based,
+ *   both ends included, as asked: the end may run past the record); null when it asked for none.
+ */
+/**
  * @typedef {object} InputSummary
  * @property {number} resultIndex
  * @property {string} resultName
  * @property {readonly string[]} lines
  * @property {readonly InputWarning[]} warnings
+ * @property {readonly RecordSummary[]} records Each drawn record, in drawing order.
+ * @property {LinearWrapSummary | null} linearWrap `null` when the Result cut no record.
  */
 /**
  * @typedef {InputSummary & { readonly drawnVisibility: string }} DrawnInputSummary
  *   A Result's summary with the Feature visibility of the render that sent it (Web-owned).
  */
 
-const SUMMARY_FIELDS = ['resultIndex', 'resultName', 'lines', 'warnings'];
+const SUMMARY_FIELDS = ['resultIndex', 'resultName', 'lines', 'warnings', 'records', 'linearWrap'];
 const WARNING_FIELDS = ['code', 'message'];
+const RECORD_FIELDS = ['drawnLength', 'sourceLength', 'region'];
+const REGION_FIELDS = ['start', 'end'];
+const WRAP_FIELDS = ['rowLength', 'rowCount', 'requested', 'recordRows', 'drawnAxisLength'];
 
 /** @param {unknown} value @param {readonly string[]} fields @returns {value is Record<string, unknown>} */
 const hasExactly = (value, fields) => (
@@ -45,6 +68,29 @@ const isText = (value) => typeof value === 'string' && value.length > 0;
 /** @param {unknown} value @returns {value is InputWarning} */
 const isWarning = (value) => hasExactly(value, WARNING_FIELDS)
   && isText(value.code) && /^[a-z_]+$/.test(value.code) && isText(value.message);
+
+/** @param {unknown} value @returns {value is number} */
+const isCount = (value) => Number.isSafeInteger(value) && Number(value) > 0;
+
+/** @param {unknown} value @returns {value is readonly number[]} */
+const isCounts = (value) => Array.isArray(value) && value.length > 0 && value.every(isCount);
+
+/** @param {unknown} value @returns {value is RecordSummary} */
+const isRecord = (value) => hasExactly(value, RECORD_FIELDS) && isCount(value.drawnLength) && isCount(value.sourceLength)
+  && (value.region === null || (hasExactly(value.region, REGION_FIELDS) && isCount(value.region.start) && isCount(value.region.end)));
+
+/** @param {unknown} value @returns {value is readonly RecordSummary[]} */
+const isRecords = (value) => Array.isArray(value) && value.length > 0 && value.every(isRecord);
+
+/**
+ * @param {unknown} value
+ * @param {readonly RecordSummary[]} records The summary's records: a wrapped Result names the rows of each.
+ * @returns {value is LinearWrapSummary | null}
+ */
+const isLinearWrap = (value, records) => value === null || (hasExactly(value, WRAP_FIELDS)
+  && isCount(value.rowLength) && isCount(value.rowCount) && isCount(value.drawnAxisLength)
+  && (value.requested === 'auto' || isCount(value.requested))
+  && isCounts(value.recordRows) && value.recordRows.length === records.length);
 
 /**
  * The input summaries of a successful render, one per Result, each naming its Result by index and name.
@@ -61,6 +107,7 @@ export const validateInputSummaries = (value, results) => {
     || results[Number(entry.resultIndex)]?.name !== entry.resultName
     || !Array.isArray(entry.lines) || !entry.lines.every(isText)
     || !Array.isArray(entry.warnings) || !entry.warnings.every(isWarning)
+    || !isRecords(entry.records) || !isLinearWrap(entry.linearWrap, entry.records)
   ))) throw diagnosticError('RESULT_INVALID', { field: 'inputSummaries' }, { stage: 'result-admission', operation: 'validateInputSummaries' });
   return Object.freeze(/** @type {InputSummary[]} */ (value));
 };

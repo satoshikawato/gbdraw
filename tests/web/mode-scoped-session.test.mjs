@@ -1017,23 +1017,78 @@ test('Save writes each Session 51 drawing\'s own CLI options, found by drawing I
   }
 });
 
-// A wrap length is one per Linear drawing (Session 51). The Web has no control
-// for it: it lists a length held as a config override under the drawing that
-// holds it, the unopened one's too, and Save keeps it there.
+// A wrap length is one per Linear drawing (Session 51): Wrap Rows, the
+// drawing's `form.linear_wrap_length` (PD-OI-113). Load reads each drawing's
+// own value, the unopened one's too, found by drawing ID; a length a 0.14.5
+// Web Save kept as a preserved override moves into the form of the drawing
+// that holds it. Save writes it in that drawing's form, and no preserved
+// override holds it.
 test('a Session 51 keeps each Linear drawing\'s own wrap length override through Load and Save', async () => {
+  const WRAP = 'canvas.linear.wrap_length';
   const session = v49Session('drawings-linear-pair-losat');
-  session.drawings.find((entry) => entry.id === 'linear-2').config.unmanagedConfigOverrides = { 'canvas.linear.wrap_length': 30000 };
+  const entryOf = (document, id) => document.drawings.find((entry) => entry.id === id);
+  entryOf(session, 'linear-2').config.unmanagedConfigOverrides = { [WRAP]: 30000 };
+  entryOf(session, 'linear').config.form.linear_wrap_length = 'auto';
   resetDrawings();
   const first = await loadKeepingSlots(session);
   assertLoadedDrawings(session, first);
-  assert.deepEqual({ ...state.drawingOf('linear-2').unmanagedConfigOverrides }, { 'canvas.linear.wrap_length': 30000 });
-  assert.deepEqual({ ...state.drawingOf('linear').unmanagedConfigOverrides }, {});
+  assert.equal(state.drawingOf('linear-2').form.linear_wrap_length, 30000);
+  assert.equal(state.drawingOf('linear').form.linear_wrap_length, 'auto');
+  for (const id of ['linear', 'linear-2']) assert.deepEqual({ ...state.drawingOf(id).unmanagedConfigOverrides }, {}, id);
   const result = await exportSession('wrap-length', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
   const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
-  const overridesOf = (id) => saved.drawings.find((entry) => entry.id === id).config.unmanagedConfigOverrides ?? {};
-  assert.deepEqual(overridesOf('linear-2'), { 'canvas.linear.wrap_length': 30000 });
-  assert.deepEqual(overridesOf('linear'), {});
+  assert.equal(entryOf(saved, 'linear-2').config.form.linear_wrap_length, 30000);
+  assert.equal(entryOf(saved, 'linear').config.form.linear_wrap_length, 'auto');
+  for (const id of ['linear', 'linear-2']) assert.deepEqual(entryOf(saved, id).config.unmanagedConfigOverrides ?? {}, {}, id);
+  // The saved form loads again into each drawing.
+  resetDrawings();
+  const again = await loadKeepingSlots(saved);
+  assertLoadedDrawings(saved, again);
+  assert.equal(state.drawingOf('linear-2').form.linear_wrap_length, 30000);
+  assert.equal(state.drawingOf('linear').form.linear_wrap_length, 'auto');
+});
+
+// D-36: a stored wrap length the form cannot hold as stored is Python's to read (the config model's validator, at
+// Load's configuration check): a length typed with a unit, another case, spaces. A value Python refuses is dropped
+// with one Load repair row; the drawing's Wrap Rows is off.
+test('a preserved wrap length takes Python\'s reading, and one Python refuses is dropped with a Load repair row', async () => {
+  const WRAP = 'canvas.linear.wrap_length';
+  for (const [stored, read] of [['50kb', 50000], ['Auto', 'auto'], [' 20000 ', 20000], ['None', null], ['abc', null]]) {
+    const session = v49Session('drawings-linear-pair-losat');
+    session.drawings.find((entry) => entry.id === 'linear-2').config.unmanagedConfigOverrides = { [WRAP]: stored };
+    resetDrawings();
+    loadDialogs.length = 0;
+    const loaded = await load(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.equal(state.drawingOf('linear-2').form.linear_wrap_length, read, stored);
+    assert.deepEqual({ ...state.drawingOf('linear-2').unmanagedConfigOverrides }, {}, stored);
+    const items = loadDialogs.flatMap((dialog) => dialog.items).filter((item) => item.includes(WRAP));
+    assert.equal(items.length, stored === 'abc' ? 1 : 0, `${stored}: ${JSON.stringify(items)}`);
+    if (stored === 'abc') assert.ok(items[0].includes('abc'), JSON.stringify(items));
+  }
+});
+
+// D-36, F3: a v0.14.5 Web Save of a Python API Session keeps the length as typed in the Linear draft and in the
+// committed request (tests/fixtures/sessions/HmmtDNA-wrap-5kb.v50-web0145.provenance.json); v0.14.5 drew it wrapped.
+// Load reads both as Python does, with no repair row, and the saved Session loads the same.
+test('a v0.14.5 Session that stores "5kb" in its draft and request loads wrapped at 5,000 bp, with no repair row', async () => {
+  const WRAP = 'canvas.linear.wrap_length';
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz', import.meta.url))));
+  assert.equal(fixture.renderRequest.diagramOptions.configOverrides[WRAP], '5kb');
+  assert.equal(fixture.modes.linear.config.unmanagedConfigOverrides[WRAP], '5kb');
+  for (const session of [fixture, null]) {
+    const document = session ?? await save('wrap-5kb');
+    resetDrawings();
+    loadDialogs.length = 0;
+    const loaded = await load(document);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    const drawing = state.activeDrawing();
+    assert.equal(drawing.form.linear_wrap_length, 5000);
+    assert.deepEqual({ ...drawing.unmanagedConfigOverrides }, {});
+    const items = loadDialogs.flatMap((dialog) => dialog.items).filter((item) => item.includes(WRAP));
+    assert.deepEqual(items, [], session ? 'the v0.14.5 Session' : 'its Save');
+  }
 });
 
 // Italic gene names are one setting per drawing (`config.adv.italic_gene_labels`):

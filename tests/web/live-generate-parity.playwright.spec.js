@@ -1700,6 +1700,21 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
+// Wrap Rows (PD-OI-113) applies at Generate, as the other Layout settings do. On
+// the wrapped Result, a live color edit of a feature cut over two rows (lambda G,
+// 9711..10133 across the 10 kbp seam that Auto chooses) shows what Generate draws.
+test('a color edit of a feature cut over Wrap Rows shows what Generate draws (linear, one Result)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off',
+    genbank: readFileSync('gbdraw/web/tutorial-data/lambda/NC_001416.gb', 'utf8') });
+  await page.locator('#linear-wrap-rows').check();
+  await generate(page);
+  expect(await page.evaluate(() => new Set([...document.querySelectorAll('[data-gbdraw-wrap-row]')]
+    .map((row) => row.getAttribute('data-gbdraw-wrap-row'))).size), 'the Result is wrapped').toBe(5);
+  await popupEdit(page, 'lambdap14', { fill: '#d62728' });
+  await expectLiveEqualsGenerate(page, { label: 'color of a feature cut over rows' });
+});
+
 // A Session 30 (gbdraw 0.13.0) has no request: the Web shows its saved Result,
 // described by the track settings Load recorded. A palette change repaints its
 // skew track and the track's Legend rows as Generate then draws them.

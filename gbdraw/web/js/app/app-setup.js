@@ -13,6 +13,7 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
+/** @import { LinearDraftRecord } from '../services/linear-wrap-form.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
 /** @import { ColorActionsRuleActions } from './feature-editor/color-actions.js' */
 /** @import { LegendRowColorOf } from './candidate-render.js' */
@@ -224,6 +225,10 @@ import { validateAnnotationRecordTargets } from './annotations/validation.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
+import { createLinearWrapField } from './linear-wrap-field.js';
+import { exportLinearWrap, requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
+import { draftFeatureSlot } from './feature-editor/placement-actions.js';
+import { effectiveLinearSlotPlacement } from '../services/linear-track-slot-model.js';
 import { createLinearRecordSelector, RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
 import { createLinearTypographyController } from './linear-typography.js';
 import {
@@ -2390,19 +2395,70 @@ export const createAppSetup = () => {
     const drawing = shownDrawingOfMode('circular');
     return drawing ? circularDrawingRegionNote(drawing.circularRecordList.value, drawing) : '';
   });
-  // Auto values follow the records the next Generate draws. The Linear ones are
-  // known once every drawn record is read and none is cropped; until then the
-  // values name their rule.
+  // The input summary of the shown Result: its warnings in the status area, its lines in Run info, its
+  // wrapped rows.
+  const shownInputSummary = computed(() => inputSummaryOf(
+    inputSummaries.value, selectedResultIndex.value, results.value[selectedResultIndex.value]?.name
+  ));
+  // The records the next Linear Generate draws, as their cards ask for them:
+  // each source record's length and the region its card states. Known once
+  // every drawn record is read and every region can be drawn, else none.
+  /** @param {DrawingState | null | undefined} drawing @returns {LinearDraftRecord[]} */
+  const linearDraftRecordsOf = (drawing) => {
+    if (!drawing || drawing.mode !== 'linear') return [];
+    const records = drawing.drawnLinearSeqs.value.map((seq, index) => {
+      const sourceLength = Number(linearSeqRecord(drawing, seq)?.recordLength);
+      const region = linearCardRegion(seq, index + 1);
+      if (!(sourceLength > 0) || (region !== null && 'error' in region)) return null;
+      return { sourceLength,
+        region: region === null ? null : { start: Math.min(region.start, region.end), end: Math.max(region.start, region.end) } };
+    });
+    return records.length && records.every((record) => record !== null) ? /** @type {LinearDraftRecord[]} */ (records) : [];
+  };
+  // Their lengths, while none is cropped: the Web predicts no cropped length.
+  /** @param {DrawingState | null | undefined} drawing @returns {number[]} */
+  const linearRecordLengthsOf = (drawing) => {
+    const records = linearDraftRecordsOf(drawing);
+    return records.every((record) => record.region === null) ? records.map((record) => record.sourceLength) : [];
+  };
+  const drawnLinearRecordLengths = () => linearRecordLengthsOf(state.activeDrawing());
+  // A Linear card whose record list is still deferred after a Load is read
+  // now, through the record selector, as Generate reads it (DESIGN A4).
+  /** @param {DrawingState} drawing */
+  const awaitLinearRecordDiscovery = async (drawing) => {
+    if (drawing.linearSeqs.some((seq) => linearRecordSelector.statusFor(drawing, seq) === 'deferred')) {
+      const outcome = linearRecordSelector.refresh(drawing);
+      if (outcome instanceof Promise) await outcome;
+    }
+  };
+  // Wrap Rows as the shown Result drew it (PD-OI-113), from Python's input
+  // summary and the committed request of the drawing whose Result is shown:
+  // the field's Auto text and the Auto hints of sizes and ticks read it.
+  /** @param {DrawingState} drawing The committed request's stored wrap leaf while this drawing's Result is shown. */
+  const shownLinearWrapLeaf = (drawing) => {
+    const request = drawing.mode === 'linear' && state.generatedDrawingId.value === drawing.id && results.value.length > 0
+      ? getCommittedCanonicalRenderRequest() : null;
+    return request?.mode === 'linear' ? requestLinearWrapLeaf(request) : undefined;
+  };
+  const shownLinearWrapReading = computed(() => {
+    const drawing = state.activeDrawing();
+    const leaf = shownLinearWrapLeaf(drawing);
+    return shownLinearWrap({
+      value: drawing.form.linear_wrap_length,
+      requested: leaf === undefined ? undefined : wrapFormValue(leaf).value,
+      summary: shownInputSummary.value ?? undefined,
+      records: linearDraftRecordsOf(drawing)
+    });
+  });
+  // Auto values follow the records the next Generate draws; until they are
+  // known the values name their rule.
   const autoValueDisplay = createAutoValueDisplay(state, {
     circularDiagramLengths: () => circularDiagrams.value.map((/** @type {CircularDiagramRecords} */ diagram) => diagram.lengths),
-    linearRecordLengths: () => {
-      const drawing = shownDrawingOfMode('linear');
-      if (!drawing) return [];
-      const lengths = drawing.drawnLinearSeqs.value.map((seq) => {
-        if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;
-        return Number(linearSeqRecord(drawing, seq)?.recordLength);
-      });
-      return lengths.length && lengths.every((length) => length > 0) ? lengths : [];
+    linearRecordLengths: drawnLinearRecordLengths,
+    linearWrappedAxisLength: () => {
+      const reading = shownLinearWrapReading.value;
+      if (reading.kind === 'off' || reading.kind === 'one-row') return undefined;
+      return reading.kind === 'rows' ? reading.drawnAxisLength : null;
     }
   });
   /** @param {DepthFileSlots | DepthFileSlots[]} value */
@@ -3714,10 +3770,7 @@ export const createAppSetup = () => {
     // deferred after a Load); the Circular list is the one Generate awaited.
     readRecordIdentitySources: async (drawing) => {
       if (drawing.mode === 'circular') return { mode: drawing.mode, circular: circularRecordEntries(drawing) };
-      if (drawing.linearSeqs.some((seq) => linearRecordSelector.statusFor(drawing, seq) === 'deferred')) {
-        const outcome = linearRecordSelector.refresh(drawing);
-        if (outcome instanceof Promise) await outcome;
-      }
+      await awaitLinearRecordDiscovery(drawing);
       return {
         mode: drawing.mode,
         linear: new Map(drawing.linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(drawing, seq))]))
@@ -4053,6 +4106,10 @@ export const createAppSetup = () => {
     if (result?.status === 'ok' || result?.status === 'legacy') prefetchPyodideBootAssets();
     return result;
   };
+  // The Sessions this page has installed: a Load replaces the document, so
+  // an owner that holds what an action did to the previous one (Align at
+  // feature's applied state) reads this count instead of the drawn values.
+  const sessionReplacements = ref(0);
   /** @param {SessionFileInput} event */
   const loadSessionFromFile = (event) => importSessionFromFile(event, {
     shownDrawing: state.activeDrawing,
@@ -4124,6 +4181,7 @@ export const createAppSetup = () => {
         recordSessionLifecycleEvent('history-baseline-end');
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
         closeLegendStrokeOptions();
+        sessionReplacements.value += 1;
       }
     }
   });
@@ -5426,7 +5484,26 @@ export const createAppSetup = () => {
     runPlacement: ({ canonical, label }) => runCommittedCanonicalCandidate({ canonical, label, alignmentResetReceipt: null }),
     notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
     projectPlacement: projectCommittedSimilarityAlignment,
-    recordTranslations: () => state.linearRecordTranslations.value
+    recordTranslations: () => state.linearRecordTranslations.value,
+    sessionReplacements: () => sessionReplacements.value
+  });
+  // Wrap Rows (PD-OI-113): its blockers read the owners the request reads. A Similarity alignment is a
+  // comparison input to Python's refusal; Align at feature is the positions its Apply wrote, while they hold.
+  const linearWrapField = createLinearWrapField({
+    state,
+    changeLayoutSetting: featureActions.placementActions.changeLayoutSetting,
+    shownWrap: () => shownLinearWrapReading.value,
+    blockerInputs: () => {
+      const drawing = state.activeDrawing();
+      return {
+        comparisons: drawing.linearComparisonResolution.value.hasComparisonIntent || state.similarityAlignmentPlan.value !== null,
+        sharedRecordRow: linearLabelHasSharedRow.value,
+        featureAlignment: featureAnchor.applied.value,
+        featureTrackOnAxis: Boolean(drawing.adv.linear_track_slots_enabled)
+          && effectiveLinearSlotPlacement(draftFeatureSlot({ mode: drawing.mode, form: drawing.form, adv: drawing.adv })) === 'overlay'
+      };
+    },
+    watch
   });
   // Generate asks about Upload pairs without a file: each pair's row
   // takes its own file; Skip sets the pairs still without one to No comparison
@@ -6315,18 +6392,36 @@ export const createAppSetup = () => {
       // this page, so only a page with a loaded font embeds. SVG and
       // Interactive SVG follow Embed font in exported SVG; a PNG always draws
       // with the fonts, and a PDF always registers the faces its text uses.
-      /** @type {import('../services/export.js').ExportFontPorts} */
-      const fontPorts = {
+      // The size check of a PNG or PDF reads the exported Result's wrap
+      // (D-52, D-55): Python reads its stored leaf, and decides from it
+      // whether a record is cut, and the row length it advises. A loaded
+      // Result has no input summary: its records are discovered first.
+      const exportedDrawing = historySnapshots.displayedArtifactDrawing();
+      const exportedSummary = shownInputSummary.value ?? undefined;
+      const exportedWrapLeaf = shownLinearWrapLeaf(exportedDrawing);
+      const linearWrap = () => exportLinearWrap({
+        leaf: exportedWrapLeaf,
+        summary: exportedSummary,
+        discoverRecordLengths: async () => {
+          await awaitLinearRecordDiscovery(exportedDrawing);
+          return linearRecordLengthsOf(exportedDrawing);
+        }
+      });
+      /** @type {import('../services/export.js').ExportPorts} */
+      const exportPorts = {
         embedFonts: state.loadedFonts.value.length > 0
           ? async (svg, kind) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS, { svg, kind })).result
           : null,
         embedInSvg: fontSettings.embedInExports.value,
         resolvePdfFonts: async (runs, known) => (
           await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PDF_FONTS, { runs, known })
-        ).result
+        ).result,
+        checkExportLimit: async (request) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT, {
+          ...request, linearWrap: await linearWrap()
+        })
       };
       /** @type {import('../services/export.js').ExportOutcome} */
-      const result = await exportMethod(snapshot, fontPorts);
+      const result = await exportMethod(snapshot, exportPorts);
       if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
       if (result.fontWarnings.length > 0) {
         showNotice({ text: t('Exported {file}.', { file: result.filename }), items: result.fontWarnings });
@@ -6627,10 +6722,6 @@ export const createAppSetup = () => {
       && item.resultName === results.value[selectedResultIndex.value]?.name);
     return entry && entry.report.drawn ? entry : null;
   });
-  // The input summary of the shown Result: its warnings in the status area, its lines in Run info.
-  const shownInputSummary = computed(() => inputSummaryOf(
-    inputSummaries.value, selectedResultIndex.value, results.value[selectedResultIndex.value]?.name
-  ));
   // A live Feature visibility edit no render drew since: the summary counts what the render drew,
   // so it is compared with the visibility of the drawing whose Result is shown.
   const shownInputSummaryStale = computed(() => {
@@ -7916,6 +8007,7 @@ export const createAppSetup = () => {
     autoValueText: autoValueDisplay.autoValueText,
     autoValueVisible: autoValueDisplay.autoValueVisible,
     canUseLinearRulerOnAxis,
+    ...linearWrapField,
     canUseCircularScaleStyling,
     circularTrackNewRenderer,
     linearTrackNewRenderer,

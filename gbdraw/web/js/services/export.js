@@ -91,14 +91,36 @@ const loadPdfLibraries = () => {
  */
 
 /**
- * The Worker's font helpers an export uses. `embedFonts` is null when no font
+ * A PNG or PDF size, in SVG pixels, for the Worker's limit check
+ * (gbdraw/render/export_limits.py); `dpi` is the PNG's, null for a PDF.
+ * @typedef {{ format: 'png' | 'pdf', width: number, height: number, dpi: number | null }} ExportLimitRequest
+ * @typedef {(request: ExportLimitRequest) => Promise<unknown>} CheckExportLimit
+ *   Rejects with the EXPORT_LIMIT error when the figure is over the format's limit.
+ */
+
+/**
+ * The Worker's helpers an export uses. `embedFonts` is null when no font
  * is loaded in this page. `embedInSvg` is Embed font in exported SVG: whether
  * SVG and Interactive SVG carry the fonts; a PNG always draws with them.
- * @typedef {object} ExportFontPorts
+ * `checkExportLimit` is the size check of a PNG or PDF, which knows what the
+ * exported Result drew; SVG and Interactive SVG have no limit.
+ * @typedef {object} ExportPorts
  * @property {EmbedFonts | null} [embedFonts]
  * @property {boolean} [embedInSvg]
  * @property {ResolvePdfFonts} [resolvePdfFonts]
+ * @property {CheckExportLimit} [checkExportLimit]
  */
+
+/**
+ * The size check, before the browser draws anything: a refusal throws, and
+ * nothing is downloaded. A missing port fails here, as a missing PDF font port does.
+ * @param {CheckExportLimit | undefined} checkExportLimit
+ * @param {ExportLimitRequest} request
+ */
+const requireExportWithinLimit = async (checkExportLimit, request) => {
+  if (typeof checkExportLimit !== 'function') throw new Error('The export size check is not available.');
+  await checkExportLimit(request);
+};
 
 /**
  * What a finished export reports: the file name, and one warning per font the
@@ -139,7 +161,7 @@ const fontEmbeddingOf = async (clone, embedFonts, kind) => (
 );
 
 /**
- * @param {ExportFontPorts} ports
+ * @param {ExportPorts} ports
  * @returns {EmbedFonts | null}
  */
 const svgFontPort = ({ embedFonts, embedInSvg }) => (embedInSvg && embedFonts ? embedFonts : null);
@@ -486,7 +508,7 @@ const downloadSvgString = (svgString, filename) => {
 
 /**
  * @param {ExportSnapshot} snapshot
- * @param {ExportFontPorts} [ports]
+ * @param {ExportPorts} [ports]
  * @returns {Promise<ExportOutcome>}
  */
 export const downloadSVG = async (snapshot, ports = {}) => {
@@ -498,7 +520,7 @@ export const downloadSVG = async (snapshot, ports = {}) => {
 
 /**
  * @param {ExportSnapshot} snapshot
- * @param {ExportFontPorts} [ports]
+ * @param {ExportPorts} [ports]
  * @returns {Promise<ExportOutcome>}
  */
 export const downloadInteractiveSVG = async (snapshot, ports = {}) => {
@@ -514,10 +536,10 @@ export const downloadInteractiveSVG = async (snapshot, ports = {}) => {
  * SVG carries every custom font it draws with (D-13: whatever Embed font in
  * exported SVG and the font's license; the bytes never leave the page).
  * @param {ExportSnapshot} snapshot
- * @param {ExportFontPorts} [ports]
+ * @param {ExportPorts} [ports]
  * @returns {Promise<ExportOutcome>}
  */
-export const downloadPNG = async (snapshot, { embedFonts } = {}) => {
+export const downloadPNG = async (snapshot, { embedFonts, checkExportLimit } = {}) => {
   const filename = getDownloadName(snapshot, 'png');
   const { svgString } = await getEmbeddedSvgString(snapshot, embedFonts, 'raster');
   const svg = getSvgFromString(svgString);
@@ -528,12 +550,13 @@ export const downloadPNG = async (snapshot, { embedFonts } = {}) => {
   if (!dims) {
     throw new Error('The current SVG has no usable dimensions for PNG export.');
   }
-  const canvas = document.createElement('canvas');
   // The Web sets a number (default 300) or a string; parseInt accepts both.
   const dpi = parseInt(/** @type {string} */ (snapshot.dpi), 10);
   if (!Number.isFinite(dpi) || dpi <= 0) {
     throw new Error('The selected PNG DPI is invalid.');
   }
+  await requireExportWithinLimit(checkExportLimit, { format: 'png', width: dims.width, height: dims.height, dpi });
+  const canvas = document.createElement('canvas');
   const scale = dpi / CSS_PX_PER_INCH;
   canvas.width = dims.width * scale;
   canvas.height = dims.height * scale;
@@ -575,10 +598,10 @@ export const downloadPNG = async (snapshot, { embedFonts } = {}) => {
 
 /**
  * @param {ExportSnapshot} snapshot
- * @param {ExportFontPorts} [ports]
+ * @param {ExportPorts} [ports]
  * @returns {Promise<ExportOutcome>}
  */
-export const downloadPDF = async (snapshot, { resolvePdfFonts } = {}) => {
+export const downloadPDF = async (snapshot, { resolvePdfFonts, checkExportLimit } = {}) => {
   const filename = getDownloadName(snapshot, 'pdf');
   const svgString = getCurrentSvgString(snapshot);
 
@@ -587,16 +610,16 @@ export const downloadPDF = async (snapshot, { resolvePdfFonts } = {}) => {
   if (!svg) {
     throw new Error('The current SVG could not be parsed for PDF export.');
   }
+  // 2. Determine Width/Height (Use attributes or viewBox); the PDF copy keeps them.
+  const dims = getSvgDimensions(svg);
+  if (!dims) {
+    throw new Error('The current SVG has no usable dimensions for PDF export.');
+  }
+  await requireExportWithinLimit(checkExportLimit, { format: 'pdf', width: dims.width, height: dims.height, dpi: null });
   const prepared = prepareSvgForPdf(svg);
   const { svg: pdfSvg, cleanup } = prepared;
 
   try {
-    // 2. Determine Width/Height (Use attributes or viewBox)
-    const dims = getSvgDimensions(pdfSvg);
-    if (!dims) {
-      throw new Error('The current SVG has no usable dimensions for PDF export.');
-    }
-
     if (!pdfSvg.getAttribute('viewBox')) {
       pdfSvg.setAttribute('viewBox', `0 0 ${dims.width} ${dims.height}`);
     }

@@ -22,6 +22,7 @@ import { namedFeatureInstance } from '../services/feature-selector.js';
 import { cliRecordKey, expandedRecordKey, recordKeyExpansion } from '../services/record-draw-selection.js';
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
 import { FEATURE_INSTANCE_SEPARATOR } from '../contracts/schema.generated.js';
+import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from '../services/linear-wrap-form.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
@@ -1224,6 +1225,13 @@ const appendConfigOverrides = (args, request) => {
     ...CONFIG_VALUE_OPTIONS,
     ...(request.mode === 'linear' ? LINEAR_CONFIG_VALUE_OPTIONS : CIRCULAR_CONFIG_VALUE_OPTIONS)
   }).forEach(([path, option]) => appendOption(args, option, take(path)));
+  // Wrap Rows: `auto` or a length in bp, as the form holds them; null and "none" are off, which the CLI writes as no
+  // flag. Other stored text (a Python API Session's "5kb") is not written as typed: the CLI may not read it back (R12).
+  if (request.mode === 'linear') {
+    const wrap = wrapFormValue(take(LINEAR_WRAP_LENGTH_PATH));
+    if (wrap.lost) throw recipeUnavailable(msg('the wrap length is not a value the CLI reads back.'));
+    appendOption(args, '--wrap_length', wrap.value);
+  }
   // D-04: a request reads a scale interval of 0 or less as automatic, which the CLI writes as no flag.
   const scaleInterval = take('objects.scale.interval');
   appendOption(args, '--scale_interval', typeof scaleInterval === 'number' && scaleInterval <= 0 ? null : scaleInterval);

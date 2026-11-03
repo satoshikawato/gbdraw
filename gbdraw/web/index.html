@@ -4292,11 +4292,12 @@
                                 </div>
                                 <div>
                                     <span class="input-label text-[10px] mb-1"><label for="linear-track-layout">{{ t('Track Layout') }}</label> <help-tip id="help-linear-track-layout" :text="t('Simple mode only. Above places features above the axis, Features on axis centers them on it, and Below places them below it. Use Reset to copy this choice into the custom stack.')"></help-tip></span>
-                                    <select id="linear-track-layout" :value="form.linear_track_layout" @change="featurePlacementActions.changeLayoutSetting($event, 'linear_track_layout')" aria-describedby="help-linear-track-layout" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" :title="adv.linear_track_slots_enabled ? t('Simple mode only. Use Reset to rebuild the custom stack from this setting.') : ''">
+                                    <select id="linear-track-layout" :value="form.linear_track_layout" @change="featurePlacementActions.changeLayoutSetting($event, 'linear_track_layout')" :aria-describedby="linearWrapOn ? 'help-linear-track-layout linear-wrap-fixed-track-layout' : 'help-linear-track-layout'" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" :title="adv.linear_track_slots_enabled ? t('Simple mode only. Use Reset to rebuild the custom stack from this setting.') : ''">
                                         <option value="above">{{ t('Above') }}</option>
-                                        <option value="middle">{{ t('Features on axis') }}</option>
+                                        <option value="middle" :disabled="linearWrapOn">{{ t('Features on axis') }}</option>
                                         <option value="below">{{ t('Below') }}</option>
                                     </select>
+                                    <p v-if="linearWrapOn" id="linear-wrap-fixed-track-layout" class="ui-hint">{{ t('{option} is unavailable while Wrap Rows is on.', { option: t('Features on axis') }) }}</p>
                                 </div>
                                 <div class="grid grid-cols-1 gap-y-1 p-1.5 bg-slate-50 rounded-lg" data-layout-options>
                                     <div class="flex items-center text-xs">
@@ -4334,10 +4335,31 @@
                                     </div>
                                     <div class="flex items-center text-xs">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="form.normalize_length" aria-describedby="help-linear-normalize-record-lengths" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                            <input type="checkbox" v-model="form.normalize_length" :aria-describedby="linearWrapFixesNormalize ? 'help-linear-normalize-record-lengths linear-wrap-fixed-normalize' : 'help-linear-normalize-record-lengths'" class="form-checkbox" :disabled="!semanticMutationAvailable || linearWrapFixesNormalize">
                                             <span>{{ t('Normalize Record Lengths') }}</span>
                                         </label>
                                         <help-tip id="help-linear-normalize-record-lengths" :text="t('Draw all sequences at the same displayed length. Hides the length bar.')"></help-tip>
+                                        <p v-if="linearWrapFixesNormalize" id="linear-wrap-fixed-normalize" class="ui-hint ml-2">{{ t('Fixed while Wrap Rows is on.') }}</p>
+                                    </div>
+                                    <div class="text-xs space-y-1" data-linear-wrap-field>
+                                        <div class="flex items-center">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" id="linear-wrap-rows" :checked="linearWrapOn" @change="changeLinearWrap($event, 'on')" class="form-checkbox" :aria-describedby="linearWrapBlockedText ? 'help-linear-wrap-rows linear-wrap-blocked' : 'help-linear-wrap-rows'" :disabled="!semanticMutationAvailable || (!linearWrapOn && linearWrapBlocked)">
+                                                <span>{{ t('Wrap Rows') }}</span>
+                                            </label>
+                                            <help-tip id="help-linear-wrap-rows" :text="t('Draw each record over rows of this length. Leave the length empty for Auto, which chooses it from the longest record.')"></help-tip>
+                                        </div>
+                                        <div v-if="linearWrapOn" class="ml-6 flex items-center gap-1">
+                                            <auto-value-field class="flex-1 min-w-0" :visible="linearWrapAmount === ''" :text="linearWrapAutoText">
+                                                <input type="number" id="linear-wrap-length" min="1" step="any" :value="linearWrapAmount" @change="changeLinearWrap($event, 'amount')" :aria-label="t('Row length')" class="form-input form-input-compact auto-value-input w-full" :disabled="!semanticMutationAvailable || linearWrapBlocked">
+                                            </auto-value-field>
+                                            <select id="linear-wrap-unit" :value="linearWrapUnit" @change="changeLinearWrap($event, 'unit')" :aria-label="t('Row length unit')" class="form-input form-input-compact text-xs py-1 w-auto shrink-0" :disabled="!semanticMutationAvailable || linearWrapBlocked">
+                                                <option value="bp">bp</option>
+                                                <option value="kbp">kbp</option>
+                                                <option value="Mbp">Mbp</option>
+                                            </select>
+                                        </div>
+                                        <p v-if="linearWrapBlockedText" id="linear-wrap-blocked" class="ui-hint" data-linear-wrap-blocked>{{ linearWrapBlockedText }}</p>
                                     </div>
                                     <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">
                                         <div class="flex items-center text-xs">
@@ -5937,10 +5959,11 @@
                                 class="space-y-3 min-w-0">
                                 <div>
                                     <span class="input-label text-[10px] mb-1">{{ t('Scale Style') }} <help-tip id="help-linear-axis-scale-style" :text="t('\'Bar\' draws a simple line, \'Ruler\' draws a ruler with ticks and labels.')"></help-tip></span>
-                                    <select v-model="form.scale_style" class="form-input text-xs py-1" :aria-label="t('Linear scale style')" aria-describedby="help-linear-axis-scale-style" :disabled="!semanticMutationAvailable">
-                                        <option value="bar">{{ t('Bar (Simple)') }}</option>
+                                    <select v-model="form.scale_style" class="form-input text-xs py-1" :aria-label="t('Linear scale style')" :aria-describedby="linearWrapOn ? 'help-linear-axis-scale-style linear-wrap-fixed-scale-style' : 'help-linear-axis-scale-style'" :disabled="!semanticMutationAvailable">
+                                        <option value="bar" :disabled="linearWrapOn">{{ t('Bar (Simple)') }}</option>
                                         <option value="ruler">{{ t('Ruler (Ticks)') }}</option>
                                     </select>
+                                    <p v-if="linearWrapOn" id="linear-wrap-fixed-scale-style" class="ui-hint">{{ t('{option} is unavailable while Wrap Rows is on.', { option: t('Bar (Simple)') }) }}</p>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
@@ -5967,14 +5990,15 @@
                                         ]">
                                         <input
                                             type="checkbox"
-                                            aria-describedby="help-linear-axis-ruler-on-axis"
+                                            :aria-describedby="linearWrapFixesRulerOnAxis ? 'help-linear-axis-ruler-on-axis linear-wrap-fixed-ruler-on-axis' : 'help-linear-axis-ruler-on-axis'"
                                             v-model="form.linear_ruler_on_axis"
                                             class="form-checkbox"
-                                            :disabled="!semanticMutationAvailable || (!canUseLinearRulerOnAxis)"
+                                            :disabled="!semanticMutationAvailable || (!canUseLinearRulerOnAxis) || linearWrapFixesRulerOnAxis"
                                             :class="canUseLinearRulerOnAxis ? '' : 'opacity-50'">
                                         <span>{{ t('Ruler on Axis') }}</span>
                                     </label>
                                     <help-tip id="help-linear-axis-ruler-on-axis" :text="t('Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler.')"></help-tip>
+                                    <p v-if="linearWrapFixesRulerOnAxis" id="linear-wrap-fixed-ruler-on-axis" class="ui-hint ml-2">{{ t('Fixed while Wrap Rows is on.') }}</p>
                                 </div>
                                 <div class="space-y-1">
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">

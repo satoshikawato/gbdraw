@@ -143,7 +143,7 @@
       {"domain":"config.form","path":"show_scale","value":true},
       {"domain":"config.form","path":"scale_style","value":"bar"},
       {"domain":"config.form","path":"linear_ruler_on_axis","value":false},
-      {"domain":"config.form","path":"linear_wrap_length"},
+      {"domain":"config.form","path":"linear_wrap_length","value":null},
       {"domain":"config.form","path":"show_labels_linear","value":"none"},
       {"domain":"config.form","path":"separate_strands","value":true},
       {"domain":"config.form","path":"align_center","value":false},

@@ -92,8 +92,8 @@ const roundDisplayNumber = (value, digits = 1) => {
   return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 };
 
-/** @param {unknown} value */
-const formatBp = (value) => {
+/** A length in bp as the Auto texts show it (`10 kbp`). @param {unknown} value */
+export const formatBp = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '';
   if (Math.abs(numeric) >= 1_000_000 && numeric % 1_000_000 === 0) {
@@ -178,6 +178,9 @@ const normalizeLengthParam = (value) => {
  * @typedef {object} DrawnLengthSources
  * @property {() => number[][]} circularDiagramLengths the records of each Circular diagram
  * @property {() => number[]} linearRecordLengths the records of the Linear diagram, in drawing order
+ * @property {() => number | null | undefined} linearWrappedAxisLength while Wrap Rows is on, the bases on the
+ *   longest drawn axis of the shown Result that drew this draft (Python's `drawnAxisLength`), null while it is not
+ *   known; undefined while no record is cut, so the axis is the longest record
  */
 /** @type {WeakMap<RecordLengthState, DrawnLengthSources>} */
 const drawnLengthSources = new WeakMap();
@@ -204,6 +207,17 @@ const drawnDiagramLengths = (state) => {
   return lengths.length ? [lengths] : [];
 };
 
+/**
+ * The lengths sizes and ticks follow: a wrapped Linear drawing's drawn axis (sliding windows keep the whole
+ * records, `drawnDiagramLengths`). Python owns the axis; [] while it is not known.
+ * @param {RecordLengthState} state
+ */
+const drawnAxisDiagramLengths = (state) => {
+  const axis = shownMode(state) === 'linear' ? drawnLengthSources.get(state)?.linearWrappedAxisLength() : undefined;
+  if (axis === undefined) return drawnDiagramLengths(state);
+  return axis === null ? [] : [[axis]];
+};
+
 /** @param {RecordLengthState} state @param {DrawingState} drawing */
 const activeCircularLengthParam = (state, drawing) => (
   sharedSizeClass('circular', circularDiagramLengths(state), drawing)
@@ -216,7 +230,7 @@ const activeCircularLengthParam = (state, drawing) => (
  * @param {DrawingState} drawing the drawing of the shown mode
  */
 const activeLengthParam = (state, drawing) => (
-  sharedSizeClass(shownMode(state), drawnDiagramLengths(state), drawing)
+  sharedSizeClass(shownMode(state), drawnAxisDiagramLengths(state), drawing)
 );
 
 /**
@@ -226,10 +240,10 @@ const activeLengthParam = (state, drawing) => (
  * @template T
  * @param {RecordLengthState} state
  * @param {(length: number) => T} valueForLength
+ * @param {number[][]} [diagrams] The lengths it follows: the whole records, or the drawn axis for ticks.
  * @returns {T | null}
  */
-const sharedLengthValue = (state, valueForLength) => {
-  const diagrams = drawnDiagramLengths(state);
+const sharedLengthValue = (state, valueForLength, diagrams = drawnDiagramLengths(state)) => {
   const lengths = shownMode(state) === 'circular' ? diagrams.flat() : diagrams.map((records) => Math.max(...records));
   const values = new Set(lengths.map(valueForLength));
   return values.size === 1 ? [...values][0] : null;
@@ -493,7 +507,8 @@ const linearLabelPlacementText = (drawing) => {
 const scaleIntervalText = (state) => {
   const interval = sharedLengthValue(
     state,
-    shownMode(state) === 'circular' ? autoCircularTickInterval : autoLinearTickInterval
+    shownMode(state) === 'circular' ? autoCircularTickInterval : autoLinearTickInterval,
+    drawnAxisDiagramLengths(state)
   );
   return interval ? withAuto(formatBp(interval)) : t('by record length (auto)');
 };
@@ -506,7 +521,10 @@ const linearLabelFontSizeText = (state, drawing) => formatShortLong(
   formatPx,
   sizeClassForRecordLengths(
     'linear',
-    linearLabelSizeLengths(linearRecordLengths(state), drawing.form.show_labels_linear),
+    drawnLengthSources.get(state)?.linearWrappedAxisLength() === undefined
+      ? linearLabelSizeLengths(linearRecordLengths(state), drawing.form.show_labels_linear)
+      // Wrapped: the labels follow the drawn axis (Python's `linear_label_font_size`).
+      : drawnAxisDiagramLengths(state).flat(),
     drawing
   )
 );
@@ -592,7 +610,9 @@ const autoTextByKey = (state, drawing, key, context = null) => {
  * @param {Partial<DrawnLengthSources>} [sources] the records the next Generate draws
  */
 export const createAutoValueDisplay = (state, sources = {}) => {
-  drawnLengthSources.set(state, { circularDiagramLengths: () => [], linearRecordLengths: () => [], ...sources });
+  drawnLengthSources.set(state, {
+    circularDiagramLengths: () => [], linearRecordLengths: () => [], linearWrappedAxisLength: () => undefined, ...sources
+  });
   /**
    * @param {string} key
    * @param {AutoValueContext | null} [context]

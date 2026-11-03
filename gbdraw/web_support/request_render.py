@@ -424,20 +424,9 @@ def _render_canonical_web_request(
             with_source_names(item.input_summary, source_names) if source_names else item.input_summary,
             result_index=result_index,
             result_name=results[result_index]["name"],
+            linear_wrap=item.linear_metadata.wrap if item.linear_metadata is not None else None,
         )
         for result_index, item in enumerate(items)
-    ]
-    metadata["linearWrap"] = [
-        {
-            "resultIndex": result_index,
-            "resultName": results[result_index]["name"],
-            "rowLength": item.linear_metadata.wrap.row_length,
-            "rowCount": item.linear_metadata.wrap.row_count,
-            "requested": item.linear_metadata.wrap.requested,
-            "recordRows": list(item.linear_metadata.wrap.record_rows),
-        }
-        for result_index, item in enumerate(items)
-        if item.linear_metadata is not None and item.linear_metadata.wrap is not None
     ]
     # Crossing label leaders drawn anyway: the counts, and a token that names
     # the figure whose rows the dialog computes later (OD-F14).
