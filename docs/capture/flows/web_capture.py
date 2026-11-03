@@ -413,14 +413,18 @@ def generate_and_inspect(
     return report
 
 
-def fit_complete_linear_preview(
+def fit_complete_preview(
     page: Page,
     target_zoom: str = "40%",
-) -> None:
-    """Use the public preview controls to center a whole Linear diagram in view.
+    *,
+    center: bool = True,
+) -> bool:
+    """Use the public preview controls to show a whole diagram in Result Preview.
 
-    `target_zoom` is the documented zoom; a diagram wider than the preview at
-    that zoom is shown with the preview's own Fit instead.
+    `target_zoom` is the documented zoom; a diagram wider or taller than the
+    preview at that zoom is shown with the preview's own Fit instead. Returns
+    True when Fit was used. `center` drags a Linear diagram to the preview's
+    horizontal center; Circular callers pass False and keep their own pan.
     """
 
     reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
@@ -434,7 +438,7 @@ def fit_complete_linear_preview(
         zoom_out.click()
     else:
         raise AssertionError(
-            f"Could not reach the documented Linear preview zoom: {target_zoom}"
+            f"Could not reach the documented preview zoom: {target_zoom}"
         )
 
     page.wait_for_timeout(250)
@@ -456,71 +460,81 @@ def fit_complete_linear_preview(
                 canvasLeft: canvasRect.left,
                 canvasRight: canvasRect.right,
                 canvasWidth: canvasRect.width,
+                canvasHeight: canvasRect.height,
                 canvasCenterX: (canvasRect.left + canvasRect.right) / 2,
                 wrapperLeft: wrapperRect.left,
                 wrapperRight: wrapperRect.right,
                 wrapperWidth: wrapperRect.width,
+                wrapperHeight: wrapperRect.height,
                 wrapperCenterX: (wrapperRect.left + wrapperRect.right) / 2,
               };
             }
             """
         )
 
-    def too_wide(geometry: dict[str, float] | None) -> bool:
+    def too_big(geometry: dict[str, float] | None) -> bool:
         if geometry is None:
-            raise AssertionError("Could not resolve the rendered Linear preview")
-        return geometry["wrapperWidth"] > geometry["canvasWidth"] + 4
+            raise AssertionError("Could not resolve the rendered preview")
+        return (
+            geometry["wrapperWidth"] > geometry["canvasWidth"] + 4
+            or geometry["wrapperHeight"] > geometry["canvasHeight"] + 4
+        )
 
     geometry = preview_geometry()
-    if too_wide(geometry):
-        # Wider than the preview at the documented zoom: the app's Fit takes the
-        # largest zoom that shows the whole diagram, measured from the page.
+    fitted = too_big(geometry)
+    if fitted:
+        # Larger than the preview at the documented zoom: the app's Fit takes
+        # the largest zoom that shows the whole diagram, measured from the page.
         page.get_by_role("button", name="Fit to preview", exact=True).click()
         page.wait_for_timeout(250)
         geometry = preview_geometry()
-        if too_wide(geometry):
+        if too_big(geometry):
             raise AssertionError(
-                "The documented Linear preview zoom does not fit the complete diagram: "
+                "The documented preview zoom does not fit the complete diagram: "
                 f"{geometry!r}"
             )
 
-    delta_x = geometry["canvasCenterX"] - geometry["wrapperCenterX"]
-    if abs(delta_x) > 2:
-        box = canvas.bounding_box()
-        if box is None:
-            raise AssertionError("Could not resolve the Result Preview bounds for panning")
-        usable_width = box["width"] - 32
-        if abs(delta_x) > usable_width:
-            raise AssertionError(
-                "The Linear preview requires an unsafe centering drag: "
-                f"{geometry!r}"
-            )
-        start_x = box["x"] + (box["width"] - 16 if delta_x < 0 else 16)
-        y = box["y"] + (box["height"] * 0.65)
-        page.mouse.move(start_x, y)
-        page.mouse.down()
-        page.mouse.move(start_x + delta_x, y, steps=12)
-        page.mouse.up()
-        page.wait_for_timeout(250)
+    if center:
+        delta_x = geometry["canvasCenterX"] - geometry["wrapperCenterX"]
+        if abs(delta_x) > 2:
+            box = canvas.bounding_box()
+            if box is None:
+                raise AssertionError(
+                    "Could not resolve the Result Preview bounds for panning"
+                )
+            usable_width = box["width"] - 32
+            if abs(delta_x) > usable_width:
+                raise AssertionError(
+                    "The preview requires an unsafe centering drag: "
+                    f"{geometry!r}"
+                )
+            start_x = box["x"] + (box["width"] - 16 if delta_x < 0 else 16)
+            y = box["y"] + (box["height"] * 0.65)
+            page.mouse.move(start_x, y)
+            page.mouse.down()
+            page.mouse.move(start_x + delta_x, y, steps=12)
+            page.mouse.up()
+            page.wait_for_timeout(250)
 
-    centered = preview_geometry()
-    if centered is None:
-        raise AssertionError("The rendered Linear preview disappeared while centering")
-    center_error = abs(centered["wrapperCenterX"] - centered["canvasCenterX"])
-    edge_tolerance = max(
-        2,
-        ((centered["wrapperWidth"] - centered["canvasWidth"]) / 2) + 2,
-    )
-    if (
-        center_error > 2
-        or centered["wrapperLeft"] < centered["canvasLeft"] - edge_tolerance
-        or centered["wrapperRight"] > centered["canvasRight"] + edge_tolerance
-    ):
-        raise AssertionError(
-            "The complete Linear diagram is not centered inside Result Preview: "
-            f"{centered!r}"
+        centered = preview_geometry()
+        if centered is None:
+            raise AssertionError("The rendered preview disappeared while centering")
+        center_error = abs(centered["wrapperCenterX"] - centered["canvasCenterX"])
+        edge_tolerance = max(
+            2,
+            ((centered["wrapperWidth"] - centered["canvasWidth"]) / 2) + 2,
         )
+        if (
+            center_error > 2
+            or centered["wrapperLeft"] < centered["canvasLeft"] - edge_tolerance
+            or centered["wrapperRight"] > centered["canvasRight"] + edge_tolerance
+        ):
+            raise AssertionError(
+                "The complete diagram is not centered inside Result Preview: "
+                f"{centered!r}"
+            )
     page.evaluate("() => window.getSelection()?.removeAllRanges()")
+    return fitted
 
 
 def _visible_preview_frame(page: Page) -> dict[str, float]:

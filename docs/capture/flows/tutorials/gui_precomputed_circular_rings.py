@@ -224,6 +224,9 @@ def capture_gui_precomputed_circular_rings(
         track_preset.select_option("middle")
         expect(track_preset).to_have_value("middle")
         page.get_by_label("Separate Strands", exact=True).uncheck()
+        page.get_by_role(
+            "group", name="GenBank/DDBJ File selection", exact=True
+        ).scroll_into_view_if_needed()
         screenshot_bytes[GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES[0]] = (
             capture_screenshot(
                 page,

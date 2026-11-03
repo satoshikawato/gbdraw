@@ -41,8 +41,9 @@ loaded-session state.
 
 ### Step 1: Load the record
 
-In the drawing bar, keep the **Circular** drawing shown. Select **GenBank**, choose `HmmtDNA.gbk`, and set **Output
-Prefix** to `interactive_human_mitochondrion`.
+In the drawing bar, keep the **Circular** drawing shown. Select **GenBank**,
+choose `HmmtDNA.gbk`, and set **Output Prefix** to
+`interactive_human_mitochondrion`.
 
 ![Human mitochondrial GenBank record ready for the interactive project](../images/t-gui-09/01-input-ready.png)
 

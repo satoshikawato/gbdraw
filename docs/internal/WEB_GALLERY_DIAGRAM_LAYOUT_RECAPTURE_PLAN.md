@@ -117,7 +117,7 @@ TSV. Final state: Linear one-record layout; `No comparison`; prefix
 | Output | Class / decision | Selector or action state | Caption intent | Alt text |
 | --- | --- | --- | --- | --- |
 | `docs/images/t-gui-02/01-input-ready.png` | `D-OP`; Keep expected | Select `Linear`, `GenBank`, and `No comparison`; upload with `GenBank File`; selection contains `NC_001416.gb`. | Confirm the Lambda input and Linear mode. | Linear GenBank input showing NC_001416.gb selected |
-| `docs/images/t-gui-02/02-first-diagram.png` | `D-RESULT`; Recapture | Generate the first diagram and call `fit_complete_linear_preview`. | Show the first Linear result in Step 2. | First linear Lambda genome diagram |
+| `docs/images/t-gui-02/02-first-diagram.png` | `D-RESULT`; Recapture | Generate the first diagram and call `fit_complete_preview`. | Show the first Linear result in Step 2. | First linear Lambda genome diagram |
 | `docs/images/t-gui-02/03-layout-settings.png` | `D-OP`; Recapture | Set Middle, separate strands, all labels, priority TSV, left legend, `Show Coordinate Scale (Linear)=on`, and `Linear scale style=ruler`; keep `Axis & Scale` open and scroll the scale selector into view. | Record the label and ruler settings. | Linear layout controls configured for labels and a ruler |
 | `docs/images/t-gui-02/04-finished-diagram.png` | `D-RESULT`; Recapture | Regenerate, assert the labeled/ruler semantics, and fit the complete Linear preview; SVG download must be `lambda_linear.svg`. | Verify the labeled final map before export. | Finished linear Lambda genome diagram with labels and ruler |
 

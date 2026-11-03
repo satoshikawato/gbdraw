@@ -472,10 +472,12 @@ class _FakePreviewCanvas:
             "canvasLeft": 357.0,
             "canvasRight": 357.0 + page.canvas_width,
             "canvasWidth": page.canvas_width,
+            "canvasHeight": 600.0,
             "canvasCenterX": 357.0 + page.canvas_width / 2,
             "wrapperLeft": center - width / 2,
             "wrapperRight": center + width / 2,
             "wrapperWidth": width,
+            "wrapperHeight": 300.0,
             "wrapperCenterX": center,
         }
 
@@ -506,25 +508,25 @@ class _FakePreviewPage:
 
 def test_shared_linear_preview_fit_uses_fit_when_the_documented_zoom_is_too_wide() -> None:
     from docs.capture import run_all  # noqa: F401  (puts the capture flows on the import path)
-    from flows.web_capture import fit_complete_linear_preview
+    from flows.web_capture import fit_complete_preview
 
     # Five short-class BGC records: 1075 px wide at 40% in a 1066 px preview.
     wide = _FakePreviewPage(diagram_width=2687.5)
-    fit_complete_linear_preview(wide, target_zoom="40%")
+    fit_complete_preview(wide, target_zoom="40%")
     assert wide.clicks == ["Zoom out"] * 6 + ["Fit to preview"]
     assert wide.zoom == 0.39
 
     # A diagram that fits at the documented zoom keeps that zoom.
     narrow = _FakePreviewPage(diagram_width=2000.0)
     narrow.centered = True
-    fit_complete_linear_preview(narrow, target_zoom="40%")
+    fit_complete_preview(narrow, target_zoom="40%")
     assert narrow.clicks == ["Zoom out"] * 6
     assert narrow.zoom == 0.4
 
     # A diagram that Fit cannot show whole still stops the capture.
     endless = _FakePreviewPage(diagram_width=2687.5, min_zoom=0.4)
     with pytest.raises(AssertionError, match="does not fit the complete diagram"):
-        fit_complete_linear_preview(endless, target_zoom="40%")
+        fit_complete_preview(endless, target_zoom="40%")
 
 
 def test_first_linear_flow_uses_accessible_real_actions_without_state_shortcuts() -> None:

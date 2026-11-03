@@ -58,7 +58,8 @@ files selected.
 
 ### Step 1: Load the human reference
 
-In the drawing bar, keep the **Circular** drawing shown. Select **GenBank**, choose `HmmtDNA.gbk`, and set:
+In the drawing bar, keep the **Circular** drawing shown. Select **GenBank**,
+choose `HmmtDNA.gbk`, and set:
 
 | Control | Value |
 | --- | --- |

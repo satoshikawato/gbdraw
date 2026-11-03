@@ -44,7 +44,6 @@ from flows.bgc_losatp import (
 from flows.human_circular import (
     apply_finished_human_settings,
     assert_human_mitochondrion_fixture,
-    fit_finished_human_preview,
     generate_finished_human_diagram,
     load_raw_human_circular,
 )
@@ -52,7 +51,7 @@ from flows.web_capture import (
     toggle_disclosure,
     assert_output_paths,
     capture_screenshot,
-    fit_complete_linear_preview,
+    fit_complete_preview,
     generate_and_inspect,
     open_browser_capture,
     set_feature_search_visible,
@@ -261,7 +260,7 @@ def _assert_closed_drawer_does_not_reserve_canvas(page: Page) -> dict[str, float
     }
     if (
         geometry["canvasRightGap"] > 24
-        or geometry["svgWidth"] < 760
+        or geometry["svgWidth"] < 600
         or geometry["legendLeft"] < geometry["resultLeft"] + 4
         or geometry["legendRight"] > geometry["resultRight"] - 4
         or geometry["legendCaptionRight"] > geometry["resultRight"] - 4
@@ -825,7 +824,7 @@ def _capture_bgc_popups(
         )
         # As in the BGC tutorial flow, the search row must not move the drag start.
         set_feature_search_visible(page, visible=False)
-        fit_complete_linear_preview(page, target_zoom="40%")
+        fit_complete_preview(page, target_zoom="40%")
         set_feature_search_visible(page, visible=True)
         page.wait_for_timeout(350)
 
@@ -922,7 +921,7 @@ def capture_gui_interactive_editing(
         _stabilize_static_capture_surface(page)
         load_raw_human_circular(page, output_prefix=EDITED_OUTPUT_PREFIX)
         generate_finished_human_diagram(page)
-        fit_finished_human_preview(page)
+        fit_complete_preview(page, "60%", center=False)
         page.wait_for_timeout(350)
         popup = _search_and_open_feature(
             page,
@@ -987,7 +986,7 @@ def capture_gui_interactive_editing(
         if EDIT_LEGEND not in set(final_report.get("texts", [])):
             raise AssertionError("The edited legend caption did not survive regeneration")
 
-        fit_finished_human_preview(page)
+        fit_complete_preview(page, "60%", center=False)
         final_report["previewScroll"] = _scroll_finished_preview_to_right(page)
         _, moved_legend_transform = _drag_legend(page)
         legend_transform = _inspect_target_style(

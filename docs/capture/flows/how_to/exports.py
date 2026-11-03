@@ -23,12 +23,12 @@ from config import (
 )
 from flows.human_circular import (
     assert_human_mitochondrion_fixture,
-    fit_finished_human_preview,
     generate_finished_human_diagram,
     load_raw_human_circular,
     pan_finished_human_preview_left,
 )
 from flows.web_capture import (
+    fit_complete_preview,
     assert_output_paths,
     capture_screenshot,
     open_browser_capture,
@@ -394,8 +394,8 @@ def capture_gui_exports(
         png_report = _validate_png(png_path, svg_dimensions=svg_dimensions)
         pdf_report = _validate_pdf(pdf_path, svg_dimensions=svg_dimensions)
 
-        fit_finished_human_preview(page)
-        pan_finished_human_preview_left(page)
+        if not fit_complete_preview(page, "60%", center=False):
+            pan_finished_human_preview_left(page)
         set_feature_search_visible(page, visible=False)
         page.wait_for_timeout(250)
         screenshot_bytes["exported-result.png"] = capture_screenshot(

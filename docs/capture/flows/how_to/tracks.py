@@ -17,6 +17,7 @@ from playwright.sync_api import BrowserType, Page, expect
 from assertions.svg_semantics import inspect_first_circular_svg
 from config import ACTION_TIMEOUT_MS, VIEWPORT_HEIGHT, VIEWPORT_WIDTH
 from flows.web_capture import (
+    fit_complete_preview,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
@@ -522,19 +523,9 @@ def _fit_circular_preview(
     pan_left_ratio: float = 0.24,
     pan_up_ratio: float = 0.0,
 ) -> None:
-    reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
-    zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
-    if "100%" not in reset_zoom.inner_text():
-        reset_zoom.click()
-        expect(reset_zoom).to_contain_text("100%")
-    for _ in range(12):
-        if target_zoom in reset_zoom.inner_text():
-            break
-        zoom_out.click()
-    else:
-        raise AssertionError(f"Could not reach Circular preview zoom {target_zoom}")
+    fitted = fit_complete_preview(page, target_zoom, center=False)
 
-    if pan_left_ratio > 0.0:
+    if pan_left_ratio > 0.0 and not fitted:
         result_region = page.get_by_role("region", name="Result Preview", exact=True)
         box = result_region.bounding_box()
         if box is None:

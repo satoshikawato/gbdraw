@@ -41,8 +41,9 @@ files selected.
 
 ### Step 1: Load the record and depth table
 
-In the drawing bar, keep the **Circular** drawing shown. Select **GenBank**, then choose `AP027133.gb`. Set Output
-Prefix to `quantitative_genome_map` and enable **Separate Strands**.
+In the drawing bar, keep the **Circular** drawing shown. Select **GenBank**,
+then choose `AP027133.gb`. Set Output Prefix to `quantitative_genome_map` and
+enable **Separate Strands**.
 
 Open **Depth TSV tracks** and load
 `AP027133.DRR394922.depth-1kb.tsv`. Configure the series as follows:

@@ -43,10 +43,10 @@ files selected.
 
 ### Step 1: Load the NCBI Lambda genome
 
-In the drawing bar, choose the **Linear** tab to make the Linear drawing. It starts with **No
-comparison**. Under **Input Genomes**, keep **GenBank** selected. The **GenBank / DDBJ
-File** uploader is the first control in **File 1**; choose
-`NC_001416.gb`. Leave **Record options** closed.
+In the drawing bar, choose the **Linear** tab to make the Linear drawing. It
+starts with **No comparison**. Under **Input Genomes**, keep **GenBank**
+selected. The **GenBank / DDBJ File** uploader is the first control in **File
+1**; choose `NC_001416.gb`. Leave **Record options** closed.
 
 The uploader should show `NC_001416.gb` in green. Keep one input row only; this Tutorial uses the complete `NC_001416.1` record without cropping or splitting it.
 

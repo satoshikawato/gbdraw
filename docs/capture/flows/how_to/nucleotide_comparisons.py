@@ -49,7 +49,7 @@ from flows.web_capture import (
     capture_screenshot,
     show_drawing,
     center_preview_diagram,
-    fit_complete_linear_preview,
+    fit_complete_preview,
     generate_and_inspect,
     linear_pair,
     linear_raw_result,
@@ -384,7 +384,7 @@ def capture_gui_uploaded_comparison(
         selected_pairs.scroll_into_view_if_needed()
         blast_selection.scroll_into_view_if_needed()
         blast_selection.hover()
-        page.mouse.wheel(0, 240)
+        page.mouse.wheel(0, 226)
         screenshot_bytes["comparison-plan.png"] = capture_screenshot(
             page, output_paths["comparison-plan.png"]
         )
@@ -394,7 +394,7 @@ def capture_gui_uploaded_comparison(
             inspect_gui_losatn_svg,
             _assert_tlosatx_linear_svg,
         )
-        fit_complete_linear_preview(page)
+        fit_complete_preview(page)
         screenshot_bytes["comparison-result.png"] = capture_screenshot(
             page, output_paths["comparison-result.png"]
         )
@@ -525,7 +525,7 @@ def capture_gui_tlosatx(
             inspect_gui_losatn_svg,
             _assert_tlosatx_linear_svg,
         )
-        fit_complete_linear_preview(page)
+        fit_complete_preview(page)
         screenshot_bytes["tlosatx-result.png"] = capture_screenshot(
             page, output_paths["tlosatx-result.png"]
         )
@@ -815,15 +815,7 @@ def _assert_span_fasta(path: Path) -> dict[str, Any]:
 
 
 def _fit_circular_ring_preview(page: Page) -> None:
-    reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
-    zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
-    for _ in range(8):
-        if "50%" in reset_zoom.inner_text():
-            break
-        zoom_out.click()
-    else:
-        raise AssertionError("Could not reach the documented 50% Circular zoom")
-    page.wait_for_timeout(250)
+    fit_complete_preview(page, "50%", center=False)
 
     # The floating search palette would cover the ring legend and labels.
     set_feature_search_visible(page, visible=False)

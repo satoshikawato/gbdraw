@@ -36,7 +36,7 @@ from flows.web_capture import (
     assert_output_paths,
     capture_screenshot,
     show_drawing,
-    fit_complete_linear_preview,
+    fit_complete_preview,
     generate_and_inspect,
     generate_and_wait_for_result,
     open_browser_capture,
@@ -126,7 +126,7 @@ def capture_gui_inputs(
             lambda result: inspect_lambda_input_svg(result, page),
             assert_lambda_input_svg,
         )
-        fit_complete_linear_preview(page)
+        fit_complete_preview(page)
         genbank.scroll_into_view_if_needed()
         screenshot_bytes["genbank-input.png"] = capture_screenshot(
             page, output_paths["genbank-input.png"]
@@ -152,7 +152,7 @@ def capture_gui_inputs(
             assert_lambda_input_svg,
         )
         assert_matching_lambda_input_semantics(genbank_report, gff3_report)
-        fit_complete_linear_preview(page)
+        fit_complete_preview(page)
         gff3_fasta.scroll_into_view_if_needed()
         screenshot_bytes["gff3-fasta-input.png"] = capture_screenshot(
             page, output_paths["gff3-fasta-input.png"]

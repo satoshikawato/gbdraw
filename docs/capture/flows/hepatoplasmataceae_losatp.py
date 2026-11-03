@@ -29,7 +29,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     capture_screenshot,
     show_drawing,
-    fit_complete_linear_preview,
+    fit_complete_preview,
     generate_and_inspect,
     open_browser_capture,
     open_linear_comparison_disclosure,
@@ -1082,7 +1082,7 @@ def capture_hepatoplasmataceae_collinear(
                 timeout_ms=600_000,
             )
             set_feature_search_visible(page, visible=False)
-            fit_complete_linear_preview(page, target_zoom="40%")
+            fit_complete_preview(page, target_zoom="40%")
             _prepare_plain_definition_detail(page)
             page.mouse.move(1_400, 880)
             screenshots[screenshot_names["plain"]] = capture_screenshot(
@@ -1115,7 +1115,7 @@ def capture_hepatoplasmataceae_collinear(
         )
         _assert_fresh_search(page, evidence_scope=evidence_scope)
         set_feature_search_visible(page, visible=False)
-        fit_complete_linear_preview(page, target_zoom="40%")
+        fit_complete_preview(page, target_zoom="40%")
         screenshots[screenshot_names["result"]] = capture_screenshot(
             page, output_paths[screenshot_names["result"]]
         )

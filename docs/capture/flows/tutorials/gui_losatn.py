@@ -37,7 +37,7 @@ from flows.web_capture import (
     assert_output_paths,
     capture_screenshot,
     show_drawing,
-    fit_complete_linear_preview,
+    fit_complete_preview,
     generate_and_inspect,
     linear_raw_result,
     open_browser_capture,
@@ -144,7 +144,7 @@ def capture_gui_losatn(
         first_report = generate_and_inspect(
             page, inspect_gui_losatn_svg, assert_plain_gui_losatn_svg
         )
-        fit_complete_linear_preview(page)
+        fit_complete_preview(page)
         screenshot_bytes["02-first-diagram.png"] = capture_screenshot(
             page, output_paths["02-first-diagram.png"]
         )
@@ -222,7 +222,7 @@ def capture_gui_losatn(
         final_report = generate_and_inspect(
             page, inspect_gui_losatn_svg, assert_gui_losatn_svg
         )
-        fit_complete_linear_preview(page)
+        fit_complete_preview(page)
         screenshot_bytes["04-comparison-result.png"] = capture_screenshot(
             page, output_paths["04-comparison-result.png"]
         )

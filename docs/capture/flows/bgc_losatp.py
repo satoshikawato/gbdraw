@@ -29,7 +29,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     capture_screenshot,
     show_drawing,
-    fit_complete_linear_preview,
+    fit_complete_preview,
     generate_and_inspect,
     linear_raw_result,
     open_browser_capture,
@@ -725,7 +725,7 @@ def capture_bgc_losatp(
             generate_and_inspect(
                 page, inspect_gui_bgc_losatp_svg, assert_plain_gui_bgc_svg
             )
-            fit_complete_linear_preview(page, target_zoom="30%")
+            fit_complete_preview(page, target_zoom="30%")
             name = screenshot_names["plain"]
             screenshot_bytes[name] = capture_screenshot(
                 page, output_paths[name]
@@ -812,7 +812,7 @@ def capture_bgc_losatp(
             )
 
         set_feature_search_visible(page, visible=False)
-        fit_complete_linear_preview(page, target_zoom="40%")
+        fit_complete_preview(page, target_zoom="40%")
         name = screenshot_names["settings"]
         losat_mode_group = settings.get_by_role(
             "group", name="LOSAT Mode", exact=True
@@ -865,9 +865,9 @@ def capture_bgc_losatp(
                 raise AssertionError(
                     f"Expected alignment to {align_orthogroup_id}, found {aligned_state!r}"
                 )
-            fit_complete_linear_preview(page, target_zoom="40%")
+            fit_complete_preview(page, target_zoom="40%")
         else:
-            fit_complete_linear_preview(page, target_zoom="40%")
+            fit_complete_preview(page, target_zoom="40%")
         if scenario_id == "H-GUI-07":
             # Save Raw LOSAT TSV appears in the pair row once the result is cached.
             raw_result = linear_raw_result(page, 1, 2)

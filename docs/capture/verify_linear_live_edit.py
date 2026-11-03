@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "docs" / "capture"))
 from config import FIRST_LINEAR_LABEL_RULE_PATH, GENERATION_TIMEOUT_MS  # noqa: E402
 from flows.web_capture import (  # noqa: E402
     assert_fixture_identity,
-    fit_complete_linear_preview,
+    fit_complete_preview,
     generate_and_wait_for_result,
     open_browser_capture,
     set_feature_search_visible,
@@ -218,7 +218,7 @@ def main():
             # The scale edit is draft only; the committed request and Result are unchanged.
             assert edited["draft"]["adv"]["scale_font_size"] == 19
             same_artifact(live, edited)
-            fit_complete_linear_preview(page, target_zoom="40%")
+            fit_complete_preview(page, target_zoom="40%")
             set_feature_search_visible(page, visible=False)
             camera = checkpoint(page, "06b-camera", args.output)
             same_artifact(edited, camera)
