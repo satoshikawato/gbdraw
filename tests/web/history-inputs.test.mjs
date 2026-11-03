@@ -662,3 +662,24 @@ test('a radio step keeps its group\'s name and the radio\'s label, or the label 
     }
   }
 });
+
+// Wrap Rows (PD-OI-113): the checkbox's one change writes the five fields the switch decides (the layout
+// transition's `linearWrapFormPatch`), and the input adapter records it as one step, so one Undo restores all five.
+test('turning Wrap Rows on is one Undo step that restores every field it switched', async () => {
+  const { linearWrapFormPatch } = await import(pathToFileURL(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'linear-wrap-form.js')));
+  const h = await createBoundaryHarness();
+  try {
+    Object.assign(h.state, { linear_wrap_length: null, linear_track_layout: 'middle', scale_style: 'bar', normalize_length: true,
+      linear_ruler_on_axis: false });
+    const before = { ...h.state };
+    await h.dispatch('pointerdown', h.controls.checkbox);
+    await h.dispatch('click', h.controls.checkbox);
+    await h.dispatch('change', h.controls.checkbox, { atTarget: () => { Object.assign(h.state, linearWrapFormPatch(h.state, 'auto')); } });
+    await settleTasks();
+    assert.deepEqual(h.counts(), [1, 0]);
+    assert.deepEqual({ ...h.state }, { ...before, linear_wrap_length: 'auto', linear_track_layout: 'above', scale_style: 'ruler',
+      normalize_length: false, linear_ruler_on_axis: true });
+    await h.history.undo();
+    assert.deepEqual({ ...h.state }, before);
+  } finally { h.cleanup(); }
+});

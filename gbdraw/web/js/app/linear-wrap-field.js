@@ -29,6 +29,10 @@ import { computed, ref } from '../utils/reactivity.js';
 export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInputs, shownWrap, watch }) => {
   const form = () => state.activeDrawing().form;
   const linearWrapOn = computed(() => form().linear_wrap_length !== null);
+  // D-56: Normalize Record Lengths and Ruler on Axis are fixed only while they hold what rows need (off, on), as
+  // Track Layout and Scale Style disable only the conflicting option; a loaded other value stays editable toward it.
+  const linearWrapFixesNormalize = computed(() => linearWrapOn.value && !form().normalize_length);
+  const linearWrapFixesRulerOnAxis = computed(() => linearWrapOn.value && Boolean(form().linear_ruler_on_axis));
   /** @type {{ value: LinearWrapUnit }} */
   const linearWrapUnit = ref(/** @type {LinearWrapUnit} */ ('kbp'));
   // The value the field wrote last: a value from anywhere else (Load, Undo,
@@ -71,5 +75,8 @@ export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInput
     written = value;
     return changeLayoutSetting(event, 'linear_wrap_length', value);
   };
-  return { linearWrapOn, linearWrapUnit, linearWrapAmount, linearWrapAutoText, linearWrapBlocked, linearWrapBlockedText, changeLinearWrap };
+  return {
+    linearWrapOn, linearWrapFixesNormalize, linearWrapFixesRulerOnAxis, linearWrapUnit, linearWrapAmount, linearWrapAutoText,
+    linearWrapBlocked, linearWrapBlockedText, changeLinearWrap
+  };
 };

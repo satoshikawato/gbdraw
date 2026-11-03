@@ -720,8 +720,11 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when the rows a Result drew moved from the `linearWrap`
     # list into each input summary (`linearWrap: null` here): with that key
     # removed and the empty list put back, the reply has the earlier digest.
-    "similarity_groups": "0e5641a02728d6704d435b972aec5bf1f2e8b6dbdaf2dcee82295f37edc4b4e9",
-    "collinear": "5fb4f957663b861b37d6f27bd7c98e006e8d6ab05059e5cce3333cd21a1552ea",
+    # Updated again when each input summary took the drawn record lengths
+    # (`recordLengths`): with that key removed, the reply has the earlier
+    # digest.
+    "similarity_groups": "9ddc7be305d022694a583f68849efb85ef030f0bee0514f25a30dfcdbb928724",
+    "collinear": "e2fef83a80c9e9004c8028a09bd4c4591ae495f0f27f36ee3fe70355fc0ca15f",
 }
 
 

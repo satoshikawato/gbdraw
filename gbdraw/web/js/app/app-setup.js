@@ -225,7 +225,7 @@ import { classifyOptionalPositiveNumber } from '../utils/optional-positive-numbe
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearWrapField } from './linear-wrap-field.js';
-import { requestLinearWrapLength, shownLinearWrap } from '../services/linear-wrap-form.js';
+import { exportLinearWrap, requestLinearWrapLength, shownLinearWrap } from '../services/linear-wrap-form.js';
 import { draftFeatureSlot } from './feature-editor/placement-actions.js';
 import { effectiveLinearSlotPlacement } from '../services/linear-track-slot-model.js';
 import { createLinearRecordSelector, RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
@@ -2401,27 +2401,31 @@ export const createAppSetup = () => {
   ));
   // The records the next Linear Generate draws, by length: known once every
   // drawn record is read and none is cropped, else none.
-  /** @returns {number[]} */
-  const drawnLinearRecordLengths = () => {
-    const drawing = shownDrawingOfMode('linear');
-    if (!drawing) return [];
+  /** @param {DrawingState | null | undefined} drawing @returns {number[]} */
+  const linearRecordLengthsOf = (drawing) => {
+    if (!drawing || drawing.mode !== 'linear') return [];
     const lengths = drawing.drawnLinearSeqs.value.map((seq) => {
       if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;
       return Number(linearSeqRecord(drawing, seq)?.recordLength);
     });
     return lengths.length && lengths.every((length) => length > 0) ? lengths : [];
   };
+  const drawnLinearRecordLengths = () => linearRecordLengthsOf(state.activeDrawing());
   // Wrap Rows as the shown Result drew it (PD-OI-113), from Python's input
   // summary and the committed request of the drawing whose Result is shown:
   // the field's Auto text and the Auto hints of sizes and ticks read it.
-  const shownLinearWrapReading = computed(() => {
-    const drawing = state.activeDrawing();
+  /** @param {DrawingState} drawing The committed request's wrap length while this drawing's Result is shown. */
+  const shownLinearWrapRequest = (drawing) => {
     const request = drawing.mode === 'linear' && state.generatedDrawingId.value === drawing.id && results.value.length > 0
       ? getCommittedCanonicalRenderRequest() : null;
+    return request?.mode === 'linear' ? requestLinearWrapLength(request) : undefined;
+  };
+  const shownLinearWrapReading = computed(() => {
+    const drawing = state.activeDrawing();
     return shownLinearWrap({
       value: drawing.form.linear_wrap_length,
-      requested: request?.mode === 'linear' ? requestLinearWrapLength(request) : undefined,
-      summary: shownInputSummary.value === null ? undefined : shownInputSummary.value.linearWrap,
+      requested: shownLinearWrapRequest(drawing),
+      summary: shownInputSummary.value ?? undefined,
       recordLengths: drawnLinearRecordLengths()
     });
   });
@@ -6364,10 +6368,14 @@ export const createAppSetup = () => {
       // this page, so only a page with a loaded font embeds. SVG and
       // Interactive SVG follow Embed font in exported SVG; a PNG always draws
       // with the fonts, and a PDF always registers the faces its text uses.
-      // The size check of a PNG or PDF reads what the exported Result drew:
-      // a wrapped Result's rows decide the row length Python advises.
-      const summary = shownInputSummary.value;
-      const linearWrap = summary === null ? null : summary.linearWrap;
+      // The size check of a PNG or PDF reads the exported Result's wrap
+      // (D-55): Python decides from it whether a record is cut, and the row
+      // length it advises. A loaded Result has no input summary.
+      const linearWrap = exportLinearWrap({
+        requested: shownLinearWrapRequest(historySnapshots.displayedArtifactDrawing()),
+        summary: shownInputSummary.value ?? undefined,
+        recordLengths: linearRecordLengthsOf(historySnapshots.displayedArtifactDrawing())
+      });
       /** @type {import('../services/export.js').ExportPorts} */
       const exportPorts = {
         embedFonts: state.loadedFonts.value.length > 0

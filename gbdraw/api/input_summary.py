@@ -120,7 +120,6 @@ class LinearWrapPayload(TypedDict):
     # What was asked for: ``"auto"`` or a length in bp, never ``"none"`` (nothing is cut then).
     requested: LinearWrapLength
     recordRows: list[int]
-    recordLengths: list[int]
     # The bases on the longest drawn axis, which sizes and ticks follow (DrawnExtent.drawn_axis_length).
     drawnAxisLength: int
 
@@ -132,6 +131,9 @@ class InputSummaryPayload(TypedDict):
     resultName: str
     lines: list[str]
     warnings: list[InputWarningPayload]
+    # The bases of each drawn record, in drawing order: the Web tells from them whether the records it reads now
+    # are the ones this Result drew (and a wrapped Result's export check reads them).
+    recordLengths: list[int]
     # ``None`` when the Result cut no record (a Circular Result, or a Linear one drawn on one row each).
     linearWrap: LinearWrapPayload | None
 
@@ -396,7 +398,6 @@ def _linear_wrap_payload(wrap: LinearWrapSummary) -> LinearWrapPayload:
         "rowCount": wrap.row_count,
         "requested": wrap.requested,
         "recordRows": list(wrap.record_rows),
-        "recordLengths": list(wrap.record_lengths),
         "drawnAxisLength": DrawnExtent("linear", wrap.record_lengths, wrap.row_length).drawn_axis_length,
     }
 
@@ -416,6 +417,7 @@ def input_summary_payload(
         "resultName": result_name,
         "lines": list(input_summary_lines(summary)),
         "warnings": [{"code": item.code, "message": item.message} for item in input_warnings(summary)],
+        "recordLengths": [record.drawn_length for record in summary.records],
         "linearWrap": None if linear_wrap is None else _linear_wrap_payload(linear_wrap),
     }
 

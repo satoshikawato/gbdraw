@@ -166,6 +166,7 @@ def test_web_reply_carries_the_lines_and_warnings_the_cli_logs(tmp_path: Path) -
         "resultName": "summary.svg",
         "lines": list(input_summary_lines(summary)),
         "warnings": [{"code": "comparison_rows_filtered_out", "message": FILTERED_OUT_WARNING.removeprefix("WARNING: ")}],
+        "recordLengths": [record.drawn_length for record in summary.records],
         "linearWrap": None,
     }]
     assert [item.code for item in input_warnings(summary)] == ["comparison_rows_filtered_out"]

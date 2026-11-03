@@ -11,12 +11,14 @@ const summary = (overrides = {}) => ({
   resultName: 'b.svg',
   lines: ['Record EMPTY001.1 (empty.gb), record 1 of 1, 1,000 bp: drew 0 features.'],
   warnings: [{ code: 'no_drawable_features', message: 'Record EMPTY001.1 (empty.gb) has no feature to draw: it has no features.' }],
+  recordLengths: [1000],
   linearWrap: null,
   ...overrides
 });
 // gbdraw/api/input_summary.py `LinearWrapPayload` of phage lambda at Auto (tests/test_web_wrap_diagnostics.py).
+// Its record lengths ride the summary (`recordLengths: [48502]`), as they do for a Result that cut nothing.
 const wrap = (overrides = {}) => ({
-  rowLength: 10000, rowCount: 5, requested: 'auto', recordRows: [5], recordLengths: [48502], drawnAxisLength: 10000,
+  rowLength: 10000, rowCount: 5, requested: 'auto', recordRows: [5], drawnAxisLength: 10000,
   ...overrides
 });
 
@@ -48,13 +50,18 @@ test('a summary that does not name its Result, or has another shape, refuses the
     [summary({ warnings: [{ code: 'no_drawable_features', message: 'x', extra: 1 }] })],
     [{ ...summary(), extra: true }],
     [(({ linearWrap, ...rest }) => rest)(summary())],
+    [(({ recordLengths, ...rest }) => rest)(summary())],
+    [summary({ recordLengths: [] })],
+    [summary({ recordLengths: [0] })],
+    [summary({ recordLengths: [1000.5] })],
     [summary({ linearWrap: {} })],
     [summary({ linearWrap: wrap({ requested: 'none' }) })],
     [summary({ linearWrap: wrap({ requested: '10kb' }) })],
     [summary({ linearWrap: wrap({ rowLength: 0 }) })],
     [summary({ linearWrap: wrap({ rowCount: 2.5 }) })],
-    [summary({ linearWrap: wrap({ recordRows: [] , recordLengths: [] }) })],
-    [summary({ linearWrap: wrap({ recordLengths: [48502, 1] }) })],
+    [summary({ linearWrap: wrap({ recordRows: [] }) })],
+    [summary({ linearWrap: wrap({ recordRows: [5, 1] }) })],
+    [summary({ linearWrap: wrap({ recordLengths: [48502] }) })],
     [summary({ linearWrap: wrap({ drawnAxisLength: undefined }) })],
     [summary({ linearWrap: { ...wrap(), extra: 1 } })]
   ]) {

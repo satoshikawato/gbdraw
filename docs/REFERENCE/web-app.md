@@ -1160,7 +1160,8 @@ on, the length is empty, which means Auto; type a length and choose bp, kbp, or
 Mbp to set one. Python decides the rows: Auto takes the shortest of 10, 20 and
 50 kbp that keeps the longest record within five rows, else 50 kbp, and cuts
 nothing when every record is 10 kbp or shorter. After Generate the field shows
-what Auto drew, such as "10 kbp per row, 5 rows (auto)" or "One row (auto)". A
+what Auto drew, such as "10 kbp per row, 5 rows (auto)" or "One row (auto)",
+until the records change. A
 Session stores the length in bp; the unit is not saved, and a loaded length
 shows in the largest unit that holds it whole.
 
@@ -1168,7 +1169,9 @@ Turning Wrap Rows on sets, in the same edit, **Track Layout** to Above (Below
 stays), **Scale Style** to Ruler (Ticks), **Normalize Record Lengths** off, and
 **Ruler on Axis** on, also when no record is cut, so the figure is drawn with
 the values the form shows. While it is on, Features on axis and Bar (Simple)
-are unavailable and the other two are fixed, each with a note. Turning it off
+are unavailable, and Normalize Record Lengths and Ruler on Axis are fixed while
+they hold off and on, each with a note; a loaded Session that holds the other
+value can still change it. Turning it off
 writes only the length; one Undo returns all five settings to their values
 before it was turned on.
 

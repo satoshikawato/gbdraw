@@ -4,7 +4,7 @@
 // `canvas.linear.wrap_length` (services/session-request.js compiles it);
 // Python decides the row length and whether a record is cut
 // (gbdraw/layout/linear_wrap.py), and parses a length typed with a unit.
-/** @import { LinearWrapSummary } from './input-summary.js' */
+/** @import { InputSummary } from './input-summary.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 /** The request leaf of the wrap length (a config override path). */
@@ -118,7 +118,9 @@ const BLOCKERS = Object.freeze([
  */
 export const linearWrapBlockers = (inputs) => BLOCKERS.filter(([input]) => inputs[input]).map(([, blocker]) => blocker);
 
-// The length's unit is view state (D-27): the form and the Session hold bp.
+// The length's unit is view state (D-27): the form and the Session hold bp, and the Web never sends unit text,
+// so these factors are the field's own, not a copy of Python's length parser (D-57). Each is 10 to its exponent.
+const UNIT_EXPONENTS = Object.freeze({ bp: 0, kbp: 3, Mbp: 6 });
 export const LINEAR_WRAP_UNITS = Object.freeze({ bp: 1, kbp: 1_000, Mbp: 1_000_000 });
 /** @typedef {keyof typeof LINEAR_WRAP_UNITS} LinearWrapUnit */
 /** @type {readonly LinearWrapUnit[]} */
@@ -146,8 +148,10 @@ export const linearWrapUnitOf = (value, current) => (typeof value === 'number' &
 export const linearWrapAmountText = (value, unit) => (typeof value === 'number' ? String(value / LINEAR_WRAP_UNITS[unit]) : '');
 
 /**
- * The value a typed amount writes: empty is Auto (D-28); otherwise amount x unit in bp, a whole number when the
- * decimal amount names one (`1.1` kbp is 1100 bp). Any other number is sent as typed and Python refuses it.
+ * The value a typed amount writes: empty is Auto (D-28); otherwise amount x unit in bp. A decimal amount is
+ * shifted by the unit's exponent digit by digit, so it writes a whole number exactly when it names one (`1.1` kbp
+ * is 1100 bp, `1.0000000001` kbp is not whole). Any other number (not whole, a sign, an exponent) is sent as typed
+ * and Python's validator refuses it, as the CLI refuses `--wrap_length 1.0000000001kb` (D-57).
  * @param {string} text
  * @param {LinearWrapUnit} unit
  * @returns {'auto' | number}
@@ -156,15 +160,20 @@ export const linearWrapInputValue = (text, unit) => {
   const trimmed = String(text).trim();
   const amount = Number(trimmed);
   if (!trimmed || !Number.isFinite(amount)) return 'auto';
-  const product = amount * LINEAR_WRAP_UNITS[unit];
-  const whole = Math.round(product);
-  return Math.abs(product - whole) < 1e-6 ? whole : product;
+  const decimal = /^(\d*)(?:\.(\d*))?$/.exec(trimmed);
+  if (!decimal) return amount * LINEAR_WRAP_UNITS[unit];
+  const [, whole, fraction = ''] = decimal;
+  const shift = UNIT_EXPONENTS[unit];
+  const digits = `${whole}${fraction.padEnd(shift, '0')}`;
+  // The digits past the unit's exponent are the bp's fraction.
+  return Number(`${digits.slice(0, whole.length + shift) || '0'}.${digits.slice(whole.length + shift) || '0'}`);
 };
 
 /**
  * What the shown Result says about the drawing's Wrap Rows value. `off`: wrap is off. `rows`: the Result cut
  * records with this value over these records (its input summary's `linearWrap`). `one-row`: the Result asked for
- * this value and cut nothing, so the axis is the longest record. `unknown`: no Result drew this draft.
+ * this value over these records and cut nothing, so the axis is the longest record. `unknown`: no Result drew
+ * this draft.
  * @typedef {{ kind: 'off' } | { kind: 'unknown' } | { kind: 'one-row' }
  *   | { kind: 'rows', rowLength: number, rowCount: number, drawnAxisLength: number }} ShownLinearWrap
  */
@@ -173,8 +182,8 @@ export const linearWrapInputValue = (text, unit) => {
  * @property {unknown} value The drawing's `form.linear_wrap_length`.
  * @property {LinearWrapFormValue | undefined} requested The shown Result's committed request's wrap length (read
  *   with `wrapFormValue`); undefined when no Result of this drawing is shown.
- * @property {LinearWrapSummary | null | undefined} summary The shown Result's input summary's `linearWrap`;
- *   undefined when the render sent no summary for it (a loaded Result).
+ * @property {Pick<InputSummary, 'recordLengths' | 'linearWrap'> | undefined} summary The shown Result's input
+ *   summary; undefined when the render sent none for it (a loaded Result).
  * @property {readonly number[]} recordLengths The lengths of the records the next Generate draws, [] while unknown.
  */
 /**
@@ -185,10 +194,29 @@ export const linearWrapInputValue = (text, unit) => {
 export const shownLinearWrap = ({ value, requested, summary, recordLengths }) => {
   if (value === null) return { kind: 'off' };
   if (requested === undefined || requested !== value || summary === undefined) return { kind: 'unknown' };
-  if (summary === null) return { kind: 'one-row' };
+  // Rows and one row alike describe the next Generate only over the records the Result drew.
   const sameRecords = summary.recordLengths.length === recordLengths.length
     && summary.recordLengths.every((length, index) => length === recordLengths[index]);
-  return summary.requested === value && sameRecords
-    ? { kind: 'rows', rowLength: summary.rowLength, rowCount: summary.rowCount, drawnAxisLength: summary.drawnAxisLength }
-    : { kind: 'unknown' };
+  const wrap = summary.linearWrap;
+  if (!sameRecords || (wrap !== null && wrap.requested !== value)) return { kind: 'unknown' };
+  return wrap === null
+    ? { kind: 'one-row' }
+    : { kind: 'rows', rowLength: wrap.rowLength, rowCount: wrap.rowCount, drawnAxisLength: wrap.drawnAxisLength };
+};
+
+/**
+ * What the size check of a PNG or PDF export reads about the exported Result's wrap (D-55): the committed
+ * request's length, and the bases of the records the Result drew, from its input summary, or, for a Result
+ * without one (a loaded Session, a Gallery Session before Generate), of the records the drawing reads. Python
+ * decides from them whether a record is cut and what would fit (gbdraw/web_support/export_limit.py).
+ * @param {{ requested: LinearWrapFormValue | undefined, summary: Pick<InputSummary, 'recordLengths'> | undefined,
+ *   recordLengths: readonly number[] }} inputs `requested` as `shownLinearWrap` reads it; `recordLengths` those
+ *   the next Generate draws, [] while unknown.
+ * @returns {{ requested: 'auto' | number, recordLengths: number[] } | null} null with wrap off or the records unknown.
+ */
+export const exportLinearWrap = ({ requested, summary, recordLengths }) => {
+  const lengths = summary === undefined ? recordLengths : summary.recordLengths;
+  return requested === undefined || requested === null || lengths.length === 0
+    ? null
+    : { requested, recordLengths: [...lengths] };
 };

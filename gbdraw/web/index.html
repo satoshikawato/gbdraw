@@ -4335,11 +4335,11 @@
                                     </div>
                                     <div class="flex items-center text-xs">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="form.normalize_length" :aria-describedby="linearWrapOn ? 'help-linear-normalize-record-lengths linear-wrap-fixed-normalize' : 'help-linear-normalize-record-lengths'" class="form-checkbox" :disabled="!semanticMutationAvailable || linearWrapOn">
+                                            <input type="checkbox" v-model="form.normalize_length" :aria-describedby="linearWrapFixesNormalize ? 'help-linear-normalize-record-lengths linear-wrap-fixed-normalize' : 'help-linear-normalize-record-lengths'" class="form-checkbox" :disabled="!semanticMutationAvailable || linearWrapFixesNormalize">
                                             <span>{{ t('Normalize Record Lengths') }}</span>
                                         </label>
                                         <help-tip id="help-linear-normalize-record-lengths" :text="t('Draw all sequences at the same displayed length. Hides the length bar.')"></help-tip>
-                                        <p v-if="linearWrapOn" id="linear-wrap-fixed-normalize" class="ui-hint ml-2">{{ t('Fixed while Wrap Rows is on.') }}</p>
+                                        <p v-if="linearWrapFixesNormalize" id="linear-wrap-fixed-normalize" class="ui-hint ml-2">{{ t('Fixed while Wrap Rows is on.') }}</p>
                                     </div>
                                     <div class="text-xs space-y-1" data-linear-wrap-field>
                                         <div class="flex items-center">
@@ -5990,15 +5990,15 @@
                                         ]">
                                         <input
                                             type="checkbox"
-                                            :aria-describedby="linearWrapOn ? 'help-linear-axis-ruler-on-axis linear-wrap-fixed-ruler-on-axis' : 'help-linear-axis-ruler-on-axis'"
+                                            :aria-describedby="linearWrapFixesRulerOnAxis ? 'help-linear-axis-ruler-on-axis linear-wrap-fixed-ruler-on-axis' : 'help-linear-axis-ruler-on-axis'"
                                             v-model="form.linear_ruler_on_axis"
                                             class="form-checkbox"
-                                            :disabled="!semanticMutationAvailable || (!canUseLinearRulerOnAxis) || linearWrapOn"
+                                            :disabled="!semanticMutationAvailable || (!canUseLinearRulerOnAxis) || linearWrapFixesRulerOnAxis"
                                             :class="canUseLinearRulerOnAxis ? '' : 'opacity-50'">
                                         <span>{{ t('Ruler on Axis') }}</span>
                                     </label>
                                     <help-tip id="help-linear-axis-ruler-on-axis" :text="t('Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler.')"></help-tip>
-                                    <p v-if="linearWrapOn" id="linear-wrap-fixed-ruler-on-axis" class="ui-hint ml-2">{{ t('Fixed while Wrap Rows is on.') }}</p>
+                                    <p v-if="linearWrapFixesRulerOnAxis" id="linear-wrap-fixed-ruler-on-axis" class="ui-hint ml-2">{{ t('Fixed while Wrap Rows is on.') }}</p>
                                 </div>
                                 <div class="space-y-1">
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">

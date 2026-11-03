@@ -3,13 +3,14 @@
 // through the layout transition), its blockers, and the length field's amount and unit. The value's request
 // and Session channel is tested in session-request, mode-scoped-session and session50-load-resave.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 
 import { normalizeUserFacingError, reasonText } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { createDefaultAdv, createDefaultForm } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import {
-  LINEAR_WRAP_FORM_FIELDS, linearWrapAmountText, linearWrapBlockers, linearWrapFormPatch, linearWrapInputValue, linearWrapUnitOf,
-  requestLinearWrapLength, shownLinearWrap
+  LINEAR_WRAP_FORM_FIELDS, exportLinearWrap, linearWrapAmountText, linearWrapBlockers, linearWrapFormPatch, linearWrapInputValue,
+  linearWrapUnitOf, requestLinearWrapLength, shownLinearWrap
 } from '../../gbdraw/web/js/services/linear-wrap-form.js';
 import {
   createFeaturePlacementActions, draftFeatureSlot, draftPlacementTargets
@@ -171,6 +172,13 @@ test('the length field writes bp from an amount and a unit, and shows a value fr
   assert.equal(linearWrapInputValue('1.1', 'kbp'), 1100);
   assert.equal(linearWrapInputValue('0.5', 'Mbp'), 500000);
   assert.equal(linearWrapInputValue('1.5', 'bp'), 1.5, 'Python refuses a length that is no whole bp');
+  // The decimal amount is shifted by the unit exactly (D-57), not rounded: a non-whole bp is sent as typed.
+  assert.equal(linearWrapInputValue('1.0000000001', 'kbp'), 1000.0000001, 'the CLI refuses --wrap_length 1.0000000001kb too');
+  assert.equal(linearWrapInputValue('0.0000015', 'Mbp'), 1.5);
+  assert.equal(linearWrapInputValue('1.10', 'kbp'), 1100);
+  assert.equal(linearWrapInputValue('.5', 'kbp'), 500);
+  assert.equal(linearWrapInputValue('20.', 'kbp'), 20000);
+  assert.equal(linearWrapInputValue('0.000001', 'Mbp'), 1);
   assert.equal(linearWrapUnitOf(20000, 'bp'), 'kbp');
   assert.equal(linearWrapUnitOf(3_000_000, 'bp'), 'Mbp');
   assert.equal(linearWrapUnitOf(1500, 'Mbp'), 'bp');
@@ -207,14 +215,22 @@ test('the length field writes bp from an amount and a unit, and shows a value fr
 
 // Case 6 (summary part): what the shown Result drew with the drawing's value comes from Python's input summary
 // and the committed request; the Web copies neither the Auto rule nor the drawn axis.
-const SUMMARY = Object.freeze({ rowLength: 10000, rowCount: 5, requested: 'auto', recordRows: [5], recordLengths: [48502],
-  drawnAxisLength: 10000 });
+const SUMMARY = Object.freeze({ recordLengths: [48502],
+  linearWrap: { rowLength: 10000, rowCount: 5, requested: 'auto', recordRows: [5], drawnAxisLength: 10000 } });
+const ONE_ROW = Object.freeze({ recordLengths: [8000], linearWrap: null });
 
 test('the shown Result names its rows only when it drew this value over these records (case 6)', () => {
   const read = (inputs) => shownLinearWrap({ value: 'auto', requested: 'auto', summary: SUMMARY, recordLengths: [48502], ...inputs });
   assert.deepEqual(read({}), { kind: 'rows', rowLength: 10000, rowCount: 5, drawnAxisLength: 10000 });
   assert.deepEqual(read({ value: null }), { kind: 'off' });
-  assert.deepEqual(read({ summary: null }), { kind: 'one-row' }, 'Auto with nothing cut');
+  // One row: the Result cut nothing over these records. A record added since (no Generate) is unknown: the next
+  // Generate may cut it, so neither the text nor the Auto hints claim one row (review 2 F2).
+  assert.deepEqual(read({ summary: ONE_ROW, recordLengths: [8000] }), { kind: 'one-row' }, 'Auto with nothing cut');
+  assert.deepEqual(read({ summary: ONE_ROW, recordLengths: [8000, 5_000_000] }), { kind: 'unknown' }, 'a record added since');
+  assert.deepEqual(read({ summary: ONE_ROW, recordLengths: [5_000_000] }), { kind: 'unknown' }, 'a record replaced since');
+  assert.deepEqual(read({ summary: ONE_ROW, recordLengths: [] }), { kind: 'unknown' }, 'records not known');
+  assert.deepEqual(read({ value: 20000, requested: 20000, summary: ONE_ROW, recordLengths: [8000, 30000] }), { kind: 'unknown' },
+    'a typed length over the old longest record');
   for (const changed of [{ requested: undefined }, { requested: 20000 }, { summary: undefined }, { recordLengths: [48502, 1000] },
     { recordLengths: [] }, { value: 20000, requested: 20000 }]) {
     assert.deepEqual(read(changed), { kind: 'unknown' }, JSON.stringify(changed));
@@ -299,4 +315,72 @@ test('a PNG or PDF over its limit is refused by the Worker check before anything
   } finally {
     dom.restore();
   }
+});
+
+// Review 2 F3 (D-56): while Wrap Rows is on, Normalize Record Lengths and Ruler on Axis are fixed only while they
+// hold the value rows need, as Track Layout and Scale Style disable only the conflicting option. A loaded Session
+// that holds the other value keeps the control editable toward it, so WRAP_NORMALIZE_LENGTH's first remedy works.
+test('Normalize Record Lengths and Ruler on Axis are fixed only while they hold what rows need', () => {
+  const drawing = linearDrawing();
+  const field = createLinearWrapField({ state: withDrawings(drawing), watch: () => {}, changeLayoutSetting: () => {},
+    shownWrap: () => ({ kind: 'unknown' }),
+    blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, featureAlignment: false, featureTrackOnAxis: false }) });
+  const fixed = () => [field.linearWrapFixesNormalize.value, field.linearWrapFixesRulerOnAxis.value];
+  drawing.form.linear_wrap_length = null;
+  drawing.form.normalize_length = false;
+  drawing.form.linear_ruler_on_axis = true;
+  assert.deepEqual(fixed(), [false, false], 'wrap off: both free');
+  // Right after turning on, both hold what rows need (the switch wrote them).
+  Object.assign(drawing.form, linearWrapFormPatch(drawing.form, 'auto'));
+  assert.deepEqual(fixed(), [true, true]);
+  // A loaded `--normalize_length --wrap_length 50kb` Session: Normalize is on, so it stays editable.
+  drawing.form.normalize_length = true;
+  drawing.form.linear_ruler_on_axis = false;
+  assert.deepEqual(fixed(), [false, false]);
+});
+
+// Review 2 F1 (D-55): the size check of an export reads the Result's committed wrap length and its records'
+// lengths, and Python decides from them whether a record is cut (gbdraw/web_support/export_limit.py). A loaded
+// Result has no input summary: the records the Web knows stand in, and a PDF the CLI refuses is refused.
+const pythonExportCheck = (requests) => JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
+import json, sys
+from gbdraw.config.models.canvas import linear_wrap_length_from_config
+from gbdraw.exceptions import GbdrawError
+from gbdraw.web_support.export_limit import check_web_export_limit_json
+out = []
+for request in json.load(sys.stdin):
+    try:
+        if "wrapLength" in request:
+            out.append(linear_wrap_length_from_config(request["wrapLength"]))
+        else:
+            out.append(json.loads(check_web_export_limit_json(json.dumps(request))))
+    except GbdrawError as error:
+        out.append(error.diagnostic)
+print(json.dumps(out))
+`], { input: JSON.stringify(requests), encoding: 'utf8' }));
+
+test('a PDF export of a wrapped Result without an input summary is refused when a record is cut, as on the CLI', () => {
+  // What the export sends: the committed request's length with the summary's records, or, without a summary,
+  // the records the drawing reads; nothing while either is unknown or wrap is off.
+  assert.deepEqual(exportLinearWrap({ requested: 10000, summary: undefined, recordLengths: [5_000_000] }),
+    { requested: 10000, recordLengths: [5_000_000] });
+  assert.deepEqual(exportLinearWrap({ requested: 'auto', summary: SUMMARY, recordLengths: [] }),
+    { requested: 'auto', recordLengths: [48502] }, 'a Result drawn here: the records Python drew');
+  assert.equal(exportLinearWrap({ requested: null, summary: undefined, recordLengths: [5_000_000] }), null, 'wrap off');
+  assert.equal(exportLinearWrap({ requested: undefined, summary: undefined, recordLengths: [5_000_000] }), null, 'no Linear request');
+  assert.equal(exportLinearWrap({ requested: 'auto', summary: undefined, recordLengths: [] }), null, 'records not known');
+
+  const pdf = (linearWrap) => ({ format: 'pdf', width: 1500, height: 34_000, dpi: null, linearWrap });
+  const [cut, uncut, plain, fraction] = pythonExportCheck([
+    pdf(exportLinearWrap({ requested: 10000, summary: undefined, recordLengths: [5_000_000] })),
+    pdf(exportLinearWrap({ requested: 'auto', summary: undefined, recordLengths: [8000] })),
+    pdf(exportLinearWrap({ requested: null, summary: undefined, recordLengths: [5_000_000] })),
+    { wrapLength: linearWrapInputValue('1.0000000001', 'kbp') }
+  ]);
+  assert.equal(cut.code, 'EXPORT_LIMIT');
+  assert.equal(cut.reason, 'PDF_SIZE');
+  assert.deepEqual(uncut, { ok: true }, 'nothing is cut: an unwrapped PDF stays as it was');
+  assert.deepEqual(plain, { ok: true });
+  // D-57: a typed amount that is no whole bp reaches Python as typed and is refused with its diagnostic.
+  assert.deepEqual(fraction, { code: 'INPUT_INVALID', configPath: 'canvas.linear.wrap_length' });
 });

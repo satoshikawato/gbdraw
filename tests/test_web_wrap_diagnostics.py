@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from gbdraw.api.input_summary import _linear_wrap_payload
 from gbdraw.api.options import LinearDiagramOptions
 from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordInput, RenderOutputRequest
 from gbdraw.config.models import GbdrawConfig
@@ -113,13 +112,15 @@ def web_helpers() -> dict:
 
 def _web_export_check(helpers: dict, fmt: str, size: tuple[float, float], wrap: LinearWrapSummary | None,
                       dpi: float | None) -> dict:
+    # What the Web sends (D-55): the committed request's length and the Result's record lengths.
     request = {"format": fmt, "width": size[0], "height": size[1], "dpi": dpi,
-               "linearWrap": None if wrap is None else _linear_wrap_payload(wrap)}
+               "linearWrap": None if wrap is None
+               else {"requested": wrap.requested, "recordLengths": list(wrap.record_lengths)}}
     return json.loads(helpers["call_web_json_helper"]("check_web_export_limit_json", json.dumps(request)))
 
 
-def test_the_web_export_check_reads_the_input_summary_and_refuses_as_the_cli_does(web_helpers: dict) -> None:
-    # What the Result's input summary sent (`linearWrap`) decides the advice; the PNG scales by its DPI.
+def test_the_web_export_check_reads_the_wrap_and_refuses_as_the_cli_does(web_helpers: dict) -> None:
+    # The Result's wrap length and records decide the rows and the advice; the PNG scales by its DPI.
     png = _web_export_check(web_helpers, "png", SORANGIUM_SIZE, SORANGIUM, 300)["error"]
     assert (png["code"], png["operation"]) == ("EXPORT_LIMIT", "checkExportLimit")
     assert png["context"] == {"reason": "PNG_SIZE", "limit": 32_767, "width": 6_250, "height": 143_647,
@@ -127,8 +128,10 @@ def test_the_web_export_check_reads_the_input_summary_and_refuses_as_the_cli_doe
     pdf = _web_export_check(web_helpers, "pdf", SORANGIUM_SIZE, SORANGIUM, None)["error"]
     assert pdf["context"] == {"reason": "PDF_SIZE", "limit": 14_400, "width": 1_500, "height": 34_475,
                               "rowLength": 200_000}
-    # An unwrapped PDF stays as it was; a PNG that fits at its DPI passes.
+    # An unwrapped PDF stays as it was, also when a wrap length cut no record; a PNG that fits at its DPI passes.
     assert _web_export_check(web_helpers, "pdf", SORANGIUM_SIZE, None, None) == {"ok": True}
+    uncut = LinearWrapSummary(20_000_000, 20_000_000, (13_033_779,))
+    assert _web_export_check(web_helpers, "pdf", SORANGIUM_SIZE, uncut, None) == {"ok": True}
     assert _web_export_check(web_helpers, "png", SORANGIUM_SIZE, SORANGIUM, 68) == {"ok": True}
     # A PNG names its DPI; an unknown format is not checked as another.
     assert "error" in _web_export_check(web_helpers, "png", SORANGIUM_SIZE, None, None)
@@ -158,8 +161,10 @@ def test_each_input_summary_names_the_rows_its_result_drew(tmp_path: Path) -> No
         "rowCount": 5,
         "requested": "auto",
         "recordRows": [5],
-        "recordLengths": [48_502],
         "drawnAxisLength": 10_000,
     }
+    assert wrapped["recordLengths"] == [48_502]
     [plain] = _summaries(tmp_path, **{WRAP: 100_000})
     assert plain["linearWrap"] is None
+    # Nothing cut: the record lengths still name what the Result drew (review 2 F2).
+    assert plain["recordLengths"] == [48_502]
