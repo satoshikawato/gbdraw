@@ -600,3 +600,65 @@ for (const pointer of [false, true]) {
     } finally { h.cleanup(); }
   });
 }
+
+// PD-OI-112: a control's step keeps the control's name and the value it set,
+// read as the step ends, for the History list; a step an action names
+// otherwise keeps none.
+test('a select step keeps the select\'s name and the option it set', async () => {
+  const h = await createSelectHarness({
+    getAttribute: (name) => (name === 'aria-label' ? 'Legend position' : null),
+    selectedOptions: [{ innerText: 'Left' }]
+  });
+  try {
+    h.dispatch('pointerdown');
+    await h.settle();
+    h.change('left');
+    h.dispatch('change');
+    await h.settle();
+    assert.deepEqual(h.history.stackEntries('undo').map((entry) => [entry.label, entry.detail]),
+      [['Change setting', { name: 'Legend position', value: 'Left' }]]);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('a step an action renames keeps no detail of the control that opened it', async () => {
+  const h = await createSelectHarness();
+  try {
+    const step = await h.history.begin('Change setting', { source: 'input-adapter', owner: 'select', detail: () => ({ name: 'Palette', value: 'arctic' }) });
+    let release = () => {};
+    const first = h.history.runUndoable('Load label edits', () => new Promise((resolve) => { release = resolve; }));
+    await h.settle();
+    await h.history.runUndoable('Change record topology', () => { h.change('none'); });
+    release();
+    await first;
+    await h.history.commit(step);
+    assert.deepEqual(h.history.stackEntries('undo').map((entry) => [entry.label, entry.detail]),
+      [['Change record topology', undefined]]);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('a radio step keeps its group\'s name and the radio\'s label, or the label alone without a group name', async () => {
+  for (const [legend, expected] of [['Input format', { name: 'Input format', value: 'GFF3 + FASTA' }], [null, { name: '', value: 'GFF3 + FASTA' }]]) {
+    const h = await createBoundaryHarness();
+    try {
+      const group = legend
+        ? { tagName: 'FIELDSET', querySelector: (selector) => (selector === 'legend' ? { innerText: legend } : null), getAttribute: () => null }
+        : null;
+      const { radio } = h.controls;
+      const closest = radio.closest;
+      Object.assign(radio, {
+        getAttribute: () => null,
+        labels: [{ innerText: 'GFF3 + FASTA' }],
+        closest: (selector) => (selector.includes('radiogroup') ? group : closest(selector))
+      });
+      await moveRadioWithArrow(h);
+      await settleTasks();
+      assert.deepEqual(h.history.stackEntries('undo').map((entry) => entry.detail), [expected]);
+    } finally {
+      h.cleanup();
+    }
+  }
+});

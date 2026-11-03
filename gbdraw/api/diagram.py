@@ -99,6 +99,7 @@ from gbdraw.api.options import (
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LinearRecordTranslation,
     LosatRuntimeOptions,
     LosatSearchOptions,
     losatp_analysis_mode,
@@ -294,6 +295,9 @@ class LinearDiagramMetadata:
     search_frame_bindings: tuple[ComparisonRecordBinding, ...] = ()
     # What a wrapped figure drew; ``None`` when no record is longer than one row.
     wrap: LinearWrapSummary | None = None
+    # The translation each record was drawn with, after the Similarity alignment
+    # or ``anchor_feature`` moves (``_final_record_translations``).
+    record_translations: tuple[LinearRecordTranslation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -2629,6 +2633,10 @@ def assemble_linear_diagram_from_records(
             comparison_warnings=getattr(canvas, "_gbdraw_comparison_record_id_warnings", ()),
             comparison_tallies=getattr(canvas, "_gbdraw_comparison_tallies", ()),
             wrap=wrap_summary,
+            record_translations=tuple(
+                LinearRecordTranslation(record_key=key, x=x, y=y)
+                for key, x, y in getattr(canvas, "_gbdraw_record_translations", ())
+            ),
         ),
     )
     bind_export_wrap(canvas, wrap_summary)

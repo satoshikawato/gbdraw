@@ -1720,7 +1720,7 @@ test('Session preflight rejects invalid canonical data without resetting live st
     await expect.poll(() => page.evaluate(() => window.__SESSION_REJECTIONS__)).toBe(count);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
     await expect(page.getByRole('alert', { name: 'Session not loaded' }))
-      .toContainText('Load a supported Session file or recreate it with the current writer.');
+      .toContainText('Load a Session file that this version of gbdraw supports.');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
       code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason }
     });
@@ -3019,11 +3019,13 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
   await expect(
     page.locator('.run-info-panel').getByText('Reproducibility files', { exact: true })
   ).toBeVisible();
-  await expect(page.locator('.run-info-panel')).toContainText(
+  // The tab shows no download description and no note a reader does not act on (ui-copy-diet 2026-11-02);
+  // the Run info keeps them.
+  await expect(page.locator('.run-info-panel')).not.toContainText(
     'The Source recipe uses only the original source files.'
   );
-  await expect(page.locator('.run-info-panel')).toContainText('Exact replay file:');
-  await expect(page.locator('.run-info-panel')).not.toContainText('Source recipe helper files:');
+  await expect(page.locator('.run-info-panel')).not.toContainText('Exact replay file:');
+  await expect(page.locator('.run-info-panel')).not.toContainText('Source recipe helper file');
   const sourceCopy = page.locator('.run-info-panel').getByTitle('Copy command');
   const replayCopy = page.locator('.run-info-panel').getByTitle('Copy exact replay command');
   await sourceCopy.click();
@@ -3053,10 +3055,10 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
       downloadBundle: {
         ...app.lastRunInfo.downloadBundle,
         description:
-          'Source recipe helper files: browser-comparison.tsv. Exact replay file: out.gbdraw-session.json.',
+          'Source recipe helper file: browser-comparison.tsv. Exact replay file: out.gbdraw-session.json.',
         descriptionParts: [
           {
-            text: 'Source recipe helper files: {files}.',
+            text: 'Source recipe helper file: {files}.',
             params: { files: { text: 'browser-comparison.tsv', verbatim: true } }
           },
           {
@@ -3067,8 +3069,8 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
       }
     };
   });
-  await expect(page.locator('.run-info-panel')).toContainText(
-    'Source recipe helper files: browser-comparison.tsv.'
+  await expect(page.locator('.run-info-panel')).not.toContainText(
+    'Source recipe helper file: browser-comparison.tsv.'
   );
 
   await page.evaluate(() => {
@@ -3108,9 +3110,11 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
       }
     };
   });
-  await expect(page.locator('.run-info-panel')).toContainText(
+  // Without a Source recipe the tab has no Source recipe section (ui-copy-diet rows 91, 93).
+  await expect(page.locator('.run-info-panel')).not.toContainText(
     'multiple uploaded inputs use the visible filename "genome.gbk"'
   );
+  await expect(page.locator('.run-info-panel').getByText('Source recipe', { exact: true })).toHaveCount(0);
   await expect(page.locator('.run-info-panel').getByTitle('Copy command')).toHaveCount(0);
   await expect(page.locator('.run-info-panel').getByTitle('Copy exact replay command')).toBeVisible();
   for (const bands of [geometry.client, geometry.bbox]) {
@@ -3834,7 +3838,7 @@ test('TK-03: stepping a Depth row track index past the series adds no series', a
   }, { a: depthTsv(10), b: depthTsv(20) });
   const seriesCount = () => page.evaluate(() => window.__GBDRAW_APP__.adv.depth_tracks.length);
   await expect.poll(seriesCount).toBe(2);
-  const toggle = await reveal(page.locator('[aria-controls="circular-custom-track-slots-panel"]'));
+  const toggle = await reveal(page.locator('button[aria-controls="circular-custom-track-slots-panel"]'));
   if (await page.locator('#circular-custom-track-slots-panel').count() === 0) await toggle.click();
   await page.getByRole('checkbox', { name: 'Use custom stack', exact: true }).check();
   const trackIndex = page.getByLabel('Depth track index depth_2', { exact: true });

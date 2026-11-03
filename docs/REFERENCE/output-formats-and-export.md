@@ -88,12 +88,12 @@ Check the downloaded dimensions and file signature instead of trusting the
 extension.
 
 gbdraw draws no background. SVG and Interactive SVG have no background shape,
-and command-line and Python PNG keep the background transparent. PDF, EPS,
-and PS paint no page background, so a viewer shows its own page color, usually
-white. The web app PNG export fills the background white unless
-**Transparent background** is on next to the DPI choice; it is off by default,
-is a page setting that is not saved in Sessions, and is not an Undo step. The
-web app PDF has no background either way.
+and command-line, Python, and web app PNG keep the background transparent. PDF,
+EPS, and PS paint no page background, so a viewer shows its own page color,
+usually white. The web app PNG export fills the background white when
+**White background** is on next to the DPI choice; it is off by default, is a
+page setting that is not saved in Sessions, and is not an Undo step. The web
+app PDF has no background either way.
 
 SVG lengths are CSS pixels (96 px per inch). A web PDF page is the SVG canvas
 at 0.75 pt per px, the same physical size as the CLI (CairoSVG) PDF; a

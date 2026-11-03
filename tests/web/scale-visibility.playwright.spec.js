@@ -89,9 +89,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   const circularAxisCard = page.locator('summary').filter({ hasText: 'Axis & Scale' });
   await circularAxisCard.press('Enter');
   await expect(page.getByLabel('Show Coordinate Scale (Circular)')).toBeDisabled();
-  await expect(page.locator('[data-scale-visibility-note]')).toContainText(
-    'Use an enabled Ticks slot'
-  );
+  await expect(page.locator('[data-scale-visibility-note]')).toHaveText('Show Ticks slot');
   await expect(page.getByLabel('Circular scale interval')).toBeEnabled();
 
   expect(await runDiagram(page)).toEqual({
@@ -157,6 +155,40 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   const hiddenLinearScale = await inspectResultSvg(page);
   expect(hiddenLinearScale.lengthBar).toBe(false);
   expect(hiddenLinearScale.recordAxisCount).toBeGreaterThan(0);
+});
+
+// D-03 (ui-copy-diet 2026-11-02): with Custom Track Slots on, the coordinate scale follows the Ticks
+// slot; a link beside the disabled Show Coordinate Scale reveals that row, or the Custom Track Slots
+// panel when the stack has no Ticks row. It changes no setting.
+test('Show Ticks slot reveals the Ticks row of the custom stack, or the panel without one', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.selectDrawing('circular');
+    app.setCircularTrackSlotsEnabled(true);
+    await window.Vue.nextTick();
+  });
+  const tick = await page.evaluate(() => window.__GBDRAW_APP__.adv.circular_track_slots.find((slot) => slot.renderer === 'ticks').id);
+  const settingsBefore = await page.evaluate(() => JSON.stringify([window.__GBDRAW_APP__.form, window.__GBDRAW_APP__.adv]));
+  await page.locator('summary').filter({ hasText: 'Axis & Scale' }).press('Enter');
+  const link = page.getByRole('button', { name: 'Show Ticks slot' });
+  await expect(page.locator('#circular-custom-track-slots-panel')).toHaveCount(0);
+  await link.click();
+  const row = page.locator(`[data-capture="circular-track-slot-${tick}"]`);
+  await expect(row).toBeInViewport();
+  expect(await row.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  expect(await page.evaluate(() => JSON.stringify([window.__GBDRAW_APP__.form, window.__GBDRAW_APP__.adv]))).toBe(settingsBefore);
+
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.adv.circular_track_slots = app.adv.circular_track_slots.filter((slot) => slot.renderer !== 'ticks');
+    app.circularTrackSlotsPanelOpen = false;
+    await window.Vue.nextTick();
+  });
+  await page.locator('summary').filter({ hasText: 'Axis & Scale' }).scrollIntoViewIfNeeded();
+  await link.click();
+  await expect(page.locator('#circular-custom-track-slots-panel')).toBeInViewport();
+  await expect(page.getByRole('button', { name: 'Custom Track Slots', exact: true })).toBeFocused();
 });
 
 test('Arrow controls render in both modes and survive a session round trip', async ({ page }) => {

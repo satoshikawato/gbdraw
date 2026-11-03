@@ -241,7 +241,7 @@ test('status, selection, and input build no tables; each Generate builds its lab
     return app.currentResults()[app.selectedResultIndex].content;
   });
   const before = await shown();
-  const lock = page.locator('input[type="checkbox"][aria-describedby="linear-definition-lock-help"]');
+  const lock = page.locator('input[type="checkbox"][aria-describedby~="linear-definition-lock-help"]');
   const flip = await observe(page, () => lock.click());
   expect(flip.undo).toBe(1);
   if (onGenerate) {

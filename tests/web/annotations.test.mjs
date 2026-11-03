@@ -777,7 +777,7 @@ test('an import that would remove every set asks first, and Cancel keeps the set
   assert.equal(questions.length, 1);
   assert.equal(questions[0].title, 'Remove all annotation sets?');
   assert.deepEqual(questions[0].actions.map((action) => action.id), ['remove']);
-  assert.match(questions[0].description, /removes all 1 annotation set\./);
+  assert.match(questions[0].description, /removes the annotation set\./);
   assert.equal(JSON.stringify(state), before);
   await editor.importAnnotationTable('');
   assert.deepEqual(state.annotationSets, []);

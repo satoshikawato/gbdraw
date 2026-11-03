@@ -1,5 +1,5 @@
 // UJ-06 (Owner 2026-10-08): the Gallery catalog this origin serves is the one
-// source of Load an example: the button shows when it gives an example, and
+// source of Open Gallery example: the button shows when it gives an example, and
 // the chooser lists its usable entries in catalog order.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

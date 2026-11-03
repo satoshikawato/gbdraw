@@ -141,15 +141,19 @@ so it adds no track row; see [Custom Track Slots](#custom-track-slots).
 4. Select **Generate Diagram**.
 5. Inspect **Result Preview**, then export a file or select **Save Session**.
 
-The operation labels below state when each kind of edit reaches the Result.
-Settings marked **Applies on Generate** stay in the settings draft until the
-next successful **Generate Diagram**; until then the Result keeps its applied
-settings. The app does not show a separate always-on application status.
+The table below states when each kind of edit reaches the Result. A clock
+icon beside a setting's heading or label marks a change that applies on
+Generate, wholly or in part. Its tooltip, which opens on hover, keyboard focus,
+or a tap, reads **Applies on Generate** or names the parts that apply at once.
+A setting without the icon changes the Result at once. Settings that apply on
+Generate stay in the settings draft until the next successful **Generate
+Diagram**; until then the Result keeps its applied settings. The app does not
+show a separate always-on application status.
 
-| Operation label | When the Result changes |
+| Kind of edit | When the Result changes |
 |---|---|
-| **Applies on Generate** | Every setting the Result draws that is not **Live edit** or **Apply required**, including **Feature placement** in the feature popup and the selection toolbar, and **Default colors** while a palette change waits. The page shows the note in each such card or group. Adding a Depth file, or a Depth series while a Depth file is loaded, turns **Show Depth** on, and removing the last Depth file or the File that holds it turns it off; turning it off hides the drawn Depth track at once, and a Depth track from changed files appears on Generate. In a custom stack, adding, moving, or changing a row applies on Generate. Changing a Depth **Legend title** clears a Legend tab rename of the old title at once; the new title appears on Generate. **Output Prefix** names the Results of the next Generate, and exports take their file names from the Result. **Embed font in exported SVG** affects exported SVG files only, and **Transparent background** affects PNG downloads only. |
-| **Live edit** | Feature color, label text, and visibility, including **Feature Visibility** rules, update the current Result directly (leaving a feature out of protein search applies on Generate); an edit that adds or removes geometry rerenders the Result automatically. A label rerender uses the settings of the last Generate plus the current feature, label, color, and legend edits, and the live setting values changed since. Legend text, order, stroke, and removal, and stroke edits on selected features, are live. Palette selection is live when **Instant Preview** is on. The Legend card (position, swatch size, font size), the plot title (**Plot Title**, its position, and its font size), the definition text (**Species**, **Default font size**, and the Linear definition row **Size**, **Weight**, and **Color**; not **Strain**, or **Keep Full Definition**), record names (**Organism / strain** of a Linear File or record, and **Record label** and **Subtitle** of a Circular record; the record popup shows each field's note), the **Dinucleotide content/skew** **Window**, Region Annotation **Fill color** and **Line color**, Comparison **Match height**, **Center Reserved Radius**, and the custom-stack row **Height** in Linear, the Circular multi-record canvas layout (while the Result is a multi-record canvas; otherwise it applies on Generate and says so), and the Linear **Lock Definition Column** rerender the current Result automatically (in Circular, while a **Multi-Record Canvas** change waits for Generate, the Legend and Plot Title positions apply on Generate, and the notes say so; turning **Multi-Record Canvas** back to the shown canvas applies them) from the settings of the last Generate plus the changed values; if the rerender fails, the Result and the last Generate's settings stay, the control keeps its value, and **Live edit failed** appears. Region Annotation colors and a Linear row **Height** have a note per item: an item with a Legend label, an item added since the last Generate, and a features or Depth row say **Applies on Generate**. Record names say **Applies on Generate** when the Result is a Circular batch or grid, or when a Linear File card was moved, removed, or replaced, or its record changed, since the last Generate. **Show GC Content**, **Show GC Skew**, and **Show Depth** (Linear), **Hide GC Content**, **Hide GC Skew**, and **Show Depth** (Circular), turning a GC content, GC skew, or Depth row of the custom stack on or off or removing it, and **Use custom stack** rerender the current Result the same way: a track comes back as the last Generate built it, and other changed values of its row (a width, a color, the track type) still apply on Generate. An Overlay row that left with the track it names comes back the same way when the stack draws both again: by Undo, by turning it back on by hand while the track is back, or by turning **Use custom stack** back. Showing a track applies on Generate if the Result did not draw it when its Session was loaded (a track hidden at once after the load comes back at once); after a Depth file or series change, or a change of the records the Depth files map to; for a custom stack row added since the last Generate or a stack the last Generate could not build; and, with a Circular custom track stack or Circular track widths or radii, for **Hide GC Content** and **Hide GC Skew** turned off by hand (an Undo of that hide applies at once, with the rows it turned off). **Use custom stack** applies on Generate, with every track it would hide or show, when it is turned on after a Session load, and when it is set the other way than the Result was drawn while the Region Annotation sets differ from those the Result draws; turning it off after a Session load on a Linear Result drawn with the stack applies at once. A Circular Result drawn with a custom stack or with track widths or radii does not show which way it was drawn. After a Session load, **Use custom stack** set the other way than the Session saved it applies on Generate, with every track it would hide or show; while it stays as saved, the stack stays as it is and only the tracks a setting hides leave at once. Hiding a track always applies at once. Turning off a custom stack row with its switch, or **Hide GC Content** or **Hide GC Skew** while **Use custom stack** is on, when another row starts at or extends to that track (an Overlay row's anchor or **Extend to**), asks first: the dialog names those rows ("Track row N" and the row's ID) and offers to turn the track and those rows off as one Undo step, or Cancel, which changes nothing. Removing such a row, or the Depth file or series that such a Depth row draws, does not ask: the live edit and **Generate Diagram** refuse the stack, and the drawn track stays. The note beside the controls says so. On a Result loaded from a Session saved without a render request (Session versions 27 to 30), the settings above that rerender the Result apply on Generate and say so; the edits that update the Result directly (such as feature color, Legend, and palette edits) stay live. |
+| **Applies on Generate** (clock icon) | Every setting the Result draws that is not a live edit or **Apply required**, including **Feature placement** in the feature popup and the selection toolbar, and **Default colors** while a palette change waits. The clock sits in the heading of each such card or group. Adding a Depth file, or a Depth series while a Depth file is loaded, turns **Show Depth** on, and removing the last Depth file or the File that holds it turns it off; turning it off hides the drawn Depth track at once, and a Depth track from changed files appears on Generate. In a custom stack, adding, moving, or changing a row applies on Generate. Changing a Depth **Legend title** clears a Legend tab rename of the old title at once; the new title appears on Generate. **Output Prefix** names the Results of the next Generate, and exports take their file names from the Result. **Embed font in exported SVG** affects exported SVG files only, and **White background** affects PNG downloads only. |
+| Live edit (no mark) | Feature color, label text, and visibility, including **Feature Visibility** rules, update the current Result directly (leaving a feature out of protein search applies on Generate); an edit that adds or removes geometry rerenders the Result automatically. A label rerender uses the settings of the last Generate plus the current feature, label, color, and legend edits, and the live setting values changed since. Legend text, order, stroke, and removal, and stroke edits on selected features, are live. Palette selection is live when **Instant Preview** is on. The Legend card (position, swatch size, font size), the plot title (**Plot Title**, its position, and its font size), the definition text (**Species**, **Default font size**, and the Linear definition row **Size**, **Weight**, and **Color**; not **Strain**, or **Keep Full Definition**), record names (**Organism / strain** of a Linear File or record, and **Record label** and **Subtitle** of a Circular record; the record popup shows each field's note), the **Dinucleotide content/skew** **Window**, Region Annotation **Fill color** and **Line color**, Comparison **Match height**, **Center Reserved Radius**, and the custom-stack row **Height** in Linear, the Circular multi-record canvas layout (while the Result is a multi-record canvas; otherwise it applies on Generate and says so), and the Linear **Lock Definition Column** rerender the current Result automatically (in Circular, while a **Multi-Record Canvas** change waits for Generate, the Legend and Plot Title positions apply on Generate, and the notes say so; turning **Multi-Record Canvas** back to the shown canvas applies them) from the settings of the last Generate plus the changed values; if the rerender fails, the Result and the last Generate's settings stay, the control keeps its value, and **Live edit failed** appears. Region Annotation colors and a Linear row **Height** have a note per item: an item with a Legend label, an item added since the last Generate, and a features or Depth row say **Applies on Generate**. Record names say **Applies on Generate** when the Result is a Circular batch or grid, or when a Linear File card was moved, removed, or replaced, or its record changed, since the last Generate. **Show GC Content**, **Show GC Skew**, and **Show Depth** (Linear), **Hide GC Content**, **Hide GC Skew**, and **Show Depth** (Circular), turning a GC content, GC skew, or Depth row of the custom stack on or off or removing it, and **Use custom stack** rerender the current Result the same way: a track comes back as the last Generate built it, and other changed values of its row (a width, a color, the track type) still apply on Generate. An Overlay row that left with the track it names comes back the same way when the stack draws both again: by Undo, by turning it back on by hand while the track is back, or by turning **Use custom stack** back. Showing a track applies on Generate if the Result did not draw it when its Session was loaded (a track hidden at once after the load comes back at once); after a Depth file or series change, or a change of the records the Depth files map to; for a custom stack row added since the last Generate or a stack the last Generate could not build; and, with a Circular custom track stack or Circular track widths or radii, for **Hide GC Content** and **Hide GC Skew** turned off by hand (an Undo of that hide applies at once, with the rows it turned off). **Use custom stack** applies on Generate, with every track it would hide or show, when it is turned on after a Session load, and when it is set the other way than the Result was drawn while the Region Annotation sets differ from those the Result draws; turning it off after a Session load on a Linear Result drawn with the stack applies at once. A Circular Result drawn with a custom stack or with track widths or radii does not show which way it was drawn. After a Session load, **Use custom stack** set the other way than the Session saved it applies on Generate, with every track it would hide or show; while it stays as saved, the stack stays as it is and only the tracks a setting hides leave at once. Hiding a track always applies at once. Turning off or removing a custom stack row, **Hide GC Content** or **Hide GC Skew** when it turns off a stack row, removing a Depth series, removing a series' last Depth file (**Remove Depth TSV**, **Remove from all records**, or a record's own uploader), removing or clearing a Linear File that holds such a last file (from its card or with **Remove File** in the record list, after that question), and removing or replacing a source in Circular **Pairwise Comparisons** while **Use custom stack** is on and its ring row leaves with it, when another row starts at or extends to that track (an Overlay row's anchor or **Extend to**), ask first, with **Use custom stack** on or off for every change but the last: the dialog names those rows ("Track row N" and the row's ID) and offers to make the change and turn those rows off as one Undo step, or Cancel, which changes nothing (the file, series, or row stays). A Depth row with a width, spacing, or ID you set stays in the stack when its last file goes: when another row reaches it, the dialog says so and the choice turns it off too; when no row does, nothing asks and Generate reports the row issue. With two or more series, when another series keeps a file and Generate still draws Depth (**Show Depth** on, or with **Use custom stack** on a Depth row still on), the dialog also says the series stays empty and Generate will ask for a file or its removal; the series stays, and Generate refuses until it has one or is removed. While **Use custom stack** is on, **Hide GC Content** and **Hide GC Skew** ask also when no other row does. A Depth row with no width, spacing, or ID you set leaves with its last file, also after a Generate and in a saved Session, and Generate draws: a moved row leaves too, and a file added again puts it at the default place; a Linear row's **Height** is also its series' height, which stays, and a file added again draws at it; a row you turned off stays, off, and stays off when a file is added again. With no row reaching it, such a removal takes the Depth row out at once, and nothing asks. On a Result loaded from a Session saved without a render request (Session versions 27 to 30), the settings above that rerender the Result apply on Generate and say so; the edits that update the Result directly (such as feature color, Legend, and palette edits) stay live. |
 | **Apply required** | Alignment choices stay in the review draft until **Apply** succeeds. |
 
 A live edit can succeed while other settings stay in the draft. **Live edit
@@ -232,9 +236,9 @@ and lists any warnings about older Session content. Dismiss the notice with its
 close button; the next notice replaces it. Generate keeps it, since it describes
 the loaded Session; **Reset Settings** and a switch between Circular and Linear
 clear it. Popups open below the notice while it is in the upper half of the window, so it stays readable. On gbdraw.app, **Load example** in the header
-and **Load an example** in the empty Preview list the Gallery examples and load
+and **Open Gallery example** in the empty Preview list the Gallery examples and load
 the chosen one's Session, asking first when the current work has unsaved
-changes. The local `gbdraw gui` ships no Gallery and shows neither button. On gbdraw.app the empty Preview also shows a **Learn with tutorials** card,
+changes. The local `gbdraw gui` ships no Gallery and shows neither button. On gbdraw.app the empty Preview also shows a **Learn with tutorials** button under **Open Gallery example**,
 each row of the example list has a **Tutorial** link, and the notice of an
 example loaded with **Load example** links to that example's tutorial; each
 opens the Interactive Gallery's tutorial, which is in English, in a new tab.
@@ -464,14 +468,15 @@ and, in Circular, the **Tuckin**, **Middle**, or **Spreadout** button under
 Depth rows follow Depth files the same way in Circular and Linear. When a
 logical Depth series gets its first file, the stack gains one Depth row for it,
 unless a row, enabled or disabled, already references that series. When the
-series loses its last file, the rows that still have their default settings are
-removed. This happens whether or not the custom stack is in use. Other settings
-never add, re-enable, or move a Depth row, so a row you removed, disabled, or
-moved stays as you left it. **Add Depth TSV series** and a series **Remove**
+series loses its last file, the rows that are on and still have their default
+settings are removed, also when you moved them; a row you turned off stays, off.
+This happens whether or not the custom stack is in use. Other settings never add,
+re-enable, or move a Depth row, so a row you removed, disabled, or moved stays as
+you left it. **Add Depth TSV series** and a series **Remove**
 add no row.
 
-An enabled Depth row whose series has no file, for example after a Linear
-File's Depth TSV is cleared, shows "Depth track '<id>' has no logical Depth
+An enabled Depth row whose series has no file, for example a row with a width,
+spacing, or ID you set after a Linear File's Depth TSV is cleared, shows "Depth track '<id>' has no logical Depth
 source." **Generate Diagram** then stops on that row. Add a file, or disable or
 remove the row. A Session whose inactive custom stack has no Depth row does not
 gain one when you turn the stack on; use **Reset**.
@@ -479,7 +484,7 @@ gain one when you turn the stack on; use **Reset**.
 **Hide GC Content** and **Hide GC Skew** disable the matching enabled rows
 that use the **Dinucleotide** setting, whether or not the custom stack is in
 use, and turning the option off enables those rows again. A row with another
-dinucleotide, such as an AT skew row, is not affected. Rows you disabled yourself stay disabled. Turning off a row that an enabled Overlay row starts at or extends to asks first and offers to turn that row off too: with the row's switch, and with **Hide GC Content** or **Hide GC Skew** while the custom stack is in use. While it is not in use, **Hide GC Content** and **Hide GC Skew** do not ask and leave the Overlay row on, and removing such a row does not ask either. A row's resolved
+dinucleotide, such as an AT skew row, is not affected. Rows you disabled yourself stay disabled. Turning off or removing a row that an enabled Overlay row starts at or extends to asks first and offers to turn that row off too, whether or not the custom stack is in use: with the row's switch, its **Remove** or **Delete**, **Hide GC Content** or **Hide GC Skew**, the removal of a Depth series or of its last Depth file, and the removal or clearing of a Linear File that holds that file. In use, the removal of a comparison source whose ring row leaves with it asks too. A row's resolved
 **(auto)** geometry comes from the last generated diagram and appears only for
 rows it drew. Any other row, and every row before the first Generate, shows the
 Auto **Width** and gaps it asks for as an estimate written as "≈ … (estimate)",
@@ -540,7 +545,7 @@ File**, or both the **GFF3 File** and **FASTA File**; no separate load action is
 needed. **Source records** shows **Inspecting source records…** and then the
 count, such as **1 source record inspected**. Each record's rotation row
 appears at the same time, before **Generate Diagram**. A GFF3 file alone shows
-**Upload both GFF3 and FASTA files to inspect records.** Replacing the file
+no count until its FASTA file is chosen. Replacing the file
 inspects the new source. For GFF3 + FASTA, the records are the sequences that have GFF3 rows, in FASTA
 order, as on the command line. A FASTA sequence with no GFF3 row is not offered.
 To draw it, add a `region` row to the GFF3.
@@ -553,7 +558,7 @@ current Result stays in the Preview until the next successful Generate.
 
 | Source | **Record** choice | Next Generate |
 |---|---|---|
-| One record | **Automatic (only record)** | One diagram of that record |
+| One record | **Automatic (single record)** | One diagram of that record |
 | Several records | **All records (separate diagrams)** | One diagram per record |
 | Several records | One listed record | One diagram of that record |
 
@@ -571,7 +576,7 @@ Canvas uses a grid. Turn it off to select one record.** Select **Show
 Multi-Record Canvas setting** to move to that checkbox.
 
 **Single-record crop, orientation and titles** contains **Record label**,
-**Subtitle**, **Region (optional)** with 1-based inclusive **Start** and **End**,
+**Subtitle**, **Region** with 1-based inclusive **Start** and **End**,
 and **Reverse complement**. These controls are editable only when the next
 diagram draws one record: **Multi-Record Canvas** is off, and the source has one
 record or **Record** names one. With several records and **All records**, the
@@ -705,7 +710,7 @@ before the nearest sequence, or before its depth or GC% axis labels when it
 draws them. Turn it off explicitly to use a common column
 center that follows each row's horizontal offset. Shorter text can leave more
 space; record-local text stays above its own sequence. Either selection
-redraws the current Result (**Live edit**).
+redraws the current Result at once.
 
 Loading a session preserves its saved ON or OFF selection and its saved Result.
 Supported older sessions that omitted the setting keep their former OFF meaning.
@@ -885,6 +890,23 @@ block genes**, **Diagonal drift**, **Merge conflicts**, **Search between**
 (**Adjacent pairs** or **All records**), and **Color mode** (**Average
 identity**, **Orientation**, or **Orientation + identity**). Scientific
 meanings and limits belong to the comparison reference below.
+
+**Orient records from comparisons**, under **Record orientation** below the
+Linear **Result filters**, sets the **Reverse complement** of each record below
+the top row from the nucleotide comparisons of the last Generate (uploaded BLAST
+tables, LOSATN, or TLOSATX) with the rule of `--auto_orient`, as one Undo step:
+a record whose hits against the row above are mostly reverse is checked, any
+other record below the top row is unchecked, also one whose checkbox you set.
+The records of the top row keep their orientation, so reversing a top-row
+record flips the records below it on the next press. Unlike `--auto_orient` on
+the command line, a checked record below the top row is decided again, so
+pressing the button after the comparisons change can undo an earlier
+reversal. The next Generate draws
+the new orientation; Undo restores the previous checkboxes. The button is off
+until a Generate has drawn a nucleotide comparison, and the status line says
+when the comparisons give every record its current orientation, or when
+records or their orientation changed since that Generate. See [Automatic Linear
+orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation).
 
 Circular **Pairwise Comparisons** selects **Run LOSAT** or **Upload BLAST TSV**.
 Uploaded comparison tables use **BLAST outfmt 6/7 files** and **Reference side**
@@ -1109,6 +1131,21 @@ See [Session compatibility](session-and-request-compatibility.md#similarity-alig
 for what a Session saves. Collinear alignment controls, anchor TSV, scored
 inference, support-count ranking and multi-hop automatic selection are unsupported.
 
+### Align at feature
+
+**Record Layout** under **Advanced comparison and layout** also lines the
+drawn records up at one named feature, as `gbdraw linear --anchor_feature`
+does, with no comparison needed. Type a `KEY=VALUE` selector such as
+`gene=COX1` in **Align at feature** and choose **Align at feature…**. Python
+resolves it on the Result as drawn and lists, per record, whether it keeps its
+place or moves, and by how many px. **Align records** writes the record positions once,
+as one History step, and draws them; later changes do not align the records
+again. Applying clears an active Similarity alignment, as a record drag does.
+A selector that no record matches, matches at different starts in one record,
+or records that share a row or that `canvas.linear.wrap_length` splits over
+several rows, are refused with the reason. See [Record selection and
+layout](command-line.md#record-selection-and-layout) for the matching rules.
+
 ## Preview, search, and editor
 
 **Result Preview** exposes records, feature and quantitative tracks,
@@ -1147,8 +1184,7 @@ when the feature has no gene), the product on up to two lines when it differs,
 and `<record ID> · <location> (<strand>)` with thousands separators; parts of a
 split location are separated by `; `.
 
-**Edit** has three groups. **Appearance** changes the current Result, as its
-heading says (**Updates the current Result**):
+**Edit** has three groups. **Appearance** changes the current Result at once:
 **Fill Color**, **Stroke**, the **Label** row (label text, **Label visibility**,
 and **Apply Label** on one line), **Feature visibility**, and **Legend name**.
 The list under it (**Choose from color rules…**) names the color rules for the
@@ -1156,15 +1192,15 @@ feature's type and those for every feature type (`*` in a color table), each
 once; choosing one puts the feature into that group with its name and its
 color. The **Legend name** field offers no suggestions while you type; the
 list is the only place that offers an existing group. When the
-feature has no label, one line names the reason, for example `No label shown (Show Labels = None).
-Choose On to show it.` The **Similarity group** section follows when the
+feature has no label, one line names the reason, for example `No label shown (Show Labels = None).`
+The **Similarity group** section follows when the
 feature belongs to one: one line with the group ID, its name, and **N genes in
 M records**, then **Show in editor** and **Align…**, with **Review alignment
 options…** under **Align…**. **More** holds **Highlight**, **Clear highlight**,
 and the copy and download of all member nucleotide or amino-acid FASTA;
 **N genes** opens the member table, where each row's **FASTA** menu copies or
 downloads that member. **Layout** holds **Feature placement**, marked
-**Applies on Generate**, and record rotation.
+with the clock icon (**Applies on Generate**), and record rotation.
 
 **Details** lists the feature type, length, and protein ID, which the header
 does not show, with one **Copy details** button for the header and these rows.
@@ -1292,7 +1328,7 @@ runtime starts. A legend row that a color rule draws under the name of a
 generated row in another color (the two are then numbered, such as `rRNA (1)`
 and `rRNA (2)`) belongs to that rule: renaming it or changing its color edits
 the rule, and the generated row stays a legend-only row. The color scope dialog offers **This feature only** first, then,
-under **All features with the same**, the matching **Color rule**, **Legend item**, **Label**, and **Source label**
+under **All features sharing**, the matching **Color rule**, **Legend item**, **Label**, and **Source label**
 with their feature counts. **Label** and **Source label** become
 one anchored qualifier rule only when the selected features share one feature
 type, qualifier, and value and that rule matches exactly the intended loaded
@@ -1527,15 +1563,15 @@ the renderer's text measurements; Generate applies it. **Undo** and **Redo** tra
 editor changes. Each change of a checkbox, radio button, select, or button is one step. This
 holds whether you use the pointer, click its label text, or use the keyboard,
 and also when a text field had focus. A text field's edit is its own step. A file chosen for an input is one step, also when a button or label
-opens the picker, such as **Add Seq** or an uploaded BLAST row's **Comparison
-sequence (optional)**. In a Session whose Circular rings replay saved LOSAT
-rows, Undo and Redo of a ring change, such as **Remove series** or **Add Seq**,
+opens the picker, such as **Add comparison sequence** or an uploaded BLAST row's **Comparison
+sequence**. In a Session whose Circular rings replay saved LOSAT
+rows, Undo and Redo of a ring change, such as **Remove series** or **Add comparison sequence**,
 also restore those rows, so a custom stack keeps its ring rows and the next
 Generate gives the loaded diagram. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS), also while a
 select has focus. In a text field these keys keep the browser's text undo. Undo and Redo, like a failed Session Load, restore each setting exactly as
 it was: a setting that was not set, such as a track slot side or the Circular
 multi-record legend position, stays unset. **Reset Settings** is broader than undo and asks
-first; its dialog lists what it resets and what stays. **Reset this drawing** resets the shown drawing as one step of its History; **Reset all drawings** resets every drawing and also the LOSAT execution and threads, Rich Feature Popup, Auto Reflow, PNG DPI, and Instant Preview, as one step that one Undo from any drawing restores; **Cancel** changes nothing. Every Legend rename, of a feature row or a track row such as GC content, returns
+first; its dialog warns that your edits are removed too and that Undo restores them. **Reset this drawing** resets the shown drawing as one step of its History; **Reset all drawings** resets every drawing and also the LOSAT execution and threads, Rich Feature Popup, Auto Reflow, PNG DPI, and Instant Preview, as one step that one Undo from any drawing restores; **Cancel** changes nothing. Every Legend rename, of a feature row or a track row such as GC content, returns
 to the caption Python draws. The reset also removes the label table that a loaded
 Session saved and every Similarity group name, including the saved names of
 groups that the current results do not show. The **Default colors file**,
@@ -1757,7 +1793,8 @@ input files.
 from the original input files and public CLI settings; **Exact replay** uses the
 saved Session and saved analysis files of that Result. Both downloads refer to the
 successful Result, even when controls hold a newer draft. An unavailable Source
-recipe includes a reason; it does not silently omit unsupported settings.
+recipe is not shown in the tab; the Run info keeps its reason
+(`sourceRecipe.unavailableReason`), and it never silently omits unsupported settings.
 **Search runtime** lists the program and runtime of each displayed LOSAT
 result: the browser Wasm (`wasm`) with the LOSAT build that searched it (a result
 that gbdraw 0.14.4 or earlier searched reads `version not recorded`), or the kind,

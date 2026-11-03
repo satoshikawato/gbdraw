@@ -75,7 +75,7 @@ const annotateSelection = async (page, svgIds) => {
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.selectedFeatureCount)).toBe(svgIds.length);
   const annotations = panel(page);
   if (await annotations.getAttribute('open') === null) await annotations.locator('summary').first().press('Enter');
-  await annotations.getByRole('button', { name: /Add set/ }).click();
+  await annotations.getByRole('button', { name: 'Add annotation set' }).click();
   await annotations.getByRole('button', { name: /Selected features/ }).click();
   await settle(page);
 };

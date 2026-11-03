@@ -8,6 +8,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { generateAndWaitForResult, reveal, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
+const { clocksIn } = require('./helpers/timing-notes.cjs');
 const { expectLiveEqualsGenerate } = require('./helpers/live-generate-parity.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
@@ -83,7 +84,8 @@ const expectWaits = async (page, before) => {
   expect(after.request, 'the committed Session waits for Generate').toEqual(before.request);
 };
 
-const noteOf = (scope) => scope.locator('.apply-note').first();
+// The clock of a scope's note (PD-OI-037 rev 3): none while its value applies at once.
+const noteOf = (scope) => clocksIn(scope).first();
 
 // Turns "Use custom stack" on in a mode; true when it was off.
 const enableCustomStack = async (page, mode) => {
@@ -158,7 +160,7 @@ run('species circular: a Species change is live and equals a Generate', TOBACCO,
 for (const [mode, file] of [['circular', TOBACCO], ['linear', LAMBDA]]) {
   run(`dinucleotide-window ${mode}: a Window change is live and equals a Generate`, file, async (page) => {
     if (mode === 'linear') {
-      const gc = page.locator('input[aria-describedby="help-linear-show-gc-content"]');
+      const gc = page.locator('input[aria-describedby~="help-linear-show-gc-content"]');
       await reveal(gc);
       if (!(await gc.isChecked())) await gc.click();
       await generateNow(page);
@@ -181,8 +183,8 @@ run('annotation-style circular: an annotation item Fill change is live and equal
 });
 run('annotation-style linear: an annotation item Fill change is live and equals a Generate', LAMBDA, async (page) => {
   const section = page.locator('[data-setting="region-annotations"]');
-  await reveal(section.locator('button', { hasText: 'Add set' }).first());
-  await section.locator('button', { hasText: 'Add set' }).first().click();
+  await reveal(section.locator('button', { hasText: 'Add annotation set' }).first());
+  await section.locator('button', { hasText: 'Add annotation set' }).first().click();
   await section.locator('button', { hasText: 'Coordinates' }).first().click();
   await commitValue(page.locator('input[aria-label="Annotation end (inclusive)"]').first(), 20000);
   const target = page.locator('select[aria-label="Annotation target record"]').first();
@@ -218,7 +220,7 @@ run('track-geometry linear: a custom-stack row Height change is live and equals 
   if (await enableCustomStack(page, 'linear')) await generateNow(page);
   const row = (await linearSlotRows(page)).find((slot) => slot.renderer !== 'features' && slot.renderer !== 'depth');
   expect(row, 'the stack has a row that is neither features nor Depth').toBeTruthy();
-  await expect(noteOf(slotScope(page, row.id))).toHaveText(/Live edit/);
+  await expect(noteOf(slotScope(page, row.id))).toHaveCount(0);
   const before = JSON.stringify((await facts(page)).request.diagramOptions.tracks.linearTrackSlots);
   const current = parseFloat(row.height);
   const height = Number.isFinite(current) && current > 0 ? Math.round(current * 2) : 60;
@@ -246,7 +248,7 @@ run('record-names circular: a record label change is live and equals a Generate'
 });
 run('record-names linear: a record name edited after Session Load is live and equals a Generate', BGC, async (page) => {
   const card = page.locator('[data-linear-source-card]').first();
-  await expect(noteOf(card.locator('[data-setting="record-names"]'))).toHaveText(/Live edit/);
+  await expect(noteOf(card.locator('[data-setting="record-names"]'))).toHaveCount(0);
   const input = page.locator('input[aria-label="Definition for sequence 1"]');
   await expectLiveUnit(page, 'Linear record name', () => commitValue(input, 'G2 record name'),
     (request) => JSON.stringify(request.records).includes('G2 record name'));
@@ -269,8 +271,8 @@ run('annotation-style waits: an item with a Legend label says Applies on Generat
   const scopeOf = (index) => rows.nth(index).locator('[data-setting="annotation-style"]');
   await reveal(rows.nth(5));
   // plastome_tint: lsc_tint (row 5) has no Legend label, irb_tint (row 6) has one.
-  await expect(noteOf(scopeOf(4).first())).toHaveText(/Live edit/);
-  await expect(noteOf(scopeOf(5).first())).toHaveText(/Applies on Generate/);
+  await expect(noteOf(scopeOf(4).first())).toHaveCount(0);
+  await expect(noteOf(scopeOf(5).first())).toHaveAttribute('aria-label', 'Applies on Generate');
   const before = await facts(page);
   await commitColor(page.locator('input[aria-label="Annotation fill color"]').nth(5), '#ff0000');
   await expectWaits(page, before);
@@ -283,8 +285,8 @@ run('track-geometry waits: a features row Height says Applies on Generate and ke
   const features = slots.find((slot) => slot.renderer === 'features');
   const other = slots.find((slot) => slot.renderer !== 'features' && slot.renderer !== 'depth');
   expect(features, 'the stack has a features row').toBeTruthy();
-  await expect(noteOf(slotScope(page, features.id))).toHaveText(/Applies on Generate/);
-  if (other) await expect(noteOf(slotScope(page, other.id))).toHaveText(/Live edit/);
+  await expect(noteOf(slotScope(page, features.id))).toHaveAttribute('aria-label', 'Applies on Generate');
+  if (other) await expect(noteOf(slotScope(page, other.id))).toHaveCount(0);
   const before = await facts(page);
   const current = parseFloat(features.height);
   await commitValue(slotHeight(page, features.id), Number.isFinite(current) && current > 0 ? Math.round(current * 2) : 60);
@@ -299,7 +301,7 @@ run('record-names waits: a record name in a card whose File was replaced keeps t
   await reveal(card.locator('input[type="file"]').first());
   await card.locator('input[type="file"]').first().setInputFiles(file);
   await settleLive(page);
-  await expect(noteOf(card.locator('[data-setting="record-names"]'))).toHaveText(/Applies on Generate/);
+  await expect(noteOf(card.locator('[data-setting="record-names"]'))).toHaveAttribute('aria-label', 'Applies on Generate');
   const before = await facts(page);
   await commitValue(page.locator('input[aria-label="Definition for sequence 1"]'), 'G2 replaced name');
   await expectWaits(page, before);

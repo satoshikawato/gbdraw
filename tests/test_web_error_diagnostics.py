@@ -586,7 +586,7 @@ def test_the_gc_rows_kept_inside_a_placement_reach_the_web_by_name() -> None:
         encoding="utf-8"
     )
     block = wording[wording.index("const SWITCHED_TRACKS") :]
-    web_tracks = set(re.findall(r"\b([a-z_]+): \{ name:", block[: block.index("});")]))
+    web_tracks = set(re.findall(r"\b([a-z_]+): \{ remedy:", block[: block.index("});")]))
     assert SWITCHED_TRACK_IDS == web_tracks == {"gc_content", "gc_skew", "ticks"}
 
     context = serialize_web_error(

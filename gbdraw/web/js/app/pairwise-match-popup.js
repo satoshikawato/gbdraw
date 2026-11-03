@@ -22,7 +22,7 @@ import {
   textAliasStatus,
   orthogroupIdStatus
 } from '../services/feature-identity.js';
-import { msg, t, tm, tmx, tn } from '../utils/i18n.js';
+import { msg, t, tm, tmx, tn, tx } from '../utils/i18n.js';
 
 /** @import { AliasSource, FeatureIdentity } from '../services/feature-identity.js' */
 /** @import { FeatureLike } from '../services/feature-utils.js' */
@@ -176,7 +176,7 @@ export const PAIRWISE_MATCH_SELECTOR = [
 const MATCH_KIND_TITLES = {
   pairwise: msg('Pairwise match'),
   orthogroup: msg('Similarity-group match'),
-  collinear: msg('Collinearity block'),
+  collinear: msg('Collinear block'),
   homology: msg('Comparison ring match')
 };
 
@@ -304,11 +304,12 @@ const normalizeMatchKind = (value, element = null) => {
  * @param {PopupRow[]} rows
  * @param {string} id The English row label (a `msg` key).
  * @param {unknown} value
+ * @param {string} [label] The shown label, when the key of `id` has another meaning.
  */
-const addRow = (rows, id, value) => {
+const addRow = (rows, id, value, label = tm(id)) => {
   const text = normalizeText(value);
   if (!text) return;
-  rows.push({ id, label: tm(id), value: text });
+  rows.push({ id, label, value: text });
 };
 
 /**
@@ -1796,6 +1797,23 @@ const buildBlockOrthogroups = ({
 // Collinear block popup (UX-B01): one summary line, the gene pairs, and the
 // block facts behind "Details".
 const COLLINEAR_ORIENTATION_TEXT = Object.freeze({ plus: msg('Same orientation'), minus: msg('Inverted') });
+// The labels of Color mode: the settings list them (`collinearColorModeOptions`)
+// and the block popup shows the one a match carries. A test holds them to
+// Python's modes (COLLINEARITY_COLOR_MODES, generated).
+export const COLLINEAR_COLOR_MODE_TEXT = Object.freeze({
+  average_identity: msg('Average identity'), orientation: msg('Orientation'), orientation_identity: msg('Orientation + identity')
+});
+/**
+ * How a value Python writes on a match shows in the UI language; a value the
+ * table does not list (a newer Python) shows as written. Own keys only:
+ * `constructor` and `__proto__` name inherited members, not values (OV-322).
+ * @param {Readonly<Record<string, string>>} table
+ * @param {unknown} value
+ */
+const shownMatchValue = (table, value) => {
+  const key = normalizeText(value).toLowerCase();
+  return Object.hasOwn(table, key) ? tm(table[key]) : normalizeText(value);
+};
 const COLLINEAR_BLOCK_NOTE = msg('Block envelopes may include intergenic sequence and genes that are not anchors.');
 
 /** @param {number} value */
@@ -1841,9 +1859,10 @@ const collinearDetailRows = (element, descriptor) => {
   const identity = finiteNumber(descriptor.identity);
   const alignedLength = finiteNumber(attr(element, 'data-alignment-length'));
   addRow(rows, msg('Block ID'), descriptor.collinearityBlockId);
-  addRow(rows, msg('Kind'), attr(element, 'data-collinearity-block-kind'));
-  addRow(rows, msg('Orientation'), attr(element, 'data-collinearity-orientation'));
-  addRow(rows, msg('Color mode'), attr(element, 'data-collinearity-color-mode'));
+  // Python's words (`COLLINEARITY_BLOCK_KINDS`, generated for tools/i18n/source-keys.mjs): an unknown one shows as written.
+  addRow(rows, msg('Kind'), tmx('collinearity block kind', attr(element, 'data-collinearity-block-kind')));
+  addRow(rows, msg('Orientation'), shownMatchValue(COLLINEAR_ORIENTATION_TEXT, attr(element, 'data-collinearity-orientation')));
+  addRow(rows, msg('Color mode'), shownMatchValue(COLLINEAR_COLOR_MODE_TEXT, attr(element, 'data-collinearity-color-mode')));
   if (descriptor.matchKind === 'collinear') {
     addRow(rows, msg('Average identity'), identity === null ? descriptor.identity : `${identity.toFixed(2)}%`);
     // LOSATP anchors: the summed protein alignment length.
@@ -1922,11 +1941,7 @@ const genePairCells = (row) => (row
 const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }) => {
   const query = blockSpanView(descriptor.queryRecordId, descriptor.queryInterval, descriptor.queryTableInterval);
   const subject = blockSpanView(descriptor.subjectRecordId, descriptor.subjectInterval, descriptor.subjectTableInterval);
-  const orientation = normalizeText(descriptor.orientation).toLowerCase();
-  // Own keys only: `constructor` and `__proto__` name inherited members, not orientations (OV-322).
-  const orientationText = Object.hasOwn(COLLINEAR_ORIENTATION_TEXT, orientation)
-    ? tm(COLLINEAR_ORIENTATION_TEXT[/** @type {keyof typeof COLLINEAR_ORIENTATION_TEXT} */ (orientation)])
-    : orientation;
+  const orientationText = shownMatchValue(COLLINEAR_ORIENTATION_TEXT, descriptor.orientation);
   const identity = finiteNumber(descriptor.identity);
   const identityText = identity === null ? '' : t('{identity}% identity', { identity: Math.round(identity) });
   const pairCount = genePairs.filter((pair) => pair.query && pair.subject).length;
@@ -1944,7 +1959,7 @@ const buildCollinearBlockView = ({ element, descriptor, genePairs, localGroups }
     pairsLabel,
     groupHeading,
     genePairs,
-    summaryText: `Collinear block: ${query.text} vs ${subject.text}; ${facts.join('; ')}`,
+    summaryText: `${tm(MATCH_KIND_TITLES.collinear)}: ${query.text} ${t('vs {record}', { record: subject.text })}; ${facts.join('; ')}`,
     pairsCopyText: [
       ['Query record', 'Query location', 'Query protein ID', 'Query product',
         'Subject record', 'Subject location', 'Subject protein ID', 'Subject product',
@@ -2259,7 +2274,7 @@ export const buildMatchPopupPayload = (
   addRow(summaryRows, msg('Query table interval'), descriptor.queryTableInterval);
   addRow(summaryRows, msg('Subject interval'), sInterval);
   addRow(summaryRows, msg('Subject table interval'), descriptor.subjectTableInterval);
-  addRow(summaryRows, msg('Orientation'), descriptor.orientation);
+  addRow(summaryRows, msg('Orientation'), shownMatchValue(COLLINEAR_ORIENTATION_TEXT, descriptor.orientation));
   if (matchKind === 'homology') {
     addRow(summaryRows, msg('Ring label'), attr(element, 'data-track-label'));
     const rawSourceIndex = integerAttr(element, 'data-source-index');
@@ -2273,7 +2288,7 @@ export const buildMatchPopupPayload = (
   addRow(alignmentRows, msg('Identity'), descriptor.identity);
   addRow(alignmentRows, msg('Alignment length'), attr(element, 'data-alignment-length'));
   addRow(alignmentRows, msg('E-value'), attr(element, 'data-evalue'));
-  addRow(alignmentRows, msg('Bit score'), attr(element, 'data-bitscore'));
+  addRow(alignmentRows, msg('Bitscore'), attr(element, 'data-bitscore'));
   addRow(alignmentRows, msg('Mismatches'), attr(element, 'data-mismatches'));
   addRow(alignmentRows, msg('Gap opens'), attr(element, 'data-gap-opens'));
   addRow(alignmentRows, msg('Edge kind'), attr(element, 'data-edge-kind'));
@@ -2358,24 +2373,23 @@ const formatPairwiseMatchHoverRows = ({
    */
   const addFirst = (id, value) => addRow(rows, id, value);
   if (!matchKind) return rows;
+  const kindText = shownMatchValue(MATCH_KIND_TITLES, matchKind);
   if (matchKind === 'orthogroup') {
-    addFirst(msg('Kind'), matchKind);
+    addFirst(msg('Kind'), kindText);
     addFirst(msg('Similarity group'), orthogroupId);
     addFirst(msg('Display name'), displayName);
     addFirst(msg('Genes'), memberCount);
     return rows.slice(0, 6);
   }
-  addFirst(msg('Kind'), matchKind);
+  addFirst(msg('Kind'), kindText);
   addFirst(msg('Identity'), identity);
   addFirst(msg('Query'), queryInterval);
   addFirst(msg('Subject'), subjectInterval);
   if (matchKind === 'collinear') {
-    addFirst(
-      groupScope === 'adjacent_local'
-        ? msg('Collinear groups')
-        : msg('Similarity groups'),
-      String(blockOrthogroupCount ?? '')
-    );
+    const groups = String(blockOrthogroupCount ?? '');
+    // A count of groups, not the LOSATP mode of that name: a locale may word the two apart.
+    if (groupScope === 'adjacent_local') addRow(rows, 'Collinear groups', groups, tx('number of groups in a block', 'Collinear groups'));
+    else addRow(rows, 'Similarity groups', groups, tx('number of groups in a block', 'Similarity groups'));
   } else {
     addFirst(msg('Similarity group'), orthogroupId);
   }

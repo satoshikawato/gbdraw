@@ -306,5 +306,25 @@ export const WORK_ALLOWLIST = [
     // PD-OI-103). One action asks for one rerender (OV-1076).
     kind: 'Reset Settings', stages: ['fills', 'legend', 'legendFills', 'strokes', 'visibility'], compiles: 2, requests: ['render'],
     run: resetSettings
+  },
+  {
+    // A Result that was not displayed during Reset Settings, whose bytes lack the
+    // feature a Generate hid: its display asks for the one rerender that draws it (OV-2293).
+    kind: 'Result display after Reset Settings', stages: ['fills', 'legend', 'legendFills', 'visibility'], compiles: 1, requests: ['render'],
+    before: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        app.form.labels_mode = 'out';
+        app.form.multi_record_canvas = false;
+        app.adv.circular_grouping_intent = 'batch';
+      });
+      await generate(page);
+      await showResult(page, 1);
+      await popupEdit(page, { biological_feature_id: 'f5aa08bf5', record_idx: 1 }, { visibility: 'off' });
+      await generate(page);
+      await showResult(page, 0);
+      await resetSettings(page);
+    },
+    run: async (page) => { await showResult(page, 1); await settleLive(page); }
   }
 ];

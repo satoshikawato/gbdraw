@@ -1151,7 +1151,7 @@ def smoke_test(contract: str = "all") -> None:
 
 
 def _assert_no_gallery_catalog_or_sessions(names: set[str], archive: str) -> None:
-    """UJ-06: Load an example shows only where the Gallery catalog is served,
+    """UJ-06: Open Gallery example shows only where the Gallery catalog is served,
     so a distribution ships neither the catalog nor a Gallery Session."""
     shipped = sorted(
         name for name in names

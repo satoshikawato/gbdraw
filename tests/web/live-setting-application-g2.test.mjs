@@ -104,6 +104,8 @@ const HEIGHT = 'diagramOptions.configOverrides.canvas.linear.comparison_height';
 const RADIUS = 'diagramOptions.tracks.centerReservedRadius';
 const SLOTS = 'diagramOptions.tracks.linearTrackSlots';
 const RECORDS = 'records';
+// A live note's text: a change that applies at once shows no mark (PD-OI-037 rev 3).
+const LIVE = '';
 const linearOverride = (key) => [['renderRequest', 'diagramOptions', 'configOverrides', `${key}.short`],
   ['renderRequest', 'diagramOptions', 'configOverrides', `${key}.long`]];
 
@@ -453,7 +455,7 @@ test('a Linear card\'s record selection applies on Generate: its record names wa
     const drawing = modeDrawing(state, 'linear');
     const note = () => owner.settingApplicationNote('record-names', (path) => request.liveSettingNoteApplies(
       committed.renderRequest, path, drawing, inputs, committed.resources)).text;
-    assert.equal(note(), 'Live edit');
+    assert.equal(note(), LIVE);
     // The selector picks the second record; the inferred definition follows it
     // (setLinearRecordSelector). Generate draws the second record with it.
     set(card, 'region_record_id', '#2');
@@ -469,7 +471,7 @@ test('a Linear card\'s record selection applies on Generate: its record names wa
     set(card, 'region_start', 2);
     set(card, 'region_end', 20);
     set(card, 'definition', 'Cropped name');
-    assert.equal(note(), 'Live edit');
+    assert.equal(note(), LIVE);
     assert.equal(applied(committed, project(committed, 'linear', [RECORDS])).renderRequest.records[1].presentation.label,
       'Cropped name');
     // A split member (F-18) was drawn from a card that selects no record.
@@ -505,7 +507,7 @@ test('a live write never enters an array by index (F-1)', () => {
   assert.deepEqual(target.diagramOptions, { window: 5, tracks: { centerReservedRadius: 3 } });
 });
 
-test('a row with paths of the other mode shows Live edit in each mode', () => {
+test('a row with paths of the other mode is live in each mode', () => {
   const circular = { mode: 'circular', grouping: 'single', records: [] };
   const linear = { mode: 'linear', grouping: 'single', records: [], diagramOptions: {}, comparisons: [] };
   const note = (id, committed) => owner.settingApplicationNote(id, (path) => request.liveSettingNoteApplies(
@@ -513,9 +515,9 @@ test('a row with paths of the other mode shows Live edit in each mode', () => {
   for (const id of ['definition-text', 'track-geometry', 'dinucleotide-window']) {
     assert.equal(note(id, circular).application, 'live', `${id} circular`);
   }
-  assert.equal(note('definition-text', circular).text, 'Live edit');
+  assert.equal(note('definition-text', circular).text, LIVE);
   assert.equal(note('track-geometry', linear).application, 'live');
-  assert.equal(note('definition-text', linear).text, 'Live edit');
+  assert.equal(note('definition-text', linear).text, LIVE);
   assert.equal(note('comparison-height', linear).application, 'generate', 'no committed comparison');
   // The other mode's path is still not applied.
   assert.equal(request.liveSettingApplies(circular, STYLES, modeDrawing(state, 'circular'), inputs), false);
@@ -532,16 +534,16 @@ test('an annotation item\'s and a Linear row\'s note read the condition their ap
     restore.push(() => items.pop());
     const note = (id, item, shown = committed) => owner.settingApplicationNote(id, (path) => request.liveSettingNoteApplies(
       shown.renderRequest, path, modeDrawing(state, shown.renderRequest.mode), inputs, shown.resources, item)).text;
-    // Without an item the rows say Live edit; each item says what its apply does.
-    assert.equal(note('annotation-style', null), 'Live edit');
-    assert.equal(note('track-geometry', null), 'Live edit');
-    for (const [itemId, text] of Object.entries({ r1: 'Live edit', r2: 'Applies on Generate', r4: 'Applies on Generate' })) {
+    // Without an item the rows show no mark; each item says what its apply does.
+    assert.equal(note('annotation-style', null), LIVE);
+    assert.equal(note('track-geometry', null), LIVE);
+    for (const [itemId, text] of Object.entries({ r1: LIVE, r2: 'Applies on Generate', r4: 'Applies on Generate' })) {
       assert.equal(note('annotation-style', { setId: 'islands', itemId }), text, itemId);
-      // The note says Live edit exactly when the apply writes the item's new colors.
+      // The note shows no mark exactly when the apply writes the item's new colors.
       const item = items.find((candidate) => candidate.id === itemId);
       const style = item.style;
       item.style = { fill: '#ff0000', stroke: '#00ff00' };
-      assert.equal(project(committed, 'linear', [ANNOTATIONS]).length, text === 'Live edit' ? 1 : 0, itemId);
+      assert.equal(project(committed, 'linear', [ANNOTATIONS]).length, text === LIVE ? 1 : 0, itemId);
       item.style = style;
     }
     assert.equal(note('annotation-style', { setId: 'another', itemId: 'r1' }), 'Applies on Generate', 'a set the Result lacks');
@@ -550,14 +552,14 @@ test('an annotation item\'s and a Linear row\'s note read the condition their ap
     labelled.renderRequest.diagramOptions.annotations.sets[0].legendLabel = 'Islands';
     assert.equal(note('annotation-style', { setId: 'islands', itemId: 'r1' }, labelled), 'Applies on Generate');
     // A Linear row: the GC Height is live; the features row and a new or renamed row wait.
-    for (const [slotId, text] of Object.entries({ gc_content: 'Live edit', features: 'Applies on Generate', new_row: 'Applies on Generate' })) {
+    for (const [slotId, text] of Object.entries({ gc_content: LIVE, features: 'Applies on Generate', new_row: 'Applies on Generate' })) {
       assert.equal(note('track-geometry', { slotId }), text, slotId);
     }
     const stringSlots = structuredClone(committed);
     stringSlots.renderRequest.diagramOptions.tracks.linearTrackSlots = ['gc_content:dinucleotide_content'];
     assert.equal(note('track-geometry', { slotId: 'gc_content' }, stringSlots), 'Applies on Generate', 'a spec string row');
     // A Circular Result draws no Linear row and waits for none (the row rule).
-    assert.equal(note('track-geometry', { slotId: 'features' }, { renderRequest: { mode: 'circular', grouping: 'single', records: [] } }), 'Live edit');
+    assert.equal(note('track-geometry', { slotId: 'features' }, { renderRequest: { mode: 'circular', grouping: 'single', records: [] } }), LIVE);
   } finally {
     undoAll();
   }

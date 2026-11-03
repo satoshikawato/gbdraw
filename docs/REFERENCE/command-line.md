@@ -150,8 +150,8 @@ anchor moves leave theirs. A moved record can widen the canvas. With
 `--auto_orient`, the anchor is read after the automatic reverse complement.
 `--anchor_feature` cannot be combined with `--similarity_alignment_feature`,
 with records that share a row (`--multi_record_position`), or with a
-`--wrap_length` that cuts a record, and a Session does not store it yet:
-`--save_session` with it stops before drawing.
+`--wrap_length` that cuts a record. A saved Session stores the resulting
+record translations, not the option.
 
 On-axis ruler coordinates depend on the canvas topology. If any Linear row
 contains multiple records, every ruler on that canvas uses record-local

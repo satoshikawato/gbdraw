@@ -304,7 +304,7 @@ export const createAnnotationEditor = ({
   const askReplaceAll = (setCount) => askChoice({
     title: t('Remove all annotation sets?'),
     description: joinSentences(t('The imported table has no annotation rows.'),
-      tn(setCount, 'Importing it removes all {count} annotation set.', 'Importing it removes all {count} annotation sets.')),
+      tn(setCount, 'Importing it removes the annotation set.', 'Importing it removes the {count} annotation sets.')),
     actions: [{ id: 'remove', label: t('Remove all sets'), tone: 'danger' }]
   });
   /** @param {string} text */

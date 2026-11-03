@@ -213,9 +213,17 @@ against the row above. At exactly half, or without hits, the record keeps its
 orientation. A record that `--reverse_complement 1` or a region's `:rc`
 already reverses stays reversed, and the next row is decided against it as
 drawn. The figure equals the one the same explicit reverses draw; the CLI logs
-each record it reversed. A Session cannot store the option yet: with `--save_session` or
-`--session_output` the command stops with an error before it draws. The Web app does not
-offer it yet.
+each record it reversed. A Session stores the result, not the option: each record the
+rule reversed is saved with its reverse-complement flag set, so a replay of the Session
+draws the same figure without `--auto_orient`.
+
+In the Web app, **Orient records from comparisons** in the Linear comparison settings
+runs the same rule on the comparisons of the last Generate with the reverse flags of the
+records below the top row cleared first. The top row keeps its orientation, and each record
+below it gets its **Reverse complement** from the comparisons, also one that was checked; a
+record that the comparisons do not decide is unchecked. The change is one Undo step, and the
+next Generate draws it. See
+[Comparison surfaces](web-app.md#comparison-surfaces).
 
 ## Selected Linear edges
 
@@ -225,7 +233,7 @@ positional adjacent pairs. The button that matches the resolved plan is pressed;
 a selected or mixed plan presses none of them and shows a **Custom** badge.
 
 Open **Selected pairs (N)** to change the source or uploaded file for one pair,
-omit a pair, or select **Add** and define an explicit non-adjacent pair. The
+omit a pair, or select **Add pair** and define an explicit non-adjacent pair. The
 pair sections are grouped there instead of appearing between record cards.
 Each included uploaded edge needs its own active file. An omitted edge
 contributes no comparison results and does not reserve a search job. Retained inactive

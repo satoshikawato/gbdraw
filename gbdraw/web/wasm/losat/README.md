@@ -4,12 +4,14 @@ The LOSAT WebAssembly files of the Web app:
   `docs/web/abi_v1.md`). The host calls `_initialize` once after instantiation.
 - `losat-threaded.wasm`: threaded WASI command for cross-origin-isolated
   browsers. It exports `_start` and `wasi_thread_start`, imports shared memory
-  from `env.memory`, and imports `wasi.thread-spawn`.
+  from `env.memory`, and imports `wasi.thread-spawn`. LOSAT's shared-memory guard
+  has rewritten its memory operations (its record is the custom section
+  `losat.shared_memory_guard`); the Web app compiles the file as it is.
 
 `losat-build.json` records their build: the LOSAT commit, the build commands,
 the toolchain, each file's sha256 and size, and the page limits of the memory
-the threaded file imports. `tests/test_losat_wasm_build.py` fails when a file
-does not match it. The Web app records the build's `version` with each search,
+the threaded file imports and its guard record. `tests/test_losat_wasm_build.py`
+fails when a file does not match it or the threaded file has no current guard. The Web app records the build's `version` with each search,
 and sizes each threaded job's shared memory from those limits
 (`js/services/losat-build.generated.js`).
 
@@ -27,13 +29,24 @@ cd "$GBDRAW_SRC"
 python tools/record_losat_wasm_build.py --losat-src "$LOSAT_SRC" --target-dir "$TARGET_DIR"
 ```
 
-The tool copies `wasm32-wasip1/release/LOSAT.wasm` to `losat.wasm` and
-`wasm32-wasip1-threads/release/losat.wasm` to `losat-threaded.wasm`, and
+The tool copies `wasm32-wasip1/release/LOSAT.wasm` to `losat.wasm`, writes
+`wasm32-wasip1-threads/release/losat.wasm` through LOSAT's
+`tests/wasi_shared_memory.js guard` to `losat-threaded.wasm` (cargo's output is
+not guarded, and the tool stops when the result has no current guard record), and
 rewrites `losat-build.json` and the generated module.
+
+Panic messages in the files hold the absolute paths of the build (the Cargo
+registry and LOSAT's `src/cli.rs`), so bytes depend on where it ran. For the same
+bytes as LOSAT's `WASI threading integration` artifact
+`losat-threaded-command.wasm`, build with `CARGO_HOME=/home/runner/.cargo` in a
+checkout at `/home/runner/work/LOSAT/LOSAT`; `--remap-path-prefix` is not enough,
+because it changes the file name in the module's name section.
 
 Notes:
 
-- The Web app keeps `losat.wasm` as the serial fallback.
+- The Web app keeps `losat.wasm` as the serial fallback. It is a local build:
+  LOSAT publishes no artifact for it at this commit, so there is nothing to
+  compare it with. It reproduces from a fresh clone at CI's paths.
 - Threaded browser execution needs COOP/COEP response headers so that
   `SharedArrayBuffer` is available.
 - For threaded LOSAT, `-num_threads N` is N compute threads. The browser

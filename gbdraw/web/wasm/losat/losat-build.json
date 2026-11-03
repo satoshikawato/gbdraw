@@ -1,18 +1,18 @@
 {
   "schema": 1,
   "repository": "https://github.com/satoshikawato/LOSAT",
-  "commit": "dde737f188dc29b6a291e633df7f4db82b90348e",
-  "commitDate": "2026-10-31T14:11:11+00:00",
+  "commit": "f62da7f6b50592f1f421b3e16a4f6c0a30331202",
+  "commitDate": "2026-11-01T21:14:27+00:00",
   "cargoVersion": "0.2.0",
-  "version": "0.2.0+dde737f188dc",
+  "version": "0.2.0+f62da7f6b505",
   "toolchain": {
     "rustc": "rustc 1.92.0 (ded5c06cf 2025-12-08)\nbinary: rustc\ncommit-hash: ded5c06cf21d2b93bffd5d884aa6e96934ee4234\ncommit-date: 2025-12-08\nhost: x86_64-unknown-linux-gnu\nrelease: 1.92.0\nLLVM version: 21.1.3",
     "cargo": "cargo 1.92.0 (344c4567c 2025-10-21)"
   },
   "files": {
     "losat.wasm": {
-      "sha256": "7c154abc37b3bdab2493855a890e6cdc8f5f7432fa88aee67ebf03b42fae85a2",
-      "size": 7261437,
+      "sha256": "7b88ce41d9e4e56866ffcf4ad614599d8ed4e994149288f90629a4b0366743cf",
+      "size": 7413792,
       "target": "wasm32-wasip1",
       "shape": "serial reactor, direct losat_web_* API (_initialize)",
       "command": "cargo build --release --locked --target wasm32-wasip1 --lib --no-default-features",
@@ -22,11 +22,11 @@
       ]
     },
     "losat-threaded.wasm": {
-      "sha256": "0a2eef6f057ffc00cbc59bd56e2e0bc3e00c921f47cc3a6843e705becbf4c55a",
-      "size": 12741988,
+      "sha256": "2f4cab623e43bb8ceaaf6ade99de570de19f3c5d7db615734047412955304263",
+      "size": 13028782,
       "target": "wasm32-wasip1-threads",
       "shape": "threaded command (_start, wasi_thread_start; imports env.memory, wasi.thread-spawn)",
-      "command": "cargo build --release --locked --target wasm32-wasip1-threads --bin losat --features wasm-threads",
+      "command": "cargo build --release --locked --target wasm32-wasip1-threads --bin losat --features wasm-threads && node tests/wasi_shared_memory.js guard losat.wasm losat-threaded.wasm",
       "rustflags": [
         "-C",
         "target-feature=+simd128",
@@ -34,8 +34,16 @@
         "link-arg=--max-memory=4294901760"
       ],
       "memory": {
-        "initial": 43,
+        "initial": 44,
         "maximum": 65535
+      },
+      "sharedMemoryGuard": {
+        "version": 3,
+        "fill": 1321,
+        "copy": 7005,
+        "grow": 1,
+        "atomic": 29019,
+        "atomic_helpers": 1418
       }
     }
   }

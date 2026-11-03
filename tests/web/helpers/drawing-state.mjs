@@ -136,7 +136,7 @@ export const TRANSIENT_KEYS = Object.freeze([
   'plotTitleAutoTransform', 'showCanvasControls', 'skipCaptureBaseConfig',
   'skipExtractOnSvgChange', 'trustedArtifactRestoreInProgress', 'newColorFeat', 'newColorVal',
   'newPriorityRule', 'newFeatureToAdd', 'displayedResultMetadata', 'featureList', 'featureListState', 'filteredFeatures',
-  'filteredEditableLabels', 'ruleMatchingPending', 'downloadTransparentBackground'
+  'filteredEditableLabels', 'ruleMatchingPending', 'downloadWhiteBackground'
 ]);
 
 // The drawing store itself: the drawings by ID, their tab order and names

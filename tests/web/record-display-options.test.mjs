@@ -174,7 +174,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
   let committed = { resources, renderRequest: { mode: linear ? 'linear' : 'circular', records: components.map(({ resourceId }, i) => ({
     recordKey: `record-${i + 1}`, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
     selector: null })) } };
-  const state = { mode: { value: linear ? 'linear' : 'circular' }, inputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [], inputFiles,
+  const state = { sessionOperationAvailability: () => null, mode: { value: linear ? 'linear' : 'circular' }, inputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [], inputFiles,
     form: createDefaultForm(), adv: createDefaultAdv('circular'),
     recordDisplayDrafts: [], featurePlacementOverrides: {},
     circularRecordList: { value: discovered ? components.map(({ resourceId }, i) => ({
@@ -376,7 +376,7 @@ test('same-name, same-content source replacement does not retain old feature cap
   assert.equal(model.state.files.c_gb.name, model.file.name);
   assert.notEqual(model.state.files.c_gb, model.file);
   assert.deepEqual(model.enabled(), []);
-  assert.throws(() => model.actions.setPlacement([model.feature], 'main'), /Unavailable/);
+  assert.throws(() => model.actions.setPlacement([model.feature], 'main'), /A selected feature is not in the displayed Result\./);
 });
 
 test('isCurrentFeature is a pure check of the committed record, its bound source, and the saved resource', () => {
@@ -429,7 +429,7 @@ test('a feature whose record key is not text is not current, with a source drawn
     assert.equal(isCurrentFeature(feature, binding), false, JSON.stringify(feature));
   }
   // The placement control reads a feature's identity from either spelling; the check reads `record_key`.
-  const state = { mode: { value: 'linear' }, form: createDefaultForm(), adv: createDefaultAdv('linear'),
+  const state = { sessionOperationAvailability: () => null, mode: { value: 'linear' }, form: createDefaultForm(), adv: createDefaultAdv('linear'),
     featurePlacementOverrides: {}, featureCatalog: { value: { items: [{ recordKeys: ['card:1'] }] } } };
   const actions = createFeaturePlacementActions({ state: withDrawings(state), runUndoable: (_label, fn) => fn(),
     getCommittedRequest: () => request, isCurrentFeature: (feature) => isCurrentFeature(feature, binding) });
@@ -475,7 +475,7 @@ test('unsupported draft lanes remain unavailable independently of current placem
   model.state.form.track_type = 'tuckin';
   assert.equal(model.actions.valueFor(model.feature), 'outward');
   assert.deepEqual(model.enabled(), ['auto', 'main']);
-  assert.throws(() => model.actions.setPlacement([model.feature], 'inward'), /Unavailable/);
+  assert.throws(() => model.actions.setPlacement([model.feature], 'inward'), /The current track settings have no feature track for this placement\./);
 });
 
 
@@ -594,7 +594,7 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
   const committed = { resources, renderRequest: { mode: 'linear', records: [{ recordKey: 'record-1', cardinality: 'exactly_one',
     source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' } }] } };
   const inputFiles = createInputFileStore();
-  const state = { mode: { value: 'linear' }, inputType: { value: 'gb' }, files: { c_gb: null }, inputFiles,
+  const state = { sessionOperationAvailability: () => null, mode: { value: 'linear' }, inputType: { value: 'gb' }, files: { c_gb: null }, inputFiles,
     linearSeqs: [{ uid: 'record-1', gb: inputFiles.registerFile(createSessionResourceFileView(table, 'both')), region_record_id: 'second', region_reverse: false }],
     form: createDefaultForm(), adv: createDefaultAdv('linear'),
     recordDisplayDrafts: [{ sourceUid: 'record-1', selector: '#1', recordId: 'second', topologyOverride: null,
@@ -667,7 +667,7 @@ const sourceControls = () => {
     files: { c_gb: inputFiles.registerFile(new File(['c'], 'c.gb')) }, circularRecordList: { value: [] } };
   const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')],
     linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: inputFiles.registerFile(new File([uid], `${uid}.gb`)), region_record_id: '', region_reverse: false })) };
-  const state = withModeDrawings({ mode: { value: 'linear' }, inputType: { value: 'gb' },
+  const state = withModeDrawings({ sessionOperationAvailability: () => null, mode: { value: 'linear' }, inputType: { value: 'gb' },
     featureCatalog: { value: null }, inputFiles },
   { circular, linear });
   withSourceDrawings(state);

@@ -141,7 +141,7 @@ test('Search features finds a hidden feature; Open shows its popup with the hidd
   const popup = page.locator('.feature-popup');
   await expect(popup).toBeVisible();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature.feat.locus_tag)).toBe('FL2');
-  await expect(popup.locator('[data-feature-hidden-note]')).toHaveText('This feature is hidden. Choose On to show it.');
+  await expect(popup.locator('[data-feature-hidden-note]')).toHaveText('This feature is hidden.');
   // The popup of a feature the Result does not draw has no point to open at;
   // it opens inside the viewport, also on a phone.
   const insideViewport = async () => {

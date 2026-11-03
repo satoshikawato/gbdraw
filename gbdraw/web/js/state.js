@@ -255,9 +255,9 @@ const selectedSpecificPreset = ref(defaultEditorDraftState.selectedSpecificPrese
 const specificRulePresetLoading = ref(defaultEditorDraftState.specificRulePresetLoading);
 const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 // A choice of the PNG download, as the DPI beside it, kept for the page only:
-// on, the PNG keeps the drawing's transparent background (as the CLI's PNG
-// does); off, it is painted white. Neither a Session nor History holds it.
-const downloadTransparentBackground = ref(false);
+// off, the PNG keeps the drawing's transparent background (as the CLI's PNG
+// does); on, it is painted white. Neither a Session nor History holds it.
+const downloadWhiteBackground = ref(false);
 
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
@@ -852,17 +852,23 @@ const filteredEditableLabels = computed(() => {
 // 'history' words why History rejects Undo/Redo; History decides when (D-28).
 // `preparationBusyReason` words an edit still applying, whose owners only the
 // composition root holds: it passes it for Save and Load (R13). History words
-// its own pending edit the same way, so it passes none.
+// its own pending edit the same way, so it passes none. 'not-during-run' also
+// refuses while a run is processing (a Generate, or a Rotate, Align, or Align at
+// feature run): Reset Settings derives the ring series again, from which the
+// running Generate built its ring searches, and those runs replace the Result
+// that Generate adopts (OV-2446).
 /** @returns {SessionBusy | null} */
 export const sessionOperationAvailability = (
   operation = 'mutation',
   preparationBusyReason = /** @type {(() => string | null | undefined) | null} */ (null)
 ) => {
   let reason = '';
+  const generating = processing.value ? msg('Generating diagram. Retry after generation finishes.') : '';
   if (sessionImportPending.value) reason = msg('Loading session. Retry after loading finishes.');
   else if (sessionSavePending.value) reason = msg('Saving session. Retry after saving finishes.');
+  else if (operation === 'not-during-run') reason = generating;
   else if (operation === 'save' || operation === 'load' || operation === 'history') {
-    if (processing.value) reason = msg('Generating diagram. Retry after generation finishes.');
+    if (generating) reason = generating;
     else if (labelReflowProcessing.value) reason = msg('Updating diagram. Retry after the update finishes.');
     else reason = preparationBusyReason?.() || '';
   }
@@ -1275,7 +1281,7 @@ export const state = Object.freeze({
   selectedSpecificPreset,
   specificRulePresetLoading,
   downloadDpi,
-  downloadTransparentBackground,
+  downloadWhiteBackground,
   extractedFeatures,
   biologicalFeatures,
   featureCatalog,

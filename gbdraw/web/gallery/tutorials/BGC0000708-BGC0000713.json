@@ -116,11 +116,11 @@
             "BGC0000708.gbk"
           ],
           [
-            "Organism / strain (optional)",
+            "Organism / strain",
             "<i>Streptomyces lividus</i> CBS 844.73"
           ],
           [
-            "Subtitle / title (optional)",
+            "Subtitle / title",
             "Lividomycin biosynthetic gene cluster"
           ]
         ]
@@ -182,8 +182,8 @@
             "visibleText": [
               "File 1",
               "BGC0000708.gbk",
-              "Organism / strain (optional)",
-              "Subtitle / title (optional)"
+              "Organism / strain",
+              "Subtitle / title"
             ],
             "visibleControls": [
               {
@@ -198,7 +198,7 @@
           }
         }
       ],
-      "note": "MIBiG has already cut each cluster out of its genome, so each file holds one cluster. For a whole genome of your own, find the cluster's coordinates first and enter them in the record's options (Record options for a one-record file) › Region (optional) › Start and End; this tutorial skips that work."
+      "note": "MIBiG has already cut each cluster out of its genome, so each file holds one cluster. For a whole genome of your own, find the cluster's coordinates first and enter them in the record's options (Record options for a one-record file) › Region › Start and End; this tutorial skips that work."
     },
     {
       "title": "Add the other four clusters, one at a time",
@@ -325,8 +325,8 @@
             "visibleText": [
               "File 5",
               "BGC0000713.gbk",
-              "Organism / strain (optional)",
-              "Subtitle / title (optional)",
+              "Organism / strain",
+              "Subtitle / title",
               "Add sequence"
             ],
             "visibleControls": [
@@ -728,7 +728,7 @@
             "visibleText": [
               "BGC0000713.gbk",
               "Record options",
-              "Region (optional)",
+              "Region",
               "Reverse complement"
             ],
             "visibleControls": [

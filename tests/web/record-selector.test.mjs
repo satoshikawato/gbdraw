@@ -250,7 +250,7 @@ const errorController = createLinearRecordSelector({
 });
 await errorController.refresh(errorState.activeDrawing());
 assert.deepEqual(errorController.optionsFor(errorState.activeDrawing(), errorState.linearSeqs[0]), [
-  { value: 'LegacyRec', label: 'Upload a sequence file first', synthetic: true }
+  { value: 'LegacyRec', label: '', synthetic: true }
 ]);
 errorState.linearSeqs[0].gb = { name: 'bad.gb' };
 await errorController.refresh(errorState.activeDrawing());

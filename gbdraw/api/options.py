@@ -1477,7 +1477,14 @@ class LinearDiagramOptions(_ModeDiagramOptions):
                     "anchor_feature must be a FeatureSelector, a key=value string, or None.",
                     diagnostic={"code": "INPUT_INVALID"},
                 )
-            object.__setattr__(self, "anchor_feature", parse_feature_selector(self.anchor_feature))
+            try:
+                selector = parse_feature_selector(self.anchor_feature)
+            except ValidationError as exc:
+                raise ValidationError(
+                    f"anchor_feature: {exc}",
+                    diagnostic={"code": "INPUT_INVALID", "field": "anchor_feature", "reason": "REQUIRED"},
+                ) from exc
+            object.__setattr__(self, "anchor_feature", selector)
         for placement in self.feature_placements:
             placement.target.validate_mode("linear")
         _validate_mode_config_overrides(

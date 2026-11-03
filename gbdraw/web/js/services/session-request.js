@@ -53,7 +53,7 @@ import {
   parseCircularTrackSlotSpecs
 } from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
-import { downloadSafeName } from '../utils/download-names.js';
+import { DEFAULT_LINEAR_OUTPUT_PREFIX, downloadSafeName } from '../utils/download-names.js';
 import { projectCircularMeasureDraft } from './circular-track-measure.js';
 import {
   buildLinearTrackSlotPayload,
@@ -647,6 +647,7 @@ const canonicalRecordDisplay = (raw) => {
 // Fresh canonical requests use only these typed GbdrawConfig leaf paths.
 // The snake_case aliases derived below exist solely in the persisted-session
 // reader; they are never emitted by buildConfigOverrides().
+
 const CONFIG_OVERRIDE_PATHS = Object.freeze({
   arrowHeadLengthRatio: 'objects.features.arrow_geometry.head_length_ratio',
   arrowShaftWidthRatio: 'objects.features.arrow_geometry.shaft_width_ratio',
@@ -4425,7 +4426,7 @@ const projectCanonicalRenderInput = ({
     ? resolveCircularBatchPrefixes(circularOutputRecords, explicitPrefix)
         .map(renderOutputPayload)
     : renderOutputPayload(
-        explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : 'out')
+        explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : DEFAULT_LINEAR_OUTPUT_PREFIX)
       );
   const labelProjection = generatedLabelProjection || requestLabelProjection(state, drawing);
   // The option keys are not checked yet; the two keys every request has are.

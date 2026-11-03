@@ -912,7 +912,7 @@ def capture_gui_circular_rings(
         ):
             with page.expect_file_chooser() as chooser_info:
                 page.get_by_role(
-                    "button", name=re.compile(r"Add Seq")
+                    "button", name=re.compile(r"Add comparison sequence")
                 ).last.click()
             chooser_info.value.set_files(record["fasta"])
             ring_label = page.get_by_label(

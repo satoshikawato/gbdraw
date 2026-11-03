@@ -15,7 +15,6 @@ export const RECORDS_LOADING_LABEL = msg('Loading records...');
 // OV-379: a File whose records no read has started for (a loaded Session
 // defers discovery) is not inspected; it is not loading.
 export const RECORDS_NOT_INSPECTED_LABEL = msg('Not inspected');
-export const RECORD_FILE_REQUIRED_LABEL = msg('Upload a sequence file first');
 export const RECORD_READ_ERROR_LABEL = msg('Records could not be loaded');
 
 /**
@@ -401,10 +400,10 @@ export const createLinearRecordSelector = ({
         ? RECORDS_NOT_INSPECTED_LABEL
         : selectorState.status === 'error'
           ? RECORD_READ_ERROR_LABEL
-          : RECORD_FILE_REQUIRED_LABEL;
+          : ''; // No file: the disabled select shows no text (its accessible name says what it is).
     return [{
       value: currentValue,
-      label: tm(label),
+      label: label ? tm(label) : '',
       synthetic: Boolean(currentValue)
     }];
   };

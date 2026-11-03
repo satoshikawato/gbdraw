@@ -469,7 +469,7 @@ const depthWindowText = (state, drawing, field) => {
 /** @param {RecordLengthState} state @param {DrawingState} drawing */
 const linearAxisGapText = (state, drawing) => {
   const layout = String(drawing?.form?.linear_track_layout || 'middle').toLowerCase();
-  if (layout === 'middle') return 'ignored';
+  if (layout === 'middle') return t('ignored');
   const manualHeight = parsePositiveNumber(drawing?.adv?.feature_height);
   const multiplier = drawing?.form?.separate_strands ? 0.25 : 0.30;
   if (manualHeight !== null) return withAuto(formatPx(manualHeight * multiplier));
@@ -486,7 +486,7 @@ const linearAxisGapText = (state, drawing) => {
 /** @param {DrawingState} drawing */
 const linearLabelPlacementText = (drawing) => {
   const layout = requireCurrentLinearTrackLayout(drawing?.form?.linear_track_layout);
-  return layout === 'below' ? 'below' : 'above';
+  return layout === 'below' ? t('below') : t('above');
 };
 
 /** @param {RecordLengthState} state */
@@ -539,9 +539,9 @@ const autoTextByKey = (state, drawing, key, context = null) => {
     case 'circularDepthWidth': return circularWidthText(state, drawing, 'depth');
     case 'linearDepthHeight': return withAuto(formatPx(DEFAULTS.linear.depthHeightPx));
     case 'linearDepthTrackHeight': return withAuto(formatPx(parsePositiveNumber(drawing?.adv?.depth_height) ?? DEFAULTS.linear.depthHeightPx));
-    case 'depthLargeTick': return 'endpoints only';
+    case 'depthLargeTick': return t('endpoints only');
     case 'depthTickFont': return withAuto(formatPx(depthTickFontSize(state, drawing, context)));
-    case 'conservationReference': return drawing?.circularConservation?.source === 'losat' ? t('subject (auto)') : t('detect side (auto)');
+    case 'conservationReference': return drawing?.circularConservation?.source === 'losat' ? t('subject') : t('detect side');
     case 'conservationRingWidth': return circularWidthText(state, drawing, 'sequence_conservation');
     case 'conservationRingGap': return withAuto(formatPx(previewSpacingPx()));
     case 'plotTitle': return plotTitleText(state, drawing);

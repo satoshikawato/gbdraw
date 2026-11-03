@@ -718,6 +718,21 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]);
     }
   },
+  // Align at feature: Python resolves the anchor on the committed request,
+  // staged as Generate stages it, and returns the record translations.
+  [DIAGRAM_HELPER_OPERATIONS.RESOLVE_FEATURE_ANCHOR]: {
+    keys: ['canonicalRequest', 'selector'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'resolve_feature_anchor_json', [
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(payload.selector, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   // Load Feature Edits TSV: Python reads the table against the records of the
   // committed request, staged as Generate stages them (design Q4 6.4, R4).
   [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE]: {
@@ -1017,6 +1032,20 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
       pyodide, 'circular_ring_tables_in_search_frame_json', [
         jsonArgument(payload.resourceIds, []),
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
+  // The Orient records button: Python plans the last Generate's request with
+  // auto_orient and returns each record's drawn orientation by record key.
+  [DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION]: {
+    keys: ['canonicalRequest'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'decide_auto_orientation_json', [
         jsonArgument(payload.canonicalRequest, null),
         jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
         `${workspace}/output`,

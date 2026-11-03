@@ -165,7 +165,7 @@
               "linearSeqs.0.definition": "Marsupenaeus japonicus endogenous nimavirus",
               "linearSeqs.8.gb.name": "MejoMJNV.gb"
             },
-            "visibleText": ["MjeNMV.gb", "Record options", "Organism / strain (optional)"],
+            "visibleText": ["MjeNMV.gb", "Record options", "Organism / strain"],
             "visibleControls": [
               {"selector": "[data-capture='majanivirus-organism-input']", "value": "Marsupenaeus japonicus endogenous nimavirus"}
             ]

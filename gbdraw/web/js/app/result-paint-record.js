@@ -83,6 +83,46 @@ export const sameColors = (left, right) => left[0] === right[0] && left[1] === r
 /** @param {Pick<EditorPaintState, 'colors' | 'visibility'>} left @param {Pick<EditorPaintState, 'colors' | 'visibility'>} right */
 const sameFills = (left, right) => sameColors(left.colors, right.colors) && left.visibility === right.visibility;
 
+/**
+ * The label rows of `EditorPaintState.labels`: [recordKey, biologicalFeatureId,
+ * labelVisibility, labelText, labelSourceText], and the bulk label texts by source text.
+ * @typedef {[[string, string, string | null, string | null, string | null][], Record<string, string>]} LabelPaintRows
+ */
+
+// Whether a Result drawn with the label intent `drawn` lacks what `current`
+// draws: a label On or Off that returned to Default, or an edited text that
+// left. Only Python decides whether Default draws a label and which text it
+// started from, so no projection of the Result's bytes can show them; another
+// value (Off to On, one text to another) the label projection shows or asks for.
+// An edit that had already left when the Result was last shown (`shown`, '' when
+// unknown) is not asked about: the Result followed it, or asked once for it. A
+// row of a feature the Result does not draw (`drawsFeature`) says nothing of it.
+// The bytes hold no source text, so a bulk text counts for every Result.
+/**
+ * @param {string} drawn
+ * @param {string} shown
+ * @param {string} current
+ * @param {(recordKey: string, featureId: string) => boolean} drawsFeature
+ */
+export const drawnLabelIntentGone = (drawn, shown, current, drawsFeature) => {
+  const [drawnRows, drawnBulk] = /** @type {LabelPaintRows} */ (JSON.parse(drawn));
+  const rowKey = (/** @type {LabelPaintRows[0][number]} */ [recordKey, featureId]) => JSON.stringify([recordKey, featureId]);
+  const read = (/** @type {string} */ labels) => {
+    const [rows, bulk] = /** @type {LabelPaintRows} */ (JSON.parse(labels));
+    return { held: new Map(rows.map((row) => [rowKey(row), row])), bulk };
+  };
+  const now = read(current);
+  const before = shown ? read(shown) : null;
+  const shownByDefault = (/** @type {string | null | undefined} */ visibility) => visibility !== 'on' && visibility !== 'off';
+  const rowGone = (/** @type {LabelPaintRows[0][number]} */ row, /** @type {ReturnType<typeof read>} */ { held }) => {
+    const heldRow = held.get(rowKey(row));
+    return (!shownByDefault(row[2]) && shownByDefault(heldRow?.[2])) || (row[3] !== null && (heldRow?.[3] ?? null) === null);
+  };
+  const bulkGone = (/** @type {string} */ source, /** @type {string} */ text, /** @type {ReturnType<typeof read>} */ { bulk }) => bulk[source] !== text;
+  return drawnRows.some((row) => rowGone(row, now) && !(before && rowGone(row, before)) && drawsFeature(row[0], row[1]))
+    || Object.entries(drawnBulk).some(([source, text]) => bulkGone(source, text, now) && !(before && bulkGone(source, text, before)));
+};
+
 // A paint state no editor state equals: a Result recorded with it shows
 // every paint domain and the labels on its next display. The Legend order is
 // kept: replaying the default order needs the Result's generated inventory.
@@ -92,6 +132,12 @@ const unknownPaint = (current) => ({ ...current, colors: [null, ''], visibility:
 export const createResultPaintRecord = () => {
   /** @type {Map<string, EditorPaintState>} */
   const shownByResult = new Map();
+  // The editor state each Result's bytes were drawn with, which a live edit
+  // does not change: a rerender or a Generate draws a new Result. A restored
+  // Result not displayed is taken as drawn with the state of its drawing at the
+  // restore, which is all a Session or an Undo of a Generate says of its bytes.
+  /** @type {Map<string, EditorPaintState>} */
+  const drawnByResult = new Map();
   let bound = '';
   // The paint domains the displayed Result was not shown (a declined or
   // failed display); recorded with it when it leaves.
@@ -112,20 +158,25 @@ export const createResultPaintRecord = () => {
      * every Result but the mounted one shows every paint domain on its first
      * display. A label rerender draws the fills and visibility of the state
      * it started from (`drawn`, OV-346): the displayed Result lacks those of
-     * an edit made meanwhile (`lacking`) until they are shown.
+     * an edit made meanwhile (`lacking`) until they are shown. `drawingStateOf`
+     * reads the state of the drawing that holds a restored Result not displayed.
      * @param {readonly string[]} identities
      * @param {string} displayed
      * @param {EditorPaintState} current
-     * @param {{ restored?: boolean, drawn?: EditorPaintState }} [options]
+     * @param {{ restored?: boolean, drawn?: EditorPaintState, drawingStateOf?: (identity: string) => EditorPaintState }} [options]
      */
-    commit(identities, displayed, current, { restored = false, drawn = current } = {}) {
+    commit(identities, displayed, current, { restored = false, drawn = current, drawingStateOf = () => current } = {}) {
       const live = new Set(identities.filter(Boolean));
       live.forEach((identity) => {
         if (shownByResult.has(identity)) return;
-        shownByResult.set(identity, restored && identity !== displayed ? unknownPaint(current) : drawn);
+        const notDisplayed = restored && identity !== displayed;
+        shownByResult.set(identity, notDisplayed ? unknownPaint(current) : drawn);
+        drawnByResult.set(identity, notDisplayed ? drawingStateOf(identity) : drawn);
       });
       [...shownByResult.keys()].forEach((identity) => {
-        if (!live.has(identity)) shownByResult.delete(identity);
+        if (live.has(identity)) return;
+        shownByResult.delete(identity);
+        drawnByResult.delete(identity);
       });
       bound = displayed;
       const { colors, visibility } = drawn;
@@ -188,6 +239,14 @@ export const createResultPaintRecord = () => {
      */
     drewPaint(drawn, current) {
       return drawn ? sameFills(drawn, current) && drawn.strokes === current.strokes : false;
+    },
+    /**
+     * The editor state the Result's bytes were drawn with.
+     * @param {string} identity
+     * @returns {EditorPaintState | undefined}
+     */
+    drawn(identity) {
+      return drawnByResult.get(identity);
     },
     /** @param {string} identity The Result shown again with the intent it left with (E1). */
     rebind(identity) {

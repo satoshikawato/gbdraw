@@ -780,7 +780,6 @@ test('OV-1249: Reset Settings keeps a Record Order row for each loaded record', 
   await settleLive(page);
   // Reset returns the rows to the defaults of the loaded records, as an upload sets them.
   expect(await recordOrder()).toEqual(loaded);
-  await expect(page.getByText('Upload a sequence file to load records.')).toHaveCount(0);
 });
 
 // H2 (D-15-51): Reset Settings resets both drawings and is one project step:

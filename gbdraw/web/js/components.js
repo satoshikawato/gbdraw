@@ -13,15 +13,18 @@ import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidan
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
 import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
+import { detectedTopologyNote } from './services/record-display-model.js';
+import { specificRuleHasQualifier } from './services/specific-color-rules.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
-import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsShortText, settingsView } from './services/settings-sections.js';
-import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
+import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsScrollOwner, settingsShortText, settingsView } from './services/settings-sections.js';
+import { SETTING_NOTE_APPLIES, settingApplicationNote, settingClassNote, settingClockLabel } from './services/setting-application.js';
 import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
 import { isInputFileRef } from './services/history-files.js';
 import { sessionFilesOfKind } from './services/drawing/inputs.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { TranslationParams } from './utils/i18n.js' */
-/** @import { SettingApplicationId } from './services/setting-application.js' */
+/** @import { SettingApplicationClass, SettingApplicationId } from './services/setting-application.js' */
+/** @import { Ref } from './utils/reactivity.js' */
 /** @import { LiveSettingItem } from './services/session-request.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
@@ -167,7 +170,8 @@ export const GbdrawLoader = {
 // aria-describedby. The description is a hidden element teleported to <body>,
 // so the text around the tip stays its visible label and screen readers do
 // not read the tip text twice. Mouse hover and keyboard focus show the
-// tooltip, a click or tap toggles it, and Escape or blur closes it. Place
+// tooltip, a click or tap toggles it, and Escape or blur closes it; an
+// Escape with the tooltip closed reaches the dialog around the tip. Place
 // tips outside <label> so they never change the accessible name of a label or
 // its control. The default slot replaces the question mark (the layout warning
 // beside the compact Generate button shows a warning mark).
@@ -185,6 +189,7 @@ export const HelpTip = {
     const visible = computed(() => hovered.value || keyboardFocus.value || pinned.value);
     const style = reactive({ top: '0px', left: '0px' });
     const trigger = ref(null);
+    const tooltip = /** @type {Ref<HTMLElement | null>} */ (ref(null));
     const position = () => {
       if (!trigger.value) return;
       const rect = trigger.value.getBoundingClientRect();
@@ -207,9 +212,11 @@ export const HelpTip = {
         left = viewportWidth - halfWidth - 10;
       }
 
-      // Prevent overflow at the top (if too close to top edge, show below)
-      // Considering header and browser frame, if y < 60px, show below
-      if (rect.top < 60) {
+      // Prevent overflow at the top: show below when the icon is within 60 px
+      // of it (header and browser frame) or the shown tooltip would not fit
+      // above (OV-2449: a long timing note).
+      const height = tooltip.value ? tooltip.value.offsetHeight : 0;
+      if (rect.top < 60 || rect.top - gap - height < 8) {
         top = rect.bottom + gap;
         transform = 'translate(-50%, 0)'; // transform for below display
       }
@@ -218,7 +225,8 @@ export const HelpTip = {
       style.left = `${left}px`;
       style.transform = transform;
     };
-    watch(visible, (/** @type {boolean} */ open) => { if (open) position(); });
+    // Again once the tooltip is shown, with its height.
+    watch(visible, (/** @type {boolean} */ open) => { if (open) { position(); void nextTick(position); } });
     // A touch tap also reports pointerenter; only a hovering pointer shows it.
     const onEnter = (/** @type {PointerEvent} */ event) => { hovered.value = event.pointerType !== 'touch'; };
     const onLeave = () => { hovered.value = false; };
@@ -228,11 +236,18 @@ export const HelpTip = {
       keyboardFocus.value = false;
       pinned.value = false;
     };
+    // Escape closes an open tooltip and goes no further; with the tooltip
+    // closed it reaches the dialog or popup that holds the tip.
+    const onEscape = (/** @type {KeyboardEvent} */ event) => {
+      if (!visible.value) return;
+      event.stopPropagation();
+      close();
+    };
     const toggle = () => { pinned.value = !pinned.value; };
     const readName = () => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); };
     onMounted(readName);
     watch(uiLocale, () => nextTick(readName));
-    return { descriptionId, name, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
+    return { descriptionId, name, visible, style, trigger, tooltip, onEnter, onLeave, onFocus, close, onEscape, toggle };
   }
 };
 
@@ -319,23 +334,41 @@ export const SettingsSectionTitle = {
 };
 
 // The timing note of a `SETTING_APPLICATION` row (services/setting-application.js),
-// placed inside that row's `data-setting` scope: "Applies on Generate" with
-// `data-applies-on-generate="<key>"`, "Live edit" for a live block inside a
-// Generate scope, or the row's own qualified note as a hint line. A live
-// setting row the shown Result cannot draw says "Applies on Generate"
-// (the injected `SETTING_NOTE_APPLIES` predicate of the committed request,
-// made once per render). An `item` (an annotation item, a Linear row) states
-// that one item's value.
+// placed inside that row's `data-setting` scope, in the heading or label of
+// the setting it marks (PD-OI-037 rev 3). A change that applies on Generate,
+// wholly or in part, shows a clock icon: a `HelpTip` named "Applies on
+// Generate" whose tooltip and description are the note, inside a wrapper
+// marked `data-timing-clock`, with `data-applies-on-generate="<key>"` for a
+// Generate row. A change that
+// applies at once shows nothing; an export-only row shows its note as a line.
+// A live setting row the shown Result cannot draw applies on Generate (the
+// injected `SETTING_NOTE_APPLIES` predicate of the committed request, made
+// once per render). An `item` (an annotation item, a Linear row) states that
+// one item's value; `application` replaces the row's class where it follows
+// state (Palette Instant Preview); `id` names the description, which the
+// one control of a field references through aria-describedby. While the note
+// shows nothing, `id` names an empty hidden span, so that reference keeps its
+// target.
 export const SettingNote = {
-  props: { setting: { type: String, required: true }, item: { type: Object, default: null } },
-  /** @param {{ setting: SettingApplicationId, item: LiveSettingItem | null }} props */
+  components: { HelpTip },
+  props: {
+    setting: { type: String, required: true },
+    item: { type: Object, default: null },
+    application: { type: String, default: null },
+    id: { type: String, default: null }
+  },
+  /** @param {{ setting: SettingApplicationId, item: LiveSettingItem | null, application: SettingApplicationClass | null, id: string | null }} props */
   setup: (props) => {
     const appliesFor = /** @type {(item: LiveSettingItem | null) => (requestPath: string) => boolean} */ (inject(SETTING_NOTE_APPLIES, () => () => true));
-    return { note: computed(() => settingApplicationNote(props.setting, appliesFor(props.item))) };
+    return {
+      note: computed(() => (props.application ? settingClassNote(props.application) : settingApplicationNote(props.setting, appliesFor(props.item)))),
+      label: computed(settingClockLabel)
+    };
   },
-  template: `<span v-if="note.text" :class="note.qualified ? 'ui-hint block' : 'apply-note'"
-    :data-applies-on-generate="note.application === 'generate' ? setting : null"><i v-if="note.application === 'generate'"
-    class="ph ph-clock" aria-hidden="true"></i> {{ note.text }}</span>`
+  template: `<span v-if="note.display === 'clock'" class="apply-note" data-timing-clock
+    :data-applies-on-generate="note.application === 'generate' ? setting : null"><help-tip :id="id" :text="note.text" :label="label"><i
+    class="ph ph-clock" aria-hidden="true"></i></help-tip></span><span v-else-if="note.display === 'hint'" :id="id" class="ui-hint block">{{ note.text }}</span><span
+    v-else-if="id" :id="id" hidden></span>`
 };
 
 // `v-settings-section="'<key>'"` on the element of a settings section: it
@@ -649,6 +682,9 @@ export const ActionMenu = {
       item.run(event);
       if (!props.closeOnRun || !menu) return;
       menu.open = false;
+      // A dialog the item opened mounts after this: its Cancel returns focus to
+      // the toggle, as the item it would read is hidden now.
+      focusMenuToggle(menu);
       void nextTick(() => {
         // A dialog the item opened keeps its focus.
         const active = document.activeElement;
@@ -804,6 +840,8 @@ export const ColorValueControl = {
  * @property {InputFileKind} [fileKind] the kind of file the uploader takes: it also offers the files of that kind
  *   in this Session (`sessionFilesOfKind`, PD-OI-090 〔入力ファイル〕), and choosing one is the same selection as
  *   an upload of it, by its ref
+ * @property {string} [help] help tip text, shown beside the zone (the label is hidden until a file is
+ *   chosen) and referenced by the zone through aria-describedby
  */
 
 // `inspectionFailed` is the slot's existing inspection status, passed by the
@@ -811,7 +849,8 @@ export const ColorValueControl = {
 // selected file whose inspection failed is not shown as ready (UI-08).
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'importStep', 'inspectionFailed', 'fileKind'],
+  components: { HelpTip },
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'importStep', 'inspectionFailed', 'fileKind', 'help'],
   emits: ['update:modelValue', 'clearRequest'],
   /**
    * @param {FileUploaderProps} props
@@ -819,6 +858,7 @@ export const FileUploader = {
    */
   setup(props, { emit }) {
     const input = ref(null);
+    const helpId = `file-help-${useId()}`;
     const uploadAvailable = computed(() => !state.sessionOperationAvailability());
     const selectedFiles = computed(() => {
       if (Array.isArray(props.modelValue)) return props.modelValue.filter(Boolean);
@@ -833,6 +873,46 @@ export const FileUploader = {
       const suffix = items.length > 2 ? ` +${items.length - 2}` : '';
       return t('{count} files: {names}', { count: items.length, names: `${firstNames}${suffix}` });
     });
+    // The label row appears above the zone once a file is chosen, and the settings above it keep changing
+    // while the file is inspected. When the user picks a file with focus in the component, hold the zone
+    // at the viewport position it had at the pick (Owner D-23): each frame, for up to 300 frames, scroll
+    // what scrolls the settings (`settingsScrollOwner`) by the drift (a drift it cannot take, such as one
+    // above the page top, waits), and stop at once when the user scrolls, touches, clicks, or types. The position is
+    // read at the pick because the parent's render moves the settings above the zone before this
+    // component's own watcher runs.
+    const root = ref(/** @type {HTMLElement | null} */ (null));
+    const zone = ref(/** @type {HTMLElement | null} */ (null));
+    const HOLD_MAX_FRAMES = 300;
+    const USER_SCROLL_EVENTS = ['wheel', 'touchstart', 'pointerdown', 'keydown'];
+    /** @param {number} top */
+    const holdZoneAt = (top) => {
+      const area = root.value;
+      const box = zone.value;
+      if (!area || !box) return;
+      const settings = box.closest('.settings-scroll');
+      const scroller = settings ? settingsScrollOwner(settings) : document.scrollingElement;
+      let frames = 0;
+      let stopped = false;
+      const stop = () => {
+        stopped = true;
+        USER_SCROLL_EVENTS.forEach((type) => window.removeEventListener(type, stop, true));
+      };
+      USER_SCROLL_EVENTS.forEach((type) => window.addEventListener(type, stop, { capture: true, passive: true }));
+      const hold = () => {
+        if (stopped) return;
+        if (!box.isConnected || !area.contains(document.activeElement) || ++frames > HOLD_MAX_FRAMES) {
+          stop();
+          return;
+        }
+        const drift = box.getBoundingClientRect().top - top;
+        if (scroller && Math.abs(drift) > 0.5) scroller.scrollTop += drift;
+        requestAnimationFrame(hold);
+      };
+      requestAnimationFrame(hold);
+    };
+    // The zone's top at a pick made with focus in the component and no file shown yet; else null.
+    const pickTopNow = () => (!hasSelection.value && zone.value && root.value?.contains(document.activeElement)
+      ? zone.value.getBoundingClientRect().top : null);
     // The files in this Session that this uploader offers, less the ones it shows.
     const sessionFiles = computed(() => {
       if (!props.fileKind) return [];
@@ -844,8 +924,9 @@ export const FileUploader = {
      * (a `multiple` uploader adds it to the ones it shows). One History step,
      * as an upload.
      * @param {(File | InputFileRef)[]} nextFiles
+     * @param {number | null} pickTop the zone's viewport top at the pick, held after the selection (`holdZoneAt`)
      */
-    const select = (nextFiles) => {
+    const select = (nextFiles, pickTop) => {
       // A chosen input file makes a Generate likely: download the Worker's boot files now.
       if (nextFiles.length) prefetchPyodideBootAssets();
       const update = () => {
@@ -854,6 +935,7 @@ export const FileUploader = {
         } else if (nextFiles[0]) {
           emit('update:modelValue', nextFiles[0]);
         }
+        if (pickTop !== null) holdZoneAt(pickTop);
       };
       const history = window.__GBDRAW_HISTORY__;
       const apply = async () => {
@@ -872,7 +954,7 @@ export const FileUploader = {
     const handleFile = (/** @type {{ target: HTMLInputElement }} */ e) => {
       const busy = state.sessionOperationAvailability();
       if (busy) { e.target.value = ''; return busy; }
-      select(Array.from(e.target.files || []));
+      select(Array.from(e.target.files || []), pickTopNow());
       e.target.value = '';
     };
     const chooseSessionFile = (/** @type {{ target: HTMLSelectElement }} */ e) => {
@@ -881,7 +963,7 @@ export const FileUploader = {
       const busy = state.sessionOperationAvailability();
       if (busy) return busy;
       if (!chosen) return undefined;
-      select(props.multiple ? [...selectedFiles.value, chosen] : [chosen]);
+      select(props.multiple ? [...selectedFiles.value, chosen] : [chosen], pickTopNow());
       return undefined;
     };
     const clearFile = (/** @type {Event} */ event) => {
@@ -907,7 +989,7 @@ export const FileUploader = {
         emit('update:modelValue', props.multiple ? [] : null);
       }
     };
-    return { input, handleFile, chooseSessionFile, clearFile, hasSelection, selectedLabel, sessionFiles, uploadAvailable };
+    return { input, root, zone, helpId, handleFile, chooseSessionFile, clearFile, hasSelection, selectedLabel, sessionFiles, uploadAvailable };
   }
 };
 
@@ -954,7 +1036,7 @@ export const RecordDisplayControl = {
       // goes back, and a cleared field shows the current start (OV-421).
       event.target.value = props.controller.surfaceFor(props.row).displayStart ?? '';
     };
-    return { error, setStart, controlAvailable: computed(() => !state.sessionOperationAvailability()), draft: computed(() => props.controller.draftFor(props.row)),
+    return { error, setStart, detectedTopologyNote, controlAvailable: computed(() => !state.sessionOperationAvailability()), draft: computed(() => props.controller.draftFor(props.row)),
       surface: computed(() => props.controller.surfaceFor(props.row)) };
   }
 };
@@ -1008,7 +1090,11 @@ export const SpecificRuleRows = {
   template: '#specific-rule-rows-template',
   components: { OperationError, HelpTip },
   props: ['rules', 'featureKeys', 'available', 'patternText', 'patternDraft', 'fieldId'],
-  emits: ['set-field', 'move-up', 'move-down', 'remove', 'edit-pattern', 'retry-pattern', 'revert-pattern']
+  emits: ['set-field', 'move-up', 'move-down', 'remove', 'edit-pattern', 'retry-pattern', 'revert-pattern'],
+  // OV-2435: a row without a qualifier shows the reason the Add form gives, by the same check.
+  setup() {
+    return { specificRuleHasQualifier };
+  }
 };
 
 // The preview of record or title text with italic markup, shown under its

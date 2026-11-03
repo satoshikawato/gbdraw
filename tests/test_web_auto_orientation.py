@@ -1,0 +1,198 @@
+"""The Worker helper behind the Web's "Orient records from comparisons" button.
+
+The page sends the request of its last Generate; the helper plans it with
+``auto_orient`` through the planner the CLI's ``--auto_orient`` runs, so both
+surfaces decide with one owner and draw the same orientation.
+"""
+from __future__ import annotations
+
+import csv
+import json
+from dataclasses import replace
+from pathlib import Path
+from typing import cast
+
+import pytest
+from Bio import SeqIO
+
+import gbdraw
+from gbdraw.api import (
+    GenBankInputSource,
+    LinearDiagramOptions,
+    LinearDiagramRequest,
+    RecordCardinality,
+    RecordInput,
+    RecordPresentation,
+    plan_linear_request,
+    resolve_request,
+)
+from gbdraw.api.record_planning import record_is_reverse_complemented
+from gbdraw.exceptions import ValidationError
+from gbdraw.session_request_codec import encode_canonical_request
+from gbdraw.web_support.auto_orientation import decide_auto_orientation
+
+_EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
+_QUERY = _EXAMPLES / "MjeNMV.gb"
+_SUBJECT = _EXAMPLES / "MelaMJNV.gb"
+_TABLE = _EXAMPLES / "MjeNMV.MelaMJNV.tblastx.out"
+
+
+def _reverse_hits_table(directory: Path) -> Path:
+    """The tblastx table with the subject coordinates mirrored: MelaMJNV's hits are mostly reverse."""
+
+    length = len(SeqIO.read(_SUBJECT, "genbank"))
+    table = directory / "MjeNMV.MelaMJNV.mirrored.tsv"
+    with _TABLE.open(encoding="utf-8") as source, table.open("w", encoding="utf-8", newline="") as target:
+        writer = csv.writer(target, delimiter="\t", lineterminator="\n")
+        for row in csv.reader(source, delimiter="\t"):
+            if row and not row[0].startswith("#"):
+                row[8], row[9] = str(length + 1 - int(row[8])), str(length + 1 - int(row[9]))
+                writer.writerow(row)
+    return table
+
+
+def _request(table: Path, *, query_reversed: bool = False, subject_reversed: bool = False) -> LinearDiagramRequest:
+    return LinearDiagramRequest(
+        records=(
+            RecordInput(
+                GenBankInputSource(_QUERY),
+                record_key="card-query",
+                presentation=RecordPresentation(reverse_complement=query_reversed),
+            ),
+            RecordInput(
+                GenBankInputSource(_SUBJECT),
+                record_key="card-subject",
+                presentation=RecordPresentation(reverse_complement=subject_reversed),
+            ),
+        ),
+        options=LinearDiagramOptions(blast_files=(str(table),)),
+    )
+
+
+def _committed(request: LinearDiagramRequest, directory: Path) -> tuple[dict[str, object], dict[str, str]]:
+    """The request as the Web's last Generate commits it: planned, encoded, its resources staged."""
+
+    encoded = encode_canonical_request(resolve_request(request))
+    staged = directory / "resources"
+    staged.mkdir(parents=True, exist_ok=True)
+    paths = {}
+    for index, resource in enumerate(encoded.resources, start=1):
+        target = staged / f"{index:04d}.bin"
+        target.write_bytes(
+            resource.content if resource.content is not None else Path(str(resource.source_path)).read_bytes()
+        )
+        paths[resource.resource_id] = str(target)
+    return encoded.payload, paths
+
+
+def _planner_flags(request: LinearDiagramRequest) -> list[bool]:
+    """The orientation the CLI planner draws with ``--auto_orient``."""
+
+    plan = plan_linear_request(replace(request, options=replace(request.options, auto_orient=True)))
+    return [record_is_reverse_complemented(record) for record in plan.records]
+
+
+@pytest.mark.linear
+def test_the_helper_decides_what_the_cli_planner_draws(tmp_path: Path) -> None:
+    request = _request(_reverse_hits_table(tmp_path))
+    payload, paths = _committed(request, tmp_path)
+    reply = decide_auto_orientation(payload, paths, str(tmp_path / "out"))
+    assert reply == {"records": [
+        {"recordKey": "card-query", "reverseComplement": False},
+        {"recordKey": "card-subject", "reverseComplement": True},
+    ]}
+    assert [record["reverseComplement"] for record in reply["records"]] == _planner_flags(request)
+
+
+def _helper_flags(request: LinearDiagramRequest, directory: Path) -> list[bool]:
+    payload, paths = _committed(request, directory)
+    return [record["reverseComplement"] for record in decide_auto_orientation(
+        payload, paths, str(directory / "out"))["records"]]
+
+
+@pytest.mark.linear
+def test_the_helper_decides_every_record_below_the_top_row(tmp_path: Path) -> None:
+    mirrored = _reverse_hits_table(tmp_path)
+    assert _helper_flags(_request(_TABLE), tmp_path / "forward") == [False, False] == _planner_flags(_request(_TABLE))
+    # A checked Reverse complement below the top row that the comparisons contradict
+    # is decided again: the answer is the planner's on the request without that flag.
+    assert _helper_flags(_request(_TABLE, subject_reversed=True), tmp_path / "explicit") == [False, False]
+    # On the command line an explicit reverse still wins.
+    assert _planner_flags(_request(_TABLE, subject_reversed=True)) == [False, True]
+    # A record reversed by the rule and drawn so stays reversed while its hits are mostly reverse.
+    assert _helper_flags(_request(mirrored, subject_reversed=True), tmp_path / "drawn-reversed") == [
+        False, True] == _planner_flags(_request(mirrored))
+
+
+@pytest.mark.linear
+def test_the_top_row_keeps_its_orientation_and_the_rows_below_follow_it(tmp_path: Path) -> None:
+    mirrored = _reverse_hits_table(tmp_path)
+    # A reversed top row: the record below is decided against it as drawn, as the CLI decides.
+    assert _helper_flags(_request(_TABLE, query_reversed=True), tmp_path / "top") == [True, True] == _planner_flags(
+        _request(_TABLE, query_reversed=True))
+    # Already as the comparisons decide: nothing changes, the top row included.
+    assert _helper_flags(_request(_TABLE, query_reversed=True, subject_reversed=True), tmp_path / "both") == [
+        True, True]
+    # Mirrored hits against a reversed top row: the record below is drawn forward.
+    assert _helper_flags(_request(mirrored, query_reversed=True, subject_reversed=True), tmp_path / "mirrored") == [
+        True, False] == _planner_flags(_request(mirrored, query_reversed=True))
+
+
+@pytest.mark.linear
+def test_a_card_that_draws_both_records_is_decided_per_record(tmp_path: Path) -> None:
+    """A File card that draws all the records of its file, reversed: its record below the top row is decided."""
+
+    both = tmp_path / "both.gb"
+    SeqIO.write([SeqIO.read(_QUERY, "genbank"), SeqIO.read(_SUBJECT, "genbank")], both, "genbank")
+    payload, paths = _committed(LinearDiagramRequest(
+        records=(RecordInput(
+            GenBankInputSource(both), record_key="card", cardinality=RecordCardinality.ALL,
+            presentation=RecordPresentation(reverse_complement=True),
+        ),),
+        options=LinearDiagramOptions(blast_files=(str(_reverse_hits_table(tmp_path)),)),
+    ), tmp_path / "card")
+    # The Web sends such a card as one input that draws all its records.
+    card = dict(cast("dict[str, object]", cast("list[object]", payload["records"])[0]))
+    card.update(cardinality="all", recordKey="card", selector=None)
+    reply = decide_auto_orientation({**payload, "records": [card]}, paths, str(tmp_path / "out"))
+    assert reply == {"records": [
+        {"recordKey": "card:1", "reverseComplement": True},
+        {"recordKey": "card:2", "reverseComplement": False},
+    ]}
+
+
+@pytest.mark.linear
+def test_the_worker_json_boundary_names_its_operation(tmp_path: Path) -> None:
+    from gbdraw.web_support.auto_orientation import decide_auto_orientation_json
+
+    payload, paths = _committed(_request(_reverse_hits_table(tmp_path)), tmp_path)
+    reply = json.loads(decide_auto_orientation_json(json.dumps(payload), json.dumps(paths), str(tmp_path / "out")))
+    assert [record["reverseComplement"] for record in reply["records"]] == [False, True]
+    helpers_js = Path(gbdraw.__file__).parent / "web" / "js" / "app" / "python-helpers.js"
+    namespace: dict[str, object] = {}
+    exec(helpers_js.read_text(encoding="utf-8").split("`", 1)[1].rsplit("`", 1)[0], namespace)
+    call = namespace["call_web_json_helper"]
+    assert callable(call)
+    # The Worker passes the staged identities after the helper's arguments; a failure names the operation.
+    error = json.loads(call(
+        "decide_auto_orientation_json", json.dumps(payload), json.dumps(paths), str(tmp_path / "out"), "{}"
+    ))["error"]
+    assert error["operation"] == "decideAutoOrientation"
+
+
+def test_a_circular_request_is_refused_with_a_diagnostic(tmp_path: Path) -> None:
+    from gbdraw.api import CircularDiagramRequest
+
+    encoded = encode_canonical_request(resolve_request(CircularDiagramRequest(
+        records=(RecordInput(GenBankInputSource(_QUERY)),),
+    )))
+    staged = {}
+    for index, resource in enumerate(encoded.resources, start=1):
+        target = tmp_path / f"{index:04d}.bin"
+        target.write_bytes(
+            resource.content if resource.content is not None else Path(str(resource.source_path)).read_bytes()
+        )
+        staged[resource.resource_id] = str(target)
+    with pytest.raises(ValidationError, match="requires a Linear request") as raised:
+        decide_auto_orientation(encoded.payload, staged, str(tmp_path / "out"))
+    assert raised.value.diagnostic is not None

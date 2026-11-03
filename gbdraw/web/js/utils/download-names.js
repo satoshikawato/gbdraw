@@ -14,6 +14,11 @@ const DEVICE_NAMES = new Set([
   ...[...'123456789¹²³'].flatMap((suffix) => [`COM${suffix}`, `LPT${suffix}`])
 ]);
 
+// The output prefix of a Linear request without one; the Output Prefix field shows it as its placeholder.
+// Python owns the value (`RenderOutputRequest.output_prefix`); this module is the Web side of the registered
+// twin (`concern:output-prefix`).
+export const DEFAULT_LINEAR_OUTPUT_PREFIX = 'out';
+
 /**
  * @param {unknown} value
  * @param {string} fallback The name when nothing is left.

@@ -813,7 +813,6 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
         historyDiagnostics.generatedArtifactFullSerializationCount || 0
       )
     },
-    autoLabelReflowEnabled: state.autoLabelReflowEnabled.value,
     structural: window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_PROBE__?.snapshot?.() || null
   };
 });
@@ -1149,7 +1148,6 @@ const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, as
   const { createAnnotationSet } = await import('/gbdraw/web/js/services/annotation-state.js');
   const app = window.__GBDRAW_APP__;
   const history = window.__GBDRAW_HISTORY__;
-  state.autoLabelReflowEnabled.value = false;
 
   const orange = state.paletteDefinitions.value.orange || state.activeDrawing().currentColors.value;
   const draftColors = normalizePaletteColors({
@@ -1537,7 +1535,6 @@ test('loaded current preview supports direct edits before the first Generate', a
   await page.evaluate(() => window.__GBDRAW_SESSION_INTENT_PROBE__.reset());
   await startLoadedPreviewDirectEditProbe(page);
   const initiallyLoaded = await captureLoadedPreviewDirectEditState(page);
-  expect(initiallyLoaded.autoLabelReflowEnabled).toBe(false);
   expect(initiallyLoaded.structural).toMatchObject({
     directEditResultFlushCount: 0,
     directEditSvgSerializationCount: 0
@@ -1788,7 +1785,6 @@ test('loaded current preview supports direct edits before the first Generate', a
     generatedArtifactFullCloneCount: 0,
     generatedArtifactFullSerializationCount: 0
   });
-  expect(freshlyLoaded.autoLabelReflowEnabled).toBe(false);
   expectBiologicalOwnersUnchanged(freshlyLoaded);
   await capturePreviewWorkerStage(
     freshPage,

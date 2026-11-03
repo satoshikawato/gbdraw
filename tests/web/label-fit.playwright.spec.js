@@ -116,7 +116,7 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
   await expect(page.getByLabel('Resolve Overlaps', { exact: true })).toBeChecked();
 
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Fit labels: separate overlapping features');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Fit labels');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   expect(await labelSettings(page)).toEqual(before.settings);
 });
@@ -297,7 +297,7 @@ test('labels far over the room around the map: Generate stops at once with the w
   await generateAndWaitForResult(page, { expectedStatus: 'error', requireCommittedResult: false });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('[data-label-fit-records]')).toHaveText(
-    /^capacity：14 ptの外側のラベル600個には、図のまわりにあるスペースの約\d\.\d倍が必要です\s*$/);
+    /^capacity：14 ptの外側のラベル600個には、図のまわりにあるスペースの約\d\.\d倍が必要です。\s*$/);
   await expect(dialog.locator('[data-label-fit-records] .font-semibold')).toHaveText('capacity');
   await expect(page.getByRole('alert')).toContainText(/外側のラベルには、図のまわりにあるスペースの約\d\.\d倍が必要です。/);
   await expect(page.getByRole('alert')).not.toContainText('room around the map');

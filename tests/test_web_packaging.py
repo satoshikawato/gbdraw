@@ -221,7 +221,7 @@ def _assert_white_gallery_thumbnail(path: Path) -> None:
 @pytest.mark.browser
 def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module, expected_wheel_path = ensure_prepared_browser_wheel()
-    expected_wheel_name = "gbdraw-0.14.4-py3-none-any.whl"
+    expected_wheel_name = "gbdraw-0.14.5-py3-none-any.whl"
     assert verify_module._parse_wheel_name() == expected_wheel_name
     assert expected_wheel_path.name == expected_wheel_name
     verify_module.assert_browser_wheel_is_not_recursive(expected_wheel_path)
@@ -360,7 +360,7 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     assert "bin/*/*" in build_support.get_excluded_package_data_patterns(include_browser_wheel=False)
 
     # UJ-06 (Owner 2026-10-08): the local GUI ships no Gallery catalog or
-    # Session, so its empty state shows no Load an example.
+    # Session, so its empty state shows no Open Gallery example.
     assert [pattern for pattern in package_data_patterns if "web/gallery" in pattern] == [
         "web/gallery/palettes/palettes.json"
     ]
@@ -424,6 +424,15 @@ def test_index_loads_the_vue_production_build_its_notice_names() -> None:
     assert sorted(path.name for path in (WEB_ROOT / "vendor" / "vue").iterdir()) == [
         "vue.global.prod.js"
     ]
+
+
+def test_index_loads_only_ui_fonts_the_offline_check_requires() -> None:
+    from gbdraw._web_assets import REQUIRED_UI_FONT_FILES
+
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    loaded = set(re.findall(r"url\('\./(vendor/fonts/[^']+\.woff2)'\)", index_html))
+    required = {path.as_posix() for path in REQUIRED_UI_FONT_FILES}
+    assert loaded and loaded == required, sorted(loaded ^ required)
 
 
 def test_web_asset_notices_name_only_files_the_package_ships() -> None:
@@ -1126,7 +1135,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     repo_root = tmp_path / "repo"
     web_root = repo_root / "gbdraw" / "web"
     web_root.mkdir(parents=True)
-    expected_name = "gbdraw-0.14.4-py3-none-any.whl"
+    expected_name = "gbdraw-0.14.5-py3-none-any.whl"
     pyodide_dir = tmp_path / "pyodide"
     calls: list[object] = []
 
@@ -1709,7 +1718,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
     )
 
     wheel_path = next(dist_dir.glob("gbdraw-*.whl"))
-    assert wheel_path.name == "gbdraw-0.14.4-py3-none-any.whl"
+    assert wheel_path.name == "gbdraw-0.14.5-py3-none-any.whl"
     subprocess.run(
         [
             sys.executable,

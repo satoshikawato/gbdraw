@@ -388,8 +388,8 @@ test('History reports each step, checkpoint, Undo and Redo with its changes, and
 });
 
 test('a live setting row the shown Result cannot draw says Applies on Generate', () => {
-  assert.equal(owner.settingApplicationNote('multi-record-layout').text, 'Live edit');
-  const generateNote = { application: 'generate', text: 'Applies on Generate', qualified: false };
+  assert.equal(owner.settingApplicationNote('multi-record-layout').display, 'none');
+  const generateNote = { application: 'generate', text: 'Applies on Generate', display: 'clock' };
   // A single-canvas Result: the layout fields apply on Generate (PD-OI-103).
   const single = { mode: 'circular', grouping: 'single' };
   const draft = (multiRecordCanvas) => ({ form: { multi_record_canvas: multiRecordCanvas } });
@@ -400,24 +400,27 @@ test('a live setting row the shown Result cannot draw says Applies on Generate',
   assert.equal(request.liveSettingApplies({ mode: 'circular', grouping: 'grid' }, 'layout.multiRecordColumnGapRatio', draft(true)), true);
   assert.equal(request.liveSettingApplies(single, 'diagramOptions.output.legend', draft(false)), true);
   assert.deepEqual(note('multi-record-layout', single, true), generateNote);
-  assert.equal(note('legend', single, false).text, 'Live edit');
+  assert.equal(note('legend', single, false).display, 'none');
   // OV-1077: during a Multi-Record Canvas change the positions apply on
   // Generate; the sizes, font sizes and the title text stay live.
-  const partial = { application: 'live', text: 'Live edit; the position applies on Generate after the Multi-Record Canvas change', qualified: true };
+  const partial = { application: 'live', text: 'Live edit; the position applies on Generate after the Multi-Record Canvas change.', display: 'clock' };
   assert.equal(request.liveSettingApplies(single, 'diagramOptions.output.legend', draft(true)), false);
   assert.equal(request.liveSettingApplies(single, 'diagramOptions.plotTitleFontSize', draft(true)), true);
   assert.deepEqual(note('legend', single, true), partial);
   assert.deepEqual(note('plot-title', single, true), partial);
   assert.deepEqual(note('plot-title', { mode: 'circular', grouping: 'grid' }, false), partial);
-  assert.equal(note('legend', { mode: 'linear', grouping: 'single' }, false).text, 'Live edit');
+  assert.equal(note('legend', { mode: 'linear', grouping: 'single' }, false).display, 'none');
   // A row without request paths keeps its own note.
-  assert.equal(owner.settingApplicationNote('depth-sources', () => false).qualified, true);
+  assert.equal(owner.settingApplicationNote('depth-sources', () => false).text, owner.SETTING_APPLICATION.find((row) => row.id === 'depth-sources').note);
 });
 
 test('no live note text is written outside the owner', async () => {
   const html = await readFile(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'utf8');
   assert.deepEqual([...html.matchAll(/Live edit:|Updates the current Result/g)].map((match) => match[0]), []);
-  for (const id of ['legend-editor', 'features-editor', 'feature-appearance']) {
-    assert.match(html, new RegExp(`settingApplicationNote\\('${id}'\\)\\.text`), id);
+  // The Legend and Features tab helps open with their row's sentence; the
+  // feature popup's Appearance shows no mark (PD-OI-037 rev 3).
+  for (const id of ['legend-editor', 'features-editor']) {
+    assert.match(html, new RegExp(`settingApplicationHelp\\('${id}'\\)`), id);
   }
+  assert.doesNotMatch(html, /feature-appearance'\)/);
 });

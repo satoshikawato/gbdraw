@@ -397,3 +397,60 @@ test('cold helper cancellation retains its draft and Retry starts the real runti
   expect((await snapshot(page)).undo).toBe(before.undo + 1);
   expect((await getDiagramWorkerActivity(page)).constructions).toBe(2);
 });
+
+// OV-2435: a color rule needs a qualifier, as the CLI color table does. Without
+// one, Add is disabled and the form says why; a row edit that clears it is
+// refused; a rule a Session holds without one says why on its row.
+test('a color rule needs a qualifier: Add is disabled with the reason, a cleared row qualifier comes back, and a saved rule without one says why (OV-2435)', async ({ page }, info) => {
+  test.setTimeout(180000);
+  const session = JSON.parse(readFileSync(fixture('circular'), 'utf8'));
+  session.modes.circular.config.rules = [
+    { feat: 'CDS', qual: 'product', val: 'NADH', color: '#f01234', cap: '' },
+    { feat: 'CDS', qual: '', val: 'dehydrogenase', color: '#123456', cap: '' }
+  ];
+  const file = info.outputPath('rule-without-qualifier.gbdraw-session.json');
+  writeFileSync(file, JSON.stringify(session));
+  page.on('dialog', dialog => dialog.accept());
+  await openApp(page);
+  await load(page, file);
+  const reason = 'Choose or type a qualifier. A rule without one colors nothing.';
+  const rows = page.locator('[data-color-rule-row]');
+  await expect(rows).toHaveCount(2);
+  await reveal(rows.nth(1));
+  const savedHint = rows.nth(1).locator('[data-color-rule-qualifier-hint]');
+  await expect(savedHint).toBeVisible();
+  await expect(savedHint).toHaveText(reason);
+  await expect(rows.nth(0).locator('[data-color-rule-qualifier-hint]')).toHaveCount(0);
+
+  const form = page.locator('[data-specific-rule-add]');
+  const qualifier = form.getByLabel('Qualifier name', { exact: true });
+  const pattern = form.getByLabel('New color rule pattern', { exact: true });
+  const add = form.getByRole('button', { name: 'Add color rule', exact: true });
+  const hint = form.locator('[data-specific-rule-qualifier-hint]');
+  await pattern.fill('dehydrogenase');
+  await expect(add).toBeEnabled();
+  await expect(hint).toHaveCount(0);
+  for (const text of ['', '   ']) {
+    await qualifier.fill(text);
+    await expect(add).toBeDisabled();
+    await expect(hint).toHaveText(reason);
+    const id = await hint.getAttribute('id');
+    await expect(qualifier).toHaveAttribute('aria-describedby', id);
+    await expect(add).toHaveAttribute('aria-describedby', id);
+  }
+  await page.screenshot({ path: info.outputPath('add-without-qualifier.png') });
+  await expect(pattern).toHaveValue('dehydrogenase');
+  await qualifier.fill('product');
+  await expect(add).toBeEnabled();
+  await expect(hint).toHaveCount(0);
+
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const before = await undoCount();
+  await rows.nth(0).locator('summary').click();
+  const rowQualifier = rows.nth(0).getByLabel('Qualifier name', { exact: true });
+  await rowQualifier.fill('');
+  await rowQualifier.press('Tab');
+  await expect(rowQualifier).toHaveValue('product');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(rule => rule.qual))).toEqual(['product', '']);
+  expect(await undoCount()).toBe(before);
+});

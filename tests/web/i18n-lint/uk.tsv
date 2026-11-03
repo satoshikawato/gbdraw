@@ -1,0 +1,26 @@
+id	regex	flags	message	severity
+uk-russian-letters	[ыэъёЫЭЪЁ]	u	Russian-only letter (ы э ъ ё) in a Ukrainian string (STYLE 17.3): write the Ukrainian spelling with и, е, і, є, ї or an apostrophe.	error
+uk-ascii-apostrophe	(?<=[а-яіїєґ])'(?=[а-яіїєґ])	iu	ASCII apostrophe inside a Ukrainian word: write the typographic apostrophe ’ (U+2019), e.g. об’єкт, необов’язково (STYLE 17.3).	error
+uk-modifier-apostrophe	ʼ	u	Modifier-letter apostrophe ʼ (U+02BC): the catalogs use the typographic apostrophe ’ (U+2019) in every Ukrainian word (STYLE 17.3).	error
+uk-straight-quote	^(?![^\n]*=")(?![^\n]*\\ : \* \? " < > \|)[^\n]*"	u	Straight double quote in prose: Ukrainian quotes are « » (nested „ “), never " (STYLE 17.3). Exempt: code such as /key="value" (a value with =") and the literal forbidden file-name characters (\ : * ? " < > |) as the English shows them (review-addenda).	error
+uk-wrong-quotes	[“”„‘]	u	Curly or low quote mark: use « » for the English "…" and „ “ only inside « » (STYLE 17.3).	error
+uk-guillemet-space	«[\s ]|[\s ]»	u	Space inside « »: Ukrainian guillemets hug the text, «{name}» (STYLE 17.3).	error
+uk-space-before-punct	^(?![^\n]*\\ : \* \? " < > \|)[^\n]*[  ][:;?!]	u	Space before a colon, semicolon, question or exclamation mark: Ukrainian has none (Поле: {path}, Видалити?) (STYLE 17.3). Exempt: the file-name rule lists the literal characters \ : * ? " < > | (spaces before : and ?) as the English shows them.	error
+uk-three-dots	\.\.\.	u	Three dots: write one ellipsis character … (STYLE 17.3).	error
+uk-spaced-hyphen	\s-\s	u	Hyphen used as a dash: write an em dash — (preceded by U+00A0) in prose (STYLE 17.3). The minus sign is − (U+2212).	error
+uk-nonascii-digits	[٠-٩۰-۹０-９]	u	Non-ASCII digit: numbers use ASCII digits 0-9 (STYLE 1.2).	error
+uk-placeholder-suffix	\}[\-–]?[Ѐ-ӿ]|[Ѐ-ӿ]\{	u	Cyrillic letters glued to a placeholder: a placeholder takes no suffix, case ending or prefix; put a class noun before it (запис {record}) (STYLE 17.5).	error
+uk-mixed-script	[Ѐ-ӿ][A-Za-z]|[A-Za-z][Ѐ-ӿ]	u	Latin and Cyrillic letters touching: a homoglyph or a suffix glued to a Latin name. Separate them (BLAST-таблиця or таблиця BLAST) (STYLE 17.1).	error
+uk-register-vy-capital	(?<=[а-яіїєґ,;]\s)(?:Ви|Вас|Вам|Вами|Ваш|Ваша|Ваше|Ваші|Вашу)(?![Ѐ-ӿA-Za-z’])	u	Capitalised Ви/Ваш inside a sentence: the register is lower-case ви, ваш (STYLE 17.2).	error
+uk-register-ty	(?<![Ѐ-ӿA-Za-z’])(?:ти|тобі|тебе|твій|твоя|твоє|твої|натисни|вибери|обери|введи|скасуй|перевір|спробуй|вкажи|збережи|зачекай)(?![Ѐ-ӿA-Za-z’])	iu	Second person singular (ти, imperative натисни): use the formal ви form, натисніть, виберіть (STYLE 17.2).	error
+uk-calque-session	(?<![Ѐ-ӿA-Za-z’])сес{1,2}[іи]	iu	сесія/сессия is the Russian calque (in Ukrainian it is an exam period): Session is сеанс (STYLE 17.1).	error
+uk-calque-undo	(?<![Ѐ-ӿA-Za-z’])відмін(?:ит|ен|я[єю])	iu	відмінити is the Russian calque: Undo and Cancel are скасувати (STYLE 17.1). відмінність (difference) is fine.	error
+uk-calque-default	по\s+(?:замовчуванню|умовчанню|промовчанню)|(?<![Ѐ-ӿA-Za-z’])(?:дефолт|за\s+дефолтом)	iu	по замовчуванню/дефолт is a Russian calque: Default is типовий, типово (STYLE 17.1).	error
+uk-default-variant	за\s+(?:замовчуванням|умовчанням|промовчанням)	iu	За замовчуванням is acceptable but the glossary writes one word for Default: типовий, типово (STYLE 17.1).	warn
+uk-calque-enable	(?<![Ѐ-ӿA-Za-z’])(?:включит|включіт|включен|включа|відключ|виключит|виключіт)	iu	включити/відключити/виключити are Russian calques: Enable is увімкнути, Disable is вимкнути; use "не враховувати" for leave out (STYLE 17.1). включно (inclusive) is fine.	error
+uk-calque-participle	(?<![Ѐ-ӿA-Za-z’])слідуюч|приймат(?:и|ь|е|ись)?\s+участь|на\s+протязі	iu	Russian calque: слідуючий is наступний, приймати участь is брати участь, на протязі is протягом (STYLE 17.1).	error
+uk-calque-settings	(?<![Ѐ-ӿA-Za-z’])настро(?:йк|юван|їти|ювати|йте)	iu	настройки/настроюваний are Russian calques: Settings is налаштування, Custom is власний (STYLE 17.1).	error
+uk-calque-pry	(?<![Ѐ-ӿA-Za-z’])при\s+[а-яіїєґ’]+[нт]і(?![Ѐ-ӿA-Za-z’])	iu	при + noun for "when" is the Russian construction: write під час/після/у разі (під час збереження) (STYLE 17.1).	warn
+uk-calque-column	(?<![Ѐ-ӿA-Za-z’])колон(?:к|ок)	iu	колонка is the Russian calque: Column is стовпець (STYLE 17.1).	error
+uk-track-trek-fich	(?<![Ѐ-ӿA-Za-z’])(?:трек|фіч)	iu	трек is not the Track word (доріжка) and фіча/фічер is slang (Feature is ознака) (STYLE 17.1).	error
+uk-calque-words	(?<![Ѐ-ӿA-Za-z’])(?:вірн|любий|любе|любі|любого|закладк|кликн|клікн|додаток|додатки)	iu	Russian-style word: вірний is правильний, любий is будь-який, закладка is вкладка, кликнути is натиснути, додаток (app) is застосунок (STYLE 17.1).	warn

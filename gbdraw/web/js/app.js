@@ -35,13 +35,13 @@ import { formatFeatureLocation } from './services/feature-utils.js';
 import { UI_LOCALES, joinSentences, sentenceSeparator, t, tm, tn, tx, uiLocale } from './utils/i18n.js';
 import { errorText } from './utils/error-text.js';
 import { INTERACTIVE_GALLERY_URL } from './utils/gallery-routes.js';
-import { settingApplicationNote, settingApplicationSentence, settingApplicationText } from './services/setting-application.js';
+import { settingApplicationHelp, settingApplicationSentence } from './services/setting-application.js';
 
 const { createApp } = window.Vue;
 
 const app = createApp({
   components: { ActionMenu, ChoiceDialog, OperationError, SpecificRuleRows, CircularMeasureInput, DepthTrackIndexInput, RecordDisplayControl, AutoValueField, ColorSwatch, ColorValueControl, DefaultColorScopeLine, FileUploader, GbdrawLoader, HelpTip, LinearRecordNames, MarkupPreview, PreviewZoomPercent, RecordName, SettingNote, SettingsSectionIndex, SettingsSectionTitle },
-  methods: { chooseUiLanguage, formatFeatureLocation, settingApplicationNote, settingApplicationSentence, settingApplicationText, translationFeedbackUrl },
+  methods: { chooseUiLanguage, formatFeatureLocation, settingApplicationHelp, settingApplicationSentence, translationFeedbackUrl },
   setup: createAppSetup
 });
 // Every template (the root, the x-templates, the inline component templates)

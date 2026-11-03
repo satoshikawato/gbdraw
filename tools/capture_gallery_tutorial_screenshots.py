@@ -1394,11 +1394,15 @@ def wait_for_css_transitions(page) -> None:
 
     page.evaluate(
         """
-        () => Promise.all(
-          document.getAnimations()
-            .filter((animation) => animation instanceof CSSTransition)
-            .map((animation) => animation.finished.catch(() => undefined)),
-        )
+        () => Promise.race([
+          Promise.all(
+            document.getAnimations()
+              .filter((animation) => animation instanceof CSSTransition)
+              .map((animation) => animation.finished.catch(() => undefined)),
+          ),
+          // A finished promise can stay pending when the page paints no frame; stop waiting.
+          new Promise((resolve) => setTimeout(resolve, 2000)),
+        ])
         """
     )
 

@@ -71,7 +71,7 @@ def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> 
     assert tip_template.count("<button") == 1
     assert 'v-else' not in tip_template
     assert ':aria-expanded="visible"' in tip_template
-    assert '@keydown.esc.stop="close"' in tip_template
+    assert '@keydown.esc="onEscape"' in tip_template
 
 
 def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> None:
@@ -316,12 +316,11 @@ def test_losatn_tutorial_controls_and_match_popup_are_accessible() -> None:
         '{ from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })"' in index
     )
     assert (
-        ':data-input-aria-label="`BLAST TSV for #${pair.queryIndex + 1} to '
-        '#${pair.subjectIndex + 1}`"' in index
+        ':data-input-aria-label="t(\'BLAST TSV for #{from} to #{to}\', '
+        '{ from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })"' in index
     )
     assert 'label="BLAST TSV"' in index
     assert ':data-linear-comparison-pair-upload="pair.edgeKey"' in index
-    assert ':data-input-aria-label="`BLAST TSV for #' in index
     assert ':test-id="`linear-genbank-${sourceIndex + 1}`"' in index
     assert ':data-testid="testId || undefined"' in index
     assert "'testId'" in components

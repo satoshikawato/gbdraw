@@ -218,9 +218,13 @@ const diffSemanticSnapshots = (live, generated) => {
 };
 
 // The context an allowed-difference condition reads: the live Result's
-// context, and whether the feature's label is drawn on both sides.
-const differenceContext = (difference, live, generated) => ({
+// context, and whether the feature's label is drawn on both sides. `unplaced`
+// names the label a text edit with Auto Reflow off left that nothing has placed,
+// shown now under the current state: the edited feature's `id`. It reads as Auto
+// Reflow off; a difference on any other label answers for the current state.
+const differenceContext = (difference, live, generated, unplaced = null) => ({
   ...live.context,
+  autoReflow: live.context.autoReflow && !(unplaced && difference.id === unplaced.id),
   labelDrawnInBoth: Boolean(live.labels[difference.id] && generated.labels[difference.id])
 });
 
@@ -238,8 +242,9 @@ const describeDifference = ({ kind, id, attribute, live, generated }) => (
 
 // Snapshots the live Result, runs Generate, snapshots again, and fails with one
 // line per unexpected difference. `allowed` defaults to every entry of the
-// allowed-difference table; `label` names the case in the message.
-const expectLiveEqualsGenerate = async (page, { allowed = ALLOWED_DIFFERENCES, label = 'live edit' } = {}) => {
+// allowed-difference table; `label` names the case in the message;
+// `unplaced` as in `differenceContext`.
+const expectLiveEqualsGenerate = async (page, { allowed = ALLOWED_DIFFERENCES, label = 'live edit', unplaced = null } = {}) => {
   await settleLive(page);
   const live = await semanticSnapshot(page);
   await generateAndWaitForResult(page);
@@ -251,7 +256,7 @@ const expectLiveEqualsGenerate = async (page, { allowed = ALLOWED_DIFFERENCES, l
   const generated = await semanticSnapshot(page);
   const differences = diffSemanticSnapshots(live, generated).map((difference) => ({
     ...difference,
-    allowedBy: allowedBy(difference, differenceContext(difference, live, generated), allowed)?.id || null
+    allowedBy: allowedBy(difference, differenceContext(difference, live, generated, unplaced), allowed)?.id || null
   }));
   const unexpected = differences.filter((difference) => !difference.allowedBy);
   const tolerated = differences.filter((difference) => difference.allowedBy);

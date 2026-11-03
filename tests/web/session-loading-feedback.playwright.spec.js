@@ -491,7 +491,7 @@ test('Load Session asks before it replaces work changed since the last Save or L
 });
 
 // UJ-06 (Owner 2026-10-08): where this origin serves the Gallery catalog
-// (gbdraw.app), the empty state's Load an example lists every catalog entry and
+// (gbdraw.app), the empty state's Open Gallery example lists every catalog entry and
 // loads the chosen one's Session through the Load Session path and its UJ-09
 // question. Without the catalog (the pip GUI) the button is absent.
 const galleryCatalog = JSON.parse(readFileSync(
@@ -508,7 +508,7 @@ const blockExternalRequests = async (page) => {
   return external;
 };
 const exampleControls = (page) => ({
-  example: page.getByRole('button', { name: 'Load an example', exact: true }),
+  example: page.getByRole('button', { name: 'Open Gallery example', exact: true }),
   header: page.locator('header.app-header').getByRole('button', { name: 'Load example', exact: true }),
   chooser: page.getByRole('dialog', { name: 'Choose an example', exact: true }),
   confirm: page.getByRole('dialog', { name: 'Replace the current work?', exact: true })
@@ -539,7 +539,7 @@ const acceptLoadedSession = async (page, title) => {
   };
 };
 
-test('Load an example lists every Gallery example and loads the chosen Circular or Linear .gz Session', async ({ page }) => {
+test('Open Gallery example lists every Gallery example and loads the chosen Circular or Linear .gz Session', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   const external = await blockExternalRequests(page);
@@ -587,7 +587,7 @@ test('Load an example lists every Gallery example and loads the chosen Circular 
   expect(external).toEqual([]);
 });
 
-test('Load an example is absent where this origin serves no Gallery catalog', async ({ page }) => {
+test('Open Gallery example is absent where this origin serves no Gallery catalog', async ({ page }) => {
   test.setTimeout(180_000);
   let catalogRequested;
   const catalogRead = new Promise((resolve) => { catalogRequested = resolve; });
@@ -600,11 +600,12 @@ test('Load an example is absent where this origin serves no Gallery catalog', as
   await catalogRead;
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
   expect(diagnostics.pageErrors).toEqual([]);
-  await expect(page.getByText('No Circular Result yet. Configure settings and click Generate.')).toBeVisible();
+  // PD-OI-108 rev 3: the empty Preview has no sentence; only its icon stays.
+  await expect(page.locator('[data-empty-preview] .ph-dna')).toBeVisible();
   await expect(exampleControls(page).example).toHaveCount(0);
   await expect(exampleControls(page).header).toHaveCount(0);
-  // #1383 (PD-OI-108): the header still opens gbdraw.app's Gallery; the card
-  // about the examples' tutorials goes with the examples.
+  // #1383 (PD-OI-108 rev 3): the header still opens gbdraw.app's Gallery; the box
+  // with the example button and the tutorials button goes with the examples.
   await expect(page.locator('[data-gallery-link]')).toHaveAttribute('href', 'https://gbdraw.app/gallery/');
   await expect(page.locator('[data-tutorial-card]')).toHaveCount(0);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorDisplay)).toBeFalsy();
@@ -621,6 +622,44 @@ const expectNewTab = async (link, href) => {
 };
 const tutorialHref = (page, id) => new URL(`/gbdraw/web/gallery/${id}#Tutorial`, page.url()).href;
 
+// PD-OI-108 rev 3: the empty Preview's box stacks Open Gallery example above
+// Learn with tutorials, both as wide as the wider of the two, and the box is
+// that width plus its padding and border.
+test('the empty Preview box stacks its two actions at the width of the wider one', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await blockExternalRequests(page);
+  await openApp(page);
+  const card = page.locator('[data-tutorial-card]');
+  await expect(card.getByRole('button', { name: 'Open Gallery example', exact: true })).toBeVisible();
+  const box = await card.evaluate((element) => {
+    const [example, link] = Array.from(element.children);
+    const width = (child) => child.getBoundingClientRect().width;
+    // The width each action takes on its own, without the grid stretching it.
+    const natural = [example, link].map((child) => {
+      child.style.justifySelf = 'start';
+      const value = width(child);
+      child.style.justifySelf = '';
+      return value;
+    });
+    const style = getComputedStyle(element);
+    const frame = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth']
+      .reduce((sum, key) => sum + parseFloat(style[key]), 0);
+    return {
+      order: [example.textContent.trim(), link.textContent.trim()],
+      above: example.getBoundingClientRect().bottom <= link.getBoundingClientRect().top,
+      widths: [width(example), width(link)],
+      wider: Math.max(...natural),
+      card: element.getBoundingClientRect().width,
+      frame
+    };
+  });
+  expect(box.order).toEqual(['Open Gallery example', 'Learn with tutorials']);
+  expect(box.above).toBe(true);
+  expect(Math.abs(box.widths[0] - box.widths[1])).toBeLessThan(0.5);
+  expect(Math.abs(box.widths[0] - box.wider)).toBeLessThan(0.5);
+  expect(Math.abs(box.card - (box.wider + box.frame))).toBeLessThan(0.5);
+});
+
 test('a loaded example links to its Gallery tutorial, and a Session from a file does not', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -628,7 +667,7 @@ test('a loaded example links to its Gallery tutorial, and a Session from a file 
   await openApp(page);
   await expectNewTab(page.locator('[data-gallery-link]'), 'https://gbdraw.app/gallery/');
   await expectNewTab(
-    page.locator('[data-tutorial-card]').getByRole('link', { name: 'Open the Interactive Gallery', exact: true }),
+    page.locator('[data-tutorial-card]').getByRole('link', { name: 'Learn with tutorials', exact: true }),
     'https://gbdraw.app/gallery/'
   );
   const { example, chooser } = exampleControls(page);
@@ -714,8 +753,10 @@ test('the header gives way by icons, never by narrowing the Session title', asyn
   await expect(page.getByRole('link', { name: 'Gallery & tutorials', exact: true })).toBeVisible();
   expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
 
-  // Where the cap alone still narrows the title, the file buttons show their icons.
-  await page.setViewportSize({ width: 799, height: 900 });
+  // Where the cap alone still narrows the title, the file buttons show their
+  // icons. PD-OI-112: the History button takes 34 px of the header, so these
+  // two widths add 34 px.
+  await page.setViewportSize({ width: 833, height: 900 });
   await expect.poll(fitOf).toEqual([true, true, false]);
   await expect(header.locator('.app-file-actions .app-config-button').first()).toHaveCSS('width', '32px');
   await expect(header.locator('.app-toolbar')).toHaveCSS('column-gap', '4px');
@@ -723,7 +764,7 @@ test('the header gives way by icons, never by narrowing the Session title', asyn
 
   // TL-D06: where the icons and the closed-up gaps still narrow the title, its
   // "Session" caption hides, so the title takes that width.
-  await page.setViewportSize({ width: 778, height: 768 });
+  await page.setViewportSize({ width: 812, height: 768 });
   await expect.poll(fitOf).toEqual([true, true, true]);
   await expect(header.locator('.app-session-label')).toBeHidden();
   await expect(header.locator('.app-toolbar')).toHaveCSS('column-gap', '2px');
@@ -781,7 +822,7 @@ test('the header Load example stays after an example loads and loads another', a
   await expect(header).toBeVisible();
 });
 
-test('the example chooser cancels with focus back on Load an example and keeps the UJ-09 question', async ({ page }) => {
+test('the example chooser cancels with focus back on Open Gallery example and keeps the UJ-09 question', async ({ page }) => {
   test.setTimeout(180_000);
   await openApp(page);
   const { example, chooser, confirm } = exampleControls(page);
@@ -866,7 +907,9 @@ test('the Load notice stays across Generate and clears on a mode switch and Rese
   await loadBaselineSession(page);
   await page.evaluate(() => { window.__GBDRAW_APP__.requestResetSettings(); });
   const reset = page.getByRole('dialog', { name: 'Reset settings?', exact: true });
-  await expect(reset).toContainText('Comparisons, which turn off; their uploaded tables stay (Linear drawings)');
+  await expect(reset.locator('[data-choice-prompt-lines] li')).toHaveText([
+    'Your edits are removed too', 'Undo restores them', 'Reset all drawings also resets the settings every drawing shares'
+  ]);
   await reset.getByRole('button', { name: 'Reset all drawings', exact: true }).click();
   await expect(notice).toHaveCount(0);
 });

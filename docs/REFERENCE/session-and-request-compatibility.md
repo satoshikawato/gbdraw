@@ -591,7 +591,7 @@ holds the same leaves as one without the option, besides the length.
 The Web app has no control for it yet. When it loads such a Session it draws the
 rows and lists the length under the settings that are not editable in the Web
 UI. Generate and **Save Session** keep it, as a config override in the saved
-request, and that row's **Reset** removes it.
+request, and that row's **Reset setting** removes it.
 When a record is cut, Generate stops with an error if the form asks for a Track
 layout of Middle or a bar scale, which cannot draw rows; the last Result stays.
 
@@ -779,15 +779,19 @@ need to be run again. Request schema 9 keeps schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
 inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.
-A typed Linear request with `auto_orient=True` is not encoded
-(`CanonicalRequestEncodingError`), and a canonical request with `autoOrient` is
-rejected as an unknown field: no Session stores [automatic Linear
+[Automatic Linear
 orientation](comparison-programs-thresholds-and-results.md#automatic-linear-orientation)
-yet.
-A typed Linear request with `anchor_feature` set is not encoded
-(`CanonicalRequestEncodingError`), and a canonical request with
-`anchorFeature` is rejected as an unknown field: no Session stores the
-[feature anchor](command-line.md#record-selection-and-layout) yet.
+and a [feature anchor](command-line.md#record-selection-and-layout) are
+planner-only options: a Session stores their results, not the options.
+`resolve_request()`, and every Session writer, writes the Reverse complement
+flag of each record the orientation rule reversed, and draws an anchor request
+once to write each record's translation into
+`renderRequest.layout.recordTranslations`, replacing the translations it held.
+A Session saved with `--auto_orient` or `--anchor_feature` therefore draws the
+same figure when it is loaded, without the options. A typed Linear request that
+still sets `auto_orient=True` or `anchor_feature` is not encoded
+(`CanonicalRequestEncodingError`; resolve it first), and a canonical request
+with `autoOrient` or `anchorFeature` is rejected as an unknown field.
 
 ## Similarity alignment in requests and Sessions
 
@@ -865,8 +869,8 @@ In Web **Run Info**, **Source recipe** uses the original input filenames and
 public CLI settings. Keep those original files and download any listed
 generated helpers with **Download reproducibility files**. That bundle also
 includes the session that **Exact replay** refers to, with its embedded
-resources and saved analysis results. An unavailable Source recipe reports why
-it cannot express the committed settings losslessly.
+resources and saved analysis results. The Web Run Info tab shows nothing for a
+Source recipe that cannot express the committed settings losslessly.
 
 Both commands target the successful generation represented by Run Info, even
 after Undo/Redo or edits to the current controls. Exact replay reconstructs that

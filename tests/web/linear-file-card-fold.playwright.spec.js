@@ -289,7 +289,7 @@ test('Load example folds the five files of BGC0000708 and the one file of lambda
   await page.setViewportSize({ width: 1600, height: 1000 });
   await openApp(page);
   const chooser = page.getByRole('dialog', { name: 'Choose an example', exact: true });
-  await page.getByRole('button', { name: 'Load an example', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Gallery example', exact: true }).click();
   await chooser.locator('[data-gallery-example="BGC0000708-BGC0000713"]').click();
   await page.waitForFunction(() => window.__GBDRAW_APP__.results.length > 0 && !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   await expect(cards(page)).toHaveCount(5);

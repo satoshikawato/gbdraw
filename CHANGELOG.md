@@ -24,6 +24,54 @@ write-up of a release.
   Sessions are saved as Session version 50, which gbdraw 0.14.x cannot open;
   Sessions saved by 0.14.x (46 to 49) open as before.
 - Changed: the drawing bar replaces the Circular and Linear mode buttons.
+
+## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
+
+- Patch release of 0.14.4. Sessions are saved as Session version 50 (0.14.4 writes 49); a Session
+  saved by 0.14.5 opens in 0.14.5 or later only. See the [full release notes](./docs/RELEASE_NOTES_0.14.5.md).
+- Added: Web UI: German, Italian, Polish, Russian, Turkish and Ukrainian in
+  the Language menu. Polish and Turkish letters use the bundled Inter Latin
+  Extended subset, Russian and Ukrainian letters the bundled Inter Cyrillic
+  subset.
+- Fixed: Web UI: wrong meanings, broken grammar, and inconsistent terms in the Japanese,
+  Simplified and Traditional Chinese, Korean, Spanish, French, Portuguese, Thai, Indonesian,
+  and Vietnamese translations; the Align button of the similarity group drawer stayed English in every
+  language. All translations are still LLM drafts.
+- Fixed: Web UI: English text that no translation could correct. Raw values such as `circular`,
+  `plus`, `reverse`, and `compress` now show as the names the controls use, screen-reader labels of
+  file inputs are translated, counted sentences read correctly at 1, messages name a setting you can
+  type or choose as its control does, and several words from the code in messages are replaced.
+- Fixed: in the Web UI record popup, the Alignment line of a record that was
+  not moved shows the reason as its label reads, for example "Not moved:
+  Skipped by user"; it was lower-cased, which damaged German nouns and the
+  Turkish dotted I.
+- Added: `--identity_scale MIN MAX`, `identity_scale` on `LinearComparisonOptions` and
+  `ComparisonRingOptions`, and the Web **Identity scale min (%)** / **Identity scale max (%)**
+  fix the identity color range of comparisons.
+- Added: `--italic_gene_labels` and the Web **Italic gene names** checkbox draw labels whose
+  text comes from the `gene` qualifier in italics.
+- Changed: a PNG downloaded from the Web app keeps the drawing's transparent background, as SVG
+  and the command-line and Python PNG do. Check **White background**, next to the PNG DPI
+  choice, for the white background of earlier Web PNGs.
+- Added: `gbdraw linear --auto_orient` reverse-complements records from their nucleotide hits
+  against the row above, and `--anchor_feature KEY=VALUE` aligns records at a named feature.
+  The Web app has the matching **Orient records from comparisons** button and **Align at
+  feature** action. A Session saved with either option stores the resulting Reverse
+  complement flags or record translations, not the option.
+- Fixed: the Web app's hover popup no longer opens after a pan for a pointer that has left the
+  drawing.
+- Changed: the tobacco chloroplast tutorial and Gallery entry use `builtin:plastid`.
+- Added: `gbdraw circular --origin_feature KEY=VALUE` rotates records so that the named
+  feature's start is the display start. Command line and Python only.
+- Added: `gbdraw circular` and `gbdraw linear` log an `INFO:` line per drawn record and
+  comparison table and a `WARNING:` when a record has no feature to draw or the thresholds
+  leave out every row of a comparison table; the Web app shows the same text under the
+  Generate status line and in **Run Info** (**Input summary**).
+- Fixed: a UTF-8 byte order mark no longer hides the first record of a GenBank, EMBL, GFF3,
+  or FASTA file. A Session saved by 0.14.4 or earlier with such a file of several records
+  now points each saved record index one record earlier.
+- Fixed: a live palette change on comparison matches colored by identity matches **Generate
+  Diagram** in the Web app.
 - Added: `--wrap_length AUTO|LENGTH` and the config key
   `canvas.linear.wrap_length` draw one Linear record over several rows at one
   scale, each row with its own height. The record stays one record, and a figure
@@ -56,26 +104,129 @@ write-up of a release.
   and Collinear blocks do, instead of failing with "Ordered BLAST/protein comparison
   inputs are ambiguous". `-b/--blast` on such a layout is still refused; the
   message now says to list the tables in `--comparisons_table` (OV-2371).
+- Fixed: Web app: with **Use custom stack** on, the Generate that ran a ring's
+  LOSAT search replaced its Track row: the row lost its edits, the next Generate
+  drew it under another id, and a row anchored to it stopped that Generate with
+  an error. The row now keeps its id and edits (OV-2442).
+- Fixed: Web app: during a **Generate Diagram**, a reorder of the comparison
+  rings by keyboard, or a switch to **Upload BLAST TSV** and back to
+  **Run LOSAT**, could draw a ring's search under another ring's name.
+  **Move series outward**, **Move series inward**, **Remove series**,
+  **Add comparison sequence**, **Run LOSAT**, **Upload BLAST TSV**, and **Reset Settings** are
+  now disabled while a Generate runs. So are **Apply now** of
+  **Rotate record using this feature**, **Align…** and
+  **Review alignment options…** in the Similarity groups editor and the feature
+  popup, **Apply** of the alignment review, and **Align records** of **Align at feature**:
+  Rotate, Align, and Align at feature do not run during a Generate. A Rotate
+  reached by keyboard there dropped the Generate's result (OV-2446).
 - Fixed: a threaded LOSAT search in the Web app could stop with "memory access
   out of bounds" and run the whole pair again (the console said "running the
   pair again"), or fail after the third stop. In Chromium a copy into memory
-  that another LOSAT thread had just grown could trap; the Web app now checks
-  each such copy and first brings the thread's view of the memory up to date.
+  that another LOSAT thread had just grown could trap; the LOSAT build now brings
+  the thread's view of the memory up to date before memory copies and atomic
+  instructions, which on ARM64 Linux and Android also covers stores (as LOSAT
+  states it), and each thread updates its view when it starts. Android was not
+  measured.
 - Changed: the Web app's LOSAT engine is the LOSAT development commit
-  `dde737f18` (version 0.2.0 before its release; it was a build of LOSAT
-  0.1.0). Its searches give the rows of the `losat` command of that commit;
-  LOSATN with task `blastn` gives different E-values and hits than before.
+  `f62da7f6b` (version 0.2.0 before its release; it was a build of LOSAT
+  0.1.0). Its searches give the rows of the `losat` command of that commit.
+  Against 0.14.4: LOSATP gives the same rows (Vibrio check,
+  three MjeNMV and LvMJNV pairs); LOSATN `megablast` gives other rows on some
+  pairs (MjeNMV x MelaMJNV 531 rows instead of 538); LOSATN `blastn` gives
+  different E-values and hits (lambda x DE3 21 rows instead of 19); TLOSATX gives
+  the same rows in another order on the checks measured.
   Task `dc-megablast` now runs dc-megablast (the old engine ran `blastn` for
   it) on threaded execution: the default, and **Auto** on a cross-origin
   isolated page. **Serial**, or a page without isolation, stops before the
   search with a message that `dc-megablast` needs threaded LOSAT. **Auto** now
   runs LOSATN and TLOSATX on threaded execution too, wherever the page allows
-  it. Run Info names the engine's version. Saved LOSATP and LOSATN `megablast`
-  searches of an earlier Web app are reused, because this engine gives the
-  same rows; its saved LOSATN `blastn` and `dc-megablast` searches and TLOSATX
-  searches run again once at the next **Generate Diagram**. Searches saved by
+  it. Run Info names the engine's version. A LOSATP search saved by an earlier Web
+  app is reused, because this engine gives the same rows on those checks; its saved LOSATN
+  searches of any task and TLOSATX searches run again once at the next
+  **Generate Diagram**. Searches saved by
   the command line are reused as before.
   `gbdraw/web/wasm/losat/losat-build.json` records the build.
+- Added: built-in specific-color tables. `-t/--table` and
+  `FeatureOptions.color_table` accept `builtin:cog`, `builtin:phrog`,
+  `builtin:plastid`, and `builtin:mitochondrion`; the Web app **Colors > Preset
+  scheme** lists them in place of the Pharokka and Bakta presets. The `cog`
+  table reads `db_xref`, GFF3 `Dbxref`, and `note`, so it colors Bakta's default
+  GenBank output, which the old Bakta preset did not (OV-2358).
+- Fixed: more real-world input reads, or fails with a named error. Read now: a
+  LOCUS line with spaces in the name, EMBL flat files (`.embl`, `.emb`
+  in the Web file pickers), qualifier lines indented with tabs, lowercase GFF3
+  feature types such as `cds`, and GFF3 attributes with a space after `;`. A
+  `CONTIG` record without sequence and a `--gbk` file without a record now stop
+  with an error that names the file and the reason.
+- Changed: in the Web app, removing a Depth series, the last Depth file of a series, or a custom
+  stack row that another row starts at or extends to (Circular and Linear), removing or clearing a
+  Linear File that holds such a last file (after the File's own question), removing a Circular
+  comparison source whose ring row leaves with it, and **Hide GC Content** or **Hide GC Skew** with
+  **Use custom stack** off when it turns off such a row (Circular), ask with the same dialog: it
+  offers to make the change and turn those rows off as one Undo step, or Cancel, which changes
+  nothing. A Depth row with a width, spacing, or ID you set, which stays with no file, turns off
+  with them. With two or more series, when Generate will ask for that series' file (**Show Depth**
+  on, or a Depth row still on in the custom stack), the dialog also says the series stays empty
+  and Generate will ask for a file or its removal.
+- Fixed: a Linear Depth row now leaves with its last Depth file after **Generate Diagram** too,
+  and in a Session saved earlier, as it does before the first Generate; before, it stayed and the
+  next Generate refused the stack. A moved row leaves too, and a file added again puts it at the
+  default place. A height typed on the row stays on its series. With no row reaching it, nothing
+  asks.
+- Fixed: a Depth row you turned off now stays in the stack, off, when its last file goes and when a
+  file is added again, in Circular and Linear; before, it left and came back on.
+- Fixed: Web UI text left in English in other languages: the Undo and Redo tooltips of preserved settings,
+  imported comparisons, and the Labels do not fit dialog; Auto values such as `above`, `ignored`, and
+  `endpoints only`; and the row titles and setting names in the Labels do not fit dialog.
+- Changed: the Undo and Redo tooltips and the dialogs that name a control or track row read as whole sentences in
+  more languages; English now quotes the control in the lane warning and says `Track rows 3 and 4`.
+- Fixed: after **Reset Settings**, the other mode's Result and the other Results of a batch show the
+  reset feature and label edits when displayed, instead of keeping the hidden features and labels, the
+  edited label text, and after a Session load the Legend rows of removed color rules until the next
+  Generate. The display redraws once when the Result was drawn with such an edit, even where the redraw
+  changes nothing. A failed redraw does not run again at the next display. A Result whose redraw failed
+  stays until its next redraw, a later color edit on it, or Generate; until the next redraw or Generate stay the label text a Result was drawn
+  with when Reset, Save, and Load pass before it is shown, and its **Label visibility** too when the Reset was made with the
+  other drawing shown (in the drawing shown at the Reset, its redraw applies it), and a label text on a Result not shown when the
+  edit left, returned by an Undo of a later Generate. Settings with the **Applies on Generate** clock still wait for Generate.
+- Fixed: text typed in a Features list label input stays when a redraw finishes.
+- Fixed: the Web UI no longer accepts a specific color rule without a qualifier, which colored nothing;
+  **Add color rule** stays disabled while the qualifier is empty, and a hint says why (OV-2435).
+- Changed: Web UI: shorter text. Descriptive sentences are cut from the sidebar, dialogs, and
+  placeholders, and buttons name their action (**Add comparison sequence**, was **Add Seq**;
+  **Clear LOSAT results**, was **Clear Cache**). A setting that waits for **Generate Diagram** shows a
+  clock icon with an **Applies on Generate** tooltip instead of a text chip, a setting that applies at
+  once has no mark, and the empty Preview shows **Open Gallery example** above **Learn with tutorials**
+  in one box. Help tips are unchanged.
+- Added: Web app: a **History** button lists the Undo and Redo steps with the setting and value each step
+  set; a pick walks Undo or Redo to that step. The Undo and Redo tooltips use the same text.
+- Known issue: with **Auto Reflow** off, Circular and Linear, a label text that Generate places away from
+  its feature with a leader stays without the leader, and a label with a leader keeps it for a text that
+  fits, until the next placement or Generate, also when an Undo of a Generate returns it with **Auto Reflow**
+  on (OV-2410).
+- Known issue: an Undo or Redo back to **Label visibility** On draws no label on a figure that lacks it,
+  until the next redraw or Generate (OV-2413).
+- Known issue: with **Auto Reflow** on, an Undo of a feature hide or of **Label visibility** Off
+  changes the figure only when its redraw finishes, not at once; a Redo applies at once (OV-2436).
+- Known issue: with **Auto Reflow** on, on Circular and Linear diagrams, after a Legend drag and a label
+  text edit, the Undo that should return the Legend does nothing and uses up its step (OV-2437).
+- Known issue: after a Legend row with a stroke is deleted, a Generate, the removal or recaption of its color
+  rule or another Legend name for its feature (for a row with no color rule, only when its whole row was renamed first and this rename applies to the whole row), and **Restore**, the next
+  **Generate Diagram** fails with "The generated result could not be accepted", on Circular and Linear
+  diagrams; a row without a stroke does not fail (OV-2412).
+- Known issue: Web app: with **Use custom stack** on, **Add comparison sequence** after a ring search returns every ring to
+  its sequence file and replaces the ring rows: their edits are lost, and a row anchored to one of them stops
+  each **Generate Diagram** with "Track row N. Field: Enabled drawable anchor." until its anchor is chosen
+  again (OV-2443).
+- Known issue: Web app: after any change to the comparison rings (a reorder, **Remove series**, or **Add comparison sequence**),
+  a record rotation before the next **Generate Diagram** returns the rings of the last Generate and drops the
+  change with no message, and after a reorder or a Remove the next Generate can draw a ring's rows under another ring's
+  name (OV-2444).
+- Known issue: Web app: with **Use custom stack** on, after Undo goes back past a Track-stack edit made before a
+  Generate that ran the ring searches, each **Generate Diagram** stops with "Track row N. Use the supported
+  conservation workflow and select a comparison source.", also after another Undo or Redo; turning
+  **Use custom stack** off, Generate, and on again recovers, with the ring rows made again without their
+  edits (OV-2445).
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-31
 

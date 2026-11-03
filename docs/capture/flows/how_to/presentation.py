@@ -782,8 +782,8 @@ def capture_gui_styling(
         expect(label_mode).to_have_value("out")
         page.get_by_role("button", name="Whitelist", exact=True).click()
         page.get_by_role("button", name="+ Add Rule", exact=True).click()
-        page.get_by_role("textbox", name="Feat", exact=True).fill("CDS")
-        page.get_by_role("textbox", name="Qual", exact=True).fill("gene")
+        page.get_by_role("textbox", name="Feature", exact=True).fill("CDS")
+        page.get_by_role("textbox", name="Qualifier", exact=True).fill("gene")
         page.get_by_role("textbox", name="Pattern", exact=True).fill(
             STYLE_LABEL_PATTERN
         )

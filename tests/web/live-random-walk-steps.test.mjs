@@ -4,7 +4,7 @@
 // a browser.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nextStep, whyNotApplicable } from './helpers/live-random-walk.mjs';
+import { nextStep, unplacedLabels, whyNotApplicable } from './helpers/live-random-walk.mjs';
 import { createRandom } from './helpers/live-random-walk-plan.mjs';
 
 const LEGEND_ROW_KINDS = ['stroke', 'legendRename', 'legendColor', 'legendDelete'];
@@ -64,4 +64,19 @@ test('a replay refuses a restoring step when no row is deleted', () => {
   const step = { kind: 'legendColor', prepare: { kind: 'legendRestore' }, row: 'CDS', color: '#123456' };
   assert.equal(whyNotApplicable(step, walkState({ legend: ['CDS'], deletedLegend: [] }), context),
     'its prepare step: no deleted Legend row');
+});
+
+// Only a label text edit made with Auto Reflow off, and the Undos right after it,
+// show labels nothing has placed, and only that edit's; every other step answers
+// for the current state.
+test('a step shows unplaced labels only from a text edit with Auto Reflow off and the Undos after it', () => {
+  const step = { kind: 'labelText', feature: 'record 1, feature f5aa08bf5', text: 'x' };
+  const edited = { id: 'f5aa08bf5' };
+  assert.deepEqual(unplacedLabels(step, false, undefined), edited);
+  assert.equal(unplacedLabels(step, true, undefined), null);
+  assert.deepEqual(unplacedLabels({ kind: 'undo' }, true, { unplaced: edited }), edited);
+  assert.equal(unplacedLabels({ kind: 'undo' }, true, { unplaced: null }), null);
+  assert.equal(unplacedLabels({ kind: 'undo' }, true, undefined), null);
+  assert.equal(unplacedLabels({ kind: 'undoRedo' }, true, { unplaced: edited }), null);
+  assert.equal(unplacedLabels({ kind: 'fill' }, true, { unplaced: edited }), null);
 });

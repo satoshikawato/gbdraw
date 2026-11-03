@@ -37,7 +37,7 @@ test('new annotation IDs still select their editor row after deletion and regene
   await session(page);
   const panel = annotations(page);
   await panel.locator('summary').press('Enter');
-  await panel.getByRole('button', { name: /Add set/ }).click();
+  await panel.getByRole('button', { name: 'Add annotation set' }).click();
   const add = panel.getByRole('button', { name: /Coordinates/ });
   for (let i = 0; i < 3; i += 1) await add.click();
   await panel.getByTitle('Delete annotation', { exact: true }).first().click();
@@ -80,13 +80,13 @@ test('selected D-loop without gene or locus_tag generates a feature annotation',
   const features = page.locator('details').filter({ has: page.locator('summary[aria-label="Features"]') });
   await features.locator('summary').press('Enter');
   await features.locator('select').filter({ has: page.locator('option[value="D-loop"]') }).selectOption('D-loop');
-  await features.getByRole('button', { name: /Add$/ }).click();
+  await features.getByRole('button', { name: 'Add type', exact: true }).click();
   await generateAndWaitForResult(page);
   const id = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.find((feature) => feature.type === 'D-loop').svg_id);
   await page.locator(`.origin-top svg [data-gbdraw-feature-id="${id}"]`).first().dispatchEvent('click', { ctrlKey: true });
   const panel = annotations(page);
   await panel.locator('summary').press('Enter');
-  await panel.getByRole('button', { name: /Add set/ }).click();
+  await panel.getByRole('button', { name: 'Add annotation set' }).click();
   await panel.getByRole('button', { name: /Selected features/ }).click();
   await generateAndWaitForResult(page);
   await expect(page.locator('.origin-top svg [data-gbdraw-annotation-id="feature_1"]')).toHaveCount(1);
@@ -181,7 +181,7 @@ test('malformed annotations preserve the draft and a valid import is undoable', 
   page.on('dialog', (dialog) => { dialogs.push(dialog.message()); dialog.dismiss(); });
   const panel = annotations(page);
   await panel.locator('summary').press('Enter');
-  await panel.getByRole('button', { name: /Add set/ }).click();
+  await panel.getByRole('button', { name: 'Add annotation set' }).click();
   await panel.getByRole('button', { name: /Coordinates/ }).click();
   const before = await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets));
   const upload = panel.locator('input[type=file]');
@@ -428,7 +428,7 @@ test('invalid annotation coordinates preserve the draft and the last successful 
   await session(page);
   const panel = annotations(page);
   await panel.locator('summary').press('Enter');
-  await panel.getByRole('button', { name: /Add set/ }).click();
+  await panel.getByRole('button', { name: 'Add annotation set' }).click();
   await panel.getByRole('button', { name: /Coordinates/ }).click();
   const before = await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets));
   const dialogs = [];

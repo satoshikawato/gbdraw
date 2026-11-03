@@ -16,9 +16,15 @@ import { t } from '../utils/i18n.js';
  * @property {string} label The button text; it names the outcome.
  * @property {ChoiceTone} [tone]
  *
+ * A short line of a choice dialog, led by an icon (a Phosphor class such as `ph-warning`).
+ * @typedef {object} ChoiceLine
+ * @property {string} icon
+ * @property {string} text
+ *
  * @typedef {object} ChoiceRequest
  * @property {string} title
  * @property {string} [description] One or two sentences: what the choice is about.
+ * @property {ChoiceLine[]} [lines] Short icon-led lines in place of a description.
  * @property {string[]} [items] Short lines listed under the description.
  * @property {string} [note] A closing sentence under the list.
  * @property {ChoiceAction[]} actions
@@ -78,6 +84,7 @@ export const createChoicePrompt = ({ reactive }) => {
     show: false,
     title: '',
     description: '',
+    lines: /** @type {ChoiceLine[]} */ ([]),
     items: /** @type {string[]} */ ([]),
     note: '',
     actions: /** @type {ChoiceAction[]} */ ([]),
@@ -99,6 +106,7 @@ export const createChoicePrompt = ({ reactive }) => {
     Object.assign(prompt, {
       title: request.title,
       description: request.description || '',
+      lines: [...(request.lines || [])],
       items: [...(request.items || [])],
       note: request.note || '',
       actions: request.actions.map((action) => ({ tone: 'secondary', ...action })),

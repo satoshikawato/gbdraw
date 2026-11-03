@@ -249,7 +249,7 @@ for (const [enabled, slots, field, slotIndex] of [
   });
   assert.equal(failure?.code, 'TRACK_INVALID', field);
   assert.deepEqual(failure.context, { field, reason: 'OBSOLETE_TRACK_FIELD', slotIndex });
-  assert.equal(failure.summary, `The track settings are invalid. Track row ${slotIndex + 1}. Field: ${field}. `
+  assert.equal(failure.summary, `The track settings are invalid. Track row ${slotIndex + 1}. Field: ${field === 'spacing' ? 'Spacing' : field}. `
     + 'Custom Track Slots no longer read this field. Use slot-level radius, width, inner_gap_px, '
     + 'outer_gap_px, side, and z fields.');
 }

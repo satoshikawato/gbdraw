@@ -105,6 +105,59 @@ test('a WASI thread that traps reports the trap on its job fault channel', async
   assert.equal(Atomics.load(new Int32Array(control), 0), -1);
 });
 
+// A standby worker's instance may be older than the growth that made room for this thread's stack and TLS. LOSAT's
+// own host runs memory.grow(0) before wasi_thread_start to update the worker's view; the race is not reproduced here.
+// wasi_thread_start stores 1 at address 0, so each grow sees whether the thread has started.
+const threadStartStoreModule = moduleBytes(
+  section(1, [[0x60, 2, I32, I32, 0]]),
+  section(2, [[...name('env'), ...name('memory'), ...sharedMemory(1, 1)]]),
+  section(3, [[0]]),
+  section(7, [[...name('wasi_thread_start'), 0x00, 0]]),
+  section(10, [[...leb(9), 0x00, 0x41, 0x00, 0x41, 0x01, 0x36, 0x02, 0x00, 0x0b]])
+);
+
+test('a WASI thread refreshes its view of the shared memory right before wasi_thread_start', async (t) => {
+  assert.ok(WebAssembly.validate(threadStartStoreModule));
+  restoreGlobalsAfter(t, ['self']);
+  const posted = [];
+  let threadDone = () => {};
+  globalThis.self = {
+    postMessage: (message) => { posted.push(message); if (message.type === 'done') threadDone(); },
+    close() {}
+  };
+  await import(`${threadWorkerUrl.href}?instance=grow-${Date.now()}`);
+  const onmessage = globalThis.self.onmessage;
+  const module = await WebAssembly.compile(threadStartStoreModule);
+  const memoryWithGrowLog = () => {
+    const memory = new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true });
+    const grows = [];
+    memory.grow = (delta) => {
+      grows.push({ delta, started: new Int32Array(memory.buffer)[0] });
+      return WebAssembly.Memory.prototype.grow.call(memory, delta);
+    };
+    return { memory, grows };
+  };
+
+  // The standby path: the instance exists before the thread is asked to start.
+  const standby = memoryWithGrowLog();
+  await onmessage({
+    data: { type: 'prepare', id: 'prepare-1', readyControl: new SharedArrayBuffer(4), module, memory: standby.memory, args: [], env: [], wasiShimUrl }
+  });
+  const done = new Promise((resolve) => { threadDone = resolve; });
+  await onmessage({ data: { type: 'start', id: 'start-1', tid: 1, startArg: 0, control: new SharedArrayBuffer(4) } });
+  await settleWithin(done, 5000, 'prepared thread');
+  assert.deepEqual(standby.grows, [{ delta: 0, started: 0 }]);
+  assert.equal(new Int32Array(standby.memory.buffer)[0], 1);
+
+  // The cold path: the worker instantiates when it is asked to run.
+  const cold = memoryWithGrowLog();
+  await onmessage({
+    data: { type: 'run', module, memory: cold.memory, startArg: 0, tid: 2, control: new SharedArrayBuffer(4), args: [], env: [], wasiShimUrl }
+  });
+  assert.deepEqual(cold.grows, [{ delta: 0, started: 0 }]);
+  assert.equal(new Int32Array(cold.memory.buffer)[0], 1);
+});
+
 const setupPage = async (t, { trappedAttempts = Infinity, trap = true } = {}) => {
   assert.ok(WebAssembly.validate(threadedJobModule));
   restoreGlobalsAfter(t, ['window', 'crossOriginIsolated', 'fetch', 'Worker']);

@@ -652,8 +652,9 @@ test('N18 (request-less Results): a Result shown without a committed request say
     for (const key of [...GT, 'diagramOptions.output.legend', 'diagramOptions.plotTitle']) {
       assert.equal(config.committedSettingNotePredicate()(key), false, key);
     }
-    assert.notEqual(owner.settingApplicationNote('track-visibility', config.committedSettingNotePredicate()).text,
-      owner.LIVE_NOTE?.text ?? 'Live edit');
+    const note = owner.settingApplicationNote('track-visibility', config.committedSettingNotePredicate());
+    assert.equal(note.application, 'generate');
+    assert.equal(note.display, 'clock');
   } finally {
     state.results.value = shown;
   }

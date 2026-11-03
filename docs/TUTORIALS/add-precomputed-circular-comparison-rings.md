@@ -129,7 +129,7 @@ Select **SVG** to save `precomputed_circular_rings.svg`.
 To compute the three rings instead of uploading frozen tables, keep the same
 displayed reference, comparison file order, labels, and filters. Under
 **Pairwise Comparisons**, select **Run LOSAT** and **TLOSATX**, and add each
-comparison file with **Add Seq**; FASTA, GenBank, and DDBJ files are accepted.
+comparison file with **Add comparison sequence**; FASTA, GenBank, and DDBJ files are accepted.
 Set **Reference gencode** to `2` and each row's **Comparison gencode** to `2`,
 `5`, and `5` for zebrafish, fruit fly, and nematode, respectively. The
 displayed human record is the TLOSATX subject.

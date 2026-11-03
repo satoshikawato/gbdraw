@@ -9,6 +9,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal, settleLiv
 const { load } = require('./helpers/mode-transition.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { clocksIn, clockNotes } = require('./helpers/timing-notes.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot } = require('./helpers/live-generate-parity.cjs');
 const { open, addColorRule, addVisibilityRule } = require('./helpers/live-generate-parity-steps.cjs');
 
@@ -785,12 +786,13 @@ test('with a single-canvas Result, the Multi-Record layout rows say Applies on G
   try {
     await generateNow(page);
     const positionNote = /the position applies on Generate after the Multi-Record Canvas change/;
-    for (const id of ['legend', 'plot-title']) await expect(page.locator(`[data-setting="${id}"]`).getByText(positionNote)).toHaveCount(0);
+    const positionNotes = (id) => clockNotes(page.locator(`[data-setting="${id}"]`)).then((notes) => notes.filter((text) => positionNote.test(text)).length);
+    for (const id of ['legend', 'plot-title']) await expect.poll(() => positionNotes(id)).toBe(0);
     await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
-    const note = page.locator('[data-setting="multi-record-layout"] > span').first();
-    await expect(note).toHaveText(/Applies on Generate/);
-    await expect(note).toHaveAttribute('data-applies-on-generate', 'multi-record-layout');
-    for (const id of ['legend', 'plot-title']) await expect(page.locator(`[data-setting="${id}"]`).getByText(positionNote)).toHaveCount(1);
+    const note = page.locator('[data-setting="multi-record-layout"] [data-applies-on-generate="multi-record-layout"]');
+    // The Layout card may be closed: read the clock's name from its attribute.
+    await expect(clocksIn(note)).toHaveAttribute('aria-label', 'Applies on Generate');
+    for (const id of ['legend', 'plot-title']) await expect.poll(() => positionNotes(id)).toBe(1);
   } finally {
     await page.context().close();
   }
@@ -900,7 +902,7 @@ test('lambda: Lock Definition Column redraws the Linear Result without Generate 
     await generateNow(page);
     const before = await facts(page);
     const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
-    await clickControl(page, 'input[type="checkbox"][aria-describedby="linear-definition-lock-help"]');
+    await clickControl(page, 'input[type="checkbox"][aria-describedby~="linear-definition-lock-help"]');
     await expect.poll(async () => (await facts(page)).overrides?.[lockKey], { timeout: APPLY_TIMEOUT })
       .toBe(!before.overrides[lockKey]);
     await settleLive(page);
@@ -909,7 +911,7 @@ test('lambda: Lock Definition Column redraws the Linear Result without Generate 
     expect(after.reflowError).toBeNull();
     expect(after.content).not.toBe(before.content);
     expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(steps + 1);
-    await expect(page.locator('[data-setting="definition-column"] > span.apply-note')).toHaveText(/Live edit/);
+    await expect(clocksIn(page.locator('[data-setting="definition-column"]'))).toHaveCount(0);
     await expectLiveEqualsGenerate(page, { label: 'Linear Lock Definition Column' });
   } finally {
     await page.context().close();

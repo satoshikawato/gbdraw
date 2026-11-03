@@ -121,7 +121,7 @@ test('incomplete GFF pair stays idle; complete pair automatically discovers with
   await page.locator('input[type=radio][value=gff]').first().check();
   await page.getByLabel('GFF3 File', { exact: true }).setInputFiles(fixture('tests/test_inputs/NC_013668.gff3'));
   await waitStatus(page, 'idle');
-  await expect(page.locator('[data-circular-discovery-status]')).toContainText('Upload both');
+  await expect(page.locator('[data-circular-discovery-status]')).toHaveText('');
   await page.getByLabel('FASTA File', { exact: true }).setInputFiles(fixture('tests/test_inputs/NC_013668.fasta'));
   await waitStatus(page, 'ready');
   expect((await snapshot(page)).rows).toEqual([['#1', 'NC_013668.3']]);

@@ -143,7 +143,6 @@ from .session import (
 )
 from .session_drawings import SessionDrawingArtifacts
 from .session_io import session_to_cli_args
-from .session_request_codec import require_storable_diagram_options
 from .cli_utils.losat_output import (
     parse_positive_int as _parse_positive_int,
     write_losat_output_files,
@@ -1872,8 +1871,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         ),
     )
     diagram_output_paths = diagram_request_output_paths(canonical_request)
-    if args.save_session or args.session_output:
-        require_storable_diagram_options(canonical_request.options)
     session_output_path = preflight_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
         session_output=args.session_output,
