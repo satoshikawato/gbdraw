@@ -10,7 +10,7 @@ import { normalizeUserFacingError, reasonText } from '../../gbdraw/web/js/utils/
 import { createDefaultAdv, createDefaultForm } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import {
   LINEAR_WRAP_FORM_FIELDS, exportLinearWrap, linearWrapAmountText, linearWrapBlockers, linearWrapFormPatch, linearWrapInputValue,
-  linearWrapUnitOf, requestLinearWrapLength, shownLinearWrap
+  linearWrapUnitOf, requestLinearWrapLeaf, requestLinearWrapLength, shownLinearWrap
 } from '../../gbdraw/web/js/services/linear-wrap-form.js';
 import {
   createFeaturePlacementActions, draftFeatureSlot, draftPlacementTargets
@@ -214,31 +214,38 @@ test('the length field writes bp from an amount and a unit, and shows a value fr
 });
 
 // Case 6 (summary part): what the shown Result drew with the drawing's value comes from Python's input summary
-// and the committed request; the Web copies neither the Auto rule nor the drawn axis.
-const SUMMARY = Object.freeze({ recordLengths: [48502],
+// and the committed request; the Web copies neither the Auto rule nor the drawn axis. "These records" compares each
+// drawn record's source length and requested region, as Python sent them, with the card's (review 3 F2, D-53).
+const LAMBDA = Object.freeze({ drawnLength: 48502, sourceLength: 48502, region: null });
+const SUMMARY = Object.freeze({ records: [LAMBDA],
   linearWrap: { rowLength: 10000, rowCount: 5, requested: 'auto', recordRows: [5], drawnAxisLength: 10000 } });
-const ONE_ROW = Object.freeze({ recordLengths: [8000], linearWrap: null });
+const ONE_ROW = Object.freeze({ records: [{ drawnLength: 8000, sourceLength: 8000, region: null }], linearWrap: null });
+/** @param {number} sourceLength @param {{ start: number, end: number } | null} [region] */
+const card = (sourceLength, region = null) => ({ sourceLength, region });
 
 test('the shown Result names its rows only when it drew this value over these records (case 6)', () => {
-  const read = (inputs) => shownLinearWrap({ value: 'auto', requested: 'auto', summary: SUMMARY, recordLengths: [48502], ...inputs });
+  const read = (inputs) => shownLinearWrap({ value: 'auto', requested: 'auto', summary: SUMMARY, records: [card(48502)], ...inputs });
   assert.deepEqual(read({}), { kind: 'rows', rowLength: 10000, rowCount: 5, drawnAxisLength: 10000 });
   assert.deepEqual(read({ value: null }), { kind: 'off' });
   // One row: the Result cut nothing over these records. A record added since (no Generate) is unknown: the next
   // Generate may cut it, so neither the text nor the Auto hints claim one row (review 2 F2).
-  assert.deepEqual(read({ summary: ONE_ROW, recordLengths: [8000] }), { kind: 'one-row' }, 'Auto with nothing cut');
-  assert.deepEqual(read({ summary: ONE_ROW, recordLengths: [8000, 5_000_000] }), { kind: 'unknown' }, 'a record added since');
-  assert.deepEqual(read({ summary: ONE_ROW, recordLengths: [5_000_000] }), { kind: 'unknown' }, 'a record replaced since');
-  assert.deepEqual(read({ summary: ONE_ROW, recordLengths: [] }), { kind: 'unknown' }, 'records not known');
-  assert.deepEqual(read({ value: 20000, requested: 20000, summary: ONE_ROW, recordLengths: [8000, 30000] }), { kind: 'unknown' },
+  assert.deepEqual(read({ summary: ONE_ROW, records: [card(8000)] }), { kind: 'one-row' }, 'Auto with nothing cut');
+  assert.deepEqual(read({ summary: ONE_ROW, records: [card(8000), card(5_000_000)] }), { kind: 'unknown' }, 'a record added since');
+  assert.deepEqual(read({ summary: ONE_ROW, records: [card(5_000_000)] }), { kind: 'unknown' }, 'a record replaced since');
+  assert.deepEqual(read({ summary: ONE_ROW, records: [] }), { kind: 'unknown' }, 'records not known');
+  assert.deepEqual(read({ value: 20000, requested: 20000, summary: ONE_ROW, records: [card(8000), card(30000)] }), { kind: 'unknown' },
     'a typed length over the old longest record');
-  for (const changed of [{ requested: undefined }, { requested: 20000 }, { summary: undefined }, { recordLengths: [48502, 1000] },
-    { recordLengths: [] }, { value: 20000, requested: 20000 }]) {
+  for (const changed of [{ requested: undefined }, { requested: 20000 }, { summary: undefined }, { records: [card(48502), card(1000)] },
+    { records: [] }, { value: 20000, requested: 20000 }]) {
     assert.deepEqual(read(changed), { kind: 'unknown' }, JSON.stringify(changed));
   }
-  // The committed request's value: its override leaf, or a CLI request's full config.
+  // The committed request's value: its override leaf, or a CLI request's full config; the leaf as stored for the
+  // export check, which Python reads (review 3 F1, D-52).
   assert.equal(requestLinearWrapLength({ diagramOptions: { configOverrides: { 'canvas.linear.wrap_length': 'auto' } } }), 'auto');
   assert.equal(requestLinearWrapLength({ diagramOptions: { config: { canvas: { linear: { wrap_length: 20000 } } }, configOverrides: {} } }), 20000);
   assert.equal(requestLinearWrapLength({ diagramOptions: { configOverrides: {} } }), null);
+  assert.equal(requestLinearWrapLeaf({ diagramOptions: { config: { canvas: { linear: { wrap_length: '5kb' } } }, configOverrides: {} } }), '5kb');
+  assert.equal(requestLinearWrapLeaf({ diagramOptions: { configOverrides: {} } }), null);
 
   const drawing = linearDrawing();
   drawing.form.linear_wrap_length = 'auto';
@@ -250,6 +257,22 @@ test('the shown Result names its rows only when it drew this value over these re
   assert.equal(field.linearWrapAutoText.value, 'One row (auto)');
   reading = { kind: 'unknown' };
   assert.equal(field.linearWrapAutoText.value, 'Auto');
+});
+
+// Review 3 F2 (D-53): a cropped record. Python drew 200,000 bases of a 5 Mb record in 4 rows of 50 kbp; the card
+// still asks for the same region of a record of the same length, so the field shows the rows, and a cropped record
+// that is not cut shows one row. A changed region, or a source of another length, is unknown until Generate.
+test('a cropped record shows the rows and one row Python drew while the card asks for the same region (review 3 F2)', () => {
+  const region = { start: 1, end: 200_000 };
+  const cropped = { records: [{ drawnLength: 200_000, sourceLength: 5_000_000, region }],
+    linearWrap: { rowLength: 50_000, rowCount: 4, requested: 'auto', recordRows: [4], drawnAxisLength: 50_000 } };
+  const read = (inputs) => shownLinearWrap({ value: 'auto', requested: 'auto', summary: cropped, records: [card(5_000_000, region)], ...inputs });
+  assert.deepEqual(read({}), { kind: 'rows', rowLength: 50_000, rowCount: 4, drawnAxisLength: 50_000 });
+  const uncut = { records: [{ drawnLength: 8000, sourceLength: 5_000_000, region: { start: 1001, end: 9000 } }], linearWrap: null };
+  assert.deepEqual(read({ summary: uncut, records: [card(5_000_000, { start: 1001, end: 9000 })] }), { kind: 'one-row' });
+  assert.deepEqual(read({ records: [card(5_000_000, { start: 1, end: 300_000 })] }), { kind: 'unknown' }, 'another region');
+  assert.deepEqual(read({ records: [card(5_000_000)] }), { kind: 'unknown' }, 'the region removed');
+  assert.deepEqual(read({ records: [card(4_000_000, region)] }), { kind: 'unknown' }, 'a source of another length');
 });
 
 test('while wrapping, the Auto sizes and ticks follow the drawn axis Python sent, and the windows the whole record (case 6)', () => {
@@ -359,26 +382,44 @@ for request in json.load(sys.stdin):
 print(json.dumps(out))
 `], { input: JSON.stringify(requests), encoding: 'utf8' }));
 
-test('a PDF export of a wrapped Result without an input summary is refused when a record is cut, as on the CLI', () => {
-  // What the export sends: the committed request's length with the summary's records, or, without a summary,
-  // the records the drawing reads; nothing while either is unknown or wrap is off.
-  assert.deepEqual(exportLinearWrap({ requested: 10000, summary: undefined, recordLengths: [5_000_000] }),
+test('a PDF export of a wrapped Result without an input summary is refused when a record is cut, as on the CLI', async () => {
+  // What the export sends: the committed request's wrap leaf as stored, with the records the summary names, or,
+  // without a summary, the records the drawing's discovery reads, awaited at export (review 3 F1, D-52); nothing
+  // while the records stay unknown, wrap is off, or no Linear Result is shown.
+  const discovered = (lengths) => async () => lengths;
+  assert.deepEqual(await exportLinearWrap({ leaf: 10000, summary: undefined, discoverRecordLengths: discovered([5_000_000]) }),
     { requested: 10000, recordLengths: [5_000_000] });
-  assert.deepEqual(exportLinearWrap({ requested: 'auto', summary: SUMMARY, recordLengths: [] }),
+  assert.deepEqual(await exportLinearWrap({ leaf: 'auto', summary: SUMMARY, discoverRecordLengths: discovered([]) }),
     { requested: 'auto', recordLengths: [48502] }, 'a Result drawn here: the records Python drew');
-  assert.equal(exportLinearWrap({ requested: null, summary: undefined, recordLengths: [5_000_000] }), null, 'wrap off');
-  assert.equal(exportLinearWrap({ requested: undefined, summary: undefined, recordLengths: [5_000_000] }), null, 'no Linear request');
-  assert.equal(exportLinearWrap({ requested: 'auto', summary: undefined, recordLengths: [] }), null, 'records not known');
+  assert.equal(await exportLinearWrap({ leaf: null, summary: undefined, discoverRecordLengths: discovered([5_000_000]) }), null, 'wrap off');
+  assert.equal(await exportLinearWrap({ leaf: undefined, summary: undefined, discoverRecordLengths: discovered([5_000_000]) }), null,
+    'no Linear request');
+  assert.equal(await exportLinearWrap({ leaf: 'auto', summary: undefined, discoverRecordLengths: discovered([]) }), null, 'records not known');
 
+  // The state after a Load: no input summary, and the cards' record lists deferred until something reads them. The
+  // export awaits the discovery as Generate does, so the 5 Mb record is known when the check is asked.
+  const page = { deferred: true, lengths: [] };
+  const discoverRecordLengths = async () => {
+    if (page.deferred) { await Promise.resolve(); page.deferred = false; page.lengths = [5_000_000]; }
+    return page.lengths;
+  };
+  const loaded = (leaf) => exportLinearWrap({ leaf, summary: undefined, discoverRecordLengths });
   const pdf = (linearWrap) => ({ format: 'pdf', width: 1500, height: 34_000, dpi: null, linearWrap });
-  const [cut, uncut, plain, fraction] = pythonExportCheck([
-    pdf(exportLinearWrap({ requested: 10000, summary: undefined, recordLengths: [5_000_000] })),
-    pdf(exportLinearWrap({ requested: 'auto', summary: undefined, recordLengths: [8000] })),
-    pdf(exportLinearWrap({ requested: null, summary: undefined, recordLengths: [5_000_000] })),
+  const [cut, unit, auto, none, uncut, plain, fraction] = pythonExportCheck([
+    pdf(await loaded(10000)),
+    // A CLI or Python API Session's leaf goes as stored: Python's validator reads it.
+    pdf(await loaded('5kb')),
+    pdf(await loaded('Auto')),
+    pdf(await loaded('none')),
+    pdf(await exportLinearWrap({ leaf: 'auto', summary: undefined, discoverRecordLengths: discovered([8000]) })),
+    pdf(await exportLinearWrap({ leaf: null, summary: undefined, discoverRecordLengths: discovered([5_000_000]) })),
     { wrapLength: linearWrapInputValue('1.0000000001', 'kbp') }
   ]);
-  assert.equal(cut.code, 'EXPORT_LIMIT');
-  assert.equal(cut.reason, 'PDF_SIZE');
+  for (const refusal of [cut, unit, auto]) {
+    assert.equal(refusal.code, 'EXPORT_LIMIT', JSON.stringify(refusal));
+    assert.equal(refusal.reason, 'PDF_SIZE');
+  }
+  assert.deepEqual(none, { ok: true }, '"none" is off');
   assert.deepEqual(uncut, { ok: true }, 'nothing is cut: an unwrapped PDF stays as it was');
   assert.deepEqual(plain, { ok: true });
   // D-57: a typed amount that is no whole bp reaches Python as typed and is refused with its diagnostic.

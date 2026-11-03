@@ -11,12 +11,12 @@ const summary = (overrides = {}) => ({
   resultName: 'b.svg',
   lines: ['Record EMPTY001.1 (empty.gb), record 1 of 1, 1,000 bp: drew 0 features.'],
   warnings: [{ code: 'no_drawable_features', message: 'Record EMPTY001.1 (empty.gb) has no feature to draw: it has no features.' }],
-  recordLengths: [1000],
+  records: [{ drawnLength: 1000, sourceLength: 1000, region: null }],
   linearWrap: null,
   ...overrides
 });
 // gbdraw/api/input_summary.py `LinearWrapPayload` of phage lambda at Auto (tests/test_web_wrap_diagnostics.py).
-// Its record lengths ride the summary (`recordLengths: [48502]`), as they do for a Result that cut nothing.
+// Its records ride the summary (`records`), as they do for a Result that cut nothing.
 const wrap = (overrides = {}) => ({
   rowLength: 10000, rowCount: 5, requested: 'auto', recordRows: [5], drawnAxisLength: 10000,
   ...overrides
@@ -30,6 +30,13 @@ test('a reply without input summaries has none, and a valid one is kept as sent'
   assert.equal(inputSummaryOf(admitted, 1, 'b.svg'), admitted[0]);
   assert.equal(inputSummaryOf(admitted, 0, 'a.svg'), null);
   assert.equal(inputSummaryOf(admitted, 1, 'a.svg'), null, 'a Result is found by index and name');
+});
+
+// Each drawn record: its drawn bases, its source record's, and the region of the source the request asked for
+// (review 3 F2): a cropped record says which, so the Web compares it with the card.
+test('a summary keeps each record a cropped Result drew, as Python sent it', () => {
+  const records = [{ drawnLength: 200000, sourceLength: 5000000, region: { start: 1, end: 200000 } }];
+  assert.deepEqual(validateInputSummaries([summary({ records })], results)[0].records, records);
 });
 
 test('a summary keeps the rows its wrapped Result drew, as Python sent them', () => {
@@ -50,10 +57,17 @@ test('a summary that does not name its Result, or has another shape, refuses the
     [summary({ warnings: [{ code: 'no_drawable_features', message: 'x', extra: 1 }] })],
     [{ ...summary(), extra: true }],
     [(({ linearWrap, ...rest }) => rest)(summary())],
-    [(({ recordLengths, ...rest }) => rest)(summary())],
-    [summary({ recordLengths: [] })],
-    [summary({ recordLengths: [0] })],
-    [summary({ recordLengths: [1000.5] })],
+    [(({ records, ...rest }) => rest)(summary())],
+    [{ ...summary(), recordLengths: [1000] }],
+    [summary({ records: [] })],
+    [summary({ records: [{ drawnLength: 0, sourceLength: 1000, region: null }] })],
+    [summary({ records: [{ drawnLength: 1000.5, sourceLength: 1000, region: null }] })],
+    [summary({ records: [{ drawnLength: 1000, region: null }] })],
+    [summary({ records: [{ drawnLength: 1000, sourceLength: 1000 }] })],
+    [summary({ records: [{ drawnLength: 1000, sourceLength: 1000, region: null, extra: 1 }] })],
+    [summary({ records: [{ drawnLength: 1000, sourceLength: 1000, region: { start: 1 } }] })],
+    [summary({ records: [{ drawnLength: 1000, sourceLength: 1000, region: { start: 0, end: 1000 } }] })],
+    [summary({ records: [{ drawnLength: 1000, sourceLength: 1000, region: [1, 1000] }] })],
     [summary({ linearWrap: {} })],
     [summary({ linearWrap: wrap({ requested: 'none' }) })],
     [summary({ linearWrap: wrap({ requested: '10kb' }) })],
@@ -61,7 +75,7 @@ test('a summary that does not name its Result, or has another shape, refuses the
     [summary({ linearWrap: wrap({ rowCount: 2.5 }) })],
     [summary({ linearWrap: wrap({ recordRows: [] }) })],
     [summary({ linearWrap: wrap({ recordRows: [5, 1] }) })],
-    [summary({ linearWrap: wrap({ recordLengths: [48502] }) })],
+    [summary({ linearWrap: wrap({ records: [] }) })],
     [summary({ linearWrap: wrap({ drawnAxisLength: undefined }) })],
     [summary({ linearWrap: { ...wrap(), extra: 1 } })]
   ]) {

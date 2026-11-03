@@ -85,6 +85,9 @@ class RecordInputSummary:
     # The drawn source bases, 1-based and inclusive, when the record is cropped.
     region: tuple[int, int] | None
     features: tuple[FeatureTypeTally, ...]
+    # The region of the source record the request asked for (1-based, inclusive, as asked: its end may run past the
+    # record), ``None`` when it asked for none. The Web compares it with the record's card.
+    requested_region: tuple[int, int] | None = None
 
     @property
     def drawn_features(self) -> int:
@@ -124,6 +127,20 @@ class LinearWrapPayload(TypedDict):
     drawnAxisLength: int
 
 
+class RegionPayload(TypedDict):
+    start: int
+    end: int
+
+
+class RecordPayload(TypedDict):
+    """One drawn record (:class:`RecordInputSummary`): its drawn bases, its source record's, and the region of the
+    source the request asked for."""
+
+    drawnLength: int
+    sourceLength: int
+    region: RegionPayload | None
+
+
 class InputSummaryPayload(TypedDict):
     """The input summary of one Web Result (``metadata.inputSummaries``); not saved in a Session."""
 
@@ -131,9 +148,9 @@ class InputSummaryPayload(TypedDict):
     resultName: str
     lines: list[str]
     warnings: list[InputWarningPayload]
-    # The bases of each drawn record, in drawing order: the Web tells from them whether the records it reads now
-    # are the ones this Result drew (and a wrapped Result's export check reads them).
-    recordLengths: list[int]
+    # Each drawn record, in drawing order: the Web tells from them whether the records its cards ask for now are the
+    # ones this Result drew (and a wrapped Result's export check reads the drawn lengths).
+    records: list[RecordPayload]
     # ``None`` when the Result cut no record (a Circular Result, or a Linear one drawn on one row each).
     linearWrap: LinearWrapPayload | None
 
@@ -213,6 +230,7 @@ def summarize_inputs(
             drawn_length=len(record.seq),
             source_length=source_length,
             region=_drawn_region(record, source_length),
+            requested_region=None if item.region is None else (item.region.start, item.region.end),
             features=_record_feature_tallies(
                 record,
                 selected_features=selected_features,
@@ -402,6 +420,15 @@ def _linear_wrap_payload(wrap: LinearWrapSummary) -> LinearWrapPayload:
     }
 
 
+def _record_payload(record: RecordInputSummary) -> RecordPayload:
+    region = record.requested_region
+    return {
+        "drawnLength": record.drawn_length,
+        "sourceLength": record.source_length,
+        "region": None if region is None else {"start": region[0], "end": region[1]},
+    }
+
+
 def input_summary_payload(
     summary: InputSummary,
     *,
@@ -417,7 +444,7 @@ def input_summary_payload(
         "resultName": result_name,
         "lines": list(input_summary_lines(summary)),
         "warnings": [{"code": item.code, "message": item.message} for item in input_warnings(summary)],
-        "recordLengths": [record.drawn_length for record in summary.records],
+        "records": [_record_payload(record) for record in summary.records],
         "linearWrap": None if linear_wrap is None else _linear_wrap_payload(linear_wrap),
     }
 
@@ -434,6 +461,8 @@ __all__ = [
     "LinearWrapPayload",
     "NO_DRAWABLE_FEATURES",
     "RecordInputSummary",
+    "RecordPayload",
+    "RegionPayload",
     "input_summary_lines",
     "input_summary_payload",
     "input_warnings",

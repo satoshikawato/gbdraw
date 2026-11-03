@@ -1,8 +1,9 @@
 // Wrap Rows (Linear Layout, PD-OI-113): turning it on switches the settings rows
 // decide in one History step, Auto shows the row length and rows Python chose,
 // comparisons and Align at feature keep it from being turned on, a feature cut
-// over rows stays one feature, Save and Load keep the length, and a PNG over its
-// size limit is refused before a file is made.
+// over rows stays one feature, Save and Load keep the length, and a PNG or a
+// wrapped PDF over its size limit is refused before a file is made, also for a
+// loaded Result.
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { copyFileSync, mkdirSync, readFileSync } = require('node:fs');
@@ -201,12 +202,15 @@ test('a feature cut over rows opens one popup from any fragment and highlights e
   expect(selected.marked).toBe(selected.count);
 });
 
-test('Save then Load keeps the length, a CLI Session loads into the field, and a PNG over its limit makes no file', async ({ page }, testInfo) => {
+test('Save then Load keeps the length, a loaded wrapped PDF over its limit and a PNG over its limit make no file', async ({ page }, testInfo) => {
   test.setTimeout(480_000);
+  const downloads = [];
+  page.on('download', (file) => downloads.push(file.suggestedFilename()));
   await openLinear(page, [LAMBDA]);
   await wrapBox(page).scrollIntoViewIfNeeded();
-  await setWrap(page, 20, 'kbp');
-  expect(await wrapState(page)).toMatchObject({ wrap: 20000, amount: '20', unit: 'kbp' });
+  // 300 bp rows: 162 rows of lambda, a PDF page of about 16,400 pt, which the CLI refuses.
+  await setWrap(page, 300, 'bp');
+  expect(await wrapState(page)).toMatchObject({ wrap: 300, amount: '300', unit: 'bp' });
   await generateAndWaitForResult(page);
   const saved = testInfo.outputPath('wrapped.gbdraw-session.json.gz');
   await download(page, 'Save Session', saved, { title: '' });
@@ -214,7 +218,15 @@ test('Save then Load keeps the length, a CLI Session loads into the field, and a
   await settle(page);
   expect((await wrapState(page)).wrap).toBe(null);
   await loadSessionFile(page, saved);
-  expect(await wrapState(page)).toMatchObject({ wrap: 20000, amount: '20', unit: 'kbp' });
+  expect(await wrapState(page)).toMatchObject({ wrap: 300, amount: '300', unit: 'bp' });
+
+  // Review 3 F1: the loaded Result has no input summary and its record list waits; Export PDF without Generate
+  // reads the record first and refuses the page as the CLI does.
+  downloads.length = 0;
+  await page.getByRole('button', { name: 'PDF', exact: true }).click();
+  await expect(page.getByText('PDF is limited to 14,400 pt per side', { exact: false }).first()).toBeVisible({ timeout: 60_000 });
+  await page.waitForTimeout(1_000);
+  expect(downloads).toEqual([]);
 
   // A Session the CLI wrote with --wrap_length shows its length in the field.
   const directory = testInfo.outputPath('cli');
@@ -233,8 +245,7 @@ test('Save then Load keeps the length, a CLI Session loads into the field, and a
   await generateAndWaitForResult(page);
   await settle(page);
   await page.evaluate(() => { window.__GBDRAW_APP__.downloadDpi = '600'; });
-  const downloads = [];
-  page.on('download', (file) => downloads.push(file.suggestedFilename()));
+  downloads.length = 0;
   await page.getByRole('button', { name: 'PNG', exact: true }).click();
   const message = page.getByText('PNG is limited to 32,767 px per side', { exact: false }).first();
   await expect(message).toBeVisible({ timeout: 60_000 });

@@ -1161,7 +1161,7 @@ Mbp to set one. Python decides the rows: Auto takes the shortest of 10, 20 and
 50 kbp that keeps the longest record within five rows, else 50 kbp, and cuts
 nothing when every record is 10 kbp or shorter. After Generate the field shows
 what Auto drew, such as "10 kbp per row, 5 rows (auto)" or "One row (auto)",
-until the records change. A
+until the records or their regions change. A
 Session stores the length in bp; the unit is not saved, and a loaded length
 shows in the largest unit that holds it whole.
 
@@ -1178,8 +1178,8 @@ before it was turned on.
 Wrap Rows cannot be turned on, or its length changed, while the drawing has
 comparisons (BLAST, comparison pairs, LOSAT, Similarity groups, or a Similarity
 alignment), a Record Layout row with several records, records that **Align at
-feature** placed (until that step is undone; the app does not know it after
-the Session is loaded again), or a feature track on the axis in Custom Track
+feature** placed (until that step is undone or a Session is loaded), or a
+feature track on the axis in Custom Track
 Slots. The note under the field names what to remove. Turning it off is always
 possible. When one of these is added after Wrap Rows is on and Generate cuts a
 record, Generate stops with the same message and keeps the last Result, and
@@ -1187,7 +1187,8 @@ record, Generate stops with the same message and keeps the last Result, and
 
 A feature cut over two rows stays one feature: its popup, highlight, selection,
 label, and editor rows are the feature's, and any of its pieces opens them. A
-PNG or PDF over its format's size limit is refused before a file is made; see
+PNG over 32,767 px per side, or a wrapped figure's PDF over 14,400 pt, is
+refused before a file is made; see
 [PNG and PDF size limits](output-formats-and-export.md#png-and-pdf-size-limits).
 
 ## Preview, search, and editor

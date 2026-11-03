@@ -723,8 +723,12 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when each input summary took the drawn record lengths
     # (`recordLengths`): with that key removed, the reply has the earlier
     # digest.
-    "similarity_groups": "9ddc7be305d022694a583f68849efb85ef030f0bee0514f25a30dfcdbb928724",
-    "collinear": "e2fef83a80c9e9004c8028a09bd4c4591ae495f0f27f36ee3fe70355fc0ca15f",
+    # Updated again when each input summary named its drawn records with their
+    # source length and requested region (`records`, review 3 F2): with each
+    # entry mapped back to its drawn length as `recordLengths`, the reply has
+    # the earlier digest.
+    "similarity_groups": "b58c726435364367522ab1cbe8ec49269622540f1dbca7eac50c89c103af9d82",
+    "collinear": "c45d48412c492e9eea9903c2f8056858593d43d6d7f5aea6e0ff6fc37ad30d63",
 }
 
 

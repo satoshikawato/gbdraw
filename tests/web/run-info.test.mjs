@@ -1222,18 +1222,28 @@ test('Italic gene names has its CLI flag in the Source recipe of either mode', a
   }
 });
 
-// Wrap Rows writes `--wrap_length` with the request's value, Auto as `auto`; no wrap length writes nothing.
+// Wrap Rows writes `--wrap_length` with the request's value, Auto as `auto`; no wrap length, null and "none" (off)
+// write nothing. Any other stored text (a Python API Session's "5kb", " 20000 ") is not written as typed: the recipe
+// is unavailable with the reason, since the CLI parser may not read it back (review 3 F3, R12).
 test('a Linear wrap length has its CLI flag in the Source recipe', async () => {
-  for (const length of ['auto', 20000, undefined]) {
+  const withLength = (length) => {
     const copy = structuredClone(linearGallerySession);
     const overrides = copy.renderRequest.diagramOptions.configOverrides;
     delete overrides['canvas.linear.wrap_length'];
     if (length !== undefined) overrides['canvas.linear.wrap_length'] = length;
-    const recipe = await buildSourceRecipe(copy);
+    return copy;
+  };
+  for (const [length, flag] of [['auto', 'auto'], [20000, '20000'], [undefined, undefined], [null, undefined], ['none', undefined]]) {
+    const recipe = await buildSourceRecipe(withLength(length));
     assert.equal(recipe.available, true, recipe.unavailableReason);
     const at = recipe.args.indexOf('--wrap_length');
-    assert.equal(at === -1 ? undefined : recipe.args[at + 1], length === undefined ? undefined : String(length), JSON.stringify(recipe.args));
+    assert.equal(at === -1 ? undefined : recipe.args[at + 1], flag, JSON.stringify(recipe.args));
     await assertCliParserAccepts(recipe);
+  }
+  for (const length of ['5kb', ' 20000 ', 'Auto', 1.5]) {
+    const recipe = await buildSourceRecipe(withLength(length));
+    assert.equal(recipe.available, false, JSON.stringify(length));
+    assert.match(recipe.unavailableReason, /wrap length/, JSON.stringify(length));
   }
 });
 

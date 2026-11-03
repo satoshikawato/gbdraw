@@ -13,6 +13,7 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ExportError, GbdrawError
+from gbdraw.io.regions import parse_region_spec
 from gbdraw.layout.linear_wrap import LinearWrapSummary, refuse_feature_track_on_the_axis, refuse_undrawable_wrap
 from gbdraw.render.export_limits import check_export_limit
 from gbdraw.web_support.error_adapter import serialize_web_error
@@ -138,6 +139,26 @@ def test_the_web_export_check_reads_the_wrap_and_refuses_as_the_cli_does(web_hel
     assert "error" in _web_export_check(web_helpers, "eps", SORANGIUM_SIZE, None, None)
 
 
+def _web_export_leaf(helpers: dict, leaf: object, record_lengths: list[int]) -> dict:
+    request = {"format": "pdf", "width": SORANGIUM_SIZE[0], "height": SORANGIUM_SIZE[1], "dpi": None,
+               "linearWrap": {"requested": leaf, "recordLengths": record_lengths}}
+    return json.loads(helpers["call_web_json_helper"]("check_web_export_limit_json", json.dumps(request)))
+
+
+def test_the_web_export_check_reads_the_stored_wrap_leaf_with_the_config_validator(web_helpers: dict) -> None:
+    # Review 3 F1 (D-52): a loaded Result's committed request goes as stored, so a CLI or Python API Session's
+    # "5kb" or "Auto" is checked as the CLI checks it; "none" and null are off.
+    for leaf in ("50kb", "Auto", " 50000 ", 50_000):
+        refusal = _web_export_leaf(web_helpers, leaf, [13_033_779])["error"]
+        assert refusal["context"]["reason"] == "PDF_SIZE", leaf
+    for leaf in ("none", None):
+        assert _web_export_leaf(web_helpers, leaf, [13_033_779]) == {"ok": True}, leaf
+    # A leaf the validator refuses is refused with its diagnostic, as a Generate of it would be.
+    refused = _web_export_leaf(web_helpers, "50 parsecs", [13_033_779])["error"]
+    assert refused["code"] == "INPUT_INVALID"
+    assert refused["context"]["configPath"] == WRAP
+
+
 def _summaries(tmp_path: Path, **overrides: object) -> list[dict]:
     document = build_session_document(
         LinearDiagramRequest(
@@ -163,8 +184,34 @@ def test_each_input_summary_names_the_rows_its_result_drew(tmp_path: Path) -> No
         "recordRows": [5],
         "drawnAxisLength": 10_000,
     }
-    assert wrapped["recordLengths"] == [48_502]
+    assert wrapped["records"] == [{"drawnLength": 48_502, "sourceLength": 48_502, "region": None}]
     [plain] = _summaries(tmp_path, **{WRAP: 100_000})
     assert plain["linearWrap"] is None
-    # Nothing cut: the record lengths still name what the Result drew (review 2 F2).
-    assert plain["recordLengths"] == [48_502]
+    # Nothing cut: the records still name what the Result drew (review 2 F2).
+    assert plain["records"] == [{"drawnLength": 48_502, "sourceLength": 48_502, "region": None}]
+
+
+def test_a_cropped_record_names_its_source_length_and_the_region_asked_for(tmp_path: Path) -> None:
+    # Review 3 F2 (D-53): the Web tells a cropped record apart by its source length and region, as its card
+    # states them; the region is the one the request asked for, also when its end runs past the record.
+    def summary(start: int, end: int) -> dict:
+        document = build_session_document(
+            LinearDiagramRequest(
+                records=(RecordInput(GenBankInputSource(str(LAMBDA)), region=parse_region_spec("NC_001416.1:5001-35000")),),
+                options=LinearDiagramOptions(config_overrides={WRAP: "auto"}),
+                output=RenderOutputRequest(output_prefix="web", formats=("svg",)),
+            )
+        ).to_dict()
+        request = document["drawings"][0]["renderRequest"]
+        # The region as a card states it: the Web sends the fields as typed (a Session writer clamps its own).
+        request["records"][0]["region"].update(start=start, end=end)
+        [entry] = render_embedded_canonical_web_request(
+            request, resources=document["resources"], workspace=tmp_path / f"{start}-{end}",
+        )["metadata"]["inputSummaries"]
+        return entry
+
+    cropped = summary(5_001, 35_000)
+    assert cropped["records"] == [{"drawnLength": 30_000, "sourceLength": 48_502, "region": {"start": 5_001, "end": 35_000}}]
+    assert cropped["linearWrap"]["recordRows"] == [len(range(0, 30_000, cropped["linearWrap"]["rowLength"]))]
+    past_end = summary(1, 60_000)
+    assert past_end["records"] == [{"drawnLength": 48_502, "sourceLength": 48_502, "region": {"start": 1, "end": 60_000}}]

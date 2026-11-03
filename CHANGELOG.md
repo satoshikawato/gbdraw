@@ -30,8 +30,8 @@ write-up of a release.
 - Changed: the drawing bar replaces the Circular and Linear mode buttons.
 - Added: Web app: **Wrap Rows** in the Linear Layout card draws long records
   over several rows (Auto, or a length in bp, kbp, or Mbp), with the same rules
-  as `--wrap_length`. A PNG or PDF export over its size limit is refused before
-  a file is made.
+  as `--wrap_length`. A PNG over 32,767 px per side, or a wrapped figure's PDF
+  over 14,400 pt, is refused before a file is made.
 
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
 

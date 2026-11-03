@@ -66,6 +66,8 @@ import { computed, ref } from '../utils/reactivity.js';
  *   The candidate Session: `committed` with these record translations and orientations, and no alignment plan.
  * @property {() => readonly unknown[]} recordTranslations The record translations drawn now (reactive):
  *   the notice after Apply holds only while they are the ones Apply wrote, so Undo retires it.
+ * @property {() => number} sessionReplacements The Sessions the page has installed (reactive): a Load replaces the
+ *   document, so it retires what Apply did, also when the loaded positions are the ones Apply wrote.
  */
 
 const STATUSES = new Set(['reference', 'aligned', 'unmatched']);
@@ -117,7 +119,7 @@ const previewLine = (record, index) => {
 /** @param {FeatureAnchorPorts} ports */
 export const createFeatureAnchorAction = ({
   materializedSession, hasAlignmentPlan, runHelperOperation, resolveOperation, runPlacement, notePlanReplaced, projectPlacement,
-  recordTranslations
+  recordTranslations, sessionReplacements
 }) => {
   /** @type {Ref<string>} */
   const selector = ref('');
@@ -127,14 +129,16 @@ export const createFeatureAnchorAction = ({
   const preview = ref(null);
   /** @type {Ref<Record<string, unknown> | null>} */
   const error = ref(null);
-  /** @type {Ref<{ text: string, written: FeatureAnchorTranslation[] }>} */
-  const noticeState = ref({ text: '', written: [] });
-  // Align at feature holds while the records are where Apply put them: Undo, a drag, or a Load retires it.
-  // Its notice shows then, and Wrap Rows reads it as Align at feature being present (PD-OI-113).
+  /** @type {Ref<{ text: string, written: FeatureAnchorTranslation[], session: number }>} */
+  const noticeState = ref({ text: '', written: [], session: -1 });
+  // Align at feature holds while the records are where Apply put them, in the Session Apply wrote them to. Undo, a
+  // drag that moves the translations (one under a Similarity alignment plan), or a Session Load retires it; a drag
+  // with no plan edits the composition, not the translations, so it does not. Its notice shows while it holds, and
+  // Wrap Rows reads it as Align at feature being present (PD-OI-113).
   const applied = computed(() => {
-    const { written } = noticeState.value;
+    const { written, session } = noticeState.value;
     const drawn = recordTranslations();
-    return written.length > 0 && drawn.length === written.length && written.every((entry, index) => {
+    return session === sessionReplacements() && written.length > 0 && drawn.length === written.length && written.every((entry, index) => {
       const current = drawn[index];
       return isObject(current) && current.recordKey === entry.recordKey && current.x === entry.x && current.y === entry.y;
     });
@@ -162,7 +166,7 @@ export const createFeatureAnchorAction = ({
     const expected = ++actionId;
     preview.value = null;
     error.value = null;
-    noticeState.value = { text: '', written: [] };
+    noticeState.value = { text: '', written: [], session: -1 };
     status.value = 'resolving';
     try {
       const canonical = materializedSession();
@@ -221,7 +225,7 @@ export const createFeatureAnchorAction = ({
     if (outcome?.status === 'ok') {
       if (clearsAlignment) notePlanReplaced(msg('records aligned at a feature.'));
       noticeState.value = { text: t('Records aligned at {selector}.', { selector: current.reply.selector }),
-        written: current.reply.recordTranslations };
+        written: current.reply.recordTranslations, session: sessionReplacements() };
       preview.value = null;
       status.value = 'idle';
       return { status: 'ok' };

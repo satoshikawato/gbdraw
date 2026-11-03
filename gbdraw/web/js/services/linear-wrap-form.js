@@ -4,7 +4,7 @@
 // `canvas.linear.wrap_length` (services/session-request.js compiles it);
 // Python decides the row length and whether a record is cut
 // (gbdraw/layout/linear_wrap.py), and parses a length typed with a unit.
-/** @import { InputSummary } from './input-summary.js' */
+/** @import { InputSummary, RecordSummary } from './input-summary.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 
 /** The request leaf of the wrap length (a config override path). */
@@ -48,19 +48,27 @@ export const wrapFormValue = (raw, readings = NO_WRAP_READINGS) => {
 };
 
 /**
- * The Wrap Rows value a committed Linear request asked for, as the form holds it: its override leaf, or else
- * its full config's (a CLI request). A value the form cannot hold reads as null.
+ * The wrap length a committed Linear request stores, as stored: its override leaf, or else its full config's (a CLI
+ * request); null when it stores none. Python's validator reads it where the stored text decides (the export check).
  * @param {CanonicalRenderRequest} request
- * @returns {LinearWrapFormValue}
+ * @returns {unknown}
  */
-export const requestLinearWrapLength = (request) => {
+export const requestLinearWrapLeaf = (request) => {
   const { configOverrides, config } = /** @type {{ configOverrides?: Record<string, unknown> | null,
     config?: { canvas?: { linear?: { wrap_length?: unknown } } } | null }} */ (request.diagramOptions);
   const leaf = configOverrides && Object.hasOwn(configOverrides, LINEAR_WRAP_LENGTH_PATH)
     ? configOverrides[LINEAR_WRAP_LENGTH_PATH]
     : config?.canvas?.linear?.wrap_length;
-  return wrapFormValue(leaf).value;
+  return leaf ?? null;
 };
+
+/**
+ * The Wrap Rows value a committed Linear request asked for, as the form holds it (`requestLinearWrapLeaf`). A value
+ * the form cannot hold reads as null.
+ * @param {CanonicalRenderRequest} request
+ * @returns {LinearWrapFormValue}
+ */
+export const requestLinearWrapLength = (request) => wrapFormValue(requestLinearWrapLeaf(request)).value;
 
 // Turning Wrap Rows on switches the settings rows cannot draw with, and the one rows decide (receipt PD-OI-113:
 // each row draws its ruler on its axis), in the same edit: Features on axis to Above, Bar (Simple) to Ruler
@@ -150,8 +158,10 @@ export const linearWrapAmountText = (value, unit) => (typeof value === 'number' 
 /**
  * The value a typed amount writes: empty is Auto (D-28); otherwise amount x unit in bp. A decimal amount is
  * shifted by the unit's exponent digit by digit, so it writes a whole number exactly when it names one (`1.1` kbp
- * is 1100 bp, `1.0000000001` kbp is not whole). Any other number (not whole, a sign, an exponent) is sent as typed
- * and Python's validator refuses it, as the CLI refuses `--wrap_length 1.0000000001kb` (D-57).
+ * is 1100 bp, `1.0000000001` kbp is not whole). The number field also gives a sign or an exponent (`+5`, `1e3`):
+ * the browser reads it as a number, which is multiplied by the unit (`1e3` kbp writes 1,000,000 bp, accepted when
+ * whole, although the CLI refuses `--wrap_length 1e3kb`). A bp value that is not whole is sent as it is, and Python's
+ * validator refuses it, as the CLI refuses `--wrap_length 1.0000000001kb` (D-51, D-57).
  * @param {string} text
  * @param {LinearWrapUnit} unit
  * @returns {'auto' | number}
@@ -178,25 +188,35 @@ export const linearWrapInputValue = (text, unit) => {
  *   | { kind: 'rows', rowLength: number, rowCount: number, drawnAxisLength: number }} ShownLinearWrap
  */
 /**
+ * A record the next Linear Generate draws, as its card asks for it: the bases of its source record and the region of
+ * it the card states (1-based, both ends included, the smaller first), null without one. Python's input summary
+ * names each drawn record by the same two facts (`RecordSummary`), so the Web never predicts a cropped length.
+ * @typedef {Pick<RecordSummary, 'sourceLength' | 'region'>} LinearDraftRecord
+ */
+/**
  * @typedef {object} ShownLinearWrapInputs
  * @property {unknown} value The drawing's `form.linear_wrap_length`.
  * @property {LinearWrapFormValue | undefined} requested The shown Result's committed request's wrap length (read
  *   with `wrapFormValue`); undefined when no Result of this drawing is shown.
- * @property {Pick<InputSummary, 'recordLengths' | 'linearWrap'> | undefined} summary The shown Result's input
+ * @property {Pick<InputSummary, 'records' | 'linearWrap'> | undefined} summary The shown Result's input
  *   summary; undefined when the render sent none for it (a loaded Result).
- * @property {readonly number[]} recordLengths The lengths of the records the next Generate draws, [] while unknown.
+ * @property {readonly LinearDraftRecord[]} records The records the next Generate draws, [] while unknown.
  */
+/** @param {LinearDraftRecord['region']} a @param {LinearDraftRecord['region']} b */
+const sameRegion = (a, b) => (a === null || b === null ? a === b : a.start === b.start && a.end === b.end);
 /**
  * Reads Python's summary only; the Auto rule, the cut test and the drawn axis stay Python's.
  * @param {ShownLinearWrapInputs} inputs
  * @returns {ShownLinearWrap}
  */
-export const shownLinearWrap = ({ value, requested, summary, recordLengths }) => {
+export const shownLinearWrap = ({ value, requested, summary, records }) => {
   if (value === null) return { kind: 'off' };
   if (requested === undefined || requested !== value || summary === undefined) return { kind: 'unknown' };
-  // Rows and one row alike describe the next Generate only over the records the Result drew.
-  const sameRecords = summary.recordLengths.length === recordLengths.length
-    && summary.recordLengths.every((length, index) => length === recordLengths[index]);
+  // Rows and one row alike describe the next Generate only over the records the Result drew: the same source
+  // lengths, each cropped to the same region (review 3 F2, D-53).
+  const sameRecords = summary.records.length === records.length
+    && summary.records.every(({ sourceLength, region }, index) => sourceLength === records[index].sourceLength
+      && sameRegion(region, records[index].region));
   const wrap = summary.linearWrap;
   if (!sameRecords || (wrap !== null && wrap.requested !== value)) return { kind: 'unknown' };
   return wrap === null
@@ -205,18 +225,19 @@ export const shownLinearWrap = ({ value, requested, summary, recordLengths }) =>
 };
 
 /**
- * What the size check of a PNG or PDF export reads about the exported Result's wrap (D-55): the committed
- * request's length, and the bases of the records the Result drew, from its input summary, or, for a Result
- * without one (a loaded Session, a Gallery Session before Generate), of the records the drawing reads. Python
- * decides from them whether a record is cut and what would fit (gbdraw/web_support/export_limit.py).
- * @param {{ requested: LinearWrapFormValue | undefined, summary: Pick<InputSummary, 'recordLengths'> | undefined,
- *   recordLengths: readonly number[] }} inputs `requested` as `shownLinearWrap` reads it; `recordLengths` those
- *   the next Generate draws, [] while unknown.
- * @returns {{ requested: 'auto' | number, recordLengths: number[] } | null} null with wrap off or the records unknown.
+ * What the size check of a PNG or PDF export reads about the exported Result's wrap (D-52, D-55): the committed
+ * request's wrap leaf as stored, and the bases of the records the Result drew, from its input summary, or, for a
+ * Result without one (a loaded Session, a Gallery Session before Generate), of the records the drawing's discovery
+ * reads, awaited as Generate awaits it. Python reads the leaf with its config validator (`"5kb"` and `"Auto"`
+ * included) and decides from them whether a record is cut and what would fit (gbdraw/web_support/export_limit.py).
+ * @param {{ leaf: unknown, summary: Pick<InputSummary, 'records'> | undefined,
+ *   discoverRecordLengths: () => Promise<readonly number[]> }} inputs `leaf` as `requestLinearWrapLeaf` reads it,
+ *   undefined when no Linear Result of the drawing is shown; `discoverRecordLengths` the lengths of the records the
+ *   drawing reads once its discovery has run, [] while unknown (a cropped record).
+ * @returns {Promise<{ requested: unknown, recordLengths: number[] } | null>} null with wrap off or the records unknown.
  */
-export const exportLinearWrap = ({ requested, summary, recordLengths }) => {
-  const lengths = summary === undefined ? recordLengths : summary.recordLengths;
-  return requested === undefined || requested === null || lengths.length === 0
-    ? null
-    : { requested, recordLengths: [...lengths] };
+export const exportLinearWrap = async ({ leaf, summary, discoverRecordLengths }) => {
+  if (leaf === undefined || leaf === null) return null;
+  const lengths = summary === undefined ? await discoverRecordLengths() : summary.records.map((record) => record.drawnLength);
+  return lengths.length === 0 ? null : { requested: leaf, recordLengths: [...lengths] };
 };

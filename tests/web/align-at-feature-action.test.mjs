@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const { createFeatureAnchorAction, validateFeatureAnchorReply } = await import('../../gbdraw/web/js/app/align-at-feature.js');
+const { ref } = await import('../../gbdraw/web/js/utils/reactivity.js');
 
 const KEYS = ['record-1', 'record-2'];
 const committedSession = (layout = null) => ({
@@ -23,7 +24,7 @@ const reply = () => ({
 
 // A fixture page: one committed Session, the drawn translations, and the calls the owner makes.
 const fixture = ({ plan = false, helper = async () => ({ result: reply() }) } = {}) => {
-  const page = { committed: committedSession(), plan, drawn: [], runs: [], replaced: [], helperCalls: [] };
+  const page = { committed: committedSession(), plan, drawn: [], runs: [], replaced: [], helperCalls: [], sessions: ref(0) };
   const action = createFeatureAnchorAction({
     materializedSession: () => {
       if (!page.committed) throw new Error('Generate a Linear diagram before aligning.');
@@ -43,7 +44,8 @@ const fixture = ({ plan = false, helper = async () => ({ result: reply() }) } = 
     notePlanReplaced: (reason) => page.replaced.push(reason),
     projectPlacement: ({ committed, plan, translations }) => ({ ...committed,
       renderRequest: { ...committed.renderRequest, layout: { similarityAlignment: plan, recordTranslations: translations } } }),
-    recordTranslations: () => page.drawn
+    recordTranslations: () => page.drawn,
+    sessionReplacements: () => page.sessions.value
   });
   return { page, action };
 };
@@ -101,10 +103,34 @@ test('applied holds while the records keep the positions Apply wrote, which Wrap
   assert.equal(action.applied.value, false, 'a preview moves nothing');
   await action.apply();
   assert.equal(action.applied.value, true);
-  // Undo (or a Load) puts other positions back: Align at feature no longer holds.
+  // Undo puts other positions back: Align at feature no longer holds.
   page.drawn = [{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 12, y: 3 }];
   assert.equal(action.applied.value, false);
   assert.equal(action.notice.value, '');
+});
+
+// Review 3 F4 (D-54): a Session Load replaces the document. A Session that holds the positions Apply wrote (the one
+// saved after Apply, loaded again in the same page) is the same Session as in a fresh page, where Align at feature
+// is not known: Wrap Rows stays enabled and the notice does not come back.
+test('a Session Load retires Align at feature even when the loaded positions are the ones Apply wrote', async () => {
+  const { page, action } = fixture();
+  action.selector.value = 'gene=COX1';
+  await action.resolve();
+  await action.apply();
+  assert.equal(action.applied.value, true);
+  const written = page.drawn.map((entry) => ({ ...entry }));
+  // Load another Session, then the saved one: the drawn positions are those Apply wrote.
+  page.drawn = [];
+  page.sessions.value += 1;
+  page.drawn = written;
+  page.sessions.value += 1;
+  assert.equal(action.applied.value, false);
+  assert.equal(action.notice.value, '');
+  // A new Apply in the loaded Session holds again.
+  page.committed = committedSession();
+  await action.resolve();
+  await action.apply();
+  assert.equal(action.applied.value, true);
 });
 
 test('Apply without an active plan clears nothing', async () => {
