@@ -4350,10 +4350,10 @@
                                             <help-tip id="help-linear-wrap-rows" :text="t('Draw each record over rows of this length. Leave the length empty for Auto, which chooses it from the longest record.')"></help-tip>
                                         </div>
                                         <div v-if="linearWrapOn" class="ml-6 flex items-center gap-1">
-                                            <auto-value-field :visible="linearWrapAmount === ''" :text="linearWrapAutoText">
-                                                <input type="number" id="linear-wrap-length" min="1" step="any" :value="linearWrapAmount" @change="changeLinearWrap($event, 'amount')" :aria-label="t('Row length')" class="form-input form-input-compact auto-value-input w-24" :disabled="!semanticMutationAvailable || linearWrapBlocked">
+                                            <auto-value-field class="flex-1 min-w-0" :visible="linearWrapAmount === ''" :text="linearWrapAutoText">
+                                                <input type="number" id="linear-wrap-length" min="1" step="any" :value="linearWrapAmount" @change="changeLinearWrap($event, 'amount')" :aria-label="t('Row length')" class="form-input form-input-compact auto-value-input w-full" :disabled="!semanticMutationAvailable || linearWrapBlocked">
                                             </auto-value-field>
-                                            <select id="linear-wrap-unit" :value="linearWrapUnit" @change="changeLinearWrap($event, 'unit')" :aria-label="t('Row length unit')" class="form-input form-input-compact text-xs py-1" :disabled="!semanticMutationAvailable || linearWrapBlocked">
+                                            <select id="linear-wrap-unit" :value="linearWrapUnit" @change="changeLinearWrap($event, 'unit')" :aria-label="t('Row length unit')" class="form-input form-input-compact text-xs py-1 w-auto shrink-0" :disabled="!semanticMutationAvailable || linearWrapBlocked">
                                                 <option value="bp">bp</option>
                                                 <option value="kbp">kbp</option>
                                                 <option value="Mbp">Mbp</option>
