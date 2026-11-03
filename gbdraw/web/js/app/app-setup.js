@@ -225,8 +225,7 @@ import { classifyOptionalPositiveNumber } from '../utils/optional-positive-numbe
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearWrapField } from './linear-wrap-field.js';
-import { shownLinearWrap } from '../services/linear-wrap-form.js';
-import { requestLinearWrapLength } from '../services/session-request.js';
+import { requestLinearWrapLength, shownLinearWrap } from '../services/linear-wrap-form.js';
 import { draftFeatureSlot } from './feature-editor/placement-actions.js';
 import { effectiveLinearSlotPlacement } from '../services/linear-track-slot-model.js';
 import { createLinearRecordSelector, RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
@@ -6364,18 +6363,23 @@ export const createAppSetup = () => {
       // this page, so only a page with a loaded font embeds. SVG and
       // Interactive SVG follow Embed font in exported SVG; a PNG always draws
       // with the fonts, and a PDF always registers the faces its text uses.
-      /** @type {import('../services/export.js').ExportFontPorts} */
-      const fontPorts = {
+      // The size check of a PNG or PDF reads what the exported Result drew:
+      // a wrapped Result's rows decide the row length Python advises.
+      const summary = shownInputSummary.value;
+      const linearWrap = summary === null ? null : summary.linearWrap;
+      /** @type {import('../services/export.js').ExportPorts} */
+      const exportPorts = {
         embedFonts: state.loadedFonts.value.length > 0
           ? async (svg, kind) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EMBED_FONTS, { svg, kind })).result
           : null,
         embedInSvg: fontSettings.embedInExports.value,
         resolvePdfFonts: async (runs, known) => (
           await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.PDF_FONTS, { runs, known })
-        ).result
+        ).result,
+        checkExportLimit: (request) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT, { ...request, linearWrap })
       };
       /** @type {import('../services/export.js').ExportOutcome} */
-      const result = await exportMethod(snapshot, fontPorts);
+      const result = await exportMethod(snapshot, exportPorts);
       if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
       if (result.fontWarnings.length > 0) {
         showNotice({ text: t('Exported {file}.', { file: result.filename }), items: result.fontWarnings });

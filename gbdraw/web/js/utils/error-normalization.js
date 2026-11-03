@@ -3,7 +3,7 @@
 // copy of it alone), so it declares the identity of utils/i18n.js `msg`.
 /** @param {string} text */
 const msg = (text) => text;
-const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
+const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
   'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords',
   'promoteLegacyLosatpCache', 'readAllSequenceRecords', 'readComparisonSequence', 'readFeatureOverrideTable', 'registerFonts', 'resolveFeatureAnchor', 'resolveLegacyProteinReferences',
@@ -69,9 +69,10 @@ const REASONS = Object.freeze({
   WRAP_GRID_ROW: 'A wrapped record needs a Record Layout row of its own. Give each record its own row, or turn Wrap Rows off.',
   // Align at feature and gbdraw linear --anchor_feature (gbdraw/api/record_planning.py, gbdraw/layout/linear_wrap.py).
   WRAP_ANCHOR_FEATURE: 'A wrapped record cannot be aligned at a feature. Reset the alignment, or turn Wrap Rows off.',
-  // A PNG or PDF over its format's size limit (gbdraw/render/export_limits.py); the facts are the EXPORT_LIMIT phrases.
-  PNG_SIZE: 'Lower the PNG DPI, or use SVG, which has no size limit.',
-  PDF_SIZE: 'Set a longer row length in Wrap Rows, or use SVG, which has no size limit.',
+  // A PNG or PDF over its format's size limit (gbdraw/render/export_limits.py). The limit and the advice are the
+  // EXPORT_LIMIT phrases: a row length or DPI is advised only when Python found one that fits (D-46).
+  PNG_SIZE: 'Use SVG, which has no size limit.',
+  PDF_SIZE: 'Use SVG, which has no size limit.',
   SELECTOR_NO_MATCH: 'No record has a feature that this selector names. Check the key and the value, for example gene=COX1.',
   SELECTOR_AMBIGUOUS: 'In one record, this selector names features that start at different bases. Use a selector that names one feature, such as locus_tag=<tag>.',
   ANCHOR_SHARED_ROW: 'Records that share a row cannot be aligned at a feature. Give each record its own row in Record Layout.',

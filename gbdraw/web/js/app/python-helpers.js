@@ -36,6 +36,7 @@ from gbdraw.web_support.label_fit import (
     label_fit_mode,
 )
 from gbdraw.web_support.export_fonts import pdf_fonts_json, svg_font_embedding_json
+from gbdraw.web_support.export_limit import check_web_export_limit_json
 from gbdraw.web_support.worker_cancel import WorkerCancelRequest
 
 _WEB_LOSATP_CACHE_LIMIT = 64
@@ -1868,6 +1869,8 @@ _WEB_JSON_HELPERS = {
     "synthesize_color_rules_json": (synthesize_color_rules_json, "evaluateRules"),
     "svg_font_embedding_json": (svg_font_embedding_json, "embedFonts"),
     "pdf_fonts_json": (pdf_fonts_json, "pdfFonts"),
+    # A PNG or PDF over its format's limit refuses before the browser draws it (EXPORT_LIMIT).
+    "check_web_export_limit_json": (check_web_export_limit_json, "checkExportLimit"),
     "validate_web_config_overrides_json": (validate_web_config_overrides_json, "validateConfigOverrides"),
     "extract_first_fasta": (extract_first_fasta, "extractFirstFasta"),
     # The page stages a new upload under the id the next Generate names: the parse is kept for it (OV-1595).

@@ -3,6 +3,7 @@
 /** @import { FeaturePlacementDraftRow, FeaturePlacementTarget } from '../../services/feature-placement.js' */
 /** @import { ChangeTrackLayout, LayoutControl } from '../track-slot-edits.js' */
 /** @import { RecordKeyedFeature } from '../../services/feature-identity.js' */
+/** @import { LinearWrapFormValue } from '../../services/linear-wrap-form.js' */
 import {
   canonicalFeaturePlacements,
   featureIdentityKeyOf,
@@ -273,7 +274,7 @@ export const createFeaturePlacementActions = ({
     const control = /** @type {LayoutControl & { value?: string }} */ (event.target);
     const written = value !== undefined ? value : control.type === 'checkbox' ? control.checked : control.value;
     return changeTrackLayout(() => {
-      if (field === 'linear_wrap_length') Object.assign(drawing.form, linearWrapFormPatch(drawing.form, /** @type {number | 'auto' | null} */ (written)));
+      if (field === 'linear_wrap_length') Object.assign(drawing.form, linearWrapFormPatch(drawing.form, /** @type {LinearWrapFormValue} */ (written)));
       else drawing.form[field] = written;
     }, control);
   };

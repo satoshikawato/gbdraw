@@ -9,14 +9,13 @@ import { normalizeUserFacingError, reasonText } from '../../gbdraw/web/js/utils/
 import { createDefaultAdv, createDefaultForm } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import {
   LINEAR_WRAP_FORM_FIELDS, linearWrapAmountText, linearWrapBlockers, linearWrapFormPatch, linearWrapInputValue, linearWrapUnitOf,
-  shownLinearWrap
+  requestLinearWrapLength, shownLinearWrap
 } from '../../gbdraw/web/js/services/linear-wrap-form.js';
 import {
   createFeaturePlacementActions, draftFeatureSlot, draftPlacementTargets
 } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createLinearWrapField } from '../../gbdraw/web/js/app/linear-wrap-field.js';
 import { createAutoValueDisplay } from '../../gbdraw/web/js/app/auto-value-display.js';
-import { requestLinearWrapLength } from '../../gbdraw/web/js/services/session-request.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 // What Python sends for each wrap refusal (gbdraw/layout/linear_wrap.py; tests/test_web_wrap_diagnostics.py).
@@ -49,18 +48,29 @@ test('an export over the format limit names the limit, the size and what would f
     + ' PNG is limited to 32,767 px per side, and this figure is 6,250 x 143,647 px.'
     + ' A row length of 500,000 bp should fit (estimated from the drawn height).'
     + ' A DPI of 68 or lower would fit.'
-    + ' Lower the PNG DPI, or use SVG, which has no size limit.');
+    + ' Use SVG, which has no size limit.');
   assert.deepEqual(png.actions, ['use-svg']);
   const pdf = normalizeUserFacingError({ code: 'EXPORT_LIMIT', operation: 'export-pdf', stage: 'export-capture',
-    context: { reason: 'PDF_SIZE', limit: 14400, width: 1500, height: 34475 } });
+    context: { reason: 'PDF_SIZE', limit: 14400, width: 1500, height: 34475, rowLength: 200000 } });
   assert.equal(pdf.summary, 'The figure is larger than this file format allows, so no file was made.'
     + ' PDF is limited to 14,400 pt per side, and this figure is 1,500 x 34,475 pt.'
-    + ' Set a longer row length in Wrap Rows, or use SVG, which has no size limit.');
+    + ' A row length of 200,000 bp should fit (estimated from the drawn height).'
+    + ' Use SVG, which has no size limit.');
+  // D-46: a row length or DPI is advised only when Python found one that fits. An unwrapped PDF (Wrap Rows off),
+  // and a wrapped one no longer row length fits, name the limit and SVG only.
+  for (const context of [{ limit: 14400, width: 1500, height: 20000 }, { limit: 14400, width: 20000, height: 900 }]) {
+    const plain = normalizeUserFacingError({ code: 'EXPORT_LIMIT', operation: 'export-pdf', stage: 'export-capture',
+      context: { reason: 'PDF_SIZE', ...context } });
+    assert.equal(plain.summary, 'The figure is larger than this file format allows, so no file was made.'
+      + ` PDF is limited to 14,400 pt per side, and this figure is ${context.width.toLocaleString('en-US')} x ${context.height.toLocaleString('en-US')} pt.`
+      + ' Use SVG, which has no size limit.');
+    assert.doesNotMatch(plain.summary, /row length|DPI/);
+  }
   const unbounded = normalizeUserFacingError({ code: 'EXPORT_LIMIT', operation: 'export-png', stage: 'export-capture',
     context: { reason: 'PNG_SIZE', limit: 32767, width: -1, height: 1.5, dpi: 2e7 } });
   assert.deepEqual(unbounded.context, { reason: 'PNG_SIZE', limit: 32767 }, 'only bounded counts are kept');
   assert.equal(unbounded.summary, 'The figure is larger than this file format allows, so no file was made.'
-    + ' Lower the PNG DPI, or use SVG, which has no size limit.');
+    + ' Use SVG, which has no size limit.');
 });
 
 // The fields Wrap Rows switches, as a drawing's form holds them.
@@ -241,4 +251,52 @@ test('while wrapping, the Auto sizes and ticks follow the drawn axis Python sent
   const unknown = displayOf([48502], null);
   assert.equal(unknown.autoValueText('scaleInterval'), 'by record length (auto)');
   assert.equal(unknown.autoValueText('dinucleotideWindow'), whole.autoValueText('dinucleotideWindow'));
+});
+
+// Case 6 (port part): PNG and PDF ask the Worker's size check before the browser draws or downloads anything,
+// with the SVG size and the PNG DPI; SVG and Interactive SVG never ask. The page has no DOM here: a minimal
+// stand-in records what the export creates, so a refusal that reaches the canvas or the PDF staging fails.
+const exportDom = (width, height) => {
+  const created = [];
+  const svg = {
+    attributes: new Map([['width', String(width)], ['height', String(height)]]),
+    getAttribute(name) { return this.attributes.get(name) ?? null; },
+    setAttribute(name, value) { this.attributes.set(name, String(value)); },
+    removeAttribute(name) { this.attributes.delete(name); },
+    querySelectorAll: () => [],
+    classList: { toggle() {}, remove() {}, length: 0 }
+  };
+  const saved = { document: globalThis.document, XMLSerializer: globalThis.XMLSerializer };
+  globalThis.document = { createElement: (tag) => {
+    created.push(tag);
+    if (tag === 'template') return { set innerHTML(_markup) {}, content: { querySelector: () => svg } };
+    throw new Error(`the export created a ${tag}`);
+  } };
+  globalThis.XMLSerializer = class { serializeToString() { return '<svg/>'; } };
+  return { svg, created, restore: () => Object.assign(globalThis, saved) };
+};
+
+test('a PNG or PDF over its limit is refused by the Worker check before anything is drawn (case 6)', async () => {
+  const { downloadPNG, downloadPDF, downloadSVG } = await import('../../gbdraw/web/js/services/export.js');
+  const dom = exportDom(1500, 45966);
+  try {
+    const requests = [];
+    const refusal = Object.assign(new Error('over the limit'), { code: 'EXPORT_LIMIT' });
+    const checkExportLimit = async (request) => { requests.push(request); throw refusal; };
+    const snapshot = { name: 'lambda.svg', svg: dom.svg, dpi: '300' };
+    await assert.rejects(downloadPNG(snapshot, { checkExportLimit }), refusal);
+    await assert.rejects(downloadPDF(snapshot, { checkExportLimit }), refusal);
+    assert.deepEqual(requests, [
+      { format: 'png', width: 1500, height: 45966, dpi: 300 },
+      { format: 'pdf', width: 1500, height: 45966, dpi: null }
+    ]);
+    assert.deepEqual(dom.created.filter((tag) => tag !== 'template'), [], 'no canvas and no PDF staging');
+    // A missing port is a wiring error, not a skipped check.
+    await assert.rejects(downloadPNG(snapshot, {}), /size check is not available/);
+    // SVG never asks: it has no size limit (the stand-in stops its download link).
+    await assert.rejects(downloadSVG(snapshot, { checkExportLimit }), /created a a/);
+    assert.equal(requests.length, 2, 'SVG asked no size check');
+  } finally {
+    dom.restore();
+  }
 });

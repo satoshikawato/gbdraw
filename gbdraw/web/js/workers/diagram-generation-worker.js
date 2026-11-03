@@ -792,6 +792,15 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       jsonArgument(payload.runs, []), jsonArgument(payload.known, [])
     ])
   },
+  // The size limit of a PNG or PDF (gbdraw/render/export_limits.py), checked before the browser draws it.
+  [DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT]: {
+    keys: ['format', 'width', 'height', 'dpi', 'linearWrap'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'check_web_export_limit_json', [JSON.stringify({
+      format: payload.format, width: payload.width, height: payload.height,
+      dpi: payload.dpi ?? null, linearWrap: payload.linearWrap ?? null
+    })])
+  },
   [DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES]: {
     keys: [
       'mode',

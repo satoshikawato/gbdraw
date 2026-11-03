@@ -5,6 +5,10 @@
 // Python decides the row length and whether a record is cut
 // (gbdraw/layout/linear_wrap.py), and parses a length typed with a unit.
 /** @import { LinearWrapSummary } from './input-summary.js' */
+/** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+
+/** The request leaf of the wrap length (a config override path). */
+export const LINEAR_WRAP_LENGTH_PATH = 'canvas.linear.wrap_length';
 
 /**
  * `null`: off; `'auto'`: Python's automatic row length; a number: a row length in bp, a positive safe integer.
@@ -27,6 +31,21 @@ export const wrapFormValue = (raw) => {
   if (raw === 'auto') return { value: 'auto', lost: false };
   if (typeof raw === 'number' && Number.isSafeInteger(raw) && raw > 0) return { value: raw, lost: false };
   return { value: null, lost: true };
+};
+
+/**
+ * The Wrap Rows value a committed Linear request asked for, as the form holds it: its override leaf, or else
+ * its full config's (a CLI request). A value the form cannot hold reads as null.
+ * @param {CanonicalRenderRequest} request
+ * @returns {LinearWrapFormValue}
+ */
+export const requestLinearWrapLength = (request) => {
+  const { configOverrides, config } = /** @type {{ configOverrides?: Record<string, unknown> | null,
+    config?: { canvas?: { linear?: { wrap_length?: unknown } } } | null }} */ (request.diagramOptions);
+  const leaf = configOverrides && Object.hasOwn(configOverrides, LINEAR_WRAP_LENGTH_PATH)
+    ? configOverrides[LINEAR_WRAP_LENGTH_PATH]
+    : config?.canvas?.linear?.wrap_length;
+  return wrapFormValue(leaf).value;
 };
 
 // Turning Wrap Rows on switches the settings rows cannot draw with, and the one rows decide (receipt PD-OI-113:

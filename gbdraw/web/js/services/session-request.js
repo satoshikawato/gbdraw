@@ -124,7 +124,8 @@ import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
-import { wrapFormValue } from './linear-wrap-form.js';
+/** @import { LinearWrapFormValue } from './linear-wrap-form.js' */
+import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from './linear-wrap-form.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
   CONFIG_UNSET_NUMBER_PATHS,
@@ -676,7 +677,7 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   depthHeight: 'canvas.linear.depth_height',
   normalizeLength: 'canvas.linear.normalize_length',
   // Not a CONFIG_UNSET_NUMBER_PATHS path: "auto" is a value here.
-  linearWrapLength: 'canvas.linear.wrap_length',
+  linearWrapLength: LINEAR_WRAP_LENGTH_PATH,
   labelRendering: 'labels.rendering',
   circularLabelSpacing: 'labels.spacing.circular',
   circularLabelPlacement: 'labels.circular.placement',
@@ -831,21 +832,6 @@ const LINEAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
   CONFIG_OVERRIDE_PATHS.normalizeLength,
   CONFIG_OVERRIDE_PATHS.linearWrapLength
 ]);
-
-/**
- * The Wrap Rows value a committed Linear request asked for, as the form holds it: its override leaf, or else
- * its full config's (a CLI request). A value the form cannot hold reads as null.
- * @param {CanonicalRenderRequest} request
- * @returns {import('./linear-wrap-form.js').LinearWrapFormValue}
- */
-export const requestLinearWrapLength = (request) => {
-  const { configOverrides, config } = /** @type {{ configOverrides?: Record<string, unknown> | null,
-    config?: { canvas?: { linear?: { wrap_length?: unknown } } } | null }} */ (request.diagramOptions);
-  const leaf = configOverrides && Object.hasOwn(configOverrides, CONFIG_OVERRIDE_PATHS.linearWrapLength)
-    ? configOverrides[CONFIG_OVERRIDE_PATHS.linearWrapLength]
-    : config?.canvas?.linear?.wrap_length;
-  return wrapFormValue(leaf).value;
-};
 
 /** @param {ModeProfileName} mode */
 export const managedConfigOverridePathsForMode = (mode) => {
@@ -2854,7 +2840,7 @@ const buildConfigOverrides = (
             leaf(CONFIG_OVERRIDE_PATHS.scaleStrokeWidth, adv.scale_stroke_width),
           [CONFIG_OVERRIDE_PATHS.normalizeLength]: Boolean(form.normalize_length),
           // Off (null) states nothing, so an unwrapped request is the one it was before Wrap Rows.
-          [CONFIG_OVERRIDE_PATHS.linearWrapLength]: form.linear_wrap_length
+          [CONFIG_OVERRIDE_PATHS.linearWrapLength]: /** @type {LinearWrapFormValue} */ (form.linear_wrap_length)
         })
   };
   const sharedLengthValues = {

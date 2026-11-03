@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
+from gbdraw.api.input_summary import _linear_wrap_payload
 from gbdraw.api.options import LinearDiagramOptions
 from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordInput, RenderOutputRequest
 from gbdraw.config.models import GbdrawConfig
@@ -99,6 +101,38 @@ def test_a_refusal_with_no_advice_names_only_the_limit_and_size() -> None:
     assert _context(_export_refusal("png", (33_000.0, 100.0), None), "export-png") == {
         "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 33_000, "height": 100,
     }
+
+
+@pytest.fixture(scope="module")
+def web_helpers() -> dict:
+    source = (Path(__file__).resolve().parents[1] / "gbdraw/web/js/app/python-helpers.js").read_text()
+    namespace: dict = {}
+    exec(source.split("`", 1)[1].rsplit("`", 1)[0], namespace)
+    return namespace
+
+
+def _web_export_check(helpers: dict, fmt: str, size: tuple[float, float], wrap: LinearWrapSummary | None,
+                      dpi: float | None) -> dict:
+    request = {"format": fmt, "width": size[0], "height": size[1], "dpi": dpi,
+               "linearWrap": None if wrap is None else _linear_wrap_payload(wrap)}
+    return json.loads(helpers["call_web_json_helper"]("check_web_export_limit_json", json.dumps(request)))
+
+
+def test_the_web_export_check_reads_the_input_summary_and_refuses_as_the_cli_does(web_helpers: dict) -> None:
+    # What the Result's input summary sent (`linearWrap`) decides the advice; the PNG scales by its DPI.
+    png = _web_export_check(web_helpers, "png", SORANGIUM_SIZE, SORANGIUM, 300)["error"]
+    assert (png["code"], png["operation"]) == ("EXPORT_LIMIT", "checkExportLimit")
+    assert png["context"] == {"reason": "PNG_SIZE", "limit": 32_767, "width": 6_250, "height": 143_647,
+                              "rowLength": 500_000, "dpi": 68}
+    pdf = _web_export_check(web_helpers, "pdf", SORANGIUM_SIZE, SORANGIUM, None)["error"]
+    assert pdf["context"] == {"reason": "PDF_SIZE", "limit": 14_400, "width": 1_500, "height": 34_475,
+                              "rowLength": 200_000}
+    # An unwrapped PDF stays as it was; a PNG that fits at its DPI passes.
+    assert _web_export_check(web_helpers, "pdf", SORANGIUM_SIZE, None, None) == {"ok": True}
+    assert _web_export_check(web_helpers, "png", SORANGIUM_SIZE, SORANGIUM, 68) == {"ok": True}
+    # A PNG names its DPI; an unknown format is not checked as another.
+    assert "error" in _web_export_check(web_helpers, "png", SORANGIUM_SIZE, None, None)
+    assert "error" in _web_export_check(web_helpers, "eps", SORANGIUM_SIZE, None, None)
 
 
 def _summaries(tmp_path: Path, **overrides: object) -> list[dict]:

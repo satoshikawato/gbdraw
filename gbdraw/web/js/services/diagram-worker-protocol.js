@@ -46,6 +46,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   PDF_FONTS: 'pdfFonts',
   REGISTER_FONTS: 'registerFonts',
   BUILD_PROTEIN_LOSAT_CACHE_KEYS: 'buildProteinLosatCacheKeys',
+  CHECK_EXPORT_LIMIT: 'checkExportLimit',
   COMPUTE_LABEL_FIT_ROW: 'computeLabelFitRow',
   CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD: 'convertLosatpPairsToGenomicPayload',
   CONVERT_RING_TABLES_TO_SEARCH_FRAME: 'convertRingTablesToSearchFrame',
