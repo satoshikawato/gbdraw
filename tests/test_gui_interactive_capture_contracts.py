@@ -95,7 +95,7 @@ def test_interactive_flows_use_raw_inputs_and_visible_actions() -> None:
         for path in (HUMAN_HELPER, INTERACTIVE_FLOW, EXPORT_FLOW)
     )
     for required in (
-        'get_by_role("button", name="Circular", exact=True)',
+        'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
         'get_by_role("searchbox", name="Search features", exact=True)',

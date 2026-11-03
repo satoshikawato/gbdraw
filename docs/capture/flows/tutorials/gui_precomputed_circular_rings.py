@@ -38,6 +38,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
@@ -205,9 +206,7 @@ def capture_gui_precomputed_circular_rings(
     try:
         page.goto(base_url, wait_until="domcontentloaded")
         wait_for_app_shell(page)
-        circular = page.get_by_role("button", name="Circular", exact=True)
-        circular.click()
-        expect(circular).to_have_attribute("aria-pressed", "true")
+        show_drawing(page, "circular")
         page.get_by_role("radio", name="GenBank", exact=True).check()
         page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
             FIRST_CIRCULAR_FIXTURE_PATH
@@ -225,11 +224,13 @@ def capture_gui_precomputed_circular_rings(
         track_preset.select_option("middle")
         expect(track_preset).to_have_value("middle")
         page.get_by_label("Separate Strands", exact=True).uncheck()
+        page.get_by_role(
+            "group", name="GenBank/DDBJ File selection", exact=True
+        ).scroll_into_view_if_needed()
         screenshot_bytes[GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES[0]] = (
             capture_screenshot(
                 page,
                 output_paths[GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES[0]],
-                "Circular",
             )
         )
 
@@ -241,7 +242,6 @@ def capture_gui_precomputed_circular_rings(
             capture_screenshot(
                 page,
                 output_paths[GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES[1]],
-                "Circular",
             )
         )
 
@@ -306,7 +306,6 @@ def capture_gui_precomputed_circular_rings(
             capture_screenshot(
                 page,
                 output_paths[GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES[2]],
-                "Circular",
             )
         )
 
@@ -319,7 +318,6 @@ def capture_gui_precomputed_circular_rings(
             capture_screenshot(
                 page,
                 output_paths[GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES[3]],
-                "Circular",
             )
         )
 
@@ -364,7 +362,6 @@ def capture_gui_precomputed_circular_rings(
             capture_screenshot(
                 page,
                 output_paths[GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES[4]],
-                "Circular",
             )
         )
         popup_report = {

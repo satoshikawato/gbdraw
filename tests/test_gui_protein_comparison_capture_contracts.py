@@ -331,7 +331,7 @@ def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None
     assert 'output_prefix="hepatoplasmataceae_collinear"' in how_to
 
     for fragment in (
-        'get_by_role("button", name="Linear", exact=True)',
+        'show_drawing(page, "linear")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'name="Set no comparison", exact=True',
         'to_have_attribute("aria-pressed", "true")',
@@ -399,7 +399,7 @@ def test_bgc_flow_pins_gallery_presentation_and_losatp_values() -> None:
         'line_stroke_width.fill("2")',
         'scale_style.select_option("ruler")',
         'axis_stroke_width.fill("5")',
-        'fit_complete_linear_preview(page, target_zoom="40%")',
+        'fit_complete_preview(page, target_zoom="40%")',
         'if scenario_id == "H-GUI-07"',
         "raw_result = linear_raw_result(page, 1, 2)",
         "open_linear_raw_filename(raw_result)",
@@ -563,7 +563,7 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         'threading.get("pairWorkers") != 4',
         'threading.get("threadsPerJob") != 8',
         'page.get_by_label("Track Layout", exact=True).select_option("middle")',
-        'fit_complete_linear_preview(page, target_zoom="40%")',
+        'fit_complete_preview(page, target_zoom="40%")',
         '"Separate Strands"',
         'settings.get_by_label("Collinear color mode", exact=True).select_option',
         '"orientation_identity"',

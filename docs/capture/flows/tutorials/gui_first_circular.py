@@ -37,6 +37,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     expect_circular_source_status,
     generate_and_inspect,
     open_ancestor_details,
@@ -83,9 +84,7 @@ def capture_first_circular(
         page.goto(base_url, wait_until="domcontentloaded")
         wait_for_app_shell(page)
 
-        circular = page.get_by_role("button", name="Circular", exact=True)
-        circular.click()
-        expect(circular).to_have_attribute("aria-pressed", "true")
+        show_drawing(page, "circular")
 
         genbank = page.get_by_role("radio", name="GenBank", exact=True)
         genbank.check()
@@ -100,14 +99,14 @@ def capture_first_circular(
         expect(selected_file).to_contain_text("HmmtDNA.gbk")
         expect_circular_source_status(page, "1 source record inspected")
         screenshot_bytes["01-input-ready.png"] = capture_screenshot(
-            page, output_paths["01-input-ready.png"], "Circular"
+            page, output_paths["01-input-ready.png"]
         )
 
         first_report = generate_and_inspect(
             page, inspect_first_circular_svg, assert_first_circular_svg
         )
         screenshot_bytes["02-first-diagram.png"] = capture_screenshot(
-            page, output_paths["02-first-diagram.png"], "Circular"
+            page, output_paths["02-first-diagram.png"]
         )
 
         output_prefix = page.get_by_label("Output Prefix", exact=True)
@@ -122,7 +121,7 @@ def capture_first_circular(
         )
         assert_species_markup(publication_report)
         screenshot_bytes["03-publication-label.png"] = capture_screenshot(
-            page, output_paths["03-publication-label.png"], "Circular"
+            page, output_paths["03-publication-label.png"]
         )
 
         track_preset = open_ancestor_details(
@@ -160,7 +159,7 @@ def capture_first_circular(
         track_preset.scroll_into_view_if_needed()
         expect(track_preset).to_be_visible()
         screenshot_bytes["04-layout-settings.png"] = capture_screenshot(
-            page, output_paths["04-layout-settings.png"], "Circular"
+            page, output_paths["04-layout-settings.png"]
         )
 
         final_report = generate_and_inspect(
@@ -171,14 +170,14 @@ def capture_first_circular(
         _frame_finished_preview_with_legend(page)
         set_feature_search_visible(page, visible=False)
         screenshot_bytes["04-finished-diagram.png"] = capture_screenshot(
-            page, output_paths["04-finished-diagram.png"], "Circular"
+            page, output_paths["04-finished-diagram.png"]
         )
 
         svg_button = page.get_by_role("button", name="SVG", exact=True)
         expect(svg_button).to_be_visible()
         svg_button.hover()
         screenshot_bytes["05-export-svg.png"] = capture_screenshot(
-            page, output_paths["05-export-svg.png"], "Circular"
+            page, output_paths["05-export-svg.png"]
         )
         with page.expect_download(timeout=ACTION_TIMEOUT_MS) as download_info:
             svg_button.click()

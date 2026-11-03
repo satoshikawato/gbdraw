@@ -43,8 +43,9 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     center_preview_diagram,
-    fit_complete_linear_preview,
+    fit_complete_preview,
     generate_and_inspect,
     open_browser_capture,
     open_linear_comparison_disclosure,
@@ -139,17 +140,7 @@ def _write_complete_mitochondrial_container(path: Path) -> tuple[dict[str, Any],
 def _fit_complete_grid_preview(page: Page, target_zoom: str = "30%") -> None:
     """Center the complete 2 by 2 canvas in the visible Result Preview frame."""
 
-    reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
-    zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
-    for _ in range(10):
-        if target_zoom in reset_zoom.inner_text():
-            break
-        zoom_out.click()
-    else:
-        raise AssertionError(
-            f"Could not reach the documented Circular preview zoom: {target_zoom}"
-        )
-    page.wait_for_timeout(250)
+    fit_complete_preview(page, target_zoom, center=False)
 
     center_preview_diagram(page, label="Circular grid")
     page.evaluate("() => window.getSelection()?.removeAllRanges()")
@@ -190,9 +181,7 @@ def capture_gui_circular_layout(
         page.goto(base_url, wait_until="domcontentloaded")
         wait_for_app_shell(page)
 
-        circular = page.get_by_role("button", name="Circular", exact=True)
-        circular.click()
-        expect(circular).to_have_attribute("aria-pressed", "true")
+        show_drawing(page, "circular")
         genbank = page.get_by_role("radio", name="GenBank", exact=True)
         genbank.check()
         expect(genbank).to_be_checked()
@@ -281,7 +270,6 @@ def capture_gui_circular_layout(
         screenshot_bytes["grid-settings.png"] = capture_screenshot(
             page,
             output_paths["grid-settings.png"],
-            "Circular",
         )
 
         final_report = generate_and_inspect(
@@ -294,7 +282,6 @@ def capture_gui_circular_layout(
         screenshot_bytes["grid-result.png"] = capture_screenshot(
             page,
             output_paths["grid-result.png"],
-            "Circular",
         )
 
         svg_button = page.get_by_role("button", name="SVG", exact=True)
@@ -484,9 +471,7 @@ def capture_gui_linear_layout(
         page.goto(base_url, wait_until="domcontentloaded")
         wait_for_app_shell(page)
 
-        linear = page.get_by_role("button", name="Linear", exact=True)
-        linear.click()
-        expect(linear).to_have_attribute("aria-pressed", "true")
+        show_drawing(page, "linear")
         page.get_by_role("radio", name="GenBank", exact=True).check()
         expect(
             page.get_by_role("button", name="Set no comparison", exact=True)
@@ -580,7 +565,7 @@ def capture_gui_linear_layout(
 
         arrange_rows.scroll_into_view_if_needed()
         screenshot_bytes["record-layout.png"] = capture_screenshot(
-            page, output_paths["record-layout.png"], "Linear"
+            page, output_paths["record-layout.png"]
         )
 
         final_report = generate_and_inspect(
@@ -642,9 +627,9 @@ def capture_gui_linear_layout(
         ):
             raise AssertionError(f"The documented ruler is not active: {rendered_state!r}")
 
-        fit_complete_linear_preview(page, target_zoom="30%")
+        fit_complete_preview(page, target_zoom="30%")
         screenshot_bytes["orientation-result.png"] = capture_screenshot(
-            page, output_paths["orientation-result.png"], "Linear"
+            page, output_paths["orientation-result.png"]
         )
 
         svg_button = page.get_by_role("button", name="SVG", exact=True)

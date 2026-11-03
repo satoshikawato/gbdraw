@@ -135,7 +135,7 @@ so it adds no track row; see [Custom Track Slots](#custom-track-slots).
 
 ## Main workflow
 
-1. Select **Circular** or **Linear**.
+1. Choose the **Circular** drawing or the **Linear** tab in the drawing bar.
 2. Add the biological inputs and resolve any validation message.
 3. Set layout, tracks, comparisons, labels, and output values.
 4. Select **Generate Diagram**.

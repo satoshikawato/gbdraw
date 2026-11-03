@@ -75,9 +75,10 @@ files selected.
 
 ### Step 1: Load the complete record
 
-Select **Circular** and **GenBank**, then choose `HmmtDNA.gbk`. Set **Output
-Prefix** to `mitochondrial_features_highlighted`, Species to `<i>Homo
-sapiens</i>`, Track Preset to **Middle**, and turn **Separate Strands** off.
+In the drawing bar, keep the **Circular** drawing shown. Select **GenBank**,
+then choose `HmmtDNA.gbk`. Set **Output Prefix** to
+`mitochondrial_features_highlighted`, Species to `<i>Homo sapiens</i>`, Track
+Preset to **Middle**, and turn **Separate Strands** off.
 
 ### Step 2: Set colors, labels, and feature appearance
 

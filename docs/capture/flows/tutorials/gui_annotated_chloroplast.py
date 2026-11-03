@@ -28,6 +28,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
@@ -474,9 +475,7 @@ def capture_gui_annotated_chloroplast(
         wait_for_app_shell(page)
         _resize_sidebar(page)
 
-        circular = page.get_by_role("button", name="Circular", exact=True)
-        circular.click()
-        expect(circular).to_have_attribute("aria-pressed", "true")
+        show_drawing(page, "circular")
         page.get_by_role("radio", name="GenBank", exact=True).check()
         page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
             GUI_ANNOTATION_GENBANK_PATH
@@ -490,7 +489,7 @@ def capture_gui_annotated_chloroplast(
             "annotated_chloroplast_map"
         )
         screenshot_bytes[SCREENSHOT_NAMES[0]] = capture_screenshot(
-            page, output_paths[SCREENSHOT_NAMES[0]], "Circular"
+            page, output_paths[SCREENSHOT_NAMES[0]]
         )
 
         generate_and_inspect(page, _inspect_tracks_svg, _assert_plain_plastome)
@@ -500,7 +499,7 @@ def capture_gui_annotated_chloroplast(
             pan_left_ratio=0.0,
         )
         screenshot_bytes[SCREENSHOT_NAMES[1]] = capture_screenshot(
-            page, output_paths[SCREENSHOT_NAMES[1]], "Circular"
+            page, output_paths[SCREENSHOT_NAMES[1]]
         )
 
         _configure_gallery_presentation(page)
@@ -526,7 +525,7 @@ def capture_gui_annotated_chloroplast(
         annotations.scroll_into_view_if_needed()
         expect(page.get_by_role("button", name="Download TSV", exact=True)).to_be_enabled()
         screenshot_bytes[SCREENSHOT_NAMES[2]] = capture_screenshot(
-            page, output_paths[SCREENSHOT_NAMES[2]], "Circular"
+            page, output_paths[SCREENSHOT_NAMES[2]]
         )
 
         _configure_gallery_slots(page)
@@ -536,7 +535,7 @@ def capture_gui_annotated_chloroplast(
             "group", name="Circular track slot plastome_tint", exact=True
         ).scroll_into_view_if_needed()
         screenshot_bytes[SCREENSHOT_NAMES[3]] = capture_screenshot(
-            page, output_paths[SCREENSHOT_NAMES[3]], "Circular"
+            page, output_paths[SCREENSHOT_NAMES[3]]
         )
 
         final_report = generate_and_inspect(
@@ -552,7 +551,7 @@ def capture_gui_annotated_chloroplast(
             ).click()
         _dismiss_history_limit_notice(page)
         screenshot_bytes[SCREENSHOT_NAMES[4]] = capture_screenshot(
-            page, output_paths[SCREENSHOT_NAMES[4]], "Circular"
+            page, output_paths[SCREENSHOT_NAMES[4]]
         )
         download_report = _download_svg(
             page,

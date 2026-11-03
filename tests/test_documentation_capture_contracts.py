@@ -372,7 +372,7 @@ def test_first_circular_flow_uses_accessible_real_actions_without_state_shortcut
     shared_source = WEB_CAPTURE_PATH.read_text(encoding="utf-8")
 
     for required in (
-        'get_by_role("button", name="Circular", exact=True)',
+        'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
         'get_by_label("Output Prefix", exact=True)',
@@ -472,10 +472,12 @@ class _FakePreviewCanvas:
             "canvasLeft": 357.0,
             "canvasRight": 357.0 + page.canvas_width,
             "canvasWidth": page.canvas_width,
+            "canvasHeight": 600.0,
             "canvasCenterX": 357.0 + page.canvas_width / 2,
             "wrapperLeft": center - width / 2,
             "wrapperRight": center + width / 2,
             "wrapperWidth": width,
+            "wrapperHeight": 300.0,
             "wrapperCenterX": center,
         }
 
@@ -506,32 +508,32 @@ class _FakePreviewPage:
 
 def test_shared_linear_preview_fit_uses_fit_when_the_documented_zoom_is_too_wide() -> None:
     from docs.capture import run_all  # noqa: F401  (puts the capture flows on the import path)
-    from flows.web_capture import fit_complete_linear_preview
+    from flows.web_capture import fit_complete_preview
 
     # Five short-class BGC records: 1075 px wide at 40% in a 1066 px preview.
     wide = _FakePreviewPage(diagram_width=2687.5)
-    fit_complete_linear_preview(wide, target_zoom="40%")
+    fit_complete_preview(wide, target_zoom="40%")
     assert wide.clicks == ["Zoom out"] * 6 + ["Fit to preview"]
     assert wide.zoom == 0.39
 
     # A diagram that fits at the documented zoom keeps that zoom.
     narrow = _FakePreviewPage(diagram_width=2000.0)
     narrow.centered = True
-    fit_complete_linear_preview(narrow, target_zoom="40%")
+    fit_complete_preview(narrow, target_zoom="40%")
     assert narrow.clicks == ["Zoom out"] * 6
     assert narrow.zoom == 0.4
 
     # A diagram that Fit cannot show whole still stops the capture.
     endless = _FakePreviewPage(diagram_width=2687.5, min_zoom=0.4)
     with pytest.raises(AssertionError, match="does not fit the complete diagram"):
-        fit_complete_linear_preview(endless, target_zoom="40%")
+        fit_complete_preview(endless, target_zoom="40%")
 
 
 def test_first_linear_flow_uses_accessible_real_actions_without_state_shortcuts() -> None:
     source = LINEAR_FLOW_PATH.read_text(encoding="utf-8")
 
     for required in (
-        'get_by_role("button", name="Linear", exact=True)',
+        'show_drawing(page, "linear")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'name="Set no comparison", exact=True',
         'to_have_attribute("aria-pressed", "true")',
@@ -582,7 +584,7 @@ def test_gui_inputs_flow_uses_whole_files_real_actions_and_actual_error() -> Non
     source = GUI_INPUTS_FLOW_PATH.read_text(encoding="utf-8")
 
     for required in (
-        'get_by_role("button", name="Linear", exact=True)',
+        'show_drawing(page, "linear")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'name="GFF3 + FASTA", exact=True',
         'name="Set no comparison", exact=True',
@@ -631,7 +633,7 @@ def test_gui_circular_layout_flow_uses_complete_records_and_public_controls() ->
     ]
 
     for required in (
-        'get_by_role("button", name="Circular", exact=True)',
+        'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
         'get_by_label("Output Prefix", exact=True)',
@@ -708,7 +710,7 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
     assert 'aria-label="Comparison match height"' in index_source
 
     for required in (
-        'get_by_role("button", name="Linear", exact=True)',
+        'show_drawing(page, "linear")',
         'name="Set no comparison", exact=True',
         'to_have_attribute("aria-pressed", "true")',
         '"button", name="Add sequence", exact=True',

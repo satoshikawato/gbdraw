@@ -40,7 +40,8 @@ files selected.
 
 ### Step 1: Load the NCBI mitochondrial genome
 
-Select **Circular** at the top of the app and keep **GenBank** selected under **Input Genomes**. In **GenBank/DDBJ File**, choose `HmmtDNA.gbk`.
+The drawing bar shows one **Circular** drawing. Keep **GenBank** selected under
+**Input Genomes**. In **GenBank/DDBJ File**, choose `HmmtDNA.gbk`.
 
 The uploader should show `HmmtDNA.gbk` in green. The app inspects the file at
 once: **Source records** reports **1 source record inspected**, and the

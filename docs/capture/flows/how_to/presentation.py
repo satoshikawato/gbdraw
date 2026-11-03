@@ -14,10 +14,12 @@ from playwright.sync_api import BrowserType, Page, expect
 from assertions.svg_semantics import assert_static_svg_safety, inspect_svg_file
 from config import ACTION_TIMEOUT_MS
 from flows.web_capture import (
+    fit_complete_preview,
     toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
@@ -620,9 +622,7 @@ def _verify_fixture_contracts(*, include_style_tables: bool) -> dict[str, Any]:
 
 
 def _open_human_circular(page: Page, prefix: str) -> None:
-    circular = page.get_by_role("button", name="Circular", exact=True)
-    circular.click()
-    expect(circular).to_have_attribute("aria-pressed", "true")
+    show_drawing(page, "circular")
     genbank = page.get_by_role("radio", name="GenBank", exact=True)
     genbank.check()
     expect(genbank).to_be_checked()
@@ -665,19 +665,12 @@ def _set_plot_title(page: Page, title: str) -> None:
     toggle_disclosure(legend_panel)
 
 
-def _fit_finished_circular_preview(page: Page) -> None:
-    reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
-    zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
-    for _ in range(10):
-        if "60%" in reset_zoom.inner_text():
-            break
-        zoom_out.click()
-    else:
-        raise AssertionError("Could not reach the documented 60% preview zoom")
+def _fit_and_pan_preview_left(page: Page, distance_ratio: float = 0.27) -> None:
+    """Show the whole diagram at 60% or Fit; pan to the legend only at 60%."""
 
-
-def _pan_preview_left(page: Page, distance_ratio: float = 0.27) -> None:
-    """Use the public canvas gesture to reveal the right-side legend."""
+    if fit_complete_preview(page, "60%", center=False):
+        return
+    _wait_for_preview_transform(page)
 
     result_region = page.get_by_role("region", name="Result Preview", exact=True)
     box = result_region.bounding_box()
@@ -815,14 +808,13 @@ def capture_gui_styling(
             "button", name="Whitelist", exact=True
         ).scroll_into_view_if_needed()
         screenshot_bytes["style-settings.png"] = capture_screenshot(
-            page, output_paths["style-settings.png"], "Circular"
+            page, output_paths["style-settings.png"]
         )
         toggle_disclosure(labels_panel)
-        _fit_finished_circular_preview(page)
-        _pan_preview_left(page, distance_ratio=0.17)
+        _fit_and_pan_preview_left(page, distance_ratio=0.17)
         _wait_for_preview_transform(page)
         screenshot_bytes["style-result.png"] = capture_screenshot(
-            page, output_paths["style-result.png"], "Circular"
+            page, output_paths["style-result.png"]
         )
         download_report = _download_svg(
             page, download_dir, EXPECTED_STYLE_SVG, _assert_style_svg
@@ -950,18 +942,16 @@ def capture_gui_feature_presentation(
             page.get_by_label("Visibility rule 1 record ID", exact=True)
         ).to_be_in_viewport(ratio=1)
         screenshot_bytes["presentation-settings.png"] = capture_screenshot(
-            page, output_paths["presentation-settings.png"], "Circular"
+            page, output_paths["presentation-settings.png"]
         )
         toggle_disclosure(features_panel)
-        _fit_finished_circular_preview(page)
         # The pan starts after the zoom has finished. A drag that starts while
         # the zoom still runs moves the canvas in some captures and not in
         # others, so the image was not reproducible.
-        _wait_for_preview_transform(page)
-        _pan_preview_left(page, 0.06)
+        _fit_and_pan_preview_left(page, 0.06)
         _wait_for_preview_transform(page)
         screenshot_bytes["presentation-result.png"] = capture_screenshot(
-            page, output_paths["presentation-result.png"], "Circular"
+            page, output_paths["presentation-result.png"]
         )
         download_report = _download_svg(
             page,

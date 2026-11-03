@@ -165,7 +165,7 @@ def test_h_gui_03_to_06_flows_use_visible_controls_without_state_injection() -> 
     comparisons = COMPARISON_FLOW_PATH.read_text(encoding="utf-8")
     shared = WEB_CAPTURE_PATH.read_text(encoding="utf-8")
     for fragment in (
-        'get_by_role("button", name="Linear", exact=True)',
+        'show_drawing(page, "linear")',
         'get_by_test_id("linear-genbank-1").set_input_files',
         'f"Definition for sequence {index}"',
         '"Arrange linear records in rows"',

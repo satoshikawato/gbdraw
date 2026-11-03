@@ -28,7 +28,8 @@ from flows.web_capture import (
     toggle_disclosure,
     assert_fixture_identity,
     capture_screenshot,
-    fit_complete_linear_preview,
+    show_drawing,
+    fit_complete_preview,
     generate_and_inspect,
     open_browser_capture,
     open_linear_comparison_disclosure,
@@ -97,9 +98,7 @@ def _validate_fixtures() -> tuple[dict[str, Any], ...]:
 
 
 def _set_source_inputs(page: Page) -> None:
-    linear = page.get_by_role("button", name="Linear", exact=True)
-    linear.click()
-    expect(linear).to_have_attribute("aria-pressed", "true")
+    show_drawing(page, "linear")
     page.get_by_role("radio", name="GenBank", exact=True).check()
     expect(
         page.get_by_role("button", name="Set no comparison", exact=True)
@@ -1072,7 +1071,7 @@ def capture_hepatoplasmataceae_collinear(
         if "input" in screenshot_names:
             _assert_input_capture_framing(page)
             screenshots[screenshot_names["input"]] = capture_screenshot(
-                page, output_paths[screenshot_names["input"]], "Linear"
+                page, output_paths[screenshot_names["input"]]
             )
 
         if "plain" in screenshot_names:
@@ -1083,11 +1082,11 @@ def capture_hepatoplasmataceae_collinear(
                 timeout_ms=600_000,
             )
             set_feature_search_visible(page, visible=False)
-            fit_complete_linear_preview(page, target_zoom="40%")
+            fit_complete_preview(page, target_zoom="40%")
             _prepare_plain_definition_detail(page)
             page.mouse.move(1_400, 880)
             screenshots[screenshot_names["plain"]] = capture_screenshot(
-                page, output_paths[screenshot_names["plain"]], "Linear"
+                page, output_paths[screenshot_names["plain"]]
             )
             _return_to_overview_zoom(page)
 
@@ -1099,7 +1098,7 @@ def capture_hepatoplasmataceae_collinear(
         )
         _frame_collinear_settings(settings)
         screenshots[screenshot_names["settings"]] = capture_screenshot(
-            page, output_paths[screenshot_names["settings"]], "Linear"
+            page, output_paths[screenshot_names["settings"]]
         )
 
         final_report = generate_and_inspect(
@@ -1116,15 +1115,15 @@ def capture_hepatoplasmataceae_collinear(
         )
         _assert_fresh_search(page, evidence_scope=evidence_scope)
         set_feature_search_visible(page, visible=False)
-        fit_complete_linear_preview(page, target_zoom="40%")
+        fit_complete_preview(page, target_zoom="40%")
         screenshots[screenshot_names["result"]] = capture_screenshot(
-            page, output_paths[screenshot_names["result"]], "Linear"
+            page, output_paths[screenshot_names["result"]]
         )
 
         first_match = _prepare_collinear_detail(page)
         page.mouse.move(VIEWPORT_WIDTH - 40, VIEWPORT_HEIGHT - 30)
         screenshots[screenshot_names["detail"]] = capture_screenshot(
-            page, output_paths[screenshot_names["detail"]], "Linear"
+            page, output_paths[screenshot_names["detail"]]
         )
 
         first_match.focus()
@@ -1140,7 +1139,7 @@ def capture_hepatoplasmataceae_collinear(
                 raise AssertionError(f"Collinear popup is missing {token!r}")
         _move_popup_opposite_match(page, popup, first_match)
         screenshots[screenshot_names["popup"]] = capture_screenshot(
-            page, output_paths[screenshot_names["popup"]], "Linear"
+            page, output_paths[screenshot_names["popup"]]
         )
 
         fasta_report = _download_collinear_envelopes(page, popup, download_dir)

@@ -25,6 +25,7 @@ from flows.web_capture import (
     expect_circular_source_status,
     generate_and_inspect,
     open_ancestor_details,
+    show_drawing,
 )
 
 
@@ -70,9 +71,7 @@ def assert_human_mitochondrion_fixture() -> dict[str, Any]:
 def load_raw_human_circular(page: Page, *, output_prefix: str) -> None:
     """Load HmmtDNA through the public Circular GenBank controls."""
 
-    circular = page.get_by_role("button", name="Circular", exact=True)
-    circular.click()
-    expect(circular).to_have_attribute("aria-pressed", "true")
+    show_drawing(page, "circular")
     genbank = page.get_by_role("radio", name="GenBank", exact=True)
     genbank.check()
     expect(genbank).to_be_checked()
@@ -145,18 +144,6 @@ def generate_finished_human_diagram(page: Page) -> dict[str, Any]:
     )
 
 
-def fit_finished_human_preview(page: Page) -> None:
-    """Reach the documented 60 percent preview zoom with public controls."""
-
-    reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
-    zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
-    for _ in range(10):
-        if "60%" in reset_zoom.inner_text():
-            return
-        zoom_out.click()
-    raise AssertionError("Could not reach the documented 60% Circular preview zoom")
-
-
 def pan_finished_human_preview_left(page: Page, *, distance_ratio: float = 0.25) -> None:
     """Pan the public preview so the right-side legend remains in frame."""
 
@@ -182,7 +169,6 @@ __all__ = [
     "HUMAN_SPECIES_MARKUP",
     "apply_finished_human_settings",
     "assert_human_mitochondrion_fixture",
-    "fit_finished_human_preview",
     "generate_finished_human_diagram",
     "load_raw_human_circular",
     "pan_finished_human_preview_left",
