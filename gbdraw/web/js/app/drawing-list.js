@@ -11,7 +11,7 @@ import { diagnosticError, normalizeUserFacingError } from '../utils/error-normal
 import { errorText } from '../utils/error-text.js';
 import { msg, t, tm } from '../utils/i18n.js';
 
-/** @import { DrawingId } from '../services/drawing-view.js' */
+/** @import { CopyNamePhrase, DrawingId } from '../services/drawing-view.js' */
 /** @import { ModeProfileName } from '../mode-profiles.js' */
 /** @import { DrawingState, DrawingTab } from '../state.js' */
 /** @import { ProjectListStep } from '../services/history.js' */
@@ -72,16 +72,40 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @property {ShowDrawingNow} showDrawingNow
  */
 
+/** @param {string} operation @param {string} reason @param {DrawingId} drawingId */
+const listError = (operation, reason, drawingId) => diagnosticError(
+  'INPUT_INVALID', { field: 'drawing', reason, drawingId }, { stage: 'drawing-list', operation }
+);
+
+/** The UI language's word for each mode, for a default name in the bar. */
+const MODE_LABELS = Object.freeze({ circular: msg('Circular'), linear: msg('Linear') });
+
+/**
+ * A drawing's name as its tab shows it: a default name ("Circular", "Linear
+ * 2") in the UI language, any other name as stored. A default name stays
+ * stored in English. The tab's label and a copy's name read it (OV-2477).
+ * @param {DrawingTab} tab @param {ModeProfileName} mode
+ * @returns {string}
+ */
+const shownDrawingName = ({ id, name }, mode) => (
+  name === defaultDrawingName(mode, id) ? defaultDrawingName(mode, id, tm(MODE_LABELS[mode])) : name
+);
+
+/**
+ * A copy's name phrase in the UI language, stored as made (Owner D-35):
+ * "<name> copy", then "<name> copy 2" in English.
+ * @type {CopyNamePhrase}
+ */
+const copyNamePhrase = (name, number) => (
+  number > 1 ? t('{name} copy {number}', { name, number }) : t('{name} copy', { name })
+);
+
 /** @param {DrawingListPorts} ports */
 export const createDrawingList = ({
   drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, styleDrawing, copyDrawing,
   addDrawing, removeDrawing, putSlot, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
   removeDrawingHistory, runListStep, showDrawingNow
 }) => {
-  /** @param {string} operation @param {string} reason @param {DrawingId} drawingId */
-  const listError = (operation, reason, drawingId) => diagnosticError(
-    'INPUT_INVALID', { field: 'drawing', reason, drawingId }, { stage: 'drawing-list', operation }
-  );
   /** @param {string} operation @param {DrawingId} drawingId @returns {number} */
   const tabIndexOf = (operation, drawingId) => {
     const index = drawingTabs().findIndex((tab) => tab.id === drawingId);
@@ -152,7 +176,8 @@ export const createDrawingList = ({
 
   /**
    * A copy of a drawing at the end of the tabs (PD-OI-090 〔作成〕): the ID of
-   * its kind, the name "<name> copy" (`copyDrawingName`), the source's files,
+   * its kind, the source tab's shown name with the copy phrase in the UI
+   * language ("<name> copy", `copyDrawingName`), the source's files,
    * settings, edits, and Result, and an empty History, shown (R11). Its Undo
    * shows the drawing shown before; its Redo shows the copy again (R16-2).
    * @param {DrawingId} sourceId
@@ -165,7 +190,7 @@ export const createDrawingList = ({
       const before = shownDrawingId();
       const { mode } = drawingOf(sourceId);
       const drawingId = allocateDrawingId(mode, tabs.map((tab) => tab.id));
-      const name = copyDrawingName(tabs[index].name, tabs.map((tab) => tab.name));
+      const name = copyDrawingName(shownDrawingName(tabs[index], mode), tabs.map((tab) => tab.name), copyNamePhrase);
       const { drawing, slot: copied } = copyDrawing(sourceId, drawingId);
       /** @type {HeldSlot} */
       let slot = copied;
@@ -389,9 +414,6 @@ const isNameRefusal = (error) => error instanceof Error && 'stage' in error && e
   && 'context' in error && typeof error.context === 'object' && error.context !== null && 'reason' in error.context
   && (error.context.reason === 'BLANK_NAME' || error.context.reason === 'REPEATED_NAME');
 
-/** The UI language's word for each mode, for a default name in the bar. */
-const MODE_LABELS = Object.freeze({ circular: msg('Circular'), linear: msg('Linear') });
-
 /**
  * One tab of the drawing bar. `label` is the name as the tab shows it: a
  * default name ("Circular", "Linear 2") in the UI language, any other name as
@@ -490,13 +512,14 @@ export const createDrawingBar = ({
     const all = drawingTabs();
     const shown = shownDrawingId();
     /** @type {Array<DrawingBarTab | DrawingBarOffer>} */
-    const bar = all.map(({ id, name }, index) => {
+    const bar = all.map((tab, index) => {
+      const { id } = tab;
       const mode = modeOf(id);
       return {
         kind: /** @type {const} */ ('drawing'),
         id,
         mode,
-        label: name === defaultDrawingName(mode, id) ? defaultDrawingName(mode, id, tm(MODE_LABELS[mode])) : name,
+        label: shownDrawingName(tab, mode),
         selected: id === shown,
         canMoveLeft: index > 0,
         canMoveRight: index < all.length - 1,
@@ -508,13 +531,25 @@ export const createDrawingBar = ({
   };
 
   /**
-   * Rename through the app's text dialog. A refused name (blank, or another
+   * The bar's tab of a drawing, by its ID; an unknown ID is a bug.
+   * @param {string} operation @param {DrawingId} drawingId
+   * @returns {DrawingBarTab}
+   */
+  const drawingTabOf = (operation, drawingId) => {
+    const tab = tabs().find((each) => each.kind === 'drawing' && each.id === drawingId);
+    if (!tab || tab.kind !== 'drawing') throw listError(operation, 'UNKNOWN_DRAWING', drawingId);
+    return tab;
+  };
+
+  /**
+   * Rename through the app's text dialog, starting from the tab's shown
+   * name (OV-2477). A refused name (blank, or another
    * drawing's) asks again with the error owner's text; Cancel renames nothing.
    * @param {DrawingId} drawingId
    * @returns {Promise<DrawingListOutcome | null>}
    */
   const renameDrawing = async (drawingId) => {
-    let value = drawingTabs().find((tab) => tab.id === drawingId)?.name ?? '';
+    let value = drawingTabOf('renameDrawing', drawingId).label;
     let description = '';
     for (;;) {
       const input = await askText({
@@ -551,7 +586,7 @@ export const createDrawingBar = ({
    */
   const deleteDrawing = async (drawingId) => {
     if (needsDeleteConfirmation(drawingId)) {
-      const name = tabs().find((tab) => tab.kind === 'drawing' && tab.id === drawingId)?.label ?? drawingId;
+      const name = drawingTabOf('deleteDrawing', drawingId).label;
       const choice = await askChoice({
         title: t('Delete {name}?', { name }),
         lines: [

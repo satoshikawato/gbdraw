@@ -18,7 +18,9 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-globalThis.document = { createElement: () => ({ click: () => {} }), querySelector: () => null };
+globalThis.document = {
+  createElement: () => ({ click: () => {} }), querySelector: () => null, documentElement: { setAttribute: () => {} }
+};
 installFakeSvgDom();
 globalThis.File = File;
 
@@ -386,6 +388,45 @@ test('Duplicate copies a drawing as one step; its Undo shows the source and its 
   assert.equal(tabNameOf(tabIds().at(-1)), `${name} copy 2`, 'a second copy takes the next free name');
 });
 
+// OV-2477 (Owner D-35 A): a name the app makes is made in the UI language and
+// stored as is. A copy takes the source tab's shown label and the translated
+// copy phrase; Rename starts from the shown label. A default name stays stored
+// in English and shown translated.
+const { setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
+
+test('in a non-English UI, Duplicate names the copy from the shown label and Rename starts from it', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId: source } = app.drawingList.newDrawing('circular');
+  const stored = tabNameOf(source);
+  assert.equal(stored, defaultDrawingName('circular', source), 'a default name is stored in English');
+  const catalog = { Circular: '環状', '{name} copy': '{name} のコピー', '{name} copy {number}': '{name} のコピー {number}' };
+  await setUiLocale('ja', async () => ({ default: catalog }));
+  try {
+    const shown = defaultDrawingName('circular', source, '環状');
+    const labelOf = (drawingId) => app.drawingBar.tabs().find((tab) => tab.kind === 'drawing' && tab.id === drawingId).label;
+    assert.equal(labelOf(source), shown, 'and shown in the UI language');
+    assert.equal(tabNameOf(source), stored);
+
+    const first = app.drawingBar.duplicateDrawing(source);
+    assert.equal(first.status, 'ok');
+    assert.equal(tabNameOf(first.drawingId), `${shown} のコピー`, 'the copy is named from the shown label');
+    assert.equal(labelOf(first.drawingId), `${shown} のコピー`, 'and shown as stored');
+    const second = app.drawingBar.duplicateDrawing(source);
+    assert.equal(tabNameOf(second.drawingId), `${shown} のコピー 2`, 'a second copy takes the numbered phrase');
+
+    const renaming = app.drawingBar.renameDrawing(source);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(app.choicePrompt.field?.value, shown, 'the Rename field starts from the shown label');
+    app.resolveChoicePrompt('cancel');
+    assert.equal(await renaming, null);
+  } finally {
+    await setUiLocale('en');
+    for (let step = 0; step < 3; step += 1) await history.undo();
+  }
+  assert.ok(!tabIds().includes(source), 'Undo removes the drawings this test made');
+});
+
 // New drawing with this style (PD-OI-090 〔作成〕(3), R17-4): a new drawing of
 // the chosen mode at its defaults, with the source's settings that its mode
 // has and the table rows the user entered; no files, edits, or card rows.
@@ -623,7 +664,8 @@ test('the drawing bar lists the tabs; Rename asks again on a refused name and Un
   };
   const renaming = app.drawingBar.renameDrawing('linear');
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(asked(), { show: true, value: name, description: '' }, 'the dialog starts from the stored name');
+  const shownLabel = app.drawingBar.tabs().find((tab) => tab.kind === 'drawing' && tab.id === 'linear').label;
+  assert.deepEqual(asked(), { show: true, value: shownLabel, description: '' }, 'the dialog starts from the shown label');
   await answer(other.toUpperCase());
   const refusal = normalizeUserFacingError(Object.assign(new Error('REPEATED_NAME'), {
     code: 'INPUT_INVALID', stage: 'drawing-list', context: { field: 'drawing', reason: 'REPEATED_NAME' } }));
