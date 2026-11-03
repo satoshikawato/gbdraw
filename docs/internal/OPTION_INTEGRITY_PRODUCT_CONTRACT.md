@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `110`
+- Contract revision: `111`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -41,8 +41,8 @@ Status: active Product authority
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
   `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
   `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, `PD-OI-106`,
-  `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, `PD-OI-110`, `PD-OI-111`, and
-  `PD-OI-112`
+  `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, `PD-OI-110`, `PD-OI-111`,
+  `PD-OI-112`, and `PD-OI-113`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -4066,6 +4066,36 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 111 changes: `PD-OI-113` is added (concern
+  `web.linear.wrap-length`, scenario revision `1`; the outcome
+  `WEB-WRAP-CONTROL`). The Web gets a Wrap field in the Linear settings, near
+  Normalize Record Lengths, that sets the wrap length (off, Auto, or a number
+  with bp, kbp, or Mbp) by the same rules as the CLI and Python. It comes from
+  the Product Decision Owner `satoshikawato`'s replies of `2026-11-03` in the
+  Claude Code session of the campaign `linear-wrap-1428-20261030`
+  (`DECISIONS.md` `W-31` to `W-35`). Each reply is quoted as written.
+  - W-32 (`2026-11-03`). The session showed the draft receipt, with four agent
+    judgments marked for the Owner to overrule. Reply: 「承認」
+  - W-31 and W-33 (`2026-11-03`). The Owner first said
+    「v0.14.6でWebにシップしよう」 and then withdrew it with
+    「やっぱやめた。v0.15.0でいい。」 The receipt's last sentence of the
+    Accepted residual risk named v0.14.6, so receipt `r2` dropped that one
+    sentence and nothing else.
+  - W-34 (`2026-11-03`). Reply to receipt `r2`: 「r2承認」
+  - W-35 (`2026-11-03`). The planner of the runtime change found that the
+    engine forces Ruler on Axis on when a record is cut, and asked whether the
+    Web should switch it on as well. The Owner chose to switch it on and
+    approved receipt `r3`, which adds Ruler on Axis to the switched settings.
+    Reply: 「r3承認」
+  - Only receipt `r3` is serialized. The earlier copies are not.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-113` scenario revision `1`
+    `182bb5259caf226d1496e96390839faa608a4cad219d1a06dc32c38644152b38`.
+  - No other record is amended or retired.
+  - This change is authority only. The runtime, tests, and documentation that
+    implement it follow in a later dependent pull request; this revision
+    supplies no runtime acceptance evidence, and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -10824,6 +10854,61 @@ Decision date: 2026-11-02
   "acceptedResidualRisk": "言語を切り替えると以前の行は元の言語のまま。ボタンの行は短い名前になることがある。ヘッダーの詰め方が一部の幅で少し早く始まる",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-02"
+}
+```
+
+### PD-OI-113: Web control for the Linear wrap length
+
+- Concern key: `web.linear.wrap-length`
+- Scenario revision: `1`
+- Supersedes: none. No earlier record fixed a Web control for the wrap length;
+  until now the Web kept it only under Preserved session settings, which
+  `OIPC-C05` covers as `PASS_THROUGH`.
+- Status: `ACCEPTED`
+- Selected outcome: `WEB-WRAP-CONTROL`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-11-03` quoted in the Revision 111
+  entry above (W-31 to W-35). The receipt and JSON below reproduce all nine
+  fields of the approved receipt without translation or additional terms. This
+  record is an authority-only Contract creation: the runtime that implements
+  it follows in a later dependent pull request, and this record supplies no
+  runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `182bb5259caf226d1496e96390839faa608a4cad219d1a06dc32c38644152b38`.
+
+```text
+PRODUCT_DECISION
+Concern: web.linear.wrap-length（Web で Linear の折り返しの長さを設定する）
+Scenario revision: 1
+Choice: WEB-WRAP-CONTROL
+  - Linear の設定の Normalize Record Lengths の近くに「折り返し」の欄を置く。初めはオフ（折り返さない）。オンにすると、Auto か、数値と単位（bp / kbp / Mbp）を選べる。オンにしたときの初めの値は Auto。
+  - 長さと Auto の決め方は CLI・Python（`--wrap_length`、`canvas.linear.wrap_length`）と同じ。Auto は、いちばん長いレコードが 5 行以内に収まる 10 kb・20 kb・50 kb のうちいちばん短い長さで、収まらなければ 50 kb。10 kb 以下のレコードしかなければ折り返さない。Auto で描いた後、欄の横に実際の 1 行の長さと行数を出す。
+  - 折り返しをオンにすると、一緒に使えない設定と折り返しで決まる設定を見える形で切り替え、オンの間は選べなくして理由を出す。Track Layout の Features on axis は Above に、Scale Style の Bar (Simple) は Ruler (Ticks) に、Normalize Record Lengths はオフに、Ruler on Axis はオンにする（各行は目盛りを軸に描くため）。どのレコードも切れない長さでも同じで、フォームに見えている値で描く。
+  - オフに戻すと、それらの設定はまた選べるが、値は自動では戻さない。Undo 1 回で、オンにする前の設定に全部戻る。
+  - 比較（BLAST、comparisons table、similarity groups）、Record Layout で 1 行に複数のレコードを置く配置、Align at feature、軸の上に置いた feature track（side=overlay）のどれかがあるときは、折り返しの欄を選べなくして、何を外せばよいかを出す。折り返しをオンにした後でそれらを足し、Generate でレコードが切れるときは、何が一緒に使えないかと直し方を言うメッセージを出し、前の図を残す。
+  - 折り返した図でも 1 本のレコードは 1 本のまま。行をまたぐ feature は、どの断片にカーソルを置いてもクリックしても 1 つのポップアップが開き、全部の断片が強調される。feature editor、レコードの選択、ラベルの編集、Session はレコード単位のまま。
+  - 長さは Session に保存され、読み込むと欄に戻る。CLI の `--save_session` や Web 0.14.5 で保存した、長さの入った Session も欄に戻る。
+  - PNG・PDF の書き出しが形式の上限（PNG は 1 辺 32,767 px、PDF は 14,400 pt）を超えるときは、ファイルを作らず、上限と、長い 1 行の長さ、または低い DPI を示すメッセージを出す。SVG は常に書き出せる。
+Rationale: 折り返しは 0.14.5 で CLI と Python からは使えるのに、Web には長さを入れる欄がなく、CLI で作った Session を読み込む以外に使えない。エンジンは同じなので、Web にはフォームの欄だけを足し、長さの決め方と断り方は CLI と同じものを使う。
+Must preserve: 折り返しがオフのときの描き方と設定（初めはオフ）。同じ設定なら Web と CLI・Python で同じ図になること、ライブプレビューと Generate で同じ図になること。0.14.5 までに保存した Session の開き方と図。プレビューの Fit・ズーム・パン。feature とレコードの識別子と、レコード単位の操作
+May retire: Web で折り返しの長さを「Preserved session settings」でしか持てず、Web では変えられなかった扱い。エラーメッセージの「Preserved session settings で canvas.linear.wrap_length を戻す」という案内
+Accepted residual risk: 行の多い図はプレビューの Fit では小さく、ズームして読む。PDF は縦に長い 1 ページのまま（ページ分けはまだ）。上限のメッセージが示す長さは描いた高さからの推定で、もっと短くても収まる場合がある。比較と組み合わせた折り返しと、1 行に複数のレコードを置く図の折り返しはまだできない。新しい文言は翻訳バッチまで英語
+Owner: satoshikawato
+Decision date: 2026-11-03
+```
+
+```json
+{
+  "concern": "web.linear.wrap-length（Web で Linear の折り返しの長さを設定する）",
+  "scenarioRevision": 1,
+  "choice": "WEB-WRAP-CONTROL\n  - Linear の設定の Normalize Record Lengths の近くに「折り返し」の欄を置く。初めはオフ（折り返さない）。オンにすると、Auto か、数値と単位（bp / kbp / Mbp）を選べる。オンにしたときの初めの値は Auto。\n  - 長さと Auto の決め方は CLI・Python（`--wrap_length`、`canvas.linear.wrap_length`）と同じ。Auto は、いちばん長いレコードが 5 行以内に収まる 10 kb・20 kb・50 kb のうちいちばん短い長さで、収まらなければ 50 kb。10 kb 以下のレコードしかなければ折り返さない。Auto で描いた後、欄の横に実際の 1 行の長さと行数を出す。\n  - 折り返しをオンにすると、一緒に使えない設定と折り返しで決まる設定を見える形で切り替え、オンの間は選べなくして理由を出す。Track Layout の Features on axis は Above に、Scale Style の Bar (Simple) は Ruler (Ticks) に、Normalize Record Lengths はオフに、Ruler on Axis はオンにする（各行は目盛りを軸に描くため）。どのレコードも切れない長さでも同じで、フォームに見えている値で描く。\n  - オフに戻すと、それらの設定はまた選べるが、値は自動では戻さない。Undo 1 回で、オンにする前の設定に全部戻る。\n  - 比較（BLAST、comparisons table、similarity groups）、Record Layout で 1 行に複数のレコードを置く配置、Align at feature、軸の上に置いた feature track（side=overlay）のどれかがあるときは、折り返しの欄を選べなくして、何を外せばよいかを出す。折り返しをオンにした後でそれらを足し、Generate でレコードが切れるときは、何が一緒に使えないかと直し方を言うメッセージを出し、前の図を残す。\n  - 折り返した図でも 1 本のレコードは 1 本のまま。行をまたぐ feature は、どの断片にカーソルを置いてもクリックしても 1 つのポップアップが開き、全部の断片が強調される。feature editor、レコードの選択、ラベルの編集、Session はレコード単位のまま。\n  - 長さは Session に保存され、読み込むと欄に戻る。CLI の `--save_session` や Web 0.14.5 で保存した、長さの入った Session も欄に戻る。\n  - PNG・PDF の書き出しが形式の上限（PNG は 1 辺 32,767 px、PDF は 14,400 pt）を超えるときは、ファイルを作らず、上限と、長い 1 行の長さ、または低い DPI を示すメッセージを出す。SVG は常に書き出せる。",
+  "rationale": "折り返しは 0.14.5 で CLI と Python からは使えるのに、Web には長さを入れる欄がなく、CLI で作った Session を読み込む以外に使えない。エンジンは同じなので、Web にはフォームの欄だけを足し、長さの決め方と断り方は CLI と同じものを使う。",
+  "mustPreserve": "折り返しがオフのときの描き方と設定（初めはオフ）。同じ設定なら Web と CLI・Python で同じ図になること、ライブプレビューと Generate で同じ図になること。0.14.5 までに保存した Session の開き方と図。プレビューの Fit・ズーム・パン。feature とレコードの識別子と、レコード単位の操作",
+  "mayRetire": "Web で折り返しの長さを「Preserved session settings」でしか持てず、Web では変えられなかった扱い。エラーメッセージの「Preserved session settings で canvas.linear.wrap_length を戻す」という案内",
+  "acceptedResidualRisk": "行の多い図はプレビューの Fit では小さく、ズームして読む。PDF は縦に長い 1 ページのまま（ページ分けはまだ）。上限のメッセージが示す長さは描いた高さからの推定で、もっと短くても収まる場合がある。比較と組み合わせた折り返しと、1 行に複数のレコードを置く図の折り返しはまだできない。新しい文言は翻訳バッチまで英語",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-03"
 }
 ```
 
