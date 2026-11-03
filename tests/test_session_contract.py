@@ -142,6 +142,13 @@ def test_an_unknown_key_in_each_closed_object_is_a_violation() -> None:
             "labelVisibility": None, "labelText": None, "labelSourceText": None,
         }
     }
+    # No stored mode-scoped Session carries an editor slice now that the Gallery is at Session 51.
+    edited["modes"]["circular"]["editorState"] = {
+        "featureStrokes": {"overrides": {}},
+        "legend": {
+            "addedCaptions": {}, "colorOverrides": {}, "deletedEntries": [], "entries": [], "strokeOverrides": {},
+        },
+    }
     validate_session(edited)
     sessions = [edited, *(
         session for _name, session in _stored_sessions() if session.get("version") == MODE_SCOPED_SESSION_MAX_VERSION
