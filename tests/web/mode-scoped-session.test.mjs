@@ -1049,20 +1049,46 @@ test('a Session 51 keeps each Linear drawing\'s own wrap length override through
   assert.equal(state.drawingOf('linear').form.linear_wrap_length, 'auto');
 });
 
-// D-30: a preserved length typed with a unit, which only Python reads, is
-// dropped with a Load repair row; the drawing's Wrap Rows is off.
-test('a preserved wrap length the form cannot hold is dropped with a Load repair row', async () => {
-  const session = v49Session('drawings-linear-pair-losat');
-  session.drawings.find((entry) => entry.id === 'linear-2').config.unmanagedConfigOverrides = { 'canvas.linear.wrap_length': '50kb' };
-  resetDrawings();
-  loadDialogs.length = 0;
-  const loaded = await load(session);
-  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.equal(state.drawingOf('linear-2').form.linear_wrap_length, null);
-  assert.deepEqual({ ...state.drawingOf('linear-2').unmanagedConfigOverrides }, {});
-  const items = loadDialogs.flatMap((dialog) => dialog.items);
-  assert.equal(items.filter((item) => item.includes('canvas.linear.wrap_length')).length, 1, JSON.stringify(items));
-  assert.ok(items.some((item) => item.includes('50kb')), JSON.stringify(items));
+// D-36: a stored wrap length the form cannot hold as stored is Python's to read (the config model's validator, at
+// Load's configuration check): a length typed with a unit, another case, spaces. A value Python refuses is dropped
+// with one Load repair row; the drawing's Wrap Rows is off.
+test('a preserved wrap length takes Python\'s reading, and one Python refuses is dropped with a Load repair row', async () => {
+  const WRAP = 'canvas.linear.wrap_length';
+  for (const [stored, read] of [['50kb', 50000], ['Auto', 'auto'], [' 20000 ', 20000], ['None', null], ['abc', null]]) {
+    const session = v49Session('drawings-linear-pair-losat');
+    session.drawings.find((entry) => entry.id === 'linear-2').config.unmanagedConfigOverrides = { [WRAP]: stored };
+    resetDrawings();
+    loadDialogs.length = 0;
+    const loaded = await load(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.equal(state.drawingOf('linear-2').form.linear_wrap_length, read, stored);
+    assert.deepEqual({ ...state.drawingOf('linear-2').unmanagedConfigOverrides }, {}, stored);
+    const items = loadDialogs.flatMap((dialog) => dialog.items).filter((item) => item.includes(WRAP));
+    assert.equal(items.length, stored === 'abc' ? 1 : 0, `${stored}: ${JSON.stringify(items)}`);
+    if (stored === 'abc') assert.ok(items[0].includes('abc'), JSON.stringify(items));
+  }
+});
+
+// D-36, F3: a v0.14.5 Web Save of a Python API Session keeps the length as typed in the Linear draft and in the
+// committed request (tests/fixtures/sessions/HmmtDNA-wrap-5kb.v50-web0145.provenance.json); v0.14.5 drew it wrapped.
+// Load reads both as Python does, with no repair row, and the saved Session loads the same.
+test('a v0.14.5 Session that stores "5kb" in its draft and request loads wrapped at 5,000 bp, with no repair row', async () => {
+  const WRAP = 'canvas.linear.wrap_length';
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz', import.meta.url))));
+  assert.equal(fixture.renderRequest.diagramOptions.configOverrides[WRAP], '5kb');
+  assert.equal(fixture.modes.linear.config.unmanagedConfigOverrides[WRAP], '5kb');
+  for (const session of [fixture, null]) {
+    const document = session ?? await save('wrap-5kb');
+    resetDrawings();
+    loadDialogs.length = 0;
+    const loaded = await load(document);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    const drawing = state.activeDrawing();
+    assert.equal(drawing.form.linear_wrap_length, 5000);
+    assert.deepEqual({ ...drawing.unmanagedConfigOverrides }, {});
+    const items = loadDialogs.flatMap((dialog) => dialog.items).filter((item) => item.includes(WRAP));
+    assert.deepEqual(items, [], session ? 'the v0.14.5 Session' : 'its Save');
+  }
 });
 
 // Italic gene names are one setting per drawing (`config.adv.italic_gene_labels`):

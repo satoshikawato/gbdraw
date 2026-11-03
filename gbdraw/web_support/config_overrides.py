@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import Any, Literal, cast
+from typing import Any, Literal, NamedTuple, cast
 
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
@@ -61,6 +61,15 @@ def _validated_base_config(config: object) -> GbdrawConfig:
         raise ValidationError("diagramOptions.config is invalid.") from exc
 
 
+class WebConfigCheck(NamedTuple):
+    """``preserved``: the validated effective leaves the active Web GUI does not own. ``canonical``: each
+    GUI-managed path of the overrides with the value the typed model reads it as (``"5kb"`` is ``5000``), so a
+    Web reader takes Python's reading of a stored value instead of parsing it."""
+
+    preserved: dict[str, object]
+    canonical: dict[str, object]
+
+
 def validate_and_project_web_config_overrides(
     *,
     mode: Literal["circular", "linear"],
@@ -74,6 +83,22 @@ def validate_and_project_web_config_overrides(
     The typed configuration model remains the validity owner. ``managed_paths``
     describes only the current GUI projection; it cannot make a path valid.
     """
+
+    return check_web_config_overrides(
+        mode=mode, config=config, overrides=overrides, managed_paths=managed_paths,
+        require_unmanaged_only=require_unmanaged_only,
+    ).preserved
+
+
+def check_web_config_overrides(
+    *,
+    mode: Literal["circular", "linear"],
+    config: object = None,
+    overrides: object = None,
+    managed_paths: object = None,
+    require_unmanaged_only: bool = False,
+) -> WebConfigCheck:
+    """``validate_and_project_web_config_overrides`` with the canonical reading of the managed overrides."""
 
     if mode not in {"circular", "linear"}:
         raise ValidationError(f"Unsupported Web configuration mode: {mode!r}.")
@@ -164,7 +189,8 @@ def validate_and_project_web_config_overrides(
 
     # Re-run mode validation against values originating from a full config.
     options_type(config_overrides=projected)
-    return projected
+    canonical = {path: _raw_config_leaf(effective_raw, path) for path in sorted(set(validated) & managed)}
+    return WebConfigCheck(projected, canonical)
 
 
 def validate_and_project_stored_request_config_overrides(
@@ -182,12 +208,24 @@ def validate_and_project_stored_request_config_overrides(
     without them (D-OD11).
     """
 
+    return _check_stored_request_config_overrides(
+        mode=mode, config=config, overrides=overrides, managed_paths=managed_paths
+    ).preserved
+
+
+def _check_stored_request_config_overrides(
+    *,
+    mode: Literal["circular", "linear"],
+    config: object = None,
+    overrides: object = None,
+    managed_paths: object = None,
+) -> WebConfigCheck:
     if mode in {"circular", "linear"}:
         if isinstance(config, Mapping):
             config = migrate_legacy_full_config(config, mode=mode, path="diagramOptions.config")
         if isinstance(overrides, Mapping):
             overrides = migrate_flat_config_overrides(overrides, mode=mode, path="diagramOptions.configOverrides")
-    return validate_and_project_web_config_overrides(
+    return check_web_config_overrides(
         mode=mode, config=config, overrides=overrides, managed_paths=managed_paths
     )
 
@@ -216,13 +254,13 @@ def validate_web_config_overrides_json(
         managed_paths = json.loads(str(managed_paths_json))
         # The functions re-validate the mode and raise ValidationError.
         checked_mode = cast(Literal["circular", "linear"], str(mode))
-        projected = (
-            validate_and_project_web_config_overrides(
+        checked = (
+            check_web_config_overrides(
                 mode=checked_mode, config=config, overrides=overrides, managed_paths=managed_paths,
                 require_unmanaged_only=True,
             )
             if source == "draft"
-            else validate_and_project_stored_request_config_overrides(
+            else _check_stored_request_config_overrides(
                 mode=checked_mode, config=config, overrides=overrides, managed_paths=managed_paths
             )
         )
@@ -233,10 +271,12 @@ def validate_web_config_overrides_json(
             {"error": serialize_web_error(exc, operation="validateConfigOverrides", stage="helper")},
             ensure_ascii=False,
         )
-    return json.dumps({"overrides": projected}, ensure_ascii=False)
+    return json.dumps({"overrides": checked.preserved, "canonical": checked.canonical}, ensure_ascii=False)
 
 
 __all__ = [
+    "WebConfigCheck",
+    "check_web_config_overrides",
     "validate_and_project_stored_request_config_overrides",
     "validate_and_project_web_config_overrides",
     "validate_web_config_overrides_json",

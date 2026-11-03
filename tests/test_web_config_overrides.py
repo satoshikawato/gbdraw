@@ -139,7 +139,8 @@ def test_json_boundary_returns_validated_overlay() -> None:
     ))
 
     assert result == {
-        "overrides": {"objects.blast_match.curve_tension": 0.25}
+        "overrides": {"objects.blast_match.curve_tension": 0.25},
+        "canonical": {},
     }
 
 
@@ -265,7 +266,7 @@ def test_a_draft_check_reads_no_flat_override_name(flat, managed):
         validate_and_project_web_config_overrides(mode="circular", overrides=flat, managed_paths=managed)
     stored = json.loads(validate_web_config_overrides_json(
         "circular", "null", json.dumps({"gc_stroke_color": "red"}), "[]", "storedRequest"))
-    assert stored == {"overrides": {"objects.gc_content.stroke_color": "red"}}
+    assert stored == {"overrides": {"objects.gc_content.stroke_color": "red"}, "canonical": {}}
 
 
 def test_json_boundary_requires_its_check():
@@ -281,7 +282,7 @@ def test_json_boundary_names_its_check(source):
     assert result["error"]["code"] == "HELPER_PROTOCOL"
     named = json.loads(validate_web_config_overrides_json(
         "circular", "null", json.dumps({"gc_stroke_color": "red"}), "[]", "storedRequest"))
-    assert named == {"overrides": {"objects.gc_content.stroke_color": "red"}}
+    assert named == {"overrides": {"objects.gc_content.stroke_color": "red"}, "canonical": {}}
 
 
 def test_a_wrap_length_alone_is_valid_because_the_form_owns_the_track_layout() -> None:
@@ -289,3 +290,18 @@ def test_a_wrap_length_alone_is_valid_because_the_form_owns_the_track_layout() -
 
     wrap = {"canvas.linear.wrap_length": 10_000}
     assert validate_and_project_web_config_overrides(mode="linear", overrides=wrap, managed_paths=[]) == wrap
+
+
+@pytest.mark.parametrize(
+    ("stored", "read"),
+    [("5kb", 5_000), (" 20000 ", 20_000), ("Auto", "auto"), ("None", "none"), ("2.5 Mbp", 2_500_000), (20_000, 20_000)],
+)
+def test_the_check_reads_a_managed_leaf_as_the_config_model_does(stored, read) -> None:
+    # D-36: the Web Load takes Python's reading of a stored wrap length the form cannot hold as stored.
+    wrap = "canvas.linear.wrap_length"
+    reply = json.loads(validate_web_config_overrides_json(
+        "linear", "null", json.dumps({wrap: stored}), json.dumps([wrap]), "storedRequest"))
+    assert reply == {"overrides": {}, "canonical": {wrap: read}}
+    refused = json.loads(validate_web_config_overrides_json(
+        "linear", "null", json.dumps({wrap: "abc"}), json.dumps([wrap]), "storedRequest"))
+    assert refused["error"]["context"] == {"configPath": wrap}

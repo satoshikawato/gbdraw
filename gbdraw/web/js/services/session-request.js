@@ -124,8 +124,8 @@ import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
-/** @import { LinearWrapFormValue } from './linear-wrap-form.js' */
-import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from './linear-wrap-form.js';
+/** @import { LinearWrapFormValue, StoredWrapReadings } from './linear-wrap-form.js' */
+import { LINEAR_WRAP_LENGTH_PATH, NO_WRAP_READINGS, wrapFormValue } from './linear-wrap-form.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
   CONFIG_UNSET_NUMBER_PATHS,
@@ -949,12 +949,13 @@ export const draftFieldsForConfigValues = (values, mode, adv, trackOptions = {})
  * A config leaf that a Session kept as a GUI-unmanaged preserved override
  * before the GUI had its setting, and the draft field that holds it now. A
  * reader moves it into that field, so a preserved override is never a path
- * the GUI manages. `read` reads the stored value as the field holds it.
+ * the GUI manages. `read` reads the stored value as the field holds it, with Python's readings of the stored
+ * values Load asked for.
  * @typedef {object} PromotedPreservedOverride
  * @property {string} path
  * @property {'adv' | 'form'} container
  * @property {string} field
- * @property {(value: unknown) => { value: unknown, lost: boolean }} read
+ * @property {(value: unknown, readings: StoredWrapReadings) => { value: unknown, lost: boolean }} read
  */
 /** @type {readonly PromotedPreservedOverride[]} */
 const PROMOTED_PRESERVED_OVERRIDES = Object.freeze([
@@ -983,9 +984,10 @@ const isPlainRecord = (value) => Boolean(value) && typeof value === 'object' && 
  * dropped either way.
  * @template T
  * @param {T} config
+ * @param {StoredWrapReadings} [readings] Python's readings of the stored wrap lengths (`wrapFormValue`).
  * @returns {PromotedPreservedAdoption<T>}
  */
-export const adoptPromotedPreservedOverrides = (config) => {
+export const adoptPromotedPreservedOverrides = (config, readings = NO_WRAP_READINGS) => {
   const preserved = isPlainRecord(config) ? config.unmanagedConfigOverrides : undefined;
   const rows = isPlainRecord(preserved) ? PROMOTED_PRESERVED_OVERRIDES.filter(({ path }) => Object.hasOwn(preserved, path)) : [];
   if (!isPlainRecord(config) || !isPlainRecord(preserved) || rows.length === 0) return { config, containers: [], dropped: [] };
@@ -1004,7 +1006,7 @@ export const adoptPromotedPreservedOverrides = (config) => {
       adopted[container] = isPlainRecord(config[container]) ? { ...config[container] } : {};
     }
     const holder = /** @type {Record<string, unknown>} */ (adopted[container]);
-    const reading = read(stored);
+    const reading = read(stored, readings);
     if (reading.lost) dropped.push({ at: `unmanagedConfigOverrides.${path}`, stored });
     else holder[field] ??= reading.value;
   }
@@ -5991,7 +5993,9 @@ export const projectCanonicalSessionRequest = ({
   deferResourceContent = false,
   adoptCanonicalPayloads = false,
   markCardFileRows = false,
-  bindingInputSlot
+  bindingInputSlot,
+  // Python's readings of the stored wrap lengths the form cannot hold as stored (Load asks for them).
+  wrapReadings = NO_WRAP_READINGS
 }) => {
   // Every request reaches the projection at the current schema: a stored one
   // through its reader (`readStoredRenderRequest`), a new one from the writer.
@@ -6659,8 +6663,9 @@ export const projectCanonicalSessionRequest = ({
   const projectedLinearTrackLayout = renderRequest.mode === 'linear'
     ? requireCurrentLinearTrackLayout(overrides.linear_track_layout)
     : 'middle';
-  // A length typed with a unit (`"50kb"`, a Python API Session) only Python reads: Wrap Rows is off, with a row.
-  const projectedWrapLength = wrapFormValue(renderRequest.mode === 'linear' ? overrides.linear_wrap_length : null);
+  // A length Python reads otherwise than stored (`"50kb"`, a Python API Session) takes Python's reading; one
+  // Python refuses is off, with a row.
+  const projectedWrapLength = wrapFormValue(renderRequest.mode === 'linear' ? overrides.linear_wrap_length : null, wrapReadings);
   if (projectedWrapLength.lost) {
     legacyTableRepairs.push(loadRepair({
       code: 'setting-replaced', path: CONFIG_OVERRIDE_PATHS.linearWrapLength, effect: 'dropped',

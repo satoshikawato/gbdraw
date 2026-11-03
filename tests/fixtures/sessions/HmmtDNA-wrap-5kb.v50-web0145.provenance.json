@@ -1,0 +1,16 @@
+{
+  "purpose": "Positive fixture of the released flat Session 50 (tag v0.14.5) that a Web Save Session wrote over a Python API Session whose wrap length is unit text: \"5kb\" in the committed request's configOverrides and, kept as a GUI-unmanaged preserved override (PD-OI-009), in modes.linear.config.unmanagedConfigOverrides. v0.14.5 and the CLI draw it wrapped at 5,000 bp per row. Load takes Python's reading of both (D-36; readStoredWrapLengths in gbdraw/web/js/services/config.js).",
+  "sourceCommit": "033a3aa89",
+  "history": "release tag v0.14.5 (first-parent main)",
+  "route": "The v0.14.5 Python API writes a Linear Session whose request carries config_overrides {'canvas.linear.wrap_length': '5kb'}; the v0.14.5 Web app loads it (the path is not a GUI setting there, so it becomes a preserved override) and Save Session writes it in the Linear slice's draft and keeps the committed request.",
+  "pythonWriter": "save_session_document(path, LinearDiagramRequest(records=(RecordInput(source=GenBankInputSource('tests/test_inputs/HmmtDNA.gbk')),), options=LinearDiagramOptions(config_overrides={'canvas.linear.wrap_length': '5kb'})), title='wrap-length-unit-text'), run with python -P from the root of `git archive v0.14.5` (gbdraw on sys.path)",
+  "webWriter": "in Node, from the root of the same tree: the tag's gbdraw/web/js/services/config.js importSession (confirmLoadRepairs: acceptNodeFeatureRecoveryRow) then exportSession('wrap-length-preserved'), with the tag's tests/web/helpers/session-import-node.mjs, tests/web/fake-svg-dom.mjs, tests/web/helpers/session-caller.mjs and validateWebConfigOverrides of tests/web/helpers/python-evaluator.mjs as the unmanaged-override validator",
+  "inputs": {
+    "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
+  },
+  "values": "modes.linear.config.unmanagedConfigOverrides: canvas.linear.wrap_length \"5kb\" (no form.linear_wrap_length); renderRequest.diagramOptions.configOverrides: canvas.linear.wrap_length \"5kb\"",
+  "decompressedSha256": "69951ba82873496fb0687668d7fa14fabcc154736faef7c83b33c00bb59acab0",
+  "compression": "gzip -n -9",
+  "sessionVersion": 50,
+  "requestSchema": 9
+}

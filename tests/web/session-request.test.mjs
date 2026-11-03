@@ -6220,20 +6220,21 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   const requestOf = (form) => buildCanonicalRenderRequest({ state: { ...base, form }, filesData: linearFilesData });
   assert.equal(requestOf({ ...base.form, linear_wrap_length: 'auto' }).renderRequest.diagramOptions.configOverrides[WRAP], 'auto');
   assert.equal(requestOf({ ...base.form, linear_wrap_length: 20000 }).renderRequest.diagramOptions.configOverrides[WRAP], 20000);
-  assert.equal(
-    JSON.stringify(requestOf({ ...base.form, linear_wrap_length: null }).renderRequest),
-    JSON.stringify(requestOf(formBeforeTheField).renderRequest),
-    'off: the request of the same draft before Wrap Rows, byte for byte'
-  );
+  // Off writes no leaf: the request equals the one of the same draft without the field, and the request the base
+  // of Wrap Rows (893e3c153, before the field existed) compiled from this state, by its digest.
+  const offRequest = JSON.stringify(requestOf({ ...base.form, linear_wrap_length: null }).renderRequest);
+  assert.equal(offRequest, JSON.stringify(requestOf(formBeforeTheField).renderRequest), 'off: no leaf');
+  assert.equal(createHash('sha256').update(offRequest).digest('hex'),
+    '2170105a4f563c058c1f38dec30c07a5ab21229e0b19c5d1544baa180425b9c9', 'off: the request 893e3c153 compiled');
   assert.ok(managedConfigOverridePathsForMode('linear').includes(WRAP));
   assert.ok(!managedConfigOverridePathsForMode('circular').includes(WRAP));
 
-  const projectedWrap = (value, { full = false } = {}) => {
+  const projectedWrap = (value, { full = false, wrapReadings = undefined } = {}) => {
     const canonical = structuredClone(full ? pythonConfigCanonical : linearCanonical);
     const options = canonical.renderRequest.diagramOptions;
     if (full) options.config.canvas.linear.wrap_length = value;
     else if (value !== undefined) options.configOverrides[WRAP] = value;
-    const projection = projectCanonicalSessionRequest(canonical);
+    const projection = projectCanonicalSessionRequest({ ...canonical, wrapReadings });
     assert.equal(Object.hasOwn(projection.config.unmanagedConfigOverrides || {}, WRAP), false, 'a managed leaf is never preserved');
     return {
       value: projection.config.form.linear_wrap_length,
@@ -6247,7 +6248,12 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     assert.deepEqual(projectedWrap('none', { full }), { value: null, repairs: [] });
   }
   assert.deepEqual(projectedWrap(undefined), { value: null, repairs: [] });
-  // D-30: a length typed with a unit (a Python API Session) only Python reads.
+  // D-36: a length typed with a unit (a Python API Session) takes Python's reading, which Load asks for before it
+  // projects (`readStoredWrapLengths` in services/config.js); a value with no reading (Python refused it) is off,
+  // with one row.
+  for (const full of [false, true]) {
+    assert.deepEqual(projectedWrap('50kb', { full, wrapReadings: new Map([['"50kb"', 50000]]) }), { value: 50000, repairs: [] });
+  }
   const unreadable = projectedWrap('50kb');
   assert.equal(unreadable.value, null);
   assert.deepEqual(unreadable.repairs.map(({ code, effect, stored }) => ({ code, effect, stored })),
