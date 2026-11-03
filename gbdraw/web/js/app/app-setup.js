@@ -225,6 +225,8 @@ import { classifyOptionalPositiveNumber } from '../utils/optional-positive-numbe
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearWrapField } from './linear-wrap-field.js';
+import { shownLinearWrap } from '../services/linear-wrap-form.js';
+import { requestLinearWrapLength } from '../services/session-request.js';
 import { draftFeatureSlot } from './feature-editor/placement-actions.js';
 import { effectiveLinearSlotPlacement } from '../services/linear-track-slot-model.js';
 import { createLinearRecordSelector, RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
@@ -2393,19 +2395,46 @@ export const createAppSetup = () => {
     const drawing = shownDrawingOfMode('circular');
     return drawing ? circularDrawingRegionNote(drawing.circularRecordList.value, drawing) : '';
   });
-  // Auto values follow the records the next Generate draws. The Linear ones are
-  // known once every drawn record is read and none is cropped; until then the
-  // values name their rule.
+  // The input summary of the shown Result: its warnings in the status area, its lines in Run info, its
+  // wrapped rows.
+  const shownInputSummary = computed(() => inputSummaryOf(
+    inputSummaries.value, selectedResultIndex.value, results.value[selectedResultIndex.value]?.name
+  ));
+  // The records the next Linear Generate draws, by length: known once every
+  // drawn record is read and none is cropped, else none.
+  /** @returns {number[]} */
+  const drawnLinearRecordLengths = () => {
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return [];
+    const lengths = drawing.drawnLinearSeqs.value.map((seq) => {
+      if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;
+      return Number(linearSeqRecord(drawing, seq)?.recordLength);
+    });
+    return lengths.length && lengths.every((length) => length > 0) ? lengths : [];
+  };
+  // Wrap Rows as the shown Result drew it (PD-OI-113), from Python's input
+  // summary and the committed request of the drawing whose Result is shown:
+  // the field's Auto text and the Auto hints of sizes and ticks read it.
+  const shownLinearWrapReading = computed(() => {
+    const drawing = state.activeDrawing();
+    const request = drawing.mode === 'linear' && state.generatedDrawingId.value === drawing.id && results.value.length > 0
+      ? getCommittedCanonicalRenderRequest() : null;
+    return shownLinearWrap({
+      value: drawing.form.linear_wrap_length,
+      requested: request?.mode === 'linear' ? requestLinearWrapLength(request) : undefined,
+      summary: shownInputSummary.value === null ? undefined : shownInputSummary.value.linearWrap,
+      recordLengths: drawnLinearRecordLengths()
+    });
+  });
+  // Auto values follow the records the next Generate draws; until they are
+  // known the values name their rule.
   const autoValueDisplay = createAutoValueDisplay(state, {
     circularDiagramLengths: () => circularDiagrams.value.map((/** @type {CircularDiagramRecords} */ diagram) => diagram.lengths),
-    linearRecordLengths: () => {
-      const drawing = shownDrawingOfMode('linear');
-      if (!drawing) return [];
-      const lengths = drawing.drawnLinearSeqs.value.map((seq) => {
-        if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;
-        return Number(linearSeqRecord(drawing, seq)?.recordLength);
-      });
-      return lengths.length && lengths.every((length) => length > 0) ? lengths : [];
+    linearRecordLengths: drawnLinearRecordLengths,
+    linearWrappedAxisLength: () => {
+      const reading = shownLinearWrapReading.value;
+      if (reading.kind === 'off' || reading.kind === 'one-row') return undefined;
+      return reading.kind === 'rows' ? reading.drawnAxisLength : null;
     }
   });
   /** @param {DepthFileSlots | DepthFileSlots[]} value */
@@ -2609,6 +2638,7 @@ export const createAppSetup = () => {
   const linearWrapField = createLinearWrapField({
     state,
     changeLayoutSetting: featureActions.placementActions.changeLayoutSetting,
+    shownWrap: () => shownLinearWrapReading.value,
     blockerInputs: () => {
       const drawing = state.activeDrawing();
       return {
@@ -6646,10 +6676,6 @@ export const createAppSetup = () => {
       && item.resultName === results.value[selectedResultIndex.value]?.name);
     return entry && entry.report.drawn ? entry : null;
   });
-  // The input summary of the shown Result: its warnings in the status area, its lines in Run info.
-  const shownInputSummary = computed(() => inputSummaryOf(
-    inputSummaries.value, selectedResultIndex.value, results.value[selectedResultIndex.value]?.name
-  ));
   // A live Feature visibility edit no render drew since: the summary counts what the render drew,
   // so it is compared with the visibility of the drawing whose Result is shown.
   const shownInputSummaryStale = computed(() => {

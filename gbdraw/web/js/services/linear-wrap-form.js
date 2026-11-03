@@ -4,6 +4,7 @@
 // `canvas.linear.wrap_length` (services/session-request.js compiles it);
 // Python decides the row length and whether a record is cut
 // (gbdraw/layout/linear_wrap.py), and parses a length typed with a unit.
+/** @import { LinearWrapSummary } from './input-summary.js' */
 
 /**
  * `null`: off; `'auto'`: Python's automatic row length; a number: a row length in bp, a positive safe integer.
@@ -125,4 +126,36 @@ export const linearWrapInputValue = (text, unit) => {
   const product = amount * LINEAR_WRAP_UNITS[unit];
   const whole = Math.round(product);
   return Math.abs(product - whole) < 1e-6 ? whole : product;
+};
+
+/**
+ * What the shown Result says about the drawing's Wrap Rows value. `off`: wrap is off. `rows`: the Result cut
+ * records with this value over these records (its input summary's `linearWrap`). `one-row`: the Result asked for
+ * this value and cut nothing, so the axis is the longest record. `unknown`: no Result drew this draft.
+ * @typedef {{ kind: 'off' } | { kind: 'unknown' } | { kind: 'one-row' }
+ *   | { kind: 'rows', rowLength: number, rowCount: number, drawnAxisLength: number }} ShownLinearWrap
+ */
+/**
+ * @typedef {object} ShownLinearWrapInputs
+ * @property {unknown} value The drawing's `form.linear_wrap_length`.
+ * @property {LinearWrapFormValue | undefined} requested The shown Result's committed request's wrap length (read
+ *   with `wrapFormValue`); undefined when no Result of this drawing is shown.
+ * @property {LinearWrapSummary | null | undefined} summary The shown Result's input summary's `linearWrap`;
+ *   undefined when the render sent no summary for it (a loaded Result).
+ * @property {readonly number[]} recordLengths The lengths of the records the next Generate draws, [] while unknown.
+ */
+/**
+ * Reads Python's summary only; the Auto rule, the cut test and the drawn axis stay Python's.
+ * @param {ShownLinearWrapInputs} inputs
+ * @returns {ShownLinearWrap}
+ */
+export const shownLinearWrap = ({ value, requested, summary, recordLengths }) => {
+  if (value === null) return { kind: 'off' };
+  if (requested === undefined || requested !== value || summary === undefined) return { kind: 'unknown' };
+  if (summary === null) return { kind: 'one-row' };
+  const sameRecords = summary.recordLengths.length === recordLengths.length
+    && summary.recordLengths.every((length, index) => length === recordLengths[index]);
+  return summary.requested === value && sameRecords
+    ? { kind: 'rows', rowLength: summary.rowLength, rowCount: summary.rowCount, drawnAxisLength: summary.drawnAxisLength }
+    : { kind: 'unknown' };
 };

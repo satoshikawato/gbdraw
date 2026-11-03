@@ -8,12 +8,15 @@ import test from 'node:test';
 import { normalizeUserFacingError, reasonText } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { createDefaultAdv, createDefaultForm } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import {
-  LINEAR_WRAP_FORM_FIELDS, linearWrapAmountText, linearWrapBlockers, linearWrapFormPatch, linearWrapInputValue, linearWrapUnitOf
+  LINEAR_WRAP_FORM_FIELDS, linearWrapAmountText, linearWrapBlockers, linearWrapFormPatch, linearWrapInputValue, linearWrapUnitOf,
+  shownLinearWrap
 } from '../../gbdraw/web/js/services/linear-wrap-form.js';
 import {
   createFeaturePlacementActions, draftFeatureSlot, draftPlacementTargets
 } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createLinearWrapField } from '../../gbdraw/web/js/app/linear-wrap-field.js';
+import { createAutoValueDisplay } from '../../gbdraw/web/js/app/auto-value-display.js';
+import { requestLinearWrapLength } from '../../gbdraw/web/js/services/session-request.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 // What Python sends for each wrap refusal (gbdraw/layout/linear_wrap.py; tests/test_web_wrap_diagnostics.py).
@@ -140,7 +143,7 @@ test('each blocker keeps Wrap Rows from turning on, in its Generate refusal\'s w
   const store = withDrawings(linearDrawing());
   let inputs = { ...none, comparisons: true };
   const writes = [];
-  const field = createLinearWrapField({ state: store, blockerInputs: () => inputs, watch: () => {},
+  const field = createLinearWrapField({ state: store, blockerInputs: () => inputs, watch: () => {}, shownWrap: () => ({ kind: 'off' }),
     changeLayoutSetting: (_event, fieldName, value) => { writes.push([fieldName, value]); } });
   assert.equal(field.linearWrapBlocked.value, true);
   assert.equal(field.linearWrapBlockedText.value, reasonText('WRAP'));
@@ -168,7 +171,7 @@ test('the length field writes bp from an amount and a unit, and shows a value fr
   const drawing = linearDrawing();
   const store = withDrawings(drawing);
   const watchers = [];
-  const field = createLinearWrapField({ state: store, watch: (_source, callback) => watchers.push(callback),
+  const field = createLinearWrapField({ state: store, watch: (_source, callback) => watchers.push(callback), shownWrap: () => ({ kind: 'unknown' }),
     blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, featureAlignment: false, featureTrackOnAxis: false }),
     changeLayoutSetting: (_event, _field, value) => { drawing.form.linear_wrap_length = value; } });
   const changed = () => watchers.forEach((callback) => callback());
@@ -190,4 +193,52 @@ test('the length field writes bp from an amount and a unit, and shows a value fr
   changed();
   assert.equal(drawing.form.linear_wrap_length, 'auto');
   assert.equal(field.linearWrapUnit.value, 'bp', 'Auto keeps the unit');
+});
+
+// Case 6 (summary part): what the shown Result drew with the drawing's value comes from Python's input summary
+// and the committed request; the Web copies neither the Auto rule nor the drawn axis.
+const SUMMARY = Object.freeze({ rowLength: 10000, rowCount: 5, requested: 'auto', recordRows: [5], recordLengths: [48502],
+  drawnAxisLength: 10000 });
+
+test('the shown Result names its rows only when it drew this value over these records (case 6)', () => {
+  const read = (inputs) => shownLinearWrap({ value: 'auto', requested: 'auto', summary: SUMMARY, recordLengths: [48502], ...inputs });
+  assert.deepEqual(read({}), { kind: 'rows', rowLength: 10000, rowCount: 5, drawnAxisLength: 10000 });
+  assert.deepEqual(read({ value: null }), { kind: 'off' });
+  assert.deepEqual(read({ summary: null }), { kind: 'one-row' }, 'Auto with nothing cut');
+  for (const changed of [{ requested: undefined }, { requested: 20000 }, { summary: undefined }, { recordLengths: [48502, 1000] },
+    { recordLengths: [] }, { value: 20000, requested: 20000 }]) {
+    assert.deepEqual(read(changed), { kind: 'unknown' }, JSON.stringify(changed));
+  }
+  // The committed request's value: its override leaf, or a CLI request's full config.
+  assert.equal(requestLinearWrapLength({ diagramOptions: { configOverrides: { 'canvas.linear.wrap_length': 'auto' } } }), 'auto');
+  assert.equal(requestLinearWrapLength({ diagramOptions: { config: { canvas: { linear: { wrap_length: 20000 } } }, configOverrides: {} } }), 20000);
+  assert.equal(requestLinearWrapLength({ diagramOptions: { configOverrides: {} } }), null);
+
+  const drawing = linearDrawing();
+  drawing.form.linear_wrap_length = 'auto';
+  let reading = read({});
+  const field = createLinearWrapField({ state: withDrawings(drawing), watch: () => {}, changeLayoutSetting: () => {},
+    shownWrap: () => reading, blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, featureAlignment: false, featureTrackOnAxis: false }) });
+  assert.equal(field.linearWrapAutoText.value, '10 kbp per row, 5 rows (auto)');
+  reading = { kind: 'one-row' };
+  assert.equal(field.linearWrapAutoText.value, 'One row (auto)');
+  reading = { kind: 'unknown' };
+  assert.equal(field.linearWrapAutoText.value, 'Auto');
+});
+
+test('while wrapping, the Auto sizes and ticks follow the drawn axis Python sent, and the windows the whole record (case 6)', () => {
+  const displayOf = (lengths, axis) => {
+    const state = withDrawings({ mode: { value: 'linear' }, form: { scale_style: 'ruler' }, adv: {}, unmanagedConfigOverrides: {} });
+    return createAutoValueDisplay(state, { linearRecordLengths: () => lengths, linearWrappedAxisLength: () => axis });
+  };
+  const wrapped = displayOf([48502], 10000);
+  const oneRow = displayOf([10000], undefined);
+  const whole = displayOf([48502], undefined);
+  for (const key of ['scaleInterval', 'axisStrokeWidth', 'labelFontSize']) assert.equal(wrapped.autoValueText(key), oneRow.autoValueText(key), key);
+  assert.notEqual(whole.autoValueText('scaleInterval'), oneRow.autoValueText('scaleInterval'), 'the fixture tells the axis from the record');
+  assert.equal(wrapped.autoValueText('dinucleotideWindow'), whole.autoValueText('dinucleotideWindow'));
+  // Not known: the length-dependent texts name their rule.
+  const unknown = displayOf([48502], null);
+  assert.equal(unknown.autoValueText('scaleInterval'), 'by record length (auto)');
+  assert.equal(unknown.autoValueText('dinucleotideWindow'), whole.autoValueText('dinucleotideWindow'));
 });

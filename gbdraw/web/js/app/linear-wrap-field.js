@@ -4,12 +4,13 @@
 // (`changeLayoutSetting`), which also switches the settings rows decide
 // (`linearWrapFormPatch`); the length's unit is view state (D-27).
 /** @import { DrawingState } from '../state.js' */
-/** @import { LinearWrapBlocker, LinearWrapBlockerInputs, LinearWrapUnit } from '../services/linear-wrap-form.js' */
+/** @import { LinearWrapBlocker, LinearWrapBlockerInputs, LinearWrapUnit, ShownLinearWrap } from '../services/linear-wrap-form.js' */
 import {
   isLinearWrapUnit, linearWrapAmountText, linearWrapBlockers, linearWrapInputValue, linearWrapUnitOf
 } from '../services/linear-wrap-form.js';
 import { reasonText } from '../utils/error-normalization.js';
-import { joinSentences, tm } from '../utils/i18n.js';
+import { joinSentences, t, tm } from '../utils/i18n.js';
+import { formatBp } from './auto-value-display.js';
 import { computed, ref } from '../utils/reactivity.js';
 
 /**
@@ -17,6 +18,7 @@ import { computed, ref } from '../utils/reactivity.js';
  * @property {{ activeDrawing: () => DrawingState }} state
  * @property {(event: Event, field: string, value?: unknown) => unknown} changeLayoutSetting The layout transition.
  * @property {() => LinearWrapBlockerInputs} blockerInputs What the shown Linear drawing holds that rows cannot draw with.
+ * @property {() => ShownLinearWrap} shownWrap What the shown Result drew with the drawing's value.
  * @property {(source: () => unknown, callback: () => void) => unknown} watch Vue `watch`: reads a value
  *   from outside the field (Load, Undo, Reset, a drawing switch).
  */
@@ -24,7 +26,7 @@ import { computed, ref } from '../utils/reactivity.js';
 /** Which part of the field an edit comes from. @typedef {'on' | 'amount' | 'unit'} LinearWrapFieldPart */
 
 /** @param {LinearWrapFieldPorts} ports */
-export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInputs, watch }) => {
+export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInputs, shownWrap, watch }) => {
   const form = () => state.activeDrawing().form;
   const linearWrapOn = computed(() => form().linear_wrap_length !== null);
   /** @type {{ value: LinearWrapUnit }} */
@@ -39,6 +41,15 @@ export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInput
     written = undefined;
   });
   const linearWrapAmount = computed(() => linearWrapAmountText(form().linear_wrap_length, linearWrapUnit.value));
+  // Beside an empty length (Auto): what the shown Result drew with Auto, else just Auto.
+  const linearWrapAutoText = computed(() => {
+    const reading = shownWrap();
+    if (form().linear_wrap_length !== 'auto') return t('Auto');
+    if (reading.kind === 'rows') {
+      return t('{length} per row, {rows} rows (auto)', { length: formatBp(reading.rowLength), rows: reading.rowCount });
+    }
+    return reading.kind === 'one-row' ? t('One row (auto)') : t('Auto');
+  });
   /** @type {{ readonly value: LinearWrapBlocker[] }} */
   const blockers = computed(() => linearWrapBlockers(blockerInputs()));
   // D-29: a blocker keeps Wrap Rows from being turned on or its length changed, never from being turned off.
@@ -60,5 +71,5 @@ export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInput
     written = value;
     return changeLayoutSetting(event, 'linear_wrap_length', value);
   };
-  return { linearWrapOn, linearWrapUnit, linearWrapAmount, linearWrapBlocked, linearWrapBlockedText, changeLinearWrap };
+  return { linearWrapOn, linearWrapUnit, linearWrapAmount, linearWrapAutoText, linearWrapBlocked, linearWrapBlockedText, changeLinearWrap };
 };

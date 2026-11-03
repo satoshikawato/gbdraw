@@ -832,6 +832,21 @@ const LINEAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
   CONFIG_OVERRIDE_PATHS.linearWrapLength
 ]);
 
+/**
+ * The Wrap Rows value a committed Linear request asked for, as the form holds it: its override leaf, or else
+ * its full config's (a CLI request). A value the form cannot hold reads as null.
+ * @param {CanonicalRenderRequest} request
+ * @returns {import('./linear-wrap-form.js').LinearWrapFormValue}
+ */
+export const requestLinearWrapLength = (request) => {
+  const { configOverrides, config } = /** @type {{ configOverrides?: Record<string, unknown> | null,
+    config?: { canvas?: { linear?: { wrap_length?: unknown } } } | null }} */ (request.diagramOptions);
+  const leaf = configOverrides && Object.hasOwn(configOverrides, CONFIG_OVERRIDE_PATHS.linearWrapLength)
+    ? configOverrides[CONFIG_OVERRIDE_PATHS.linearWrapLength]
+    : config?.canvas?.linear?.wrap_length;
+  return wrapFormValue(leaf).value;
+};
+
 /** @param {ModeProfileName} mode */
 export const managedConfigOverridePathsForMode = (mode) => {
   if (!['circular', 'linear'].includes(mode)) {
