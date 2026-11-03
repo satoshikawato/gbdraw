@@ -60,9 +60,18 @@ const REASONS = Object.freeze({
 
   UNKNOWN_CONFIG_PATH: 'Remove unknown configuration overrides or use a supported setting.',
   CIRCULAR_SETTING: 'It applies only to Circular diagrams. Reset it under Preserved session settings, or switch to Circular.',
-  WRAP: 'A figure that splits records over several rows draws no comparisons. Remove the comparison inputs, or reset canvas.linear.wrap_length under Preserved session settings.',
+  // A record cut by Wrap Rows (gbdraw/layout/linear_wrap.py): what rows cannot draw, and the ways out. The Wrap Rows
+  // field shows the same text when it cannot be turned on (`reasonText`).
+  WRAP: 'A wrapped figure draws no comparisons. Remove the comparison inputs (BLAST, comparison pairs, LOSAT, Similarity groups), or turn Wrap Rows off.',
+  WRAP_TRACK_LAYOUT: 'Wrapped rows draw their tracks above or below the axis. Set Track Layout to Above or Below, move the feature track off the axis in Custom Track Slots, or turn Wrap Rows off.',
+  WRAP_SCALE_STYLE: 'Each wrapped row draws a ruler on its axis. Set Scale Style to Ruler (Ticks), or turn Wrap Rows off.',
+  WRAP_NORMALIZE_LENGTH: 'Wrapped rows draw at one scale. Turn Normalize Record Lengths off, or turn Wrap Rows off.',
+  WRAP_GRID_ROW: 'A wrapped record needs a Record Layout row of its own. Give each record its own row, or turn Wrap Rows off.',
   // Align at feature and gbdraw linear --anchor_feature (gbdraw/api/record_planning.py, gbdraw/layout/linear_wrap.py).
-  WRAP_ANCHOR_FEATURE: 'Records split over several rows cannot be aligned at a feature. Reset canvas.linear.wrap_length under Preserved session settings, or set it so that no record is split.',
+  WRAP_ANCHOR_FEATURE: 'A wrapped record cannot be aligned at a feature. Reset the alignment, or turn Wrap Rows off.',
+  // A PNG or PDF over its format's size limit (gbdraw/render/export_limits.py); the facts are the EXPORT_LIMIT phrases.
+  PNG_SIZE: 'Lower the PNG DPI, or use SVG, which has no size limit.',
+  PDF_SIZE: 'Set a longer row length in Wrap Rows, or use SVG, which has no size limit.',
   SELECTOR_NO_MATCH: 'No record has a feature that this selector names. Check the key and the value, for example gene=COX1.',
   SELECTOR_AMBIGUOUS: 'In one record, this selector names features that start at different bases. Use a selector that names one feature, such as locus_tag=<tag>.',
   ANCHOR_SHARED_ROW: 'Records that share a row cannot be aligned at a feature. Give each record its own row in Record Layout.',
@@ -244,6 +253,8 @@ const DEFINITIONS = Object.freeze({
   EXPORT_CONVERSION: ['The browser could not convert the diagram for export. Retry or use SVG.', ['retry', 'use-svg']],
   PDF_LIBRARY: ['The PDF libraries could not start. Reload and retry or use SVG.', ['reload', 'retry', 'use-svg']],
   PDF_GLYPH: ['PDF fonts cannot represent this text. Use SVG to retain this text.', ['use-svg']],
+  // Python checks the size before anything is drawn or downloaded (gbdraw/render/export_limits.py).
+  EXPORT_LIMIT: ['The figure is larger than this file format allows, so no file was made.', ['use-svg']],
   CLEANUP_FAILED: ['Temporary resource cleanup failed. Save a Session and reload before retrying.', ['save-session', 'reload', 'retry']]
 });
 
@@ -255,7 +266,7 @@ const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Pairwise display 
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',
-  evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length', wrap_length: 'Bases per row', anchor_feature: 'Feature selector',
+  evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length', wrap_length: 'Wrap Rows', anchor_feature: 'Feature selector',
   plot_title_font_size: 'Plot Title Font Size', font_family: 'Font', feature_width_circular: 'Feature Track Width',
   depth_width_circular: 'Depth Width', gc_content_width_circular: 'GC Content Width',
   gc_content_radius_circular: 'GC Content Radius', gc_skew_width_circular: 'GC Skew Width',
@@ -335,6 +346,11 @@ const PHRASES = Object.freeze({
   sessionFileNotSaved: 'The Session was not saved: its file would be {size} MB, and the browser loads files of at most {limit} MB.',
   largestInputs: 'Largest inputs: {inputs}.',
   sessionSaveRemedy: 'Remove or replace the largest inputs with smaller ones, then save again.',
+  // EXPORT_LIMIT (gbdraw/render/export_limits.py): the limit and size in the format's unit, and what would fit.
+  exportSizePx: 'PNG is limited to {limit} px per side, and this figure is {width} x {height} px.',
+  exportSizePt: 'PDF is limited to {limit} pt per side, and this figure is {width} x {height} pt.',
+  exportRowLength: 'A row length of {length} bp should fit (estimated from the drawn height).',
+  exportDpi: 'A DPI of {dpi} or lower would fit.',
   liveEditFailed: 'Live edit failed: direct edits already applied are kept; geometry may still need updating.',
   liveEditRetry: 'Retry the live edit or use Generate.',
   liveEditChange: 'Change the edit, or change the settings and use Generate.',
@@ -352,6 +368,16 @@ const PHRASES = Object.freeze({
  * @property {true} [verbatim]
  */
 const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+/** A count as Python's export message writes it (`32,767`). @param {number} value */
+const grouped = (value) => value.toLocaleString('en-US');
+
+/**
+ * The correction text of a diagnostic reason: the catalog key a hint translates, the same text a refusal
+ * with that reason shows. `null` for a reason this owner does not word.
+ * @param {string} reason
+ * @returns {string | null}
+ */
+export const reasonText = (reason) => (Object.hasOwn(REASONS, reason) ? REASONS[reason] : null);
 /**
  * @param {ErrorTextPart} part
  * @param {(text: string) => string} translate
@@ -447,6 +473,11 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [sessionByteLimit] The size in bytes that Load opens at most.
  * @property {'file'} [sessionSizeKind] Set when the two sizes are those of the gzip file, not of its expanded JSON.
  * @property {string} [largestInputs] The file names of the largest inputs of a Session that Save refused.
+ * @property {number} [limit] An export format's size limit per side, in its unit (EXPORT_LIMIT).
+ * @property {number} [width] The figure's width in the export format's unit (EXPORT_LIMIT).
+ * @property {number} [height] The figure's height in the export format's unit (EXPORT_LIMIT).
+ * @property {number} [rowLength] The longer Wrap Rows length in bp that should fit (EXPORT_LIMIT).
+ * @property {number} [dpi] The highest PNG DPI that fits (EXPORT_LIMIT).
  */
 
 /**
@@ -724,8 +755,9 @@ const contextFor = (value) => {
     if (tracks.length) context.keptInsideTracks = tracks.join(',');
   }
   if (typeof value.slotTrack === 'string' && Object.hasOwn(SWITCHED_TRACKS, value.slotTrack)) context.slotTrack = value.slotTrack;
-  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex'>} */ ([
-    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex'
+  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex' | 'limit' | 'width' | 'height' | 'rowLength' | 'dpi'>} */ ([
+    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex',
+    'limit', 'width', 'height', 'rowLength', 'dpi'
   ])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
@@ -818,6 +850,10 @@ export const normalizeUserFacingError = (value, {
     .filter(Boolean).join(', ');
   const { queryRecordIndex, subjectRecordIndex, labelFitCounts, labelCapacityOuter, labelCapacityInner, exceptionType } = result.context;
   const { sessionBytes, sessionByteLimit, sessionSizeKind, largestInputs } = result.context;
+  const { limit, width, height, rowLength, dpi } = result.context;
+  const exportSize = (reason === 'PNG_SIZE' || reason === 'PDF_SIZE') && limit !== undefined && width !== undefined
+    && height !== undefined && { text: reason === 'PNG_SIZE' ? PHRASES.exportSizePx : PHRASES.exportSizePt,
+    params: { limit: grouped(limit), width: grouped(width), height: grouped(height) } };
   // A Save over the cap: the file would not load again, and saving again fails the same way.
   const saveOverCap = result.code === 'SESSION_SIZE_LIMIT' && result.operation === 'session-save'
     && sessionBytes !== undefined && sessionByteLimit !== undefined;
@@ -845,6 +881,9 @@ export const normalizeUserFacingError = (value, {
     // `undefined > 1` is false: with no count there is no line.
     /** @type {number} */ (featureCount) > 1 && { text: PHRASES.featuresAffected, params: { count: /** @type {number} */ (featureCount) } },
     field && field !== 'schema' && { text: PHRASES.field, params: { field: FIELD_LABELS[field] ? { text: FIELD_LABELS[field] } : field } },
+    exportSize,
+    exportSize && rowLength !== undefined && { text: PHRASES.exportRowLength, params: { length: grouped(rowLength) } },
+    exportSize && dpi !== undefined && { text: PHRASES.exportDpi, params: { dpi } },
     sessionVersionGuidance(result.context)
       || (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null),
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
