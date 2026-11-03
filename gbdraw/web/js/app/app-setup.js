@@ -224,6 +224,9 @@ import { validateAnnotationRecordTargets } from './annotations/validation.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
+import { createLinearWrapField } from './linear-wrap-field.js';
+import { draftFeatureSlot } from './feature-editor/placement-actions.js';
+import { effectiveLinearSlotPlacement } from '../services/linear-track-slot-model.js';
 import { createLinearRecordSelector, RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
 import { createLinearTypographyController } from './linear-typography.js';
 import {
@@ -2601,6 +2604,22 @@ export const createAppSetup = () => {
       drawing.linearRecordRows,
       { enabled: Boolean(drawing.linearRecordLayoutEnabled.value) }
     );
+  });
+  // Wrap Rows (PD-OI-113): its blockers read the owners the request reads.
+  const linearWrapField = createLinearWrapField({
+    state,
+    changeLayoutSetting: featureActions.placementActions.changeLayoutSetting,
+    blockerInputs: () => {
+      const drawing = state.activeDrawing();
+      return {
+        comparisons: drawing.linearComparisonResolution.value.hasComparisonIntent,
+        sharedRecordRow: linearLabelHasSharedRow.value,
+        featureAlignment: state.similarityAlignmentPlan.value !== null,
+        featureTrackOnAxis: Boolean(drawing.adv.linear_track_slots_enabled)
+          && effectiveLinearSlotPlacement(draftFeatureSlot({ mode: drawing.mode, form: drawing.form, adv: drawing.adv })) === 'overlay'
+      };
+    },
+    watch
   });
   /** @param {unknown} mode */
   const linearLabelVisibilitySummary = (mode) => describeLinearLabelVisibility(mode, {
@@ -7916,6 +7935,7 @@ export const createAppSetup = () => {
     autoValueText: autoValueDisplay.autoValueText,
     autoValueVisible: autoValueDisplay.autoValueVisible,
     canUseLinearRulerOnAxis,
+    ...linearWrapField,
     canUseCircularScaleStyling,
     circularTrackNewRenderer,
     linearTrackNewRenderer,

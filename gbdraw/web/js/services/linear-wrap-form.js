@@ -27,3 +27,102 @@ export const wrapFormValue = (raw) => {
   if (typeof raw === 'number' && Number.isSafeInteger(raw) && raw > 0) return { value: raw, lost: false };
   return { value: null, lost: true };
 };
+
+// Turning Wrap Rows on switches the settings rows cannot draw with, and the one rows decide (receipt PD-OI-113:
+// each row draws its ruler on its axis), in the same edit: Features on axis to Above, Bar (Simple) to Ruler
+// (Ticks), Normalize Record Lengths off, Ruler on Axis on. It does so also when no record is cut, so the figure is
+// the form's visible values. Turning it off writes only the length; Undo restores the others.
+/**
+ * @typedef {{ linear_wrap_length: LinearWrapFormValue | number, linear_track_layout?: 'above' | 'below',
+ *   scale_style?: 'ruler', normalize_length?: false, linear_ruler_on_axis?: true }} LinearWrapFormPatch
+ *   A length that is no positive safe integer (a typed `1.5`) is sent as typed, and Python refuses it.
+ */
+/** The form fields a Wrap Rows edit writes; the layout transition saves and restores them. */
+export const LINEAR_WRAP_FORM_FIELDS = Object.freeze(
+  /** @type {const} */ (['linear_wrap_length', 'linear_track_layout', 'scale_style', 'normalize_length', 'linear_ruler_on_axis'])
+);
+
+/**
+ * The fields one Wrap Rows edit writes.
+ * @param {{ linear_track_layout: unknown }} form The drawing's form before the edit.
+ * @param {LinearWrapFormValue | number} value
+ * @returns {LinearWrapFormPatch}
+ */
+export const linearWrapFormPatch = (form, value) => (value === null
+  ? { linear_wrap_length: null }
+  : {
+      linear_wrap_length: value,
+      linear_track_layout: form.linear_track_layout === 'below' ? 'below' : 'above',
+      scale_style: 'ruler',
+      normalize_length: false,
+      linear_ruler_on_axis: true
+    });
+
+/**
+ * What the shown Linear drawing holds that rows cannot draw with, each read from the owner its request reads.
+ * @typedef {object} LinearWrapBlockerInputs
+ * @property {boolean} comparisons BLAST, comparison pairs, LOSAT or Similarity groups.
+ * @property {boolean} sharedRecordRow Record Layout puts several records in one row.
+ * @property {boolean} featureAlignment Records aligned at a feature (a similarity alignment).
+ * @property {boolean} featureTrackOnAxis Custom Track Slots put the feature track on the axis (side overlay).
+ */
+/**
+ * Python's refusal reason for each (gbdraw/layout/linear_wrap.py), so the field's hint and the Generate refusal
+ * show one text (`reasonText`).
+ * @typedef {'WRAP' | 'WRAP_GRID_ROW' | 'WRAP_ANCHOR_FEATURE' | 'WRAP_TRACK_LAYOUT'} LinearWrapBlocker
+ */
+/** @type {ReadonlyArray<[keyof LinearWrapBlockerInputs, LinearWrapBlocker]>} */
+const BLOCKERS = Object.freeze([
+  ['comparisons', 'WRAP'], ['sharedRecordRow', 'WRAP_GRID_ROW'],
+  ['featureAlignment', 'WRAP_ANCHOR_FEATURE'], ['featureTrackOnAxis', 'WRAP_TRACK_LAYOUT']
+]);
+/**
+ * What keeps Wrap Rows from being turned on or its length changed. Turning it off is never blocked, so a Session
+ * that holds both can follow the refusal's "turn Wrap Rows off". Whether a record is cut is Python's.
+ * @param {LinearWrapBlockerInputs} inputs
+ * @returns {LinearWrapBlocker[]}
+ */
+export const linearWrapBlockers = (inputs) => BLOCKERS.filter(([input]) => inputs[input]).map(([, blocker]) => blocker);
+
+// The length's unit is view state (D-27): the form and the Session hold bp.
+export const LINEAR_WRAP_UNITS = Object.freeze({ bp: 1, kbp: 1_000, Mbp: 1_000_000 });
+/** @typedef {keyof typeof LINEAR_WRAP_UNITS} LinearWrapUnit */
+/** @type {readonly LinearWrapUnit[]} */
+const LARGEST_FIRST = Object.freeze(['Mbp', 'kbp', 'bp']);
+
+/** @param {unknown} unit @returns {unit is LinearWrapUnit} */
+export const isLinearWrapUnit = (unit) => typeof unit === 'string' && Object.hasOwn(LINEAR_WRAP_UNITS, unit);
+
+/**
+ * The unit a length shows in when it comes from outside the field (Load, Undo, Reset): the largest one whose
+ * amount is a whole number; Auto and Off keep `current`.
+ * @param {unknown} value
+ * @param {LinearWrapUnit} current
+ * @returns {LinearWrapUnit}
+ */
+export const linearWrapUnitOf = (value, current) => (typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+  ? /** @type {LinearWrapUnit} */ (LARGEST_FIRST.find((unit) => value % LINEAR_WRAP_UNITS[unit] === 0))
+  : current);
+
+/**
+ * The amount the length field shows: empty for Auto (D-28) and Off.
+ * @param {unknown} value
+ * @param {LinearWrapUnit} unit
+ */
+export const linearWrapAmountText = (value, unit) => (typeof value === 'number' ? String(value / LINEAR_WRAP_UNITS[unit]) : '');
+
+/**
+ * The value a typed amount writes: empty is Auto (D-28); otherwise amount x unit in bp, a whole number when the
+ * decimal amount names one (`1.1` kbp is 1100 bp). Any other number is sent as typed and Python refuses it.
+ * @param {string} text
+ * @param {LinearWrapUnit} unit
+ * @returns {'auto' | number}
+ */
+export const linearWrapInputValue = (text, unit) => {
+  const trimmed = String(text).trim();
+  const amount = Number(trimmed);
+  if (!trimmed || !Number.isFinite(amount)) return 'auto';
+  const product = amount * LINEAR_WRAP_UNITS[unit];
+  const whole = Math.round(product);
+  return Math.abs(product - whole) < 1e-6 ? whole : product;
+};

@@ -12,6 +12,7 @@ import { resolveCircularTrackFeaturePlacement } from '../../services/circular-tr
 import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement } from '../../services/linear-track-slot-model.js';
 import { validateCustomTrackPlan } from '../../services/track-slot-validation.js';
 import { setFeaturePlacementRow } from '../../services/drawing/feature-edits.js';
+import { LINEAR_WRAP_FORM_FIELDS, linearWrapFormPatch } from '../../services/linear-wrap-form.js';
 import { msg, t } from '../../utils/i18n.js';
 
 /**
@@ -40,22 +41,34 @@ const LANE_ONE_LABEL = {
   below: () => t('Below lane 1')
 };
 
-// The placement targets of a draft's feature slot: the one availability
-// predicate of the popup choices and of a layout change (R3, R10). It resolves
-// the draft through the same slot owner used by request projection; Result
-// geometry continues to describe the last successful Generate.
+// A draft's feature slot, resolved through the same slot owner the request
+// projection uses: the custom stack's enabled feature slot, or the simple
+// layout's; undefined when the custom stack enables none. The one reader of
+// the placement targets and of Wrap Rows' "feature track on the axis".
 /**
  * @param {PlacementDraft} draft
- * @returns {{ kind: string, side?: string, level?: number }[]} The main track and, when the slot splits, one lane per side.
  */
-export const draftPlacementTargets = ({ mode, form, adv }) => {
+export const draftFeatureSlot = ({ mode, form, adv }) => {
   const trackType = mode === 'circular' ? form.track_type : form.linear_track_layout;
-  const slot = adv[`${mode}_track_slots_enabled`]
+  return adv[`${mode}_track_slots_enabled`]
     ? validateCustomTrackPlan({
       mode, slots: adv[`${mode}_track_slots`],
       axisIndex: adv[`${mode}_track_slots_axis_index`], trackType
     }).enabledSlots.find((entry) => entry.renderer === 'features')
     : (mode === 'circular' ? {} : createDefaultLinearTrackSlots({ trackLayout: trackType })[0]);
+};
+
+// The placement targets of a draft's feature slot: the one availability
+// predicate of the popup choices and of a layout change (R3, R10). Result
+// geometry continues to describe the last successful Generate.
+/**
+ * @param {PlacementDraft} draft
+ * @returns {{ kind: string, side?: string, level?: number }[]} The main track and, when the slot splits, one lane per side.
+ */
+export const draftPlacementTargets = (draft) => {
+  const { mode, form } = draft;
+  const trackType = mode === 'circular' ? form.track_type : form.linear_track_layout;
+  const slot = draftFeatureSlot(draft);
   if (!slot) return [];
   const bidirectional = mode === 'circular'
     ? resolveCircularTrackFeaturePlacement(slot, trackType).laneDirection === 'split'
@@ -64,9 +77,11 @@ export const draftPlacementTargets = ({ mode, form, adv }) => {
     ? SIDES[mode].map((side) => ({ kind: 'lane', side, level: 1 })) : [])];
 };
 
-// The draft inputs of draftPlacementTargets, saved and restored in place so
-// the stack rows keep their identity (R10).
-const LAYOUT_FORM_FIELDS = ['track_type', 'linear_track_layout', 'separate_strands'];
+// The form fields a layout transition writes: the draft inputs of
+// draftPlacementTargets and the fields of a Wrap Rows edit. They are saved and
+// restored in place, so the stack rows keep their identity (R10) and Cancel
+// restores every field the edit wrote.
+const LAYOUT_FORM_FIELDS = ['track_type', 'separate_strands', ...LINEAR_WRAP_FORM_FIELDS];
 /**
  * @param {unknown} value
  * @returns {unknown}
@@ -247,15 +262,20 @@ export const createFeaturePlacementActions = ({
     return result;
   };
   /**
-   * @param {Event} event A change of the select or checkbox that holds the setting.
+   * @param {Event} event A change of the control that holds the setting.
    * @param {string} field
+   * @param {unknown} [value] The value the edit writes; a select's or a checkbox's own value by default.
+   *   A Wrap Rows edit (`linear_wrap_length`) also writes the settings it switches (`linearWrapFormPatch`).
    */
-  const changeLayoutSetting = (event, field) => {
+  const changeLayoutSetting = (event, field, value) => {
     const drawing = state.activeDrawing();
-    // The listeners sit on a select or a checkbox.
+    // The listeners sit on a select, a checkbox, or the Wrap Rows length and unit.
     const control = /** @type {LayoutControl & { value?: string }} */ (event.target);
-    const value = control.type === 'checkbox' ? control.checked : control.value;
-    return changeTrackLayout(() => { drawing.form[field] = value; }, control);
+    const written = value !== undefined ? value : control.type === 'checkbox' ? control.checked : control.value;
+    return changeTrackLayout(() => {
+      if (field === 'linear_wrap_length') Object.assign(drawing.form, linearWrapFormPatch(drawing.form, /** @type {number | 'auto' | null} */ (written)));
+      else drawing.form[field] = written;
+    }, control);
   };
 
   return { choices, setPlacement, layoutChange, resolveLayoutChange, changeLayoutSetting, changeTrackLayout,
