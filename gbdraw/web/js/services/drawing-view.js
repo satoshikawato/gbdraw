@@ -112,15 +112,21 @@ export const defaultDrawingName = (mode, drawingId, modeName = MODE_DRAWING_NAME
 };
 
 /**
- * A copy's name (T-B4-5): "<name> copy", then "<name> copy 2", "<name> copy
- * 3" ..., the first that no name in `names` repeats under the rule of
+ * The phrase of a copy's name in the UI language: `number` 1 is the first
+ * copy ("<name> copy" in English), 2 and on the next ones ("<name> copy 2").
+ * @typedef {(name: string, number: number) => string} CopyNamePhrase
+ */
+
+/**
+ * A copy's name (T-B4-5, OV-2477): `phrase(name, 1)`, then `phrase(name, 2)`
+ * ..., the first that no name in `names` repeats under the rule of
  * `drawingNamesProblem`. Python names no copy, so this rule has no twin.
- * @param {string} name @param {readonly string[]} names
+ * @param {string} name @param {readonly string[]} names @param {CopyNamePhrase} phrase
  * @returns {string}
  */
-export const copyDrawingName = (name, names) => {
+export const copyDrawingName = (name, names, phrase) => {
   for (let number = 1; ; number += 1) {
-    const candidate = `${name} copy${number > 1 ? ` ${number}` : ''}`;
+    const candidate = phrase(name, number);
     if (!drawingNamesProblem([...names, candidate])) return candidate;
   }
 };
