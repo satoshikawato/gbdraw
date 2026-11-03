@@ -331,7 +331,7 @@ def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None
     assert 'output_prefix="hepatoplasmataceae_collinear"' in how_to
 
     for fragment in (
-        'get_by_role("button", name="Linear", exact=True)',
+        'show_drawing(page, "linear")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'name="Set no comparison", exact=True',
         'to_have_attribute("aria-pressed", "true")',

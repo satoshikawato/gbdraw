@@ -122,7 +122,7 @@ def test_presentation_rule_tables_are_frozen_and_gene_first() -> None:
 def test_presentation_flows_use_visible_controls_without_state_injection() -> None:
     source = FLOW_PATH.read_text(encoding="utf-8")
     required = (
-        'get_by_role("button", name="Circular", exact=True)',
+        'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
         'get_by_label("Palette", exact=True)',
