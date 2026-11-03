@@ -12,6 +12,13 @@ record ID, description, topology, sequence, feature locations, strand, and
 qualifiers. The reader does not split one biological sequence into artificial
 records.
 
+Any input file may be gzip-compressed, as NCBI and ENA distribute them
+(`.gbff.gz`, `.fna.gz`, `.gff.gz`): a flat file, GFF3, FASTA, a TSV table, a
+depth file, or a Session. gbdraw tells a gzip file by its first two bytes, not
+its name, and reads it as the plain file it holds, in the command line, the
+Python API, and the Web app alike. A Session saved from a gzip upload holds the
+plain file under the uploaded name. bzip2, xz, and zstd files are not read.
+
 Before parsing, the reader repairs two layouts that other tools write: a
 `LOCUS` name that contains spaces (Geneious) is read with each run of spaces
 as one `_`, and tabs that indent a feature-table line, or separate a feature

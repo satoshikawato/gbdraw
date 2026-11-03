@@ -2302,7 +2302,6 @@ export default Object.freeze({
   "The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.": "비교 연결선 양 끝의 feature가 표시된 feature와 일치하지 않습니다. 비교 입력과 표시 변환을 검토하십시오. 문제가 계속되면 세션을 저장하십시오.",
   "The figure is drawn.": "다이어그램이 그려졌습니다.",
   "The file is empty.": "파일이 비어 있습니다.",
-  "The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.": "이 파일은 gzip으로 압축되어 있습니다. 먼저 압축을 푸십시오(예: gunzip 사용). GenBank/DDBJ 입력은 압축되지 않은 플랫 파일이어야 합니다.",
   "The file is not a GenBank/DDBJ flat file: it has no record header line.": "이 파일은 GenBank/DDBJ 플랫 파일이 아닙니다. 레코드 머리글 줄이 없습니다.",
   "The font could not be loaded.": "글꼴을 불러올 수 없습니다.",
   "The font of all diagram text: labels, titles, legend, and scale.": "다이어그램의 모든 텍스트(레이블, 제목, 범례, 축척)에 쓰는 글꼴입니다.",

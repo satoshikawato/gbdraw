@@ -16,12 +16,15 @@ from BCBio import GFF
 
 from .input_text import (
     FLAT_FILE_FORMAT_NAMES,
+    GZIP_ERRORS,
     FlatFileFormat,
     LineStream,
     canonicalize_feature_types,
     flat_file_format,
     flat_file_stream,
     gff3_stream,
+    open_input_text,
+    read_input_bytes,
     text_lines,
 )
 from .record_select import parse_record_selector, reverse_records, select_record
@@ -34,6 +37,8 @@ logger = logging.getLogger(__name__)
 
 # A file that cannot be parsed is a user-fixable input: the Web asks to replace it.
 _UNREADABLE_INPUT = {"code": "INPUT_UNREADABLE"}
+# A flat file the parser refused: cut off or damaged (OV-1258).
+_UNREADABLE_FLAT_FILE = {"code": "INPUT_UNREADABLE", "reason": "GENBANK_PARSE"}
 _DUPLICATE_FASTA_IDS = {"code": "INPUT_INVALID", "field": "fasta", "reason": "UNIQUE_IDS"}
 # OV-1257: a GFF3/FASTA pair whose slot file holds no entry says which slot.
 _GFF_WITHOUT_FEATURES = {"code": "NO_RECORDS", "reason": "GFF_NO_FEATURES"}
@@ -66,27 +71,18 @@ def genbank_absence_diagnostic(path: str) -> dict[str, str]:
     Its first non-blank line tells an empty file, a FASTA file, and other text apart.
     """
 
-    with open(path, "rb") as handle:
-        # A byte order mark is not text, also on a line of its own.
-        lines = (line.removeprefix(b"\xef\xbb\xbf") if index == 0 else line for index, line in enumerate(handle))
-        first = next((line.strip() for line in lines if line.strip()), b"")
+    # A byte order mark is not text, also on a line of its own.
+    lines = (
+        line.removeprefix(b"\xef\xbb\xbf") if index == 0 else line
+        for index, line in enumerate(read_input_bytes(path).splitlines())
+    )
+    first = next((line.strip() for line in lines if line.strip()), b"")
     reason = "EMPTY_FILE" if not first else "FASTA_IN_GENBANK" if first.startswith(b">") else "NOT_GENBANK"
     return {"code": "NO_RECORDS", "reason": reason}
 
 
-def genbank_read_diagnostic(path: str) -> dict[str, str]:
-    """The INPUT_UNREADABLE diagnostic of a GenBank/DDBJ file the parser refused (OV-1258).
-
-    A gzip file says so; any other refusal is a file cut off or damaged.
-    """
-
-    with open(path, "rb") as handle:
-        compressed = handle.read(2) == b"\x1f\x8b"
-    return {"code": "INPUT_UNREADABLE", "reason": "GZIP_INPUT" if compressed else "GENBANK_PARSE"}
-
-
 def read_flat_file_records(path: str) -> list[SeqRecord]:
-    """Every record of one GenBank, DDBJ or EMBL flat file, in file order: the one flat-file parse.
+    """Every record of one GenBank, DDBJ or EMBL flat file, plain or gzip, in file order: the one flat-file parse.
 
     The first non-blank line names the format (an ``ID`` line is EMBL). The text
     reaches Biopython through :func:`gbdraw.io.input_text.flat_file_stream`, and each
@@ -96,22 +92,22 @@ def read_flat_file_records(path: str) -> list[SeqRecord]:
     """
 
     fmt: FlatFileFormat = "genbank"
-    with open(path) as handle:
+    with open_input_text(path) as handle:
         lines = text_lines(handle)
         head: list[str] = []
-        try:  # A file that is not text (gzip) stops at its first line: UnicodeDecodeError is a ValueError.
+        try:  # A file that is not text stops at its first line: UnicodeDecodeError is a ValueError.
             for line in lines:
                 head.append(line)
                 if line.strip():
                     break
             fmt = flat_file_format(head[-1] if head else "")
             records = list(SeqIO.parse(flat_file_stream(chain(head, lines), fmt), fmt))
-        except ValueError as e:
+        except (ValueError, *GZIP_ERRORS) as e:
             name = FLAT_FILE_FORMAT_NAMES[fmt]
             raise ParseError(
                 f"The {name} parser stopped: {_parser_reason(e)}. "
                 f"Error parsing {name} file {path}. It may be corrupt or in the wrong format.",
-                diagnostic=genbank_read_diagnostic(path),
+                diagnostic=_UNREADABLE_FLAT_FILE,
             ) from e
     if not records:
         diagnostic = genbank_absence_diagnostic(path)
@@ -422,7 +418,7 @@ def _gff_fasta_errors(gff_file: str, fasta_file: str):
     """Report a failure while reading a GFF3/FASTA pair the way every caller expects."""
     try:
         yield
-    except ValueError as e:
+    except (ValueError, *GZIP_ERRORS) as e:
         if str(e).startswith("Record selector"):
             raise ValidationError(str(e)) from e
         raise ParseError(
@@ -451,7 +447,7 @@ def _read_fasta_records(fasta_file: str) -> list[SeqRecord]:
     Biopython 1.88 refuses it. A file without a ">" line has no entry (OV-1257).
     """
 
-    with open(fasta_file) as handle:
+    with open_input_text(fasta_file) as handle:
         lines = text_lines(handle)
         for line in lines:
             if line.startswith(">"):
@@ -499,7 +495,7 @@ def parse_gff_fasta(
             raise InputFileError(f"File does not exist or is not accessible: {path}")
     with _gff_fasta_errors(gff_file, fasta_file):
         logger.info("INFO: Loading GFF3 file {}".format(gff_file))
-        with open(gff_file) as gff_handle:
+        with open_input_text(gff_file) as gff_handle:
             gff_records = list(GFF.parse(gff3_stream(text_lines(gff_handle))))
         for record in gff_records:
             canonicalize_feature_types(record.features)

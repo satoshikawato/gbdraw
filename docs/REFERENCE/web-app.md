@@ -63,6 +63,11 @@ upload does not appear in Linear, and a mode switch keeps both. LOSAT run settin
 feature popup are shared. A saved Session keeps each mode's settings
 (Session 51, [compatibility](session-and-request-compatibility.md)).
 
+Every file input also takes a gzip-compressed file (`.gb.gz`, `.fna.gz`,
+`.gff.gz`, a gzip TSV): it is read as the plain file it holds, told by its
+first two bytes, and a saved Session keeps the plain file
+([input formats](input-formats-and-tsv-schemas.md#sequence-and-annotation-files)).
+
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
 uploaders, followed by its name fields and a closed **Record options**

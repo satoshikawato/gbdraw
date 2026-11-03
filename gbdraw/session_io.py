@@ -17,7 +17,6 @@ import math
 import os
 import re
 import tempfile
-import zlib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -64,6 +63,7 @@ from .core.numeric import (
     parse_ascii_nonnegative_integer,
 )
 from .config.models.root import read_stored_font_size
+from .io.input_text import GZIP_ERRORS, open_input_text
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
 from .io.colors import is_user_color, named_color_hex, packaged_color_palettes
@@ -687,22 +687,17 @@ def _read_session_json(path: str | Path) -> object:
             _read_session_text(session_path),
             object_pairs_hook=_reject_duplicate_json_keys,
         )
-    except (json.JSONDecodeError, UnicodeDecodeError, EOFError, zlib.error, gzip.BadGzipFile) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError, *GZIP_ERRORS) as exc:
         raise ValidationError(f"Not a valid JSON session file: {session_path}") from exc
     except OSError as exc:
         raise ValidationError(f"Could not read session file: {session_path}") from exc
 
 
 def _read_session_text(path: str | Path) -> str:
-    """Read UTF-8 session JSON, detecting gzip by its file signature."""
+    """Read UTF-8 session JSON, plain or gzip (told by its signature, as every input file is)."""
 
-    session_path = Path(path)
-    with session_path.open("rb") as session_file:
-        is_gzip = session_file.read(2) == b"\x1f\x8b"
-    if is_gzip:
-        with gzip.open(session_path, mode="rt", encoding="utf-8") as session_file:
-            return session_file.read()
-    return session_path.read_text(encoding="utf-8")
+    with open_input_text(path, encoding="utf-8") as session_file:
+        return session_file.read()
 
 
 def validate_session(

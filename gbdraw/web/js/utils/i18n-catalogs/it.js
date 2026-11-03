@@ -2302,7 +2302,6 @@ export default Object.freeze({
   "The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.": "Le feature agli estremi dei collegamenti di confronto non corrispondono alle feature mostrate. Rivedi gli input di confronto e le trasformazioni di visualizzazione; se il problema persiste, salva una sessione.",
   "The figure is drawn.": "Il diagramma è stato disegnato.",
   "The file is empty.": "Il file è vuoto.",
-  "The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.": "Il file è compresso con gzip. Decomprimilo prima (ad esempio con gunzip); l’input GenBank/DDBJ deve essere un flat file non compresso.",
   "The file is not a GenBank/DDBJ flat file: it has no record header line.": "Il file non è un flat file GenBank/DDBJ: non ha una riga di intestazione del record.",
   "The font could not be loaded.": "Impossibile caricare il carattere.",
   "The font of all diagram text: labels, titles, legend, and scale.": "Il carattere di tutto il testo del diagramma: etichette, titoli, legenda e scala.",

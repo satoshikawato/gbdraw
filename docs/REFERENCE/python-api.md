@@ -13,7 +13,7 @@ draw_circular(records: RecordCollection, *, options: CircularOptions | None = No
 draw_linear(records: RecordCollection, *, options: LinearOptions | None = None, layout: LinearLayout | None = None, record_displays: Sequence[RecordDisplayOptions] | None = None) -> Diagram
 ```
 
-`read_genbank()` returns every record from every supplied file. `read_gff()` requires equally sized GFF3 and FASTA path lists and matching sequence IDs. Each drawing function accepts one Biopython `SeqRecord` or a sequence of records. Both reject an empty record collection, non-`SeqRecord` members, and option or layout objects for the wrong mode.
+`read_genbank()` returns every record from every supplied file. `read_gff()` requires equally sized GFF3 and FASTA path lists and matching sequence IDs. A path may name a gzip-compressed file. Each drawing function accepts one Biopython `SeqRecord` or a sequence of records. Both reject an empty record collection, non-`SeqRecord` members, and option or layout objects for the wrong mode.
 
 The reader helpers accept filesystem paths, not open file handles. If another
 library has already parsed an upload or in-memory stream, pass its Biopython

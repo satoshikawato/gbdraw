@@ -2674,11 +2674,11 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="inputType === 'gb'">
-                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="uploadCircularSourceFile('c_gb', $event)" file-kind="genbank" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="uploadCircularSourceFile('c_gb', $event)" file-kind="genbank" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
-                            <file-uploader :label="t('GFF3 File')" :model-value="files.c_gff" @update:model-value="uploadCircularSourceFile('c_gff', $event)" file-kind="gff" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
-                            <file-uploader :label="t('FASTA File')" :model-value="files.c_fasta" @update:model-value="uploadCircularSourceFile('c_fasta', $event)" file-kind="fasta" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader :label="t('GFF3 File')" :model-value="files.c_gff" @update:model-value="uploadCircularSourceFile('c_gff', $event)" file-kind="gff" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
+                            <file-uploader :label="t('FASTA File')" :model-value="files.c_fasta" @update:model-value="uploadCircularSourceFile('c_fasta', $event)" file-kind="fasta" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
                         </div>
                         <section :aria-label="t('Source records')" class="space-y-2">
                             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -2795,7 +2795,7 @@
                                 <file-uploader
                                     :label="t('Depth TSV')"
                                     small
-                                    accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
+                                    accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
                                     :model-value="getCircularDepthFile(0)"
                                     @update:model-value="uploadCircularDepthFile(0, $event)" file-kind="depth"
                                 ></file-uploader>
@@ -2924,7 +2924,7 @@
                                     <file-uploader
                                         :label="t('Depth TSV')"
                                         small
-                                        accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
+                                        accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
                                         :model-value="getCircularDepthFile(track.index)"
                                         @update:model-value="uploadCircularDepthFile(track.index, $event)" file-kind="depth"
                                     ></file-uploader>
@@ -3019,7 +3019,7 @@
                                 <file-uploader
                                     :label="t('GenBank / DDBJ File')"
                                     :test-id="`linear-genbank-${sourceIndex + 1}`"
-                                    accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*"
+                                    accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*,.gz,application/gzip"
                                     :model-value="source.sequence.gb"
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
@@ -3030,7 +3030,7 @@
                             <div v-else class="space-y-2 mb-2">
                                 <file-uploader
                                     label="GFF3"
-                                    accept=".gff,.gff3,.txt,text/plain,text/*"
+                                    accept=".gff,.gff3,.txt,text/plain,text/*,.gz,application/gzip"
                                     :model-value="source.sequence.gff"
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
@@ -3039,7 +3039,7 @@
                                 ></file-uploader>
                                 <file-uploader
                                     label="FASTA"
-                                    accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"
+                                    accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*,.gz,application/gzip"
                                     :model-value="source.sequence.fasta"
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
@@ -3112,7 +3112,7 @@
                                         <file-uploader
                                             :label="t('Depth TSV')"
                                             small
-                                            accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
+                                            accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
                                             :model-value="track.status.file"
                                             @update:model-value="uploadLinearSourceDepthFile(source, track.index, $event)" file-kind="depth"
                                             :data-input-aria-label="sourceIndex === 0 && track.index === 0
@@ -3223,7 +3223,7 @@
                                             <file-uploader
                                                 :label="t('Depth TSV · series {n}', { n: track.index + 1 })"
                                                 small
-                                                accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
+                                                accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
                                                 :model-value="getLinearDepthFile(seq, track.index)"
                                                 @update:model-value="uploadLinearDepthFile(seq, track.index, $event)" file-kind="depth"
                                                 :data-input-aria-label="t('Depth TSV · series {series} for sequence {sequence}', { sequence: idx + 1, series: track.index + 1 })"
@@ -3772,7 +3772,7 @@
                                                 data-comparison-focus="pair-upload"
                                                 :data-input-aria-label="t('BLAST TSV for #{from} to #{to}', { from: pair.queryIndex + 1, to: pair.subjectIndex + 1 })"
                                                 small
-                                                accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*"
+                                                accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
                                                 :model-value="pair.draft?.fileActive ? pair.draft.file : null"
                                                 @update:model-value="uploadLinearComparisonCardFile(pair.edgeKey, $event)" file-kind="comparison"
                                             ></file-uploader>
@@ -4094,7 +4094,7 @@
                                     :model-value="files.c_conservation_blasts"
                                     @update:model-value="setCircularConservationUploadFiles" file-kind="comparison"
                                     :multiple="true"
-                                    accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*"
+                                    accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
                                 ></file-uploader>
                                 <div>
                                     <span class="text-[9px] flex items-center">{{ t('Reference side') }} <help-tip id="help-circular-comparison-reference-side" :text="t('Use Auto when exactly one BLAST side matches the displayed reference record IDs; choose Query or Subject for ambiguous files.')"></help-tip></span>
@@ -4206,7 +4206,7 @@
                                             <span class="truncate text-slate-600">{{ row.comparisonSequenceFilename || t('Choose file…') }}</span>
                                             <input type="file"
                                                    class="hidden"
-                                                   accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
+                                                   accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*,.gz,application/gzip"
                                                    @change="setCircularConservationCompanionFile(row.sourceIndex, $event)" :disabled="!semanticMutationAvailable">
                                         </label>
                                         <div v-if="circularConservation.source === 'losat' && circularConservation.losat_program === 'tblastx'" class="grid grid-cols-[minmax(0,1fr)_4.8rem] gap-1 items-center">
@@ -4226,7 +4226,7 @@
                                     type="file"
                                     ref="circularConservationFastaInput"
                                     data-history-managed
-                                    accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
+                                    accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*,.gz,application/gzip"
                                     @change="addCircularConservationComparisonFile"
                                     class="hidden"
                                  :disabled="!semanticMutationAvailable || processing">
@@ -5391,7 +5391,7 @@
                                     </button>
                                 </div>
                                 <div class="mt-2">
-                                    <file-uploader :label="t('Default colors file')" :help="t('Tab-separated value (TSV) file of feature type and color. Feature types not listed keep the selected palette colors.')" :model-value="files.d_color" @update:model-value="importAuxiliaryTable('d_color', $event)" file-kind="d_color" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Default colors file')" :help="t('Tab-separated value (TSV) file of feature type and color. Feature types not listed keep the selected palette colors.')" :model-value="files.d_color" @update:model-value="importAuxiliaryTable('d_color', $event)" file-kind="d_color" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip" :small="true"></file-uploader>
                                 </div>
                             </div>
 
@@ -5435,7 +5435,7 @@
                                     @edit-pattern="editSpecificRulePattern" @retry-pattern="retrySpecificRulePattern" @revert-pattern="revertSpecificRulePattern"></specific-rule-rows>
 
                                 <div class="mt-2">
-                                    <file-uploader :label="t('Specific rules file')" :help="t('TSV file of rules: feature type, qualifier, regular expression, color, and optional legend name.')" :model-value="files.t_color" @update:model-value="importAuxiliaryTable('t_color', $event)" :after-change="waitForAuxiliaryFileImport" file-kind="t_color" :import-step="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Specific rules file')" :help="t('TSV file of rules: feature type, qualifier, regular expression, color, and optional legend name.')" :model-value="files.t_color" @update:model-value="importAuxiliaryTable('t_color', $event)" :after-change="waitForAuxiliaryFileImport" file-kind="t_color" :import-step="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip" :small="true"></file-uploader>
                                 </div>
                             </div>
                         </div>
@@ -5697,7 +5697,7 @@
                                         </div>
                                         <button @click="addWhitelistRule" :disabled="!semanticMutationAvailable" class="text-xs text-blue-600 font-bold">{{ t('+ Add Rule') }}</button>
                                         <div class="ui-hint text-center mt-2">{{ t('or') }}</div>
-                                        <file-uploader :label="t('Whitelist File')" :model-value="files.whitelist" @update:model-value="importAuxiliaryTable('whitelist', $event)" file-kind="whitelist" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                        <file-uploader :label="t('Whitelist File')" :model-value="files.whitelist" @update:model-value="importAuxiliaryTable('whitelist', $event)" file-kind="whitelist" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip" :small="true"></file-uploader>
                                     </div>
                                 </div>
 
@@ -5723,7 +5723,7 @@
                                     </div>
 
                                     <div class="ui-hint text-center mb-1">{{ t('or') }}</div>
-                                    <file-uploader :label="t('Priority File (TSV)')" :model-value="files.qualifier_priority" @update:model-value="importAuxiliaryTable('qualifier_priority', $event)" file-kind="qualifier_priority" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Priority File (TSV)')" :model-value="files.qualifier_priority" @update:model-value="importAuxiliaryTable('qualifier_priority', $event)" file-kind="qualifier_priority" :import-step="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip" :small="true"></file-uploader>
                                 </div>
 
                                 <div class="pt-3 border-t border-slate-100">

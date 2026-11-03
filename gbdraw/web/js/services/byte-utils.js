@@ -185,3 +185,22 @@ export const sha256Hex = async (value) => {
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
 };
+
+// A gzip stream starts with these two bytes (RFC 1952), whatever the file is named.
+export const GZIP_SIGNATURE = Object.freeze([0x1f, 0x8b]);
+
+/** @param {Uint8Array} bytes */
+export const isGzipBytes = (bytes) => GZIP_SIGNATURE.every((byte, index) => bytes[index] === byte);
+
+/**
+ * The bytes a gzip file holds, or the bytes themselves when they are not gzip
+ * or the browser has no `DecompressionStream` (Python reads a gzip input file
+ * as well, so the Worker still draws it).
+ * @param {Uint8Array} bytes
+ * @returns {Promise<Uint8Array>}
+ */
+export const expandGzipBytes = async (bytes) => {
+  if (!isGzipBytes(bytes) || typeof DecompressionStream !== 'function') return bytes;
+  const expanded = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(expanded).arrayBuffer());
+};

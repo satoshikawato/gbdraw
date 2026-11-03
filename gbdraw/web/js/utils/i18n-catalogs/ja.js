@@ -2302,7 +2302,6 @@ export default Object.freeze({
   "The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.": "比較のリンクの両端のフィーチャーが、表示中のフィーチャーと一致しません。配列比較の入力と表示の変換を確認してください。問題が続く場合は、セッションを保存してください。",
   "The figure is drawn.": "図は描画されました。",
   "The file is empty.": "ファイルが空です。",
-  "The file is gzip-compressed. Decompress it first (for example with gunzip); GenBank/DDBJ input must be an uncompressed flat file.": "このファイルはgzipで圧縮されています。先に展開してください（例：gunzipを使用）。GenBank/DDBJの入力は、圧縮されていないフラットファイルである必要があります。",
   "The file is not a GenBank/DDBJ flat file: it has no record header line.": "このファイルはGenBank/DDBJのフラットファイルではありません。レコードのヘッダー行がありません。",
   "The font could not be loaded.": "フォントを読み込めませんでした。",
   "The font of all diagram text: labels, titles, legend, and scale.": "図のすべてのテキスト（ラベル、タイトル、凡例、スケール）のフォントです。",

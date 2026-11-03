@@ -126,6 +126,13 @@ No. Pair each GFF3 input with the matching FASTA sequence. [Sequence and
 annotation files](./REFERENCE/input-formats-and-tsv-schemas.md#sequence-and-annotation-files)
 explains ID matching, coordinates, phase, and translation.
 
+### Can I use gzip-compressed files?
+
+Yes. A `.gbff.gz`, `.fna.gz`, `.gff.gz`, or gzip TSV file is read as the plain
+file it holds, in the CLI, the Python API, and the web app; the first two bytes
+decide, not the name. See
+[input formats](REFERENCE/input-formats-and-tsv-schemas.md#sequence-and-annotation-files).
+
 ### My labels overlap. What should I do?
 
 Reduce the label size, filter the label set, or change the Circular track

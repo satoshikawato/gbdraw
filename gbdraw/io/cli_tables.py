@@ -12,6 +12,7 @@ from typing import Literal, Sequence
 
 from ..core.numeric import parse_ascii_integer
 from ..exceptions import ValidationError
+from ..io.input_text import GZIP_ERRORS, open_input_text
 from ..io.regions import parse_region_spec
 from ..tracks import (
     normalize_circular_track_slots_with_axis,
@@ -725,7 +726,7 @@ def _read_tsv_table(
 ) -> tuple[Path, tuple[str, ...], list[_RawRow]]:
     table_path = Path(str(path))
     try:
-        handle = table_path.open("r", encoding="utf-8-sig", newline="")
+        handle = open_input_text(table_path, encoding="utf-8-sig", newline="")
     except OSError as exc:
         raise ValidationError(f"Could not read {table_name}: {table_path}") from exc
 
@@ -733,7 +734,11 @@ def _read_tsv_table(
         reader = csv.reader(handle, delimiter="\t")
         header: tuple[str, ...] | None = None
         raw_rows: list[_RawRow] = []
-        for line_number, cells in enumerate(reader, start=1):
+        try:
+            rows = list(enumerate(reader, start=1))
+        except GZIP_ERRORS as exc:  # A gzip table cut off or damaged.
+            raise ValidationError(f"Could not read {table_name}: {table_path}") from exc
+        for line_number, cells in rows:
             if _cells_are_blank(cells):
                 continue
             if header is None:

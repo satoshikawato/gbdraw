@@ -78,3 +78,18 @@ structuredClone(transferred, { transfer: [transferred] });
 assert.equal(transferred.byteLength, 0);
 assert.equal(bytesToText(await readFileBytes(rowA)), 'LOCUS shared');
 assert.equal(bytesToText(await readFileBytes(rowB)), 'LOCUS shared');
+
+// A gzip input file (NCBI's .gbff.gz, .fna.gz, .gff.gz) reads as the plain
+// file it holds, told by its first two bytes, not its name: every browser
+// reader, the Session and the Worker see the plain bytes.
+const { gzipSync } = await import('node:zlib');
+const gzipFile = {
+  name: 'input.gb.gz',
+  async arrayBuffer() {
+    return Uint8Array.from(gzipSync('LOCUS gzipped')).buffer;
+  }
+};
+assert.equal(bytesToText(await readFileBytes(gzipFile)), 'LOCUS gzipped');
+assert.equal(await readFileText(gzipFile), 'LOCUS gzipped');
+const plainNamedGz = { name: 'plain.gb.gz', async arrayBuffer() { return encoder.encode('LOCUS plain').buffer; } };
+assert.equal(await readFileText(plainNamedGz), 'LOCUS plain');

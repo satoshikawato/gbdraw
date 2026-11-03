@@ -80,7 +80,8 @@ app's Wasm execution and assets are unchanged.
 GenBank and GBFF files use `--gbk`, including DDBJ records downloaded in
 GenBank flat-file format and EMBL flat files
 ([input formats](input-formats-and-tsv-schemas.md#sequence-and-annotation-files)). GFF3
-uses `--gff` with a positionally matched `--fasta` list. A `--records_table`
+uses `--gff` with a positionally matched `--fasta` list. Any input file,
+the TSV tables included, may be gzip-compressed. A `--records_table`
 replaces those direct path lists and stores source paths and record-specific
 settings together. Relative paths inside any manifest resolve from the
 manifest's directory.

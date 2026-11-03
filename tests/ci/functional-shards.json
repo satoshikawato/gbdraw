@@ -226,6 +226,7 @@
       "tests/web/feature-identity-overrides.playwright.spec.js",
       "tests/web/feature-location-search.playwright.spec.js",
       "tests/web/gui-audit-20260930-options.playwright.spec.js",
+      "tests/web/gzip-inputs.playwright.spec.js",
       "tests/web/losat-thread-fault.playwright.spec.js",
       "tests/web/palette-default-colors.playwright.spec.js",
       "tests/web/per-mode-results.playwright.spec.js",
