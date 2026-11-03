@@ -7,6 +7,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { openFresh, settle } = require('./helpers/audit-browser.cjs');
 
 const root = path.resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -30,10 +31,12 @@ const mirroredTable = () => {
 const forwardTable = () => readFileSync(path.join(examples, 'MjeNMV.MelaMJNV.tblastx.out'), 'utf8');
 const useTable = (page, blast, name) => page.evaluate(async ({ blast, name }) => {
   const app = window.__GBDRAW_APP__;
+  // B's plan edges hold input-file refs from the project's file store.
+  const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
   app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length, {
     id: 'auto-orient-edge', queryUid: app.linearSeqs[0].uid, subjectUid: app.linearSeqs[1].uid,
     included: true, fileActive: true, losatFilenameActive: false, source: 'upload',
-    file: new File([blast], name, { type: 'text/plain' }), losatFilename: ''
+    file: bound(new File([blast], name, { type: 'text/plain' })), losatFilename: ''
   });
   await window.Vue.nextTick();
 }, { blast, name });
@@ -50,10 +53,9 @@ test('Orient records from comparisons checks the reversed record as one Undo ste
   test.setTimeout(420_000);
   await openFresh(page);
   const { subject, table } = mirroredTable();
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async ({ first, second }) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
-    await window.Vue.nextTick();
     if (app.linearSeqs.length < 2) app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));
     app.setLinearSeqPrimaryFile(1, 'gb', new File([second], 'MelaMJNV.gb', { type: 'text/plain' }));

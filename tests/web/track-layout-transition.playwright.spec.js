@@ -4,6 +4,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { expectLiveEqualsGenerate, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { RING_SESSION_FILE, ringSessionUpload } = require('./helpers/ring-session.cjs');
 
@@ -698,9 +699,9 @@ test('rev 7: a Session whose request holds string slot specs asks on Remove and 
     if (slot.z) params.push(`z=${slot.z}`);
     return `${slot.id}:${slot.renderer}${params.length ? `@${params.join(',')}` : ''}`;
   };
-  const tracks = session.renderRequest.diagramOptions.tracks;
+  const tracks = shownSavedDrawing(session).renderRequest.diagramOptions.tracks;
   tracks.circularTrackSlots = tracks.circularTrackSlots.map(specOf);
-  delete session.modes.circular.config.adv.circular_track_slots;
+  delete shownSavedDrawing(session).config.adv.circular_track_slots;
   const file = testInfo.outputPath('string-slots.gbdraw-session.json');
   writeFileSync(file, JSON.stringify(session));
   const page = await load(browser, file);
@@ -743,8 +744,8 @@ const savedSession = async (saved, file) => {
 const heightsInSession = (session) => {
   const depthRows = (rows) => rows.filter((row) => row.renderer === 'depth').map((row) => row.height);
   return {
-    draft: depthRows(session.modes.linear.config.adv.linear_track_slots),
-    request: depthRows(session.renderRequest.diagramOptions.tracks.linearTrackSlots)
+    draft: depthRows(shownSavedDrawing(session).config.adv.linear_track_slots),
+    request: depthRows(shownSavedDrawing(session).renderRequest.diagramOptions.tracks.linearTrackSlots)
   };
 };
 const generatedLinear = async (browser, { reach = false } = {}) => {
@@ -763,9 +764,9 @@ const loadedWithWrittenHeight = async (browser, testInfo, options) => {
   const session = await savedSession(saved, file);
   await saved.context().close();
   const writeHeight = (height) => (row) => (row.renderer === 'depth' ? { ...row, height } : row);
-  const { adv } = session.modes.linear.config;
+  const { adv } = shownSavedDrawing(session).config;
   adv.linear_track_slots = adv.linear_track_slots.map(writeHeight('10px'));
-  const { tracks } = session.renderRequest.diagramOptions;
+  const { tracks } = shownSavedDrawing(session).renderRequest.diagramOptions;
   tracks.linearTrackSlots = tracks.linearTrackSlots.map(writeHeight({ value: 10, unit: 'px' }));
   writeFileSync(file, JSON.stringify(session));
   const page = await load(browser, file);
@@ -868,11 +869,12 @@ const twoRecordFile = async (browser) => {
   const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await context.newPage();
   await openApp(page, { waitForPalette: false });
-  await page.evaluate(() => {
+  await showDrawing(page, { kind: 'linear' });
+  await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     app.addLinearSeq();
-    const gb = new File(['LOCUS       MULTI\n'], 'multi.gbk', { type: 'text/plain' });
+    // B's record cards hold input-file refs from the project's file store.
+    const gb = (await import('./js/state.js')).state.inputFiles.registerFile(new File(['LOCUS       MULTI\n'], 'multi.gbk', { type: 'text/plain' }));
     app.linearSeqs[0].gb = gb;
     app.linearSeqs[1].gb = gb;
     app.setLinearTrackSlotsEnabled(true);
@@ -997,7 +999,7 @@ for (const mode of ['circular', 'linear']) {
           expect(await slotDrawnCount(page, 'mark'), 'Undo draws it again').toBe(drawnBefore);
           expect(await committedSlotsOf(page, mode), 'Undo gives the committed request back').toEqual(slotsBefore);
           const saved = await savedSession(page, testInfo.outputPath('after-undo.gbdraw-session.json'));
-          expect(slotIdsOf(saved.renderRequest.diagramOptions.tracks[`${mode}TrackSlots`]), 'a Save after the Undo holds it').toContain('mark');
+          expect(slotIdsOf(shownSavedDrawing(saved).renderRequest.diagramOptions.tracks[`${mode}TrackSlots`]), 'a Save after the Undo holds it').toContain('mark');
           await historyStep(page, 'redo');
           expect(await slotDrawnCount(page, 'mark'), 'Redo takes it out again').toBe(0);
           expect(await committedSlotsOf(page, mode)).toEqual(slotsAfter);
@@ -1350,7 +1352,7 @@ test('rev 7: Linear File removal: Cancel on the second question keeps the File, 
     expect(await files()).toEqual(filesBefore);
     expect(await stackState(page, 'linear')).toEqual(start);
     const saved = await savedSession(page, testInfo.outputPath('undo.gbdraw-session.json'));
-    expect(saved.modes.linear.config.adv.linear_track_slots.find((row) => row.id === 'mark0').enabled).toBe(true);
+    expect(shownSavedDrawing(saved).config.adv.linear_track_slots.find((row) => row.id === 'mark0').enabled).toBe(true);
     await expectGenerates(page);
   } finally { await page.context().close(); }
 });
@@ -1450,7 +1452,7 @@ test('rev 7: Circular removing a comparison source whose managed ring row anothe
       await historyStep(page, 'undo');
       expect(await rings()).toBe(3);
       const saved = await savedSession(page, testInfo.outputPath('ring-undo.gbdraw-session.json'));
-      expect(saved.modes.circular.config.adv.circular_track_slots.find((row) => row.id === 'mark').enabled).not.toBe(false);
+      expect(shownSavedDrawing(saved).config.adv.circular_track_slots.find((row) => row.id === 'mark').enabled).not.toBe(false);
       await historyStep(page, 'redo');
     };
     await expectGenerates(page);

@@ -808,11 +808,17 @@ const LABEL_SETTINGS = Object.freeze([
 ]);
 const readLabelSettings = (page) => page.evaluate(async (settings) => {
   const { state } = await import('/gbdraw/web/js/state.js');
-  return settings.map(([drawingMode, group, name]) => [drawingMode, group, name, window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name]]);
+  // The first drawing of each mode; a project without a drawing of that mode keeps no value for it.
+  return settings.flatMap(([drawingMode, group, name]) => {
+    const drawing = state.drawingList().find((entry) => entry.mode === drawingMode);
+    return drawing ? [[drawingMode, group, name, window.Vue.unref(drawing[group])[name]]] : [];
+  });
 }, LABEL_SETTINGS);
 const writeLabelSettings = (page, values) => page.evaluate(async (written) => {
   const { state } = await import('/gbdraw/web/js/state.js');
-  written.forEach(([drawingMode, group, name, value]) => { window.Vue.unref(state.drawingOfMode(drawingMode)[group])[name] = value; });
+  written.forEach(([drawingMode, group, name, value]) => {
+    window.Vue.unref(state.drawingList().find((drawing) => drawing.mode === drawingMode)[group])[name] = value;
+  });
 }, values);
 // Reset writes Auto Reflow off and default label settings. A case keeps both, so
 // its display runs with the state its title names.

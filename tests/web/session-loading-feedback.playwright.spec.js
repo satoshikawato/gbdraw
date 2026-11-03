@@ -745,8 +745,9 @@ test('the header gives way by icons, never by narrowing the Session title', asyn
   await expect(words).toBeVisible();
   const roomyTitle = await titleWidth();
   // Widths are measured on the one-row header with the Circular/Linear buttons
-  // in the drawing bar (PD-OI-090): the Gallery cap alone from about 944 px, the
-  // file icons from about 808 px, the title alone from about 788 px (English).
+  // in the drawing bar (PD-OI-090) and the History button (PD-OI-112, 34 px):
+  // the Gallery cap alone from about 978 px, the file icons from about 842 px,
+  // the title alone from about 822 px (English).
   await page.setViewportSize({ width: 880, height: 900 });
   await expect.poll(fitOf).toEqual([false, true, false]);
   await expect(words).toBeHidden();

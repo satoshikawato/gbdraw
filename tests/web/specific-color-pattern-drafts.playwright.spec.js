@@ -5,6 +5,7 @@ const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp, reveal, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 const { inspectSafeDetails } = require('./helpers/operation-error.cjs');
 const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const fixture = mode => join(process.cwd(), 'gbdraw/web/gallery/sessions', mode === 'linear'
   ? 'lambda_basic_linear.gbdraw-session.json' : 'HmmtDNA_basic_circular.gbdraw-session.json');
@@ -404,7 +405,7 @@ test('cold helper cancellation retains its draft and Retry starts the real runti
 test('a color rule needs a qualifier: Add is disabled with the reason, a cleared row qualifier comes back, and a saved rule without one says why (OV-2435)', async ({ page }, info) => {
   test.setTimeout(180000);
   const session = JSON.parse(readFileSync(fixture('circular'), 'utf8'));
-  session.modes.circular.config.rules = [
+  shownSavedDrawing(session).config.rules = [
     { feat: 'CDS', qual: 'product', val: 'NADH', color: '#f01234', cap: '' },
     { feat: 'CDS', qual: '', val: 'dehydrogenase', color: '#123456', cap: '' }
   ];
