@@ -767,32 +767,6 @@ def test_unwrapped_metadata_says_so() -> None:
     assert _build(wrap=None).metadata.wrap is None
 
 
-def test_the_web_reply_names_the_rows(tmp_path: Path) -> None:
-    def reply(**overrides: object) -> dict:
-        document = build_session_document(
-            LinearDiagramRequest(
-                records=(RecordInput(GenBankInputSource(str(LAMBDA))),),
-                options=LinearDiagramOptions(config_overrides=overrides),
-                output=RenderOutputRequest(output_prefix="web", formats=("svg",)),
-            )
-        ).to_dict()
-        return render_embedded_canonical_web_request(
-            document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "workspace"
-        )["metadata"]
-
-    assert reply(**{WRAP: "auto"})["linearWrap"] == [
-        {
-            "resultIndex": 0,
-            "resultName": "web.svg",
-            "rowLength": 10_000,
-            "rowCount": 5,
-            "requested": "auto",
-            "recordRows": [5],
-        }
-    ]
-    assert reply()["linearWrap"] == []
-
-
 def test_a_hundred_rows_stay_fast_and_tile(tmp_path: Path) -> None:
     record = SeqRecord(Seq("ATGC" * 25_000), id="LONG1", name="LONG1", description="hundred rows")
     record.annotations["molecule_type"] = "DNA"

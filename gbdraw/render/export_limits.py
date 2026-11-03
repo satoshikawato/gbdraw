@@ -35,21 +35,17 @@ def _export_wrap(drawing: Drawing) -> LinearWrapSummary | None:
     return wrap if isinstance(wrap, LinearWrapSummary) else None
 
 
-def _row_length_advice(
-    wrap: LinearWrapSummary, width: float, height: float, limit: int, unit: str
-) -> str:
-    """The next longer 1-2-5 row length that fits, from the drawn height per row: the rows share the height."""
+def _row_length_advice(wrap: LinearWrapSummary, width: float, height: float, limit: int) -> tuple[int, float] | None:
+    """The next longer 1-2-5 row length that fits and its estimated height, from the drawn height per row: the rows
+    share the height. ``None`` when no longer row length would fit."""
 
     if width <= limit:
         drawn_rows = wrap.row_count
         for length in longer_row_lengths(wrap.row_length, max(wrap.record_lengths)):
             estimate = height * wrap.rows_at(length) / drawn_rows
             if estimate <= limit:
-                return (
-                    f" A longer row length should fit: {wrap_length_option(length)} is about {estimate:,.0f} {unit} "
-                    "tall (estimated from the drawn height)."
-                )
-    return " No longer row length would fit (estimated from the drawn height)."
+                return length, estimate
+    return None
 
 
 def check_export_limit(
@@ -64,7 +60,8 @@ def check_export_limit(
 
     ``wrap`` is what a wrapped figure drew, and it decides the advice. ``dpi`` is given only by a caller whose PNG
     scales by it (the Web app); gbdraw's CairoSVG PNG is one pixel per SVG pixel whatever its DPI, and a PDF page
-    never depends on it.
+    never depends on it. The error's diagnostic carries the same facts for the Web: the limit and the size in the
+    format's unit, and the advised row length and DPI when one fits.
     """
 
     if fmt == "png":
@@ -81,16 +78,33 @@ def check_export_limit(
     if not over:
         return
     width, height = width_px * scale, height_px * scale
+    diagnostic: dict[str, object] = {
+        "code": "EXPORT_LIMIT",
+        "reason": "PNG_SIZE" if fmt == "png" else "PDF_SIZE",
+        "limit": limit,
+        "width": round(width),
+        "height": round(height),
+    }
     message = (
         f"{fmt.upper()} is limited to {limit:,} {unit} per side, and this figure is {width:,.0f} x {height:,.0f} {unit}."
     )
     if wrap is not None:
-        message += _row_length_advice(wrap, width, height, limit, unit)
+        advice = _row_length_advice(wrap, width, height, limit)
+        if advice is None:
+            message += " No longer row length would fit (estimated from the drawn height)."
+        else:
+            length, estimate = advice
+            diagnostic["rowLength"] = length
+            message += (
+                f" A longer row length should fit: {wrap_length_option(length)} is about {estimate:,.0f} {unit} "
+                "tall (estimated from the drawn height)."
+            )
     if dpi is not None and fmt == "png":
         lower_dpi = floor(limit * CSS_PX_PER_INCH / max(width_px, height_px))
         if lower_dpi >= 1:
+            diagnostic["dpi"] = lower_dpi
             message += f" A DPI of {lower_dpi} or lower would fit."
-    raise ExportError(f"{message} SVG has no size limit (-f svg).")
+    raise ExportError(f"{message} SVG has no size limit (-f svg).", diagnostic=diagnostic)
 
 
 def check_drawing_export_limits(drawing: Drawing, formats: Sequence[str]) -> None:

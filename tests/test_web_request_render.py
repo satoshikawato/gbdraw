@@ -717,8 +717,11 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # summary of each Result): no other key moved.
     # Updated again when a protein pair's summary line counted the protein
     # matches drawn, with no threshold: only `inputSummaries` moved.
-    "similarity_groups": "626bf1cef88752d314b1716c5edd521e0d22cf0696610ac857626e383fa726b7",
-    "collinear": "578d7a6a1d064e29102d010f6a3c3e2eb439fb334fe8314c420e0217494c1665",
+    # Updated again when the rows a Result drew moved from the `linearWrap`
+    # list into each input summary (`linearWrap: null` here): with that key
+    # removed and the empty list put back, the reply has the earlier digest.
+    "similarity_groups": "0e5641a02728d6704d435b972aec5bf1f2e8b6dbdaf2dcee82295f37edc4b4e9",
+    "collinear": "5fb4f957663b861b37d6f27bd7c98e006e8d6ab05059e5cce3333cd21a1552ea",
 }
 
 

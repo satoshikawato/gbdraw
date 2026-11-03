@@ -22,6 +22,8 @@ from typing import Literal, TypedDict
 
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.auto_sizes import DrawnExtent
+from gbdraw.config.models.canvas import LinearWrapLength
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.features.ids import feature_instances
 from gbdraw.features.overrides import feature_override_lookup
@@ -29,6 +31,7 @@ from gbdraw.features.placement import ResolvedRecordFeatureInputs
 from gbdraw.features.selector_values import get_feature_type
 from gbdraw.features.visibility import should_render_feature
 from gbdraw.io.comparisons import ComparisonThresholdName, ComparisonThresholdTally
+from gbdraw.layout.linear_wrap import LinearWrapSummary
 from gbdraw.linear_comparison import ComparisonTableTally
 
 from .record_planning import ResolvedRecordProvenance
@@ -109,6 +112,19 @@ class InputWarningPayload(TypedDict):
     message: str
 
 
+class LinearWrapPayload(TypedDict):
+    """The rows a wrapped Linear Result drew (:class:`LinearWrapSummary`); the Web reads it as sent."""
+
+    rowLength: int
+    rowCount: int
+    # What was asked for: ``"auto"`` or a length in bp, never ``"none"`` (nothing is cut then).
+    requested: LinearWrapLength
+    recordRows: list[int]
+    recordLengths: list[int]
+    # The bases on the longest drawn axis, which sizes and ticks follow (DrawnExtent.drawn_axis_length).
+    drawnAxisLength: int
+
+
 class InputSummaryPayload(TypedDict):
     """The input summary of one Web Result (``metadata.inputSummaries``); not saved in a Session."""
 
@@ -116,6 +132,8 @@ class InputSummaryPayload(TypedDict):
     resultName: str
     lines: list[str]
     warnings: list[InputWarningPayload]
+    # ``None`` when the Result cut no record (a Circular Result, or a Linear one drawn on one row each).
+    linearWrap: LinearWrapPayload | None
 
 
 def _record_feature_tallies(
@@ -372,14 +390,33 @@ def with_source_names(summary: InputSummary, names: Mapping[str, str]) -> InputS
     )
 
 
-def input_summary_payload(summary: InputSummary, *, result_index: int, result_name: str) -> InputSummaryPayload:
-    """The Web's copy of the summary of one Result: the same lines and warnings the CLI logs."""
+def _linear_wrap_payload(wrap: LinearWrapSummary) -> LinearWrapPayload:
+    return {
+        "rowLength": wrap.row_length,
+        "rowCount": wrap.row_count,
+        "requested": wrap.requested,
+        "recordRows": list(wrap.record_rows),
+        "recordLengths": list(wrap.record_lengths),
+        "drawnAxisLength": DrawnExtent("linear", wrap.record_lengths, wrap.row_length).drawn_axis_length,
+    }
+
+
+def input_summary_payload(
+    summary: InputSummary,
+    *,
+    result_index: int,
+    result_name: str,
+    linear_wrap: LinearWrapSummary | None = None,
+) -> InputSummaryPayload:
+    """The Web's copy of the summary of one Result: the same lines and warnings the CLI logs, and the rows a wrapped
+    Linear Result drew (``linear_wrap``, the CLI logs its message)."""
 
     return {
         "resultIndex": result_index,
         "resultName": result_name,
         "lines": list(input_summary_lines(summary)),
         "warnings": [{"code": item.code, "message": item.message} for item in input_warnings(summary)],
+        "linearWrap": None if linear_wrap is None else _linear_wrap_payload(linear_wrap),
     }
 
 
@@ -392,6 +429,7 @@ __all__ = [
     "InputWarning",
     "InputWarningCode",
     "InputWarningPayload",
+    "LinearWrapPayload",
     "NO_DRAWABLE_FEATURES",
     "RecordInputSummary",
     "input_summary_lines",

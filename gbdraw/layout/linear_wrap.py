@@ -207,30 +207,30 @@ def refuse_undrawable_wrap(
     linear = config.canvas.linear
     scale = config.objects.scale
     if linear.track_layout == "middle":
-        raise _wrap_conflict(
-            "WRAP_TRACK_LAYOUT",
+        raise ValidationError(
             "track_layout middle cannot draw a record cut by wrap_length: "
             "rows draw their tracks above or below the axis.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_TRACK_LAYOUT"},
         )
     if scale.show and scale.style != "ruler":
-        raise _wrap_conflict(
-            "WRAP_SCALE_STYLE",
+        raise ValidationError(
             f"scale_style {scale.style} cannot draw a record cut by wrap_length: each row draws a ruler on its axis.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_SCALE_STYLE"},
         )
     if linear.normalize_length:
-        raise _wrap_conflict(
-            "WRAP_NORMALIZE_LENGTH",
+        raise ValidationError(
             "normalize_length cannot draw a record cut by wrap_length: every row draws at one scale.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_NORMALIZE_LENGTH"},
         )
     if len(set(rows_by_record)) != len(rows_by_record):
-        raise _wrap_conflict(
-            "WRAP_GRID_ROW",
+        raise ValidationError(
             "wrap_length cannot cut a record in one grid row with others; give each record its own row, or do not wrap.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_GRID_ROW"},
         )
     if anchor_feature:
-        raise _wrap_conflict(
-            "WRAP_ANCHOR_FEATURE",
+        raise ValidationError(
             "anchor_feature cannot align a record cut by wrap_length: the record's rows share one place.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_ANCHOR_FEATURE"},
         )
 
 
@@ -239,15 +239,11 @@ def refuse_feature_track_on_the_axis(feature_track_layout: str) -> None:
     under another name, and a ruler on the axis of the rows could not stand there."""
 
     if feature_track_layout == "middle":
-        raise _wrap_conflict(
-            "WRAP_TRACK_LAYOUT",
+        raise ValidationError(
             "A feature track on the axis (side=overlay) cannot draw a record cut by wrap_length: "
             "rows draw their tracks above or below the axis.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_TRACK_LAYOUT"},
         )
-
-
-def _wrap_conflict(reason: str, message: str) -> ValidationError:
-    return ValidationError(message, diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": reason})
 
 
 __all__ = [

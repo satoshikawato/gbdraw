@@ -1,0 +1,131 @@
+"""What the Web reads of a wrapped figure: each refusal's reason, the export limit's facts, and the rows drawn."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from gbdraw.api.options import LinearDiagramOptions
+from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordInput, RenderOutputRequest
+from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.modify import modify_config_dict
+from gbdraw.config.toml import load_config_toml
+from gbdraw.exceptions import ExportError, GbdrawError
+from gbdraw.layout.linear_wrap import LinearWrapSummary, refuse_feature_track_on_the_axis, refuse_undrawable_wrap
+from gbdraw.render.export_limits import check_export_limit
+from gbdraw.web_support.error_adapter import serialize_web_error
+from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+from gbdraw.session import build_session_document
+
+WRAP = "canvas.linear.wrap_length"
+LAMBDA = Path(__file__).parent / "test_inputs" / "NC_001416.gb"
+SORANGIUM = LinearWrapSummary(50_000, 50_000, (13_033_779,))
+SORANGIUM_SIZE = (2_000.0, 45_967.0)
+
+
+def _config(**overrides: object) -> GbdrawConfig:
+    return GbdrawConfig.from_dict(modify_config_dict(load_config_toml("gbdraw.data", "config.toml"), overrides))
+
+
+def _caught(call) -> GbdrawError:
+    with pytest.raises(GbdrawError) as caught:
+        call()
+    return caught.value
+
+
+def _context(error: BaseException, operation: str = "generate") -> dict:
+    payload = serialize_web_error(error, operation=operation, stage="render")
+    return {"code": payload["code"], **payload["context"]}
+
+
+# OV-2465: the adapter kept only `WRAP`; every other wrap refusal reached the Web without its reason.
+@pytest.mark.parametrize(
+    ("refuse", "code", "reason"),
+    [
+        (lambda: refuse_undrawable_wrap(_config(), [0], ("blast_files",)), "COMPARISON_INPUT", "WRAP"),
+        (lambda: refuse_undrawable_wrap(_config(**{"canvas.linear.track_layout": "middle"}), [0], ()),
+         "INPUT_INVALID", "WRAP_TRACK_LAYOUT"),
+        (lambda: refuse_undrawable_wrap(_config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "bar"}), [0], ()),
+         "INPUT_INVALID", "WRAP_SCALE_STYLE"),
+        (lambda: refuse_undrawable_wrap(
+            _config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler", "canvas.linear.normalize_length": True}),
+            [0], ()), "INPUT_INVALID", "WRAP_NORMALIZE_LENGTH"),
+        (lambda: refuse_undrawable_wrap(_config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler"}), [0, 0], ()),
+         "INPUT_INVALID", "WRAP_GRID_ROW"),
+        (lambda: refuse_undrawable_wrap(
+            _config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler"}), [0], (), anchor_feature=True),
+         "INPUT_INVALID", "WRAP_ANCHOR_FEATURE"),
+        (lambda: refuse_feature_track_on_the_axis("middle"), "INPUT_INVALID", "WRAP_TRACK_LAYOUT"),
+    ],
+)
+def test_each_wrap_refusal_keeps_its_reason_on_the_web(refuse, code: str, reason: str) -> None:
+    assert _context(_caught(refuse)) == {"code": code, "field": "wrap_length", "reason": reason}
+
+
+def _export_refusal(fmt: str, size: tuple[float, float], wrap: LinearWrapSummary | None, dpi: float | None = None):
+    error = _caught(lambda: check_export_limit(fmt, *size, wrap=wrap, dpi=dpi))
+    assert isinstance(error, ExportError)
+    return error
+
+
+def test_a_png_refusal_names_its_limit_size_row_length_and_dpi() -> None:
+    error = _export_refusal("png", SORANGIUM_SIZE, SORANGIUM, dpi=300)
+    # The CLI text is unchanged (tests/test_export_limits.py pins it).
+    assert "DPI of 68 or lower" in str(error) and "--wrap_length 500kb" in str(error)
+    assert error.diagnostic == {
+        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 6_250, "height": 143_647,
+        "rowLength": 500_000, "dpi": 68,
+    }
+    assert _context(error, "export-png") == {
+        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 6_250, "height": 143_647,
+        "rowLength": 500_000, "dpi": 68,
+    }
+
+
+def test_a_wrapped_pdf_refusal_names_a_row_length_and_no_dpi() -> None:
+    error = _export_refusal("pdf", SORANGIUM_SIZE, SORANGIUM, dpi=300)
+    assert _context(error, "export-pdf") == {
+        "code": "EXPORT_LIMIT", "reason": "PDF_SIZE", "limit": 14_400, "width": 1_500, "height": 34_475,
+        "rowLength": 200_000,
+    }
+
+
+def test_a_refusal_with_no_advice_names_only_the_limit_and_size() -> None:
+    many_records = LinearWrapSummary(50_000, 50_000, (60_000,) * 200)
+    assert _context(_export_refusal("png", (2_000.0, 80_000.0), many_records), "export-png") == {
+        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 2_000, "height": 80_000,
+    }
+    assert _context(_export_refusal("png", (33_000.0, 100.0), None), "export-png") == {
+        "code": "EXPORT_LIMIT", "reason": "PNG_SIZE", "limit": 32_767, "width": 33_000, "height": 100,
+    }
+
+
+def _summaries(tmp_path: Path, **overrides: object) -> list[dict]:
+    document = build_session_document(
+        LinearDiagramRequest(
+            records=(RecordInput(GenBankInputSource(str(LAMBDA))),),
+            options=LinearDiagramOptions(config_overrides=overrides),
+            output=RenderOutputRequest(output_prefix="web", formats=("svg",)),
+        )
+    ).to_dict()
+    metadata = render_embedded_canonical_web_request(
+        document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "workspace"
+    )["metadata"]
+    # D-31: the rows ride each Result's input summary; the reader-less list is gone.
+    assert "linearWrap" not in metadata
+    return metadata["inputSummaries"]
+
+
+def test_each_input_summary_names_the_rows_its_result_drew(tmp_path: Path) -> None:
+    [wrapped] = _summaries(tmp_path, **{WRAP: "auto"})
+    assert wrapped["linearWrap"] == {
+        "rowLength": 10_000,
+        "rowCount": 5,
+        "requested": "auto",
+        "recordRows": [5],
+        "recordLengths": [48_502],
+        "drawnAxisLength": 10_000,
+    }
+    [plain] = _summaries(tmp_path, **{WRAP: 100_000})
+    assert plain["linearWrap"] is None

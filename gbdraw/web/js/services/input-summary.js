@@ -18,19 +18,31 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {string} message
  */
 /**
+ * The rows a wrapped Linear Result drew (gbdraw/api/input_summary.py `LinearWrapPayload`).
+ * @typedef {object} LinearWrapSummary
+ * @property {number} rowLength The bases per row.
+ * @property {number} rowCount
+ * @property {'auto' | number} requested What the request asked for: `'auto'` or a length in bp.
+ * @property {readonly number[]} recordRows The rows of each drawn record, in drawing order.
+ * @property {readonly number[]} recordLengths The bases of each drawn record, in drawing order.
+ * @property {number} drawnAxisLength The bases on the longest drawn axis, which sizes and ticks follow.
+ */
+/**
  * @typedef {object} InputSummary
  * @property {number} resultIndex
  * @property {string} resultName
  * @property {readonly string[]} lines
  * @property {readonly InputWarning[]} warnings
+ * @property {LinearWrapSummary | null} linearWrap `null` when the Result cut no record.
  */
 /**
  * @typedef {InputSummary & { readonly drawnVisibility: string }} DrawnInputSummary
  *   A Result's summary with the Feature visibility of the render that sent it (Web-owned).
  */
 
-const SUMMARY_FIELDS = ['resultIndex', 'resultName', 'lines', 'warnings'];
+const SUMMARY_FIELDS = ['resultIndex', 'resultName', 'lines', 'warnings', 'linearWrap'];
 const WARNING_FIELDS = ['code', 'message'];
+const WRAP_FIELDS = ['rowLength', 'rowCount', 'requested', 'recordRows', 'recordLengths', 'drawnAxisLength'];
 
 /** @param {unknown} value @param {readonly string[]} fields @returns {value is Record<string, unknown>} */
 const hasExactly = (value, fields) => (
@@ -45,6 +57,17 @@ const isText = (value) => typeof value === 'string' && value.length > 0;
 /** @param {unknown} value @returns {value is InputWarning} */
 const isWarning = (value) => hasExactly(value, WARNING_FIELDS)
   && isText(value.code) && /^[a-z_]+$/.test(value.code) && isText(value.message);
+
+/** @param {unknown} value @returns {value is number} */
+const isCount = (value) => Number.isSafeInteger(value) && Number(value) > 0;
+
+/** @param {unknown} value @returns {value is LinearWrapSummary | null} */
+const isLinearWrap = (value) => value === null || (hasExactly(value, WRAP_FIELDS)
+  && isCount(value.rowLength) && isCount(value.rowCount) && isCount(value.drawnAxisLength)
+  && (value.requested === 'auto' || isCount(value.requested))
+  && Array.isArray(value.recordRows) && value.recordRows.length > 0 && value.recordRows.every(isCount)
+  && Array.isArray(value.recordLengths) && value.recordLengths.length === value.recordRows.length
+  && value.recordLengths.every(isCount));
 
 /**
  * The input summaries of a successful render, one per Result, each naming its Result by index and name.
@@ -61,6 +84,7 @@ export const validateInputSummaries = (value, results) => {
     || results[Number(entry.resultIndex)]?.name !== entry.resultName
     || !Array.isArray(entry.lines) || !entry.lines.every(isText)
     || !Array.isArray(entry.warnings) || !entry.warnings.every(isWarning)
+    || !isLinearWrap(entry.linearWrap)
   ))) throw diagnosticError('RESULT_INVALID', { field: 'inputSummaries' }, { stage: 'result-admission', operation: 'validateInputSummaries' });
   return Object.freeze(/** @type {InputSummary[]} */ (value));
 };
