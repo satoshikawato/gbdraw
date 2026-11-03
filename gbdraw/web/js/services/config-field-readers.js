@@ -47,6 +47,7 @@ import {
   DEFAULT_FEATURE_RENDERINGS, FEATURE_RENDERING_VALUES, readPersistedArrowHeadLengthRatio, readPersistedArrowShaftWidthRatio
 } from '../utils/feature-rendering.js';
 import { LINEAR_LABEL_VISIBILITY_MODES } from './linear-label-visibility.js';
+import { wrapFormValue } from './linear-wrap-form.js';
 import { featureColorEditColor } from './specific-color-rules.js';
 import { isLabelOverrideRow } from './label-override-table.js';
 import { isCardRow, markedRows } from './file-imports.js';
@@ -860,6 +861,7 @@ export const readHitLimitsByMode = (value) => {
 const containerTables = (mode) => Object.freeze([
   { at: 'form', rows: [
     row('linear_track_layout', textChoice(LINEAR_TRACK_LAYOUTS, 'middle', { aliases: LINEAR_TRACK_LAYOUT_ALIASES })),
+    row('linear_wrap_length', wrapFormValue),
     // A null lock is an omission, the historical OFF (`importSessionDocument`; E-OD24, no row); the merge keeps
     // the target's value for one of another kind, with its row.
     row('keep_definition_left_aligned', onlyTrue)

@@ -207,6 +207,8 @@ test('a released flat Session 50 loads into a Linear drawing with its wrap lengt
   const linear = state.drawingOf('linear');
   assert.equal(linear.adv.italic_gene_labels, true);
   assert.deepEqual(linear.adv.identity_scale, [60, 95]);
+  // The CLI's leaf is the drawing's Wrap Rows value (PD-OI-113).
+  assert.equal(linear.form.linear_wrap_length, 5000);
   const saved = await savedDocument('released-flat-50', () => stashed);
   assert.equal(saved.version, 51);
   assert.deepEqual(saved.drawings.map((entry) => entry.mode), ['linear']);
@@ -215,6 +217,29 @@ test('a released flat Session 50 loads into a Linear drawing with its wrap lengt
   assert.deepEqual(drawing.config.adv.identity_scale, [60, 95]);
   assert.equal(requestLeaf(drawing, 'labels.linear.italic_gene_labels'), true);
   assert.deepEqual(requestLeaf(drawing, 'objects.blast_match.identity_scale'), [60, 95]);
+  assert.equal(requestLeaf(drawing, 'canvas.linear.wrap_length'), 5000);
+  assert.equal(drawing.config.form.linear_wrap_length, 5000);
+});
+
+// PD-OI-113: tag v0.14.5's Web had no Wrap Rows, so its Save kept a wrap
+// length as a preserved override of the Linear draft. Load moves it into the
+// drawing's Wrap Rows value; Save writes it there and in the request, and no
+// preserved override holds it.
+test('a wrap length a v0.14.5 Web Save kept as a preserved override loads into Wrap Rows', async () => {
+  const session = JSON.parse(gunzipSync(readFileSync(new URL(
+    '../fixtures/sessions/web-linear-wrap-preserved.v50.gbdraw-session.json.gz', import.meta.url
+  ))));
+  assert.equal(session.version, 50);
+  assert.deepEqual(session.modes.linear.config.unmanagedConfigOverrides, { 'canvas.linear.wrap_length': 5000 });
+  assert.equal(Object.hasOwn(session.modes.linear.config.form, 'linear_wrap_length'), false);
+  const stashed = await loadKeepingSlots(session);
+  const linear = state.drawingOf('linear');
+  assert.equal(linear.form.linear_wrap_length, 5000);
+  assert.deepEqual({ ...linear.unmanagedConfigOverrides }, {});
+  const saved = await savedDocument('web-wrap-preserved', () => stashed);
+  const drawing = saved.drawings.find((entry) => entry.id === 'linear');
+  assert.equal(drawing.config.form.linear_wrap_length, 5000);
+  assert.deepEqual(drawing.config.unmanagedConfigOverrides ?? {}, {});
   assert.equal(requestLeaf(drawing, 'canvas.linear.wrap_length'), 5000);
 });
 

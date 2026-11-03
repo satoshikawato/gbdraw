@@ -615,6 +615,16 @@ assert.rejects(
   }
 }
 
+// A CLI Session's wrap length publishes in the Web's request and the drawing's
+// form (OV-2455). The equivalence leaves a CLI request's configuration out
+// (OV-398), so it could not see the leaf the rebuild dropped.
+{
+  const { session } = await prepareGallerySessionForPublication(
+    await loadReleasedSession('cli-linear-wrapped.v50.gbdraw-session.json.gz'));
+  assert.equal(session.renderRequest.diagramOptions.configOverrides['canvas.linear.wrap_length'], 5000);
+  assert.equal(session.modes.linear.config.form.linear_wrap_length, 5000);
+}
+
 // A CLI command's annotation slot params are text ("0", "false") and the CLI
 // leaves an Axis index it was not given unstated; the published request compares
 // them as Load reads them (OV-1299). A real difference in either still fails.

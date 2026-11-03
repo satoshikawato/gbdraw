@@ -1017,23 +1017,52 @@ test('Save writes each Session 51 drawing\'s own CLI options, found by drawing I
   }
 });
 
-// A wrap length is one per Linear drawing (Session 51). The Web has no control
-// for it: it lists a length held as a config override under the drawing that
-// holds it, the unopened one's too, and Save keeps it there.
+// A wrap length is one per Linear drawing (Session 51): Wrap Rows, the
+// drawing's `form.linear_wrap_length` (PD-OI-113). Load reads each drawing's
+// own value, the unopened one's too, found by drawing ID; a length a 0.14.5
+// Web Save kept as a preserved override moves into the form of the drawing
+// that holds it. Save writes it in that drawing's form, and no preserved
+// override holds it.
 test('a Session 51 keeps each Linear drawing\'s own wrap length override through Load and Save', async () => {
+  const WRAP = 'canvas.linear.wrap_length';
   const session = v49Session('drawings-linear-pair-losat');
-  session.drawings.find((entry) => entry.id === 'linear-2').config.unmanagedConfigOverrides = { 'canvas.linear.wrap_length': 30000 };
+  const entryOf = (document, id) => document.drawings.find((entry) => entry.id === id);
+  entryOf(session, 'linear-2').config.unmanagedConfigOverrides = { [WRAP]: 30000 };
+  entryOf(session, 'linear').config.form.linear_wrap_length = 'auto';
   resetDrawings();
   const first = await loadKeepingSlots(session);
   assertLoadedDrawings(session, first);
-  assert.deepEqual({ ...state.drawingOf('linear-2').unmanagedConfigOverrides }, { 'canvas.linear.wrap_length': 30000 });
-  assert.deepEqual({ ...state.drawingOf('linear').unmanagedConfigOverrides }, {});
+  assert.equal(state.drawingOf('linear-2').form.linear_wrap_length, 30000);
+  assert.equal(state.drawingOf('linear').form.linear_wrap_length, 'auto');
+  for (const id of ['linear', 'linear-2']) assert.deepEqual({ ...state.drawingOf(id).unmanagedConfigOverrides }, {}, id);
   const result = await exportSession('wrap-length', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
   assert.equal(result.status, 'saved', result.error?.message);
   const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
-  const overridesOf = (id) => saved.drawings.find((entry) => entry.id === id).config.unmanagedConfigOverrides ?? {};
-  assert.deepEqual(overridesOf('linear-2'), { 'canvas.linear.wrap_length': 30000 });
-  assert.deepEqual(overridesOf('linear'), {});
+  assert.equal(entryOf(saved, 'linear-2').config.form.linear_wrap_length, 30000);
+  assert.equal(entryOf(saved, 'linear').config.form.linear_wrap_length, 'auto');
+  for (const id of ['linear', 'linear-2']) assert.deepEqual(entryOf(saved, id).config.unmanagedConfigOverrides ?? {}, {}, id);
+  // The saved form loads again into each drawing.
+  resetDrawings();
+  const again = await loadKeepingSlots(saved);
+  assertLoadedDrawings(saved, again);
+  assert.equal(state.drawingOf('linear-2').form.linear_wrap_length, 30000);
+  assert.equal(state.drawingOf('linear').form.linear_wrap_length, 'auto');
+});
+
+// D-30: a preserved length typed with a unit, which only Python reads, is
+// dropped with a Load repair row; the drawing's Wrap Rows is off.
+test('a preserved wrap length the form cannot hold is dropped with a Load repair row', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  session.drawings.find((entry) => entry.id === 'linear-2').config.unmanagedConfigOverrides = { 'canvas.linear.wrap_length': '50kb' };
+  resetDrawings();
+  loadDialogs.length = 0;
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.equal(state.drawingOf('linear-2').form.linear_wrap_length, null);
+  assert.deepEqual({ ...state.drawingOf('linear-2').unmanagedConfigOverrides }, {});
+  const items = loadDialogs.flatMap((dialog) => dialog.items);
+  assert.equal(items.filter((item) => item.includes('canvas.linear.wrap_length')).length, 1, JSON.stringify(items));
+  assert.ok(items.some((item) => item.includes('50kb')), JSON.stringify(items));
 });
 
 // Italic gene names are one setting per drawing (`config.adv.italic_gene_labels`):

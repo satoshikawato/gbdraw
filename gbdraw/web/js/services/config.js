@@ -1759,10 +1759,12 @@ const adoptPromotedPreservedSettings = (data, repairs) => {
   const document = /** @type {{ config?: unknown, modes?: unknown, drawings?: unknown }} */ (data);
   /** @param {unknown} config @param {string} path */
   const adopt = (config, path) => {
-    const adoptedConfig = adoptPromotedPreservedOverrides(config);
+    const adoption = adoptPromotedPreservedOverrides(config);
     // The cast: the adoption changes only a plain object.
-    if (adoptedConfig !== config) repairs.push(...valueRepairs(readPlainObject, /** @type {{ adv?: unknown }} */ (config).adv, `${path}.adv`));
-    return adoptedConfig;
+    const stored = /** @type {Record<string, unknown>} */ (config);
+    for (const container of adoption.containers) repairs.push(...valueRepairs(readPlainObject, stored[container], `${path}.${container}`));
+    repairs.push(...notedLossRepairs(adoption.dropped.map(({ at, stored: value }) => ({ at, stored: value, used: null })), path));
+    return adoption.config;
   };
   /** @type {{ config?: unknown, modes?: unknown, drawings?: unknown }} */
   let adopted = document;

@@ -401,6 +401,16 @@ Linear drawing of a Session 51 (`tests/test_session_released_flat_50.py`,
 `tests/web/session50-load-resave.test.mjs`). Its decompressed SHA-256 is
 `ecf4cd705e409d8c7829f5fbc7e559bf2e1cf528135997cd89182a0041686b17`.
 
+`web-linear-wrap-preserved.v50.gbdraw-session.json.gz` is a released flat Session 50
+(tag `v0.14.5`) that a Web **Save Session** wrote: the tag's Web app loaded a Python
+API Session of `tests/test_inputs/HmmtDNA.gbk` with the config override
+`canvas.linear.wrap_length` 5000, a path its GUI did not manage, so the Linear slice's
+draft keeps it in `unmanagedConfigOverrides` and its request in `configOverrides`.
+Load moves it into the drawing's Wrap Rows value (`form.linear_wrap_length`,
+PD-OI-113; `tests/web/session50-load-resave.test.mjs`). The route is in its
+provenance file; its decompressed SHA-256 is
+`589a36641a4a3357ef6eaf4b2f7adbcd5123df92c1804c6d925819bf418f2109`.
+
 `hidden-definition-circular.v49.gbdraw-session.json.gz` is a Web **Save
 Session** download of the current writer (Session 49, PD-OI-109), written by
 `tests/web/circular-hide-definition.playwright.spec.js` and recompressed with

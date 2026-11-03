@@ -124,6 +124,7 @@ import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
+import { wrapFormValue } from './linear-wrap-form.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
   CONFIG_UNSET_NUMBER_PATHS,
@@ -674,6 +675,8 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   gcHeight: 'canvas.linear.default_gc_height',
   depthHeight: 'canvas.linear.depth_height',
   normalizeLength: 'canvas.linear.normalize_length',
+  // Not a CONFIG_UNSET_NUMBER_PATHS path: "auto" is a value here.
+  linearWrapLength: 'canvas.linear.wrap_length',
   labelRendering: 'labels.rendering',
   circularLabelSpacing: 'labels.spacing.circular',
   circularLabelPlacement: 'labels.circular.placement',
@@ -825,7 +828,8 @@ const LINEAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
   CONFIG_OVERRIDE_PATHS.scaleStrokeColor,
   CONFIG_OVERRIDE_PATHS.scaleLabelColor,
   CONFIG_OVERRIDE_PATHS.scaleStrokeWidth,
-  CONFIG_OVERRIDE_PATHS.normalizeLength
+  CONFIG_OVERRIDE_PATHS.normalizeLength,
+  CONFIG_OVERRIDE_PATHS.linearWrapLength
 ]);
 
 /** @param {ModeProfileName} mode */
@@ -940,29 +944,70 @@ export const draftFieldsForConfigValues = (values, mode, adv, trackOptions = {})
   return { form: formFields, adv: advFields };
 };
 
-// The font leaf that a Session kept as a GUI-unmanaged preserved override
-// (PD-OI-009) before the GUI had a Font setting. A reader moves it into
-// `adv.font_family`, so a preserved override is never a path the GUI manages.
-const PROMOTED_FONT_FAMILY_PATH = CONFIG_OVERRIDE_PATHS.fontFamily;
+/**
+ * A config leaf that a Session kept as a GUI-unmanaged preserved override
+ * before the GUI had its setting, and the draft field that holds it now. A
+ * reader moves it into that field, so a preserved override is never a path
+ * the GUI manages. `read` reads the stored value as the field holds it.
+ * @typedef {object} PromotedPreservedOverride
+ * @property {string} path
+ * @property {'adv' | 'form'} container
+ * @property {string} field
+ * @property {(value: unknown) => { value: unknown, lost: boolean }} read
+ */
+/** @type {readonly PromotedPreservedOverride[]} */
+const PROMOTED_PRESERVED_OVERRIDES = Object.freeze([
+  // PD-OI-009: the font, before the GUI had a Font setting.
+  { path: CONFIG_OVERRIDE_PATHS.fontFamily, container: 'adv', field: 'font_family', read: (value) => ({ value, lost: false }) },
+  // PD-OI-113: the Linear wrap length a 0.14.5 Web Save kept, before the GUI had Wrap Rows.
+  { path: CONFIG_OVERRIDE_PATHS.linearWrapLength, container: 'form', field: 'linear_wrap_length', read: wrapFormValue }
+]);
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const isPlainRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 /**
- * A stored draft (`config` of a Session 27-44, or of a Session 46 slice) with
- * the preserved font override moved into the Font setting. A font the draft
- * already holds wins; the preserved leaf is dropped either way.
+ * What adopting the promoted preserved overrides of one stored draft did.
+ * @template T
+ * @typedef {object} PromotedPreservedAdoption
+ * @property {T} config The draft, with each promoted leaf moved into its field.
+ * @property {ReadonlyArray<'adv' | 'form'>} containers The containers a leaf was moved into.
+ * @property {ReadonlyArray<{ at: string, stored: unknown }>} dropped The leaves its field cannot hold, by their
+ *   place in the draft; they are dropped.
+ */
+/**
+ * A stored draft (`config` of a Session 27-44, of a Session 46-50 slice, or
+ * of a Session 51 drawing) with each promoted preserved override moved into
+ * its field. A value the draft already holds wins; the preserved leaf is
+ * dropped either way.
  * @template T
  * @param {T} config
- * @returns {T}
+ * @returns {PromotedPreservedAdoption<T>}
  */
 export const adoptPromotedPreservedOverrides = (config) => {
-  if (!isPlainRecord(config) || !isPlainRecord(config.unmanagedConfigOverrides)
-    || !Object.hasOwn(config.unmanagedConfigOverrides, PROMOTED_FONT_FAMILY_PATH)) return config;
-  const { [PROMOTED_FONT_FAMILY_PATH]: fontFamily, ...preserved } = config.unmanagedConfigOverrides;
-  const adv = isPlainRecord(config.adv) ? { ...config.adv } : {};
-  adv.font_family ??= fontFamily;
-  return /** @type {T} */ ({ ...config, adv, unmanagedConfigOverrides: preserved });
+  const preserved = isPlainRecord(config) ? config.unmanagedConfigOverrides : undefined;
+  const rows = isPlainRecord(preserved) ? PROMOTED_PRESERVED_OVERRIDES.filter(({ path }) => Object.hasOwn(preserved, path)) : [];
+  if (!isPlainRecord(config) || !isPlainRecord(preserved) || rows.length === 0) return { config, containers: [], dropped: [] };
+  /** @type {Record<string, unknown>} */
+  const adopted = { ...config, unmanagedConfigOverrides: { ...preserved } };
+  const kept = /** @type {Record<string, unknown>} */ (adopted.unmanagedConfigOverrides);
+  /** @type {Array<'adv' | 'form'>} */
+  const containers = [];
+  /** @type {Array<{ at: string, stored: unknown }>} */
+  const dropped = [];
+  for (const { path, container, field, read } of rows) {
+    const stored = kept[path];
+    delete kept[path];
+    if (!containers.includes(container)) {
+      containers.push(container);
+      adopted[container] = isPlainRecord(config[container]) ? { ...config[container] } : {};
+    }
+    const holder = /** @type {Record<string, unknown>} */ (adopted[container]);
+    const reading = read(stored);
+    if (reading.lost) dropped.push({ at: `unmanagedConfigOverrides.${path}`, stored });
+    else holder[field] ??= reading.value;
+  }
+  return { config: /** @type {T} */ (adopted), containers, dropped };
 };
 
 /** @param {string} semanticName */
@@ -2792,7 +2837,9 @@ const buildConfigOverrides = (
           [CONFIG_OVERRIDE_PATHS.scaleLabelColor]: adv.ruler_label_color || null,
           [CONFIG_OVERRIDE_PATHS.scaleStrokeWidth]:
             leaf(CONFIG_OVERRIDE_PATHS.scaleStrokeWidth, adv.scale_stroke_width),
-          [CONFIG_OVERRIDE_PATHS.normalizeLength]: Boolean(form.normalize_length)
+          [CONFIG_OVERRIDE_PATHS.normalizeLength]: Boolean(form.normalize_length),
+          // Off (null) states nothing, so an unwrapped request is the one it was before Wrap Rows.
+          [CONFIG_OVERRIDE_PATHS.linearWrapLength]: form.linear_wrap_length
         })
   };
   const sharedLengthValues = {
@@ -6611,6 +6658,14 @@ export const projectCanonicalSessionRequest = ({
   const projectedLinearTrackLayout = renderRequest.mode === 'linear'
     ? requireCurrentLinearTrackLayout(overrides.linear_track_layout)
     : 'middle';
+  // A length typed with a unit (`"50kb"`, a Python API Session) only Python reads: Wrap Rows is off, with a row.
+  const projectedWrapLength = wrapFormValue(renderRequest.mode === 'linear' ? overrides.linear_wrap_length : null);
+  if (projectedWrapLength.lost) {
+    legacyTableRepairs.push(loadRepair({
+      code: 'setting-replaced', path: CONFIG_OVERRIDE_PATHS.linearWrapLength, effect: 'dropped',
+      stored: typeof overrides.linear_wrap_length === 'string' ? overrides.linear_wrap_length : JSON.stringify(overrides.linear_wrap_length)
+    }));
+  }
   const comparisonHeight = classifyOptionalPositiveNumber(overrides.comparison_height);
   if (renderRequest.mode === 'linear' && comparisonHeight.status === 'invalid') {
     throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
@@ -6749,6 +6804,7 @@ export const projectCanonicalSessionRequest = ({
     keep_definition_left_aligned: Boolean(overrides.keep_definition_left_aligned),
     linear_ruler_on_axis: Boolean(overrides.linear_ruler_on_axis),
     normalize_length: Boolean(overrides.normalize_length),
+    linear_wrap_length: projectedWrapLength.value,
     species: renderRequest.mode === 'circular' ? (options.species || '') : '',
     strain: renderRequest.mode === 'circular' ? (options.strain || '') : ''
   };
