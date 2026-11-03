@@ -635,14 +635,24 @@ test('privileged capability owners and importers stay within their allowlists', 
     assert.deepEqual(actual.filter((path) => !allowedSet.has(path)), [], label);
   };
 
-  Object.entries(WEB_CHANGE_POLICY.allowedPrivilegedImporters).forEach(([target, allowed]) => {
-    assertSubset(detected.importersByTarget[target], allowed, `${target} importers`);
+  // An importer key that no detector lists and whose file is gone waits for a
+  // policy-only removal (the Gate retires it then); every other key must match.
+  const isRetiredImporterKey = (target) => (
+    !WEB_PRIVILEGED_IMPORT_TARGETS.includes(target)
+    && !existsSync(join(JAVASCRIPT_ROOT, target))
+  );
+  const policyImporterKeys = Object.keys(WEB_CHANGE_POLICY.allowedPrivilegedImporters)
+    .filter((target) => !isRetiredImporterKey(target))
+    .sort();
+  assert.deepEqual(policyImporterKeys, WEB_PRIVILEGED_IMPORT_TARGETS);
+  policyImporterKeys.forEach((target) => {
+    assertSubset(
+      detected.importersByTarget[target],
+      WEB_CHANGE_POLICY.allowedPrivilegedImporters[target],
+      `${target} importers`
+    );
   });
   policyCapabilityKeysMatchDetectors(WEB_CHANGE_POLICY);
-  assert.deepEqual(
-    Object.keys(WEB_CHANGE_POLICY.allowedPrivilegedImporters).sort(),
-    WEB_PRIVILEGED_IMPORT_TARGETS
-  );
   Object.entries(detected.operatorMatchesByCapability).forEach(([capability, matches_]) => {
     const actual = matches_.map(({ path }) => path);
     assertSubset(actual, WEB_CHANGE_POLICY.allowedPrivilegedOwners[capability], capability);
@@ -807,7 +817,6 @@ test('shared privileged detectors preserve the characterized current-source fact
     'services/diagram-generation.js',
     'services/diagram-resource-staging.js',
     'services/diagram-worker-protocol.js',
-    'services/gallery-session-migration.js',
     'services/history-snapshot.js',
     'services/history.js',
     'services/resource-payload-owner.js',
@@ -6392,6 +6401,62 @@ test('a runtime contraction cannot also remove a retired capability key', () => 
     assertNonWaivableRevisionFailure(execute, base, head, [
       /production runtime files and Web guard\/CI files changed together/,
       /## Removed retired privileged allowlist keys\n\n- allowedPrivilegedOwners\.Retired capability\n/
+    ]);
+  });
+});
+
+const RETIRED_IMPORT_TARGET = 'services/retired-target.js';
+const withRetiredImporterBase = (runCase, { keepTargetFile = false } = {}) => (
+  withChangeBudgetRepository((repository) => {
+    assert.ok(!WEB_PRIVILEGED_IMPORT_TARGETS.includes(RETIRED_IMPORT_TARGET));
+    const policy = cloneBudgetPolicy();
+    policy.allowedPrivilegedImporters[RETIRED_IMPORT_TARGET] = ['app/editor.js'];
+    writeBudgetPolicy(repository.write, policy);
+    if (keepTargetFile) {
+      repository.write(`gbdraw/web/js/${RETIRED_IMPORT_TARGET}`, 'export const retired = 1;\n');
+    }
+    const base = repository.commit('hold an importer key that no detector lists');
+    delete policy.allowedPrivilegedImporters[RETIRED_IMPORT_TARGET];
+    return runCase({ ...repository, base, policy });
+  })
+);
+
+test('an authority-only change removes an unlisted importer key whose file is gone', () => {
+  withRetiredImporterBase(({ base, commit, execute, policy, write }) => {
+    writeBudgetPolicy(write, policy);
+    const head = commit('remove retired importer key');
+    const result = execute({ base, head });
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+    assert.match(result.output,
+      /## Removed retired privileged allowlist keys\n\n- allowedPrivilegedImporters\.services\/retired-target\.js\n/);
+    assert.doesNotMatch(result.output,
+      /proposed privileged capability policy is missing base allowlist keys/);
+  });
+});
+
+test('an unlisted importer key cannot be removed while its file exists', () => {
+  withRetiredImporterBase(({ base, commit, execute, policy, write }) => {
+    writeBudgetPolicy(write, policy);
+    const head = commit('remove importer key of an existing file');
+    assertNonWaivableRevisionFailure(execute, base, head, [
+      /## Missing base privileged allowlist keys\n\n- allowedPrivilegedImporters\.services\/retired-target\.js\n/,
+      /proposed privileged capability policy is missing base allowlist keys/
+    ]);
+  }, { keepTargetFile: true });
+});
+
+test('an importer key that a detector lists still cannot be removed', () => {
+  withRetiredImporterBase(({ base, commit, execute, policy, write }) => {
+    assert.ok(WEB_PRIVILEGED_IMPORT_TARGETS.includes('workers/diagram-generation-worker.js'));
+    delete policy.allowedPrivilegedImporters['workers/diagram-generation-worker.js'];
+    writeBudgetPolicy(write, policy);
+    const head = commit('remove retired and listed importer keys');
+    assertNonWaivableRevisionFailure(execute, base, head, [
+      /## Missing base privileged allowlist keys\n\n- allowedPrivilegedImporters\.workers\/diagram-generation-worker\.js\n/,
+      /## Removed retired privileged allowlist keys\n\n- allowedPrivilegedImporters\.services\/retired-target\.js\n/,
+      /proposed privileged capability policy is missing base allowlist keys/
     ]);
   });
 });
