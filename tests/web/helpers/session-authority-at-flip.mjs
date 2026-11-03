@@ -1,5 +1,5 @@
 // Reads session-authority.js after the writer flip (the generated
-// SESSION_VERSION is the drawings layout's, 50) and prints the band answers
+// SESSION_VERSION is the drawings layout's, 51) and prints the band answers
 // the flip must leave as they are, as JSON. A test runs this file in a child
 // process (tests/web/session-authority.test.mjs).
 const real = await import(new URL('../../../gbdraw/web/js/contracts/schema.generated.js', import.meta.url).href);
@@ -7,7 +7,7 @@ const { isSettingsOnlySessionDocument, projectsWithoutRequest, validateSessionAu
   new URL('../../../gbdraw/web/js/services/session-authority.js', import.meta.url).href
 );
 
-// A settings-only Session of `version`, or a Session 50 drawing's view
+// A settings-only Session of `version`, or a Session 51 drawing's view
 // (`drawingViewOf`) of a drawing that holds no request.
 /** @param {number} version */
 const requestLess = (version) => ({
@@ -26,14 +26,15 @@ const bindingsRead = (version) => {
 };
 console.log(JSON.stringify({
   sessionVersion: real.SESSION_DRAWINGS_LAYOUT.version,
-  settingsOnly: Object.fromEntries([46, 47, 48, 49, 50].map((version) => [version, isSettingsOnlySessionDocument(requestLess(version))])),
-  bindings: Object.fromEntries([46, 47, 48, 49, 50].map((version) => [version, bindingsRead(version)])),
-  // Load's migration of a Session 27-39 names the writer's version (50), and a
+  settingsOnly: Object.fromEntries([46, 47, 48, 49, 50, 51].map((version) => [version, isSettingsOnlySessionDocument(requestLess(version))])),
+  bindings: Object.fromEntries([46, 47, 48, 49, 50, 51].map((version) => [version, bindingsRead(version)])),
+  // Load's migration of a Session 27-39 names the writer's version (51), and a
   // Session 27-30 holds no request: Load reads it by the file's band.
   projectsWithoutRequest: {
-    30: projectsWithoutRequest({ format: 'gbdraw-session', version: 50 }, 30),
+    30: projectsWithoutRequest({ format: 'gbdraw-session', version: 51 }, 30),
     48: projectsWithoutRequest(requestLess(48), 48),
     49: projectsWithoutRequest(requestLess(49), 49),
-    50: projectsWithoutRequest(requestLess(50), 50)
+    50: projectsWithoutRequest(requestLess(50), 50),
+    51: projectsWithoutRequest(requestLess(51), 51)
   }
 }));

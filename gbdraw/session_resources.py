@@ -57,7 +57,7 @@ _DRAWING_RESOURCE_FIELDS = ("renderRequest", "webFiles", "results")
 def drawing_resource_ids(fields: Mapping[str, object]) -> set[str]:
     """The resource IDs a drawing names: its request, Web files and Results.
 
-    ``fields`` is a Session 50 drawing or a one-drawing view; both name these
+    ``fields`` is a Session 51 drawing or a one-drawing view; both name these
     parts alike. A resource no drawing names is not the Session's.
     """
 

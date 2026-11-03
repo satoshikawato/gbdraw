@@ -1,4 +1,4 @@
-// A Session 50 Load reads each drawing's parts once, at the path the file
+// A Session 51 Load reads each drawing's parts once, at the path the file
 // holds them (`drawings[i]`): the opened drawing's editor state and LOSAT
 // caches as every other drawing's (OV-1791, OV-1797).
 import assert from 'node:assert/strict';
@@ -33,7 +33,7 @@ sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: 
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
-const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.v50.gbdraw-session.json.gz`, import.meta.url))));
+const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.v51.gbdraw-session.json.gz`, import.meta.url))));
 const load = async (session) => {
   const loaded = await importSession({
     target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
@@ -48,7 +48,7 @@ const rowsAt = (loaded, part) => loaded.repairs.filter((repair) => repair.path.i
 // drawing, on a page that starts with one Circular drawing) installs them with
 // their tabs and gives each a History at the store commit, so a reader of the
 // shown drawing's History before the Load's baseline finds it.
-test('a Session 50 Load of two Circular drawings and a Linear one into one Circular drawing installs every drawing, its tab and its History', async () => {
+test('a Session 51 Load of two Circular drawings and a Linear one into one Circular drawing installs every drawing, its tab and its History', async () => {
   assert.deepEqual(state.drawingTabs.value.map((tab) => tab.id), ['circular'], 'the page starts with one Circular drawing');
   const router = createHistoryRouter({
     drawingIds: state.drawingTabs.value.map((tab) => tab.id),
@@ -136,7 +136,7 @@ test('a Load that fails after its commit with a shown drawing the page did not h
 });
 
 for (const opened of ['circular', 'linear']) {
-  test(`a Session 50 Load lists the opened drawing's editor-state fault once, at its drawings[i] path (${opened} opened)`, async () => {
+  test(`a Session 51 Load lists the opened drawing's editor-state fault once, at its drawings[i] path (${opened} opened)`, async () => {
     const session = v49Session('drawings-circular-linear');
     session.ui.activeDrawingId = opened;
     const index = session.drawings.findIndex((entry) => entry.id === opened);
@@ -146,7 +146,7 @@ for (const opened of ['circular', 'linear']) {
       [`setting-replaced drawings[${index}].editorState.originalSvgStroke.color`]);
   });
 
-  test(`a Session 50 Load lists the opened drawing's dropped LOSAT entry once, at its drawings[i] path (${opened} opened)`, async () => {
+  test(`a Session 51 Load lists the opened drawing's dropped LOSAT entry once, at its drawings[i] path (${opened} opened)`, async () => {
     const session = v49Session('drawings-circular-linear');
     session.ui.activeDrawingId = opened;
     const index = session.drawings.findIndex((entry) => entry.id === opened);
@@ -158,7 +158,7 @@ for (const opened of ['circular', 'linear']) {
 
 // N1: the drawings Load does not open read their LOSAT caches through the
 // one reader too, each at its own path.
-test('a Session 50 Load reads every drawing\'s LOSAT caches, each at its drawings[i] path', async () => {
+test('a Session 51 Load reads every drawing\'s LOSAT caches, each at its drawings[i] path', async () => {
   const session = v49Session('drawings-circular-linear');
   session.drawings.forEach((entry) => {
     entry.losatCache.entries = [{ no: 'entry' }];

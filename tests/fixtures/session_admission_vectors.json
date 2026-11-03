@@ -899,7 +899,7 @@
    "fixture": "tests/fixtures/sessions/se08-main-linear-cli.v42.gbdraw-session.json.gz"
   },
   "web-50": {
-   "fixture": "tests/fixtures/sessions/drawings-circular-only.v50.gbdraw-session.json.gz"
+   "fixture": "tests/fixtures/sessions/drawings-circular-only.v51.gbdraw-session.json.gz"
   }
  },
  "vectors": [
@@ -5826,7 +5826,7 @@
    "edits": [],
    "python": "accept",
    "web": "loaded",
-   "note": "A Session 50 with one Circular drawing, as Python writes it."
+   "note": "A Session 51 with one Circular drawing, as Python writes it."
   },
   {
    "id": "s50-format-other",
@@ -5841,7 +5841,7 @@
    ],
    "python": "refuse",
    "web": "refused",
-   "note": "A Session 50 whose format is not gbdraw-session.",
+   "note": "A Session 51 whose format is not gbdraw-session.",
    "pythonMessage": "Not a gbdraw-session JSON file",
    "webClass": "R2"
   },
@@ -5858,7 +5858,7 @@
    ],
    "python": "refuse",
    "web": "refused",
-   "note": "A Session 50 whose version is text.",
+   "note": "A Session 51 whose version is text.",
    "pythonMessage": "Session version is required and must be an integer",
    "webClass": "R2"
   },
@@ -5874,8 +5874,8 @@
    ],
    "python": "refuse",
    "web": "refused",
-   "note": "A Session 50 without resources.",
-   "pythonMessage": "Session 50 requires resources",
+   "note": "A Session 51 without resources.",
+   "pythonMessage": "Session 51 requires resources",
    "webClass": "R2"
   },
   {
@@ -5890,8 +5890,8 @@
    ],
    "python": "refuse",
    "web": "refused",
-   "note": "A Session 50 without drawings.",
-   "pythonMessage": "Session 50 requires drawings",
+   "note": "A Session 51 without drawings.",
+   "pythonMessage": "Session 51 requires drawings",
    "webClass": "R2"
   },
   {
@@ -5907,7 +5907,7 @@
    ],
    "python": "refuse",
    "web": "repaired",
-   "note": "A Session 50 with a top-level field no writer writes.",
+   "note": "A Session 51 with a top-level field no writer writes.",
    "pythonMessage": "project contains unclassified field(s): unknownField",
    "webRepairs": [
     "session-field-dropped@unknownField"
@@ -5925,7 +5925,7 @@
    ],
    "python": "refuse",
    "web": "refused",
-   "note": "A Session 50 drawing without an ID.",
+   "note": "A Session 51 drawing without an ID.",
    "pythonMessage": "drawing requires id",
    "webClass": "R4"
   },
@@ -5942,7 +5942,7 @@
    ],
    "python": "refuse",
    "web": "refused",
-   "note": "A Session 50 drawing of no diagram mode.",
+   "note": "A Session 51 drawing of no diagram mode.",
    "pythonMessage": "needs a name and a diagram mode",
    "webClass": "R4"
   },
@@ -5958,7 +5958,7 @@
    ],
    "python": "refuse",
    "web": "refused",
-   "note": "A Session 50 drawing without a name.",
+   "note": "A Session 51 drawing without a name.",
    "pythonMessage": "drawing requires name",
    "webClass": "R4"
   },
@@ -5975,7 +5975,7 @@
    ],
    "python": "refuse",
    "web": "repaired",
-   "note": "A Session 50 drawing with a field no writer writes.",
+   "note": "A Session 51 drawing with a field no writer writes.",
    "pythonMessage": "drawing contains unclassified field(s): unknownField",
    "webRepairs": [
     "session-field-dropped@drawings[0].unknownField"

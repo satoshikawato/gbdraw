@@ -73,7 +73,7 @@ test('Show Definition off draws no center definition, keeps the plot title, and 
   await download.saveAs(savedPath);
   const saved = readSession(savedPath);
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
-  // The shown drawing holds the setting and its request (Session 50: one entry per drawing).
+  // The shown drawing holds the setting and its request (Session 51: one entry per drawing).
   expect(shownSavedDrawing(saved).config.adv.show_definition).toBe(false);
   expect(shownSavedDrawing(saved).renderRequest.diagramOptions.configOverrides[SHOW_PATH]).toBe(false);
 

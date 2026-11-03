@@ -376,8 +376,9 @@ Session 48 to drawings (`tests/test_session_compat.py`,
 `drawings-vectors.json` `upgrades`). The route, inputs and checks are in
 `two-mode-linear-shown.v48.provenance.json`.
 
-The four `drawings-*.v50.gbdraw-session.json.gz` files are Session 49
-(`drawings`, DESIGN §1).
+The four `drawings-*.v51.gbdraw-session.json.gz` files are Session 51
+(`drawings`, DESIGN §1), written at 49 and renumbered to 50 (V50a) and 51
+(V51a): only the top-level `version` changed.
 `gbdraw.session_drawings.write_session_drawings(version=49)` wrote each from a
 fixture above, upgraded to Session 48 first, leaving out the resources no
 drawing names: `circular-only` (one Circular drawing,
@@ -389,6 +390,16 @@ drawn twice: `circular` keeps the five file cards, `circular-2` has none).
 Each `.provenance.json` names the source, the edits, the script and the
 decompressed SHA-256; `tests/test_session_admission_50.py` admits them and
 writes each again unchanged.
+
+`cli-linear-wrapped.v50.gbdraw-session.json.gz` is the released flat Session 50
+(tag `v0.14.5`, `033a3aa89`): the CLI sidecar of `gbdraw linear --gbk HmmtDNA.gbk
+--wrap_length 5kb --italic_gene_labels --identity_scale 60 95 --save_session`, run
+from a worktree of `v0.14.5`, compressed with `gzip -n -9`. Its request holds
+`canvas.linear.wrap_length` 5000, `labels.linear.italic_gene_labels` true and
+`objects.blast_match.identity_scale` [60, 95]. Python and Web Load read it into one
+Linear drawing of a Session 51 (`tests/test_session_released_flat_50.py`,
+`tests/web/session50-load-resave.test.mjs`). Its decompressed SHA-256 is
+`ecf4cd705e409d8c7829f5fbc7e559bf2e1cf528135997cd89182a0041686b17`.
 
 `hidden-definition-circular.v49.gbdraw-session.json.gz` is a Web **Save
 Session** download of the current writer (Session 49, PD-OI-109), written by

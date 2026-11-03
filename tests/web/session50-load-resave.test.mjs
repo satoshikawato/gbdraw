@@ -1,4 +1,4 @@
-// A Session 50 Load keeps every drawing's request metadata (`webFiles` beside
+// A Session 51 Load keeps every drawing's request metadata (`webFiles` beside
 // its bindings) from its own entry, never from the drawing the Load opened, so
 // a re-Save writes it back (OV-1872), and a re-Save of drawings without a
 // Result writes what the first Save wrote (OV-1902).
@@ -36,7 +36,7 @@ const { createPaletteLoader } = await import('../../gbdraw/web/js/app/palettes.j
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const v49Session = () => JSON.parse(gunzipSync(readFileSync(new URL(
-  '../fixtures/sessions/drawings-circular-linear.v50.gbdraw-session.json.gz', import.meta.url
+  '../fixtures/sessions/drawings-circular-linear.v51.gbdraw-session.json.gz', import.meta.url
 ))));
 // The Load hands its caller the artifact slot of each drawing it does not
 // show (app-setup keeps them; Save writes each drawing's request metadata from
@@ -111,7 +111,7 @@ test('Save, Load and Save of a shown drawing saved with a draft request write th
 });
 
 for (const opened of ['linear', 'circular']) {
-  test(`a Session 50 Load keeps each drawing's own request metadata in the drawing it does not open (${opened} opened)`, async () => {
+  test(`a Session 51 Load keeps each drawing's own request metadata in the drawing it does not open (${opened} opened)`, async () => {
     const session = v49Session();
     session.ui.activeDrawingId = opened;
     const stashed = await loadKeepingSlots(session);
@@ -123,7 +123,7 @@ for (const opened of ['linear', 'circular']) {
   });
 }
 
-// OV-1871: what a Session 50 Load cannot restore of one drawing is listed
+// OV-1871: what a Session 51 Load cannot restore of one drawing is listed
 // before anything changes (BA-D25), and the drawing stays without its set
 // (`withStoredResultSet`); only a newer version refuses (〔拒否〕).
 const loadRows = async (session) => {
@@ -141,7 +141,7 @@ for (const [name, mutate] of [
   ['a null request beside Results', (entry) => { entry.renderRequest = null; }],
   ['a missing request beside Results', (entry) => { delete entry.renderRequest; }]
 ]) {
-  test(`a Session 50 Load lists the opened drawing's request of ${name} and keeps the drawing (OV-1871)`, async () => {
+  test(`a Session 51 Load lists the opened drawing's request of ${name} and keeps the drawing (OV-1871)`, async () => {
     const session = v49Session();
     session.ui.activeDrawingId = 'circular';
     const index = session.drawings.findIndex((entry) => entry.id === 'circular');
@@ -149,14 +149,14 @@ for (const [name, mutate] of [
     assert.deepEqual(await loadRows(session), [`request-dropped drawings[${index}].renderRequest`]);
   });
 }
-test('a Session 50 Load lists the request of a drawing it does not open, without a request beside Results (OV-1871)', async () => {
+test('a Session 51 Load lists the request of a drawing it does not open, without a request beside Results (OV-1871)', async () => {
   const session = v49Session();
   session.ui.activeDrawingId = 'linear';
   const index = session.drawings.findIndex((entry) => entry.id === 'circular');
   session.drawings[index].renderRequest = null;
   assert.deepEqual(await loadRows(session), [`other-result-set-dropped drawings[${index}].renderRequest`]);
 });
-test('a Session 50 whose resources are gone lists the opened drawing\'s request and its bindings, not a refusal (OV-1871)', async () => {
+test('a Session 51 whose resources are gone lists the opened drawing\'s request and its bindings, not a refusal (OV-1871)', async () => {
   const session = v49Session();
   session.ui.activeDrawingId = 'circular';
   session.resources = {};
@@ -167,8 +167,8 @@ test('a Session 50 whose resources are gone lists the opened drawing\'s request 
 // V50a (D-15-175): dev's Session 49 is the mode-scoped layout that adds the
 // Circular slice's `adv.show_definition` (PD-OI-109). Load reads it like a
 // Session 46-48 into drawings, so its Circular drawing keeps Show Definition
-// off, and Save writes the drawings layout (Session 50) with it off.
-test('a mode-scoped Session 49 with Show Definition off loads into a Circular drawing with it off and saves as 50 with it off', async () => {
+// off, and Save writes the drawings layout (Session 51) with it off.
+test('a mode-scoped Session 49 with Show Definition off loads into a Circular drawing with it off and saves as 51 with it off', async () => {
   const session = JSON.parse(gunzipSync(readFileSync(new URL(
     '../fixtures/sessions/hidden-definition-circular.v49.gbdraw-session.json.gz', import.meta.url
   ))));
@@ -177,7 +177,53 @@ test('a mode-scoped Session 49 with Show Definition off loads into a Circular dr
   const stashed = await loadKeepingSlots(session);
   assert.equal(state.drawingOf('circular').adv.show_definition, false);
   const saved = await savedDocument('show-definition-off', () => stashed);
-  assert.equal(saved.version, 50);
+  assert.equal(saved.version, sessionConfig.SESSION_VERSION);
   const circular = saved.drawings.find((entry) => entry.id === 'circular');
   assert.equal(circular?.config.adv.show_definition, false);
+});
+
+// D-15-190: tag v0.14.5 writes a flat Session 50 (the `modes` layout). Load
+// reads it like Sessions 46-49 into drawings; the Linear drawing keeps the
+// wrap length, italic gene names and the identity scale, and Save writes them
+// in that drawing of a Session 51.
+const releasedFlat50 = () => JSON.parse(gunzipSync(readFileSync(new URL(
+  '../fixtures/sessions/cli-linear-wrapped.v50.gbdraw-session.json.gz', import.meta.url
+))));
+/**
+ * A config leaf of a drawing's stored request: its full `config` (a CLI
+ * Session's) or its `configOverrides` (a Web Save's).
+ * @param {{ renderRequest: { diagramOptions: { config?: Record<string, any>, configOverrides?: Record<string, unknown> } } }} drawing
+ * @param {string} path
+ */
+const requestLeaf = (drawing, path) => {
+  const { config, configOverrides } = drawing.renderRequest.diagramOptions;
+  return config ? path.split('.').reduce((node, key) => node[key], config) : configOverrides[path];
+};
+
+test('a released flat Session 50 loads into a Linear drawing with its wrap length, italic names and identity scale, and saves as 51', async () => {
+  const session = releasedFlat50();
+  assert.equal(session.version, 50);
+  const stashed = await loadKeepingSlots(session);
+  const linear = state.drawingOf('linear');
+  assert.equal(linear.adv.italic_gene_labels, true);
+  assert.deepEqual(linear.adv.identity_scale, [60, 95]);
+  const saved = await savedDocument('released-flat-50', () => stashed);
+  assert.equal(saved.version, 51);
+  assert.deepEqual(saved.drawings.map((entry) => entry.mode), ['linear']);
+  const [drawing] = saved.drawings;
+  assert.equal(drawing.config.adv.italic_gene_labels, true);
+  assert.deepEqual(drawing.config.adv.identity_scale, [60, 95]);
+  assert.equal(requestLeaf(drawing, 'labels.linear.italic_gene_labels'), true);
+  assert.deepEqual(requestLeaf(drawing, 'objects.blast_match.identity_scale'), [60, 95]);
+  assert.equal(requestLeaf(drawing, 'canvas.linear.wrap_length'), 5000);
+});
+
+test('a Session 50 that lists drawings (never released) is refused with a message', async () => {
+  const saved = await savedDocument('combined-50', () => []);
+  const loaded = await importSession({
+    target: { files: [new File([JSON.stringify({ ...saved, version: 50 })], 'session.json', { type: 'application/json' })], value: 'selected' }
+  }, { confirmLoadRepairs: async () => true, installLoadedArtifactSlots: () => {} });
+  assert.notEqual(loaded.status, 'ok');
+  console.log('old combined 50:', JSON.stringify(loaded.error));
+  assert.equal(loaded.error?.context?.reason, 'FIELDS');
 });

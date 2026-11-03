@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Writes each diagram mode's default settings, as the Web builds them, to
 // gbdraw/data/mode-slice-defaults.json, which Python reads to decide whether
-// a Session 46-49 used the mode it did not show (rule d of the move to
+// a Session 46-50 used the mode it did not show (rule d of the move to
 // drawings, PD-OI-090; gbdraw.session_drawings), and the same data to
 // gbdraw/web/js/mode-slice-defaults.generated.js, which the Web's move
 // (services/session-drawings-upgrade.js) reads without building a drawing.
@@ -62,7 +62,7 @@ const NORMALIZE = [
 
 // A row's default that a released writer stored and the app has since changed.
 // A saved value equal to one is a default, not a setting: rule d must not read
-// it as a use of the mode (a Session 46-49 of one mode stays one drawing).
+// it as a use of the mode (a Session 46-50 of one mode stays one drawing).
 const EARLIER_DEFAULTS = [
   {
     domain: 'config.losat',

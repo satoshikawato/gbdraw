@@ -1,6 +1,6 @@
 # Multi-drawing project: design (synthesis)
 
-> 2026-10-29: the drawings document is **Session 50**, not 47 as written below. #1435 took 49 into 0.14.3 (Show Definition, mode-scoped; D-15-175). The Web reads 46-49 without Python and 27-44 through Python. Where the text below says 47 for the drawings document or the 46 → 47 step, read 50 and 46-49 → 50; the 47-49 steps keep the mode-scoped shape of 46.
+> 2026-10-29: the drawings document is **Session 51**, not 47 as written below. #1435 took 49 into 0.14.3 (Show Definition, mode-scoped; D-15-175). The Web reads 46-50 without Python and 27-44 through Python. Where the text below says 47 for the drawings document or the 46 → 47 step, read 50 and 46-50 → 50; the 47-49 steps keep the mode-scoped shape of 46.
 
 Revision 5, 2026-10-07 (§8 rewritten to the consolidated PR plan of Owner R9-1; phone layout UI-10 in §5 and W3;
 Z2 text measurement cited for W3/R3; Reset dialog scopes in U-3; §9 statuses). Orchestrator: session gbdraw-ff
@@ -14,7 +14,7 @@ Z2 text measurement cited for W3/R3; Reset dialog scopes in U-3; §9 statuses). 
    drawing-level setting and all Legend edits per mode, levels from `MULTI_DRAWING_SETTING_LEVELS_2026-10-07.tsv` `level_P`;
    **Session 46** = top-level `modes.{circular,linear}` slices + the committed set + `otherModeResult`
    (dev-only 45 dropped, no 45 reader anywhere).
-Drawings in v0.15.0 are therefore **Session 50**, read from 46-49 (each mode's slice and Result become one
+Drawings in v0.15.0 are therefore **Session 51**, read from 46-50 (each mode's slice and Result become one
 drawing, §3.1) and from 27-44 (through Phase E's split, §3.2).
 This document decides. The evidence (file:line) lives in the part files it cites. The level table and its notes are next to this file; the other part files, the audits, the findings list and the Owner replies stay in the campaign folder `gbdraw-baselines/multi-drawing-project-20261007/`, outside the repository:
 
@@ -89,8 +89,8 @@ Legend edits. Q7 (Contract in the implementation PR) is replaced by K.
 | Decision | Why |
 | --- | --- |
 | Drawings are Session **50** | 46 is taken by the 0.14.0 per-mode store (Phase E), 49 by 0.14.3 Show Definition; a new number for a new shape (`contract.md` K3) |
-| The 50 reader reads **46-49** (released in 0.14.0) and 27-44 through Phase E's split | one migrator chain in Python: 27-44 → 46 (Phase E's Python twin) → 47-49 (per-mode steps) → 50 (drawings); 45 is never read (dev-only, rejected since PR-1) |
-| The Web reads **46-49 without Python** (JS fast path; Python twin + shared vectors); only 27-44 go through the Python migrator on Load (M-Py, R1-4) | every 0.14.0 Session would otherwise wait ~8 s for the Python Worker on its first v0.15.0 Load; 46-49 → 50 is a structural move whose only table (MODE-ONLY fields) is already generated for the Web (`mode-scoped-settings.generated.js`); D2 holds because Python owns the vectors (Phase E's twin pattern, #908) |
+| The 50 reader reads **46-50** (released in 0.14.0) and 27-44 through Phase E's split | one migrator chain in Python: 27-44 → 46 (Phase E's Python twin) → 47-49 (per-mode steps) → 50 (drawings); 45 is never read (dev-only, rejected since PR-1) |
+| The Web reads **46-50 without Python** (JS fast path; Python twin + shared vectors); only 27-44 go through the Python migrator on Load (M-Py, R1-4) | every 0.14.0 Session would otherwise wait ~8 s for the Python Worker on its first v0.15.0 Load; 46-50 → 50 is a structural move whose only table (MODE-ONLY fields) is already generated for the Web (`mode-scoped-settings.generated.js`); D2 holds because Python owns the vectors (Phase E's twin pattern, #908) |
 | Format name and extension stay (`gbdraw-session`, `.gbdraw-session.json[.gz]`); the word "Session" stays for the file and the project, "drawing" names its parts | `py.md` 2.1, `ux.md` U17 |
 | A drawing's mode is fixed at creation | `ux.md` U3-a; removes every mode swap (D3) |
 | Inside a drawing, today's field names stay (`suppress_gc`, `circular_track_slots`, ...); a drawing holds only its mode's fields | `runtime.md` 2.2: renaming churns the R10 guard and ~30 specs for no behaviour gain, and later would need another bump |
@@ -105,7 +105,7 @@ Legend edits. Q7 (Contract in the implementation PR) is replaced by K.
 | Drawing switch disabled while Generate or a Session operation runs (as the mode switch today) | `runtime.md` RQ5 |
 | LOSAT raw caches and the protein manifest are persisted **per drawing** in 50; a content-keyed project cache is a follow-up | their keys are request-local (`queryRecordInstanceKey`, `recordInstances`, `edgeKey`), `py.md` 1.10; `inputs.md` 3.6 (union manifest) is the follow-up once keys are content-derived (`recordAnalysisId`) |
 
-## 1. Document (version 50, owned by Python)
+## 1. Document (version 51, owned by Python)
 
 ```jsonc
 {
@@ -220,12 +220,12 @@ upgrade_session_document(document | mapping | path, *, temporary_directory=None)
 
 **Chain.** One chain, owned by Python:
 - **27-44 → 46** is Phase E's split (0.14.0). Its registry is `gbdraw/web_support/mode_scoped_settings.py`, with the Python twin of `services/mode-scoped-migration.js` and the vectors `mode-split-vectors.json`. It applies R1-1, R1-3 and `MULTI_DRAWING_SETTING_LEVELS_2026-10-07.tsv` `level_P`.
-- **46-49 → 50** is this design's step (3.1).
+- **46-50 → 50** is this design's step (3.1).
 - **45** is never read: it was dev-only and is rejected since PR-1.
 
 Readers:
 - `SessionDocument` (lazy view) and `upgrade_session_document()` (CLI save path) run the whole chain.
-- The Web reads 46-49 without Python (0.2): the 46-49 → 50 step has a JS twin with shared vectors (`tests/fixtures/sessions/drawings-vectors.json`, read by pytest and a node test).
+- The Web reads 46-50 without Python (0.2): the 46-50 → 50 step has a JS twin with shared vectors (`tests/fixtures/sessions/drawings-vectors.json`, read by pytest and a node test).
 - 27-44 go through the Worker helper `migrateSessionDocument` (M-Py, R1-4). PD-OI-044 revision 2 covers only these.
 - The Web's JS migrations for 27-44 are deleted in X once PY-F has proven parity: Phase E's split, `services/feature-edit-migration.js`, the legacy paths of `services/config.js`, and `services/gallery-session-migration.js`.
 
@@ -236,7 +236,7 @@ Evidence of the old contracts:
 
 `contract.md` 2.1 has the version table.
 
-### 3.1 Steps 46-49 → 50
+### 3.1 Steps 46-50 → 50
 
 1. **Committed sets.** Mode m's set is the top level when `renderRequest.mode == m`, otherwise `otherModeResult` when its `mode == m`. A settings-only 46 (`renderRequest: null`) has no set, and `otherModeResult` is forbidden there.
 2. **Drawing A** is the mode of the top-level `renderRequest`; for a settings-only Session, `ui.mode`.

@@ -11,8 +11,8 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
     Object.freeze({minVersion: 31, versions: Object.freeze([31, 32, 33]), root: "SessionChecked31"}),
     Object.freeze({minVersion: 39, versions: Object.freeze([39]), root: "SessionChecked39"}),
     Object.freeze({minVersion: 40, versions: Object.freeze([40, 41, 42, 44]), root: "SessionChecked40"}),
-    Object.freeze({minVersion: 46, versions: Object.freeze([46, 47, 48, 49]), root: "SessionChecked46"}),
-    Object.freeze({minVersion: 50, versions: Object.freeze([50]), root: "SessionChecked50"})
+    Object.freeze({minVersion: 46, versions: Object.freeze([46, 47, 48, 49, 50]), root: "SessionChecked46"}),
+    Object.freeze({minVersion: 51, versions: Object.freeze([51]), root: "SessionChecked51"})
   ]),
   types: Object.freeze({
     CheckedSessionResult: Object.freeze({
@@ -742,7 +742,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         runMetadata: Object.freeze({kind: "unknown"}),
         cliInvocation: Object.freeze({kind: "unknown"}),
         format: Object.freeze({kind: "literal", values: Object.freeze(["gbdraw-session"])}),
-        version: Object.freeze({kind: "literal", values: Object.freeze([46, 47, 48, 49])}),
+        version: Object.freeze({kind: "literal", values: Object.freeze([46, 47, 48, 49, 50])}),
         createdAt: Object.freeze({kind: "unknown"}),
         renderRequest: Object.freeze({kind: "unknown"}),
         resources: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
@@ -839,7 +839,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
       ]),
       open: false
     }),
-    SessionChecked50: Object.freeze({
+    SessionChecked51: Object.freeze({
       kind: "object",
       fields: Object.freeze({
         createdAt: Object.freeze({kind: "unknown"}),
@@ -849,7 +849,7 @@ export const SESSION_ADMISSION_DESCRIPTION = Object.freeze({
         resources: Object.freeze({kind: "record", values: Object.freeze({kind: "unknown"})}),
         title: Object.freeze({kind: "unknown"}),
         ui: Object.freeze({kind: "unknown"}),
-        version: Object.freeze({kind: "literal", values: Object.freeze([50])}),
+        version: Object.freeze({kind: "literal", values: Object.freeze([51])}),
         webFiles: Object.freeze({kind: "unknown"})
       }),
       optional: Object.freeze(["createdAt", "legacyArtifacts", "title", "ui", "webFiles"]),

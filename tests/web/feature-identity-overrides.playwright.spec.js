@@ -643,7 +643,7 @@ test('an older Session whose sources cannot be read again fails to load and keep
   await openFresh(page);
   const runtimeAssets = /pyodide\.asm\.(?:js|wasm)(?:\?|$)/;
   await page.context().route(runtimeAssets, (route) => route.abort());
-  // A Session 46-49 loads without the diagram Worker.
+  // A Session 46-50 loads without the diagram Worker.
   await loadSession(page, 'tests/fixtures/sessions/record-identity-circular-single.v48.gbdraw-session.json.gz');
   const loaded = () => page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;

@@ -333,7 +333,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DiagramMode, DrawingState, DrawingTab, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
-/** @import { ModeScopedUpgrade, Session50, SessionDrawing50, SourceFacts } from './session-drawings-upgrade.js' */
+/** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { BoundCanonicalComparison, BoundFileValue, CircularRecordEntry, DrawingInputFiles, InputType, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
@@ -1745,7 +1745,7 @@ const withoutLegacyNullCircularSlotSpacing = (configData) => {
 
 /**
  * A Session's stored drafts (the flat `config` of a Session 27-44, each
- * Session 46 slice's `config` and each Session 50 drawing's) with the preserved overrides that are now
+ * Session 46 slice's `config` and each Session 51 drawing's) with the preserved overrides that are now
  * settings moved into them (`adoptPromotedPreservedOverrides`), read once
  * before anything validates or splits the drafts. A draft whose `adv` is no
  * object takes the font into a new `adv`; the value it drops is listed as
@@ -2233,11 +2233,11 @@ const readResultSetRequest = ({ at, set }, project) => {
  */
 const readSessionRequests = (rawData, version, repairs) => {
   const sets = storedResultSets(rawData);
-  // A Session 50 drawing without a request that holds saved Results or a
+  // A Session 51 drawing without a request that holds saved Results or a
   // feature list, which only a drawing with a request holds, has a request
   // Load cannot read (E-OD29): its row, and the drawing stays without its set.
   if (isDrawingsBand(/** @type {SessionChecked} */ (/** @type {unknown} */ (rawData)))) {
-    const document = /** @type {Session50} */ (/** @type {unknown} */ (rawData));
+    const document = /** @type {Session51} */ (/** @type {unknown} */ (rawData));
     const openedId = document.drawings.length > 0 ? openedDrawingOf(document).id : null;
     const requestLess = document.drawings.flatMap((entry, index) => (entry.renderRequest == null && (
       (Array.isArray(entry.results) && entry.results.length > 0)
@@ -2256,7 +2256,7 @@ const readSessionRequests = (rawData, version, repairs) => {
       return readSessionRequests(data, version, repairs);
     }
   }
-  // A Session 50 whose opened drawing holds no request projects no set.
+  // A Session 51 whose opened drawing holds no request projects no set.
   const projected = sets.find((entry) => entry.projected);
   const stored = sets.filter((entry) => !entry.projected);
   const storedSchemas = storedRequestSchemas(sets);
@@ -2277,7 +2277,7 @@ const readSessionRequests = (rawData, version, repairs) => {
   if ('kind' in projectedRead) {
     const envelope = /** @type {SessionEnvelope} */ (rawData);
     repairs.push(loadRepair({ code: 'request-dropped', path: projectedRead.path, effect: 'dropped' }));
-    // A Session 50 drawing whose request cannot be read stays, without its
+    // A Session 51 drawing whose request cannot be read stays, without its
     // set, as a stored drawing's does (`readStoredSetRequests`).
     if (projected.at !== '') {
       const kept = withStoredResultSet(rawData, projected.at, null);
@@ -2376,8 +2376,8 @@ const drawingInputTypeOf = (stored, requestInputType) => {
  * reads, and whether its file holds its tables as the cards' files.
  * @typedef {object} DrawingProjectionFacts
  * @property {number} sourceSessionVersion
- * @property {boolean} drawingsBand The file is a Session 50 (a drawing binds its own mode's input).
- * @property {boolean} currentSession The file is of the current-writer band (45 on) or a Session 50.
+ * @property {boolean} drawingsBand The file is a Session 51 (a drawing binds its own mode's input).
+ * @property {boolean} currentSession The file is of the current-writer band (45 on) or a Session 51.
  * @property {ImportedComparisonIntent} comparisonClassification
  * @property {unknown} storedConfig The draft the projection reads.
  * @property {boolean} hasStoredDraft
@@ -2386,7 +2386,7 @@ const drawingInputTypeOf = (stored, requestInputType) => {
  */
 /**
  * The one builder of a drawing's request projection input (B2d-3a-3a): the
- * committed set of a Session 31-48 and every drawing of a Session 50, opened
+ * committed set of a Session 31-48 and every drawing of a Session 51, opened
  * or not, from its one-drawing view (`drawingViewOf`).
  * @param {SessionInput} view
  * @param {DrawingProjectionFacts} facts
@@ -2423,7 +2423,7 @@ const drawingProjectionInputOf = (view, {
     // OV-1280: from Session 48 on, a Session without a draft holds each
     // table as its card's file (what only the source says, DESIGN §6).
     markCardFileRows: !hasStoredDraft && cardRowsAreFileRows,
-    // A Session 50 drawing binds its own mode's input.
+    // A Session 51 drawing binds its own mode's input.
     bindingInputSlot: webBindingInputSlot(drawingsBand, /** @type {UnvalidatedFields<'mode'>} */ (view.ui)?.mode)
   };
 };
@@ -2434,7 +2434,7 @@ const drawingProjectionInputOf = (view, {
  * @typedef {NonNullable<Parameters<typeof featureEditsOverProjection>[1]>} RequestFeatureEdits
  */
 /**
- * What a Session 50 drawing Load does not project gives its drawing
+ * What a Session 51 drawing Load does not project gives its drawing
  * (B2d-3a-2): the input files of its request and bindings, read from its
  * one-drawing view as the projected drawing's are (`projectCanonicalSessionRequest`,
  * or its bindings alone without a request), the classification of its
@@ -2454,8 +2454,8 @@ const drawingProjectionInputOf = (view, {
  *   (B2-D9); null: none.
  */
 /**
- * @param {Session50} document
- * @param {SessionDrawing50} drawing
+ * @param {Session51} document
+ * @param {SessionDrawing51} drawing
  * @param {ReturnType<typeof adoptCurrentSessionResources> | null} sessionResourceTable
  * @param {SourceFacts} sourceFacts The source facts of the file the document came from.
  * @returns {StoredDrawingInputs}
@@ -2505,29 +2505,29 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFa
 };
 
 /**
- * The one-drawing view (`drawingViewOf`) of the drawing a Session 50 opens
+ * The one-drawing view (`drawingViewOf`) of the drawing a Session 51 opens
  * (`openedDrawingOf`).
  * @template {SessionInput} T
- * @param {T} data A Session 50 as Load read its sets.
+ * @param {T} data A Session 51 as Load read its sets.
  * @returns {T}
  */
 const projectedDrawingView = (data) => {
-  const document = /** @type {Session50} */ (/** @type {unknown} */ (data));
+  const document = /** @type {Session51} */ (/** @type {unknown} */ (data));
   return /** @type {T} */ (/** @type {unknown} */ (drawingViewOf(document, openedDrawingOf(document))));
 };
 
 /**
- * Where the file holds the drawing Load opens: a Session 50's place in its
+ * Where the file holds the drawing Load opens: a Session 51's place in its
  * list of drawings (`drawingSetPath`, found by the opened drawing's ID), a
- * Session 27-49's top level. Its parts' rows take it as their paths' prefix,
+ * Session 27-50's top level. Its parts' rows take it as their paths' prefix,
  * so they name the file's own paths (OV-1791, OV-1797).
  * @typedef {'' | DrawingSetPath} OpenedDrawingPath
  */
 /** @param {SessionChecked} sessionData @returns {OpenedDrawingPath} */
 const openedDrawingPathOf = (sessionData) => {
   if (!isDrawingsBand(sessionData)) return '';
-  const document = /** @type {Session50} */ (/** @type {unknown} */ (sessionData));
-  // A Session 50 whose every drawing was dropped opens none; Load refuses it (R4, `restoresNothing`).
+  const document = /** @type {Session51} */ (/** @type {unknown} */ (sessionData));
+  // A Session 51 whose every drawing was dropped opens none; Load refuses it (R4, `restoresNothing`).
   if (document.drawings.length === 0) return '';
   const openedId = openedDrawingOf(document).id;
   return drawingSetPath(document.drawings.findIndex((entry) => entry.id === openedId));
@@ -2542,8 +2542,8 @@ const openedDrawingPathOf = (sessionData) => {
  * @param {SessionChecked} sessionData The document `readSessionDocument` read.
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
  * @param {readonly ResultSetPath[]} uncomposedSets The sets whose Results the composition transform could not compose.
- * @param {SourceFacts} [drawingsSourceFacts] A Session 50 document's source facts when it came from another
- *   file (Python's conversion of a Session 27-44: that file's); by default a Session 50 file's own.
+ * @param {SourceFacts} [drawingsSourceFacts] A Session 51 document's source facts when it came from another
+ *   file (Python's conversion of a Session 27-44: that file's); by default a Session 51 file's own.
  */
 const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSets,
   drawingsSourceFacts = sessionSourceFactsOf(sessionData.version, false)) => {
@@ -2554,7 +2554,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
   // its drop has a code the dialog does not list (Q1).
   /** @type {{ slice: string, unread: LegendEditsUnread }[]} */
   const unreadLegendEdits = [];
-  // A Session 50 is a list of drawings, each read by its set's readers below
+  // A Session 51 is a list of drawings, each read by its set's readers below
   // (`storedResultSets`); its tables are framed and its Legend edits row keyed.
   const drawingsBand = isDrawingsBand(sessionData);
   const openedDrawingAt = openedDrawingPathOf(sessionData);
@@ -2588,7 +2588,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
   const project = { resources: authorityData.resources };
   const rawData = await readEachResultSet(authorityData, (entry) => readResultSetResetReceipt(entry, project, repairs));
   const currentSession = isDrawingsBand(rawData) || isAuthorityBand(rawData);
-  /** @type {ModeScopedUpgrade | null} The Session 50 of a Session 46-49, below. */
+  /** @type {ModeScopedUpgrade | null} The Session 51 of a Session 46-50, below. */
   let upgrade = null;
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
   let adoptedSession = null;
@@ -2618,19 +2618,19 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
       if (read.set) setCatalogs.set(entry.at, read.catalog);
       return read.set;
     });
-    // A Session 50's drafts take their promoted preserved settings once, so
+    // A Session 51's drafts take their promoted preserved settings once, so
     // the projected view and every drawing's entry read the same draft.
     const readSets = drawingsBand ? adoptPromotedPreservedSettings(catalogSets, repairs) : catalogSets;
     const projectedAt = storedResultSets(rawData).find((entry) => entry.projected)?.at;
     validatedFeatureCatalog = projectedAt === undefined ? null : setCatalogs.get(projectedAt) ?? null;
     recordSessionLifecycleEvent('feature-catalog-validation-end');
-    // A Session 50 projects the drawing it opens as a Session 46-49 projects
+    // A Session 51 projects the drawing it opens as a Session 46-50 projects
     // its committed set: from the drawing's one-drawing view (`drawingViewOf`).
     const catalogData = drawingsBand ? projectedDrawingView(readSets) : readSets;
     if (drawingsBand) {
       upgrade = {
-        document: /** @type {Session50} */ (/** @type {unknown} */ (readSets)),
-        setSources: new Map(storedResultSets(readSets).map(({ at, set }) => [/** @type {SessionDrawing50} */ (/** @type {unknown} */ (set)).id, at])),
+        document: /** @type {Session51} */ (/** @type {unknown} */ (readSets)),
+        setSources: new Map(storedResultSets(readSets).map(({ at, set }) => [/** @type {SessionDrawing51} */ (/** @type {unknown} */ (set)).id, at])),
         sourceFacts: drawingsSourceFacts
       };
       recordSessionLifecycleEvent('session-authority-validation-start');
@@ -2659,15 +2659,15 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
 
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
   const cacheData = await readSessionLosatArtifacts(normalizedData, sourceSessionVersion, repairs, openedDrawingAt);
-  // Every other Session 50 drawing's caches go through the same reader, at
+  // Every other Session 51 drawing's caches go through the same reader, at
   // its own path; the opened drawing's are its view's, read above.
   if (drawingsBand && upgrade) {
     const { document } = upgrade;
     const openedId = openedDrawingOf(document).id;
-    /** @type {SessionDrawing50[]} */
+    /** @type {SessionDrawing51[]} */
     const drawings = [];
     for (const [index, entry] of document.drawings.entries()) {
-      drawings.push(entry.id === openedId ? entry : /** @type {SessionDrawing50} */ (/** @type {unknown} */ (
+      drawings.push(entry.id === openedId ? entry : /** @type {SessionDrawing51} */ (/** @type {unknown} */ (
         await readSessionLosatArtifacts(/** @type {SessionInput} */ (/** @type {unknown} */ (entry)),
           sourceSessionVersion, repairs, drawingSetPath(index)))));
     }
@@ -2684,7 +2684,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
  * A Session's committed request as Load projects it, from the parts
  * `readSessionImportParts` read: the Session in the current names, the classification of its comparisons, its
  * stored draft, and its request's projection. The one reader for the preflight
- * of a Session 46-49 and the first pass of a Session 31-39 (OV-2011).
+ * of a Session 46-50 and the first pass of a Session 31-39 (OV-2011).
  * @param {Awaited<ReturnType<typeof readSessionImportParts>>} read
  * @param {SessionChecked} sessionData The document `readSessionDocument` read.
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
@@ -2695,7 +2695,7 @@ const readCommittedRequestProjection = (read, sessionData, repairs) => {
   const data = adoptPromotedPreservedSettings(currentSession
     ? cacheData
     : migrateSessionDataToCurrent(cacheData, sourceSessionVersion), repairs);
-  // The Session 50 of a Session 46-49 (DESIGN §4.2): each drawing's part of
+  // The Session 51 of a Session 46-50 (DESIGN §4.2): each drawing's part of
   // the file is its own entry, found by drawing ID, and so is where the file
   // holds its saved Result set (`setSources`). Its Legend edits were read by
   // row key above.
@@ -2710,7 +2710,7 @@ const readCommittedRequestProjection = (read, sessionData, repairs) => {
         resources: data.resources
       }));
   // Session 46 and later keep each mode's draft in its slice (PD-OI-086), a
-  // Session 50 in each drawing's part; a Session 27-44 keeps one flat draft.
+  // Session 51 in each drawing's part; a Session 27-44 keeps one flat draft.
   const modeScopedSession = versionKeepsModeSlices(sessionData.version);
   let currentStoredConfig = sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION
     ? withCurrentLinearLabelVisibility(data.config)
@@ -2742,7 +2742,7 @@ const readCommittedRequestProjection = (read, sessionData, repairs) => {
     : data.config;
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-start');
   // The settings-only decision of the request read is passed on explicitly (C-OD07).
-  // A Session 50 drawing without a request projects as a settings-only
+  // A Session 51 drawing without a request projects as a settings-only
   // Session does; the document itself is no settings-only Session.
   const settingsOnly = requestRead.settingsOnly || projectsWithoutRequest(data, sourceSessionVersion);
   // Kept for the Load stage that projects a Session 39's draft again (OV-1181).
@@ -2827,7 +2827,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     settingsOnly, canonicalProjectionInput, canonicalProjection
   } = readCommittedRequestProjection(read, sessionData, repairs);
   // The preflight reads a Session 46-50: a Session 27-44 arrives as
-  // Python's Session 50 (its own file was read before the conversion, and a
+  // Python's Session 51 (its own file was read before the conversion, and a
   // Session 31-39's draft over its request there).
   if (!modeScopedSession || !upgrade) throw SESSION_FIELDS_ERROR();
   repairs.push(...(canonicalProjection?.legacyTableRepairs || []));
@@ -2881,7 +2881,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     data,
     sourceSessionVersion,
     // Sessions 27-47 keep protein results in the drawn frame (a Session 27-44
-    // until Python converts it, B2d-4); a Session 50 holds none.
+    // until Python converts it, B2d-4); a Session 51 holds none.
     /** @type {ProteinFrameSource} */
     proteinFrameSource: {
       version: sourceSessionVersion, inDrawnFrame: upgrade.sourceFacts.proteinResultsInDrawnFrame
@@ -2897,12 +2897,12 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     unmanagedConfigValidation,
     settingsOnly,
     upgrade,
-    // Each other Session 50 drawing's inputs, by drawing ID.
+    // Each other Session 51 drawing's inputs, by drawing ID.
     storedDrawingInputs: new Map(document50 && upgrade ? document50.drawings.filter((entry) => entry !== openedDrawingOf(document50))
       .map((entry) => [/** @type {DrawingId} */ (entry.id), storedDrawingInputsOf(document50, entry, currentResourceTable, upgrade.sourceFacts)]) : []),
     openedDrawingAt,
-    // The drawing whose set Load projects: a Session 50's opened drawing.
-    projectedDrawingId: drawingsBand ? /** @type {DrawingId} */ (openedDrawingOf(/** @type {Session50} */ (/** @type {unknown} */ (sessionData))).id) : null
+    // The drawing whose set Load projects: a Session 51's opened drawing.
+    projectedDrawingId: drawingsBand ? /** @type {DrawingId} */ (openedDrawingOf(/** @type {Session51} */ (/** @type {unknown} */ (sessionData))).id) : null
   };
 };
 
@@ -3724,8 +3724,8 @@ const savedLosatCacheEntryKind = (entry) => {
 
 /**
  * The project's raw LOSAT cache, from each drawing's saved entries (DESIGN
- * §4.1: a Session 50 drawing's entries merge into the one cache, keyed by
- * their content; a Session 27-49's one list is its Linear drawing's).
+ * §4.1: a Session 51 drawing's entries merge into the one cache, keyed by
+ * their content; a Session 27-50's one list is its Linear drawing's).
  * @param {readonly { drawing: DrawingState, entries: unknown }[]} sources
  * @param {unknown} [legacyEnvelope]
  * @param {{ adoptCurrent?: boolean, validatedManifest?: unknown }} [options]
@@ -4597,7 +4597,7 @@ const convertDetachedProteinResultFrames = async (source, committed, projectionI
  * `files`; returns the draft with the series and labels left. A Session
  * 27-44's first reading runs it on the stored entries `readStoredFiles`
  * kept, so its files and series reach Python aligned (D-15-139); the
- * drawings of Python's Session 50 then hold no empty place.
+ * drawings of Python's Session 51 then hold no empty place.
  * @param {Record<string, unknown>} config The Circular draft Load installs.
  * @param {Record<string, unknown>} files The candidate's file slots (`applyFiles`),
  *   or the stored entries a first reading kept.
@@ -5043,13 +5043,13 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode, linearRows, ci
   );
 };
 
-// The inputs a Load installs: each drawing's own (a Session 50 drawing's
-// request and bindings, B2d-3a-2), or a Session 27-49's one set, of which
+// The inputs a Load installs: each drawing's own (a Session 51 drawing's
+// request and bindings, B2d-3a-2), or a Session 27-50's one set, of which
 // each loaded drawing takes its mode's part: the Circular drawing its input
 // fields and record catalog, the Linear drawing its committed comparisons,
 // record rows, layout, and comparison plan. Each drawing takes the five card
-// files of its inputs (R16-4): a Session 50 drawing its own bindings, a
-// Session 27-49's drawings the one set's.
+// files of its inputs (R16-4): a Session 51 drawing its own bindings, a
+// Session 27-50's drawings the one set's.
 /**
  * @typedef {LoadedInputs & { circularRecordList: CircularRecordEntry[], linearRecordRows: LinearRecordRow[] }} LiveFileState
  */
@@ -5344,7 +5344,7 @@ const replaceDrawingsShowing = (list, tabs, shownId) => {
  */
 /**
  * The drawings a Load makes, in tab order, and the one it opens (DESIGN §4):
- * a Session's 50 document's, the fast path's for a Session 46-49
+ * a Session's 51 document's, the fast path's for a Session 46-50
  * (`upgradeModeScopedSession`). A Load makes no drawing of a mode the file
  * has none of; the bar's offer tab makes one (D-15-120).
  * @typedef {Readonly<{ drawings: readonly LoadedDrawing[], activeDrawingId: DrawingId }>} LoadedDrawingPlan
@@ -5358,7 +5358,7 @@ const drawingPlanOf = (drawings, activeDrawingId) => Object.freeze({
   drawings: Object.freeze(drawings),
   activeDrawingId
 });
-/** @param {Session50} document @returns {LoadedDrawingPlan} */
+/** @param {Session51} document @returns {LoadedDrawingPlan} */
 const loadedDrawingPlan = (document) => drawingPlanOf(document.drawings.map(({ id, mode, name }) => Object.freeze({
   id: /** @type {DrawingId} */ (id), mode, name
 })), /** @type {DrawingId} */ (openedDrawingOf(document).id));
@@ -5373,10 +5373,10 @@ const loadedDrawingPlan = (document) => drawingPlanOf(document.drawings.map(({ i
  * @typedef {Readonly<{ config: ReturnType<typeof overlayModeSliceConfig>, editorState: ReturnType<typeof normalizeEditorStateData> }>} LoadedDraft
  */
 /**
- * A drawing's draft part of its Session 50 entry: its `config` and
+ * A drawing's draft part of its Session 51 entry: its `config` and
  * `features`, and the slice fields of its `editorState` and `ui` (the entry
  * also holds its Result set's there, which its slot reads).
- * @param {SessionDrawing50} entry
+ * @param {SessionDrawing51} entry
  * @returns {Record<string, unknown>}
  */
 const drawingDraftPartOf = (entry) => {
@@ -6164,7 +6164,7 @@ const artifactUiState = (view) => ({
  */
 
 /**
- * The raw LOSAT entries Save writes into one Session 50 drawing: those its
+ * The raw LOSAT entries Save writes into one Session 51 drawing: those its
  * request's inputs name (DESIGN §1, K-3), so an entry two drawings use is
  * written in both and a drawing without a request names none. A Linear entry
  * names its pair's rows, which a Linear request names as its records' keys;
@@ -6337,7 +6337,7 @@ const exportSessionDocument = async (
     legacyDerivedEvidence
   });
   // Each drawing as its one-drawing view; `sessionDocumentOfViews` places its
-  // fields in the Session 50 layout (DESIGN §1, §4.4).
+  // fields in the Session 51 layout (DESIGN §1, §4.4).
   const sessionData = sessionDocumentOfViews(parts.map(({ saved, slice, artifact, ui, results, editorState, committed, conservationPairs }, index) => {
     const cliInvocation = artifact ? artifactCliInvocation(artifact) : undefined;
     const shown = saved.id === drawing.id;
@@ -6546,8 +6546,8 @@ const importSessionDocument = async (e, options = {}) => {
   /** @type {LegacySessionRead | null} A Session 27-44 as Load's readers read it and Python converted it (below). */
   let legacyRead = null;
   /**
-   * Where a Session 27-44 held each Result set of Python's Session 50: the
-   * 50 document's set (`setSources`, by drawing ID) mapped to the file's set
+   * Where a Session 27-44 held each Result set of Python's Session 51: the
+   * 51 document's set (`setSources`, by drawing ID) mapped to the file's set
    * Python's reply names for the drawing (`resultSetSources`, D-15-130).
    * @type {Map<ResultSetPath, ResultSetPath>}
    */
@@ -6589,7 +6589,7 @@ const importSessionDocument = async (e, options = {}) => {
     // A Session 27-44 (DESIGN 4.3, PD-OI-044 rev 4, D-15-129): its stored
     // figure shows at once; Load's readers read the file at its own paths
     // (their rows are the dialog's); Python converts the read document to a
-    // Session 50 in one Worker call, which Load reads as it reads a Session 50
+    // Session 51 in one Worker call, which Load reads as it reads a Session 51
     // file; the drawing that opens is Python's. A retry of the Load (A20)
     // keeps the stored figure and reads the file again.
     const fileDocument = readSessionInput(parsed);
@@ -6679,13 +6679,13 @@ const importSessionDocument = async (e, options = {}) => {
       // A Session 27-39's group names are read against its own groups, at
       // the file's path; the groups travel with the Results Python sets
       // aside, and the kept names go to Python (D-15-137). A Session 40-44's
-      // groups are its catalog's, read on Python's Session 50.
+      // groups are its catalog's, read on Python's Session 51.
       const groupState = fileDocument.version < CURRENT_AUTHORITY_SESSION_MIN_VERSION && isPlainObject(storedGroupState)
         ? storedGroupState : null;
       const orthogroups = groupState
         ? migrateLegacyOrthogroupMembers(Array.isArray(groupState.groups) ? groupState.groups : [],
           Array.isArray(storedRequest?.records) ? storedRequest.records : null) : [];
-      // So is the feature metadata of its Results, which Python's Session 50
+      // So is the feature metadata of its Results, which Python's Session 51
       // does not hold (OV-1958).
       const { features: storedFeatures } = /** @type {{ features?: unknown }} */ (fileParts.data);
       const featureMetadata = fileDocument.version < CURRENT_AUTHORITY_SESSION_MIN_VERSION && isPlainObject(storedFeatures)
@@ -6753,10 +6753,10 @@ const importSessionDocument = async (e, options = {}) => {
       // (its schema-2 records take their CLI labels, OV-2052).
       const upgrade = await upgradeLegacySession(readData, { storedRequestSchema: fileParts.requestRead.storedSchemas[''] });
       if (!options.isCurrent()) return { status: 'canceled' };
-      // The file's source facts, which its Session 50 does not say (`sessionSourceFactsOf`).
+      // The file's source facts, which its Session 51 does not say (`sessionSourceFactsOf`).
       // A Session 27-30's Result has no request: what it was drawn with
       // (above) travels with the Results Python sets aside (OV-1953). A
-      // Session 31-39's is its request's, which Python's Session 50 holds.
+      // Session 31-39's is its request's, which Python's Session 51 holds.
       legacyRead = {
         upgrade, repairs: [...fileRepairs, ...upgrade.warnings],
         sourceFacts: sessionSourceFactsOf(fileDocument.version, isPlainObject(storedDraft)),
@@ -6812,8 +6812,8 @@ const importSessionDocument = async (e, options = {}) => {
       if (openedFileAt !== undefined) legacyFileSets.set('', openedFileAt);
     }
     /**
-     * Where a drawing's draft part is in the file: a Session 50's
-     * entry in its list of drawings, a Session 46-49's `modes.<mode>` (OV-1791).
+     * Where a drawing's draft part is in the file: a Session 51's
+     * entry in its list of drawings, a Session 46-50's `modes.<mode>` (OV-1791).
      * @param {string} mode @param {OpenedDrawingPath} at The drawing's place in the file's list.
      */
     const draftPartAt = (mode, at) => (projectedDrawingId !== null ? at.slice(0, -1) : `modes.${mode}`);
@@ -6846,7 +6846,7 @@ const importSessionDocument = async (e, options = {}) => {
             : committedMode
         }
       : (data.ui || {});
-    // The stored Results of a Session 27-39 a Session 50 cannot hold come
+    // The stored Results of a Session 27-39 a Session 51 cannot hold come
     // beside Python's document, for the drawing it opens; they have no
     // catalog, so Save refuses them until one Generate (PD-OI-079).
     const legacyStoredResults = legacyRead && projectedDrawingId !== null
@@ -6878,7 +6878,7 @@ const importSessionDocument = async (e, options = {}) => {
     const committedSliceProjected = canonicalSession && !settingsOnly && Boolean(restoredConfig);
     /**
      * The restored settings of a drawing Load projects, by drawing ID: the
-     * committed set's (`restoredConfig`) and each other Session 50 drawing
+     * committed set's (`restoredConfig`) and each other Session 51 drawing
      * that holds a request (`storedDrawingInputs`, OV-1786); else null.
      * @param {DrawingId} drawingId
      */
@@ -6887,7 +6887,7 @@ const importSessionDocument = async (e, options = {}) => {
       : storedDrawingInputs.get(drawingId)?.restoredConfig ?? null);
     /**
      * The per-feature edits of a drawing's request, by drawing ID: the
-     * committed set's (its projection) and each other Session 50 drawing
+     * committed set's (its projection) and each other Session 51 drawing
      * that holds a request (`storedDrawingInputs`, OV-1786); else null.
      * @param {DrawingId} drawingId
      * @returns {RequestFeatureEdits | null}
@@ -6907,19 +6907,19 @@ const importSessionDocument = async (e, options = {}) => {
       return requestEdits ? featureEditsOverProjection(slice.features, requestEdits)
         : isPlainObject(slice.features) ? slice.features : {};
     };
-    // Any other Session 46-49 slice is stored settings: its track stacks install as saved (R11).
+    // Any other Session 46-50 slice is stored settings: its track stacks install as saved (R11).
     /** @param {DrawingId} drawingId */
     const isStoredSlice = (drawingId) => projectedConfigOf(drawingId) === null;
-    // The 50 document of a Session 46-49 (preflight read each drawing's part
+    // The 51 document of a Session 46-50 (preflight read each drawing's part
     // of the file as its own entry, found by drawing ID, and where the file
     // holds its saved Result set, `setSources`).
     const upgraded = upgrade.document;
-    // The drawings the Load makes and the one it opens: the 50 document's
+    // The drawings the Load makes and the one it opens: the 51 document's
     // (R17-1/R17-2/R17-7; a Session 27-44's is Python's conversion of it).
     const plan = loadedDrawingPlan(upgraded);
     /**
      * The drawing that takes a Session's part of `mode` the projection reads:
-     * a Session 50's opened drawing for its mode, else its 50 document's
+     * a Session 51's opened drawing for its mode, else its 51 document's
      * drawing of that mode; null when the document has no drawing of it (a
      * Load makes none, D-15-120). The one place a Load maps the file's modes
      * to drawing IDs.
@@ -6931,7 +6931,7 @@ const importSessionDocument = async (e, options = {}) => {
         ?? drawings.find((drawing) => drawing.mode === mode);
       return entry ? /** @type {DrawingId} */ (entry.id) : null;
     };
-    // The drawing of the committed set (the top-level set of a Session 27-49,
+    // The drawing of the committed set (the top-level set of a Session 27-50,
     // whose request Load projects; the move gives the generated mode a
     // drawing, else the set is the opened drawing's), and the drawing that
     // takes the file's one Linear part (its comparisons, LOSAT caches and
@@ -6940,8 +6940,8 @@ const importSessionDocument = async (e, options = {}) => {
     const linearPartDrawingId = fileDrawingIdOf('linear');
     /**
      * The saved entries of a LOSAT cache field the file wrote into each
-     * drawing, by drawing ID (unvalidated): a Session 50's own, the projected
-     * drawing's from its view; a Session 27-49's one list, `partDrawingId`'s
+     * drawing, by drawing ID (unvalidated): a Session 51's own, the projected
+     * drawing's from its view; a Session 27-50's one list, `partDrawingId`'s
      * (none when the file has no drawing of that part).
      * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field @param {DrawingId | null} partDrawingId
      * @returns {{ id: DrawingId, entries: unknown }[]}
@@ -6955,7 +6955,7 @@ const importSessionDocument = async (e, options = {}) => {
       : partDrawingId === null ? [] : [{ id: partDrawingId, entries: projectedEntries }]);
     // The conservation hash pairs each loaded request names (D-15-124): those
     // of the conservation entries the file wrote into its drawing (a Session
-    // 27-49's one list is its one Circular part's). A drawing without a
+    // 27-50's one list is its one Circular part's). A drawing without a
     // request installs none.
     /** @type {ReadonlyMap<DrawingId, ConservationPairs>} */
     const loadedConservationPairs = new Map(projectionResult
@@ -7000,7 +7000,7 @@ const importSessionDocument = async (e, options = {}) => {
     // Where the input files are in the file.
     const filesAt = canonicalSession ? 'webFiles.bindings' : 'files';
     // A Session 27-44's files were read with their rows before Python
-    // converted them (D-15-139); its Session 50's are read with none.
+    // converted them (D-15-139); its Session 51's are read with none.
     /** @type {LoadRepair[]} */
     const fileRows = legacyRead ? [] : repairs;
     /**
@@ -7032,14 +7032,14 @@ const importSessionDocument = async (e, options = {}) => {
       return { target, linearSeqs, collapsed: collapsedLinearSeqs, at };
     };
     recordSessionLifecycleEvent('session-candidate-files-start');
-    // The files the Load projects: a Session 50's opened drawing's, else the
-    // file's one set of a Session 27-49, whose drawings each take their
+    // The files the Load projects: a Session 51's opened drawing's, else the
+    // file's one set of a Session 27-50, whose drawings each take their
     // mode's part (`restoreLiveFileState`).
     const filesDrawingId = projectedDrawingId ?? linearPartDrawingId;
     const projectedFiles = loadFiles(canonicalSession ? projectionResult.restoredFiles : data.files,
       filesDrawingId === null ? null : draftConfigOf(filesDrawingId), inputTypes.cInputType, filesAt);
     /**
-     * Every other Session 50 drawing's own files, by drawing ID (B2d-3a-2);
+     * Every other Session 51 drawing's own files, by drawing ID (B2d-3a-2);
      * a drawing the document lacks has none (D-15-105 (5)).
      * @type {Map<DrawingId, ReturnType<typeof loadFiles>>}
      */
@@ -7093,7 +7093,7 @@ const importSessionDocument = async (e, options = {}) => {
     recordSessionLifecycleEvent('session-candidate-sequences-start');
     // E1: each Result set reads its sources in its own mode, from its drawing's files.
     // The Results Python sets aside for a drawing without a request (a
-    // Session 27-39's, which Python's Session 50 holds without a catalog)
+    // Session 27-39's, which Python's Session 51 holds without a catalog)
     // read them again, as the file's own Results did (OV-2008).
     const setAsideRequestLessId = legacyStoredResults !== undefined && settingsOnly ? projectedDrawingId : null;
     /** @param {DrawingId} drawingId */
@@ -7217,7 +7217,7 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {DiagramMode} The mode of the drawing the Load opens. */
     const shownMode = /** @type {LoadedDrawing} */ (plan.drawings.find((drawing) => drawing.id === plan.activeDrawingId)).mode;
     // Every other drawing with a saved Result set, read from its own entry of
-    // the 50 document: its request, Results, editor state, `ui` and run
+    // the 51 document: its request, Results, editor state, `ui` and run
     // metadata, and the catalog preflight read where the file holds the set
     // (found by the drawing's ID); a set without one does not load.
     /** @type {{ drawing: DrawingIdentity, mode: DiagramMode, at: ResultSetPath, catalog: FeatureCatalog, set: LoadedResultSet, webFiles: unknown }[]} */
@@ -7459,7 +7459,7 @@ const importSessionDocument = async (e, options = {}) => {
     }
     // The similarity groups' state Load installs; a name or description edit
     // of a group it does not hold is dropped and listed (B47). The group
-    // names are the projected Session 50 drawing's, else the file's Linear
+    // names are the projected Session 51 drawing's, else the file's Linear
     // part's; a file without a Linear drawing has none.
     const groupNamesDrawingId = projectedDrawingId ?? linearPartDrawingId;
     /** @param {DrawingId | null} id */
@@ -7504,7 +7504,7 @@ const importSessionDocument = async (e, options = {}) => {
         : (isPlainObject(data.orthogroupState) ? 'orthogroupState' : 'features');
       groupNameRepairs(loadedOrthogroupState, groupIds, editsPath, repairs);
     }
-    // Each other Session 50 drawing's group names, of the groups its own
+    // Each other Session 51 drawing's group names, of the groups its own
     // Result holds (its slot's), installed in it by drawing ID.
     const storedGroupNames = (projectedDrawingId === null ? [] : plan.drawings).filter(({ id }) => id !== projectedDrawingId)
       .map(({ id }) => {
@@ -7615,7 +7615,7 @@ const importSessionDocument = async (e, options = {}) => {
     // Each drawing's input type.
     committed.forEach((drawing) => {
       INPUTS_SLICE.install(drawing.slices.inputs, {
-        // A Session 50 drawing's own; else the field of its mode.
+        // A Session 51 drawing's own; else the field of its mode.
         inputType: /** @type {InputType} */ (storedDrawingInputs.get(drawing.id)?.inputType ?? inputTypes[SESSION_DRAWINGS_LAYOUT.inputTypeFields[drawing.mode]])
       });
     });
@@ -7673,7 +7673,7 @@ const importSessionDocument = async (e, options = {}) => {
     // projection may name a thread count), the rich popup, CLI provenance.
     if (isPlainObject(appUi.losatExecution)) applyLosatExecutionData(appUi.losatExecution);
     state.richFeaturePopup.value = readRichFeaturePopup(appUi.richFeaturePopup).value;
-    // The committed set's CLI options and each other Session 50 drawing's own.
+    // The committed set's CLI options and each other Session 51 drawing's own.
     preservedCliOptions.clear();
     /** @type {[DrawingId, SessionCliOptions | null][]} */
     const cliOptionsByDrawing = [
@@ -7722,7 +7722,7 @@ const importSessionDocument = async (e, options = {}) => {
     // Each drawing takes its own files, its card files among them (R16-4).
     restoreLiveFileState(committed.map((drawing) => ({ drawing, inputs: liveFileStateOf(filesOf(drawing.id)) })));
     // The Linear drawing the Files card list folds: the shown one, else a
-    // Session 27-49's Linear part's (a Session 50's first Linear drawing);
+    // Session 27-50's Linear part's (a Session 51's first Linear drawing);
     // without one, no card is folded.
     const linearDrawing = shownDrawing.mode === 'linear' ? shownDrawing
       : linearPartDrawingId === null ? null : state.drawingOf(linearPartDrawingId);
@@ -7732,7 +7732,7 @@ const importSessionDocument = async (e, options = {}) => {
       linearDrawing ? linearDrawing.inputType.value : 'gb'
     );
     // Each Linear drawing's comparisons, classified from its own request
-    // (a Session 27-49's one Linear part is its Linear drawing's), a Session
+    // (a Session 27-50's one Linear part is its Linear drawing's), a Session
     // 27-44's from the file's stored request, which Python's conversion
     // leaves out of a Circular request's drawings (C-OD14).
     const fileComparisonClassification = legacyRead ? legacyRead.comparisonClassification : null;
@@ -7745,9 +7745,9 @@ const importSessionDocument = async (e, options = {}) => {
     const losatPartDrawingId = linearPartDrawingId ?? shownDrawing.id;
     /**
      * Each drawing's saved raw LOSAT entries as the preflight read them
-     * (`readSessionLosatArtifacts`): a Session 50's by drawing, the
+     * (`readSessionLosatArtifacts`): a Session 51's by drawing, the
      * projected one first (its own are its view's), merged into the one
-     * cache (DESIGN §4.1); a Session 27-49's one list, its Linear part's,
+     * cache (DESIGN §4.1); a Session 27-50's one list, its Linear part's,
      * else the shown drawing's (a cache row of a Circular drawing names no
      * records, `restoredLosatCacheInfoIdentity`).
      * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field
@@ -7810,9 +7810,9 @@ const importSessionDocument = async (e, options = {}) => {
       ...restoredFileSequenceSources
     ]);
 
-    // The shown Result's groups; their names are the projected Session 50
+    // The shown Result's groups; their names are the projected Session 51
     // drawing's, else the Linear drawing's (Session 46 `webEdits`; a file
-    // without a Linear drawing installs none), and each other Session 50
+    // without a Linear drawing installs none), and each other Session 51
     // drawing takes its own.
     const shownGroupIds = applyOrthogroupArtifactData(loadedOrthogroupState, { catalogFeatureState: currentCatalogFeatureState });
     if (groupNamesDrawingId !== null) installGroupNames(state.drawingOf(groupNamesDrawingId), loadedOrthogroupState, shownGroupIds);

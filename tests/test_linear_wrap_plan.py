@@ -680,7 +680,7 @@ def test_session_form_key_reads_in_the_linear_slice_and_replays() -> None:
     from gbdraw.session_io import _append_linear_gui_args
 
     assert "linear_wrap_length" in SLICE_CONTAINERS["config.form"]
-    assert CURRENT_SESSION_VERSION == 50
+    assert CURRENT_SESSION_VERSION == 51
 
     def replayed(value: object) -> list[str]:
         run_args: list[str] = []

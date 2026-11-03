@@ -779,7 +779,7 @@
  * @property {unknown} [runMetadata]
  * @property {unknown} [cliInvocation]
  * @property {'gbdraw-session'} format
- * @property {46 | 47 | 48 | 49} version
+ * @property {46 | 47 | 48 | 49 | 50} version
  * @property {unknown} [createdAt]
  * @property {unknown} renderRequest
  * @property {Record<string, unknown>} resources
@@ -820,7 +820,7 @@
  * @property {unknown} [webFiles]
  */
 /**
- * @typedef {object} SessionChecked50
+ * @typedef {object} SessionChecked51
  * @property {unknown} [createdAt]
  * @property {SessionCheckedDrawing[]} drawings
  * @property {'gbdraw-session'} format
@@ -828,7 +828,7 @@
  * @property {Record<string, unknown>} resources
  * @property {unknown} [title]
  * @property {unknown} [ui]
- * @property {50} version
+ * @property {51} version
  * @property {unknown} [webFiles]
  * @property {never} [results]
  * @property {never} [runMetadata]
@@ -846,5 +846,5 @@
  * @property {never} [features]
  * @property {never} [files]
  */
-/** @typedef {SessionChecked27 | SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46 | SessionChecked50} SessionChecked */
+/** @typedef {SessionChecked27 | SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46 | SessionChecked51} SessionChecked */
 export {};

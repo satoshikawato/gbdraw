@@ -1013,8 +1013,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
-  // Load of a Session 27-44: Python returns its Session 50, the stored Results
-  // a Session 50 cannot hold, and the Load repairs (DESIGN 4.3). The resources
+  // Load of a Session 27-44: Python returns its Session 51, the stored Results
+  // a Session 51 cannot hold, and the Load repairs (DESIGN 4.3). The resources
   // travel inside the document, so the call names no file.
   [DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION]: {
     keys: ['document', 'storedRequestSchema'],

@@ -129,8 +129,8 @@ test('source facts name a Session 48 without a Web draft', () => {
     { cardRowsAreFileRows: true, proteinResultsInDrawnFrame: false, resultsRecordPythonPaint: true });
 });
 
-for (const version of [44, 50]) {
-  test(`only Sessions 46-49 move to drawings (${version})`, () => {
+for (const version of [44, 51]) {
+  test(`only Sessions 46-50 move to drawings (${version})`, () => {
     const data = settingsOnly();
     data.version = version;
     assert.throws(() => upgradeModeScopedSession(data, version), (/** @type {{ code?: string }} */ error) => error.code === 'INPUT_INVALID');

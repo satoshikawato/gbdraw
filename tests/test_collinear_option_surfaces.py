@@ -310,7 +310,7 @@ def test_the_fixture_draft_with_the_removed_anchor_mode_replays_as_rbh(tmp_path:
 
 def _protein_settings_and_draft(session: dict[str, object]) -> tuple[dict[str, object], dict[str, object]]:
     """The protein comparison's settings and the draft ``losat.blastp`` of the one
-    Linear drawing of a Session 50, or of a Session 46-49's Linear slice."""
+    Linear drawing of a Session 51, or of a Session 46-50's Linear slice."""
 
     if session["version"] >= session_io.DRAWINGS_SESSION_MIN_VERSION:
         (drawing,) = [drawing for drawing in session["drawings"] if drawing["mode"] == "linear"]

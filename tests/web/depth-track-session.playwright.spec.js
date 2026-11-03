@@ -2197,7 +2197,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   // The drawing of each mode, made after the app opens.
   /** @type {{ circular: string, linear: string }} */
   const drawingIdOf = { circular: '', linear: '' };
-  // Each stack is its drawing's own (Session 50 `drawings[]`, by drawing ID).
+  // Each stack is its drawing's own (Session 51 `drawings[]`, by drawing ID).
   const p3Draft = (session) => ({
     circularEnabled: savedDrawing(session, drawingIdOf.circular).config.adv.circular_track_slots_enabled,
     circularAxis: savedDrawing(session, drawingIdOf.circular).config.adv.circular_track_slots_axis_index,
