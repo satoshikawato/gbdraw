@@ -2930,6 +2930,7 @@ export default Object.freeze({
   "{names}, and one more": "{names}, dan satu lainnya",
   "{names}, and {count} more": "{names}, dan {count} lainnya",
   "{name} (record list unavailable)": "{name} (daftar record tidak tersedia)",
+  "{name} is also used in {count} drawings: {drawings}.": "File {name} juga digunakan di {count} gambar: {drawings}.",
   "{name} is also used in {drawings}.": "File {name} juga digunakan di gambar {drawings}.",
   "{name} mode": "Mode {name}",
   "{name} selection": "Pilihan {name}",

@@ -2930,6 +2930,7 @@ export default Object.freeze({
   "{names}, and one more": "{names} 외 1개",
   "{names}, and {count} more": "{names} 외 {count}개",
   "{name} (record list unavailable)": "{name}(레코드 목록을 사용할 수 없음)",
+  "{name} is also used in {count} drawings: {drawings}.": "{name} 파일은 다이어그램 {count}개({drawings})에서도 사용됩니다.",
   "{name} is also used in {drawings}.": "{name} 파일은 {drawings} 다이어그램에서도 사용됩니다.",
   "{name} mode": "{name} 모드",
   "{name} selection": "{name} 선택",

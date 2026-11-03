@@ -944,6 +944,20 @@ test('an uploader asks whether to replace a file another drawing uses for this d
   assert.equal(app.choicePrompt.show, false, 'a Remove never asks');
   assert.equal(copy.files.c_gb, null);
   assert.equal(circular.files.c_gb, shared);
+  // Two other drawings that use the file take the counted form.
+  const copies = [app.drawingList.duplicateDrawing('circular'), app.drawingList.duplicateDrawing('circular')]
+    .map(({ drawingId }) => drawingId);
+  app.selectDrawing('circular');
+  const twice = app.uploadCircularSourceFile('c_gb', genbank('asked-two.gb'));
+  await settle();
+  const labels = app.drawingBar.tabs().filter((tab) => copies.includes(tab.id)).map((tab) => tab.label);
+  assert.equal(app.choicePrompt.description, `asked-shared.gb is also used in 2 drawings: ${labels.join(' and ')}.`);
+  app.resolveChoicePrompt('cancel');
+  await twice;
+  await settle();
+  await app.undoHistory();
+  await app.undoHistory();
+  assert.equal(copies.some((id) => state.drawingTabs.value.some((tab) => tab.id === id)), false, 'Undo takes both copies back');
 });
 
 // R17-30 (PD-OI-090 〔入力ファイル〕): the File card the user uploads into always

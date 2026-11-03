@@ -7204,13 +7204,13 @@ export const createAppSetup = () => {
       INPUT_REPLACEMENT_WRITERS[site.slot](state.drawingOf(site.drawingId), site, fileId, file);
     }),
     askScope: async (previous, otherDrawingIds) => {
+      // Named as their tabs show them: a default name in the UI language.
+      const others = drawingBar.tabs().flatMap((tab) => (
+        tab.kind === 'drawing' && otherDrawingIds.includes(tab.id) ? [tab.label] : []));
       const choice = await askChoice({
         title: t('Replace input file?'),
-        description: t('{name} is also used in {drawings}.', {
-          name: previous.name,
-          // Named as their tabs show them: a default name in the UI language.
-          drawings: listText(drawingBar.tabs().flatMap((tab) => (
-            tab.kind === 'drawing' && otherDrawingIds.includes(tab.id) ? [tab.label] : [])))
+        description: tn(others.length, '{name} is also used in {drawings}.', '{name} is also used in {count} drawings: {drawings}.', {
+          name: previous.name, drawings: listText(others)
         }),
         actions: [
           { id: 'drawing', label: t('This drawing only'), tone: 'secondary' },

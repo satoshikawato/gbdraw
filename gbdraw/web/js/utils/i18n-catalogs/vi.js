@@ -2930,6 +2930,7 @@ export default Object.freeze({
   "{names}, and one more": "{names} và một tệp khác",
   "{names}, and {count} more": "{names} và {count} tệp khác",
   "{name} (record list unavailable)": "{name} (không có danh sách bản ghi)",
+  "{name} is also used in {count} drawings: {drawings}.": "Tệp {name} cũng được dùng trong {count} bản vẽ: {drawings}.",
   "{name} is also used in {drawings}.": "Tệp {name} cũng được dùng trong bản vẽ {drawings}.",
   "{name} mode": "Chế độ {name}",
   "{name} selection": "Lựa chọn {name}",

@@ -2930,6 +2930,7 @@ export default Object.freeze({
   "{names}, and one more": "{names}，另有1个",
   "{names}, and {count} more": "{names}，另有{count}个",
   "{name} (record list unavailable)": "{name}（记录列表不可用）",
+  "{name} is also used in {count} drawings: {drawings}.": "{count}个图谱也使用了{name}：{drawings}。",
   "{name} is also used in {drawings}.": "{drawings}图谱也使用了{name}。",
   "{name} mode": "{name}模式",
   "{name} selection": "{name}选择",
