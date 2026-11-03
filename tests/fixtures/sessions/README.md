@@ -388,7 +388,7 @@ drawing names: `circular-only` (one Circular drawing,
 `linear-2` has none) and `per-drawing-cards` (`file-card-imports-circular.v48`
 drawn twice: `circular` keeps the five file cards, `circular-2` has none).
 Each `.provenance.json` names the source, the edits, the script and the
-decompressed SHA-256; `tests/test_session_admission_50.py` admits them and
+decompressed SHA-256; `tests/test_session_admission_51.py` admits them and
 writes each again unchanged.
 
 `cli-linear-wrapped.v50.gbdraw-session.json.gz` is the released flat Session 50

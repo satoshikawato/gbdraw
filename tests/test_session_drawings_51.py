@@ -3,7 +3,7 @@
 ``read_session_drawings`` sees each drawing of a Session 51 as the one-drawing
 view that Sessions 46-50 give, and ``write_session_drawings`` is its
 inverse (DESIGN §1, D-15-79). These tests build and compare documents; the
-admission of 49 is tested in ``tests/test_session_admission_50.py``.
+admission of 51 is tested in ``tests/test_session_admission_51.py``.
 """
 
 from __future__ import annotations
