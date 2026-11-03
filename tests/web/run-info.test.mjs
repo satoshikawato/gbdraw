@@ -1222,6 +1222,21 @@ test('Italic gene names has its CLI flag in the Source recipe of either mode', a
   }
 });
 
+// Wrap Rows writes `--wrap_length` with the request's value, Auto as `auto`; no wrap length writes nothing.
+test('a Linear wrap length has its CLI flag in the Source recipe', async () => {
+  for (const length of ['auto', 20000, undefined]) {
+    const copy = structuredClone(linearGallerySession);
+    const overrides = copy.renderRequest.diagramOptions.configOverrides;
+    delete overrides['canvas.linear.wrap_length'];
+    if (length !== undefined) overrides['canvas.linear.wrap_length'] = length;
+    const recipe = await buildSourceRecipe(copy);
+    assert.equal(recipe.available, true, recipe.unavailableReason);
+    const at = recipe.args.indexOf('--wrap_length');
+    assert.equal(at === -1 ? undefined : recipe.args[at + 1], length === undefined ? undefined : String(length), JSON.stringify(recipe.args));
+    await assertCliParserAccepts(recipe);
+  }
+});
+
 // A fixed identity colour scale writes `--identity_scale MIN MAX` from the mode's leaf; no scale writes nothing.
 test('a fixed identity scale has its CLI flag in the Source recipe of either mode', async () => {
   const leaves = { circular: 'objects.conservation.identity_scale', linear: 'objects.blast_match.identity_scale' };

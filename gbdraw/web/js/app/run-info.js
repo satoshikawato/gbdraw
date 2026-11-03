@@ -1174,6 +1174,7 @@ const LINEAR_CONFIG_VALUE_OPTIONS = Object.freeze({
   'labels.linear.protection': '--label_protection',
   'canvas.linear.track_layout': '--track_layout',
   'canvas.linear.track_axis_gap': '--track_axis_gap',
+  'canvas.linear.wrap_length': '--wrap_length',
   'canvas.linear.comparison_height': '--comparison_height',
   'canvas.linear.default_gc_height': '--gc_height',
   'canvas.linear.depth_height': '--depth_height',
