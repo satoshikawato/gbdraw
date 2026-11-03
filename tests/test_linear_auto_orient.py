@@ -183,7 +183,7 @@ def test_a_session_stores_the_decided_reverse_flags_and_replays_the_figure(tmp_p
     subject, table = _reversed_subject_inputs(tmp_path)
     session = tmp_path / "saved.gbdraw-session.json"
     auto = _render(tmp_path, "auto", subject, table, "--auto_orient", "--session_output", str(session))
-    stored = load_session(session)["renderRequest"]
+    stored = load_session(session)["drawings"][0]["renderRequest"]
     # The planner resolved the option into the record's own Reverse complement flag.
     assert [record["presentation"]["reverseComplement"] for record in stored["records"]] == [False, True]
     assert "autoOrient" not in stored["diagramOptions"]
@@ -207,7 +207,7 @@ def test_a_session_stores_the_results_of_auto_orient_and_anchor_feature_and_repl
     session = tmp_path / "both.gbdraw-session.json"
     anchor = ("--anchor_feature", "product=innexin")
     drawn = _render(tmp_path, "both", subject, table, "--auto_orient", *anchor, "--session_output", str(session))
-    stored = load_session(session)["renderRequest"]
+    stored = load_session(session)["drawings"][0]["renderRequest"]
     # Neither option is stored; their results are: the Reverse complement flags and the record translations.
     assert "autoOrient" not in stored["diagramOptions"] and "anchorFeature" not in stored["diagramOptions"]
     assert [record["presentation"]["reverseComplement"] for record in stored["records"]] == [False, True]

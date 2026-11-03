@@ -205,7 +205,7 @@ def _cli(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
 def _stored_layout(session_path: Path) -> dict[str, object]:
     import json
 
-    request = json.loads(session_path.read_text(encoding="utf-8"))["renderRequest"]
+    request = json.loads(session_path.read_text(encoding="utf-8"))["drawings"][0]["renderRequest"]
     assert "anchorFeature" not in request["diagramOptions"]
     return request["layout"]
 
@@ -241,7 +241,7 @@ def test_the_python_session_writers_store_the_translations_the_anchor_resolves_t
     built = build_session_document(request).to_dict()
     path = tmp_path / "saved.gbdraw-session.json"
     save_session_document(path, request)
-    assert _stored_layout(path) == built["renderRequest"]["layout"]
+    assert _stored_layout(path) == built["drawings"][0]["renderRequest"]["layout"]
     assert [entry["x"] for entry in _stored_layout(path)["recordTranslations"]] == _record_shifts(drawn)
     with materialize_session(load_session_document(path), output_directory=tmp_path / "out") as materialized:
         replayed = session_to_request(materialized)
