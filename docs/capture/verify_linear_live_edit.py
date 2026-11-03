@@ -22,6 +22,7 @@ from flows.web_capture import (  # noqa: E402
     generate_and_wait_for_result,
     open_browser_capture,
     set_feature_search_visible,
+    show_drawing,
     wait_for_app_shell,
 )
 from flows.how_to.interactive_sessions import (  # noqa: E402
@@ -129,7 +130,7 @@ def main():
         try:
             page.goto(server.base_url, wait_until="domcontentloaded")
             wait_for_app_shell(page)
-            page.get_by_role("button", name="Linear", exact=True).click()
+            show_drawing(page, "linear")
             lock = page.get_by_label("Lock Definition Column", exact=True)
             expect(lock).to_be_checked()
             titles = page.get_by_label("Titles and Record Labels", exact=True)

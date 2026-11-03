@@ -47,6 +47,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     center_preview_diagram,
     fit_complete_linear_preview,
     generate_and_inspect,
@@ -237,9 +238,7 @@ def _assert_tlosatx_download(path: Path) -> dict[str, Any]:
 
 
 def _load_complete_linear_inputs(page: Page) -> None:
-    linear = page.get_by_role("button", name="Linear", exact=True)
-    linear.click()
-    expect(linear).to_have_attribute("aria-pressed", "true")
+    show_drawing(page, "linear")
     page.get_by_role("radio", name="GenBank", exact=True).check()
     expect(
         page.get_by_role("button", name="Set no comparison", exact=True)
@@ -387,7 +386,7 @@ def capture_gui_uploaded_comparison(
         blast_selection.hover()
         page.mouse.wheel(0, 240)
         screenshot_bytes["comparison-plan.png"] = capture_screenshot(
-            page, output_paths["comparison-plan.png"], "Linear"
+            page, output_paths["comparison-plan.png"]
         )
 
         final_report = generate_and_inspect(
@@ -397,7 +396,7 @@ def capture_gui_uploaded_comparison(
         )
         fit_complete_linear_preview(page)
         screenshot_bytes["comparison-result.png"] = capture_screenshot(
-            page, output_paths["comparison-result.png"], "Linear"
+            page, output_paths["comparison-result.png"]
         )
         download_report = _download_svg(
             page,
@@ -518,7 +517,7 @@ def capture_gui_tlosatx(
             "group", name="LOSAT Mode", exact=True
         ).scroll_into_view_if_needed()
         screenshot_bytes["tlosatx-settings.png"] = capture_screenshot(
-            page, output_paths["tlosatx-settings.png"], "Linear"
+            page, output_paths["tlosatx-settings.png"]
         )
 
         final_report = generate_and_inspect(
@@ -528,7 +527,7 @@ def capture_gui_tlosatx(
         )
         fit_complete_linear_preview(page)
         screenshot_bytes["tlosatx-result.png"] = capture_screenshot(
-            page, output_paths["tlosatx-result.png"], "Linear"
+            page, output_paths["tlosatx-result.png"]
         )
 
         tsv_button = raw_result.get_by_role(
@@ -863,9 +862,7 @@ def capture_gui_circular_rings(
     try:
         page.goto(base_url, wait_until="domcontentloaded")
         wait_for_app_shell(page)
-        circular = page.get_by_role("button", name="Circular", exact=True)
-        circular.click()
-        expect(circular).to_have_attribute("aria-pressed", "true")
+        show_drawing(page, "circular")
         page.get_by_role("radio", name="GenBank", exact=True).check()
         page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
             FIRST_CIRCULAR_FIXTURE_PATH
@@ -968,7 +965,7 @@ def capture_gui_circular_rings(
 
         page.get_by_label("Comparison ring label 1", exact=True).scroll_into_view_if_needed()
         screenshot_bytes["ring-settings.png"] = capture_screenshot(
-            page, output_paths["ring-settings.png"], "Circular"
+            page, output_paths["ring-settings.png"]
         )
 
         final_report = generate_and_inspect(
@@ -979,7 +976,7 @@ def capture_gui_circular_rings(
         _assert_gene_labels_only(final_report)
         _fit_circular_ring_preview(page)
         screenshot_bytes["ring-result.png"] = capture_screenshot(
-            page, output_paths["ring-result.png"], "Circular"
+            page, output_paths["ring-result.png"]
         )
 
         with page.expect_download(timeout=ACTION_TIMEOUT_MS) as svg_info:
@@ -1017,7 +1014,7 @@ def capture_gui_circular_rings(
         fasta_report = _assert_span_fasta(fasta_path)
 
         screenshot_bytes["hsp-popup.png"] = capture_screenshot(
-            page, output_paths["hsp-popup.png"], "Circular"
+            page, output_paths["hsp-popup.png"]
         )
         popup_report = {
             "title": "Comparison ring match",

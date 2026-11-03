@@ -26,6 +26,7 @@ from flows.web_capture import (
     toggle_disclosure,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
@@ -306,7 +307,7 @@ def capture_gui_quantitative_map(
         page.goto(base_url, wait_until="domcontentloaded")
         wait_for_app_shell(page)
         _resize_sidebar(page)
-        page.get_by_role("button", name="Circular", exact=True).click()
+        show_drawing(page, "circular")
         open_ancestor_details(page.get_by_role(
             "checkbox", name="Multi-Record Canvas", exact=True, include_hidden=True
         )).uncheck()
@@ -371,7 +372,7 @@ def capture_gui_quantitative_map(
             "group", name="Circular track slot depth_1", exact=True
         ).scroll_into_view_if_needed()
         screenshot_bytes[SCREENSHOT_NAMES[0]] = capture_screenshot(
-            page, output_paths[SCREENSHOT_NAMES[0]], "Circular"
+            page, output_paths[SCREENSHOT_NAMES[0]]
         )
 
         final_report = generate_and_inspect(
@@ -380,7 +381,7 @@ def capture_gui_quantitative_map(
         final_report["state"] = state
         _fit_circular_preview(page, target_zoom="40%", pan_left_ratio=0.0)
         screenshot_bytes[SCREENSHOT_NAMES[1]] = capture_screenshot(
-            page, output_paths[SCREENSHOT_NAMES[1]], "Circular"
+            page, output_paths[SCREENSHOT_NAMES[1]]
         )
         download_report = _download_svg(
             page,

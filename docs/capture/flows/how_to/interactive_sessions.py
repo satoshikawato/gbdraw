@@ -850,7 +850,7 @@ def _capture_bgc_popups(
                     f"{match_text!r}"
                 )
         screenshot_bytes["match-popup.png"] = capture_screenshot(
-            page, output_paths["match-popup.png"], "Linear"
+            page, output_paths["match-popup.png"]
         )
         page.get_by_role(
             "button", name="Close match popup", exact=True
@@ -878,7 +878,7 @@ def _capture_bgc_popups(
         expect(similarity).to_contain_text("5 genes in 5 records")
         page.wait_for_timeout(250)
         screenshot_bytes["group-popup.png"] = capture_screenshot(
-            page, output_paths["group-popup.png"], "Linear"
+            page, output_paths["group-popup.png"]
         )
         page.get_by_title(
             "Open similarity-group editor", exact=True
@@ -937,7 +937,7 @@ def capture_gui_interactive_editing(
         ):
             raise AssertionError("COX1 search did not open the matching feature")
         screenshot_bytes["search-popup.png"] = capture_screenshot(
-            page, output_paths["search-popup.png"], "Circular"
+            page, output_paths["search-popup.png"]
         )
         page.get_by_role(
             "button", name="Close feature popup", exact=True
@@ -953,7 +953,7 @@ def capture_gui_interactive_editing(
             )
         ).to_have_text("3 selected")
         screenshot_bytes["editor.png"] = capture_screenshot(
-            page, output_paths["editor.png"], "Circular"
+            page, output_paths["editor.png"]
         )
         selected_status = page.get_by_role(
             "status", name="Selected feature count", exact=True
@@ -1006,7 +1006,7 @@ def capture_gui_interactive_editing(
             _assert_closed_drawer_does_not_reserve_canvas(page)
         )
         screenshot_bytes["edited-result.png"] = capture_screenshot(
-            page, output_paths["edited-result.png"], "Circular"
+            page, output_paths["edited-result.png"]
         )
         svg_path = _download_svg(
             page,
@@ -1239,7 +1239,7 @@ def capture_gui_session_reproduction(
             timeout=ACTION_TIMEOUT_MS
         )
         screenshot_bytes["history-actions.png"] = capture_screenshot(
-            page, output_paths["history-actions.png"], "Circular"
+            page, output_paths["history-actions.png"]
         )
 
         page.get_by_role("button", name="Reset Settings", exact=True).click()
@@ -1264,7 +1264,7 @@ def capture_gui_session_reproduction(
         session_path = _save_current_session(page, download_dir)
         session_report = _validate_current_session(session_path)
         screenshot_bytes["session-download.png"] = capture_screenshot(
-            page, output_paths["session-download.png"], "Circular"
+            page, output_paths["session-download.png"]
         )
         first_capture.assert_clean()
     finally:
@@ -1301,7 +1301,7 @@ def capture_gui_session_reproduction(
         ).to_have_attribute("title", "Undo Generate diagram")
         _stabilize_static_capture_surface(page)
         screenshot_bytes["reloaded-result.png"] = capture_screenshot(
-            page, output_paths["reloaded-result.png"], "Circular"
+            page, output_paths["reloaded-result.png"]
         )
         svg_path = _download_svg(
             page,

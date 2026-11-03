@@ -41,7 +41,7 @@ files selected.
 
 ### Step 1: Load the record and depth table
 
-Select **Circular** and **GenBank**, then choose `AP027133.gb`. Set Output
+In the drawing bar, keep the **Circular** drawing shown. Select **GenBank**, then choose `AP027133.gb`. Set Output
 Prefix to `quantitative_genome_map` and enable **Separate Strands**.
 
 Open **Depth TSV tracks** and load

@@ -18,6 +18,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
@@ -620,9 +621,7 @@ def _verify_fixture_contracts(*, include_style_tables: bool) -> dict[str, Any]:
 
 
 def _open_human_circular(page: Page, prefix: str) -> None:
-    circular = page.get_by_role("button", name="Circular", exact=True)
-    circular.click()
-    expect(circular).to_have_attribute("aria-pressed", "true")
+    show_drawing(page, "circular")
     genbank = page.get_by_role("radio", name="GenBank", exact=True)
     genbank.check()
     expect(genbank).to_be_checked()
@@ -815,14 +814,14 @@ def capture_gui_styling(
             "button", name="Whitelist", exact=True
         ).scroll_into_view_if_needed()
         screenshot_bytes["style-settings.png"] = capture_screenshot(
-            page, output_paths["style-settings.png"], "Circular"
+            page, output_paths["style-settings.png"]
         )
         toggle_disclosure(labels_panel)
         _fit_finished_circular_preview(page)
         _pan_preview_left(page, distance_ratio=0.17)
         _wait_for_preview_transform(page)
         screenshot_bytes["style-result.png"] = capture_screenshot(
-            page, output_paths["style-result.png"], "Circular"
+            page, output_paths["style-result.png"]
         )
         download_report = _download_svg(
             page, download_dir, EXPECTED_STYLE_SVG, _assert_style_svg
@@ -950,7 +949,7 @@ def capture_gui_feature_presentation(
             page.get_by_label("Visibility rule 1 record ID", exact=True)
         ).to_be_in_viewport(ratio=1)
         screenshot_bytes["presentation-settings.png"] = capture_screenshot(
-            page, output_paths["presentation-settings.png"], "Circular"
+            page, output_paths["presentation-settings.png"]
         )
         toggle_disclosure(features_panel)
         _fit_finished_circular_preview(page)
@@ -961,7 +960,7 @@ def capture_gui_feature_presentation(
         _pan_preview_left(page, 0.06)
         _wait_for_preview_transform(page)
         screenshot_bytes["presentation-result.png"] = capture_screenshot(
-            page, output_paths["presentation-result.png"], "Circular"
+            page, output_paths["presentation-result.png"]
         )
         download_report = _download_svg(
             page,

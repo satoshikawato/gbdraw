@@ -43,7 +43,7 @@ files selected.
 
 ### Step 1: Load the NCBI Lambda genome
 
-Select **Linear** at the top of the app. A fresh Linear page starts with **No
+In the drawing bar, choose the **Linear** tab to make the Linear drawing. It starts with **No
 comparison**. Under **Input Genomes**, keep **GenBank** selected. The **GenBank / DDBJ
 File** uploader is the first control in **File 1**; choose
 `NC_001416.gb`. Leave **Record options** closed.

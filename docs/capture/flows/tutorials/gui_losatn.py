@@ -36,6 +36,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     fit_complete_linear_preview,
     generate_and_inspect,
     linear_raw_result,
@@ -113,9 +114,7 @@ def capture_gui_losatn(
         page.goto(base_url, wait_until="domcontentloaded")
         wait_for_app_shell(page)
 
-        linear = page.get_by_role("button", name="Linear", exact=True)
-        linear.click()
-        expect(linear).to_have_attribute("aria-pressed", "true")
+        show_drawing(page, "linear")
         page.get_by_role("radio", name="GenBank", exact=True).check()
         expect(
             page.get_by_role("button", name="Set no comparison", exact=True)
@@ -139,7 +138,7 @@ def capture_gui_losatn(
         expect(selected_files.nth(0)).to_contain_text("NC_001416.gb")
         expect(selected_files.nth(1)).to_contain_text("NC_042057.1.gb")
         screenshot_bytes["01-input-ready.png"] = capture_screenshot(
-            page, output_paths["01-input-ready.png"], "Linear"
+            page, output_paths["01-input-ready.png"]
         )
 
         first_report = generate_and_inspect(
@@ -147,7 +146,7 @@ def capture_gui_losatn(
         )
         fit_complete_linear_preview(page)
         screenshot_bytes["02-first-diagram.png"] = capture_screenshot(
-            page, output_paths["02-first-diagram.png"], "Linear"
+            page, output_paths["02-first-diagram.png"]
         )
 
         commands = page.get_by_role(
@@ -217,7 +216,7 @@ def capture_gui_losatn(
             "group", name="LOSAT Mode", exact=True
         ).scroll_into_view_if_needed()
         screenshot_bytes["03-losatn-settings.png"] = capture_screenshot(
-            page, output_paths["03-losatn-settings.png"], "Linear"
+            page, output_paths["03-losatn-settings.png"]
         )
 
         final_report = generate_and_inspect(
@@ -225,7 +224,7 @@ def capture_gui_losatn(
         )
         fit_complete_linear_preview(page)
         screenshot_bytes["04-comparison-result.png"] = capture_screenshot(
-            page, output_paths["04-comparison-result.png"], "Linear"
+            page, output_paths["04-comparison-result.png"]
         )
 
         tsv_button = raw_result.get_by_role(
@@ -274,7 +273,7 @@ def capture_gui_losatn(
         popup.hover()
         page.mouse.wheel(0, 420)
         screenshot_bytes["05-match-popup.png"] = capture_screenshot(
-            page, output_paths["05-match-popup.png"], "Linear"
+            page, output_paths["05-match-popup.png"]
         )
 
         capture.assert_clean()

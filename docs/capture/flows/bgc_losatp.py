@@ -28,6 +28,7 @@ from flows.web_capture import (
     toggle_disclosure,
     assert_fixture_identity,
     capture_screenshot,
+    show_drawing,
     fit_complete_linear_preview,
     generate_and_inspect,
     linear_raw_result,
@@ -125,9 +126,7 @@ def assert_bgc_fixtures() -> None:
 
 
 def _set_bgc_inputs(page: Page) -> None:
-    linear = page.get_by_role("button", name="Linear", exact=True)
-    linear.click()
-    expect(linear).to_have_attribute("aria-pressed", "true")
+    show_drawing(page, "linear")
     page.get_by_role("radio", name="GenBank", exact=True).check()
     expect(
         page.get_by_role("button", name="Set no comparison", exact=True)
@@ -718,7 +717,7 @@ def capture_bgc_losatp(
             expect(reverse_complement).to_be_checked()
             expect(reverse_complement).to_be_in_viewport()
             screenshot_bytes[name] = capture_screenshot(
-                page, output_paths[name], "Linear"
+                page, output_paths[name]
             )
             fifth_options.click()
 
@@ -729,7 +728,7 @@ def capture_bgc_losatp(
             fit_complete_linear_preview(page, target_zoom="30%")
             name = screenshot_names["plain"]
             screenshot_bytes[name] = capture_screenshot(
-                page, output_paths[name], "Linear"
+                page, output_paths[name]
             )
 
         title = (
@@ -833,7 +832,7 @@ def capture_bgc_losatp(
         )
         expect(losat_mode_group).to_be_in_viewport()
         screenshot_bytes[name] = capture_screenshot(
-            page, output_paths[name], "Linear"
+            page, output_paths[name]
         )
         if align_orthogroup_id is not None:
             alignment_popup = _open_orthogroup_alignment_target(
@@ -848,7 +847,7 @@ def capture_bgc_losatp(
             expect(similarity.get_by_role("button", name="Align…", exact=True)).to_be_in_viewport()
             page.wait_for_timeout(250)
             screenshot_bytes[alignment_name] = capture_screenshot(
-                page, output_paths[alignment_name], "Linear"
+                page, output_paths[alignment_name]
             )
             _align_to_orthogroup(page, alignment_popup, align_orthogroup_id)
             alignment_popup.get_by_role(
@@ -882,7 +881,7 @@ def capture_bgc_losatp(
             ).to_be_visible()
         name = screenshot_names["result"]
         screenshot_bytes[name] = capture_screenshot(
-            page, output_paths[name], "Linear"
+            page, output_paths[name]
         )
 
         if raw_tsv_name is not None:
@@ -910,7 +909,7 @@ def capture_bgc_losatp(
         page.mouse.wheel(0, 420)
         name = screenshot_names["popup"]
         screenshot_bytes[name] = capture_screenshot(
-            page, output_paths[name], "Linear"
+            page, output_paths[name]
         )
 
         if download_member_fasta:

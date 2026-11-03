@@ -110,7 +110,7 @@ def test_annotation_capture_uses_the_complete_plastome_and_four_regions() -> Non
 def test_track_flows_use_visible_accessible_controls_without_state_injection() -> None:
     source = FLOW_PATH.read_text(encoding="utf-8")
     required = (
-        'get_by_role("button", name="Circular", exact=True)',
+        'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
         'get_by_label("Depth TSV tracks", exact=True)',

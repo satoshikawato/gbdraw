@@ -48,7 +48,7 @@ Compare the complete Lambda and DE3 phage genomes with browser LOSATN. You will 
 
 ### Step 1: Load both complete genomes
 
-Select **Linear**. On a fresh Linear page, **No comparison** is pressed in the
+In the drawing bar, choose the **Linear** tab to make the Linear drawing. On it, **No comparison** is pressed in the
 **Comparison** command group. Under **Input Genomes**, keep **GenBank** selected.
 
 1. In the first **GenBank / DDBJ File** control, choose `NC_001416.gb`.

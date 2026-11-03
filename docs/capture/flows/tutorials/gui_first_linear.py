@@ -32,6 +32,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     fit_complete_linear_preview,
     generate_and_inspect,
     open_browser_capture,
@@ -76,9 +77,7 @@ def capture_first_linear(
         page.goto(base_url, wait_until="domcontentloaded")
         wait_for_app_shell(page)
 
-        linear = page.get_by_role("button", name="Linear", exact=True)
-        linear.click()
-        expect(linear).to_have_attribute("aria-pressed", "true")
+        show_drawing(page, "linear")
 
         genbank = page.get_by_role("radio", name="GenBank", exact=True)
         genbank.check()
@@ -95,7 +94,7 @@ def capture_first_linear(
         )
         expect(selected_file).to_contain_text("NC_001416.gb")
         screenshot_bytes["01-input-ready.png"] = capture_screenshot(
-            page, output_paths["01-input-ready.png"], "Linear"
+            page, output_paths["01-input-ready.png"]
         )
 
         first_report = generate_and_inspect(
@@ -103,7 +102,7 @@ def capture_first_linear(
         )
         fit_complete_linear_preview(page, target_zoom="30%")
         screenshot_bytes["02-first-diagram.png"] = capture_screenshot(
-            page, output_paths["02-first-diagram.png"], "Linear"
+            page, output_paths["02-first-diagram.png"]
         )
 
         output_prefix = page.get_by_label("Output Prefix", exact=True)
@@ -150,7 +149,7 @@ def capture_first_linear(
         # Keep the pointer off the number inputs so no spin buttons show.
         page.mouse.move(0, 0)
         screenshot_bytes["03-layout-settings.png"] = capture_screenshot(
-            page, output_paths["03-layout-settings.png"], "Linear"
+            page, output_paths["03-layout-settings.png"]
         )
 
         final_report = generate_and_inspect(
@@ -159,7 +158,7 @@ def capture_first_linear(
         assert_finished_linear_svg(final_report)
         fit_complete_linear_preview(page, target_zoom="30%")
         screenshot_bytes["04-finished-diagram.png"] = capture_screenshot(
-            page, output_paths["04-finished-diagram.png"], "Linear"
+            page, output_paths["04-finished-diagram.png"]
         )
 
         svg_button = page.get_by_role("button", name="SVG", exact=True)

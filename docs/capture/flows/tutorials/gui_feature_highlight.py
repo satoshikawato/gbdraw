@@ -481,7 +481,7 @@ def capture_gui_feature_highlight(
             }"""
         )
         screenshot_bytes[SCREENSHOT_NAMES[0]] = capture_screenshot(
-            page, output_paths[SCREENSHOT_NAMES[0]], "Circular"
+            page, output_paths[SCREENSHOT_NAMES[0]]
         )
 
         generate_and_wait_for_result(page)
@@ -499,7 +499,7 @@ def capture_gui_feature_highlight(
         )
         _wait_for_preview_transform(page)
         screenshot_bytes[SCREENSHOT_NAMES[1]] = capture_screenshot(
-            page, output_paths[SCREENSHOT_NAMES[1]], "Circular"
+            page, output_paths[SCREENSHOT_NAMES[1]]
         )
         download_report = _download_svg(page, download_dir)
         capture.assert_clean()

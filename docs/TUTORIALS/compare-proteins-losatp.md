@@ -53,7 +53,7 @@ files selected.
 
 ### Step 1: Load the five Linear records
 
-Select **Linear** and **GenBank**. Confirm that **No comparison** is pressed in
+In the drawing bar, choose the **Linear** tab to make the Linear drawing. Select **GenBank**. Confirm that **No comparison** is pressed in
 the **Comparison** command group. Upload `BGC0000708.gbk`, then use **Add sequence** below the File list four times and upload the remaining files in the table order.
 MIBiG has already cut each cluster out of its genome, so each file holds one
 cluster. Keep each record whole: leave all optional Region fields blank. For a

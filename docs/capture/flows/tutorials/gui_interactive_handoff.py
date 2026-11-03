@@ -143,7 +143,6 @@ def capture_gui_interactive_handoff(
             capture_screenshot(
                 page,
                 output_paths[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[0]],
-                "Circular",
             )
         )
 
@@ -155,7 +154,6 @@ def capture_gui_interactive_handoff(
             capture_screenshot(
                 page,
                 output_paths[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[1]],
-                "Circular",
             )
         )
 
@@ -169,7 +167,6 @@ def capture_gui_interactive_handoff(
             capture_screenshot(
                 page,
                 output_paths[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[2]],
-                "Circular",
             )
         )
         interactive_path = _download(
@@ -207,7 +204,6 @@ def capture_gui_interactive_handoff(
             capture_screenshot(
                 page,
                 output_paths[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[3]],
-                "Circular",
             )
         )
         popup.get_by_role("button", name="Close feature popup", exact=True).click()
@@ -229,7 +225,6 @@ def capture_gui_interactive_handoff(
             capture_screenshot(
                 page,
                 output_paths[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[4]],
-                "Circular",
             )
         )
         first_capture.assert_clean()
@@ -268,7 +263,6 @@ def capture_gui_interactive_handoff(
             capture_screenshot(
                 page,
                 output_paths[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[5]],
-                "Circular",
             )
         )
         restored_path = _download_svg(

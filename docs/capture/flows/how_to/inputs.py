@@ -35,6 +35,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     fit_complete_linear_preview,
     generate_and_inspect,
     generate_and_wait_for_result,
@@ -105,9 +106,7 @@ def capture_gui_inputs(
         page.goto(base_url, wait_until="domcontentloaded")
         wait_for_app_shell(page)
 
-        linear = page.get_by_role("button", name="Linear", exact=True)
-        linear.click()
-        expect(linear).to_have_attribute("aria-pressed", "true")
+        show_drawing(page, "linear")
         expect(
             page.get_by_role("button", name="Set no comparison", exact=True)
         ).to_have_attribute("aria-pressed", "true")
@@ -130,7 +129,7 @@ def capture_gui_inputs(
         fit_complete_linear_preview(page)
         genbank.scroll_into_view_if_needed()
         screenshot_bytes["genbank-input.png"] = capture_screenshot(
-            page, output_paths["genbank-input.png"], "Linear"
+            page, output_paths["genbank-input.png"]
         )
 
         gff3_fasta = page.get_by_role(
@@ -156,7 +155,7 @@ def capture_gui_inputs(
         fit_complete_linear_preview(page)
         gff3_fasta.scroll_into_view_if_needed()
         screenshot_bytes["gff3-fasta-input.png"] = capture_screenshot(
-            page, output_paths["gff3-fasta-input.png"], "Linear"
+            page, output_paths["gff3-fasta-input.png"]
         )
 
         svg_button = page.get_by_role("button", name="SVG", exact=True)
@@ -187,7 +186,7 @@ def capture_gui_inputs(
         expect(error_alert).to_contain_text(EXPECTED_ID_MISMATCH)
         gff3_fasta.scroll_into_view_if_needed()
         screenshot_bytes["id-error.png"] = capture_screenshot(
-            page, output_paths["id-error.png"], "Linear"
+            page, output_paths["id-error.png"]
         )
 
         capture.assert_clean()

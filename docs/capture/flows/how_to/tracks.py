@@ -20,6 +20,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    show_drawing,
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
@@ -658,9 +659,7 @@ def capture_gui_quantitative_tracks(
         wait_for_app_shell(page)
         _resize_sidebar(page)
 
-        circular = page.get_by_role("button", name="Circular", exact=True)
-        circular.click()
-        expect(circular).to_have_attribute("aria-pressed", "true")
+        show_drawing(page, "circular")
         genbank = page.get_by_role("radio", name="GenBank", exact=True)
         genbank.check()
         page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
@@ -748,7 +747,6 @@ def capture_gui_quantitative_tracks(
         screenshot_bytes["track-settings.png"] = capture_screenshot(
             page,
             output_paths["track-settings.png"],
-            "Circular",
         )
 
         final_report = generate_and_inspect(
@@ -762,7 +760,6 @@ def capture_gui_quantitative_tracks(
         screenshot_bytes["track-result.png"] = capture_screenshot(
             page,
             output_paths["track-result.png"],
-            "Circular",
         )
         download_report = _download_svg(
             page,
@@ -814,9 +811,7 @@ def capture_gui_annotation_tracks(
         wait_for_app_shell(page)
         _resize_sidebar(page)
 
-        circular = page.get_by_role("button", name="Circular", exact=True)
-        circular.click()
-        expect(circular).to_have_attribute("aria-pressed", "true")
+        show_drawing(page, "circular")
         genbank = page.get_by_role("radio", name="GenBank", exact=True)
         genbank.check()
         page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
@@ -943,7 +938,6 @@ def capture_gui_annotation_tracks(
         screenshot_bytes["slot-settings.png"] = capture_screenshot(
             page,
             output_paths["slot-settings.png"],
-            "Circular",
         )
 
         final_report = generate_and_inspect(
@@ -957,7 +951,6 @@ def capture_gui_annotation_tracks(
         screenshot_bytes["annotation-result.png"] = capture_screenshot(
             page,
             output_paths["annotation-result.png"],
-            "Circular",
         )
         download_report = _download_svg(
             page,

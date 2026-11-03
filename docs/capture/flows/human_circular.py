@@ -25,6 +25,7 @@ from flows.web_capture import (
     expect_circular_source_status,
     generate_and_inspect,
     open_ancestor_details,
+    show_drawing,
 )
 
 
@@ -70,9 +71,7 @@ def assert_human_mitochondrion_fixture() -> dict[str, Any]:
 def load_raw_human_circular(page: Page, *, output_prefix: str) -> None:
     """Load HmmtDNA through the public Circular GenBank controls."""
 
-    circular = page.get_by_role("button", name="Circular", exact=True)
-    circular.click()
-    expect(circular).to_have_attribute("aria-pressed", "true")
+    show_drawing(page, "circular")
     genbank = page.get_by_role("radio", name="GenBank", exact=True)
     genbank.check()
     expect(genbank).to_be_checked()

@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Literal, Mapping
 from urllib.parse import urlsplit
 
 from PIL import Image
@@ -704,10 +704,61 @@ def release_pointer_and_focus(page: Page) -> None:
         raise AssertionError("A control kept keyboard focus after release")
 
 
-def capture_screenshot(page: Page, path: Path, mode_name: str) -> int:
+def show_drawing(page: Page, kind: Literal["circular", "linear"]) -> None:
+    """Show the first drawing of `kind` the way a user does, by drawing ID.
+
+    Order: the drawing is already shown; else its tab in the drawing bar; else
+    the Linear offer tab; else the drawing menu's "New Circular drawing". Never
+    finds a tab by its text.
+    """
+
+    if (
+        page.evaluate(
+            "async () => (await import('./js/state.js')).state.activeDrawing().mode"
+        )
+        == kind
+    ):
+        return
+    drawing_id = page.evaluate(
+        """
+        async (kind) => {
+          const { state } = await import('./js/state.js');
+          return state.drawingList().find((drawing) => drawing.mode === kind)?.id ?? null;
+        }
+        """,
+        kind,
+    )
+    bar = page.locator(".drawing-bar")
+    if drawing_id is not None:
+        tab = bar.locator(f'[role="tab"][data-drawing-id="{drawing_id}"]')
+        tab.click()
+        expect(tab).to_have_attribute("aria-selected", "true")
+    elif kind == "linear":
+        offer = bar.locator('[role="tab"][data-drawing-offer="linear"]')
+        offer.click()
+    else:
+        menu = bar.locator(".drawing-bar-menu")
+        menu.locator("summary").click()
+        menu.get_by_role("button", name="New Circular drawing", exact=True).click()
+    page.wait_for_function(
+        """
+        async (kind) => {
+          const { state } = await import('./js/state.js');
+          const drawing = state.activeDrawing();
+          const tab = document.querySelector(
+            `.drawing-bar [role="tab"][data-drawing-id="${drawing.id}"]`);
+          return drawing.mode === kind && tab?.getAttribute('aria-selected') === 'true';
+        }
+        """,
+        arg=kind,
+        timeout=ACTION_TIMEOUT_MS,
+    )
+
+
+def capture_screenshot(page: Page, path: Path) -> int:
     """Write one pinned full-viewport PNG and enforce its size contract."""
 
-    page.get_by_role("button", name=mode_name, exact=True).scroll_into_view_if_needed()
+    page.locator(".drawing-bar").scroll_into_view_if_needed()
     page.wait_for_function(
         "() => !document.fonts || document.fonts.status === 'loaded'",
         timeout=ACTION_TIMEOUT_MS,

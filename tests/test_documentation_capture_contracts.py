@@ -372,7 +372,7 @@ def test_first_circular_flow_uses_accessible_real_actions_without_state_shortcut
     shared_source = WEB_CAPTURE_PATH.read_text(encoding="utf-8")
 
     for required in (
-        'get_by_role("button", name="Circular", exact=True)',
+        'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
         'get_by_label("Output Prefix", exact=True)',
@@ -531,7 +531,7 @@ def test_first_linear_flow_uses_accessible_real_actions_without_state_shortcuts(
     source = LINEAR_FLOW_PATH.read_text(encoding="utf-8")
 
     for required in (
-        'get_by_role("button", name="Linear", exact=True)',
+        'show_drawing(page, "linear")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'name="Set no comparison", exact=True',
         'to_have_attribute("aria-pressed", "true")',
@@ -582,7 +582,7 @@ def test_gui_inputs_flow_uses_whole_files_real_actions_and_actual_error() -> Non
     source = GUI_INPUTS_FLOW_PATH.read_text(encoding="utf-8")
 
     for required in (
-        'get_by_role("button", name="Linear", exact=True)',
+        'show_drawing(page, "linear")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'name="GFF3 + FASTA", exact=True',
         'name="Set no comparison", exact=True',
@@ -631,7 +631,7 @@ def test_gui_circular_layout_flow_uses_complete_records_and_public_controls() ->
     ]
 
     for required in (
-        'get_by_role("button", name="Circular", exact=True)',
+        'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'get_by_label("GenBank/DDBJ File", exact=True).set_input_files',
         'get_by_label("Output Prefix", exact=True)',
@@ -708,7 +708,7 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
     assert 'aria-label="Comparison match height"' in index_source
 
     for required in (
-        'get_by_role("button", name="Linear", exact=True)',
+        'show_drawing(page, "linear")',
         'name="Set no comparison", exact=True',
         'to_have_attribute("aria-pressed", "true")',
         '"button", name="Add sequence", exact=True',

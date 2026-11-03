@@ -57,7 +57,7 @@ reuse a prebuilt LOSATP cache.
 
 ### Step 1: Upload the five source records
 
-Select **Linear**. Under **Input Genomes**, keep **GenBank** selected and
+In the drawing bar, choose the **Linear** tab to make the Linear drawing. Under **Input Genomes**, keep **GenBank** selected and
 confirm that **No comparison** is pressed in the **Comparison** command group.
 
 1. In the first **GenBank / DDBJ File** control, choose `AP027078.gb`.
