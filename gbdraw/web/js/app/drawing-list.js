@@ -337,7 +337,7 @@ export const createInputReplacement = ({
       return { status: 'busy', reason };
     }
     if (sitesOf(fileId).length) {
-      runProjectStep('Replace input file', () => {
+      runProjectStep(msg('Replace input file'), () => {
         writeShown();
         applyInputReplacementToDrawings(sitesOf(fileId), fileId, file);
       });
@@ -373,7 +373,7 @@ export const createInputReplacement = ({
     const others = previous && file && previous !== file ? otherDrawingsUsing(previous.fileId) : [];
     if (!previous || !file || !others.length) return writeShown();
     return askScope(previous, others).then((scope) => {
-      if (scope === 'drawing') return runDrawingStep('Replace input file', writeShown);
+      if (scope === 'drawing') return runDrawingStep(msg('Replace input file'), writeShown);
       return scope === 'all' ? replaceInputFile(previous.fileId, file, writeShown) : null;
     });
   };

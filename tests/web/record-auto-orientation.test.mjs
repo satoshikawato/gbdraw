@@ -7,6 +7,7 @@ import { createRecordAutoOrientation } from '../../gbdraw/web/js/app/record-auto
 import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import { adoptCurrentSessionResources, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { withModeDrawings } from './helpers/drawing-state.mjs';
+import { createInputFileStore } from '../../gbdraw/web/js/services/history-files.js';
 
 const genbank = (name, text) => ({
   kind: 'genbank', name, type: 'text/plain', lastModified: 0, size: Buffer.byteLength(text), encoding: 'base64', data: btoa(text)
@@ -30,10 +31,12 @@ const DECISIONS = [{ recordKey: 'ca', reverseComplement: false }, { recordKey: '
 
 const controlsFor = ({ mode = 'linear', runUndoable, sessionBusy = null }) => {
   const table = adoptCurrentSessionResources(resources);
+  const inputFiles = createInputFileStore();
   const state = {
+    inputFiles,
     mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' }, files: { c_gb: null },
     linearSeqs: ['a', 'b'].map((id) => ({
-      uid: `c${id}`, gb: createSessionResourceFileView(table, id), region_record_id: '', region_reverse: false
+      uid: `c${id}`, gb: inputFiles.registerFile(createSessionResourceFileView(table, id)), region_record_id: '', region_reverse: false
     })),
     form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [], featurePlacementOverrides: {},
     circularRecordList: { value: [] },
@@ -44,7 +47,9 @@ const controlsFor = ({ mode = 'linear', runUndoable, sessionBusy = null }) => {
   const drawing = (id) => ({
     id, mode: id, form: createDefaultForm(), adv: createDefaultAdv(id), recordDisplayDrafts: [], featurePlacementOverrides: {}
   });
-  const wrapped = withModeDrawings(state, { circular: drawing('circular'), linear: drawing('linear') });
+  // The Linear drawing reads the fixture's record cards (B's drawing shape).
+  const linear = Object.create(state, { id: { value: 'linear' }, mode: { value: 'linear' }, inputType: { value: { value: 'gb' } } });
+  const wrapped = withModeDrawings(state, { circular: drawing('circular'), linear });
   state.mode.value = mode;
   const controls = createRecordDisplayControls({
     state: wrapped, computed: (fn) => ({ get value() { return fn(); } }), watch: () => {},
