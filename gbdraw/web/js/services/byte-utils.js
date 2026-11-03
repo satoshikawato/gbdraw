@@ -196,8 +196,8 @@ export const isGzipBytes = (bytes) => GZIP_SIGNATURE.every((byte, index) => byte
  * The bytes a gzip file holds, or the bytes themselves when they are not gzip
  * or the browser has no `DecompressionStream` (Python reads a gzip input file
  * as well, so the Worker still draws it).
- * @param {Uint8Array} bytes
- * @returns {Promise<Uint8Array>}
+ * @param {Uint8Array<ArrayBuffer>} bytes
+ * @returns {Promise<Uint8Array<ArrayBuffer>>}
  */
 export const expandGzipBytes = async (bytes) => {
   if (!isGzipBytes(bytes) || typeof DecompressionStream !== 'function') return bytes;
