@@ -77,7 +77,7 @@ for (const inputMethod of ['keyboard', 'pointer']) {
       h.dispatch('focusout');
       await h.settle();
       assert.equal(h.history.getUndoCount(), 2);
-      assert.equal(h.history.undoLabel(), 'Change setting');
+      assert.equal(h.history.stackEntries('undo').at(-1)?.label, 'Change setting');
       await h.history.undo();
       assert.equal(h.value(), 'both');
       await h.history.undo();
@@ -406,7 +406,7 @@ for (const [name, act] of [
       await act(h);
       await settleTasks();
       assert.deepEqual(h.counts(), [1, 0]);
-      assert.equal(h.history.undoLabel(), 'Change uploaded file');
+      assert.equal(h.history.stackEntries('undo').at(-1)?.label, 'Change uploaded file');
       await h.history.undo();
       assert.equal(h.state.rings, 0);
       await h.history.redo();
@@ -567,9 +567,9 @@ test('OV-1130: an action after Enter in a still-focused text field keeps its own
     await h.history.runUndoable('Reset record definition', () => { h.state.mode = 'linear'; });
     await settleTasks();
     assert.deepEqual(h.counts(), [2, 0]);
-    assert.equal(h.history.undoLabel(), 'Reset record definition');
+    assert.equal(h.history.stackEntries('undo').at(-1)?.label, 'Reset record definition');
     await h.history.undo();
-    assert.equal(h.history.undoLabel(), 'Edit setting');
+    assert.equal(h.history.stackEntries('undo').at(-1)?.label, 'Edit setting');
     assert.deepEqual({ prefix: h.state.prefix, mode: h.state.mode }, { prefix: 'A', mode: 'circular' });
   } finally { h.cleanup(); }
 });
@@ -592,7 +592,7 @@ for (const pointer of [false, true]) {
         await settleTasks();
         assert.deepEqual(h.counts(), [index + 1, 0], `pick ${index + 1}`);
       }
-      assert.equal(h.history.undoLabel(), 'Change color');
+      assert.equal(h.history.stackEntries('undo').at(-1)?.label, 'Change color');
       await h.history.undo();
       assert.equal(h.state.choice, '#222222');
       await h.history.undo();

@@ -115,7 +115,7 @@ const moveDecoration = async (page, role) => {
     await frame();
     moveTarget.dispatchEvent(mouse('mouseup', 12, -9, 0));
   }, role);
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__?.undoLabel?.() || ''))
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__?.timeline().undo[0]?.label || ''))
     .toBe(role === 'title' ? 'Move plot title' : 'Move legend');
   await page.evaluate(() => { window.__GBDRAW_APP__.layoutRepositionMode = false; });
   await settleLive(page);
@@ -793,7 +793,7 @@ test('the Undo of a Generate after a legacy configuration Load keeps the loaded 
   // The Load does not restart the drawing's History.
   expect(await undoCount()).toBeGreaterThanOrEqual(Math.max(before, 1));
   await generate(page);
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Generate diagram');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Generate diagram');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settleLive(page);
   await expectEmptyPreview(page, 'circular');

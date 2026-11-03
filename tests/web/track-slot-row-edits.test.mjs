@@ -405,7 +405,7 @@ test('circular: a hide that asks is one History step recorded at the answer, als
   });
   const editor = createCircularTrackSlotEditor({ state, askChoice: ask, runUndoable: history.runUndoable });
   const read = () => [state.form.suppress_skew, state.adv.circular_track_slots.find((slot) => slot.id === 'gc_skew').enabled, state.loaded];
-  const steps = () => [history.getUndoCount(), history.undoLabel()];
+  const steps = () => [history.getUndoCount(), history.stackEntries('undo').at(-1)?.label];
   const tick = () => new Promise((settle) => setImmediate(settle));
   await history.initializeIntentBaseline();
   /** @param {string} choice */
@@ -591,7 +591,7 @@ for (const mode of ['circular', 'linear']) {
     assert.deepEqual(read(), [true, true], 'nothing is written before the answer');
     resolve('hide');
     await asking;
-    assert.deepEqual([read(), history.getUndoCount(), history.undoLabel()], [[false, false], 1, 'Turn off track rows']);
+    assert.deepEqual([read(), history.getUndoCount(), history.stackEntries('undo').at(-1)?.label], [[false, false], 1, 'Turn off track rows']);
     await history.undo();
     assert.deepEqual(read(), [true, true]);
   });

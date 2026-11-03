@@ -111,12 +111,12 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
   await shot(notice, 'label-fit-notice-after-crossing-row.png');
   // The row's settings are one step (PD-OI-088); the Generate that follows is its own.
   expect(await undoCount(page)).toBe(before.undo + 2);
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Generate diagram');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Generate diagram');
   expect(await labelSettings(page)).toEqual({ ...before.settings, resolveOverlaps: true });
   await expect(page.getByLabel('Resolve Overlaps', { exact: true })).toBeChecked();
 
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Fit labels');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Fit labels');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   expect(await labelSettings(page)).toEqual(before.settings);
 });

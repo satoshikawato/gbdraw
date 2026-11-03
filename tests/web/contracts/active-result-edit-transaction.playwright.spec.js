@@ -160,8 +160,8 @@ test.describe('active Result Feature fill transaction', () => {
       history: {
         undoCount: history.getUndoCount(),
         redoCount: history.getRedoCount(),
-        undoLabel: String(history.undoLabel?.() || ''),
-        redoLabel: String(history.redoLabel?.() || '')
+        undoLabel: String(history.timeline().undo[0]?.label || ''),
+        redoLabel: String(history.timeline().redo[0]?.label || '')
       },
       feedback: app.errorLog ? plain(app.errorLog) : null
     };

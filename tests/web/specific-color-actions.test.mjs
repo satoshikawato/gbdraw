@@ -1210,12 +1210,12 @@ test('an Add that asks about a slow pattern is one History step recorded at the 
 
   [asked]=await ask();
   assert.equal(await s.actions.setSpecificRuleField(0,'color','#000000'),true);
-  assert.deepEqual([s.history.getUndoCount(),s.history.undoLabel()],[1,'Edit specific color rule']);
+  assert.deepEqual([s.history.getUndoCount(),s.history.stackEntries('undo').at(-1)?.label],[1,'Edit specific color rule']);
   answer('add');
   assert.equal(await asked,true);
-  assert.deepEqual([table(),s.history.getUndoCount(),s.history.undoLabel()],[['b #000000','(a+)+ #112233'],2,'Add specific color rule']);
+  assert.deepEqual([table(),s.history.getUndoCount(),s.history.stackEntries('undo').at(-1)?.label],[['b #000000','(a+)+ #112233'],2,'Add specific color rule']);
   await s.history.undo();
-  assert.deepEqual([table(),s.history.undoLabel()],[['b #000000'],'Edit specific color rule']);
+  assert.deepEqual([table(),s.history.stackEntries('undo').at(-1)?.label],[['b #000000'],'Edit specific color rule']);
   await s.history.redo();
   assert.deepEqual(table(),['b #000000','(a+)+ #112233']);
 }));
@@ -1310,7 +1310,7 @@ test('a popup recolor of a rule and its rule write are one History step under th
   await recolored;
   assert.deepEqual(table(),['b #000000 ','zz #778899 ']);
   assert.equal(s.history.getUndoCount(),1);
-  assert.equal(s.history.undoLabel(),'Change color');
+  assert.equal(s.history.stackEntries('undo').at(-1)?.label,'Change color');
 }));
 test('a Legend recolor of a rule row made while an Add is pending applies after it (OV-444)', () => withDocument(async () => {
   const {s,held,table}=queuedRuleWrites();

@@ -81,7 +81,7 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
     await labels.focus();
     await labels.selectOption('none');
     await labels.press('Tab');
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Change setting');
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Change setting');
     await noDerivedStatus(page);
     await generate(page);
     const b = await inspect(page, testInfo, 'b');
@@ -626,7 +626,7 @@ test('Checkpoint Undo and Redo keep the admitted feature catalog through a drawi
       const checkpoint = owner.getCurrentCheckpoint();
       return {
         counts: [owner.getUndoCount(), owner.getRedoCount()],
-        label: owner.undoLabel(),
+        label: owner.timeline().undo[0]?.label,
         checkpointBytes: owner.getDiagnostics().checkpointEstimatedBytes,
         checkpoint: Boolean(checkpoint),
         checkpointHasCatalog: Boolean(checkpoint?.editorState && 'featureCatalog' in checkpoint.editorState)
@@ -908,7 +908,7 @@ test('A color edit made while another edit is drawn after a Legend move is one s
       await frame();
       svg.dispatchEvent(mouse('mouseup', 12, -9, 0));
     });
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Move legend');
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Move legend');
     await page.evaluate(() => { window.__GBDRAW_APP__.layoutRepositionMode = false; });
     await settleLive(page);
     const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());

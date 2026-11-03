@@ -392,7 +392,7 @@ test('the Label Not Shown choice and the Apply that opened the dialog are one Hi
   await step.done;
   assert.equal(rowOf(state, 'feature:one/[a]').labelText, 'Renamed');
   assert.equal(history.getUndoCount(), 1);
-  assert.equal(history.undoLabel(), 'Change label text');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Change label text');
 });
 
 // "Show this label" applies Label visibility On through the Q1 and Q2 dialogs.

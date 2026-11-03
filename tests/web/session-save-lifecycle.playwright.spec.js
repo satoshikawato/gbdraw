@@ -419,7 +419,7 @@ test('Rename Session is one History step: Undo and Redo move the title apart fro
   await field.fill('Renamed');
   await field.press('Enter');
   expect(await read()).toEqual({ ...changed, title: 'Renamed' });
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Rename Session');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Rename Session');
 
   await history('undo');
   expect(await read()).toEqual(changed);

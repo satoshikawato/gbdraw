@@ -55,7 +55,7 @@ test('a drawing added to the router gets an empty History that records and undoe
   shown.value = 'linear-2';
   assert.equal(router.canUndo(), false, 'a new drawing starts with an empty History');
   await router.runUndoable('Linear 2 edit', () => { values['linear-2'] = 'b'; });
-  assert.equal(router.undoLabel(), 'Linear 2 edit');
+  assert.equal(router.timeline().undo[0]?.label, 'Linear 2 edit');
   await router.undo();
   assert.equal(values['linear-2'], '');
   assert.equal(values.linear, 'a', 'the Undo in the new drawing leaves the other drawing');
@@ -88,14 +88,14 @@ test('a removed History stays in the budget, held by the project step that remov
     router.runProjectStep('Delete again', () => { router.removeMember('linear-2'); }),
     refusal('UNKNOWN_DRAWING')
   );
-  assert.equal(router.undoLabel(), 'Delete Linear 2');
+  assert.equal(router.timeline().undo[0]?.label, 'Delete Linear 2');
   assert.equal(fileStore.has(fileAId), true, 'the held History still names file A');
 
   // The held History's bytes count: one more step is over the budget, and the
   // project step that holds it goes before the shown drawing's step.
   await router.runUndoable('Circular edit', () => { values.circular = 'y'.repeat(400); });
   assert.equal(router.getUndoCount(), 1, 'the holding project step was evicted');
-  assert.equal(router.undoLabel(), 'Circular edit');
+  assert.equal(router.timeline().undo[0]?.label, 'Circular edit');
   assert.equal(fileStore.has(fileAId), false, 'evicting the holder releases the held History and its files');
 });
 
@@ -154,7 +154,7 @@ test('restoring captured members gives back every History and the project stream
   router.restoreMembers(members);
   assert.throws(() => router.managerOf('circular-2'), refusal('UNKNOWN_DRAWING'));
   assert.deepEqual([router.getUndoCount(), router.getRedoCount()], [1, 1], 'the shown History and the project stream are back');
-  assert.equal(router.redoLabel(), 'Circular edit');
+  assert.equal(router.timeline().redo[0]?.label, 'Circular edit');
   await router.redo();
   assert.equal(values.circular, 'c');
   await router.undo();

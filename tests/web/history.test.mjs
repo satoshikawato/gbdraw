@@ -83,7 +83,7 @@ const createLayoutPreferences = () => ({
   });
   assert.equal(history.getUndoCount(), 1);
   assert.equal(history.canUndo(), true);
-  assert.equal(history.undoLabel(), 'Increment');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Increment');
 
   await history.undo();
   assert.equal(value, 0);
@@ -171,22 +171,20 @@ const createLayoutPreferences = () => ({
   assert.equal(canUndoHistory.value, true);
   busySource.value = true;
   assert.equal(history.canUndo(), false);
-  assert.equal(history.undoLabel(), '');
   assert.equal(canUndoHistory.value, false);
   assert.deepEqual(await history.undo(), busy);
   assert.equal(history.getUndoCount(), 1);
   busySource.value = false;
   assert.equal(canUndoHistory.value, true);
-  assert.equal(history.undoLabel(), 'Increment');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Increment');
   assert.equal(await history.undo(), true);
   assert.equal(canRedoHistory.value, true);
   busySource.value = true;
   assert.equal(history.canRedo(), false);
-  assert.equal(history.redoLabel(), '');
   assert.equal(canRedoHistory.value, false);
   busySource.value = false;
   assert.equal(canRedoHistory.value, true);
-  assert.equal(history.redoLabel(), 'Increment');
+  assert.equal(history.stackEntries('redo').at(-1)?.label, 'Increment');
 }
 
 {
@@ -209,7 +207,7 @@ const createLayoutPreferences = () => ({
   });
   assert.equal(value, 1);
   await reset;
-  assert.equal(history.undoLabel(), 'Synchronous reset');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Synchronous reset');
   await history.undo();
   assert.equal(value, 0);
 }
@@ -238,11 +236,11 @@ const createLayoutPreferences = () => ({
 
   assert.equal(pendingEdit.closed, true);
   assert.equal(history.getUndoCount(), 2);
-  assert.equal(history.undoLabel(), 'Generate');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Generate');
   await history.undo();
   assert.equal(setting, 1);
   assert.equal(artifact, 'artifact-a');
-  assert.equal(history.undoLabel(), 'Edit setting');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Edit setting');
   await history.undo();
   assert.equal(setting, 0);
   assert.equal(artifact, 'artifact-a');
@@ -345,7 +343,7 @@ const createLayoutPreferences = () => ({
   });
   assert.equal(checkpointBuilds, 2);
   assert.equal(history.getUndoCount(), 1);
-  assert.equal(history.undoLabel(), 'Generate');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Generate');
   await history.undo();
   assert.deepEqual(documentState, {
     setting: 'loaded',
@@ -528,11 +526,11 @@ const createLayoutPreferences = () => ({
   }, { shouldCommit: (result) => result.status === 'ok' });
   assert.equal(pendingSetting.closed, true);
   assert.equal(pendingSetting.deferAdapterCommit, true);
-  assert.equal(history.undoLabel(), 'Generate B');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Generate B');
   await history.undo();
   assert.equal(artifact.id, 'a');
   assert.equal(setting, 'changed-setting');
-  assert.equal(history.undoLabel(), 'Change render setting');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Change render setting');
   await history.undo();
   assert.equal(setting, 'loaded-setting');
   await history.redo();
@@ -768,7 +766,7 @@ const createLayoutPreferences = () => ({
   });
   // OV-1260: the newest step stays; the older one drops and the drop is announced.
   assert.equal(history.getUndoCount(), 1);
-  assert.equal(history.undoLabel(), 'Large state');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Large state');
   assert.deepEqual(limitMessages, ['Older undo history was discarded to stay within the history limit.']);
   assert.equal(await history.undo(), true);
   assert.equal(value, 'tiny');
@@ -874,14 +872,14 @@ const createLayoutPreferences = () => ({
 
   assert.equal(value, 2);
   assert.equal(history.getUndoCount(), 2);
-  assert.equal(history.undoLabel(), 'Command set two');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Command set two');
   assert.equal(checkpointBuildCount, checkpointsAfterIntentEdit);
   assert.equal(commandSizeComputations, 1);
 
   await history.undo();
   assert.equal(value, 1);
   assert.equal(checkpointApplyCount, 0);
-  assert.equal(history.undoLabel(), 'Snapshot set one');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Snapshot set one');
 
   await history.undo();
   assert.equal(value, 0);
@@ -942,7 +940,7 @@ const createLayoutPreferences = () => ({
       true
     );
     assert.equal(history.getUndoCount(), 1);
-    assert.equal(history.undoLabel(), 'Conditional command');
+    assert.equal(history.stackEntries('undo').at(-1)?.label, 'Conditional command');
 
     allowRevert = false;
     assert.equal(await history.undo(), false);
@@ -955,7 +953,7 @@ const createLayoutPreferences = () => ({
     assert.equal(value, 0);
     assert.equal(history.getUndoCount(), 0);
     assert.equal(history.getRedoCount(), 1);
-    assert.equal(history.redoLabel(), 'Conditional command');
+    assert.equal(history.stackEntries('redo').at(-1)?.label, 'Conditional command');
 
     allowApply = false;
     assert.equal(await history.redo(), false);
@@ -1498,7 +1496,7 @@ const createLayoutPreferences = () => ({
   await history.runUndoableCheckpoint('Generate', () => {
     artifact = replacementArtifact;
   });
-  assert.equal(history.undoLabel(), 'Generate');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Generate');
   await history.undo();
   assert.equal(artifact, originalArtifact);
   await history.redo();
@@ -2571,7 +2569,7 @@ for (const previousSuppressed of [false, true]) {
     harness.undoAll = async () => {
       const labels = [];
       while (harness.history.canUndo()) {
-        labels.push(harness.history.undoLabel());
+        labels.push(harness.history.stackEntries('undo').at(-1)?.label);
         await harness.history.undo();
       }
       return labels;
@@ -2726,7 +2724,7 @@ for (const previousSuppressed of [false, true]) {
     load.release();
     await load.done;
     assert.equal(h.history.getUndoCount(), 2);
-    assert.equal(h.history.undoLabel(), 'Load label edits');
+    assert.equal(h.history.stackEntries('undo').at(-1)?.label, 'Load label edits');
     await h.undoAll();
     assert.deepEqual(h.intent, START);
     await h.redoAll();
@@ -2747,10 +2745,10 @@ for (const previousSuppressed of [false, true]) {
     h.intent.color = 'blue';
     await h.history.commit(typing);
     assert.equal(h.history.getUndoCount(), 3);
-    assert.equal(h.history.undoLabel(), 'Change setting');
+    assert.equal(h.history.stackEntries('undo').at(-1)?.label, 'Change setting');
     await h.history.undo();
     assert.deepEqual(h.intent, { label: 'EDITED', table: 'applied', color: 'bl' }, 'the control step holds only what followed the remainder');
-    assert.equal(h.history.undoLabel(), 'Load label edits');
+    assert.equal(h.history.stackEntries('undo').at(-1)?.label, 'Load label edits');
     await h.history.undo();
     assert.deepEqual(h.intent, { label: 'EDITED', table: null, color: 'red' });
     await h.undoAll();
@@ -2846,7 +2844,7 @@ for (const previousSuppressed of [false, true]) {
     load.release();
     await load.done;
     assert.equal(h.history.getUndoCount(), 1, 'Generate\'s changes are not a step of the load');
-    assert.equal(h.history.undoLabel(), 'Generate diagram');
+    assert.equal(h.history.stackEntries('undo').at(-1)?.label, 'Generate diagram');
     await h.history.undo();
     assert.deepEqual([h.artifact.id, h.intent.color], ['a', 'red'], 'one Undo returns the Result and what follows it');
     await h.history.redo();
@@ -2859,7 +2857,7 @@ for (const previousSuppressed of [false, true]) {
     later.release();
     await later.done;
     assert.equal(h.history.getUndoCount(), 3);
-    assert.equal(h.history.undoLabel(), 'Load label edits');
+    assert.equal(h.history.stackEntries('undo').at(-1)?.label, 'Load label edits');
     await h.history.undo();
     assert.deepEqual(h.intent, { label: 'EDITED', table: write ? null : 'applied', color: 'legend-of-b' },
       'the step holds only what that action wrote');
@@ -3175,7 +3173,7 @@ for (const previousSuppressed of [false, true]) {
   figure = 'x'.repeat(2000);
   assert.equal(await history.keepRedrawnResult(), true);
   assert.equal(history.getRedoCount(), 0);
-  assert.equal(history.undoLabel(), 'Change feature color');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Change feature color');
   assert.deepEqual(limitMessages, ['Redo history was discarded to stay within the history limit.']);
 }
 

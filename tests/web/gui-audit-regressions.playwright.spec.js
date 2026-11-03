@@ -333,7 +333,7 @@ test('a label TSV that matches no label keeps the label edits and records no Und
     await app.loadLabelOverrideTable({ target: { files: [new File([text], 'labels.tsv')], value: 'labels.tsv' } });
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const history = window.__GBDRAW_HISTORY__;
-    return { bulk: { ...app.labelTextBulkOverrides }, undoCount: history.getUndoCount(), undoLabel: history.undoLabel() };
+    return { bulk: { ...app.labelTextBulkOverrides }, undoCount: history.getUndoCount(), undoLabel: history.timeline().undo[0]?.label };
   }, tsv);
   const edited = await importTsv('*\t*\tlabel\t^tRNA-Phe$\tMyLabel\n');
   expect(edited).toMatchObject({ bulk: { 'tRNA-Phe': 'MyLabel' }, undoLabel: 'Load label edits' });
@@ -381,7 +381,7 @@ test('an edit made while a label TSV loads and the load are two Undo steps', asy
     const read = () => ({
       label: app.labelTextBulkOverrides['tRNA-Phe'] ?? null,
       topology: state.activeDrawing().recordDisplayDrafts[0]?.topologyOverride ?? null,
-      undoLabel: history.undoLabel()
+      undoLabel: history.timeline().undo[0]?.label
     });
     const settle = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const file = new File(['*\t*\tlabel\t^tRNA-Phe$\tMyLabel\n'], 'labels.tsv');

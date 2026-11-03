@@ -58,7 +58,7 @@ def checkpoint(page, name, output):
         history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()],
         generation: s.resultGenerationKey.value,
         intent: window.__GBDRAW_HISTORY__.getCurrentIntent(),
-        historyLabel: window.__GBDRAW_HISTORY__.undoLabel(), diagnostics: window.__GBDRAW_HISTORY__.getDiagnostics()
+        historyLabel: window.__GBDRAW_HISTORY__.timeline().undo[0]?.label ?? '', diagnostics: window.__GBDRAW_HISTORY__.getDiagnostics()
       };
     }""")
     result["resultSha256"] = hashlib.sha256(result["result"].encode()).hexdigest()

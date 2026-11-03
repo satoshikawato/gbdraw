@@ -85,7 +85,7 @@ test('Orient records from comparisons checks the reversed record as one Undo ste
   await expect(status).toContainText('Generate to draw the new orientation');
   expect(await reverseFlags(page)).toEqual([false, true]);
   await expect(page.getByLabel('Reverse complement for sequence 2', { exact: true })).toBeChecked();
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Orient records from comparisons');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Orient records from comparisons');
 
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   expect(await reverseFlags(page)).toEqual([false, false]);

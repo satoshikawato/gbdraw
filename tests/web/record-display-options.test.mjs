@@ -342,7 +342,7 @@ test('Apply on Generate is one undoable draft step, and re-staging replaces the 
       startCoordinate: 25, reverseComplement: true, anchorIntent
     });
     assert.equal(model.history.getUndoCount(), 1, 'one History step');
-    assert.equal(model.history.undoLabel(), 'Rotate record to feature on Generate');
+    assert.equal(model.history.stackEntries('undo').at(-1)?.label, 'Rotate record to feature on Generate');
     assert.deepEqual(pending(), { startCoordinate: 25, reverseComplement: true });
     assert.equal(reverse(), linear ? true : null, 'a single-record Linear card owns the orientation');
 

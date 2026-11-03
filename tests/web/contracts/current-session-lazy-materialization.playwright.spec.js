@@ -1042,10 +1042,10 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     const generatedState = snapshotResultState();
     const firstUndoCount = history.getUndoCount();
     const firstRedoCount = history.getRedoCount();
-    const firstUndoLabel = history.undoLabel();
+    const firstUndoLabel = history.timeline().undo[0]?.label;
     const undone = await history.undo();
     const restoredLoadedState = snapshotResultState();
-    const redoLabelAfterUndo = history.redoLabel();
+    const redoLabelAfterUndo = history.timeline().redo[0]?.label;
     const redone = await history.redo();
     const restoredGeneratedState = snapshotResultState();
     const {

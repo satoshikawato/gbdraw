@@ -122,22 +122,22 @@ test('Reset all drawings is one project step: one Undo restores every drawing', 
 
   // A newer step of the shown drawing is undone first.
   await history.runUndoable('Linear prefix', () => { linear.form.prefix = 'after-reset'; });
-  assert.equal(history.undoLabel(), 'Linear prefix');
+  assert.equal(history.timeline().undo[0]?.label, 'Linear prefix');
   await app.undoHistory();
   assert.equal(hashOf('linear'), linearReset);
-  assert.equal(history.undoLabel(), 'Reset settings');
+  assert.equal(history.timeline().undo[0]?.label, 'Reset settings');
 
   await app.undoHistory();
   assert.equal(hashOf('circular'), circularBefore, 'one Undo in Linear restores Circular');
   assert.equal(hashOf('linear'), linearBefore, 'and Linear');
   await app.redoHistory();
-  assert.equal(history.redoLabel(), 'Linear prefix', 'Redo replays in the order the steps ended');
+  assert.equal(history.timeline().redo[0]?.label, 'Linear prefix', 'Redo replays in the order the steps ended');
   assert.equal(hashOf('circular'), circularReset, 'Redo resets Circular again');
   assert.equal(hashOf('linear'), linearReset, 'and Linear');
 
   // From the other drawing the Reset is the newest step too.
   assert.deepEqual(app.selectDrawing('circular'), { status: 'ok' });
-  assert.equal(history.undoLabel(), 'Reset settings');
+  assert.equal(history.timeline().undo[0]?.label, 'Reset settings');
   await app.undoHistory();
   assert.equal(hashOf('circular'), circularBefore, 'one Undo in Circular restores Circular');
   assert.equal(hashOf('linear'), linearBefore, 'and Linear');
@@ -179,7 +179,7 @@ test('Reset this drawing is one step of the shown drawing; the other drawing, it
     linear.form.prefix = 'linear-prefix';
     bindInputFile(state.inputFiles, linear.slices.inputs, 'd_color', new File(['a\tb'], 'linear-colors.tsv'));
   });
-  const linearUndo = { count: history.getUndoCount(), label: history.undoLabel() };
+  const linearUndo = { count: history.getUndoCount(), label: history.timeline().undo[0]?.label };
   app.selectDrawing('circular');
   await history.runUndoable('Circular prefix', () => {
     circular.form.prefix = 'circular-prefix';
@@ -206,11 +206,11 @@ test('Reset this drawing is one step of the shown drawing; the other drawing, it
   assert.equal(colorsCard(linear), 'linear-colors.tsv', 'and keeps its card file');
   assert.deepEqual(sessionValues(), session, 'the one-per-Session values stay (R17-5)');
   assert.equal(history.getUndoCount(), undoCount + 1, 'one step');
-  assert.equal(history.undoLabel(), 'Reset this drawing');
+  assert.equal(history.timeline().undo[0]?.label, 'Reset this drawing');
   const circularReset = hashOf('circular');
 
   app.selectDrawing('linear');
-  assert.deepEqual({ count: history.getUndoCount(), label: history.undoLabel() }, { count: linearUndo.count + 1, label: 'Change setting' },
+  assert.deepEqual({ count: history.getUndoCount(), label: history.timeline().undo[0]?.label }, { count: linearUndo.count + 1, label: 'Change setting' },
     'the other drawing\'s History holds no Reset step');
   app.selectDrawing('circular');
   await app.undoHistory();
@@ -257,7 +257,7 @@ test('a switch settles the departing drawing\'s open step in that drawing', asyn
   assert.deepEqual(app.selectDrawing('circular'), { status: 'ok' });
   assert.equal(history.getUndoCount(), circularSteps + 2, 'the step is the Circular drawing\'s');
   // The step ended at the switch, before the title edit.
-  assert.equal(history.undoLabel(), 'Rename Session');
+  assert.equal(history.timeline().undo[0]?.label, 'Rename Session');
   await app.undoHistory();
   assert.equal(state.sessionTitle.value, title, 'the title is undone first');
   assert.equal(circular.form.prefix, 'typed-before-switch');
@@ -414,17 +414,17 @@ test('a step that also clears a draft is its drawing\'s step and leaves the othe
 
   show(app, 'linear');
   assert.equal(history.canRedo(), true, 'a Circular step keeps Linear\'s Redo');
-  assert.equal(history.undoLabel(), 'Type pattern', 'Linear does not see the Circular step');
+  assert.equal(history.timeline().undo[0]?.label, 'Type pattern', 'Linear does not see the Circular step');
   await app.undoHistory();
   assert.equal(state.newSpecRule.val, draftBefore, 'the draft stays as the Circular step left it');
   assert.equal(circular.form.prefix, 'rule-added');
 
   show(app, 'circular');
-  assert.equal(history.undoLabel(), 'Add specific color rule');
+  assert.equal(history.timeline().undo[0]?.label, 'Add specific color rule');
   await app.undoHistory();
   assert.deepEqual({ prefix: circular.form.prefix, draft: state.newSpecRule.val }, { prefix: prefixBefore, draft: 'abc' },
     'one Undo restores the rule and the draft');
-  assert.equal(history.redoLabel(), 'Type pattern', 'Redo replays in the order the steps ended');
+  assert.equal(history.timeline().redo[0]?.label, 'Type pattern', 'Redo replays in the order the steps ended');
   await app.redoHistory();
   await app.redoHistory();
   assert.deepEqual({ prefix: circular.form.prefix, draft: state.newSpecRule.val }, { prefix: 'rule-added', draft: '' });
@@ -448,7 +448,7 @@ test('a selection outside any step is unsaved only with the next step, in its dr
   show(app, 'linear');
   assert.equal(history.canUndo(), false, 'Linear does not see the Circular step');
   show(app, 'circular');
-  assert.equal(history.undoLabel(), 'Circular prefix');
+  assert.equal(history.timeline().undo[0]?.label, 'Circular prefix');
   await app.undoHistory();
   assert.deepEqual({ prefix: circular.form.prefix, selected: state.selectedAnnotation.value },
     { prefix: prefixBefore, selected: selectedBefore });
@@ -497,9 +497,9 @@ test('a title typed in a step open at the switch is undone, without the tab rese
   await settleTurns();
   await history.commit(step);
   assert.equal(state.featurePanelTab.value, 'colors');
-  assert.equal(history.undoLabel(), 'Rename Session', 'the title edit is a project step');
+  assert.equal(history.timeline().undo[0]?.label, 'Rename Session', 'the title edit is a project step');
   show(app, 'circular');
-  assert.equal(history.undoLabel(), 'Rename Session');
+  assert.equal(history.timeline().undo[0]?.label, 'Rename Session');
   await app.undoHistory();
   assert.deepEqual({ title: state.sessionTitle.value, tab: state.featurePanelTab.value }, { title, tab: 'colors' });
 });
@@ -520,7 +520,7 @@ test('a prefix and a draft changed in a step open at the switch are undone toget
   await settleTurns();
   assert.equal(history.canUndo(), false, 'Linear does not see the Circular step');
   show(app, 'circular');
-  assert.deepEqual({ label: history.undoLabel(), count: history.getUndoCount() }, { label: 'Edit', count: 1 });
+  assert.deepEqual({ label: history.timeline().undo[0]?.label, count: history.getUndoCount() }, { label: 'Edit', count: 1 });
   await app.undoHistory();
   assert.deepEqual({ prefix: circular.form.prefix, draft: state.newSpecRule.val }, before);
 });
@@ -565,9 +565,9 @@ test('an Undo of Reset from Circular does not read Linear\'s alignment receipt',
   state.similarityAlignmentResetReceipt.value = { binding: 'fake', directions: [], referenceDeltaX: null };
   await app.resetSettings();
   show(app, 'circular');
-  assert.equal(history.undoLabel(), 'Reset settings');
+  assert.equal(history.timeline().undo[0]?.label, 'Reset settings');
   assert.equal(await app.undoHistory(), true);
-  assert.notEqual(history.undoLabel(), 'Reset settings');
+  assert.notEqual(history.timeline().undo[0]?.label, 'Reset settings');
   assert.equal(state.similarityAlignmentResetReceipt.value, null, 'the shown Circular slot takes no receipt');
 });
 
@@ -600,8 +600,8 @@ test('an Undo of Reset after the limit dropped a newer step keeps that step\'s c
   for (let index = 0; index < 30; index += 1) {
     await history.runUndoable('Species', () => { circular.form.species = `S${index}`; });
   }
-  while (history.undoLabel() === 'Species') await app.undoHistory();
-  assert.equal(history.undoLabel(), 'Reset settings', 'the limit dropped the prefix step');
+  while (history.timeline().undo[0]?.label === 'Species') await app.undoHistory();
+  assert.equal(history.timeline().undo[0]?.label, 'Reset settings', 'the limit dropped the prefix step');
   await app.undoHistory();
   assert.equal(circular.form.prefix, 'later', 'the dropped step\'s change stays');
   await app.redoHistory();
@@ -635,7 +635,7 @@ test('an Undo of Reset from the other drawing keeps a later step of the hidden d
   show(app, 'circular');
   await history.runUndoable('Circular prefix', () => { circular.form.prefix = 'later'; });
   show(app, 'linear');
-  assert.equal(history.undoLabel(), 'Reset settings');
+  assert.equal(history.timeline().undo[0]?.label, 'Reset settings');
   await app.undoHistory();
   assert.equal(circular.form.prefix, 'later');
 });
@@ -693,7 +693,7 @@ test('turning Instant Preview on applies every drawing\'s queued palette in one 
   assert.equal(state.paletteInstantPreviewEnabled.value, true);
   assert.equal(circular.pendingPaletteName.value, '', 'the hidden drawing\'s queue is applied');
   assert.equal(state.appliedPaletteName.value, linearApplied, 'the shown Result keeps its palette');
-  assert.equal(history.undoLabel(), 'Change setting');
+  assert.equal(history.timeline().undo[0]?.label, 'Change setting');
   await app.undoHistory();
   assert.equal(state.paletteInstantPreviewEnabled.value, false);
   assert.equal(circular.pendingPaletteName.value, 'queued', 'the Undo queues it again');
@@ -732,7 +732,7 @@ for (const later of ['redraw', 'rename']) test(`an Undo from the other drawing $
   if (later === 'redraw') replaceLegendRows(circular.slices.paint, [row('Hand', 0), row('GC content', 40)]);
   else await history.runUndoable('Rename Legend row', () => replaceLegendRows(circular.slices.paint, [row('Hand', 0), row('GC', 80)]));
   show(app, 'linear');
-  assert.equal(history.undoLabel(), 'Remove specific rules file');
+  assert.equal(history.timeline().undo[0]?.label, 'Remove specific rules file');
   await app.undoHistory();
   assert.deepEqual(captions(), later === 'redraw' ? ['Hand', 'Imported', 'GC content'] : ['Hand', 'GC']);
 });
@@ -762,7 +762,7 @@ test('replacing a file for every drawing that uses it is one project step that l
   const copy = state.drawingOf(copyId);
   const circular = state.drawingOf('circular');
   assert.equal(copy.files.c_gb, shared, 'the copy binds the same file');
-  const stepsBefore = history.undoLabel();
+  const stepsBefore = history.timeline().undo[0]?.label;
   const outcome = app.replaceInputFile(shared.fileId, genbank('new.gb'), () => undefined);
   // The project step is recorded when each drawing's part has settled.
   for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
@@ -773,15 +773,15 @@ test('replacing a file for every drawing that uses it is one project step that l
   const { projectInputReplacement } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const drawings = state.drawingTabs.value.map((tab) => ({ drawingId: tab.id, drawing: state.drawingOf(tab.id) }));
   assert.deepEqual(projectInputReplacement(drawings, shared.fileId), [], 'no drawing keeps the old source');
-  assert.equal(history.undoLabel(), 'Replace input file', 'one step');
+  assert.equal(history.timeline().undo[0]?.label, 'Replace input file', 'one step');
   await app.undoHistory();
   assert.equal(copy.files.c_gb, shared, 'one Undo from the copy restores it');
   assert.equal(circular.files.c_gb, shared, 'and the other drawing');
-  assert.equal(history.undoLabel(), stepsBefore);
+  assert.equal(history.timeline().undo[0]?.label, stepsBefore);
   await app.redoHistory();
   assert.equal(circular.files.c_gb?.fileId, replaced?.fileId);
   app.selectDrawing('circular');
-  assert.equal(history.undoLabel(), 'Replace input file', 'the project step is undoable from the other drawing');
+  assert.equal(history.timeline().undo[0]?.label, 'Replace input file', 'the project step is undoable from the other drawing');
   await app.undoHistory();
   assert.equal(circular.files.c_gb, shared);
   assert.equal(copy.files.c_gb, shared);
@@ -816,18 +816,18 @@ test('replacing a Linear row file or a comparison file for every drawing that us
   assert.equal(edgeFile(copy), blast, 'and the same comparison file by comparison id');
   const drawings = () => state.drawingTabs.value.map((tab) => ({ drawingId: tab.id, drawing: state.drawingOf(tab.id) }));
   for (const [old, next, read] of [[shared, genbank('new.gb'), rowFile], [blast, new File(['x'], 'new.tsv'), edgeFile]]) {
-    const before = history.undoLabel();
+    const before = history.timeline().undo[0]?.label;
     assert.equal(app.replaceInputFile(old.fileId, next, () => undefined).status, 'ok');
     await settle();
     const replaced = read(linear);
     assert.ok(replaced && replaced.fileId !== old.fileId, `${old.name}: the shown drawing binds the new file`);
     assert.equal(read(copy), replaced, `${old.name}: so does the other drawing`);
     assert.deepEqual(projectInputReplacement(drawings(), old.fileId), [], `${old.name}: no drawing keeps the old file`);
-    assert.equal(history.undoLabel(), 'Replace input file', `${old.name}: one step`);
+    assert.equal(history.timeline().undo[0]?.label, 'Replace input file', `${old.name}: one step`);
     await app.undoHistory();
     assert.equal(read(linear), old, `${old.name}: one Undo restores the shown drawing`);
     assert.equal(read(copy), old, `${old.name}: and the other drawing`);
-    assert.equal(history.undoLabel(), before);
+    assert.equal(history.timeline().undo[0]?.label, before);
     await app.redoHistory();
     assert.equal(read(copy)?.fileId, replaced.fileId, `${old.name}: Redo replaces it again`);
   }
@@ -899,7 +899,7 @@ test('an uploader asks whether to replace a file another drawing uses for this d
   app.selectDrawing(copyId);
   const copy = state.drawingOf(copyId);
   const circular = state.drawingOf('circular');
-  const before = history.undoLabel();
+  const before = history.timeline().undo[0]?.label;
   const ask = async (name, answer) => {
     const pending = app.uploadCircularSourceFile('c_gb', genbank(name));
     await settle();
@@ -911,7 +911,7 @@ test('an uploader asks whether to replace a file another drawing uses for this d
   };
   await ask('asked-cancel.gb', 'cancel');
   assert.equal(copy.files.c_gb, shared, 'Cancel changes nothing');
-  assert.equal(history.undoLabel(), before, 'and records no step');
+  assert.equal(history.timeline().undo[0]?.label, before, 'and records no step');
   // The question names the other drawings as their tabs show them: a default
   // name in the UI language, not the stored name.
   const { setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
@@ -936,7 +936,7 @@ test('an uploader asks whether to replace a file another drawing uses for this d
   await ask('asked-all.gb', 'all');
   assert.notEqual(copy.files.c_gb?.fileId, shared.fileId);
   assert.equal(circular.files.c_gb, copy.files.c_gb, 'Every drawing that uses this file replaces both');
-  assert.equal(history.undoLabel(), 'Replace input file', 'as one project step');
+  assert.equal(history.timeline().undo[0]?.label, 'Replace input file', 'as one project step');
   await app.undoHistory();
   assert.equal(circular.files.c_gb, shared);
   assert.equal(copy.files.c_gb, shared);
@@ -999,11 +999,11 @@ test('an upload over a file another drawing uses writes the chosen card; only "E
     if (answer === 'drawing') {
       assert.equal(depthOf(l, two), x, 'This drawing only: the other card of the shown drawing keeps its file');
       assert.deepEqual([depthOf(copy, one), depthOf(copy, two)], [x, x], 'and the other drawing keeps its files');
-      assert.equal(history.undoLabel(), 'Replace input file', 'a step of the shown drawing');
+      assert.equal(history.timeline().undo[0]?.label, 'Replace input file', 'a step of the shown drawing');
     } else {
       assert.equal(depthOf(l, two), y, 'Every drawing: the other card of the shown drawing is swapped');
       assert.deepEqual([depthOf(copy, one), depthOf(copy, two)], [y, y], 'and so are the other drawing\'s cards');
-      assert.equal(history.undoLabel(), 'Replace input file', 'as one project step');
+      assert.equal(history.timeline().undo[0]?.label, 'Replace input file', 'as one project step');
     }
     await app.undoHistory();
     assert.deepEqual([depthOf(l, one), depthOf(l, two), depthOf(copy, one), depthOf(copy, two)], [x, x, x, x],
