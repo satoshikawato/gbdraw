@@ -105,7 +105,7 @@ test('evicting the oldest entry keeps the artifact that the next entry still nam
   await generate('f');
   assert.equal(history.getUndoCount(), 4);
   assert.equal(retainedBytes(), 5 * ARTIFACT_BYTES);
-  assert.equal(history.undoLabel(), 'Generate f');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Generate f');
   assert.equal(await undoAll(history), 4);
   assert.equal(currentId(), 'b', 'the oldest kept entry restores the artifact it names');
 });
@@ -120,7 +120,7 @@ test('a Generate over the byte limit stays undoable and redoable', async () => {
   assert.equal(limitMessage(), '', 'no older step dropped');
   await generate('b');
   assert.equal(history.getUndoCount(), 1);
-  assert.equal(history.undoLabel(), 'Generate b');
+  assert.equal(history.stackEntries('undo').at(-1)?.label, 'Generate b');
   assert.equal(limitMessage(), LIMIT_MESSAGE);
   assert.equal(await history.undo(), true);
   assert.equal(currentId(), 'a');

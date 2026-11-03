@@ -26,7 +26,7 @@ const createApp = (buildIntentOf) => {
   const saveAvailable = computed(() => !history.mutationPending());
   const canUndo = computed(() => { void history.revision.value; return history.canUndo(); });
   const canRedo = computed(() => { void history.revision.value; return history.canRedo(); });
-  const undoTitle = computed(() => { void history.revision.value; return `Undo ${history.undoLabel()}`; });
+  const undoTitle = computed(() => { void history.revision.value; return `Undo ${history.stackEntries('undo').at(-1)?.label ?? ''}`; });
   let renders = 0;
   watchEffect(() => {
     renders += 1;
@@ -54,7 +54,7 @@ test('a tracked control renders for its value and its step, not per capture (OV-
   // The value, then Undo becoming available.
   assert.equal(app.renders() - start, 2);
   assert.equal(app.history.getUndoCount(), 1);
-  assert.equal(app.history.undoLabel(), 'Normalize record lengths');
+  assert.equal(app.history.stackEntries('undo').at(-1)?.label, 'Normalize record lengths');
   assert.equal(app.history.getDiagnostics().intentBuilds - builds, 2, 'one capture before, one after');
 
   const second = app.renders();
@@ -112,7 +112,7 @@ test('a control focused while an action opens its step joins that step (OV-946)'
   assert.equal(await app.history.undo(), true);
   assert.equal(app.checked.value, false);
   assert.equal(app.history.getUndoCount(), 0, 'Undo records no step');
-  assert.equal(app.history.redoLabel(), 'Change setting and reset Feature placements');
+  assert.equal(app.history.stackEntries('redo').at(-1)?.label, 'Change setting and reset Feature placements');
   assert.equal(await app.history.redo(), true);
   assert.equal(app.checked.value, true);
   assert.equal(app.history.getUndoCount(), 1);

@@ -178,7 +178,7 @@ test.describe('390 px offer', () => {
     await items.nth(1).click();
     await expect.poll(() => drawingIds(page)).toEqual(['circular', 'linear']);
     expect((await shownDrawing(page)).id, 'the new Linear drawing is shown').toBe('linear');
-    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('New drawing');
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('New drawing');
     await picker.locator('summary').click();
     await expect(items, 'no offer once a Linear drawing exists').toHaveText(['Circular', 'Linear']);
     await expect(items.locator('.ph-plus')).toHaveCount(0);
@@ -261,7 +261,7 @@ test('Rename in the tab menu is one History step that Undo restores; a repeated 
   await expect(drawingTab(page, second)).toHaveAccessibleName('Phage comparison');
   await expect(page.getByRole('tab', { name: 'Phage comparison', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(menu.locator('summary')).toHaveAttribute('aria-label', 'Drawing menu for Phage comparison');
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Rename drawing');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Rename drawing');
 
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(drawingTab(page, second)).toHaveAccessibleName(name);
@@ -283,7 +283,7 @@ test('Delete in the tab menu removes the shown drawing as one step that Undo res
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(await drawingIds(page), 'a drawing without Result or edits is deleted without asking').toEqual([first]);
   expect((await shownDrawing(page)).id).toBe(first);
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Delete drawing');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Delete drawing');
 
   await menu.locator('summary').click();
   await expect(deleteItem, 'the last drawing has no Delete').toBeDisabled();
@@ -311,7 +311,7 @@ test('Duplicate in the tab menu shows a named copy as one step that Undo takes b
   expect(ids[0]).toBe(first);
   await expect(drawingTab(page, copy)).toHaveAccessibleName(`${name} copy`);
   expect((await shownDrawing(page)).id, 'the copy is shown').toBe(copy);
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Duplicate drawing');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Duplicate drawing');
 
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   expect(await drawingIds(page)).toEqual([first]);
@@ -359,7 +359,7 @@ test('New Linear drawing with this style copies a both-mode setting, no profile 
   expect(styledSettings.legendFontSize).toBe(23);
   expect(styledSettings.plotTitle, 'Plot Title keeps the Linear profile').not.toBe('Styled title');
   expect(await boundFiles(styled)).toEqual([]);
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('New drawing with this style');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('New drawing with this style');
 
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   expect(await drawingIds(page)).toEqual([source]);
@@ -396,7 +396,7 @@ test('replacing a genome file that a Duplicate also uses asks for this drawing o
   await dialog.getByRole('button', { name: 'Every drawing that uses this file', exact: true }).click();
   await expect.poll(() => fileName(copy)).toBe('NC_005856.1.gb');
   expect(await fileName(source), 'both drawings bind the new file').toBe('NC_005856.1.gb');
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Replace input file');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Replace input file');
   await showDrawing(page, { name: await tabName(page, source) });
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(() => fileName(source)).toBe('NC_001416.gb');
@@ -439,7 +439,7 @@ test('an uploader offers the files in this Session and binds the chosen one with
   await picker.selectOption({ label: 'NC_001416.gb' });
   await expect.poll(() => boundId(linear, 'gb'), 'the Linear drawing binds the same file').toBe(fileId);
   expect(await lastStoredId(), 'choosing stored no new file').toBe(before);
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Change uploaded file');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Change uploaded file');
   await expect(picker, 'the uploader offers no file it already shows').toHaveCount(0);
 });
 

@@ -75,14 +75,14 @@ test('a new Session lists one Circular drawing; the Linear offer tab makes the L
   assert.equal(state.activeDrawingId.value, 'linear', 'the new Linear drawing is shown');
   assert.equal(state.drawingOf('linear').mode, 'linear');
   assert.deepEqual(offerOf(), [], 'no offer tab once a Linear drawing exists');
-  assert.equal(history.undoLabel(), 'New drawing');
+  assert.equal(history.timeline().undo[0]?.label, 'New drawing');
   assert.equal(history.managerOf('linear').getUndoCount(), 0, 'its History starts empty');
 
   await history.undo();
   assert.deepEqual(state.drawingTabs.value.map((tab) => tab.id), ['circular'], 'Undo removes the Linear drawing');
   assert.equal(state.activeDrawingId.value, 'circular', 'and shows the drawing shown before');
   assert.equal(offerOf().length, 1, 'the offer tab is back');
-  assert.equal(history.undoLabel(), '', 'the step was the only one');
+  assert.equal(history.timeline().undo.length, 0, 'the step was the only one');
 
   await history.redo();
   assert.deepEqual(state.drawingTabs.value.map((tab) => tab.id), ['circular', 'linear']);
@@ -210,7 +210,7 @@ test('New is one project step: its Undo shows the drawing shown before, its Redo
   assert.equal(tabNameOf(drawingId), defaultDrawingName('circular', drawingId));
   assert.equal(state.activeDrawingId.value, drawingId, 'the new drawing is shown');
   const drawing = state.drawingOf(drawingId);
-  assert.equal(history.undoLabel(), 'New drawing');
+  assert.equal(history.timeline().undo[0]?.label, 'New drawing');
 
   await history.undo();
   assert.equal(state.activeDrawingId.value, 'linear', 'Undo shows the drawing shown before');
@@ -251,7 +251,7 @@ test('a new drawing starts with an empty History', async () => {
   const own = history.managerOf(drawingId);
   assert.equal(own.getUndoCount(), 0);
   assert.equal(own.getRedoCount(), 0);
-  assert.equal(history.undoLabel(), 'New drawing', 'Undo from the new drawing takes the New step');
+  assert.equal(history.timeline().undo[0]?.label, 'New drawing', 'Undo from the new drawing takes the New step');
   modeDrawing(state, 'circular').form.plot_title = '';
 });
 
@@ -270,7 +270,7 @@ test('Rename refuses a blank or repeated name; a rename and a move are one step 
 
   assert.equal(app.drawingList.renameDrawing('linear', 'Phage comparison').status, 'ok');
   assert.equal(tabNameOf('linear'), 'Phage comparison');
-  assert.equal(history.undoLabel(), 'Rename drawing');
+  assert.equal(history.timeline().undo[0]?.label, 'Rename drawing');
   await history.undo();
   assert.equal(tabNameOf('linear'), name, 'Undo restores the name');
   await history.redo();
@@ -279,10 +279,10 @@ test('Rename refuses a blank or repeated name; a rename and a move are one step 
   const order = tabIds();
   app.drawingList.moveDrawing('linear', 0);
   assert.equal(tabIds()[0], 'linear');
-  assert.equal(history.undoLabel(), 'Move drawing');
+  assert.equal(history.timeline().undo[0]?.label, 'Move drawing');
   await history.undo();
   assert.deepEqual(tabIds(), order, 'Undo restores the tab order');
-  assert.equal(history.undoLabel(), 'Rename drawing', 'the move was one step');
+  assert.equal(history.timeline().undo[0]?.label, 'Rename drawing', 'the move was one step');
   await history.undo();
   assert.equal(state.activeDrawingId.value, shown, 'neither step switches the shown drawing');
 });
@@ -311,7 +311,7 @@ test('Delete shows the next tab, else the previous; its Undo restores the drawin
   assert.deepEqual(tabIds(), order.filter((id) => id !== first));
   assert.throws(() => state.drawingOf(first));
   assert.throws(() => history.managerOf(first), 'its History is held by the step');
-  assert.equal(history.undoLabel(), 'Delete drawing');
+  assert.equal(history.timeline().undo[0]?.label, 'Delete drawing');
 
   await history.undo();
   assert.deepEqual(tabIds(), order, 'Undo puts its tab back where it was');
@@ -373,7 +373,7 @@ test('Duplicate copies a drawing as one step; its Undo shows the source and its 
   copy.form.plot_title = 'Copy title';
   assert.equal(drawing.form.plot_title, 'Source title', 'a write to the copy leaves the source');
   copy.form.plot_title = 'Source title';
-  assert.equal(history.undoLabel(), 'Duplicate drawing');
+  assert.equal(history.timeline().undo[0]?.label, 'Duplicate drawing');
 
   await history.undo();
   assert.equal(state.activeDrawingId.value, source, 'Undo shows the source');
@@ -461,7 +461,7 @@ test('New drawing with this style copies the settings its mode has and the user 
   assert.deepEqual(JSON.parse(JSON.stringify(styled.featureOverrides)), {}, 'no feature edit');
   assert.equal(history.managerOf(drawingId).getUndoCount(), 0, 'with an empty History');
   assert.equal(drawing.manualPriorityRules.length, 2, 'the source keeps its rows');
-  assert.equal(history.undoLabel(), 'New drawing with this style');
+  assert.equal(history.timeline().undo[0]?.label, 'New drawing with this style');
 
   await history.undo();
   assert.equal(state.activeDrawingId.value, source, 'Undo shows the source');
@@ -603,7 +603,7 @@ test('evicting the Delete step ends its Undo and releases the files only the del
   app.drawingList.renameDrawing(kept, 'Kept last');
   assert.equal(state.inputFiles.has(fileId), false, 'evicting the step releases the file');
   while (history.canUndo()) {
-    assert.notEqual(history.undoLabel(), 'Delete drawing');
+    assert.notEqual(history.timeline().undo[0]?.label, 'Delete drawing');
     await history.undo();
   }
   assert.equal(tabIds().includes(drawingId), false, 'no Undo brings the deleted drawing back');
@@ -679,7 +679,7 @@ test('the drawing bar lists the tabs; Rename asks again on a refused name and Un
   assert.equal((await renaming).status, 'ok');
   assert.equal(tabNameOf('linear'), 'Phage comparison');
   assert.equal(app.drawingBar.tabs().find((tab) => tab.id === 'linear').label, 'Phage comparison');
-  assert.equal(history.undoLabel(), 'Rename drawing');
+  assert.equal(history.timeline().undo[0]?.label, 'Rename drawing');
   await history.undo();
   assert.equal(tabNameOf('linear'), name, 'Undo restores the name');
 

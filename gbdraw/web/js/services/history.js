@@ -2065,8 +2065,6 @@ export const createHistoryManager = ({
   );
   const canUndo = () => canTraverse(undoStack);
   const canRedo = () => canTraverse(redoStack);
-  const undoLabel = () => (canUndo() ? undoStack[undoStack.length - 1].label : '');
-  const redoLabel = () => (canRedo() ? redoStack[redoStack.length - 1].label : '');
 
   /**
    * The one listener of the settings a History step records, a checkpoint
@@ -2111,7 +2109,6 @@ export const createHistoryManager = ({
     initializeIntentBaseline,
     markSavePoint,
     redo,
-    redoLabel,
     applyProjectPart,
     restoreWith,
     topSequence,
@@ -2135,8 +2132,7 @@ export const createHistoryManager = ({
     // The Session values the open step opened with, if a step is open.
     openStepMark: () => openTransaction()?.sessionMark ?? null,
     heldIdentities,
-    undo,
-    undoLabel
+    undo
   };
 };
 
@@ -2594,8 +2590,6 @@ export const createHistoryRouter = ({
     redo: () => (walks.value > 0 ? Promise.resolve(false) : traverse('redo')),
     canUndo: () => walks.value === 0 && (managerOf(activeDrawingId()).canUndo() || (projectUndo.length > 0 && shownIdle())),
     canRedo: () => walks.value === 0 && (managerOf(activeDrawingId()).canRedo() || (projectRedo.length > 0 && shownIdle())),
-    undoLabel: () => (shownIdle() ? nextProjectStep('undo')?.label ?? managerOf(activeDrawingId()).undoLabel() : ''),
-    redoLabel: () => (shownIdle() ? nextProjectStep('redo')?.label ?? managerOf(activeDrawingId()).redoLabel() : ''),
     getUndoCount: () => managerOf(activeDrawingId()).getUndoCount() + projectUndo.length,
     getRedoCount: () => managerOf(activeDrawingId()).getRedoCount() + projectRedo.length,
     // A drawing that is not shown has no artifact installed, so its baseline

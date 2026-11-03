@@ -446,7 +446,7 @@ test('independent Linear typography follows linked, imported, and History journe
   await focusAfterHistoryCapture(page, scaleSize);
   await scaleSize.fill('26');
   await scaleSize.press('Tab');
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel()))
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label))
     .toBe('Edit setting');
   expect(await page.evaluate(() => ({
     scale: window.__GBDRAW_APP__.adv.scale_font_size,

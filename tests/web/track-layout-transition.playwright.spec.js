@@ -1751,7 +1751,7 @@ test('Rotate Apply now reached by keyboard while a Generate runs is disabled and
     expect(await ringLabels(page)).toEqual(['ringb', 'ringa', 'ringc']);
     await releaseSearch(page);
     expect(await page.evaluate(async () => (await import('./js/state.js')).state.errorLog.value)).toBeNull();
-    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel()), 'the Generate commits its Result; no Rotate step')
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label), 'the Generate commits its Result; no Rotate step')
       .toBe('Generate diagram');
     // Each ring's name, file, and source are of one ring, in the order the Generate ran with.
     expect(await page.evaluate(() => window.__GBDRAW_APP__.circularConservation.series.map((entry) => (

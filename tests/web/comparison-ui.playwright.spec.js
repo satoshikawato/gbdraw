@@ -1376,7 +1376,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
 
   // Each setting the issue list changes is one Undo step that restores it.
   const history = () => page.evaluate(() => ({ count: window.__GBDRAW_HISTORY__.getUndoCount(),
-    label: window.__GBDRAW_HISTORY__.undoLabel(), mode: window.__GBDRAW_APP__.linearComparisonUi.activeLosatpModeKey,
+    label: window.__GBDRAW_HISTORY__.timeline().undo[0]?.label, mode: window.__GBDRAW_APP__.linearComparisonUi.activeLosatpModeKey,
     plan: window.__GBDRAW_APP__.linearComparisonPlan.mode }));
   const settled = () => expect.poll(() => page.evaluate(() => !window.__GBDRAW_HISTORY__.mutationPending())).toBe(true);
   const before = await history();
@@ -1705,7 +1705,7 @@ test('Generate asks how to resolve Upload pairs without a BLAST TSV', async ({ p
   expect(await evaluateWithRetainedPromise(page, async () => {
     const history = window.__GBDRAW_HISTORY__;
     await history.undo();
-    const label = history.undoLabel();
+    const label = history.timeline().undo[0]?.label;
     await history.undo();
     return label;
   })).toBe('Set pairs to No comparison');
@@ -1730,7 +1730,7 @@ test('Generate asks how to resolve Upload pairs without a BLAST TSV', async ({ p
   await expect(rows).toHaveText([/#1 → #2.*pair-1-2\.tsv.*Change…/, /#2 → #3.*No file.*Choose file…/]);
   // The chosen file is one Undo step, the same as a file chosen in the pair row.
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_HISTORY__.mutationPending()
-    && window.__GBDRAW_HISTORY__.undoLabel())).toBe('Change uploaded file');
+    && window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Change uploaded file');
   expect(await undoCount()).toBe(beforeChoose + 1);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect(rows).toHaveText([/#1 → #2.*No file/, /#2 → #3.*No file/]);

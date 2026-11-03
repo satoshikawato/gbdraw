@@ -44,7 +44,7 @@ const generate = async (page) => {
 const expectHistory = async (page, undo, redo, label, options = {}) => {
   await expect.poll(() => page.evaluate(() => {
     const history = window.__GBDRAW_HISTORY__;
-    return [history.getUndoCount(), history.getRedoCount(), history.undoLabel()];
+    return [history.getUndoCount(), history.getRedoCount(), history.timeline().undo[0]?.label];
   }), options).toEqual([undo, redo, label]);
 };
 
@@ -96,7 +96,7 @@ for (const inputMethod of ['keyboard', 'pointer']) {
       body: JSON.stringify(await page.evaluate(() => ({
         labels: window.__GBDRAW_APP__.form.labels_mode,
         undo: window.__GBDRAW_HISTORY__.getUndoCount(),
-        undoLabel: window.__GBDRAW_HISTORY__.undoLabel()
+        undoLabel: window.__GBDRAW_HISTORY__.timeline().undo[0]?.label
       }))),
       contentType: 'application/json'
     });

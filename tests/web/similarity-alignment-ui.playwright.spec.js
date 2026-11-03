@@ -1219,7 +1219,7 @@ test('Align… and Review alignment options… are disabled while a Generate run
   const alignState = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return { error: state.errorLog.value?.code ?? null, alignError: window.__GBDRAW_APP__.similarityAlignmentError?.code ?? null,
-      plan: state.similarityAlignmentPlan.value !== null, undoLabel: window.__GBDRAW_HISTORY__.undoLabel() };
+      plan: state.similarityAlignmentPlan.value !== null, undoLabel: window.__GBDRAW_HISTORY__.timeline().undo[0]?.label ?? '' };
   });
   // Focus by keyboard focus, not by pointer, and press the key; a disabled button takes no focus.
   const pressOn = async (control, key) => {

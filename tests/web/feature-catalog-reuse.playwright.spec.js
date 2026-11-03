@@ -429,7 +429,7 @@ test('the similarity-group copy feedback clears when a Generate replaces the sho
     await setStep(page, 200);
     const retitled = await observeGenerate(page);
     expect(retitled.transports).toEqual([KEPT]);
-    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Generate diagram');
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toBe('Generate diagram');
     expect(await copy()).toBe('Copied!');
     await history(page, 'undo');
     expect(await elapsed(), 'inconclusive: Undo came after the label timer').toBeLessThan(1500);

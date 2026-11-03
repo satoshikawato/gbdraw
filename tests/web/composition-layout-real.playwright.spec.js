@@ -419,7 +419,7 @@ const dragCompositionRole = async (page, role, dx, dy) => {
 
   const expectedLabel = role === 'primary' ? 'Move diagram' : `Move ${role === 'title' ? 'plot title' : role}`;
   await expect.poll(
-    () => page.evaluate(() => window.__GBDRAW_HISTORY__?.undoLabel?.() || ''),
+    () => page.evaluate(() => window.__GBDRAW_HISTORY__?.timeline().undo[0]?.label || ''),
     { timeout: 30000 }
   ).toBe(expectedLabel);
 };
@@ -1005,7 +1005,7 @@ const dragLengthBar = async (page, dy) => {
     await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
     document.dispatchEvent(event('mouseup', y + deltaY, 0));
   }, dy);
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__?.undoLabel?.() || ''), { timeout: 30000 })
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__?.timeline().undo[0]?.label || ''), { timeout: 30000 })
     .toBe('Move length bar');
 };
 const expectHoldsScale = (state) => {

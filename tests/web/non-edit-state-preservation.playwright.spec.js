@@ -315,7 +315,7 @@ const ROWS = [
       await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
       await answerChoicePrompt(page, 'Reset settings?', 'reset-drawing');
       await settle(page);
-      expect(await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.undoLabel(),
+      expect(await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.timeline().undo[0]?.label,
         window.__GBDRAW_APP__.downloadDpi])).toEqual([counts[0] + 1, 'Reset this drawing', 600]);
       await switchMode(page, 'linear');
       expect(await historyCounts(page), 'the Linear drawing records no Reset step').toEqual(linearCounts);

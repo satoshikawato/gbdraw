@@ -942,7 +942,7 @@ test.describe('OV-104 a decoration moved on one mode\'s Result', () => {
       await frame();
       moveTarget.dispatchEvent(mouse('mouseup', 12, -9, 0));
     }, role);
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__?.undoLabel?.() || ''))
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__?.timeline().undo[0]?.label || ''))
       .toBe(role === 'title' ? 'Move plot title' : 'Move legend');
     await page.evaluate(() => { window.__GBDRAW_APP__.layoutRepositionMode = false; });
     await settleLive(page);

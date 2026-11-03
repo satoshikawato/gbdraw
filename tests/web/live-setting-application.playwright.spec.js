@@ -523,7 +523,7 @@ test('an Undo of a Generate step during an apply commits nothing from it; it run
     expect(await generated).toBe('ok');
     // The replay applies the value the Generate did not draw; hold it.
     await gateEntered(page, 2);
-    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toMatch(/Generate/i);
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.timeline().undo[0]?.label)).toMatch(/Generate/i);
     await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
     const restored = await facts(page);
     expect(restored.diagramOptions).toBe(first.diagramOptions);

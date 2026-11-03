@@ -834,12 +834,12 @@ test('an import that asks is one History step recorded at the answer; Cancel and
   // step; the removal the answer chose is then a step under the import's name.
   [done] = await importEmpty();
   await history.runUndoable('Change setting', () => { state.other = 1; });
-  assert.deepEqual([history.getUndoCount(), history.undoLabel()], [1, 'Change setting']);
+  assert.deepEqual([history.getUndoCount(), history.stackEntries('undo').at(-1)?.label], [1, 'Change setting']);
   resolve('remove');
   await done;
-  assert.deepEqual([sets(), history.getUndoCount(), history.undoLabel()], [[], 2, 'Import annotations']);
+  assert.deepEqual([sets(), history.getUndoCount(), history.stackEntries('undo').at(-1)?.label], [[], 2, 'Import annotations']);
   await history.undo();
-  assert.deepEqual([sets(), state.other, history.undoLabel()], [['kept'], 1, 'Change setting']);
+  assert.deepEqual([sets(), state.other, history.stackEntries('undo').at(-1)?.label], [['kept'], 1, 'Change setting']);
   await history.undo();
   assert.deepEqual([sets(), state.other], [['kept'], 0]);
   await history.redo();
