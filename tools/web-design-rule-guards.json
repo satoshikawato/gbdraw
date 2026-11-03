@@ -618,12 +618,6 @@
           "retireWhen": "never: its state key classes and drawing-resolution checks stay; the drawing members come from the slices"
         },
         {
-          "path": "tests/web/drawing-of-mode-cap.test.mjs",
-          "rootCause": "P2",
-          "job": "web-contracts-pr",
-          "retireWhen": "the Session format holds a list of drawings and no module resolves a drawing by its mode (multi-drawing B)"
-        },
-        {
           "path": "tests/web/drawing-slices.test.mjs",
           "rootCause": "P2",
           "job": "web-contracts-pr",
@@ -660,18 +654,7 @@
           "retireWhen": "never"
         }
       ],
-      "allowlists": [
-        {
-          "path": "tests/web/drawing-of-mode-cap.test.mjs",
-          "symbol": "DRAWING_OF_MODE_CAP",
-          "kind": "count"
-        },
-        {
-          "path": "tests/web/drawing-of-mode-cap.test.mjs",
-          "symbol": "ID_BY_MODE_OWNERS",
-          "kind": "set"
-        }
-      ]
+      "allowlists": []
     },
     {
       "id": "CW",

@@ -1103,10 +1103,6 @@ hold the drawing keys, no drawing key read from `state`, no `activeDrawing` iden
 module or template binding writing a slice member outside its slice,
 `install(capture(x))` giving back `x` also after `reset`, and
 `installShownDrawing` the one writer of `activeDrawingId`);
-`tests/web/drawing-of-mode-cap.test.mjs` (the `drawingOfMode` calls within
-`DRAWING_OF_MODE_CAP`, which may only fall, and only `ID_BY_MODE_OWNERS`
-naming a drawing ID by a mode; raising the cap or adding an owner is an
-authority-only change);
 `tests/web/per-mode-drawings.test.mjs` (no
 shared member object, and each mode's request carries its own drawing's
 values); `tests/web/mode-scoped-session.test.mjs` (Save and Load of each drawing in
