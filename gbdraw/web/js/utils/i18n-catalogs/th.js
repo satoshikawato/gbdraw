@@ -2930,6 +2930,7 @@ export default Object.freeze({
   "{names}, and one more": "{names} และอีก 1 ไฟล์",
   "{names}, and {count} more": "{names} และอีก {count} ไฟล์",
   "{name} (record list unavailable)": "{name} (รายการระเบียนไม่พร้อมใช้งาน)",
+  "{name} is also used in {count} drawings: {drawings}.": "ไฟล์ {name} ใช้ในภาพวาด {count} ภาพด้วย ได้แก่ {drawings}",
   "{name} is also used in {drawings}.": "ไฟล์ {name} ใช้ในภาพวาด {drawings} ด้วย",
   "{name} mode": "โหมด {name}",
   "{name} selection": "การเลือก {name}",

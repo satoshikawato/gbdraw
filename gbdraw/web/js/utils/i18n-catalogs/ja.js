@@ -2930,6 +2930,7 @@ export default Object.freeze({
   "{names}, and one more": "{names}、ほか1個",
   "{names}, and {count} more": "{names}、ほか{count}個",
   "{name} (record list unavailable)": "{name}（レコード一覧は利用不可）",
+  "{name} is also used in {count} drawings: {drawings}.": "{name}は{count}個の図（{drawings}）でも使用されています。",
   "{name} is also used in {drawings}.": "{name}は{drawings}の図でも使用されています。",
   "{name} mode": "{name}のモード",
   "{name} selection": "{name}の選択",
