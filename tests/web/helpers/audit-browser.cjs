@@ -1,7 +1,9 @@
 // Shared browser steps for the Web GUI audit 2026-09-30 regression specs.
 const { expect } = require('@playwright/test');
 const { showDrawing } = require('./drawing-bar.cjs');
-const { evaluateWithRetainedPromise, expectNoLoadRepairDialog, generateAndWaitForResult, openApp } = require('./app-lifecycle.cjs');
+const {
+  evaluateWithRetainedPromise, expectNoLoadRepairDialog, generateAndWaitForResult, openApp, waitForPreviewAtRest
+} = require('./app-lifecycle.cjs');
 
 const BATCH_FIXTURE = 'tests/fixtures/web_batch_two_records.gb';
 const HMMT = 'tests/test_inputs/HmmtDNA.gbk';
@@ -29,10 +31,7 @@ const settle = async (page) => {
   await page.evaluate(() => new Promise((resolve) => (
     requestAnimationFrame(() => requestAnimationFrame(resolve))
   )));
-  // A view change after the work ends (the Fit of a Session Load, R17-25) moves the
-  // figure in a 0.2 s transform transition: the figure rests when it has ended.
-  await page.waitForFunction(() => [...document.querySelectorAll('.gbdraw-preview-surface')]
-    .every((surface) => surface.getAnimations().length === 0));
+  await waitForPreviewAtRest(page);
 };
 
 const openFresh = async (page) => {

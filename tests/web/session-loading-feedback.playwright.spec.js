@@ -3,7 +3,8 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync, gzipSync } = require('node:zlib');
 const {
-  openApp, expectNoLoadRepairDialog, expectSessionLoadedWithoutWarnings, generateAndWaitForResult, answerLoadRepairs
+  openApp, expectNoLoadRepairDialog, expectSessionLoadedWithoutWarnings, generateAndWaitForResult, answerLoadRepairs,
+  waitForPreviewAtRest
 } = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
@@ -876,6 +877,9 @@ test('the first feature popup after a Session load says it is preparing and keep
   await expect(page.locator('[data-app-notice]')).toContainText('Session loaded', { timeout: 120_000 });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false
     && (window.__GBDRAW_APP__?.results || []).length > 0);
+  // The Load's Fit (R17-25) moves the figure after the Load ends; a click aimed
+  // during it lands on what passes under the point (OV-2457).
+  await waitForPreviewAtRest(page);
   // The livE CDS of record 1; no ribbon lies under its centre.
   const feature = page.locator('.gbdraw-preview-surface svg path[id="fed46a3a6_record_1"]');
   await feature.click({ force: true });

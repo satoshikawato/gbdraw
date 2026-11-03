@@ -407,6 +407,17 @@ const settleLive = async (page, { timeout = 120_000 } = {}) => {
   }
 };
 
+// A view change after the work ends (the Fit of a file Session Load, R17-25)
+// moves the figure in a 0.2 s transform transition; a pointer step aimed at a
+// drawn element before it ends can land on whatever passes under the point
+// (OV-2213, OV-2457). The figure rests when its transitions have ended.
+const waitForPreviewAtRest = (page, { timeout = 30_000 } = {}) => page.waitForFunction(
+  () => [...document.querySelectorAll('.gbdraw-preview-surface')]
+    .every((surface) => surface.getAnimations().length === 0),
+  null,
+  { timeout }
+);
+
 // G-G(3), Web GUI audit 2026-09-30: the shared Generate and Save helpers
 // reject three outcomes that previously reached users without failing a test.
 // A caller may opt out only by naming the audit ID of the known defect, so the
@@ -1016,6 +1027,7 @@ module.exports = {
   snapshotUserOwnedState,
   takePageErrors,
   waitForAppShell,
+  waitForPreviewAtRest,
   WARM_APP_PAGE,
   warmAppTest
 };
