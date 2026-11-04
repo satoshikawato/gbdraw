@@ -1756,11 +1756,22 @@ export const createRunAnalysis = ({
   /** @type {WeakMap<object, DrawnRecordIdentity[]>} */
   const committedRecordIdentities = new WeakMap();
   let latestOperationId = 0;
-  // Each drawing's Circular discovery: its read generation and the read still running.
+  // Each drawing's Circular discovery: its read generation, the read still
+  // running, and the generation of a settled read whose Record Order is not
+  // applied yet (D-15-205: the region dialog only reads).
   /** @type {Map<DrawingId, number>} */
   const circularRecordRefreshGenerations = new Map();
-  /** @type {Map<DrawingId, { fingerprint: unknown[], promise: Promise<any> | null }>} */
+  /**
+   * A drawing's Circular record read: `read` writes the list and discovery,
+   * `refresh` is that read followed by its Record Order, made by the first
+   * refresh that joins it (null until then), and `generation` is the read's,
+   * null when it read nothing.
+   * @typedef {{ fingerprint: unknown[], read: ReturnType<typeof readCircularRecords>, refresh: Promise<any> | null, generation: number | null }} CircularRecordRead
+   */
+  /** @type {Map<DrawingId, CircularRecordRead>} */
   const activeCircularRecordRefreshes = new Map();
+  /** @type {Map<DrawingId, number>} */
+  const unappliedCircularRecordReads = new Map();
   /** @type {AbortController | null} */
   let activeLosatAbortController = null;
   /** @type {readonly Record<string, any>[]} */
@@ -2366,16 +2377,21 @@ export const createRunAnalysis = ({
     return '';
   };
 
+  /** @param {DrawingState} drawing */
+  const circularRecordReadGeneration = (drawing) => circularRecordRefreshGenerations.get(drawing.id) ?? 0;
+
   /**
-   * Reads the Circular records of `drawing`'s inputs into its Multi-Record
-   * Canvas order. It writes only `drawing`, shown or not: a read of another
-   * drawing neither supersedes it nor lands in it.
+   * Reads the Circular records of `drawing`'s inputs into its record list and
+   * discovery result, derived data that History does not record. It writes no
+   * setting: `applyCircularRecordOrder` writes the read's Record Order. It
+   * writes only `drawing`, shown or not: a read of another drawing neither
+   * supersedes it nor lands in it.
    * @param {DrawingState} drawing
    * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options]
    */
-  const runCircularRecordRefresh = async (drawing, { suppress = false, automatic = false, reuseFinalError = false } = {}) => {
+  const readCircularRecords = async (drawing, { suppress = false, automatic = false, reuseFinalError = false } = {}) => {
     if (drawing.mode !== 'circular') return;
-    const currentGeneration = () => circularRecordRefreshGenerations.get(drawing.id) ?? 0;
+    const currentGeneration = () => circularRecordReadGeneration(drawing);
     if (automatic && circularDiscoveryTargetsCurrentInput(drawing)
       && ['deferred', 'ready', 'error'].includes(drawing.circularRecordDiscovery.status)) return;
     // Generate reports a final error of these exact files without reading them
@@ -2385,9 +2401,6 @@ export const createRunAnalysis = ({
     const refreshGeneration = currentGeneration() + 1;
     circularRecordRefreshGenerations.set(drawing.id, refreshGeneration);
     if (suppress || recordDiscoverySuppressed()) return;
-    if (!Array.isArray(drawing.adv.multi_record_positions)) {
-      drawing.adv.multi_record_positions = [];
-    }
     const inputType = drawing.inputType.value;
     const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
     const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
@@ -2425,7 +2438,7 @@ export const createRunAnalysis = ({
     } : idleCircularRecordDiscovery());
     drawing.circularRecordList.value = [];
     if (!hasCompleteInput) {
-      drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
+      unappliedCircularRecordReads.set(drawing.id, refreshGeneration);
       return;
     }
     if (
@@ -2471,8 +2484,7 @@ export const createRunAnalysis = ({
       drawing.circularRecordDiscovery.canonicalRecordIdentities = nextRecords
         .filter((record) => record.recordKey)
         .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
-      const nextPositions = mergeCircularRecordPositions(nextRecords, drawing.adv.multi_record_positions);
-      drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...nextPositions);
+      unappliedCircularRecordReads.set(drawing.id, refreshGeneration);
       if (nextRecords.length > 0) releaseSourceInputFailure(drawing);
       onCircularRecordsDiscovered?.({ drawingId: drawing.id, primaryFile, pairedFile, recordCount: nextRecords.length });
     } catch (error) {
@@ -2493,25 +2505,38 @@ export const createRunAnalysis = ({
       drawing.circularRecordList.value = [];
       drawing.circularRecordDiscovery.status = 'error';
       drawing.circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
-      drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
+      unappliedCircularRecordReads.set(drawing.id, refreshGeneration);
       releaseSourceInputFailure(drawing);
       onCircularRecordsDiscovered?.({ drawingId: drawing.id, primaryFile, pairedFile, recordCount: 0 });
     }
   };
 
   /**
-   * The owner of the Circular record refresh: it reads the drawing its caller
-   * gives (Generate: the drawing it pinned; a transition that changed the
-   * drawing's inputs: that drawing, R10) and shares a read still running for
-   * the same drawing and inputs. The record editor gives the shown drawing
-   * (app-setup's binding, D-15-89).
-   * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean } | undefined} options
+   * Writes the Record Order (`adv.multi_record_positions`) of `drawing`'s read
+   * `generation` once, while that read is the drawing's latest: the list's
+   * records keep their rows, and a read without records empties it.
    * @param {DrawingState} drawing
+   * @param {number | null} generation
    */
-  const refreshCircularRecordOrder = (options, drawing) => {
-    options = options || {};
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
+  const applyCircularRecordOrder = (drawing, generation) => {
+    if (generation === null || unappliedCircularRecordReads.get(drawing.id) !== generation) return;
+    unappliedCircularRecordReads.delete(drawing.id);
+    if (generation !== circularRecordReadGeneration(drawing)) return;
+    if (!Array.isArray(drawing.adv.multi_record_positions)) drawing.adv.multi_record_positions = [];
+    const positions = drawing.adv.multi_record_positions;
+    positions.splice(0, positions.length, ...mergeCircularRecordPositions(drawing.circularRecordList.value, positions));
+  };
+
+  /**
+   * The one Circular record read: it reads the drawing its caller gives
+   * (Generate: the drawing it pinned; a transition that changed the drawing's
+   * inputs: that drawing, R10) and shares a read still running for the same
+   * drawing and inputs.
+   * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} options
+   * @param {DrawingState} drawing
+   * @returns {CircularRecordRead}
+   */
+  const shareCircularRecordRead = (options, drawing) => {
     const inputType = drawing.inputType.value;
     const fingerprint = [
       Boolean(options.suppress || recordDiscoverySuppressed()),
@@ -2520,38 +2545,60 @@ export const createRunAnalysis = ({
       inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
       inputType === 'gff' ? drawing.files.c_fasta : null
     ];
-    const inflightRefresh = activeCircularRecordRefreshes.get(drawing.id);
+    const inflightRead = activeCircularRecordRefreshes.get(drawing.id);
     if (
-      inflightRefresh &&
-      fingerprint.length === inflightRefresh.fingerprint.length &&
+      inflightRead &&
+      fingerprint.length === inflightRead.fingerprint.length &&
       fingerprint.every((value, index) => (
-        Object.is(value, inflightRefresh.fingerprint[index])
+        Object.is(value, inflightRead.fingerprint[index])
       ))
-    ) {
-      // An entry is activated after its promise is assigned.
-      return /** @type {NonNullable<typeof inflightRefresh.promise>} */ (inflightRefresh.promise);
-    }
-    const entry = { fingerprint, promise: /** @type {Promise<any> | null} */ (null) };
-    entry.promise = runCircularRecordRefresh(drawing, options).finally(() => {
-      if (activeCircularRecordRefreshes.get(drawing.id) === entry) activeCircularRecordRefreshes.delete(drawing.id);
-    });
+    ) return inflightRead;
+    const startedFrom = circularRecordReadGeneration(drawing);
+    const read = readCircularRecords(drawing, options);
+    const generation = circularRecordReadGeneration(drawing) !== startedFrom ? circularRecordReadGeneration(drawing) : null;
+    /** @type {CircularRecordRead} */
+    const entry = { fingerprint, read, refresh: null, generation };
     activeCircularRecordRefreshes.set(drawing.id, entry);
-    return entry.promise;
+    read.finally(() => {
+      if (activeCircularRecordRefreshes.get(drawing.id) === entry) activeCircularRecordRefreshes.delete(drawing.id);
+    }).catch(() => {});
+    return entry;
+  };
+
+  /**
+   * The Circular record refresh of Generate, Reload Records, and the input
+   * transitions: the shared read, then its Record Order. The record editor
+   * gives the shown drawing (app-setup's binding, D-15-89).
+   * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean } | undefined} options
+   * @param {DrawingState} drawing
+   */
+  const refreshCircularRecordOrder = (options, drawing) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    const entry = shareCircularRecordRead(options || {}, drawing);
+    entry.refresh ??= entry.read.then((result) => {
+      applyCircularRecordOrder(drawing, entry.generation);
+      return result;
+    });
+    return entry.refresh;
   };
 
   /**
    * The drawing's record identities (DESIGN A4), the one read that Generate
    * and New drawing from a region make. A Circular list still deferred after a
-   * Load is read now through the refresh owner above (OV-2489); the record
-   * discovery owner's port then reads the lists, a deferred Linear card the
-   * same way. Generate has read its Circular list first, so nothing is read twice.
+   * Load is read now through the shared read above (OV-2489) without its
+   * Record Order, which Generate or Reload Records applies (D-15-205); the
+   * record discovery owner's port then reads the lists, a deferred Linear card
+   * the same way. Generate has read its Circular list first, so nothing is
+   * read twice.
    * @param {DrawingState} drawing
    * @returns {Promise<RecordIdentitySources | null>} null without the port.
    */
   const readDrawingRecordIdentities = async (drawing) => {
     if (typeof readRecordIdentitySources !== 'function') return null;
-    if (drawing.mode === 'circular' && circularDiscoveryForInput(drawing).status === 'deferred') {
-      await refreshCircularRecordOrder(undefined, drawing);
+    if (drawing.mode === 'circular' && circularDiscoveryForInput(drawing).status === 'deferred'
+      && !state.sessionOperationAvailability?.()) {
+      await shareCircularRecordRead({}, drawing).read;
     }
     return readRecordIdentitySources(drawing);
   };
@@ -2841,6 +2888,9 @@ export const createRunAnalysis = ({
           return outcome;
         }
       }
+      // A read that wrote no Record Order (the region dialog's, D-15-205)
+      // writes it in Generate's step, as Generate's own read would.
+      applyCircularRecordOrder(drawing, circularRecordReadGeneration(drawing));
     }
     const depthInputError = validateDepthInputPresence(drawing);
     if (depthInputError) {

@@ -135,3 +135,30 @@ test('the record identities read a Circular list still deferred after a Load', a
   assert.equal(circular.circularRecordDiscovery.status, 'ready', 'the list was read once, through its owner');
   app.regionDrawings.close();
 });
+
+// OV-2492 (D-15-205 A): the region dialog's read of a deferred list writes no
+// setting. Record Order (`adv.multi_record_positions`, the request's
+// `layout.multiRecordPositions`) stays as the Load left it until Generate or
+// Reload Records, which apply the read.
+test('the region dialog reads a deferred Circular list without writing Record Order', async () => {
+  const { projectDraftRequest } = await import('../../gbdraw/web/js/services/config.js');
+  const requestPositions = async () => (await projectDraftRequest(state, circular, {
+    linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: []
+  })).envelope.renderRequest.layout.multiRecordPositions;
+  app.selectDrawing('circular');
+  app.setCircularSourceFile('c_gb', genbank('p.gb', ['P1', 70]));
+  await settle();
+  assert.equal(circular.circularRecordDiscovery.status, 'ready');
+  // The state a Session Load without stored Record Order leaves.
+  circular.circularRecordDiscovery.status = 'deferred';
+  circular.circularRecordList.value = [];
+  circular.adv.multi_record_positions.splice(0, circular.adv.multi_record_positions.length);
+  const before = await requestPositions();
+  await app.regionDrawings.open();
+  assert.deepEqual(app.regionDrawings.dialog.rows.map((row) => row.caption), ['P1'], 'the dialog offers the record');
+  app.regionDrawings.close();
+  assert.deepEqual(circular.adv.multi_record_positions, [], 'the read writes no Record Order');
+  assert.deepEqual(await requestPositions(), before, 'the request carries the Record Order the Load left');
+  await app.refreshCircularRecordOrder();
+  assert.deepEqual(circular.adv.multi_record_positions, [{ selector: '#1', row: 1 }], 'Reload Records applies the read');
+});
