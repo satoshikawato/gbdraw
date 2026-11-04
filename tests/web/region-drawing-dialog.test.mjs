@@ -53,6 +53,20 @@ test('open lists the shown records by key, unchecked, and offers features only w
   assert.equal(dialog.status, 'idle');
 });
 
+test('a feature can be chosen only in a record whose Result drew features; each other row names why', async () => {
+  const { owner } = harness();
+  await owner.open();
+  assert.deepEqual(owner.dialog.rows.map((row) => row.featureReason),
+    ['', 'Generate the drawing to choose a feature.']);
+  const ownerOfEmpty = createRegionDrawing({
+    shownDrawingId: () => 'circular', projectShownRequest: async () => sent, deriveRegion: async () => ({ result: derivedReply(false) }),
+    newDrawingFromRegion: async () => ({ drawingId: 'linear' }),
+    shownRecords: async () => [{ recordKey: 'record-1', caption: 'NC_1', length: 1200, features: [] }]
+  });
+  await ownerOfEmpty.open();
+  assert.deepEqual(ownerOfEmpty.dialog.rows.map((row) => row.featureReason), ['This record has no features to choose.']);
+});
+
 test('a derived reply shows the returned sizes and the not-carried lines; Keep my values derives without adapting', async () => {
   const { owner, calls } = harness();
   await owner.open();

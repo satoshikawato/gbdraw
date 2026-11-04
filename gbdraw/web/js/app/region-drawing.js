@@ -66,6 +66,7 @@ export const regionSourceRecords = (requestRecords, sources, featuresOf) => draw
  * @property {string} end
  * @property {string} featureId
  * @property {readonly RegionSourceFeature[] | null} features
+ * @property {string} featureReason Why A feature cannot be chosen, or '' when it can.
  */
 
 /**
@@ -316,6 +317,12 @@ export const createRegionDrawing = ({
   };
 
   /** Opens on the shown drawing's records; a close before they are read keeps it closed. */
+  // A feature is chosen from the features the shown Result drew of the record.
+  /** @param {readonly RegionSourceFeature[] | null} features */
+  const featureReasonOf = (features) => {
+    if (features === null) return t('Generate the drawing to choose a feature.');
+    return features.length === 0 ? t('This record has no features to choose.') : '';
+  };
   const open = async () => {
     close();
     const mine = request;
@@ -333,7 +340,8 @@ export const createRegionDrawing = ({
     if (mine !== request) return;
     dialog.rows = records.map((record) => ({
       recordKey: record.recordKey, caption: record.caption, length: record.length, checked: false, kind: 'whole',
-      start: '1', end: String(record.length), featureId: '', features: record.features
+      start: '1', end: String(record.length), featureId: '', features: record.features,
+      featureReason: featureReasonOf(record.features)
     }));
     showStatus('idle', t('Choose at least one record.'));
   };

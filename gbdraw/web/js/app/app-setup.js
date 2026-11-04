@@ -3734,9 +3734,10 @@ export const createAppSetup = () => {
       });
     }
   });
-  // DESIGN A4: Generate reads its requests' record identities from the
-  // discovered record lists, awaited here (a Linear card whose list is still
-  // deferred after a Load); the Circular list is the one Generate awaited.
+  // DESIGN A4: the record discovery owner's lists, by mode; a Linear card
+  // whose list is still deferred after a Load is read here. Callers read them
+  // through the runner's `readDrawingRecordIdentities`, which reads a deferred
+  // Circular list first (OV-2489).
   /** @param {DrawingState} drawing @returns {Promise<RecordIdentitySources>} */
   const readRecordIdentitySources = async (drawing) => {
     if (drawing.mode === 'circular') return { mode: drawing.mode, circular: circularRecordEntries(drawing) };
@@ -3757,6 +3758,7 @@ export const createAppSetup = () => {
     requestLiveSettingApply,
     discardLiveSettingRequests,
     refreshCircularRecordOrder: refreshRecordOrderOfDrawing,
+    readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,
@@ -7744,8 +7746,8 @@ export const createAppSetup = () => {
     newDrawingFromRegion: drawingList.newDrawingFromRegion,
     shownRecords: async () => {
       const drawing = state.activeDrawing();
-      const [sent, sources] = await Promise.all([projectShownRequest(), readRecordIdentitySources(drawing)]);
-      return regionSourceRecords(sent.envelope.renderRequest.records, sources, shownResultFeatures);
+      const [sent, sources] = await Promise.all([projectShownRequest(), readDrawingRecordIdentities(drawing)]);
+      return sources ? regionSourceRecords(sent.envelope.renderRequest.records, sources, shownResultFeatures) : [];
     }
   });
   return {

@@ -99,8 +99,8 @@ test('a region of a Circular record becomes a Linear drawing that Generate draws
   }
 });
 
-// OV-2489: after a Load the Circular record list stays deferred until Generate, and the dialog reads no record.
-test.fixme('OV-2489: after a Session Load without Generate the dialog offers the drawing\'s records', async ({ browser }) => {
+// OV-2489: after a Load the Circular record list stays deferred until Generate; the dialog reads it.
+test('OV-2489: after a Session Load without Generate the dialog offers the drawing\'s records', async ({ browser }) => {
   test.setTimeout(300_000);
   const page = await load(browser, seeds.circular);
   try {
@@ -115,8 +115,6 @@ test('Coordinates that start after their end are refused with the reason, Create
   test.setTimeout(300_000);
   const page = await load(browser, seeds.circular);
   try {
-    // Generate first: before it the dialog offers no record after a Load (OV-2489).
-    await generate(page);
     const ids = await drawingIds(page);
     const steps = await undoLabels(page);
     const dialog = await openRegionDialog(page);

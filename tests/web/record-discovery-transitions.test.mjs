@@ -118,3 +118,20 @@ test('no discovery starts while a Load rolls back', async () => {
     state.sessionImportRollbackInProgress.value = false;
   }
 });
+
+// OV-2489: a Load leaves a Circular record list deferred until Generate reads
+// it; the drawing's record identities read it now, as they read a deferred
+// Linear card, so New drawing from a region offers the record before a Generate.
+test('the record identities read a Circular list still deferred after a Load', async () => {
+  app.selectDrawing('circular');
+  app.setCircularSourceFile('c_gb', genbank('d.gb', ['D1', 60]));
+  await settle();
+  assert.equal(circular.circularRecordDiscovery.status, 'ready');
+  // The state a Session Load leaves: the list deferred for the current file.
+  circular.circularRecordDiscovery.status = 'deferred';
+  circular.circularRecordList.value = [];
+  await app.regionDrawings.open();
+  assert.deepEqual(app.regionDrawings.dialog.rows.map((row) => [row.caption, row.length]), [['D1', 60]]);
+  assert.equal(circular.circularRecordDiscovery.status, 'ready', 'the list was read once, through its owner');
+  app.regionDrawings.close();
+});

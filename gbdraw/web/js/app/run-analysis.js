@@ -1520,8 +1520,8 @@ export const executeCanonicalRenderCandidate = async ({
  *   [onCircularRecordsDiscovered] A discovery of a Circular drawing's input settled (success or error).
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {((drawing: DrawingState) => Promise<RecordIdentitySources>) | null} [readRecordIdentitySources]
- *   The record discovery owner's record lists of the Generate's drawing's inputs, awaited (DESIGN A4): the
- *   sources a Generate reads its requests' record identities from (`drawnRecordIdentities`).
+ *   The record discovery owner's record lists of a drawing's inputs, awaited (DESIGN A4): the sources
+ *   `readDrawingRecordIdentities` returns, from which a request's record identities are read (`drawnRecordIdentities`).
  * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
  * @property {() => Promise<void>} [settlePendingInputs] The input reads Generate waits for before it reads the drawing:
@@ -2539,6 +2539,23 @@ export const createRunAnalysis = ({
     return entry.promise;
   };
 
+  /**
+   * The drawing's record identities (DESIGN A4), the one read that Generate
+   * and New drawing from a region make. A Circular list still deferred after a
+   * Load is read now through the refresh owner above (OV-2489); the record
+   * discovery owner's port then reads the lists, a deferred Linear card the
+   * same way. Generate has read its Circular list first, so nothing is read twice.
+   * @param {DrawingState} drawing
+   * @returns {Promise<RecordIdentitySources | null>} null without the port.
+   */
+  const readDrawingRecordIdentities = async (drawing) => {
+    if (typeof readRecordIdentitySources !== 'function') return null;
+    if (drawing.mode === 'circular' && circularDiscoveryForInput(drawing).status === 'deferred') {
+      await refreshCircularRecordOrder(undefined, drawing);
+    }
+    return readRecordIdentitySources(drawing);
+  };
+
   // R13: Generate and the label reflow prepare the specific-color rules they
   // render here, the Generate compiler's one trigger of the rule preparation.
   // `isCurrent` is the run's own staleness: the candidate is null when the run
@@ -2873,8 +2890,7 @@ export const createRunAnalysis = ({
       // committed request's records, and the rows of each record whose key changes move to its new key.
       // The request reads the moved rows; the drawing takes them when the run succeeds
       // (`pruneUnmatchedFeatureOverrides`). Feature fills are rebuilt from the moved rules.
-      identitySources = typeof readRecordIdentitySources === 'function'
-        ? await readRecordIdentitySources(drawing) : null;
+      identitySources = await readDrawingRecordIdentities(drawing);
       throwIfGenerationCanceled();
       if (generationToken !== latestGenerationToken) return { status: 'stale' };
       const nextRecordPlan = identitySources ? requestRecordPlan({
@@ -6361,6 +6377,7 @@ export const createRunAnalysis = ({
     requestLiveSettingApply,
     discardLiveSettingRequests,
     refreshCircularRecordOrder,
+    readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,

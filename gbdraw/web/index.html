@@ -9303,7 +9303,7 @@
                                     :value="row.kind" @change="row.kind = $event.target.value; regionDrawings.refresh()">
                                 <option value="whole">{{ t('Whole record') }}</option>
                                 <option value="coordinates">{{ t('Coordinates') }}</option>
-                                <option value="feature" :disabled="!row.features">{{ t('A feature') }}</option>
+                                <option value="feature" :disabled="Boolean(row.featureReason)">{{ t('A feature') }}</option>
                             </select>
                         </label>
                         <!-- Start and End wrap as one unit: never an End alone on a line -->
@@ -9324,7 +9324,7 @@
                                 <option v-for="feature in row.features || []" :key="feature.featureId" :value="feature.featureId">{{ feature.label }}</option>
                             </select>
                         </label>
-                        <p v-if="!row.features" data-region-drawing-feature-reason class="basis-full text-[11px] text-slate-500">{{ t('Generate the drawing to choose a feature.') }}</p>
+                        <p v-if="row.featureReason" data-region-drawing-feature-reason class="basis-full text-[11px] text-slate-500">{{ row.featureReason }}</p>
                     </div>
                 </li>
             </ul>
