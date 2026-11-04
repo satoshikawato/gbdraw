@@ -58,7 +58,7 @@ test('B-06 J36 rejected FASTA recovery and label regeneration preserve scale geo
   await switchMode(page, 'linear');
   await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
   await page.getByLabel('GFF3', { exact: true }).setInputFiles('gbdraw/web/tutorial-data/lambda-gff3/NC_001416.gff3');
-  const fasta = page.getByLabel('FASTA', { exact: true });
+  const fasta = page.getByLabel('FASTA', { exact: true }).and(page.locator('input[type="file"]'));
   const valid = 'gbdraw/web/tutorial-data/lambda-gff3/NC_001416.fna';
   await fasta.setInputFiles(valid); await generate(page);
   await fasta.setInputFiles({ name: 'mismatch.fasta', mimeType: 'text/plain', buffer: Buffer.from('>wrong_record_identity\n' + 'ATGC'.repeat(100) + '\n') });
