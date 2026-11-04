@@ -1063,7 +1063,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     )
   },
   // New drawing from a region: Python derives the drawing from the source
-  // drawing's committed request and returns it with its resource sources.
+  // drawing's draft projection and returns it with its resource sources.
   [DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING]: {
     keys: ['canonicalRequest', 'regions', 'adaptSizes'],
     fileRoles: [],

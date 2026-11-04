@@ -134,9 +134,9 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /**
- * The payload of `deriveRegionDrawing`: the source drawing's committed
- * request, whose resources the page stages, the regions, and whether hand-set
- * sizes return to Auto.
+ * The payload of `deriveRegionDrawing`: the source drawing's draft projection
+ * (its canonical request as the next Generate would send it), whose resources
+ * the page stages, the regions, and whether hand-set sizes return to Auto.
  * @typedef {object} RegionDrawingHelperPayload
  * @property {CanonicalRenderRequest} canonicalRequest
  * @property {CommittedCanonicalSession['resources']} resources
