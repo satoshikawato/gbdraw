@@ -27,7 +27,6 @@ from gbdraw.api.options import (
     CircularDiagramOptions,
     CircularRequestTrackOptions,
     LinearDiagramOptions,
-    LinearMultiRecordOptions,
     _ModeDiagramOptions,
     config_override_mode,
 )
@@ -322,21 +321,21 @@ def derive_region_request(
     output = getattr(source, "output", None) or RenderOutputRequest()
     request: DiagramRequest
     if target_mode == "linear":
-        layout = None
+        # Each derived record takes a row of its own (no grid row), so the
+        # record gap, which spaces the records of one row, draws nothing: the
+        # drawing states no layout, as the Web writes it.
         if isinstance(source, LinearDiagramRequest):
             assert isinstance(options, LinearDiagramOptions)
             values.update(
                 {name: getattr(options, name) for name in _LINEAR_ONLY_FIELDS},
                 **_linear_comparisons(options, selected, dropped, source_mode),
             )
-            if source.layout is not None:
-                layout = LinearMultiRecordOptions(record_gap_px=source.layout.record_gap_px)
             if source.similarity_alignment is not None:
                 dropped.append(NotCarried("SIMILARITY_ALIGNMENT", source_mode))
         elif _has_any(options, _RING_RESULTS + _RING_PLAN):
             dropped.append(NotCarried("CONSERVATION_RINGS", source_mode))
         request = LinearDiagramRequest(
-            records=records, options=LinearDiagramOptions(**values), layout=layout, output=output
+            records=records, options=LinearDiagramOptions(**values), output=output
         )
     else:
         if isinstance(options, CircularDiagramOptions):
@@ -415,18 +414,19 @@ def _record_input(
     )
     crop = None
     if not region.whole:
+        # A crop names its record in the region, as the Web writes it.
         crop = RegionSpec(
             raw=f"{region.start}-{region.end}" + (":rc" if reverse else ""),
             file_selector=None,
-            record_id=None,
-            record_index=None,
+            record_id=None if selector is None else selector.record_id,
+            record_index=None if selector is None else selector.record_index,
             start=region.start,
             end=region.end,
             reverse_complement=reverse,
         )
     return RecordInput(
         source=source.records[item.input_index].source,
-        selector=selector,
+        selector=selector if crop is None else None,
         region=crop,
         presentation=replace(
             item.presentation,

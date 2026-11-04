@@ -22,6 +22,7 @@ from gbdraw.api import (
     GenBankInputSource,
     LinearDiagramOptions,
     LinearDiagramRequest,
+    LinearMultiRecordOptions,
     MaterializedSession,
     RecordCardinality,
     RecordInput,
@@ -37,6 +38,7 @@ from gbdraw.api import (
     render_request,
 )
 from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.region_drawing import derive_region_request
 from gbdraw.api.request_render import resolve_request_records
 from gbdraw.api.requests import DiagramRequest
 from gbdraw.auto_sizes import DrawnExtent, adapt_explicit_settings, auto_setting_values
@@ -256,8 +258,10 @@ def test_regions_of_several_records_follow_source_order(materialize, tmp_path: P
     )
     records = region.drawing.request.records
     assert [record.record_key for record in records] == ["pair:1", "pair:2"]
-    # The source rows' own selectors (the Session stores each record by its ID).
-    assert [record.selector.record_id for record in records] == ["TESTA", "TESTB"]
+    # The source rows' own selectors (the Session stores each record by its ID),
+    # each in its crop, as the Web writes a crop.
+    assert [record.selector for record in records] == [None, None]
+    assert [record.region.record_id for record in records] == ["TESTA", "TESTB"]
     assert all(record.cardinality is RecordCardinality.EXACTLY_ONE for record in records)
     [track] = region.drawing.request.options.depth_tracks
     assert track.source[0] is None and str(track.source[1]).endswith("depth.tsv")
@@ -275,7 +279,26 @@ def test_a_row_of_every_record_of_a_file_is_pinned_by_index(tmp_path: Path) -> N
     with materialize_session(document, output_directory=tmp_path / "out") as materialized:
         region = derive_region_drawing(materialized, [RegionSelection("pair:2", 1, 20)])
     [record] = region.drawing.request.records
-    assert (record.record_key, record.selector.record_index) == ("pair:2", 1)
+    assert (record.record_key, record.selector, record.region.record_index) == ("pair:2", None, 1)
+
+
+def test_a_crop_of_a_record_of_a_file_is_stated_as_the_web_writes_it() -> None:
+    # A card of a file of two records, with a record gap: each crop names its
+    # record in the region, and the drawing, whose records take a row each,
+    # states no layout (OV-2464).
+    source = LinearDiagramRequest(
+        records=[RecordInput(GenBankInputSource(TWO_RECORDS), record_key="pair", cardinality=RecordCardinality.ALL)],
+        layout=LinearMultiRecordOptions(record_gap_px=40),
+    )
+    request = derive_region_request(source, [RegionSelection("pair:1", 2, 30), RegionSelection("pair:2", 5, 40)]).request
+    assert request.layout is None
+    assert [(record.selector, record.region.record_index) for record in request.records] == [(None, 0), (None, 1)]
+    stated = build_session_document(request).to_dict()["drawings"][0]["renderRequest"]
+    assert stated["layout"] == {}
+    assert [(record["selector"], record["region"]["selector"] is not None) for record in stated["records"]] == [
+        (None, True),
+        (None, True),
+    ]
 
 
 def test_feature_edits_and_annotations_inside_the_region_are_carried(materialize) -> None:
@@ -382,7 +405,6 @@ def test_circular_track_widths_follow_the_rule(materialize) -> None:
 
 
 def test_the_drawing_derivation_is_the_request_core(materialize) -> None:
-    from gbdraw.api.region_drawing import derive_region_request
     from gbdraw.session import session_to_request
 
     source = _mito_circular(config_overrides={"canvas.circular.track_type": "middle"})
