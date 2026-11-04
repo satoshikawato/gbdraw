@@ -499,6 +499,26 @@ def test_the_web_helper_draws_two_records_in_one_linear_drawing(tmp_path: Path) 
     assert {reply["resourceSources"][record["source"]["resourceId"]] for record in records} == {source_id}
 
 
+def test_the_web_helper_names_only_the_resources_the_derived_request_reads(tmp_path: Path) -> None:
+    examples = REPO / "examples"
+    source = LinearDiagramRequest(
+        records=[
+            RecordInput(GenBankInputSource(examples / "MjeNMV.gb"), record_key="a"),
+            RecordInput(GenBankInputSource(examples / "MelaMJNV.gb"), record_key="b"),
+        ],
+        options=LinearDiagramOptions(blast_files=[str(examples / "MjeNMV.MelaMJNV.tblastx.out")]),
+    )
+    payload, paths, reply = _web_region(
+        source, [{"recordKey": "a", "start": 1, "end": 30000}, {"recordKey": "b", "start": 1, "end": 30000}], tmp_path
+    )
+    assert reply["status"] == "derived"
+    # The comparison table is not carried, so the one-drawing document holds no copy of it.
+    [table_id] = [resource_id for resource_id, path in paths.items() if path.endswith(".tblastx.out")]
+    named = {record["source"]["resourceId"] for record in reply["renderRequest"]["records"]}
+    assert table_id not in reply["resourceSources"].values()
+    assert set(reply["resourceSources"]) == named
+
+
 def test_the_web_helper_refuses_an_origin_crossing_region(tmp_path: Path) -> None:
     reply = _web_region(_mito_circular(), [{"recordKey": "mito", "start": 16000, "end": 200}], tmp_path)[2]
     assert reply == {"status": "refused", "reason": "ORIGIN_CROSSING", "recordKey": "mito", "start": 16000, "end": 200}

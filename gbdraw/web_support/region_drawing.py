@@ -27,7 +27,7 @@ from gbdraw.auto_sizes import AutoValue
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_drawings import DrawingMode
 from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
-from gbdraw.session_resources import SessionResourceTable
+from gbdraw.session_resources import SessionResourceTable, canonical_resource_ids
 
 
 class CoordinateRegionInput(TypedDict):
@@ -144,13 +144,16 @@ def derive_web_region_drawing(
     for resource_id, path in resource_paths.items():
         table.request().add_path(resource_id, kind="web-file", value=path)
     encoded = encode_canonical_request(derived.request, table=table)
+    # Only the resources the derived request names: a held one reads itself,
+    # an added one (a second input of one file) the held one of its path.
     source_of_path = {str(path): resource_id for resource_id, path in resource_paths.items()}
-    resource_sources = {resource_id: resource_id for resource_id in resource_paths}
-    for resource in encoded.resources:
-        source_id = source_of_path.get(str(resource.source_path))
+    added = {resource.resource_id: str(resource.source_path) for resource in encoded.resources}
+    resource_sources: dict[str, str] = {}
+    for resource_id in canonical_resource_ids(encoded.payload):
+        source_id = resource_id if resource_id in resource_paths else source_of_path.get(added.get(resource_id, ""))
         if source_id is None:
             raise _protocol_error("The region drawing names a resource its source drawing does not have.")
-        resource_sources[resource.resource_id] = source_id
+        resource_sources[resource_id] = source_id
     return {
         "status": "derived",
         "mode": derived.mode,
