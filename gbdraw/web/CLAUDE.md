@@ -148,6 +148,7 @@ in the same change.
 | History transactions and availability: one History per drawing and the project stream behind one router, with a shared byte budget and file retention | `js/services/history.js` (`createHistoryRouter`), `js/app/history-inputs.js`, `js/services/history-snapshot.js`; the header's Undo and Redo controls and the History list (PD-OI-112) are `js/app/history-list.js` (`createHistoryControls`) |
 | Error producer contract and user-facing wording | `js/utils/error-normalization.js` (`diagnosticError`, `normalizeUserFacingError`) |
 | Numeric draft projection | `js/utils/optional-positive-number.js` (`projectOptionalNumber`) |
+| A control's name and the value it now holds (a History step's detail, the Feature placement layout dialog's question) | `js/utils/control-description.js` (`describeControl`, `controlValueText`) |
 | GenBank header reading | `js/services/genbank-header.js` |
 | Managed Depth slot reconciliation | `js/services/depth-track-state.js` (`reconcileManagedDepthSlots`), called by `changeCircularDepthSources` and `changeLinearDepthSources` |
 | Editor intent shown on the displayed Result: the edit transition, the port, and the preparation of a History step or a Result display (R3) | `js/app/app-setup.js` (`editEditorIntent`, `showEditorIntent`, `projectMountedEditorIntent`); it compiles with `compilePlanBundle` in `js/app/candidate-render.js` and reconciles with `reconcileMountedResult` in `js/services/svg-result-ingestion.js` |
@@ -636,8 +637,10 @@ routes its feature-slot edits through it (`featureSlotEdits` in
 `app/track-slot-edits.js`), and a template passes `$event` so Cancel restores
 the control. An edit that would leave a lane Feature placement of the
 drawing undrawable asks first (Owner decision Q3); Reset applies the edit
-and removes those rows as one History step. The control's History adapter
-records an edit that loses no lane, and restores install state as is (R11).
+and removes those rows as one History step. The question names the control and
+the value it now holds with the History list's `describeControl` (R11). The
+control's History adapter records an edit that loses no lane, and restores
+install state as is (R11).
 
 Every edit of a Feature Visibility rule (the Features panel and the popup's
 product and protein ID scopes) runs through `editFeatureVisibilityRules` in
@@ -693,8 +696,8 @@ or Reset Settings).
   at a step that is no longer the next one. While it runs, Undo and Redo are
   unavailable. The Undo and Redo titles and the rows read one text per step
   (`stepText`): the detail a control gave its step (its name and value,
-  `describeControl` in `app/history-inputs.js`), read when the step ends and
-  dropped when an action renames the step, or else the step's label.
+  `describeControl` in `utils/control-description.js`), read when the step ends
+  and dropped when an action renames the step, or else the step's label.
 - A step that changes a value of a drawing belongs whole to that drawing; the
   Session-level values it also changes are part of its entry and are restored
   with it where they are still as it left them. A project step is one of:
