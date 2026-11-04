@@ -6747,8 +6747,9 @@ const installStoredDrawing = (drawing, { inputType, slice, draft, resolveTrackPl
 export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sourceFiles }) => {
   // The document's one entry has the ID of its mode's first drawing; the new drawing gets its own ID.
   const id = /** @type {DrawingId} */ (mode);
-  const entry = /** @type {SessionDrawing51} */ (/** @type {unknown} */ ({ id, mode, renderRequest, resources }));
-  const document = /** @type {Session51} */ (/** @type {unknown} */ ({ version: SESSION_VERSION, drawings: [entry] }));
+  const entry = /** @type {SessionDrawing51} */ (/** @type {unknown} */ ({ id, mode, renderRequest }));
+  // A Session 51 document holds the resources beside its drawings (OV-2462).
+  const document = /** @type {Session51} */ (/** @type {unknown} */ ({ version: SESSION_VERSION, resources, drawings: [entry] }));
   const inputs = storedDrawingInputsOf(document, entry, adoptCurrentSessionResources(resources),
     sessionSourceFactsOf(SESSION_VERSION, false), await readStoredWrapLengths(document));
   if (inputs.restoredConfig && inputs.requestOverrides) {

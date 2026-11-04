@@ -30,9 +30,11 @@ const { createRegionDrawing } = await import('../../gbdraw/web/js/app/region-dra
 const { createDrawingList } = await import('../../gbdraw/web/js/app/drawing-list.js');
 const { allocateDrawingId, defaultDrawingName } = await import('../../gbdraw/web/js/services/drawing-view.js');
 const { withNewDrawingDefaults } = await import('../../gbdraw/web/js/services/reset.js');
+const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
+const { coordinateTarget } = await import('../../gbdraw/web/js/app/annotations/target-actions.js');
 const { bindDrawingInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
-  installShownDrawing, installPreparedDrawing, prepareRegionDrawing, projectDraftRequest, serializeActiveRenderFiles
+  installShownDrawing, installPreparedDrawing, prepareRegionDrawing, prepareStoredDrawing, projectDraftRequest
 } = await import('../../gbdraw/web/js/services/config.js');
 const { buildCanonicalRenderRequest, compareCanonicalRenderRequests } = await import(
   '../../gbdraw/web/js/services/session-request.js'
@@ -60,10 +62,8 @@ const genbankRecord = (name, length, cds, topology = 'circular') => {
 };
 const genbankFile = (name, records) => new File([`${records.join('\n')}\n`], name, { type: 'text/plain', lastModified: 1 });
 
-/** The Worker helper `deriveRegionDrawing`, run by the real Python owner over staged resources. */
-const deriveInPython = async (payload) => ({ result: JSON.parse(await evaluatePython(`
+const STAGE = `
 import base64, json, os, tempfile
-from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 directory = tempfile.mkdtemp()
 paths = {}
 for index, (resource_id, descriptor) in enumerate(payload['resources'].items()):
@@ -72,6 +72,22 @@ for index, (resource_id, descriptor) in enumerate(payload['resources'].items()):
     with open(path, 'wb') as handle:
         handle.write(base64.b64decode(data) if descriptor.get('encoding') == 'base64' else data.encode())
     paths[resource_id] = path
+`;
+
+/** The biological feature IDs of a request's records by start (0-based), as Python reads them. */
+const featureIdsInPython = async ({ renderRequest, resources }) => JSON.parse(await evaluatePython(`${STAGE}
+from gbdraw.api.request_render import resolve_request_records
+from gbdraw.session_request_codec import decode_canonical_request
+request = decode_canonical_request(payload['canonicalRequest'], resource_paths=paths, output_directory=directory)
+result = json.dumps({
+    str(feature.location_parts[0][0]): feature.biological_feature_id
+    for item in resolve_request_records(request).provenance for feature in item.source_feature_catalog
+})
+`, { canonicalRequest: renderRequest, resources }));
+
+/** The Worker helper `deriveRegionDrawing`, run by the real Python owner over staged resources. */
+const deriveInPython = async (payload) => ({ result: JSON.parse(await evaluatePython(`${STAGE}
+from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
 result = derive_web_region_drawing_json(
     json.dumps(payload['canonicalRequest']), json.dumps(paths), directory,
     json.dumps(payload['regions']), json.dumps(payload['adaptSizes']))
@@ -229,4 +245,88 @@ test('(d) Create adds the region drawing as New does; Undo removes it, Redo brin
   assert.equal(hashOf(source.id), sourceHash);
   // Leave the store as the next cases expect it.
   await history.undo();
+});
+
+// The names of the files registered while `run` runs.
+const countingRegistrations = async (run) => {
+  const { registerFile } = state.inputFiles;
+  const registered = [];
+  state.inputFiles.registerFile = (file) => { if (file) registered.push(file.name); return registerFile(file); };
+  try {
+    return { value: await run(), registered };
+  } finally {
+    state.inputFiles.registerFile = registerFile;
+  }
+};
+
+// A Circular record with a per-feature edit and an annotation inside 301..800
+// and one of each outside, and a color rule whose caption renames its Legend row.
+const recordWithLook = genbankRecord('recA', 1200, [[101, 200, 'A1'], [401, 600, 'A2'], [901, 1100, 'A3']]);
+const LOOK_REGION = [{ recordKey: 'record-1', start: 301, end: 800 }];
+const RULE = { feat: 'CDS', qual: 'locus_tag', val: 'A2', color: '#ff0000', cap: 'Kinase' };
+const circularSourceWithLook = async () => {
+  const source = circularSource([recordWithLook]);
+  for (const key of Object.keys(source.featureOverrides)) delete source.featureOverrides[key];
+  source.annotationSets.splice(0);
+  source.manualSpecificRules.splice(0);
+  const ids = await featureIdsInPython((await projectDraftRequest(state, source, facts)).envelope);
+  for (const [start, labelText] of [['400', 'kept'], ['900', 'dropped']]) {
+    source.featureOverrides[JSON.stringify(['record-1', ids[start]])] = {
+      recordKey: 'record-1', biologicalFeatureId: ids[start], featureVisibility: null, labelVisibility: null,
+      labelText, labelSourceText: null
+    };
+  }
+  source.annotationSets.push(createAnnotationSet({ id: 'marks', annotations: [
+    { id: 'in-span', target: coordinateTarget({ start: 450, end: 500 }), label: 'Inside', mark: 'band' },
+    { id: 'out-span', target: coordinateTarget({ start: 1000, end: 1050 }), label: 'Outside', mark: 'band' }
+  ] }));
+  source.manualSpecificRules.push({ ...RULE });
+  return source;
+};
+/** The parts of the look a region drawing carries: inside ones arrive, outside ones do not. */
+const assertLookCarried = (drawing) => {
+  assert.deepEqual(Object.values(drawing.featureOverrides).map((row) => row.labelText), ['kept']);
+  assert.deepEqual(drawing.annotationSets.flatMap((set) => set.annotations.map((item) => item.label)), ['Inside']);
+  assert.deepEqual(drawing.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })),
+    [RULE], 'the color rule and its Legend name');
+};
+
+test('(a) a region of one Circular record is a Linear drawing that carries the look inside the region', async () => {
+  const source = await circularSourceWithLook();
+  const { value: installed, registered } = await countingRegistrations(() => deriveAndInstall(source, LOOK_REGION));
+  assert.equal(installed.made.mode, 'linear');
+  assert.deepEqual(installed.prepared.repairs, []);
+  // The color table is a table the request writes, which Load holds as its card's file.
+  assert.deepEqual(registered, ['specific-colors.tsv'], 'no new GenBank file');
+  assert.equal(installed.made.files.c_gb ?? null, null);
+  assert.deepEqual(installed.made.linearSeqs.map((row) => row.gb?.fileId), [source.files.c_gb.fileId],
+    'the source drawing\'s Web file');
+  assertLookCarried(installed.made);
+});
+
+test('(f) the same region of a drawing loaded from a Session, without a Result', async () => {
+  const sent = await projectDraftRequest(state, await circularSourceWithLook(), facts);
+  const prepared = await prepareStoredDrawing({
+    mode: 'circular', renderRequest: sent.envelope.renderRequest, resources: sent.envelope.resources, sourceFiles: new Map()
+  });
+  assert.deepEqual(prepared.repairs, []);
+  const loaded = createDrawingState('loaded', 'circular');
+  installPreparedDrawing(loaded, prepared);
+  const loadedFile = loaded.files.c_gb;
+  assert.notEqual(loadedFile.fileId, modeDrawing(state, 'circular').files.c_gb.fileId, 'Load made its own Web file');
+  const { value: installed, registered } = await countingRegistrations(() => deriveAndInstall(loaded, LOOK_REGION));
+  assert.equal(installed.made.mode, 'linear');
+  assert.deepEqual(installed.prepared.repairs, []);
+  // The color table is a table the request writes, which Load holds as its card's file.
+  assert.deepEqual(registered, ['specific-colors.tsv'], 'no new GenBank file');
+  assert.deepEqual(installed.made.linearSeqs.map((row) => row.gb?.fileId), [loadedFile.fileId],
+    'the loaded drawing\'s Web file (a Session resource view)');
+  assertLookCarried(installed.made);
+});
+
+// The round trip of a Linear region drawing needs the Linear record catalog
+// (`prepareLinearRecordCatalog`, which reads the records in the Worker); this
+// file does not build it yet, so the draft projection misses the GenBank file.
+test('(a) round trip of the Linear region drawing of a Circular source', { todo: 'B5-6: build the Linear record catalog in node' }, async () => {
+  await assertRoundTrip(await deriveAndInstall(await circularSourceWithLook(), LOOK_REGION));
 });
