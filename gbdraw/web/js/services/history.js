@@ -199,8 +199,7 @@ const emitHistoryDiagnostic = (event) => {
 
 /**
  * The artifact a generated-artifact handle names: its fingerprint and compact
- * signature, which the default handle comparison also reads. A handle without
- * a fingerprint names only itself.
+ * signature. A handle without a fingerprint names only itself.
  * @param {{ identity?: { fingerprint?: string, compactSignature?: string } }} handle
  * @returns {unknown}
  */
@@ -210,6 +209,18 @@ const artifactRetentionKey = (handle) => {
     ? `${identity.fingerprint}\u0000${identity.compactSignature ?? ''}`
     : handle;
 };
+
+/**
+ * Whether two handles name the same generated artifact: the one comparison
+ * (OV-2208), read from the key that also counts their bytes. A handle without
+ * a fingerprint is never the same as another.
+ * @param {{ identity?: { fingerprint?: string, compactSignature?: string } }} before
+ * @param {{ identity?: { fingerprint?: string, compactSignature?: string } }} after
+ * @returns {boolean}
+ */
+const sameGeneratedArtifact = (before, after) => (
+  Boolean(before?.identity?.fingerprint) && artifactRetentionKey(before) === artifactRetentionKey(after)
+);
 
 /**
  * The bytes the handles retain, each artifact once (`artifactRetentionKey`) at
@@ -387,8 +398,6 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The snapshot service's capture of the generated artifact for a replacement step.
  * @property {((handle: HistoryArtifactHandle, options: { clearFailedGeneratePresentation: boolean }) => unknown) | null} [restoreGeneratedArtifactHandle]
  *   The snapshot service's restore of a captured handle; History awaits it.
- * @property {((before: HistoryArtifactHandle, after: HistoryArtifactHandle) => boolean) | null} [compareGeneratedArtifactHandles]
- *   Whether two handles name the same artifact.
  * @property {(value: unknown) => string} [signatureFor]
  *   The signature that detects a change; JSON by default.
  * @property {HistoryFileRetention | null} [fileStore]
@@ -527,7 +536,6 @@ export const createHistoryManager = ({
   applyCheckpoint,
   captureGeneratedArtifactHandle = null,
   restoreGeneratedArtifactHandle = null,
-  compareGeneratedArtifactHandles = null,
   signatureFor = (value) => JSON.stringify(value),
   fileStore = null,
   collectCurrentFileIds = null,
@@ -1573,13 +1581,7 @@ export const createHistoryManager = ({
    */
   const sameArtifactHandles = (before, after) => {
     diagnostics.artifactFingerprintComparisonCount += 1;
-    const same = typeof compareGeneratedArtifactHandles === 'function'
-      ? Boolean(compareGeneratedArtifactHandles(before, after))
-      : Boolean(
-          before?.identity?.fingerprint
-          && before.identity.fingerprint === after?.identity?.fingerprint
-          && before.identity.compactSignature === after?.identity?.compactSignature
-        );
+    const same = sameGeneratedArtifact(before, after);
     emitHistoryDiagnostic({
       type: 'compare',
       scope: 'artifact-replacement',

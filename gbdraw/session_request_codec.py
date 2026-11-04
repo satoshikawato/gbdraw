@@ -124,6 +124,7 @@ from gbdraw.annotations import (
 )
 
 from .api.options import (
+    CIRCULAR_DEFAULT_PLOT_TITLE_POSITION,
     DEPTH_TRACK_POSITIVE_FIELDS,
     LINEAR_DEFAULT_PLOT_TITLE_POSITION,
     CircularDiagramOptions,
@@ -5456,14 +5457,30 @@ class FreshProteinComparisonDefaults(TypedDict):
     hitLimits: FreshProteinHitLimits
 
 
-class AbsentLinearOutput(TypedDict):
-    """The sides a Linear request draws with where its output states none."""
+class AbsentOutput(TypedDict):
+    """The sides a request draws with where its output states none."""
 
     legend: str
     plotTitlePosition: str
 
 
-def describe_absent_linear_output() -> AbsentLinearOutput:
+def describe_absent_circular_output() -> AbsentOutput:
+    """How a Circular request without ``diagramOptions.output`` is drawn.
+
+    Python draws it, on one record and on a multi-record canvas alike, with
+    ``CircularOutputOptions()``, and a null ``plotTitlePosition`` with the
+    Circular default title side. The Web's Load reads such a request with
+    these sides.
+    """
+
+    default = CircularOutputOptions()
+    return {
+        "legend": default.legend,
+        "plotTitlePosition": default.plot_title_position or CIRCULAR_DEFAULT_PLOT_TITLE_POSITION,
+    }
+
+
+def describe_absent_linear_output() -> AbsentOutput:
     """How a Linear request without ``diagramOptions.output`` is drawn (OV-2491).
 
     Python draws it with ``LinearOutputOptions()``, and a null

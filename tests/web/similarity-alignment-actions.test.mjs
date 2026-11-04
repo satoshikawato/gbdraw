@@ -157,19 +157,23 @@ const create = ({
     for(const direction of orientations)next.renderRequest.records.find(r=>r.recordKey===direction.recordKey).presentation.reverseComplement=direction.reverseComplement;
     return next;
   };
-  const capture = () => ({ retainedBytes: 0, ownerSet: structuredClone({
-    canonical, receipt:controllerState.similarityAlignmentResetReceipt.value,
-    plan: controllerState.similarityAlignmentPlan.value,
-    translations: controllerState.linearRecordTranslations.value,
-    sequences: controllerState.activeDrawing().linearSeqs,
-    results: controllerState.results.value
-  }) });
+  // History compares handles by their identity (OV-2208): this fake's
+  // fingerprint is its owner set.
+  const capture = () => {
+    const ownerSet = structuredClone({
+      canonical, receipt:controllerState.similarityAlignmentResetReceipt.value,
+      plan: controllerState.similarityAlignmentPlan.value,
+      translations: controllerState.linearRecordTranslations.value,
+      sequences: controllerState.activeDrawing().linearSeqs,
+      results: controllerState.results.value
+    });
+    return { retainedBytes: 0, identity: { fingerprint: JSON.stringify(ownerSet), compactSignature: '' }, ownerSet };
+  };
   const history = createHistoryManager({
     buildIntent: () => ({}), applyIntent: () => {},
     buildCheckpoint: () => { throw new Error('Apply must use generated artifact handles.'); },
     applyCheckpoint: () => {},
     captureGeneratedArtifactHandle: capture,
-    compareGeneratedArtifactHandles: (a, b) => JSON.stringify(a) === JSON.stringify(b),
     restoreGeneratedArtifactHandle: ({ ownerSet }) => {
       canonical=structuredClone(ownerSet.canonical);
       controllerState.similarityAlignmentResetReceipt.value=structuredClone(ownerSet.receipt);

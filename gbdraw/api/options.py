@@ -483,6 +483,11 @@ def _validate_legend_position(legend: object, mode: DiagramMode) -> None:
         )
 
 
+# The title side a Circular drawing takes when its output states none
+# (``CircularOutputOptions.plot_title_position`` None, or no output at all).
+CIRCULAR_DEFAULT_PLOT_TITLE_POSITION: Literal["none", "top", "bottom"] = "none"
+
+
 @dataclass(frozen=True)
 class CircularOutputOptions:
     """Circular legend and title placement options."""

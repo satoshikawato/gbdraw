@@ -446,12 +446,7 @@ const createLayoutPreferences = () => ({
     restoreGeneratedArtifactHandle: async (handle) => {
       artifact = handle;
       restored.push(handle.id);
-    },
-    compareGeneratedArtifactHandles: (before, after) => Boolean(
-      before.identity.fingerprint
-      && before.identity.fingerprint === after.identity.fingerprint
-      && before.identity.compactSignature === after.identity.compactSignature
-    )
+    }
   });
   const generated = (id, compactSignature = 'stable') => ({
     id,
@@ -628,11 +623,7 @@ const createLayoutPreferences = () => ({
     buildCheckpoint: () => ({}),
     applyCheckpoint: async () => {},
     captureGeneratedArtifactHandle: () => artifact,
-    restoreGeneratedArtifactHandle: async (handle) => { artifact = handle; },
-    compareGeneratedArtifactHandles: (left, right) => (
-      left.identity.fingerprint === right.identity.fingerprint
-      && left.identity.compactSignature === right.identity.compactSignature
-    )
+    restoreGeneratedArtifactHandle: async (handle) => { artifact = handle; }
   });
   const checkpointOptions = {
     shouldCommit: (result) => result.status === 'ok',
@@ -2098,11 +2089,14 @@ const createLayoutPreferences = () => ({
   state.zoom.value = 2;
   state.canvasPan.x = 120;
   const transientOnlyHandle = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
-  assert.equal(
-    snapshots.compareGeneratedArtifactHandles(handleA, transientOnlyHandle),
-    true,
+  // History compares handles by this identity (OV-2208); the snapshot
+  // service exports no second comparison.
+  assert.deepEqual(
+    transientOnlyHandle.identity,
+    handleA.identity,
     'Generation counters and preview viewport state must not create artifact History.'
   );
+  assert.equal(Object.hasOwn(snapshots, 'compareGeneratedArtifactHandles'), false);
   state.resultGenerationKey.value = 1;
   state.zoom.value = 1;
   state.canvasPan.x = 0;
@@ -2330,7 +2324,6 @@ const createLayoutPreferences = () => ({
     },
     captureGeneratedArtifactHandle: () => snapshots.captureGeneratedArtifactHandle(state.activeDrawing()),
     restoreGeneratedArtifactHandle: snapshots.restoreGeneratedArtifactHandle,
-    compareGeneratedArtifactHandles: snapshots.compareGeneratedArtifactHandles
   });
   await ownerHistory.initializeIntentBaseline('LOSAT authority baseline');
   const replacementLifecycle = [];
@@ -2383,12 +2376,9 @@ const createLayoutPreferences = () => ({
   assert.notEqual(equivalentAppliedPaletteColors, handleB.ownerSet.appliedPaletteColors);
   assert.notEqual(equivalentPendingPaletteColors, handleB.ownerSet.pendingPaletteColors);
   assert.equal(equivalentPaletteHandle.identity.fingerprint, 'b'.repeat(64));
-  assert.equal(
-    snapshots.compareGeneratedArtifactHandles(
-      restoredHandleBeforePaletteReplacement,
-      equivalentPaletteHandle
-    ),
-    true,
+  assert.deepEqual(
+    equivalentPaletteHandle.identity,
+    restoredHandleBeforePaletteReplacement.identity,
     'Equivalent palette owner replacements must not change semantic artifact identity.'
   );
   await ownerHistory.runUndoableArtifactReplacement(
@@ -2527,8 +2517,7 @@ for (const previousSuppressed of [false, true]) {
   const primary = {code:'RESULT_INVALID',stage:'result-admission',message:'PRIVATE_PRIMARY_SENTINEL'};
   const history = createHistoryManager({buildIntent:async()=>({}),applyIntent:async()=>{},
     buildCheckpoint:async()=>({}),applyCheckpoint:async()=>{},
-    captureGeneratedArtifactHandle:()=>before,restoreGeneratedArtifactHandle:async()=>{},
-    compareGeneratedArtifactHandles:()=>false});
+    captureGeneratedArtifactHandle:()=>before,restoreGeneratedArtifactHandle:async()=>{}});
   await history.initializeIntentBaseline('Rejected artifact baseline');
   let rollbackSettled = false;
   await assert.rejects(history.runUndoableArtifactReplacement('Rejected artifact', async()=>{throw primary;}, {

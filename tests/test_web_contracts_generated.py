@@ -402,6 +402,29 @@ def test_the_fresh_protein_comparison_defaults_come_from_the_python_options(
     assert "candidateLimit: 9,\n    orthogroupMemberMaxHits: 3" in module
 
 
+def test_the_absent_circular_output_comes_from_the_python_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.session_request_codec as codec
+    from gbdraw.api.options import CIRCULAR_DEFAULT_PLOT_TITLE_POSITION, CircularOutputOptions
+
+    generator = _generator()
+    assert codec.describe_absent_circular_output() == {
+        "legend": CircularOutputOptions().legend,
+        "plotTitlePosition": CIRCULAR_DEFAULT_PLOT_TITLE_POSITION,
+    }
+    assert "ABSENT_CIRCULAR_OUTPUT = Object.freeze({\n  legend: 'right',\n  plotTitlePosition: 'none'\n})" in (
+        generator.render_web_contracts_module()
+    )
+
+    monkeypatch.setattr(
+        codec, "CircularOutputOptions", functools.partial(CircularOutputOptions, legend="left", plot_title_position="top")
+    )
+    assert "ABSENT_CIRCULAR_OUTPUT = Object.freeze({\n  legend: 'left',\n  plotTitlePosition: 'top'\n})" in (
+        generator.render_web_contracts_module()
+    )
+
+
 def test_description_data_renders_any_json_key_but_the_prototype() -> None:
     generator = _generator()
 

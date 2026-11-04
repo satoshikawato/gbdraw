@@ -760,7 +760,6 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     },
     captureGeneratedArtifactHandle: captureForHistory,
     restoreGeneratedArtifactHandle: artifactSnapshots.restoreGeneratedArtifactHandle,
-    compareGeneratedArtifactHandles: artifactSnapshots.compareGeneratedArtifactHandles
   });
   await generationHistory.initializeIntentBaseline('Generated artifact baseline');
   const readinessRuntime = createImmediatePreviewRuntime({
