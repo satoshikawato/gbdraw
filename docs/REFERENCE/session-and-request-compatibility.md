@@ -468,6 +468,11 @@ Each diagram mode keeps its own feature label style, **Label Line**,
 existed loads with each mode's defaults: Linear Underline and Box, Circular
 None and None, and upright gene names in both.
 
+A Linear drawing whose saved request states no legend or title side, as a
+Session saved from Python does, draws its legend at the right and its title at
+the bottom, in the web app as on the command line. A new Linear drawing in the
+web app starts with both at the bottom and saves them.
+
 An embedded resource may declare `checksum`, the SHA-256 digest of its bytes as
 `sha256:<hex>` or as bare hex. gbdraw does not add one. The web app keeps it
 when it saves the session again, and gbdraw rejects a resource whose bytes do

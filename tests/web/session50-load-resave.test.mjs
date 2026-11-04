@@ -252,3 +252,31 @@ test('a Session 50 that lists drawings (never released) is refused with a messag
   console.log('old combined 50:', JSON.stringify(loaded.error));
   assert.equal(loaded.error?.context?.reason, 'FIELDS');
 });
+
+// OV-2493: a drawing a Session 51 Load does not open takes its request's
+// legend and title sides, as the drawing it opens does. OV-2491 (Owner
+// decision R17-38): a Linear request that states no `output` reads with the
+// sides Python draws it with (`ABSENT_LINEAR_OUTPUT`, generated from
+// `LinearOutputOptions()`), opened or not; a Python-saved Linear Session
+// states none.
+test('each drawing of a Session 51 Load takes its request\'s layout, a Linear one without output Python\'s', async () => {
+  const { ABSENT_LINEAR_OUTPUT } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
+  const linearLayout = async (session) => {
+    await loadKeepingSlots(session);
+    return { ...state.drawingOf('linear').layoutPreferences.linear };
+  };
+  for (const opened of ['circular', 'linear']) {
+    const stated = v49Session();
+    stated.ui.activeDrawingId = opened;
+    assert.deepEqual(await linearLayout(stated), { legend: 'left', plotTitlePosition: 'bottom' }, `opened ${opened}`);
+    const absent = v49Session();
+    absent.ui.activeDrawingId = opened;
+    delete absent.drawings.find((entry) => entry.id === 'linear').renderRequest.diagramOptions.output;
+    assert.deepEqual(await linearLayout(absent), ABSENT_LINEAR_OUTPUT, `opened ${opened}, no output`);
+  }
+  const python = JSON.parse(gunzipSync(readFileSync(new URL(
+    '../fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz', import.meta.url
+  ))));
+  assert.equal(Object.hasOwn(python.drawings[0].renderRequest.diagramOptions, 'output'), false);
+  assert.deepEqual(await linearLayout(python), ABSENT_LINEAR_OUTPUT);
+});

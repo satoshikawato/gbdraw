@@ -1339,7 +1339,7 @@ def build_session_document(
     cannot replace canonical envelope fields, and it holds its own mode's
     draft only: another mode's slice (``state["modes"]["linear"]`` on a
     Circular drawing) raises :class:`SessionFormatError`. The current
-    Session version is 50: it keeps the drawings in the given order, any
+    Session version is 51: it keeps the drawings in the given order, any
     number of them, several of one mode, and drawings without a request.
     Each drawing gets its ID and name from its mode (``circular``,
     ``circular-2``; ``Circular``, ``Circular 2``).

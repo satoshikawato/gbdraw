@@ -498,6 +498,11 @@ class CircularOutputOptions:
             )
 
 
+# The title side a Linear drawing takes when its output states none
+# (``LinearOutputOptions.plot_title_position`` None, or no output at all).
+LINEAR_DEFAULT_PLOT_TITLE_POSITION: Literal["center", "top", "bottom"] = "bottom"
+
+
 @dataclass(frozen=True)
 class LinearOutputOptions:
     """Linear legend and title placement options."""

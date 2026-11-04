@@ -1,0 +1,15 @@
+{
+  "purpose": "Positive fixture of a Linear request without diagramOptions.output in Session 51: a Session saved from Python with LinearOutputOptions left unset, which every surface draws with legend right and title bottom (OV-2491, Owner decision R17-38)",
+  "writer": "gbdraw.session.save_session_document (Python API), run from the fix/linear-absent-output-default worktree on PYTHONPATH",
+  "writerCommit": "a97f355bb (origin/dev) plus the branch fix/linear-absent-output-default, which does not change the writer",
+  "command": "python -P gbdraw-baselines/multi-drawing-project-20261007/postb/scripts/ov2491-fixture.py <worktree> <worktree>/tests/fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz",
+  "request": "LinearDiagramRequest(records=(RecordInput(source=GenBankInputSource('tests/test_inputs/NC_001416.gb')),), options=LinearDiagramOptions(plot_title='Enterobacteria phage lambda')); created_at 2026-11-04T00:00:00Z",
+  "inputs": {
+    "tests/test_inputs/NC_001416.gb": "4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7"
+  },
+  "values": "drawings[0].renderRequest.diagramOptions has no output; plotTitle 'Enterobacteria phage lambda'",
+  "decompressedSha256": "599952a99b445c5ef990188988c42906d14b4be37e31a04acbf8b1517c2fa79d",
+  "compression": "gzip level 9, mtime 0 (Python gzip.compress)",
+  "sessionVersion": 51,
+  "requestSchema": 9
+}

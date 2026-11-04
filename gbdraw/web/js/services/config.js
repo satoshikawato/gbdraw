@@ -340,7 +340,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { BoundCanonicalComparison, BoundFileValue, CircularRecordEntry, DrawingInputFiles, InputType, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
-/** @import { StoredLayoutPreferences } from './layout-preferences.js' */
+/** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
 /** @import { DiagnosticContext, ErrorTextPart, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ConfirmLoadRepairs, LoadRepair, Repaired } from '../utils/load-repairs.js' */
@@ -2511,6 +2511,8 @@ const drawingProjectionInputOf = (view, {
  *   draft without them takes (`featureEditsOverProjection`, OV-220); null: the drawing holds no request.
  * @property {SessionCliOptions | null} cliOptions The CLI options the drawing's request was written with
  *   (B2-D9); null: none.
+ * @property {LayoutPreferences | null} layoutPreferences The layout its request sets (`requestLayoutPreferences`),
+ *   which a drawing whose draft has no layout takes at Load (OV-2493); null: the drawing holds no request.
  */
 /**
  * @param {Session51} document
@@ -2530,7 +2532,8 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFa
     const files = projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (view), sessionResourceTable).files;
     return {
       files, comparisonClassification: null, inputType: drawingInputTypeOf(storedInputType, null),
-      restoredConfig: null, requestOverrides: null, requestFeatureEdits: null, cliOptions: cliOptionsOf(view.cliOptions)
+      restoredConfig: null, requestOverrides: null, requestFeatureEdits: null, cliOptions: cliOptionsOf(view.cliOptions),
+      layoutPreferences: null
     };
   }
   const comparisonClassification = classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
@@ -2561,7 +2564,8 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFa
     restoredConfig: withSavedDefinitionAlignment(overlayModeSliceConfig({ mode, config: projection.config }, storedConfig)),
     requestOverrides: overrides.source === 'storedRequest' ? overrides : null,
     requestFeatureEdits: { semanticFeatureState: projection.semanticFeatureState },
-    cliOptions: cliOptionsOf(view.cliOptions)
+    cliOptions: cliOptionsOf(view.cliOptions),
+    layoutPreferences: projection.layoutPreferences
   };
 };
 
@@ -7744,6 +7748,11 @@ const importSessionDocument = async (e, options = {}) => {
     // The layout of the committed request (a Session 46 slice without its
     // own slot takes it).
     const projectedLayout = canonicalSession ? canonicalProjection?.layoutPreferences : null;
+    // The layout a drawing's request sets: the committed set's projection, or
+    // another Session 51 drawing's own (OV-2493); null without a request.
+    /** @param {DrawingId} id @returns {StoredLayoutPreferences | null} */
+    const requestLayoutOf = (id) => (id === committedSetDrawingId
+      ? projectedLayout : storedDrawingInputs.get(id)?.layoutPreferences) ?? null;
     /** @type {Map<DrawingId, SettingsContainers>} */
     const installedSettings = new Map();
     // The legend positions of the drafts' layouts: a Session 46 slice holds
@@ -7751,7 +7760,7 @@ const importSessionDocument = async (e, options = {}) => {
     // Python converts it (OV-652).
     if (legacyRead) repairs.push(...legacyRead.layoutRepairs);
     plan.drawings.forEach(({ id, mode }) => repairs.push(...storedLegendPositionRepairs(draftPartOf(id).slice.ui, `${draftPartOf(id).at}.ui`, {
-      slotOf: mode, projected: id === committedSetDrawingId && Boolean(projectedLayout)
+      slotOf: mode, projected: requestLayoutOf(id) !== null
     })));
     for (const { id, mode } of plan.drawings) {
       const { draft, settings } = await readStoredDrawingDraft({
@@ -8039,14 +8048,15 @@ const importSessionDocument = async (e, options = {}) => {
         : null;
     }
     restoreAppliedPaletteFromSession(shownDrawing, ui);
-    // Layout preferences: a drawing's slice holds its mode's slot (the
-    // committed mode's request sets it when the slice has none); a Session
-    // 27-44's layout was read before Python converted it (OV-1967).
-    if (projectedLayout && !isPlainObject(draftPartOf(committedSetDrawingId).slice.ui?.layoutPreferences)) {
-      const drawingOfCommit = committedDrawing;
-      SETTINGS_SLICE.install(drawingOfCommit.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
-        ...cloneJsonData(drawingOfCommit.layoutPreferences),
-        [generatedMode]: normalizeLayoutPreferences(projectedLayout)[generatedMode]
+    // Layout preferences: a drawing's slice holds its mode's slot; a drawing
+    // whose slice has none takes its own request's, opened or not (OV-2493);
+    // a Session 27-44's layout was read before Python converted it (OV-1967).
+    for (const drawing of committed) {
+      const requestLayout = requestLayoutOf(drawing.id);
+      if (!requestLayout || isPlainObject(draftPartOf(drawing.id).slice.ui?.layoutPreferences)) continue;
+      SETTINGS_SLICE.install(drawing.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
+        ...cloneJsonData(drawing.layoutPreferences),
+        [drawing.mode]: normalizeLayoutPreferences(requestLayout)[drawing.mode]
       }) });
     }
 

@@ -68,6 +68,15 @@ change. A Session without the leaves reads as auto, and no reader converts it. `
 leaves in a stored full config and refuses them as a `configOverrides` entry ("Unknown config override path").
 The Web has no control for them yet; a Web re-plan (a legend drag) does not keep a requested canvas.
 
+A Linear request that states no `diagramOptions.output`, or a null `plotTitlePosition`, draws with Python's
+`LinearOutputOptions()` sides: legend `right`, title `bottom` (OV-2491, Owner decision R17-38). The generated
+`ABSENT_LINEAR_OUTPUT` (`schema.generated.js`, from `describe_absent_linear_output()` in
+`gbdraw/session_request_codec.py`) carries them to the Web's Load, which reads every drawing that holds a request
+and no layout of its own with its request's sides, opened or not (OV-2493). A new Web Linear drawing keeps its legend
+and title at the bottom and states them in what it saves. The format does not change: Python and the CLI drew such a
+request this way before; only the Web's reading changes. Positive fixture:
+`tests/fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz` (Python `save_session_document`).
+
 ## Unreleased: Session 50 stores the Linear wrap length, italic gene names, and the identity colour scale
 
 Session version 50 adds the config leaf `canvas.linear.wrap_length` (`"none"`,
