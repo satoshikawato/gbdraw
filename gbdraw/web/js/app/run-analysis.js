@@ -2878,7 +2878,6 @@ export const createRunAnalysis = ({
       throwIfGenerationCanceled();
       if (generationToken !== latestGenerationToken) return { status: 'stale' };
       const nextRecordPlan = identitySources ? requestRecordPlan({
-        state,
         drawing: requestDrawing,
         filesData: { linearSeqs: [...drawing.linearSeqs], c_gb: drawing.files.c_gb, c_gff: drawing.files.c_gff, c_fasta: drawing.files.c_fasta }
       }) : null;

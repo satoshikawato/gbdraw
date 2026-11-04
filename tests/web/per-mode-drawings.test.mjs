@@ -57,10 +57,11 @@ const resetDrawing = (mode) => {
   drawing.linearComparisonPlan.mode = 'none';
   drawing.linearComparisonPlan.edges.splice(0);
 };
-// Generate builds the request of the shown mode from that mode's drawing.
-const requestOf = (mode, { linearDepth = null } = {}) => {
+// Generate builds the request of the shown mode from that mode's drawing;
+// `shown` shows another drawing while this one is projected.
+const requestOf = (mode, { linearDepth = null, shown = mode } = {}) => {
   const drawing = modeDrawing(state, mode);
-  installShownDrawing(mode);
+  installShownDrawing(shown);
   drawing.inputType.value = 'gb';
   drawing.circularRecordList.value = [];
   const filesData = mode === 'circular'
@@ -153,6 +154,19 @@ test('each mode request carries its own drawing values', () => {
   const fromLinear = samples('linear', requestOf('linear'));
   assert.deepEqual([fromLinear[0], fromLinear[3], fromLinear[4]], [7, 'deviation', 2]);
   assert.deepEqual(samples('circular', requestOf('circular')), [13, 3, false, 'percent', 4]);
+  installShownDrawing('circular');
+  MODES.forEach(resetDrawing);
+});
+
+test('a drawing that is not shown is projected in its own mode, not the shown drawing\'s (OV-2463)', () => {
+  MODES.forEach(resetDrawing);
+  for (const mode of MODES) {
+    const shown = MODES.find((other) => other !== mode);
+    const whenShown = requestOf(mode);
+    const whenHidden = requestOf(mode, { shown });
+    assert.equal(whenHidden.renderRequest.mode, mode);
+    assert.deepEqual(whenHidden, whenShown, `the ${mode} request does not depend on the shown drawing`);
+  }
   installShownDrawing('circular');
   MODES.forEach(resetDrawing);
 });

@@ -119,23 +119,8 @@ const factsOf = async (drawing) => {
     linearRecordCatalog: catalog, recordDisplayRows: [], omittedAnnotationRecordKeys: catalog.omittedRecordKeys || []
   };
 };
-/**
- * The draft request of `drawing` shown, as the app projects the shown drawing
- * (the request's mode is the shown drawing's); the drawing shown before is
- * shown again, and a drawing the store did not hold is removed again.
- */
-const projectShown = async (drawing) => {
-  const shownBefore = state.activeDrawingId.value;
-  const added = !state.drawingTabs.value.some(({ id }) => id === drawing.id);
-  if (added) state.addDrawing(drawing, drawing.id);
-  installShownDrawing(drawing.id);
-  try {
-    return await projectDraftRequest(state, drawing, await factsOf(drawing));
-  } finally {
-    installShownDrawing(shownBefore);
-    if (added) state.removeDrawing(drawing.id, { takeSlot: () => null });
-  }
-};
+/** The draft request of `drawing`, shown or not (the request's mode is the drawing's own). */
+const projectOf = async (drawing) => projectDraftRequest(state, drawing, await factsOf(drawing));
 
 const circularSource = (records, form = {}) => {
   const drawing = installShownDrawing('circular');
@@ -148,7 +133,7 @@ const circularSource = (records, form = {}) => {
 
 /** The source's request, derived for `regions`, read and installed under `drawingId`. */
 const deriveAndInstall = async (source, regions, adaptSizes = true, drawingId = 'region-test') => {
-  const sent = await projectShown(source);
+  const sent = await projectOf(source);
   const { renderRequest, resources } = sent.envelope;
   const { result: derived } = await deriveInPython({ canonicalRequest: renderRequest, resources, regions, adaptSizes });
   assert.equal(derived.status, 'derived', JSON.stringify(derived));
@@ -189,7 +174,7 @@ const putAt = (request, path, value) => {
  * difference fails.
  */
 const assertRoundTrip = async (installed, { leftToLoad = [] } = {}) => {
-  const { envelope } = await projectShown(installed.made);
+  const { envelope } = await projectOf(installed.made);
   const compare = (expectedRequest) => compareCanonicalRenderRequests({
     expectedRequest, expectedResources: derivedResources(installed),
     actualRequest: envelope.renderRequest, actualResources: envelope.resources
@@ -235,7 +220,7 @@ test('(c) a region that crosses the origin is refused: no drawing, the tabs and 
   const created = [];
   const regions = createRegionDrawing({
     shownDrawingId: () => state.activeDrawingId.value,
-    projectShownRequest: () => projectShown(state.activeDrawing()),
+    projectShownRequest: () => projectOf(state.activeDrawing()),
     deriveRegion: deriveInPython,
     newDrawingFromRegion: async (...args) => { created.push(args); return { status: 'ok', drawingId: 'never' }; }
   });
@@ -287,7 +272,7 @@ const drawingList = createDrawingList({
 });
 const regionDrawingsOf = () => createRegionDrawing({
   shownDrawingId: () => state.activeDrawingId.value,
-  projectShownRequest: () => projectShown(state.activeDrawing()),
+  projectShownRequest: () => projectOf(state.activeDrawing()),
   deriveRegion: deriveInPython,
   newDrawingFromRegion: drawingList.newDrawingFromRegion
 });
@@ -347,7 +332,7 @@ const circularSourceWithLook = async () => {
   for (const key of Object.keys(source.featureOverrides)) delete source.featureOverrides[key];
   source.annotationSets.splice(0);
   source.manualSpecificRules.splice(0);
-  const ids = await featureIdsInPython((await projectShown(source)).envelope);
+  const ids = await featureIdsInPython((await projectOf(source)).envelope);
   for (const [start, labelText] of [['400', 'kept'], ['900', 'dropped']]) {
     source.featureOverrides[JSON.stringify(['record-1', ids[start]])] = {
       recordKey: 'record-1', biologicalFeatureId: ids[start], featureVisibility: null, labelVisibility: null,
@@ -383,7 +368,7 @@ test('(a) a region of one Circular record is a Linear drawing that carries the l
 });
 
 test('(f) the same region of a drawing loaded from a Session, without a Result', async () => {
-  const sent = await projectShown(await circularSourceWithLook());
+  const sent = await projectOf(await circularSourceWithLook());
   const prepared = await prepareStoredDrawing({
     mode: 'circular', renderRequest: sent.envelope.renderRequest, resources: sent.envelope.resources, sourceFiles: new Map()
   });
@@ -412,8 +397,7 @@ const LINEAR_SETTINGS_LEFT_TO_LOAD = [
     'objects.scale.style', 'canvas.linear.normalize_length'].map((key) => `$.diagramOptions.configOverrides.${key}`),
   '$.diagramOptions.output', '$.diagramOptions.tracks'
 ];
-// The installed Linear drawing writes the derived request when it is shown,
-// as the app projects it (the request's mode is the shown drawing's).
+// The installed Linear drawing writes the derived request, shown or not.
 test('(a) round trip of the Linear region drawing of a Circular source', async () => {
   await assertRoundTrip(await deriveAndInstall(await circularSourceWithLook(), LOOK_REGION), { leftToLoad: LINEAR_SETTINGS_LEFT_TO_LOAD });
 });
@@ -426,7 +410,7 @@ test('(a) regions of two records of one file are one Linear drawing bound to tha
   const fileRef = state.inputFiles.registerFile(genbankFile('two.gb', [recordA, recordB]));
   source.linearSeqs.splice(0, Infinity, createLinearSeq({ uid: 'two', gb: fileRef }));
   Object.assign(source.form, { labels_mode: 'none' });
-  const sent = await projectShown(source);
+  const sent = await projectOf(source);
   // The card's records, as the request names them (`<card uid>:<record number>`).
   const regions = [{ recordKey: 'two:1', start: 101, end: 900 }, { recordKey: 'two:2', start: 1, end: 600 }];
   const { value: installed, registered } = await countingRegistrations(() => deriveAndInstall(source, regions));
