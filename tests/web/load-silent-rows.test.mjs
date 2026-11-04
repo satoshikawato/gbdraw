@@ -105,7 +105,7 @@ const CASES = [
   // OV-594: an input type of no kind; the request's own type wins without a row.
   ['g47L', 'ui.cInputType', 5, ['setting-replaced ui.cInputType'], () => assert.deepEqual(drawnModes(), ['linear'], 'a Linear Load makes no Circular drawing to hold the type')],
   ['g47L', 'ui.lInputType', 5, [], () => assert.equal(modeDrawing(state, 'linear').inputType.value, 'gb')],
-  ['v44', 'ui.cInputType', 'fasta', [], () => assert.equal(modeDrawing(state, 'circular').inputType.value, 'gb')],
+  ['v44', 'ui.cInputType', 'zip', [], () => assert.equal(modeDrawing(state, 'circular').inputType.value, 'gb')],
   // K19: a settings-only Session's mode of no mode (the request's mode wins in a full one).
   ['so46', 'ui.mode', 'zigzag', ['setting-replaced ui.mode'], () => assert.equal(state.mode.value, 'circular')],
   ['g47L', 'ui.mode', 'zigzag', [], () => assert.equal(state.mode.value, 'linear')],

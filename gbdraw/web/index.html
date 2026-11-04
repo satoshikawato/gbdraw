@@ -2947,7 +2947,7 @@
                             <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setLinearInputType('gff')" value="gff" class="text-blue-600" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                             <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'fasta'" @change="setLinearInputType('fasta')" value="fasta" class="text-blue-600" :disabled="!semanticMutationAvailable"> FASTA</label>
                         </div>
-                        <p v-if="inputType === 'fasta'" class="ui-hint">{{ t('Records are drawn without features.') }}</p>
+                        <div v-if="inputType === 'fasta'"><p class="ui-hint">{{ t('Records are drawn without features.') }}</p></div>
                         <div v-if="linearReorderNotice" class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
                             <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
                             <span>{{ linearReorderNotice }}</span>

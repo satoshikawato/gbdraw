@@ -16,6 +16,7 @@ const modulePaths = [
   'gbdraw/web/js/services/feature-utils.js',
   'gbdraw/web/js/services/feature-sequence-fasta.js',
   'gbdraw/web/js/services/match-sequences.js',
+  'gbdraw/web/js/services/input-types.js',
   'gbdraw/web/js/services/record-options.js',
   'gbdraw/web/js/services/record-draw-selection.js',
   'gbdraw/web/js/services/drawing/feature-edits.js',

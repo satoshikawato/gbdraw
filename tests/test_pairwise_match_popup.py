@@ -86,6 +86,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
         .replace("./conservation-series.js", "./conservation-series.mjs")
         .replace("./record-discovery.js", "./record-discovery.mjs")
+        .replace("./input-types.js", "./input-types.mjs")
         .replace("./file-content-cache.js", "./file-content-cache.mjs")
         .replace("./record-options.js", "./record-options.mjs")
         .replace("../utils/i18n.js", "./i18n.mjs"),
@@ -123,6 +124,10 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         )
     (tmp_path / "download-names.mjs").write_text(
         (WEB_ROOT / "js" / "utils" / "download-names.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / "input-types.mjs").write_text(
+        (WEB_ROOT / "js" / "services" / "input-types.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (tmp_path / "file-content-cache.mjs").write_text(
