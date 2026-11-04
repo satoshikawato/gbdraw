@@ -96,7 +96,8 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
     ("LEGACY_REQUEST_TABLES", "gbdraw.session_request_codec", "describe_legacy_request_tables"),
     ("SESSION_DRAWINGS_LAYOUT", "gbdraw.session_drawings", "describe_session_drawings_layout"),
     ("FRESH_PROTEIN_COMPARISON_DEFAULTS", "gbdraw.session_request_codec", "describe_fresh_protein_comparison"),
-    # The sides of a Linear request without `diagramOptions.output`, as Python draws it (OV-2491, R17-38).
+    # The sides of a request without `diagramOptions.output`, as Python draws it (OV-2491, R17-38).
+    ("ABSENT_CIRCULAR_OUTPUT", "gbdraw.session_request_codec", "describe_absent_circular_output"),
     ("ABSENT_LINEAR_OUTPUT", "gbdraw.session_request_codec", "describe_absent_linear_output"),
     # The files of each record source kind (resource kind, source field), in the order the source names them.
     ("RECORD_SOURCE_FILES", "gbdraw.session_request_codec", "describe_record_source_files"),

@@ -6,8 +6,27 @@ const {
   normalizeLayoutPreferences,
   resolveActiveLayoutPreference,
   resolveCircularLayoutPreference,
+  requestLayoutPreferences,
   updateActiveLayoutPreference
 } = await import('../../gbdraw/web/js/services/layout-preferences.js');
+const { ABSENT_CIRCULAR_OUTPUT, ABSENT_LINEAR_OUTPUT } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
+
+// A request without `diagramOptions.output` (or with a null title side) reads
+// with the sides Python draws it with, generated from its output options: a
+// Circular one on one record and on a multi-record canvas alike.
+for (const [mode, grouping, slot, absent] of [
+  ['circular', 'single', (layout) => layout.circular.single, ABSENT_CIRCULAR_OUTPUT],
+  ['circular', 'grid', (layout) => layout.circular.multi, ABSENT_CIRCULAR_OUTPUT],
+  ['linear', 'single', (layout) => layout.linear, ABSENT_LINEAR_OUTPUT]
+]) {
+  assert.ok(absent, `${mode} absent output is generated`);
+  assert.deepEqual(slot(requestLayoutPreferences({ mode, grouping, diagramOptions: {} })), absent, `${mode} ${grouping}`);
+  assert.deepEqual(
+    slot(requestLayoutPreferences({ mode, grouping, diagramOptions: { output: { legend: 'left', plotTitlePosition: null } } })),
+    { legend: 'left', plotTitlePosition: absent.plotTitlePosition },
+    `${mode} ${grouping}, null title side`
+  );
+}
 
 const defaults = createDefaultLayoutPreferences();
 assert.deepEqual(resolveCircularLayoutPreference(defaults, false), {

@@ -92,6 +92,7 @@ from gbdraw.annotations import (
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.record_planning import ComparisonRecordBinding, decide_linear_wrap
 from gbdraw.api.options import (
+    CIRCULAR_DEFAULT_PLOT_TITLE_POSITION,
     LINEAR_DEFAULT_PLOT_TITLE_POSITION,
     AnnotationOptions,
     CircularDiagramOptions,
@@ -4102,7 +4103,7 @@ def build_circular_diagram(
             plot_title_position=(
                 output.plot_title_position
                 if output and output.plot_title_position is not None
-                else "none"
+                else CIRCULAR_DEFAULT_PLOT_TITLE_POSITION
             ),
             plot_title_font_size=options.plot_title_font_size,
             keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
@@ -4514,7 +4515,7 @@ def build_circular_multi_diagram(
             plot_title_position=(
                 output.plot_title_position
                 if output and output.plot_title_position is not None
-                else "none"
+                else CIRCULAR_DEFAULT_PLOT_TITLE_POSITION
             ),
             plot_title_font_size=options.plot_title_font_size,
             keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,

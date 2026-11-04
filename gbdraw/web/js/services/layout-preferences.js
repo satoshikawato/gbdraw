@@ -1,5 +1,5 @@
 // @ts-check
-import { ABSENT_LINEAR_OUTPUT, LEGEND_POSITIONS } from '../contracts/schema.generated.js';
+import { ABSENT_CIRCULAR_OUTPUT, ABSENT_LINEAR_OUTPUT, LEGEND_POSITIONS } from '../contracts/schema.generated.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { loadRepair } from '../utils/load-repairs.js';
 import { changedLeaves, textChoice } from '../utils/field-reading.js';
@@ -234,8 +234,9 @@ export const updateActiveLayoutPreference = (
  * The layout a committed request sets: the slot of its mode and grouping
  * holds its output's legend and title sides; the other slots keep their
  * defaults. A side the output does not state (no output, or a null title
- * side) is the side Python draws it with: for Linear `ABSENT_LINEAR_OUTPUT`
- * (`LinearOutputOptions()`, OV-2491, R17-38), not a new Web drawing's. The
+ * side) is the side Python draws it with, `ABSENT_CIRCULAR_OUTPUT` or
+ * `ABSENT_LINEAR_OUTPUT` (generated from `CircularOutputOptions()` and
+ * `LinearOutputOptions()`, OV-2491, R17-38), not a new Web drawing's. The
  * request projection, each drawing of a Session 51 Load, and Load's read of
  * a Session 27-44 (OV-1967) read it here.
  * @param {{ mode?: unknown, grouping?: unknown, diagramOptions?: { output?: StoredLayoutSides | null } | null }} renderRequest
@@ -244,7 +245,7 @@ export const updateActiveLayoutPreference = (
 export const requestLayoutPreferences = ({ mode, grouping, diagramOptions }) => {
   const layoutPreferences = createDefaultLayoutPreferences();
   const output = diagramOptions?.output;
-  const absent = mode === 'linear' ? ABSENT_LINEAR_OUTPUT : { legend: 'right', plotTitlePosition: 'none' };
+  const absent = mode === 'linear' ? ABSENT_LINEAR_OUTPUT : ABSENT_CIRCULAR_OUTPUT;
   updateActiveLayoutPreference(layoutPreferences, String(mode), mode === 'circular' && grouping === 'grid', {
     legend: output?.legend || absent.legend,
     plotTitlePosition: output?.plotTitlePosition || absent.plotTitlePosition
