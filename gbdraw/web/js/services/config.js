@@ -6556,6 +6556,120 @@ const drawnResultModes = ({ ui, committedMode, invocationMode, canonical }) => {
  * it (DESIGN 4.3); a Load that does not end ok puts them back.
  * @typedef {{ results: unknown[], selectedResultIndex: number, failedGeneratePreservedResult: boolean }} StoredFigureWithdrawal
  */
+/** @param {string} at @param {string} field The field's place in the file under the part at `at`. */
+const pathIn = (at, field) => (at ? `${at}.${field}` : field);
+/**
+ * One stored drawing as Load reads its draft (`readStoredDrawingDraft`): its
+ * identity, its draft part of the file, its draft config (its restored
+ * settings when Load projects it, else its slice over its mode's defaults),
+ * the legend keys the reading of its saved captions changes, and its files.
+ * @typedef {object} StoredDrawingDraftView
+ * @property {DrawingId} id
+ * @property {'circular' | 'linear'} mode
+ * @property {LoadedDraftPart} part
+ * @property {Record<string, unknown>} config
+ * @property {ReadonlyMap<PythonLegendKey, PythonLegendKey>} legendRekeys
+ * @property {{ at: string, target: { files: Record<string, unknown> }, linearSeqs: readonly { uid?: unknown }[] }} files
+ * @property {unknown} storedConservationBlasts A Session 27-30's stored table list (`files.c_conservation_blasts`), else null.
+ * @property {boolean} resolveTrackPlacements False for settings only or a stored slice without its request projection.
+ * @property {Record<string, unknown> | null} validatedConfig The restored config whose unmanaged overrides Load read already, else null.
+ * @property {number | undefined} sourceSessionVersion The version of the file it is in.
+ */
+/**
+ * One stored drawing's draft as Load installs it, and the settings its
+ * readers restore (`configFieldRepairs` over its mode's defaults).
+ * @typedef {object} StoredDrawingDraft
+ * @property {LoadedDraft} draft
+ * @property {SettingsContainers} settings
+ */
+/**
+ * Reads one stored drawing's draft: its editor edits (the rule rows re-keyed),
+ * its config with what its files cannot hold left out, and every loss of it
+ * listed in `repairs`. Nothing live changes.
+ * @param {StoredDrawingDraftView} view
+ * @param {LoadRepair[]} repairs
+ * @returns {Promise<StoredDrawingDraft>}
+ */
+const readStoredDrawingDraft = async (view, repairs) => {
+  const { mode, files } = view;
+  const { slice, at } = view.part;
+  const storedEditorState = slice.editorState;
+  const editorPath = pathIn(at, 'editorState');
+  const editorState = normalizeEditorStateData(isPlainObject(storedEditorState) ? storedEditorState : {}, {
+    repairs, path: editorPath, sessionVersion: view.sourceSessionVersion
+  });
+  // The rule rows whose key the reading of the saved captions changes
+  // take the Legend records stored under the old key (F2); an edit the
+  // new key already has is kept, and the moved one is listed (B39).
+  /** @type {DroppedLegendRecord[]} */
+  const droppedLegendRecords = [];
+  const loadedEditorState = {
+    ...editorState, legend: rekeyLegendRecords(editorState.legend, view.legendRekeys, droppedLegendRecords)
+  };
+  droppedLegendRecords.forEach(({ collection, from, to }) => repairs.push(loadRepair({
+    code: 'legend-edit-rekey-dropped', path: `${editorPath}.legend.${collection}`, effect: 'dropped', label: from, used: to
+  })));
+  /** @type {Record<string, any>} */
+  let config = view.config;
+  // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
+  if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules);
+  // A Linear drawing's files hold its record rows, a Circular drawing's its conservation rows.
+  if (mode === 'linear') config = withBoundLinearRecordsOff(config, files.linearSeqs);
+  else {
+    config = withoutUnreadConservationSeries(config, files.target.files, {
+      seriesAt: `${pathIn(at, 'config')}.circularConservation.series`,
+      filesAt: files.at,
+      stored: view.storedConservationBlasts
+    }, repairs);
+  }
+  // The form's legend position is the drawing's layout slot (state.js), which reads it in its mode.
+  if (isPlainObject(config.form)) {
+    repairs.push(...readLegendPositionOfMode(config.form.legend, mode, `${pathIn(at, 'config')}.form.legend`).repairs);
+  }
+  // What the settings' readers cannot restore of the stored draft (B37,
+  // B43), installed as `applyModeSliceData` installs it over the drawing
+  // Load resets; and of the drawing's `ui` and feature edits.
+  const settings = defaultSettingsContainers(mode);
+  // What `applyModeSliceData` installs.
+  const installedConfig = overlayModeSliceConfig(null, config);
+  repairs.push(...configFieldRepairs(settings, installedConfig, pathIn(at, 'config'), {
+    stored: slice.config, mode, resolveTrackPlacements: view.resolveTrackPlacements
+  }));
+  repairs.push(...unreadFieldRepairs(slice.config,
+    pathIn(at, 'config'), mode, { slice: true }));
+  // (A Session 27-44 keeps them in its `ui` and `features`.)
+  repairs.push(...sliceFieldRepairs(slice, at, mode));
+  // A saved unmanaged override is checked against its own drawing's mode
+  // (PD-OI-009, OV-106); the restored config's were read above (OV-1791).
+  const savedOverrides = slice.config?.unmanagedConfigOverrides;
+  if (config !== view.validatedConfig && isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
+    config.unmanagedConfigOverrides = await readStoredUnmanagedConfigOverrides({
+      mode, configOverrides: savedOverrides, source: 'draft'
+    }, `${pathIn(at, 'config')}.unmanagedConfigOverrides`, repairs);
+  }
+  return { draft: { config, editorState: loadedEditorState }, settings };
+};
+/**
+ * One loaded drawing's install (`installStoredDrawing`): its input type, its
+ * draft part, its draft read by `readStoredDrawingDraft` with the per-feature
+ * edits it takes, and how its settings install.
+ * @typedef {object} StoredDrawingInstall
+ * @property {InputType} inputType
+ * @property {LoadedDraftPart['slice']} slice
+ * @property {{ features: Readonly<Record<string, unknown>> } & LoadedDraft} draft
+ * @property {boolean} resolveTrackPlacements
+ * @property {boolean} applyCanvasPadding False for the drawing that opens: its padding follows its mounted Result.
+ */
+/**
+ * Installs one loaded drawing's input type and settings over its mode's
+ * defaults (a new drawing state, or one `resetDrawingSettings` reset).
+ * @param {DrawingState} drawing
+ * @param {StoredDrawingInstall} install
+ */
+const installStoredDrawing = (drawing, { inputType, slice, draft, resolveTrackPlacements, applyCanvasPadding }) => {
+  INPUTS_SLICE.install(drawing.slices.inputs, { inputType });
+  applyModeSliceData(drawing, drawing.mode, { ...slice, ...draft }, { resolveTrackPlacements, applyCanvasPadding });
+};
 /**
  * Records the Use custom stack switch beside a committed Session Load installs
  * (`recordLoadedStackSwitch`). Load holds it untyped, as the committed Session
@@ -7416,66 +7530,16 @@ const importSessionDocument = async (e, options = {}) => {
     plan.drawings.forEach(({ id, mode }) => repairs.push(...storedLegendPositionRepairs(draftPartOf(id).slice.ui, `${draftPartOf(id).at}.ui`, {
       slotOf: mode, projected: id === committedSetDrawingId && Boolean(projectedLayout)
     })));
-    /** @param {string} at @param {string} field */
-    const pathIn = (at, field) => (at ? `${at}.${field}` : field);
     for (const { id, mode } of plan.drawings) {
-      const { slice, at } = draftPartOf(id);
-      const storedEditorState = slice.editorState;
-      const editorPath = pathIn(at, 'editorState');
-      const editorState = normalizeEditorStateData(isPlainObject(storedEditorState) ? storedEditorState : {}, {
-        repairs, path: editorPath, sessionVersion: sourceSessionVersion
-      });
-      // The rule rows whose key the reading of the saved captions changes
-      // take the Legend records stored under the old key (F2); an edit the
-      // new key already has is kept, and the moved one is listed (B39).
-      /** @type {DroppedLegendRecord[]} */
-      const droppedLegendRecords = [];
-      const loadedEditorState = {
-        ...editorState, legend: rekeyLegendRecords(editorState.legend, legendRekeysOf(id), droppedLegendRecords)
-      };
-      droppedLegendRecords.forEach(({ collection, from, to }) => repairs.push(loadRepair({
-        code: 'legend-edit-rekey-dropped', path: `${editorPath}.legend.${collection}`, effect: 'dropped', label: from, used: to
-      })));
-      /** @type {Record<string, any>} */
-      let config = sliceDraftConfigOf(id);
-      // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
-      if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules);
-      // A Linear drawing's files hold its record rows, a Circular drawing's its conservation rows.
-      if (mode === 'linear') config = withBoundLinearRecordsOff(config, filesOf(id).linearSeqs);
-      else {
-        config = withoutUnreadConservationSeries(config, filesOf(id).target.files, {
-          seriesAt: `${pathIn(at, 'config')}.circularConservation.series`,
-          filesAt: filesOf(id).at,
-          stored: canonicalSession ? null : /** @type {UnvalidatedFields<'c_conservation_blasts'>} */ (data.files)?.c_conservation_blasts
-        }, repairs);
-      }
-      // The form's legend position is the drawing's layout slot (state.js), which reads it in its mode.
-      if (isPlainObject(config.form)) {
-        repairs.push(...readLegendPositionOfMode(config.form.legend, mode, `${pathIn(at, 'config')}.form.legend`).repairs);
-      }
-      // What the settings' readers cannot restore of the stored draft (B37,
-      // B43), installed as `applyModeSliceData` installs it over the drawing
-      // Load resets; and of the drawing's `ui` and feature edits.
-      const settings = defaultSettingsContainers(mode);
+      const { draft, settings } = await readStoredDrawingDraft({
+        id, mode, part: draftPartOf(id), config: sliceDraftConfigOf(id), legendRekeys: legendRekeysOf(id), files: filesOf(id),
+        storedConservationBlasts: canonicalSession ? null : /** @type {UnvalidatedFields<'c_conservation_blasts'>} */ (data.files)?.c_conservation_blasts,
+        resolveTrackPlacements: !settingsOnly && !isStoredSlice(id),
+        validatedConfig: unmanagedConfigValidation ? restoredConfig : null,
+        sourceSessionVersion
+      }, repairs);
       installedSettings.set(id, settings);
-      // What `applyModeSliceData` installs.
-      const installedConfig = overlayModeSliceConfig(null, config);
-      repairs.push(...configFieldRepairs(settings, installedConfig, pathIn(at, 'config'), {
-        stored: slice.config, mode, resolveTrackPlacements: !settingsOnly && !isStoredSlice(id)
-      }));
-      repairs.push(...unreadFieldRepairs(slice.config,
-        pathIn(at, 'config'), mode, { slice: true }));
-      // (A Session 27-44 keeps them in its `ui` and `features`.)
-      repairs.push(...sliceFieldRepairs(slice, at, mode));
-      // A saved unmanaged override is checked against its own drawing's mode
-      // (PD-OI-009, OV-106); the restored config's were read above (OV-1791).
-      const savedOverrides = slice.config?.unmanagedConfigOverrides;
-      if (!(config === restoredConfig && unmanagedConfigValidation) && isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
-        config.unmanagedConfigOverrides = await readStoredUnmanagedConfigOverrides({
-          mode, configOverrides: savedOverrides, source: 'draft'
-        }, `${pathIn(at, 'config')}.unmanagedConfigOverrides`, repairs);
-      }
-      drafts.set(id, { config, editorState: loadedEditorState });
+      drafts.set(id, draft);
     }
     // What each drawing's Depth fit drops (B45): it runs on the restored files.
     if (!settingsOnly) {
@@ -7675,13 +7739,6 @@ const importSessionDocument = async (e, options = {}) => {
     state.sessionTitle.value = canonicalSession
       ? projectionResult.documentMetadata.title
       : (typeof data.title === 'string' ? data.title : '');
-    // Each drawing's input type.
-    committed.forEach((drawing) => {
-      INPUTS_SLICE.install(drawing.slices.inputs, {
-        // A Session 51 drawing's own; else the field of its mode.
-        inputType: /** @type {InputType} */ (storedDrawingInputs.get(drawing.id)?.inputType ?? inputTypes[SESSION_DRAWINGS_LAYOUT.inputTypeFields[drawing.mode]])
-      });
-    });
     state.downloadDpi.value = readDownloadDpi(ui.downloadDpi).value;
     // Suppressed mode watchers observe only the complete admitted document.
     state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
@@ -7723,11 +7780,14 @@ const importSessionDocument = async (e, options = {}) => {
     // slice without its mode's request projection is stored settings: its track
     // stacks install as saved, unset axis indexes included (R11).
     for (const drawing of committed) {
-      const { id, mode } = drawing;
-      const { slice } = draftPartOf(id);
-      // A drawing that holds a request takes its request's per-feature edits
-      // where its draft has none (OV-220), opened or not (OV-1786).
-      applyModeSliceData(drawing, mode, { ...slice, ...withRecoveredPaint(id, loadedFeatureEditsOf(id), draftOf(id)) }, {
+      const { id } = drawing;
+      installStoredDrawing(drawing, {
+        // A Session 51 drawing's own input type; else the field of its mode.
+        inputType: /** @type {InputType} */ (storedDrawingInputs.get(id)?.inputType ?? inputTypes[SESSION_DRAWINGS_LAYOUT.inputTypeFields[drawing.mode]]),
+        slice: draftPartOf(id).slice,
+        // A drawing that holds a request takes its request's per-feature edits
+        // where its draft has none (OV-220), opened or not (OV-1786).
+        draft: withRecoveredPaint(id, loadedFeatureEditsOf(id), draftOf(id)),
         resolveTrackPlacements: !settingsOnly && !isStoredSlice(id),
         applyCanvasPadding: id !== plan.activeDrawingId
       });
