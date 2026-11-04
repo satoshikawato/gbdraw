@@ -1736,9 +1736,9 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         record_manifest = record_input_manifest_from_table(args.records_table)
         linear_positions: list[str] = []
     else:
-        source_count = len(args.gbk or args.gff or ())
+        source_count = len(args.gbk or args.fasta or ())
         cardinality = _linear_cli_record_cardinality(
-            is_gff_source=not bool(args.gbk),
+            is_gff_source=bool(args.gff),
             source_count=source_count,
             load_comparison=load_comparison,
         )

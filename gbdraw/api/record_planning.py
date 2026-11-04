@@ -41,7 +41,9 @@ from gbdraw.io.cli_tables import (
     read_records_table,
 )
 from gbdraw.io.comparisons import read_comparison_resource
-from gbdraw.io.genome import feature_types_left_out, filter_features_by_type, load_gbks, parse_gff_fasta, require_record_sequence
+from gbdraw.io.genome import (
+    feature_types_left_out, filter_features_by_type, load_fasta, load_gbks, parse_gff_fasta, require_record_sequence,
+)
 from gbdraw.io.record_select import (
     RecordSelector,
     parse_record_selector,
@@ -81,6 +83,7 @@ from .prepared import (
 )
 from .requests import (
     CircularBatchOutputPolicy,
+    FastaInputSource,
     GenBankInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
@@ -97,6 +100,9 @@ logger = logging.getLogger(__name__)
 
 GenBankLoader = Callable[..., list[SeqRecord]]
 GffFastaLoader = Callable[..., list[SeqRecord]]
+FastaLoader = Callable[..., list[SeqRecord]]
+# What a record was read from: the planner's name for each record source type.
+RecordSourceKind = Literal["genbank", "gff_fasta", "fasta", "memory"]
 
 
 @dataclass(frozen=True)
@@ -164,7 +170,7 @@ class ResolvedRecordProvenance:
     source_record_index: int
     source_record_count: int
     source_record_id: str
-    source_kind: Literal["genbank", "gff_fasta", "memory"]
+    source_kind: RecordSourceKind
     source_paths: tuple[str, ...]
     record_key: str
     cardinality: RecordCardinality
@@ -1358,22 +1364,22 @@ def depth_track_inputs_from_cli(
 
 
 def _source_key(source: RecordInputSource) -> tuple[object, ...]:
-    if isinstance(source, GenBankInputSource):
-        return ("genbank", str(source.path))
-    if isinstance(source, GffFastaInputSource):
-        return ("gff_fasta", str(source.gff_path), str(source.fasta_path))
     if isinstance(source, InMemoryRecordSource):
         return ("memory", id(source.record), id(source.source_features))
-    raise ValidationError("Unsupported record input source.")
+    kind, paths = _source_details(source)
+    return (kind, *paths)
 
 
 def _source_details(
     source: RecordInputSource,
-) -> tuple[Literal["genbank", "gff_fasta", "memory"], tuple[str, ...]]:
+) -> tuple[RecordSourceKind, tuple[str, ...]]:
+    """The one reading of a record source: its kind and the paths of its files, in resource order."""
     if isinstance(source, GenBankInputSource):
         return "genbank", (str(source.path),)
     if isinstance(source, GffFastaInputSource):
         return "gff_fasta", (str(source.gff_path), str(source.fasta_path))
+    if isinstance(source, FastaInputSource):
+        return "fasta", (str(source.fasta_path),)
     if isinstance(source, InMemoryRecordSource):
         return "memory", ()
     raise ValidationError("Unsupported record input source.")
@@ -1391,11 +1397,14 @@ def _load_source_records(
     *,
     genbank_loader: GenBankLoader,
     gff_loader: GffFastaLoader,
+    fasta_loader: FastaLoader = load_fasta,
 ) -> ParsedRecordInputs:
     def load() -> ParsedRecordInputs:
         gff_catalogs: list[SourceFeatureCatalog] = []
         if isinstance(source, GenBankInputSource):
             records = genbank_loader([str(source.path)])
+        elif isinstance(source, FastaInputSource):
+            records = fasta_loader([str(source.fasta_path)])
         elif isinstance(source, GffFastaInputSource):
             # One parse serves every type filter: ``resolve_record_inputs`` applies it in memory.
             records = gff_loader(
@@ -1473,19 +1482,15 @@ def _prepared_source_cache_spec(
 ) -> tuple[Hashable, frozenset[PreparedResourceIdentity]] | None:
     """Build a path-independent parsed-source cache key for a Web resource."""
 
-    if isinstance(source, GenBankInputSource):
-        identity = prepared_resource_identity(source.path)
-        if identity is None:
-            return None
-        return ("parsed-source-v1", "genbank", identity), frozenset({identity})
-    if isinstance(source, GffFastaInputSource):
-        gff_identity = prepared_resource_identity(source.gff_path)
-        fasta_identity = prepared_resource_identity(source.fasta_path)
-        if gff_identity is None or fasta_identity is None:
-            return None
-        identities = frozenset({gff_identity, fasta_identity})
-        return ("parsed-source-v1", "gff-fasta", gff_identity, fasta_identity), identities
-    return None
+    if isinstance(source, InMemoryRecordSource):
+        return None
+    kind, paths = _source_details(source)
+    identities = tuple(prepared_resource_identity(path) for path in paths)
+    if any(identity is None for identity in identities):
+        return None
+    return ("parsed-source-v1", kind, *identities), frozenset(
+        identity for identity in identities if identity is not None
+    )
 
 
 def _selector_from_region(region: RegionSpec | None) -> RecordSelector | None:
@@ -1700,6 +1705,7 @@ def resolve_record_inputs(
     gff_keep_all_features: bool,
     genbank_loader: GenBankLoader = load_gbks,
     gff_loader: GffFastaLoader = parse_gff_fasta,
+    fasta_loader: FastaLoader = load_fasta,
     parsed_sources: MutableMapping[tuple[object, ...], ParsedRecordInputs] | None = None,
 ) -> ResolvedRecordCollection:
     """Load each unique source once, then apply typed selection and transforms.
@@ -1725,6 +1731,7 @@ def resolve_record_inputs(
                 record_input.source,
                 genbank_loader=genbank_loader,
                 gff_loader=gff_loader,
+                fasta_loader=fasta_loader,
             )
         if key not in id_counts:
             id_counts[key] = Counter(str(record.id) for record in parsed.records)
@@ -1856,13 +1863,13 @@ def record_input_manifest_from_paths(
     gbks = tuple(gbk_paths or ())
     gffs = tuple(gff_paths or ())
     fastas = tuple(fasta_paths or ())
-    if bool(gbks) == bool(gffs):
-        raise ValidationError(
-            "Specify either GenBank paths or GFF3/FASTA paths."
-        )
     if gffs and len(gffs) != len(fastas):
         raise ValidationError("GFF3 and FASTA path counts must match.")
-    count = len(gbks) if gbks else len(gffs)
+    if bool(gbks) == bool(fastas):
+        raise ValidationError(
+            "Specify either GenBank paths, or FASTA paths with or without GFF3 paths."
+        )
+    count = len(gbks) if gbks else len(fastas)
     if isinstance(cardinalities, RecordCardinality):
         cardinality_values = [cardinalities] * count
     else:
@@ -1893,13 +1900,12 @@ def record_input_manifest_from_paths(
     records: list[RecordInput] = []
     source_paths: list[str] = []
     for index in range(count):
-        source: RecordInputSource
-        if gbks:
-            source = GenBankInputSource(gbks[index])
-            source_paths.append(gbks[index])
-        else:
-            source = GffFastaInputSource(gffs[index], fastas[index])
-            source_paths.append(gffs[index])
+        source: RecordInputSource = (
+            GenBankInputSource(gbks[index]) if gbks
+            else GffFastaInputSource(gffs[index], fastas[index]) if gffs
+            else FastaInputSource(fastas[index])
+        )
+        source_paths.append(_source_details(source)[1][0])
         selector = parse_record_selector(str(selector_values[index] or ""))
         cardinality = cardinality_values[index]
         if selector is not None:
@@ -1933,12 +1939,12 @@ def record_input_manifest_from_table(path: str) -> RecordInputManifest:
     records: list[RecordInput] = []
     source_paths: list[str] = []
     for index, row in enumerate(table.rows):
-        if table.input_kind == "gbk":
-            source: RecordInputSource = GenBankInputSource(row.gbk)
-            source_paths.append(row.gbk)
-        else:
-            source = GffFastaInputSource(row.gff, row.fasta)
-            source_paths.append(row.gff)
+        source: RecordInputSource = (
+            GenBankInputSource(row.gbk) if row.gbk
+            else GffFastaInputSource(row.gff, row.fasta) if row.gff
+            else FastaInputSource(row.fasta)
+        )
+        source_paths.append(_source_details(source)[1][0])
         records.append(
             RecordInput(
                 source=source,

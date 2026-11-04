@@ -106,7 +106,7 @@ from gbdraw.io.comparison_sequences import (
     read_comparison_sequence_file,
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_resource
-from gbdraw.io.genome import parse_gff_fasta
+from gbdraw.io.genome import load_fasta, parse_gff_fasta
 from gbdraw.labels.fit import WARN_SEARCH_SECONDS, LabelFitReport
 from gbdraw.labels.filtering import (
     read_filter_list_file,
@@ -172,6 +172,7 @@ from .record_planning import (
     decide_linear_wrap,
     GenBankLoader,
     GffFastaLoader,
+    FastaLoader,
     ResolvedRecordCollection,
     ResolvedRecordDisplay,
     ResolvedRecordProvenance,
@@ -180,6 +181,7 @@ from .record_planning import (
     _load_source_records,
     _prepared_source_cache_spec,
     _similarity_candidate_from_orthogroup_member,
+    _source_details,
     _source_key,
     effective_record_presentation,
     project_anchor_feature_starts,
@@ -202,6 +204,7 @@ from .requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
+    FastaInputSource,
     GenBankInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
@@ -1448,7 +1451,7 @@ def _load_request_records(
     )))
 
 
-def _render_source_loaders() -> tuple[GenBankLoader, GffFastaLoader]:
+def _render_source_loaders() -> tuple[GenBankLoader, GffFastaLoader, FastaLoader]:
     """The loaders a request render reads its record sources with (read when called).
 
     The prepared parsed-source key names no loader, so every build under it
@@ -1456,14 +1459,16 @@ def _render_source_loaders() -> tuple[GenBankLoader, GffFastaLoader]:
     lookup (:func:`load_render_source_records`).
     """
 
-    return load_gbks, parse_gff_fasta
+    return load_gbks, parse_gff_fasta, load_fasta
 
 
 def load_render_source_records(source: RecordInputSource) -> ParsedRecordInputs:
     """Parse one record source as a request render does, under its prepared key when staged."""
 
-    genbank_loader, gff_loader = _render_source_loaders()
-    return _load_source_records(source, genbank_loader=genbank_loader, gff_loader=gff_loader)
+    genbank_loader, gff_loader, fasta_loader = _render_source_loaders()
+    return _load_source_records(
+        source, genbank_loader=genbank_loader, gff_loader=gff_loader, fasta_loader=fasta_loader
+    )
 
 
 def _normalize_request_records(
@@ -1471,7 +1476,7 @@ def _normalize_request_records(
     inputs: PreparedDiagramInputs,
 ) -> ResolvedRecordCollection:
     def resolve() -> ResolvedRecordCollection:
-        genbank_loader, gff_loader = _render_source_loaders()
+        genbank_loader, gff_loader, fasta_loader = _render_source_loaders()
         return resolve_record_inputs(
             request.records,
             record_options=request.record_options,
@@ -1479,6 +1484,7 @@ def _normalize_request_records(
             gff_keep_all_features=inputs.gff_keep_all_features,
             genbank_loader=genbank_loader,
             gff_loader=gff_loader,
+            fasta_loader=fasta_loader,
             parsed_sources=inputs.parsed_sources,
         )
 
@@ -1632,17 +1638,7 @@ def _coerce_resolved_collection(
     for index, (record, record_input) in enumerate(
         zip(records, request.records, strict=True)
     ):
-        source = record_input.source
-        source_paths: tuple[str, ...]
-        if isinstance(source, GenBankInputSource):
-            source_kind: Literal["genbank", "gff_fasta", "memory"] = "genbank"
-            source_paths = (str(source.path),)
-        elif isinstance(source, GffFastaInputSource):
-            source_kind = "gff_fasta"
-            source_paths = (str(source.gff_path), str(source.fasta_path))
-        else:
-            source_kind = "memory"
-            source_paths = ()
+        source_kind, source_paths = _source_details(record_input.source)
         provenance.append(
             ResolvedRecordProvenance(
                 resolved_index=index,
@@ -1872,7 +1868,7 @@ def _resolve_ring_losat(
     if options.losat_search is None:
         return options, ()
 
-    def genbank_records(source: GenBankInputSource) -> tuple[SeqRecord, ...]:
+    def file_records(source: GenBankInputSource | FastaInputSource) -> tuple[SeqRecord, ...]:
         parsed = parsed_sources.get(_source_key(source))
         # A request served from the prepared resolved-record cache made no parse
         # here: the prepared parsed source holds it.
@@ -1888,7 +1884,7 @@ def _resolve_ring_losat(
     return resolve_circular_conservation_losat(
         options,
         subject_records=ring_subject_records(
-            (item.source for item in record_inputs), genbank_records=genbank_records
+            (item.source for item in record_inputs), file_records=file_records
         ),
         drawn_records=drawn_records,
         load_sequences=load_sequences,

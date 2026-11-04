@@ -21,6 +21,7 @@ from .interface import (
     draw_circular,
     draw_linear,
     read_genbank,
+    read_fasta,
     read_gff,
 )
 from .version import __version__
@@ -54,5 +55,6 @@ __all__ = [
     "draw_circular",
     "draw_linear",
     "read_genbank",
+    "read_fasta",
     "read_gff",
 ]

@@ -146,9 +146,9 @@ import {
 } from '../services/current-option-values.js';
 import {
   circularDiscoveryForInput,
-  discoverGffFastaRecords,
-  discoverSequenceRecords,
+  discoverInputRecords,
   discoveryErrorIsFinal,
+  inputRecordsOperation,
   gffFastaReaderSelector,
   parseSequenceRecordsFast,
   readComparisonSequence,
@@ -156,6 +156,7 @@ import {
   readParsedSequenceRecords
 } from '../services/record-discovery.js';
 import { idleCircularRecordDiscovery } from '../services/drawing/inputs.js';
+import { circularInputSlots, inputSourceFiles, inputTypeSpec } from '../services/input-types.js';
 import { NO_CONSERVATION_PAIRS, buildFastaText, circularConservationKeys, conservationHashPairs } from '../services/circular-conservation-keys.js';
 import {
   classifyRawLosatCacheEntry,
@@ -1148,13 +1149,14 @@ const logPostGbdrawTimings = (entries) => {
  * (a GenBank file, or a GFF3 file and its FASTA file); otherwise null.
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources The committed Session's resources, or
  *   those the next Generate's request names (`linearRecordSourceResources`).
+ * @param {CanonicalRecordSource['kind']} sourceKind
  * @param {FileLike} sourceFile
  * @param {FileLike | null} fastaFile
  * @returns {{ recordSource: CanonicalRecordSource, resources: NonNullable<GenerationPayload['resources']> } | null}
  */
-const requestRecordSource = (resources, sourceFile, fastaFile) => {
+const requestRecordSource = (resources, sourceKind, sourceFile, fastaFile) => {
   if (!resources) return null;
-  const recordSource = recordSourceOwnedBy(resources, sourceFile, fastaFile);
+  const recordSource = recordSourceOwnedBy(resources, sourceKind, sourceFile, fastaFile);
   if (!recordSource) return null;
   const ids = recordSourceResourceIds(recordSource);
   // The transport validates each descriptor when it stages it.
@@ -2404,9 +2406,11 @@ export const createRunAnalysis = ({
     circularRecordRefreshGenerations.set(drawing, refreshGeneration);
     if (suppress || recordDiscoverySuppressed()) return;
     const inputType = drawing.inputType.value;
-    const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
-    const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
-    const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
+    const circularFiles = () => inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files));
+    const { spec, primaryFile, pairedFile, complete: hasCompleteInput } = circularFiles();
+    // The read still targets the drawing's input type and files.
+    const readTargetsInput = () => drawing.inputType.value === inputType
+      && circularFiles().primaryFile === primaryFile && circularFiles().pairedFile === pairedFile;
     const preserveCanonicalRecordKeys = circularDiscoveryTargetsCurrentInput(drawing);
     const preservedRecordKeys = new Map();
     if (preserveCanonicalRecordKeys) {
@@ -2446,21 +2450,15 @@ export const createRunAnalysis = ({
     if (
       refreshGeneration !== currentGeneration() ||
       recordDiscoverySuppressed() ||
-      drawing.inputType.value !== inputType ||
-      (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
-      (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
+      !readTargetsInput()
     ) return;
 
     try {
-      const records = inputType === 'gff'
-        ? await discoverGffFastaRecords({ gffFile: inputFiles.fileOf(primaryFile), fastaFile: inputFiles.fileOf(pairedFile) })
-        : await discoverSequenceRecords({ file: inputFiles.fileOf(primaryFile), format: 'genbank' });
+      const records = await discoverInputRecords(spec, inputFiles.fileOf(primaryFile), inputFiles.fileOf(pairedFile));
       if (
         refreshGeneration !== currentGeneration() ||
         recordDiscoverySuppressed() ||
-        drawing.inputType.value !== inputType ||
-        (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
-        (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
+        !readTargetsInput()
       ) return;
       const busy = state.sessionOperationAvailability?.();
       if (busy) {
@@ -2493,9 +2491,7 @@ export const createRunAnalysis = ({
       if (
         refreshGeneration !== currentGeneration() ||
         recordDiscoverySuppressed() ||
-        drawing.inputType.value !== inputType ||
-        (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
-        (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
+        !readTargetsInput()
       ) return;
       const busy = state.sessionOperationAvailability?.();
       if (busy) {
@@ -2506,7 +2502,7 @@ export const createRunAnalysis = ({
 
       drawing.circularRecordList.value = [];
       drawing.circularRecordDiscovery.status = 'error';
-      drawing.circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
+      drawing.circularRecordDiscovery.error = formatError(error, inputRecordsOperation(spec), 'helper');
       unappliedCircularRecordReads.set(drawing, refreshGeneration);
       releaseSourceInputFailure(drawing);
       onCircularRecordsDiscovered?.({ drawingId: drawing.id, primaryFile, pairedFile, recordCount: 0 });
@@ -2544,8 +2540,7 @@ export const createRunAnalysis = ({
       Boolean(options.suppress || recordDiscoverySuppressed()),
       drawing.id,
       inputType,
-      inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
-      inputType === 'gff' ? drawing.files.c_fasta : null
+      ...(({ primaryFile, pairedFile }) => [primaryFile, pairedFile])(inputSourceFiles(inputType, circularInputSlots(drawing.files)))
     ];
     const inflightRead = activeCircularRecordRefreshes.get(drawing.id);
     if (
@@ -2856,10 +2851,7 @@ export const createRunAnalysis = ({
       linearRecordCatalog = prepared?.catalog || null;
     }
     if (mode.value === 'circular') {
-      const inputType = drawing.inputType.value;
-      const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
-      const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
-      const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
+      const { complete: hasCompleteInput } = inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files));
       if (
         hasCompleteInput &&
         !circularDiscoveryMatchesCurrentInput(drawing)
@@ -3809,12 +3801,13 @@ export const createRunAnalysis = ({
           const held = fastaCache.get(idx);
           if (held) return held.entry;
           const startedAt = getNow();
-          const fmt = drawing.inputType.value === 'gb'
-            ? 'genbank'
-            : (useProteinBlastp ? 'gff' : 'fasta');
+          // A protein search reads a GFF3 input's GFF3 file with its FASTA; a nucleotide search reads its FASTA.
+          const inputSpec = inputTypeSpec(drawing.inputType.value);
+          const proteinPair = useProteinBlastp && inputSpec.paired !== null;
+          const fmt = proteinPair ? 'gff' : inputSpec.sourceKind === 'genbank' ? 'genbank' : 'fasta';
           const regionSpec = regionSpecs[idx]?.file || null;
           // The FASTA readers below count every entry of a GFF3 input's FASTA file (OV-1681).
-          const recordSelector = !useProteinBlastp && drawing.inputType.value === 'gff'
+          const recordSelector = !useProteinBlastp && inputSpec.paired !== null
             ? await gffFastaReaderSelector({
                 gffFile: inputFiles.fileOf(losatSeqs[idx]?.gff), fastaFile: inputFiles.fileOf(losatSeqs[idx]?.fasta),
                 selector: recordSelectors[idx] ?? ''
@@ -3823,12 +3816,10 @@ export const createRunAnalysis = ({
           const reverseFlag = /** @type {string} */ ('0');
           // The bytes of the card's files (the card names them by ref); a
           // searched card holds its source file (Generate checked each card).
-          const sourceFile = /** @type {FileLike} */ (inputFiles.fileOf(drawing.inputType.value === 'gb'
-            ? losatSeqs[idx]?.gb
-            : (useProteinBlastp ? losatSeqs[idx]?.gff : losatSeqs[idx]?.fasta)));
-          const pairedFastaFile = drawing.inputType.value === 'gff' && useProteinBlastp
-            ? inputFiles.fileOf(losatSeqs[idx]?.fasta)
-            : null;
+          const sourceFile = /** @type {FileLike} */ (inputFiles.fileOf(
+            losatSeqs[idx]?.[proteinPair || inputSpec.paired === null ? inputSpec.primary : inputSpec.paired]
+          ));
+          const pairedFastaFile = proteinPair ? inputFiles.fileOf(losatSeqs[idx]?.fasta) : null;
           const recordInstanceKey = useProteinBlastp
             ? (proteinRecordInstanceKeys[idx] || `r_${idx + 1}`)
             : '';
@@ -3865,7 +3856,7 @@ export const createRunAnalysis = ({
                 nextRecordResources() ?? (
                   typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.resources : null
                 ),
-                sourceFile, pairedFastaFile ?? null
+                inputSpec.sourceKind, sourceFile, pairedFastaFile ?? null
               );
               /** @type {{ role: string, bytes: ArrayBuffer }[]} */
               const helperFiles = [];
@@ -5022,9 +5013,9 @@ export const createRunAnalysis = ({
           throw diagnosticError('RESULT_INVALID', {}, RING_TABLE_CONVERSION);
         }
         const converted = await convertRingTablesOncePerFrame(
-          /** @type {[FileLike] | [FileLike, FileLike]} */ (drawing.inputType.value === 'gb'
-            ? [inputFiles.fileOf(drawing.files.c_gb)]
-            : [inputFiles.fileOf(drawing.files.c_gff), inputFiles.fileOf(drawing.files.c_fasta)]),
+          /** @type {[FileLike] | [FileLike, FileLike]} */ ((({ primaryFile, pairedFile }) => (
+            pairedFile ? [inputFiles.fileOf(primaryFile), inputFiles.fileOf(pairedFile)] : [inputFiles.fileOf(primaryFile)]
+          ))(inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files)))),
           {
             renderRequest: canonical.renderRequest,
             // The frame of each drawn record: its source, selector, crop and orientation.

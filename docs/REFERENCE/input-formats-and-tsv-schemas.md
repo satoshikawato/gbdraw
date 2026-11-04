@@ -42,6 +42,19 @@ file and the ID. Repeats among sequences without GFF3 rows are ignored. Sequence
 letters may be upper or lower case: GC content, GC skew, and the GC percent of
 a circular definition count soft-masked (lower-case) bases like upper-case
 ones.
+
+A FASTA given without GFF3 (`--fasta` alone, a records-table row with only
+`fasta`, `read_fasta()` or `FastaInputSource` in Python, or the **FASTA** input
+type in the Web app) draws each entry as a record with its sequence and no
+features. The record ID is the first token of the header. Each entry must hold
+at least one letter, and every letter must be an IUPAC nucleotide code
+(`ACGTURYSWKMBDHVN`, either case); otherwise the file is refused with an error
+that names the record, so a protein FASTA is not drawn. A repeated ID is
+drawn and warned about, as for GenBank. FASTA makes no topology claim, so
+its records have unknown topology: a setting that needs a complete circular
+record, such as a display start, needs **Circular record** in the Web app or
+`--record_topology circular`.
+
 Coordinates are 1-based and inclusive; strand is `+` or `-`; CDS phase is `0`,
 `1`, or `2`. `ID` values should be unique, and `Parent` should preserve the
 source annotation model. Rows that share an `ID` form one multipart feature;
@@ -148,14 +161,14 @@ containing the table.
 
 | Table | Required columns | Optional columns |
 |---|---|---|
-| Records | One of `gbk`, or both `gff` and `fasta` | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column`, `losat_gencode` |
+| Records | One of `gbk`, both `gff` and `fasta`, or `fasta` alone | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column`, `losat_gencode` |
 | Linear comparisons | `query`, `subject`; `blast` for `source=table` rows | `source` |
 | Circular conservation | `blast`; `comparison_sequence` with `--losat` (then `blast` is rejected) | `label`, `color`, `comparison_sequence`, `losat_gencode` |
 | Circular tracks | `id`, `renderer` | `side`, `r`, `w`, `inner_gap_px`, `outer_gap_px`, `z`, `params` |
 | Annotations | `set_id`, `id`, `mark` | Target and presentation fields listed below |
 
 One records-table row represents one displayed record. A table uses either
-GenBank rows or GFF3/FASTA rows; it cannot mix the two forms. `record_id`
+GenBank rows, GFF3/FASTA rows, or FASTA rows; it cannot mix these forms. `record_id`
 selects from a multi-record source. A row-scoped `region` contains coordinates
 only and applies after selection. `reverse_complement` is a row-scoped boolean.
 A region is always counted on the record as stored in the file:

@@ -137,6 +137,13 @@ mode. The top-level `modes`, `otherModeResult`, `renderRequest`, `results`,
 `config`, and `features` of Sessions 46 to 50 are not part of Session 51.
 Reading a Session 46 to 50 moves each mode's part into its own drawing.
 
+Each record of a drawing's request names its source by `kind`: `genbank` (a
+GenBank/DDBJ file, `resourceId`), `gffFasta` (a GFF3 file and its FASTA,
+`gffResourceId` and `fastaResourceId`), or `fasta` (a FASTA given without GFF3,
+`fastaResourceId`). The `fasta` kind is new in Session 51 and keeps request
+schema 9; its records have sequence and no features, and their topology is
+unknown until a Circular record setting says otherwise.
+
 Sessions 46 to 50 keep the Web app's settings and edits of each diagram mode in its
 own slice, `modes.circular` and `modes.linear`:
 

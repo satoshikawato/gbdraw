@@ -41,6 +41,20 @@ test('discovery observes topology without inferring it from the diagram or recor
   assert.equal(parseSequenceRecordText('>circular\nACGT\n', 'fasta')[0].detectedTopology, 'unknown');
 });
 
+// A FASTA given without GFF3 makes no topology claim (PD-OI-068 rev 2, Q-F6): its record's Circular record row
+// starts off, and Display start opens once the row is turned on.
+test('a FASTA record row is not circular by default and takes a Display start once Circular record is on', () => {
+  const fastaRecords = parseSequenceRecordText(`>alpha\n${'ACGT'.repeat(25)}\n`, 'fasta');
+  const [row] = buildRecordDisplayRows({ scope: 'circular', sourceUid: 'circular', source, records: fastaRecords });
+  assert.equal(row.detectedTopology, 'unknown');
+  const off = recordDisplaySurface(row);
+  assert.equal(off.effectiveCircular, false);
+  assert.equal(off.startEnabled, false);
+  const on = recordDisplaySurface(row, { topologyOverride: true });
+  assert.equal(on.effectiveCircular, true);
+  assert.equal(on.startEnabled, true);
+});
+
 test('ALL rows and exact-one use instance selectors, with no duplicate-ID fallback', () => {
   assert.equal(rows.length, 2);
   assert.notEqual(rows[0].key, rows[1].key);

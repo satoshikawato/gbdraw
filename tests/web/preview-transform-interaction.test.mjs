@@ -61,7 +61,9 @@ await copyModule('services/feature-placement.js', 'services/feature-placement.js
 await copyModule('services/json-clone.js', 'services/json-clone.js');
 for (const path of ['services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js',
   // feature-placement.js reads the record keys of a drawing from their owner.
-  'services/record-draw-selection.js', 'utils/download-names.js', 'contracts/schema.generated.js']) await copyModule(path, path);
+  'services/record-draw-selection.js', 'utils/download-names.js', 'contracts/schema.generated.js',
+  // feature-identity.js reads a record source's files from the input-type table.
+  'services/input-types.js']) await copyModule(path, path);
 // No admitted catalog: features open as the Result draws them.
 await writeFile(
   join(tempDir, 'services', 'feature-catalog.js'),

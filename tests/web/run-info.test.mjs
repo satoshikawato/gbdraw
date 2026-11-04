@@ -214,6 +214,47 @@ for (const { fixture, mode } of [
   await materializeAndRunRecipe(session, sourceRecipe, info, fixture);
 }
 
+// A FASTA given without GFF3 is `--fasta` alone in both modes (PD-OI-068 rev 2); a records table names it in its
+// `fasta` column. The recipe runs: the CLI draws the same input.
+test('source recipe of a FASTA alone gives --fasta in both modes and a fasta records-table column', async () => {
+  const text = `>alpha\n${'ACGT'.repeat(30)}\n`;
+  for (const mode of ['circular', 'linear']) {
+    for (const labelled of [false, true]) {
+      const session = canonical({
+        mode,
+        records: [{
+          recordKey: 'alpha',
+          cardinality: 'all',
+          source: { kind: 'fasta', fastaResourceId: 'source' },
+          selector: null,
+          region: null,
+          // A Circular record label needs a records table.
+          presentation: { ...presentation(), label: labelled ? 'Alpha' : null }
+        }],
+        resources: { source: resource('fasta', 'alpha.fasta', text) },
+        webFiles: { resourceOriginalNames: { source: 'alpha.fasta' } }
+      });
+      const recipe = await buildSourceRecipe(session);
+      assert.equal(recipe.available, true, `${mode}: ${recipe.unavailableReason}`);
+      const usesTable = mode === 'circular' && labelled;
+      assert.equal(recipe.args.includes('--records_table'), usesTable, mode);
+      assert.equal(recipe.args.includes('--gbk') || recipe.args.includes('--gff'), false, mode);
+      if (usesTable) {
+        const [header, row] = recipe.generatedFiles[0].data.split('\n');
+        assert.deepEqual(header.split('\t').slice(0, 2), ['fasta', 'record_label']);
+        assert.deepEqual(row.split('\t').slice(0, 2), ['alpha.fasta', 'Alpha']);
+      } else {
+        const fasta = recipe.args.indexOf('--fasta');
+        assert.notEqual(fasta, -1, mode);
+        assert.equal(recipe.fileMetadata.get(recipe.args[fasta + 1])?.name, 'alpha.fasta');
+      }
+      await assertCliParserAccepts(recipe);
+      const info = buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe });
+      await materializeAndRunRecipe(session, recipe, info, `fasta ${mode}${labelled ? ' labelled' : ''}`);
+    }
+  }
+});
+
 test('source recipe reuses materialized source text and preserves record selection', async () => {
   for (const format of ['genbank', 'fasta']) {
     for (const recordCount of [1, 2]) {

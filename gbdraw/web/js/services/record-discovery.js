@@ -7,6 +7,7 @@ import { genbankHeaderIds, pythonStrip, scanGenBankHeader } from './genbank-head
 import { ORGANISM_NAME_RULE } from '../contracts/schema.generated.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { circularInputSlots, inputSourceFiles } from './input-types.js';
 import {
   bytesToText,
   cloneFileBytesForTransfer,
@@ -18,6 +19,7 @@ import {
 /** @import { InputFileRef } from './history-files.js' */
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
+/** @import { InputTypeSpec } from './input-types.js' */
 
 /**
  * The record catalog of the Circular source files: whose files it was read
@@ -25,7 +27,7 @@ import {
  * @typedef {object} CircularRecordDiscovery
  * @property {'idle' | 'loading' | 'deferred' | 'ready' | 'error'} status
  * @property {UserFacingError | ''} error The reader's error, or '' when there is none.
- * @property {'' | 'gb' | 'gff'} inputType
+ * @property {'' | 'gb' | 'gff' | 'fasta'} inputType
  * @property {InputFileRef | null} primaryFile
  * @property {InputFileRef | null} pairedFile
  * @property {{ selector: string, record_id: string, recordKey: string }[]} canonicalRecordIdentities
@@ -92,9 +94,7 @@ export const discoveryErrorIsFinal = (error) => typeof error === 'object' && err
  */
 export const circularDiscoveryForInput = (drawing) => {
   const inputType = drawing.inputType.value;
-  const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
-  const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
-  const hasInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
+  const { primaryFile, pairedFile, complete: hasInput } = inputSourceFiles(inputType, circularInputSlots(drawing.files));
   const discovery = drawing.circularRecordDiscovery;
   const current = discovery.inputType === inputType
     && discovery.primaryFile === primaryFile && discovery.pairedFile === pairedFile;
@@ -1010,6 +1010,49 @@ export const discoverGffFastaRecords = async ({
     return normalizeSequenceRecords(response.result);
   }));
 };
+
+/**
+ * The records of a FASTA given without GFF3, as Generate draws them. Only the
+ * Python loader (`load_fasta`) decides that a record is nucleotide, so the browser
+ * has no fast path here and every read goes to the Worker helper (R4).
+ * @param {{ file: FileLike | null | undefined, runHelperOperation?: HelperOperationRunner<SequenceRecordsPayload> }} options
+ */
+export const discoverFastaInputRecords = async ({ file, runHelperOperation = runDiagramHelperOperation }) => {
+  if (!file) throw new Error('A FASTA file is required.');
+  return copiedRecords(readOncePerFile([file], 'records:fasta-input', async () => {
+    const response = await runHelperOperation(DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS, {
+      format: 'fasta', files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }]
+    });
+    return normalizeSequenceRecords(response.result);
+  }));
+};
+
+/**
+ * Per record source kind: the reader of an input's records and the helper
+ * operation a failure of it names.
+ * @type {Readonly<Record<InputTypeSpec['sourceKind'], {
+ *   operation: string,
+ *   read: (primary: FileLike | null | undefined, paired: FileLike | null | undefined) => Promise<SequenceRecord[]>
+ * }>>}
+ */
+const INPUT_RECORD_READERS = Object.freeze({
+  genbank: { operation: 'listSequenceRecords', read: (file) => discoverSequenceRecords({ file, format: 'genbank' }) },
+  gffFasta: { operation: 'listGffFastaRecords', read: (gffFile, fastaFile) => discoverGffFastaRecords({ gffFile, fastaFile }) },
+  fasta: { operation: 'listSequenceRecords', read: (file) => discoverFastaInputRecords({ file }) }
+});
+
+/**
+ * The records of one input (a Linear card, or the Circular slots) by its input type.
+ * @param {Readonly<InputTypeSpec>} spec
+ * @param {FileLike | null | undefined} primaryFile
+ * @param {FileLike | null | undefined} pairedFile
+ */
+export const discoverInputRecords = (spec, primaryFile, pairedFile) => (
+  INPUT_RECORD_READERS[spec.sourceKind].read(primaryFile, pairedFile)
+);
+
+/** @param {Readonly<InputTypeSpec>} spec The helper operation a failed read of this input names. */
+export const inputRecordsOperation = (spec) => INPUT_RECORD_READERS[spec.sourceKind].operation;
 
 /**
  * The selector a FASTA reader of a GFF3 and FASTA pair reads for a record selector. load_gff_fasta reads only the

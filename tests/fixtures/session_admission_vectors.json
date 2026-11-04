@@ -1771,37 +1771,37 @@
    ]
   },
   {
-   "id": "ov594-circular-input-type-fasta",
+   "id": "ov594-circular-input-type-zip",
    "finding": "OV-594",
    "base": "settings-only-46",
    "edits": [
     {
      "op": "set",
      "path": "/ui/cInputType",
-     "value": "fasta"
+     "value": "zip"
     }
    ],
    "python": "accept",
    "web": "repaired",
-   "note": "ui.cInputType outside gb and gff.",
+   "note": "ui.cInputType outside gb, gff and fasta.",
    "webRepairs": [
     "setting-replaced@ui.cInputType"
    ]
   },
   {
-   "id": "ov594-linear-input-type-fasta",
+   "id": "ov594-linear-input-type-zip",
    "finding": "OV-594",
    "base": "settings-only-46",
    "edits": [
     {
      "op": "set",
      "path": "/ui/lInputType",
-     "value": "fasta"
+     "value": "zip"
     }
    ],
    "python": "accept",
    "web": "repaired",
-   "note": "ui.lInputType outside gb and gff.",
+   "note": "ui.lInputType outside gb, gff and fasta.",
    "webRepairs": [
     "setting-replaced@ui.lInputType"
    ]

@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const genbank = (topology, length = 120) => `LOCUS       same                     ${length} bp    DNA     ${topology.padEnd(8)} UNA 01-JAN-2000
@@ -66,6 +66,7 @@ for (const mode of ['circular', 'linear']) {
 }
 
 const { readFileSync } = require('node:fs');
+const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
 const {
   assertDiagramWorkerIdle, assertSessionLoadLeftWorkerIdle, getDiagramWorkerActivity
@@ -282,3 +283,104 @@ test('existing helper stays loading until settlement and rejects superseded sour
   expect(worker.helpers).toBe(2);
   expect(worker.settledHelpers).toBe(2);
 });
+
+// A FASTA given without GFF3 (PD-OI-068 rev 2): Python's FASTA-only loader lists its records in the Worker,
+// each with unknown topology, and Generate draws them without features.
+const twoRecordFasta = `>alpha first\n${'acgt'.repeat(60)}\n>beta\n${'ggcc'.repeat(45)}\n`;
+const drawnText = (page) => page.evaluate(() => window.__GBDRAW_APP__.currentResults()
+  .map((result) => String(result.content || '')).join('\n'));
+for (const mode of ['circular', 'linear']) {
+  test(`a FASTA alone lists its records and Generate draws them in ${mode}`, async ({ page }) => {
+    test.setTimeout(240000);
+    await openApp(page);
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
+    await page.locator('input[type=radio][value=fasta]').first().check();
+    await expect(page.getByText('Records are drawn without features.')).toBeVisible();
+    await expect(page.locator('input[type=radio][value=gff]').first()).toBeVisible();
+    const upload = mode === 'linear' ? page.getByTestId('linear-fasta-1') : page.getByLabel('FASTA File', { exact: true });
+    await upload.setInputFiles({ name: 'two.fasta', mimeType: 'text/plain', buffer: Buffer.from(twoRecordFasta) });
+    if (mode === 'circular') {
+      await waitStatus(page, 'ready');
+      expect((await snapshot(page)).rows).toEqual([['#1', 'alpha'], ['#2', 'beta']]);
+      // Each record's Circular record row starts off: the file makes no topology claim.
+      const circularRows = page.getByRole('checkbox', { name: /^Circular record/ });
+      await expect(circularRows).toHaveCount(2);
+      for (const row of await circularRows.all()) await expect(row).not.toBeChecked();
+    } else {
+      await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 180000 }).toBe(2);
+      await expect(page.getByLabel('Default definition for file 1', { exact: true })).toBeVisible();
+    }
+    await generateAndWaitForResult(page);
+    const drawn = await drawnText(page);
+    expect(drawn).toContain('alpha');
+    expect(drawn).toContain('beta');
+  });
+}
+
+test('a protein FASTA alone is refused before Generate with the record named', async ({ page }) => {
+  test.setTimeout(240000);
+  await openApp(page);
+  await page.locator('input[type=radio][value=fasta]').first().check();
+  await page.getByLabel('FASTA File', { exact: true }).setInputFiles({
+    name: 'protein.fasta', mimeType: 'text/plain', buffer: Buffer.from('>LvMJNV_ORF1 hypothetical protein\nMKLVEQRSTWYF\n')
+  });
+  await waitStatus(page, 'error');
+  const status = page.locator('[data-circular-discovery-status]');
+  await expect(status).toContainText('LvMJNV_ORF1');
+  await expect(status).toContainText('"L"');
+  await expect(page.locator('.upload-zone.failed')).toHaveCount(1);
+  await generateAndWaitForResult(page, { expectedStatus: 'error' });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(0);
+});
+
+// In Linear the refusal is in the card's Record options. A refused FASTA file leaves Generate as a refused GenBank
+// file of the same card does (D-21): the same protein file, given as each input type.
+for (const [inputType, testId, named] of [
+  ['gb', 'linear-genbank-1', /looks like FASTA/],
+  ['fasta', 'linear-fasta-1', /LvMJNV_ORF1[\s\S]*"L"/]
+]) {
+  test(`a protein file refused as ${inputType} in linear names the failure in Record options and Generate reports it`, async ({ page }) => {
+    test.setTimeout(240000);
+    await openApp(page);
+    await showDrawing(page, { kind: 'linear' });
+    await page.locator(`input[type=radio][value=${inputType}]`).first().check();
+    await page.getByTestId(testId).setInputFiles({
+      name: 'protein.fasta', mimeType: 'text/plain', buffer: Buffer.from('>LvMJNV_ORF1 hypothetical protein\nMKLVEQRSTWYF\n')
+    });
+    await expect(page.locator('p.text-red-600', { hasText: named })).toHaveCount(1, { timeout: 180000 });
+    await expect(page.locator('.upload-zone.failed')).toHaveCount(1);
+    await generateAndWaitForResult(page, { expectedStatus: 'error' });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(0);
+  });
+}
+
+test('a saved Session with a FASTA source loads its Result without the Worker', async ({ page, context }) => {
+  test.setTimeout(300000);
+  await openApp(page);
+  await page.locator('input[type=radio][value=fasta]').first().check();
+  await page.getByLabel('FASTA File', { exact: true }).setInputFiles(fixture('tests/test_inputs/NC_013668.fasta'));
+  await waitStatus(page, 'ready');
+  await generateAndWaitForResult(page);
+  const download = page.waitForEvent('download');
+  await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'fasta-source';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const saved = await (await download).path();
+  const bytes = readFileSync(saved);
+  const session = JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+  const drawing = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
+  expect(drawing.renderRequest.records[0].source.kind).toBe('fasta');
+
+  const fresh = await context.newPage();
+  await openApp(fresh);
+  fresh.on('dialog', dialog => dialog.accept());
+  await fresh.locator('input[accept^=".json,"]').setInputFiles(saved);
+  await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.results.length === 1, null, { timeout: 180000 });
+  await assertSessionLoadLeftWorkerIdle(fresh);
+  await expect(fresh.locator('input[type=radio][value=fasta]').first()).toBeChecked();
+  expect((await snapshot(fresh)).status).toBe('deferred');
+  expect(await drawnText(fresh)).toContain('NC_013668.3');
+});
+

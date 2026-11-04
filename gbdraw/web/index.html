@@ -2670,12 +2670,17 @@
 
                     <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">{{ t('Record rotation, feature placement, or tolerance has changes pending Generate. This notice covers record display only; the Result keeps its applied settings.') }}</p>
                     <div v-if="mode === 'circular'" class="space-y-4">
-                        <div class="flex flex-wrap gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex">
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gb'" @change="setCircularInputType('gb')" value="gb" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GenBank</label>
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
+                        <div class="flex flex-wrap gap-x-2 gap-y-1 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex">
+                            <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gb'" @change="setCircularInputType('gb')" value="gb" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GenBank</label>
+                            <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
+                            <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'fasta'" @change="setCircularInputType('fasta')" value="fasta" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> FASTA</label>
                         </div>
                         <div v-if="inputType === 'gb'">
                             <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="uploadCircularSourceFile('c_gb', $event)" file-kind="genbank" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.embl,.emb,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
+                        </div>
+                        <div v-else-if="inputType === 'fasta'">
+                            <file-uploader :label="t('FASTA File')" :model-value="files.c_fasta" @update:model-value="uploadCircularSourceFile('c_fasta', $event)" file-kind="fasta" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
+                            <p class="ui-hint mt-1">{{ t('Records are drawn without features.') }}</p>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
                             <file-uploader :label="t('GFF3 File')" :model-value="files.c_gff" @update:model-value="uploadCircularSourceFile('c_gff', $event)" file-kind="gff" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*,.gz,application/gzip"></file-uploader>
@@ -2938,10 +2943,12 @@
                     </div>
 
                     <div v-if="mode === 'linear'" class="space-y-4">
-                        <div class="flex flex-wrap gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gb'" @change="setLinearInputType('gb')" value="gb" class="text-blue-600" :disabled="!semanticMutationAvailable"> GenBank</label>
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setLinearInputType('gff')" value="gff" class="text-blue-600" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
+                        <div class="flex flex-wrap gap-x-2 gap-y-1 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
+                            <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gb'" @change="setLinearInputType('gb')" value="gb" class="text-blue-600" :disabled="!semanticMutationAvailable"> GenBank</label>
+                            <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setLinearInputType('gff')" value="gff" class="text-blue-600" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
+                            <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'fasta'" @change="setLinearInputType('fasta')" value="fasta" class="text-blue-600" :disabled="!semanticMutationAvailable"> FASTA</label>
                         </div>
+                        <div v-if="inputType === 'fasta'"><p class="ui-hint">{{ t('Records are drawn without features.') }}</p></div>
                         <div v-if="linearReorderNotice" class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
                             <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
                             <span>{{ linearReorderNotice }}</span>
@@ -3025,6 +3032,18 @@
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
                                     @update:model-value="uploadLinearSeqPrimaryFile(source.index, 'gb', $event)" file-kind="genbank"
+                                    @clear-request="requestLinearSourceRemoval(source, $event)"
+                                ></file-uploader>
+                            </div>
+                            <div v-else-if="inputType === 'fasta'" class="space-y-2 mb-2">
+                                <file-uploader
+                                    label="FASTA"
+                                    :test-id="`linear-fasta-${sourceIndex + 1}`"
+                                    accept=".fa,.fas,.fasta,.fna,.ffn,.txt,text/plain,text/*,.gz,application/gzip"
+                                    :model-value="source.sequence.fasta"
+                                    :inspection-failed="linearSourceInspectionFailed(source)"
+                                    :request-clear="true"
+                                    @update:model-value="uploadLinearSeqPrimaryFile(source.index, 'fasta', $event)" file-kind="fasta"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                             </div>
@@ -3208,7 +3227,7 @@
                                 <div class="text-[10px] font-bold text-white bg-slate-500 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
                             </div>
 
-                                    <button v-if="(inputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600" :disabled="!semanticMutationAvailable">{{ t('Inspect records') }}</button>
+                                    <button v-if="shownInputComplete('linear', seq) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600" :disabled="!semanticMutationAvailable">{{ t('Inspect records') }}</button>
                                     <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
 
                             <details v-if="source.records.length > 1" data-setting="depth-sources" class="rounded border border-slate-200 bg-white/70 p-2">
@@ -5109,7 +5128,7 @@
                                                 type="button"
                                                 class="btn btn-secondary text-[10px] py-1 px-2"
                                                 @click="refreshCircularRecordOrder"
-                                                :disabled="!semanticMutationAvailable || (inputType === 'gb' ? !files.c_gb : (!files.c_gff || !files.c_fasta))"
+                                                :disabled="!semanticMutationAvailable || !shownInputComplete('circular')"
                                             >
                                                 {{ t('Reload Records') }}
                                             </button>

@@ -293,6 +293,7 @@ _VALUE_CHECKED: dict[str, tuple[str, ...]] = {
     "CanonicalAlignmentRecordDecision.recordKey": ("another string",),
     "CanonicalCollinearityResultComparison.resourceId": ("another string",),
     "CanonicalFileRef.resourceId": ("another string",),
+    "CanonicalFastaRecordSource.fastaResourceId": ("another string",),
     "CanonicalGenbankRecordSource.resourceId": ("another string",),
     "CanonicalGffFastaRecordSource.fastaResourceId": ("another string",),
     "CanonicalGffFastaRecordSource.gffResourceId": ("another string",),

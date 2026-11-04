@@ -62,7 +62,7 @@ DINUCLEOTIDE CANNOT_FIT CENTER_RESERVED THREE_COLUMNS DEPTH_VALUES FILENAME FILE
 REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLLINEAR_MERGE_ORIENTATION COLOR SEARCH_FRAME
 LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
 RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES ANNOTATION_LANE_CONFLICT CIRCULAR_SETTING LINEAR_SETTING
-ORDER RECORD_BOUNDS ORIGIN_CROSSING START_AFTER_END EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER LABEL_CAPACITY WRAP
+ORDER RECORD_BOUNDS ORIGIN_CROSSING START_AFTER_END EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES NOT_NUCLEOTIDE EMPTY_SEQUENCE RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER LABEL_CAPACITY WRAP
 WRAP_ANCHOR_FEATURE WRAP_RECORD_POSITION WRAP_TRACK_LAYOUT WRAP_SCALE_STYLE WRAP_NORMALIZE_LENGTH WRAP_GRID_ROW
 SELECTOR_NO_MATCH SELECTOR_AMBIGUOUS ANCHOR_SHARED_ROW PNG_SIZE PDF_SIZE""".split())
 # The room each side's labels need when they were not placed (CAPACITY-STOP): bounded numbers, by the key the producer
@@ -74,8 +74,12 @@ def _is_label_capacity(key: str, value: object) -> bool:
     return key in _LABEL_CAPACITY_KEYS and type(value) is float and 0.0 < value <= 1_000_000.0
 _DIAGNOSTIC_INTEGER_KEYS = frozenset(
     "row column columnCount seriesIndex slotIndex innerPx outerPx keptInsidePx placementIndex queryRecordIndex "
-    "subjectRecordIndex limit width height rowLength dpi".split()
+    "subjectRecordIndex limit width height rowLength dpi codepoint".split()
 )
+# A record named in a diagnostic (a FASTA-only record gbdraw cannot draw): its ID when the ID is one line of
+# printable ASCII text, else its 1-based position (``recordPosition``). The one owner of this bound: the Web shows
+# what it receives.
+_RECORD_NAME = re.compile(r"[\x21-\x7e][\x20-\x7e]{0,79}")
 
 # The engine computes a Result from the request alone, so an unclassified failure
 # in these stages repeats for the same inputs (RENDER_FAILED offers no Retry).
@@ -119,7 +123,7 @@ _EXACT = {
     "DepthTrackInput.source path must not be empty.": ("DEPTH_INVALID", {"field": "source", "reason": "REQUIRED"}),
     "No records found": ("NO_RECORDS", {}),
     "A resolved record collection cannot be empty.": ("NO_RECORDS", {}),
-    "Specify either GenBank paths or GFF3/FASTA paths.": ("INPUT_REQUIRED", {}),
+    "Specify either GenBank paths, or FASTA paths with or without GFF3 paths.": ("INPUT_REQUIRED", {}),
     "GFF3 and FASTA path counts must match.": ("FASTA_REQUIRED", {}),
     "GFF3 protein extraction requires a FASTA path.": ("FASTA_REQUIRED", {}),
     "An explicit display start cannot be combined with a crop.": ("REGION_INVALID", {"reason": "CROP_START_CONFLICT"}),
@@ -230,6 +234,12 @@ def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
         value = diagnostic[key]
         if type(value) is int and 0 <= value <= 10_000_000:
             context[key] = value
+    record_name = diagnostic.get("recordName")
+    record_position = diagnostic.get("recordPosition")
+    if isinstance(record_name, str) and _RECORD_NAME.fullmatch(record_name):
+        context["recordName"] = record_name
+    elif type(record_position) is int and 1 <= record_position <= 10_000_000:
+        context["recordPosition"] = record_position
     # A context value is a bounded scalar: the kept rows travel as one comma-separated text.
     kept_tracks = diagnostic.get("keptInsideTracks")
     if diagnostic["code"] == "TRACK_LAYOUT" and isinstance(kept_tracks, list):

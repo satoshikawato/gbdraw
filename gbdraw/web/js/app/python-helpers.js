@@ -1691,21 +1691,23 @@ def get_record_length(path, fmt, record_id=None, record_index=None):
         return json.dumps({'error': serialize_web_error(error, operation='unknown', stage="helper")})
 
 def list_sequence_records(path, format):
-    """List record selectors, IDs, and lengths from a sequence file."""
+    """List record selectors, IDs, and lengths of a GenBank file, or of a FASTA file given without GFF3."""
     from gbdraw.api.record_planning import _detected_topology
     from gbdraw.core.record_metadata import (
         format_inferred_definition,
         infer_record_source_metadata,
     )
+    from gbdraw.io.genome import load_fasta, require_record_sequence
     try:
-        format_map = {"genbank": "genbank", "fasta": "fasta"}
-        if format not in format_map:
+        if format not in {"genbank", "fasta"}:
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {format}'), operation='listSequenceRecords', stage="helper")})
-        # A GenBank/DDBJ/EMBL file the parser refuses, or one without a record, raises its diagnostic here.
-        records = _parse_sequence_file(path, format_map[format])
-        # OV-1258: a record without sequence cannot be drawn; the inspection says so.
-        if format == "genbank":
-            from gbdraw.io.genome import require_record_sequence
+        if format == "fasta":
+            # The records Generate draws of a FASTA-only input, refused unless nucleotide (the one loader).
+            records = load_fasta([path])
+        else:
+            # A GenBank/DDBJ/EMBL file the parser refuses, or one without a record, raises its diagnostic here.
+            records = _parse_sequence_file(path, "genbank")
+            # OV-1258: a record without sequence cannot be drawn; the inspection says so.
             for record in records:
                 require_record_sequence(record, path)
         if not records:
@@ -1726,7 +1728,7 @@ def list_sequence_records(path, format):
                     "selector": f"#{idx + 1}",
                     "record_id": str(record.id or f"Record_{idx + 1}"),
                     "record_length": len(record.seq),
-                    "topology": _detected_topology(record, "genbank") if format == "genbank" else "unknown",
+                    "topology": _detected_topology(record, format),
                     "organism": organism,
                     "strain": strain,
                     "inferred_definition": inferred_def,

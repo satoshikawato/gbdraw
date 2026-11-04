@@ -37,7 +37,9 @@ for (const source of [
   'services/svg-serialization.js', 'services/preview-affordances.js', 'services/settings-sections.js', 'services/drawn-groups.js',
   'services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js', 'utils/i18n.js',
   // feature-placement.js reads the record keys of a drawing from their owner.
-  'services/record-draw-selection.js', 'utils/download-names.js', 'contracts/schema.generated.js'
+  'services/record-draw-selection.js', 'utils/download-names.js', 'contracts/schema.generated.js',
+  // feature-identity.js reads a record source's files from the input-type table.
+  'services/input-types.js'
 ]) await copyModule(source);
 // The identity owner, with its rendered-identity reads counted.
 await copyModule('services/feature-identity.js', 'services/feature-identity-owner.js');
