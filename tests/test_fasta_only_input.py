@@ -11,6 +11,7 @@ import argparse
 import gzip
 import json
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -104,6 +105,17 @@ def test_a_refused_record_whose_id_cannot_be_shown_is_named_by_its_position(
     assert f"FASTA record {shown} in input.fasta holds 'L'" in str(caught.value)
     payload = serialize_web_error(caught.value, operation="listSequenceRecords", stage="helper")
     assert payload["context"] == {"reason": "NOT_NUCLEOTIDE", "recordPosition": 2, "codepoint": ord("L")}
+
+
+def test_the_web_wording_reads_the_record_context_keys_a_fasta_refusal_sends() -> None:
+    # The Web wording owner reads the context keys Python sends (the vocabulary guard in
+    # test_web_error_producer_coverage.py does not list these two).
+    text = (Path(__file__).resolve().parents[1] / "gbdraw" / "web" / "js" / "utils" / "error-normalization.js").read_text(
+        encoding="utf-8"
+    )
+    block = text[text.index("const contextFor") : text.index("export const normalizeUserFacingError")]
+    web_context_keys = set(re.findall(r"'([A-Za-z]+)'", block)) | set(re.findall(r"value\.([A-Za-z]+)", block))
+    assert {"recordName", "recordPosition"} <= web_context_keys
 
 
 def test_load_fasta_warns_on_repeated_ids(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:

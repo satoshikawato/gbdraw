@@ -132,15 +132,21 @@ export const recordSourceResourceIds = (source) => {
   return files.map(({ field }) => String(fields[field]));
 };
 /**
+ * The files of a record source kind (`RECORD_SOURCE_FILES`), in source order; none for an unknown kind.
+ * @param {unknown} kind
+ * @returns {readonly (typeof RECORD_SOURCE_FILES)[RecordSourceKind][number][]}
+ */
+export const recordSourceFilesOf = (kind) => (
+  Object.hasOwn(RECORD_SOURCE_FILES, String(kind)) ? RECORD_SOURCE_FILES[/** @type {RecordSourceKind} */ (kind)] : []
+);
+/**
  * The resource id of each file of a stored record source, in the order its kind names them ('' for a missing one);
  * none for a source whose kind is unknown.
  * @param {Readonly<Record<string, unknown>> | null | undefined} source
  * @returns {string[]}
  */
 export const storedRecordSourceResourceIds = (source) => (
-  source && Object.hasOwn(RECORD_SOURCE_FILES, String(source.kind))
-    ? inputSourceSlotFiles(inputTypeOfSourceKind(source.kind)).map(({ field }) => String(source[field] || '').trim())
-    : []
+  source ? recordSourceFilesOf(source.kind).map(({ field }) => String(source[field] || '').trim()) : []
 );
 /**
  * The resource id of each input slot's file in a stored record source, or '' for a slot its kind does not read

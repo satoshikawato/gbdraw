@@ -384,3 +384,25 @@ test('a saved Session with a FASTA source loads its Result without the Worker', 
   expect(await drawnText(fresh)).toContain('NC_013668.3');
 });
 
+
+// A Linear card that held a GFF3 + FASTA pair and was switched to FASTA holds nothing once its FASTA file is
+// removed: the call site asks the input type which files a card holds, so the GFF3 file left in the other
+// type's slot keeps no card.
+test('removing the FASTA file of a Linear card switched from GFF3 + FASTA to FASTA empties the card', async ({ page }) => {
+  test.setTimeout(180000);
+  await openApp(page);
+  await showDrawing(page, { kind: 'linear' });
+  await page.locator('input[type=radio][value=gff]').first().check();
+  const card = page.locator('[data-linear-source-card]').first();
+  await card.locator('input[type=file][accept^=".gff"]').setInputFiles(fixture('tests/test_inputs/NC_013668.gff3'));
+  await card.locator('input[type=file][accept^=".fa"]').setInputFiles(fixture('tests/test_inputs/NC_013668.fasta'));
+  await expect.poll(() => page.evaluate(() => {
+    const [seq] = window.__GBDRAW_APP__.linearSeqs;
+    return Boolean(seq.gff && seq.fasta);
+  })).toBe(true);
+  await page.locator('input[type=radio][value=fasta]').first().check();
+  await page.evaluate(() => window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'fasta', null));
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(
+    (seq) => ({ gff: seq.gff?.name || null, fasta: seq.fasta?.name || null })
+  ))).toEqual([{ gff: null, fasta: null }]);
+});

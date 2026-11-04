@@ -4,7 +4,7 @@ import test from 'node:test';
 import { RECORD_SOURCE_FILES } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import {
   INPUT_TYPES, inputSourceFiles, inputSourceSlotFiles, isRecordSource, recordSourceOf, recordSourceResourceIds,
-  recordSourceSlotIds, storedRecordSourceResourceIds
+  recordSourceFilesOf, recordSourceSlotIds, storedRecordSourceResourceIds
 } from '../../gbdraw/web/js/services/input-types.js';
 import {
   foldLoadedLinearSources,
@@ -663,6 +663,11 @@ test('input types read the record source files Python names, and a card holds a 
   assert.deepEqual(recordSourceSlotIds({ kind: 'fasta', fastaResourceId: 'f', resourceId: 'stale' }),
     { gb: '', gff: '', fasta: 'f' });
   assert.deepEqual(storedRecordSourceResourceIds({ kind: 'unknown', resourceId: 'x' }), []);
+  assert.deepEqual(storedRecordSourceResourceIds({ kind: 'fasta', fastaResourceId: ' f ' }), ['f']);
+  assert.deepEqual(storedRecordSourceResourceIds({ kind: 'gffFasta', gffResourceId: 'g', fastaResourceId: 'f' }), ['g', 'f']);
+  assert.deepEqual(storedRecordSourceResourceIds({ kind: 'gffFasta', gffResourceId: 'g' }), ['g', '']);
+  assert.equal(recordSourceFilesOf('fasta'), RECORD_SOURCE_FILES.fasta);
+  assert.deepEqual(recordSourceFilesOf('unknown'), []);
   // A card that held GFF3 + FASTA and was switched to FASTA holds nothing once its FASTA is removed.
   assert.equal(inputSourceFiles('fasta', { gff: 'annotation.gff3', fasta: null }).holdsFile, false);
   assert.equal(inputSourceFiles('gff', { gff: 'annotation.gff3', fasta: null }).holdsFile, true);

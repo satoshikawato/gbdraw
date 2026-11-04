@@ -78,7 +78,8 @@ test('a protein result that touches no reversed record names no conversion (OV-1
   assert.equal(storesDrawnFrameProteinResults(marked([{ queryRecordIndex: 0, subjectRecordIndex: 1 }])), true);
   assert.equal(storesDrawnFrameProteinResults(marked([])), true);
   // A reversed record whose file the Session does not hold is the request reader's to drop (OV-869).
-  for (const source of [{ kind: 'genbank', resourceId: 'q' }, { kind: 'gffFasta', gffResourceId: 'q', fastaResourceId: 's' }]) {
+  for (const source of [{ kind: 'genbank', resourceId: 'q' }, { kind: 'gffFasta', gffResourceId: 'q', fastaResourceId: 's' },
+    { kind: 'fasta', fastaResourceId: 'q' }]) {
     const unheld = protein(47);
     unheld.renderRequest.records[0].source = source;
     delete unheld.resources.q;
