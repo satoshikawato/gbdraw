@@ -273,8 +273,8 @@ test('a layout edit that drops lanes asks before it resets those placements', as
   const steps = [];
   const actions = createFeaturePlacementActions({ state, getCommittedRequest: () => null, isCurrentFeature: () => true,
     runUndoable: async (label, fn) => { steps.push(label); fn(); } });
-  const select = (value, label) => ({ target: { type: 'select-one', value, labels: [{ textContent: ` ${label} ` }],
-    selectedOptions: [{ text: `${value[0].toUpperCase()}${value.slice(1)}` }] } });
+  const select = (value, label) => ({ target: { type: 'select-one', tagName: 'SELECT', value, labels: [{ textContent: ` ${label} ` }],
+    selectedOptions: [{ textContent: `${value[0].toUpperCase()}${value.slice(1)}` }] } });
   const ask = (event, field) => {
     assert.equal(actions.changeLayoutSetting(event, field), false);
     return { ...actions.layoutChange };

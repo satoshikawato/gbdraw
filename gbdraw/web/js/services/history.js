@@ -6,6 +6,7 @@ import {
 } from './runtime-test-hooks.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 /** @import { DrawingId } from './drawing-view.js' */
+/** @import { ControlDescription } from '../utils/control-description.js' */
 
 // tests/web/history-inputs.test.mjs loads this module with its own imports
 // only, so it declares the key marker of utils/i18n.js itself.
@@ -249,10 +250,10 @@ const checkpointSvgBytes = (checkpoint) => (
  *   draws, so that restoring it needs no automatic rerender (D-24 (OV-731)).
  * @typedef {{ enabled: boolean, value: unknown }} ReplacementIntentCheckpoint
  *   The intent a replacement step also restores (`value` is the caller's own capture).
- * @typedef {{ name?: string, value?: string, checked?: boolean, color?: string }} HistoryStepDetail
+ * @typedef {ControlDescription} HistoryStepDetail
  *   What the History list shows of a step beside its label (PD-OI-112): the name of the control the
- *   step changed, as shown when the step ended, and the value it set: a text, a checkbox's state,
- *   or a color. A step without `name` is shown by its label.
+ *   step changed and the value it set, read when the step ended (`describeControl`). A step without
+ *   `name` is shown by its label.
  * @typedef {{
  *   type: 'intent', label: string, changes: HistoryIntentChange[], byteSize: number, fileIds: Set<string>, sequence?: number,
  *   session?: IntentEntry, detail?: HistoryStepDetail

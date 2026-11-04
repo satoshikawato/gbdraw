@@ -9,6 +9,7 @@
 // reports Undo and Redo unavailable, so the rows wait as the buttons do; a
 // row that cannot be picked stays focusable (`aria-disabled`).
 /** @import { HistoryTimeline, HistoryTimelineStep } from '../services/history.js' */
+import { controlValueText } from '../utils/control-description.js';
 import { t, tm, tn } from '../utils/i18n.js';
 
 /**
@@ -46,7 +47,7 @@ const VIEWPORT_MARGIN_PX = 8;
  */
 const stepText = ({ label, detail }) => ({
   name: detail?.name || tm(label),
-  value: detail?.checked === undefined ? detail?.value ?? '' : detail.checked ? t('On') : t('Off'),
+  value: detail ? controlValueText(detail) : '',
   color: detail?.color ?? ''
 });
 
