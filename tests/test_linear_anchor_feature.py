@@ -36,7 +36,7 @@ from gbdraw.api import (
 )
 from gbdraw.api.options import LinearMultiRecordOptions, LinearRecordTranslation
 from gbdraw.api.request_render import LinearRequestPlan, build_request_diagram
-from gbdraw.api.requests import RecordDisplayOptions, RecordPresentation
+from gbdraw.api.requests import RecordCardinality, RecordDisplayOptions, RecordPresentation
 from gbdraw.exceptions import ValidationError
 
 _DATA = Path(__file__).resolve().parents[1] / "gbdraw" / "web" / "tutorial-data"
@@ -687,3 +687,18 @@ def test_a_reversed_join_starts_at_its_3_prime_base() -> None:
 def test_an_unstranded_feature_rotates_as_a_plus_strand_one() -> None:
     # The Rotate popup refuses a feature without a strand; the anchor reads it as a plus-strand one.
     assert _starts(plan_linear_request(_join_records(reverse_first=False, strand=None))) == (11, 31)
+
+
+@pytest.mark.linear
+def test_a_file_card_that_expands_is_refused_when_it_carries_a_translation(tmp_path: Path) -> None:
+    # One File card (RecordCardinality.ALL) holds two records; its base translation is keyed by the card, not by
+    # the records it expands to.
+    both = tmp_path / "both.gb"
+    both.write_text(_HUMAN.read_text() + _ZEBRAFISH.read_text())
+    request = LinearDiagramRequest(
+        records=(RecordInput(GenBankInputSource(both), cardinality=RecordCardinality.ALL, record_key="record-1"),),
+        layout=LinearMultiRecordOptions(record_translations=(LinearRecordTranslation("record-1", x=10.0),)),
+    )
+    with pytest.raises(ValidationError, match="File card") as caught:
+        plan_linear_request(request)
+    assert caught.value.diagnostic == {"code": "INPUT_INVALID", "field": "anchor_feature", "reason": "ANCHOR_RECORD_CARDS"}

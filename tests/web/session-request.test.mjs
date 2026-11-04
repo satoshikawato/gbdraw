@@ -5783,8 +5783,10 @@ assert.deepEqual(resolvedProteinMarker.pairs, []);
 // other 81 requests are the 83 recorded before, byte for byte.
 assert.equal(characterizedRequests.length, 81);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  // Re-recorded when the default merge orientation became "strand" (OV-2301).
-  '226ee05fe6c482311ca894941631c6f1e22590b494cbc79970024f1ad9e156dd',
+  // Re-recorded when the default merge orientation became "strand" (OV-2301), and when the split of a File card
+  // stopped writing rows while Arrange in rows is off (OV-2500, R17-41): one request's two members lost row 1, and
+  // its layout, which then carries nothing, is left out.
+  '5ed02db221ba33b15ed43b04b08dd3d5ba3dc18f1f2f57d2b3ccada2ee662264',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 // The Python tests hand this bridge a Session of any version; a 49 is read as the one-drawing view of its shown drawing.

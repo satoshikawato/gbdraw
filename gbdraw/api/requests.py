@@ -359,6 +359,8 @@ def _contains_ascii_control(value: str) -> bool:
 # "<prefix>.gbdraw-session.json", staged as ".<name>.<random>.tmp" (34 more
 # bytes). 200 bytes keeps it within the 255-byte file name limit of common
 # filesystems.
+# A File card (RecordCardinality.ALL) that expands names its records "<card key>:<position>".
+EXPANDED_RECORD_KEY_SEPARATOR = ":"
 _OUTPUT_PREFIX_MAX_BYTES = 200
 
 
@@ -847,6 +849,20 @@ class LinearDiagramRequest:
             if translations and actual != expected:
                 missing = sorted(expected - actual)
                 unknown = sorted(actual - expected)
+                if any(
+                    key.startswith(f"{card}{EXPANDED_RECORD_KEY_SEPARATOR}")
+                    for card in unknown
+                    for key in record_keys
+                ):
+                    raise ValidationError(
+                        "anchor_feature cannot align a File card that holds several records; "
+                        "split the card so each record has its own position.",
+                        diagnostic={
+                            "code": "INPUT_INVALID",
+                            "field": "anchor_feature",
+                            "reason": "ANCHOR_RECORD_CARDS",
+                        },
+                    )
                 raise ValidationError(
                     "Linear record translation coverage differs from the displayed "
                     f"records (missing={missing}, unknown={unknown})."

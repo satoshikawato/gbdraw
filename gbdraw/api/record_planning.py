@@ -82,6 +82,7 @@ from .prepared import (
     prepared_resource_identity,
 )
 from .requests import (
+    EXPANDED_RECORD_KEY_SEPARATOR,
     CircularBatchOutputPolicy,
     FastaInputSource,
     GenBankInputSource,
@@ -260,7 +261,6 @@ class ResolvedRecordCollection:
 # input expands to (`<key>:<k>`). The Web Source recipe names a CLI record by
 # them (gbdraw/web/js/contracts/schema.generated.js).
 CLI_RECORD_KEY_PREFIX = "record-"
-EXPANDED_RECORD_KEY_SEPARATOR = ":"
 
 _SOURCE_BINDING_COLUMNS = frozenset(
     f"{role}_{name}" for role in ("query", "subject") for name in ("feature_index", "feature_svg_id")

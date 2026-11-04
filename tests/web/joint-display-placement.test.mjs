@@ -96,7 +96,8 @@ for (const mode of ['circular', 'linear']) {
     assert.deepEqual(result.renderRequest.diagramOptions.featurePlacements, [override]);
     assert.equal(new Set(result.renderRequest.records.map((record) => record.source.resourceId)).size, 1);
     if (mode === 'linear') {
-      assert.deepEqual(result.renderRequest.records.map((record) => record.presentation.gridRow), [1, 1]);
+      // OV-2500 (R17-41): Arrange in rows is off here, so the split members carry no row.
+      assert.deepEqual(result.renderRequest.records.map((record) => record.presentation.gridRow), [null, null]);
       assert.deepEqual(result.renderRequest.records.map((record) => record.cardinality), ['exactly_one', 'exactly_one']);
     }
     const projected = projectCanonicalSessionRequest(result);
