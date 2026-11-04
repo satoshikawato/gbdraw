@@ -278,7 +278,7 @@ def mode_profiles_payload() -> dict[str, object]:
     """Return the JSON-compatible profile representation used by the web app."""
 
     # gbdraw.auto_sizes takes DiagramMode from this module.
-    from gbdraw.auto_sizes import linear_label_size_records, tick_and_window_tiers
+    from gbdraw.auto_sizes import ADAPTABLE_SETTINGS, linear_label_size_records, tick_and_window_tiers
     from gbdraw.comparisons.identity_scale import IDENTITY_SCALE_PATHS
     from gbdraw.config.models import GbdrawConfig
     from gbdraw.diagrams.circular.presets import circular_auto_slot_sizes, circular_track_preset_table
@@ -300,8 +300,10 @@ def mode_profiles_payload() -> dict[str, object]:
         # The packaged short/long boundary of each mode, the records that set
         # the Auto Linear label font for each label display scope (rules:
         # gbdraw/auto_sizes.py), and the Auto sizes of a Circular row
-        # (gbdraw/diagrams/circular/presets.py).
+        # (gbdraw/diagrams/circular/presets.py), and the settings of each mode
+        # that can return to Auto, by setting ID.
         "autoSizes": {
+            "adaptableSettings": {mode: list(settings) for mode, settings in ADAPTABLE_SETTINGS.items()},
             "circularSlots": circular_auto_slot_sizes(packaged_cfg),
             "linearLabelSizeRecords": {
                 scope: linear_label_size_records(scope) for scope in get_args(LinearLabelScope)

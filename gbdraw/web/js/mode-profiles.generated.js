@@ -14,6 +14,49 @@ const deepFreeze = (value) => {
 
 export const MODE_PROFILE_DATA = deepFreeze({
   "autoSizes": {
+    "adaptableSettings": {
+      "circular": [
+        "objects.features.block_stroke_width",
+        "objects.features.line_stroke_width",
+        "objects.legends.color_rect_size",
+        "objects.legends.font_size",
+        "labels.font_size",
+        "objects.axis.circular.stroke_width",
+        "window",
+        "step",
+        "depth_window",
+        "depth_step",
+        "circularSlot.features.width",
+        "circularSlot.gc_content.width",
+        "circularSlot.gc_skew.width",
+        "circularSlot.depth.width",
+        "objects.scale.interval",
+        "objects.gc_content.tick_font_size",
+        "objects.depth.tick_font_size"
+      ],
+      "linear": [
+        "objects.features.block_stroke_width",
+        "objects.features.line_stroke_width",
+        "objects.legends.color_rect_size",
+        "objects.legends.font_size",
+        "canvas.linear.arrow_length_parameter",
+        "canvas.linear.default_cds_height",
+        "objects.axis.linear.stroke_width",
+        "objects.definition.linear.font_size",
+        "objects.scale.font_size",
+        "objects.scale.ruler_label_font_size",
+        "window",
+        "step",
+        "depth_window",
+        "depth_step",
+        "labels.font_size.linear",
+        "objects.scale.interval",
+        "canvas.linear.default_gc_height",
+        "canvas.linear.depth_height",
+        "objects.gc_content.tick_font_size",
+        "objects.depth.tick_font_size"
+      ]
+    },
     "circularSlots": {
       "gapPx": 3.9,
       "presetNumericRowSides": {

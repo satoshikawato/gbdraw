@@ -77,7 +77,7 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert "resolveComparisonThresholds(drawing.adv, 'circular')" in run_source
     assert "resolveComparisonThresholds(drawing.adv, 'linear')" in run_source
     assert "normalizeBlastThreshold" not in run_source
-    assert "resolveComparisonThresholds(drawing.adv, state.mode.value)" in request_source
+    assert "resolveComparisonThresholds(drawing.adv, mode)" in request_source
     assert "comparisonFiltersForMode('linear')" in run_source
     assert not (WEB_ROOT / "js" / "app" / "cli-args.js").exists()
     assert "effectiveLinearAxisColor({" in request_source
