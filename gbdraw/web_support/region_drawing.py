@@ -15,8 +15,10 @@ from collections.abc import Mapping, Sequence
 from typing import Literal, TypedDict
 
 from gbdraw.api.region_drawing import (
+    FeatureRegionSelection,
     NotCarriedKind,
     OriginCrossingRegion,
+    RegionChoice,
     RegionSelection,
     derive_region_request,
 )
@@ -27,12 +29,22 @@ from gbdraw.session_request_codec import decode_canonical_request, encode_canoni
 from gbdraw.session_resources import SessionResourceTable
 
 
-class RegionInput(TypedDict):
+class CoordinateRegionInput(TypedDict):
     """One region: the source drawing's record key and source coordinates, 1-based and inclusive."""
 
     recordKey: str
     start: int
     end: int
+
+
+class FeatureRegionInput(TypedDict):
+    """One region: the span of a feature, by its record key and biological feature ID."""
+
+    recordKey: str
+    featureId: str
+
+
+RegionInput = CoordinateRegionInput | FeatureRegionInput
 
 
 class ReturnedSize(TypedDict):
@@ -85,18 +97,19 @@ def _protocol_error(message: str) -> ValidationError:
     return ValidationError(message, diagnostic={"code": "HELPER_PROTOCOL"})
 
 
-def _regions(value: object) -> list[RegionSelection]:
+def _regions(value: object) -> list[RegionChoice]:
     if not isinstance(value, list):
         raise _protocol_error("A region drawing needs a list of regions.")
-    regions = []
+    regions: list[RegionChoice] = []
     for item in value:
-        if not (
-            isinstance(item, Mapping)
-            and isinstance(item.get("recordKey"), str)
-            and all(type(item.get(key)) is int for key in ("start", "end"))
-        ):
-            raise _protocol_error("A region needs a record key, a start and an end.")
-        regions.append(RegionSelection(item["recordKey"], item["start"], item["end"]))
+        if not (isinstance(item, Mapping) and isinstance(item.get("recordKey"), str)):
+            raise _protocol_error("A region needs a record key.")
+        if isinstance(item.get("featureId"), str) and "start" not in item and "end" not in item:
+            regions.append(FeatureRegionSelection(item["recordKey"], item["featureId"]))
+        elif "featureId" not in item and all(type(item.get(key)) is int for key in ("start", "end")):
+            regions.append(RegionSelection(item["recordKey"], item["start"], item["end"]))
+        else:
+            raise _protocol_error("A region needs a start and an end, or a feature ID.")
     return regions
 
 

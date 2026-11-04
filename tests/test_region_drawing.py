@@ -488,3 +488,69 @@ def test_the_web_helper_draws_two_records_in_one_linear_drawing(tmp_path: Path) 
 def test_the_web_helper_refuses_an_origin_crossing_region(tmp_path: Path) -> None:
     reply = _web_region(_mito_circular(), [{"recordKey": "mito", "start": 16000, "end": 200}], tmp_path)[2]
     assert reply == {"status": "refused", "reason": "ORIGIN_CROSSING", "recordKey": "mito", "start": 16000, "end": 200}
+
+
+def _origin_record(tmp_path: Path) -> Path:
+    """A 1000 bp circular record with a CDS at 101..400 and a CDS across the origin."""
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
+    from Bio.SeqRecord import SeqRecord
+
+    record = SeqRecord(Seq("ACGT" * 250), id="orig", name="orig", description="origin test")
+    record.annotations.update({"molecule_type": "DNA", "topology": "circular"})
+    record.features = [
+        SeqFeature(FeatureLocation(100, 400, strand=1), type="CDS", qualifiers={"locus_tag": ["inside"]}),
+        SeqFeature(
+            CompoundLocation([FeatureLocation(900, 1000, strand=1), FeatureLocation(0, 50, strand=1)]),
+            type="CDS", qualifiers={"locus_tag": ["across"]},
+        ),
+    ]
+    path = tmp_path / "origin.gb"
+    SeqIO.write(record, path, "genbank")
+    return path
+
+
+def _feature_id(request: DiagramRequest, locus_tag: str) -> str:
+    catalog = resolve_request_records(request).provenance[0].source_feature_catalog
+    return next(
+        feature.biological_feature_id for feature in catalog
+        if dict(feature.qualifiers).get("locus_tag") == (locus_tag,)
+    )
+
+
+def test_a_feature_region_is_the_span_of_its_location(tmp_path: Path) -> None:
+    from gbdraw.api.region_drawing import FeatureRegionSelection
+
+    source = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_origin_record(tmp_path)), record_key="o")])
+    by_feature = derive_region_request(source, [FeatureRegionSelection("o", _feature_id(source, "inside"))])
+    by_coordinates = derive_region_request(source, [RegionSelection("o", 101, 400)])
+    assert by_feature == by_coordinates
+    assert by_feature.mode == "linear"
+
+
+def test_a_feature_across_the_origin_is_refused(tmp_path: Path) -> None:
+    from gbdraw.api.region_drawing import FeatureRegionSelection, OriginCrossingRegion
+
+    source = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_origin_record(tmp_path)), record_key="o")])
+    with pytest.raises(OriginCrossingRegion) as refusal:
+        derive_region_request(source, [FeatureRegionSelection("o", _feature_id(source, "across"))])
+    assert (refusal.value.record_key, refusal.value.start, refusal.value.end) == ("o", 901, 50)
+
+
+def test_an_unknown_feature_is_refused(tmp_path: Path) -> None:
+    from gbdraw.api.region_drawing import FeatureRegionSelection
+
+    source = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_origin_record(tmp_path)), record_key="o")])
+    with pytest.raises(ValidationError, match="no feature 'missing'"):
+        derive_region_request(source, [FeatureRegionSelection("o", "missing")])
+
+
+def test_the_web_helper_takes_a_feature_region(tmp_path: Path) -> None:
+    source = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_origin_record(tmp_path)), record_key="o")])
+    inside, across = _feature_id(source, "inside"), _feature_id(source, "across")
+    reply = _web_region(source, [{"recordKey": "o", "featureId": inside}], tmp_path)[2]
+    assert reply["status"] == "derived"
+    assert reply["renderRequest"]["records"][0]["region"]["start"] == 101
+    refused = _web_region(source, [{"recordKey": "o", "featureId": across}], tmp_path)[2]
+    assert refused == {"status": "refused", "reason": "ORIGIN_CROSSING", "recordKey": "o", "start": 901, "end": 50}

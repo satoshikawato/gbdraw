@@ -16,6 +16,7 @@ from dataclasses import dataclass, fields, replace
 from numbers import Real
 from typing import Any, Literal, cast
 
+from gbdraw.analysis.origin_arcs import location_origin_arc
 from gbdraw.annotations.models import (
     AnnotationOptions,
     CoordinateSpan,
@@ -91,6 +92,23 @@ class RegionSelection:
     record_key: str
     start: int
     end: int
+
+
+@dataclass(frozen=True)
+class FeatureRegionSelection:
+    """The span of one feature of a record of the source drawing.
+
+    ``feature_id`` is the feature's biological feature ID in the source
+    drawing's feature catalog; the region runs from the first to the last base
+    of its location, in source coordinates. A feature across the origin is
+    refused as an origin-crossing region.
+    """
+
+    record_key: str
+    feature_id: str
+
+
+RegionChoice = RegionSelection | FeatureRegionSelection
 
 
 NotCarriedKind = Literal[
@@ -199,7 +217,7 @@ class _Region:
 
 def derive_region_drawing(
     materialized: MaterializedSession,
-    regions: Sequence[RegionSelection],
+    regions: Sequence[RegionChoice],
     *,
     drawing: str | None = None,
     mode: DrawingMode | None = None,
@@ -239,7 +257,7 @@ def derive_region_drawing(
 
 def derive_region_request(
     source: DiagramRequest,
-    regions: Sequence[RegionSelection],
+    regions: Sequence[RegionChoice],
     *,
     mode: DrawingMode | None = None,
     margin: int = 0,
@@ -357,7 +375,7 @@ def derive_region_request(
 
 def _resolve_regions(
     collection: ResolvedRecordCollection,
-    selections: Sequence[RegionSelection],
+    selections: Sequence[RegionChoice],
     *,
     margin: int,
 ) -> tuple[_Region, ...]:
@@ -383,7 +401,7 @@ def _resolve_regions(
                 f"Record {selection.record_key!r} has more than one region.", diagnostic={"code": "INPUT_INVALID"}
             )
         length = int(item.source_length or len(collection.records[item.resolved_index]))
-        start, end = selection.start, selection.end
+        start, end = _selected_span(selection, item, length)
         if start > end:
             raise OriginCrossingRegion(selection.record_key, start, end)
         if start < 1 or end > length:
@@ -395,6 +413,23 @@ def _resolve_regions(
         resolved[item.record_key] = (item, start, end, (start, end) == (1, length))
     ordered = sorted(resolved.values(), key=lambda value: value[0].resolved_index)
     return tuple(_Region(item, index, start, end, whole) for index, (item, start, end, whole) in enumerate(ordered))
+
+
+def _selected_span(selection: RegionChoice, item: ResolvedRecordProvenance, length: int) -> tuple[int, int]:
+    """A selection's 1-based inclusive span; an origin-crossing feature spans its arc (start after end)."""
+    if isinstance(selection, RegionSelection):
+        return selection.start, selection.end
+    for feature in item.source_feature_catalog:
+        if feature.biological_feature_id == selection.feature_id:
+            parts = feature.location_parts
+            arc = location_origin_arc(parts, length)
+            if arc is not None:
+                return arc[0] + 1, arc[1]
+            return min(part[0] for part in parts) + 1, max(part[1] for part in parts)
+    raise ValidationError(
+        f"Record {selection.record_key!r} has no feature {selection.feature_id!r}.",
+        diagnostic={"code": "INPUT_INVALID"},
+    )
 
 
 def _record_input(
