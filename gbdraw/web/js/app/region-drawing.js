@@ -3,6 +3,7 @@ import { diagnosticError, normalizeUserFacingError, reasonText } from '../utils/
 import { errorText } from '../utils/error-text.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { reactive } from '../utils/reactivity.js';
+import { formatGroupedNumber } from '../services/record-options.js';
 import { drawnRecordIdentities } from '../services/record-draw-selection.js';
 
 /** @import { DrawingId } from '../services/drawing-view.js' */
@@ -168,8 +169,11 @@ const notCarriedLine = (mode, kind) => {
   return tm(typeof text === 'string' ? text : text[mode]);
 };
 
-/** @param {unknown} value */
-const shownValue = (value) => (value === null || value === undefined ? t('Auto') : String(value));
+/** A returned size's value: Auto, or a number grouped as the row's length is. @param {unknown} value */
+const shownValue = (value) => {
+  if (value === null || value === undefined) return t('Auto');
+  return typeof value === 'number' ? formatGroupedNumber(value) : String(value);
+};
 
 /** @param {string} text @returns {number | null} */
 const wholeNumber = (text) => (/^\s*[1-9]\d*\s*$/.test(text) ? Number(text) : null);

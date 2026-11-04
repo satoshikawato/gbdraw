@@ -12,7 +12,8 @@ const RECORDS = [
 const sent = { envelope: { renderRequest: { mode: 'circular', records: [] }, resources: {} }, filesByResource: new Map() };
 const derivedReply = (adaptSizes) => ({
   status: 'derived', mode: 'linear', renderRequest: { mode: 'linear' }, resourceSources: {},
-  returnedToAuto: adaptSizes ? [{ setting: 'objects.scale.interval', explicit: 500, auto: 100 }] : [],
+  returnedToAuto: adaptSizes ? [{ setting: 'objects.scale.interval', explicit: 25000, auto: 1000 },
+    { setting: 'objects.features.block_stroke_width', explicit: 1234.5678, auto: null }] : [],
   notCarried: [{ kind: 'OTHER_MODE_SETTINGS', count: 0, items: ['canvas.circular.track_type'] }, { kind: 'COMPARISON_TABLES', count: 1, items: [] }]
 });
 
@@ -60,7 +61,11 @@ test('a derived reply shows the returned sizes and the not-carried lines; Keep m
   assert.deepEqual(calls.derive.at(-1).regions, [{ recordKey: 'record-1', start: 101, end: 400 }]);
   assert.equal(calls.derive.at(-1).adaptSizes, true);
   assert.equal(owner.dialog.status, 'derived');
-  assert.deepEqual(owner.dialog.returnedToAuto, [{ setting: 'objects.scale.interval', label: 'Linear ruler interval', explicit: '500', auto: '100' }]);
+  // Values are grouped as the row's length is ("280,452 bp"), with every digit kept.
+  assert.deepEqual(owner.dialog.returnedToAuto, [
+    { setting: 'objects.scale.interval', label: 'Linear ruler interval', explicit: '25,000', auto: '1,000' },
+    { setting: 'objects.features.block_stroke_width', label: 'Block Stroke Width', explicit: '1,234.5678', auto: 'Auto' }
+  ]);
   // The other mode's settings are named by the mode they apply to (the new drawing is Linear).
   assert.deepEqual(owner.dialog.notCarried, ['Settings that apply only to Circular drawings', 'The uploaded comparison tables']);
   owner.dialog.keepValues = true;
