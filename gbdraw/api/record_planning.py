@@ -2114,6 +2114,8 @@ def decide_linear_wrap(
             similarity_alignment=similarity_alignment,
         ),
         anchor_feature=decided.anchor_feature is not None,
+        records=records,
+        translations=layout.record_translations if layout is not None else (),
     )
     return decided
 

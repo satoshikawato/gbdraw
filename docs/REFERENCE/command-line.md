@@ -191,8 +191,12 @@ record in the same figure stays one row at the same scale.
 When a record is cut, `--track_layout` defaults to `above`, `--scale_style` to
 `ruler`, and the ruler stands on each row's axis. `--track_layout middle`, a
 feature slot with `side=overlay`, `--scale_style bar`, `--normalize_length`,
-comparison inputs, and several records in one `--multi_record_position` row are
-refused, comparison inputs before any search runs. A wrapped figure can pass the
+comparison inputs, several records in one `--multi_record_position` row, and
+`--anchor_feature` are refused, comparison inputs before any search runs. So is
+a cut record moved sideways by a stored position with an x other than 0 (a
+Session's `layout.recordTranslations` read by `--session`, or
+`LinearMultiRecordOptions.record_translations` in Python), whatever wrote it:
+one x cannot place a record's several rows. A wrapped figure can pass the
 [PNG and PDF size limits](output-formats-and-export.md#png-and-pdf-size-limits).
 
 <!-- executable:H-CLI-15:start -->

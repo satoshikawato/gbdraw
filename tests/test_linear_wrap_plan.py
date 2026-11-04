@@ -15,7 +15,12 @@ import pytest
 from gbdraw.api import plan_request, render_request
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import build_linear_diagram_result
-from gbdraw.api.options import LinearDiagramOptions, LinearMultiRecordOptions, LosatSearchOptions
+from gbdraw.api.options import (
+    LinearDiagramOptions,
+    LinearMultiRecordOptions,
+    LinearRecordTranslation,
+    LosatSearchOptions,
+)
 from gbdraw.api.requests import (
     GenBankInputSource,
     LinearDiagramRequest,
@@ -365,6 +370,78 @@ def test_records_in_one_grid_row_are_not_refused_when_no_record_is_cut(tmp_path:
             config_overrides={WRAP: 100_000},
         )
     )
+
+
+def _moved(*translations: tuple[str, float, float]) -> LinearMultiRecordOptions:
+    return LinearMultiRecordOptions(
+        record_translations=tuple(LinearRecordTranslation(record_key=key, x=x, y=y) for key, x, y in translations)
+    )
+
+
+# PD-OI-113 scenario revision 2: one x cannot place a record cut into rows, whatever wrote it (Align at feature,
+# a Similarity alignment, --anchor_feature, the Python API).
+def test_a_cut_record_moved_sideways_is_refused(tmp_path: Path) -> None:
+    request = _request(tmp_path, layout=_moved(("r0", 40.0, 0.0)), config_overrides={WRAP: 10_000})
+    with pytest.raises(ValidationError, match="moved sideways") as caught:
+        render_request(request)
+    assert caught.value.diagnostic == {"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_RECORD_POSITION"}
+    assert not (tmp_path / "out.svg").exists()
+
+
+def test_the_builder_refuses_a_cut_record_moved_sideways() -> None:
+    record = SeqIO.read(LAMBDA, "genbank")
+    with pytest.raises(ValidationError, match="moved sideways") as caught:
+        build_linear_diagram_result(
+            [record], options=LinearDiagramOptions(config_overrides={WRAP: 10_000}), layout=_moved(("record-1", -62.8, 0.0))
+        )
+    assert caught.value.diagnostic["reason"] == "WRAP_RECORD_POSITION"
+
+
+def test_a_moved_record_is_drawn_when_nothing_is_cut(tmp_path: Path) -> None:
+    render_request(_request(tmp_path, layout=_moved(("r0", 40.0, 0.0)), config_overrides={WRAP: 100_000}))
+    assert "data-gbdraw-wrap-row" not in _rendered_svg(tmp_path)
+
+
+def test_a_cut_record_at_x_zero_is_drawn(tmp_path: Path) -> None:
+    render_request(_request(tmp_path, layout=_moved(("r0", 0.0, 0.0)), config_overrides={WRAP: 10_000}))
+    assert "data-gbdraw-wrap-row" in _rendered_svg(tmp_path)
+
+
+def test_only_a_cut_record_refuses_its_sideways_move(tmp_path: Path) -> None:
+    short = _short_record(tmp_path)
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(GenBankInputSource(str(LAMBDA)), record_key="cut"),
+            RecordInput(GenBankInputSource(str(short)), record_key="short"),
+        ),
+        options=LinearDiagramOptions(config_overrides={WRAP: 10_000}),
+        layout=_moved(("cut", 0.0, 0.0), ("short", 30.0, 0.0)),
+        output=RenderOutputRequest(output_prefix="out", output_directory=tmp_path, formats=("svg",)),
+    )
+    render_request(request)
+    assert "data-gbdraw-wrap-row" in _rendered_svg(tmp_path)
+
+
+def test_a_stored_session_with_a_cut_record_moved_sideways_is_refused_by_the_cli(tmp_path: Path) -> None:
+    saved = _cli("--wrap_length", "10kb", "--save_session", "-o", "out", cwd=tmp_path)
+    assert saved.returncode == 0, saved.stderr
+    session_path = tmp_path / "out.gbdraw-session.json"
+    session = _session(session_path)
+    request = drawing_view(session, mode="linear")["renderRequest"]
+    request["layout"] = {
+        "recordGapPx": 24.0, "multiRecordPositions": None, "similarityAlignment": None,
+        "recordTranslations": [{"recordKey": request["records"][0]["recordKey"], "x": 40.0, "y": 0.0}],
+    }
+    session_path.write_text(json.dumps(session), encoding="utf-8")
+    replay = subprocess.run(
+        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", session_path.name,
+         "-o", "replayed", "-f", "svg"],
+        cwd=tmp_path, capture_output=True, text=True, env={"PYTHONPATH": str(Path(__file__).parents[1]), "PATH": "/usr/bin:/bin"},
+    )
+    assert replay.returncode != 0
+    assert "moved sideways" in replay.stderr + replay.stdout
+    assert "Traceback" not in replay.stderr
+    assert not (tmp_path / "replayed.svg").exists()
 
 
 def test_the_builder_decides_as_the_plan_does() -> None:

@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from Bio import SeqIO
 import pytest
 
-from gbdraw.api.options import LinearDiagramOptions
+from gbdraw.api.options import LinearDiagramOptions, LinearRecordTranslation
 from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordInput, RenderOutputRequest
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
@@ -58,6 +59,10 @@ def _context(error: BaseException, operation: str = "generate") -> dict:
         (lambda: refuse_undrawable_wrap(
             _config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler"}), [0], (), anchor_feature=True),
          "INPUT_INVALID", "WRAP_ANCHOR_FEATURE"),
+        (lambda: refuse_undrawable_wrap(
+            _config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler", WRAP: 10_000}), [0], (),
+            records=[SeqIO.read(LAMBDA, "genbank")], translations=[LinearRecordTranslation(record_key="record-1", x=5.0)]),
+         "INPUT_INVALID", "WRAP_RECORD_POSITION"),
         (lambda: refuse_feature_track_on_the_axis("middle"), "INPUT_INVALID", "WRAP_TRACK_LAYOUT"),
     ],
 )

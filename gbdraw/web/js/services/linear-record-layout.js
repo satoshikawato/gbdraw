@@ -32,6 +32,15 @@ export const recordTranslationsFor = (stored, recordKeys) => recordKeys.flatMap(
 });
 
 /**
+ * Whether a stored translation moves its record sideways (x other than 0), whatever wrote it: Align at feature, a
+ * Similarity alignment, or a loaded Session (an anchored CLI figure, the Python API). One rule for every source
+ * (PD-OI-113 scenario revision 2); whether Wrap Rows cuts the record is Python's (`refuse_undrawable_wrap`).
+ * @param {readonly StoredRecordTranslation[]} stored
+ * @returns {boolean}
+ */
+export const movesARecordSideways = (stored) => stored.some((entry) => typeof entry?.x === 'number' && entry.x !== 0);
+
+/**
  * A row field that the Web fills from run-time identities, and that a reader
  * empties when its list arranges nothing: every entry holds exactly
  * `entryKeys`, and its `positionKey` is its 1-based position in the list

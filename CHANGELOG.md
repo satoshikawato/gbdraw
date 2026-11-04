@@ -31,7 +31,11 @@ write-up of a release.
 - Added: Web app: **Wrap Rows** in the Linear Layout card draws long records
   over several rows (Auto, or a length in bp, kbp, or Mbp), with the same rules
   as `--wrap_length`. A PNG over 32,767 px per side, or a wrapped figure's PDF
-  over 14,400 pt, is refused before a file is made.
+  over 14,400 pt, is refused before a file is made. While a record is moved
+  sideways (Align at feature, a Similarity alignment, or the record positions
+  of a loaded Session), Wrap Rows cannot be turned on. A Generate, `--session`,
+  or Python render that would cut a moved record is refused; it drew the
+  record's rows shifted by one x before.
 
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
 

@@ -133,8 +133,8 @@ export const createFeatureAnchorAction = ({
   const noticeState = ref({ text: '', written: [], session: -1 });
   // Align at feature holds while the records are where Apply put them, in the Session Apply wrote them to. Undo, a
   // drag that moves the translations (one under a Similarity alignment plan), or a Session Load retires it; a drag
-  // with no plan edits the composition, not the translations, so it does not. Its notice shows while it holds, and
-  // Wrap Rows reads it as Align at feature being present (PD-OI-113).
+  // with no plan edits the composition, not the translations, so it does not. Its notice shows while it holds.
+  // Wrap Rows reads the translations themselves, whatever wrote them (PD-OI-113 scenario revision 2).
   const applied = computed(() => {
     const { written, session } = noticeState.value;
     const drawn = recordTranslations();
@@ -235,5 +235,5 @@ export const createFeatureAnchorAction = ({
     return { status: String(outcome?.status || 'error') };
   };
 
-  return { selector, status, busy, preview, previewLines, error, notice, applied, resolve, apply, cancel };
+  return { selector, status, busy, preview, previewLines, error, notice, resolve, apply, cancel };
 };

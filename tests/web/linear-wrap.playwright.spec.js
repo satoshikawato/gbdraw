@@ -1,12 +1,13 @@
 // Wrap Rows (Linear Layout, PD-OI-113): turning it on switches the settings rows
 // decide in one History step, Auto shows the row length and rows Python chose,
-// comparisons and Align at feature keep it from being turned on, a feature cut
-// over rows stays one feature, Save and Load keep the length, and a PNG or a
+// comparisons and a record moved sideways keep it from being turned on (also in
+// a loaded Session, whose Generate then refuses and keeps the figure), a feature
+// cut over rows stays one feature, Save and Load keep the length, and a PNG or a
 // wrapped PDF over its size limit is refused before a file is made, also for a
 // loaded Result.
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
-const { copyFileSync, mkdirSync, readFileSync } = require('node:fs');
+const { copyFileSync, mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
@@ -22,7 +23,7 @@ const MITOGENOMES = [
 ];
 // The texts of the refusals the field's hint shares (REASONS in gbdraw/web/js/utils/error-normalization.js).
 const COMPARISONS_TEXT = 'A wrapped figure draws no comparisons.';
-const ANCHOR_TEXT = 'A wrapped record cannot be aligned at a feature. Undo Align at feature, or turn Wrap Rows off.';
+const MOVED_TEXT = 'A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, --anchor_feature, or the Python API). Undo the move, or turn Wrap Rows off.';
 
 const openLinear = async (page, files) => {
   await openFresh(page);
@@ -111,14 +112,14 @@ test('turning Wrap Rows on switches the settings rows decide, one Undo restores 
   expect(await wrapState(page)).toMatchObject({ wrap: null, layout: 'above', scale: 'ruler', normalize: false, rulerOnAxis: true, middleDisabled: false });
 });
 
-test('comparisons and Align at feature keep Wrap Rows from being turned on and name what to remove', async ({ page }) => {
+test('comparisons and a record moved by Align at feature keep Wrap Rows from being turned on and name what to remove', async ({ page }) => {
   test.setTimeout(480_000);
   await openLinear(page, MITOGENOMES);
   await generateAndWaitForResult(page);
   await settle(page);
   await expect(wrapBox(page)).toBeEnabled();
 
-  // Align at feature writes the record positions; while they hold, rows cannot draw them.
+  // Align at feature moves NC_002333.2 sideways; while a record is moved, rows cannot draw it.
   const selector = page.getByLabel('Align at feature', { exact: true });
   await selector.evaluate((element) => {
     for (let details = element.closest('details'); details; details = details.parentElement?.closest('details')) details.open = true;
@@ -130,7 +131,7 @@ test('comparisons and Align at feature keep Wrap Rows from being turned on and n
   await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveText('Records aligned at gene=COX1.', { timeout: 180_000 });
   await settle(page);
   await expect(wrapBox(page)).toBeDisabled();
-  await expect(page.locator('#linear-wrap-blocked')).toHaveText(ANCHOR_TEXT);
+  await expect(page.locator('#linear-wrap-blocked')).toHaveText(MOVED_TEXT);
   await undo(page);
   await expect(wrapBox(page)).toBeEnabled();
   await expect(page.locator('#linear-wrap-blocked')).toHaveCount(0);
@@ -140,6 +141,46 @@ test('comparisons and Align at feature keep Wrap Rows from being turned on and n
   await settle(page);
   await expect(wrapBox(page)).toBeDisabled();
   await expect(page.locator('#linear-wrap-blocked')).toContainText(COMPARISONS_TEXT);
+});
+
+// PD-OI-113 scenario revision 2: a record's place is read alike whatever wrote it. A Session holding a wrap length
+// and a record moved sideways (as a Python API Session can; made here from a CLI Session with one translation
+// written in) keeps its figure on Load. The field cannot be changed but can be turned off, and a Generate that would
+// cut the moved record is refused with the hint's words and keeps the figure.
+test('a loaded Session with a record moved sideways blocks Wrap Rows, and its Generate refuses and keeps the figure', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const directory = testInfo.outputPath('moved');
+  mkdirSync(directory, { recursive: true });
+  copyFileSync(LAMBDA, path.join(directory, 'NC_001416.gb'));
+  const session = path.join(directory, 'moved.gbdraw-session.json');
+  execFileSync(process.env.PYTHON || 'python', [
+    '-m', 'gbdraw.cli', 'linear', '--gbk', 'NC_001416.gb', '--wrap_length', '5000', '-o', 'lambda',
+    '--save_session', '--session_output', session
+  ], { cwd: directory, stdio: 'pipe', env: { ...process.env, PYTHONPATH: root } });
+  const document = JSON.parse(readFileSync(session, 'utf8'));
+  const request = document.drawings[0].renderRequest;
+  // The record 40 px to the right, as `LinearRecordTranslation(record_key, x=40)` stores it.
+  request.layout = { recordGapPx: 24, multiRecordPositions: null, similarityAlignment: null,
+    recordTranslations: [{ recordKey: request.records[0].recordKey, x: 40, y: 0 }] };
+  writeFileSync(session, JSON.stringify(document));
+
+  await openFresh(page);
+  await loadSessionFile(page, session);
+  expect(await wrapState(page)).toMatchObject({ wrap: 5000, amount: '5', unit: 'kbp', blocked: MOVED_TEXT });
+  await expect(page.locator('#linear-wrap-length')).toBeDisabled();
+  const shown = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
+  expect(shown).toContain('data-gbdraw-wrap-row');
+
+  const outcome = await generateAndWaitForResult(page, { expectedStatus: 'error' });
+  expect(outcome.errorSummary).toContain(MOVED_TEXT);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content), 'the figure is kept').toBe(shown);
+
+  // The way out the hint names: Wrap Rows turns off while blocked, and then cannot be turned on again.
+  await expect(wrapBox(page)).toBeEnabled();
+  await wrapBox(page).uncheck();
+  await settle(page);
+  expect(await wrapState(page)).toMatchObject({ wrap: null, blocked: MOVED_TEXT });
+  await expect(wrapBox(page)).toBeDisabled();
 });
 
 test('a feature cut over rows opens one popup from any fragment and highlights every fragment', async ({ page }) => {

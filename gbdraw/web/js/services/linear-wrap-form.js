@@ -105,18 +105,18 @@ export const linearWrapFormPatch = (form, value) => (value === null
  * @typedef {object} LinearWrapBlockerInputs
  * @property {boolean} comparisons BLAST, comparison pairs, LOSAT, Similarity groups or a Similarity alignment.
  * @property {boolean} sharedRecordRow Record Layout puts several records in one row.
- * @property {boolean} featureAlignment Records where Align at feature put them.
+ * @property {boolean} movedRecords A record moved sideways (`movesARecordSideways`), whatever moved it.
  * @property {boolean} featureTrackOnAxis Custom Track Slots put the feature track on the axis (side overlay).
  */
 /**
  * Python's refusal reason for each (gbdraw/layout/linear_wrap.py), so the field's hint and the Generate refusal
  * show one text (`reasonText`).
- * @typedef {'WRAP' | 'WRAP_GRID_ROW' | 'WRAP_ANCHOR_FEATURE' | 'WRAP_TRACK_LAYOUT'} LinearWrapBlocker
+ * @typedef {'WRAP' | 'WRAP_GRID_ROW' | 'WRAP_RECORD_POSITION' | 'WRAP_TRACK_LAYOUT'} LinearWrapBlocker
  */
 /** @type {ReadonlyArray<[keyof LinearWrapBlockerInputs, LinearWrapBlocker]>} */
 const BLOCKERS = Object.freeze([
   ['comparisons', 'WRAP'], ['sharedRecordRow', 'WRAP_GRID_ROW'],
-  ['featureAlignment', 'WRAP_ANCHOR_FEATURE'], ['featureTrackOnAxis', 'WRAP_TRACK_LAYOUT']
+  ['movedRecords', 'WRAP_RECORD_POSITION'], ['featureTrackOnAxis', 'WRAP_TRACK_LAYOUT']
 ]);
 /**
  * What keeps Wrap Rows from being turned on or its length changed. Turning it off is never blocked, so a Session

@@ -246,6 +246,7 @@ import {
   linearRecordLayoutHasSharedRow,
   linearRecordPositionTokens,
   moveLinearRecordInRow,
+  movesARecordSideways,
   planLinearSourceRowMove,
   reconcileLinearRecordLayout,
   setLinearRecordRow as updateLinearRecordRow
@@ -5488,7 +5489,8 @@ export const createAppSetup = () => {
     sessionReplacements: () => sessionReplacements.value
   });
   // Wrap Rows (PD-OI-113): its blockers read the owners the request reads. A Similarity alignment is a
-  // comparison input to Python's refusal; Align at feature is the positions its Apply wrote, while they hold.
+  // comparison input to Python's refusal; a record moved sideways is read from the stored record translations,
+  // whatever wrote them (Align at feature, a Similarity alignment, a loaded Session), as Python reads them.
   const linearWrapField = createLinearWrapField({
     state,
     changeLayoutSetting: featureActions.placementActions.changeLayoutSetting,
@@ -5498,7 +5500,7 @@ export const createAppSetup = () => {
       return {
         comparisons: drawing.linearComparisonResolution.value.hasComparisonIntent || state.similarityAlignmentPlan.value !== null,
         sharedRecordRow: linearLabelHasSharedRow.value,
-        featureAlignment: featureAnchor.applied.value,
+        movedRecords: movesARecordSideways(state.linearRecordTranslations.value),
         featureTrackOnAxis: Boolean(drawing.adv.linear_track_slots_enabled)
           && effectiveLinearSlotPlacement(draftFeatureSlot({ mode: drawing.mode, form: drawing.form, adv: drawing.adv })) === 'overlay'
       };

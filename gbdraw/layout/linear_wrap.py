@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Protocol
 
 from Bio.SeqRecord import SeqRecord
 
@@ -17,6 +18,7 @@ from gbdraw.config.models.root import GbdrawConfig
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import VerticalBand
+from gbdraw.layout.linear_multi_record import stable_record_keys
 from gbdraw.layout.record_coordinates import RecordDisplayTransform, wrapped_row_count
 
 
@@ -185,17 +187,30 @@ def wrap_blocking_inputs(
     return tuple(name for name, value in given.items() if value is not None and value != () and value != [])
 
 
+class RecordTranslation(Protocol):
+    """A record's stored translation, as ``LinearMultiRecordOptions.record_translations`` holds it."""
+
+    @property
+    def record_key(self) -> str: ...
+
+    @property
+    def x(self) -> float: ...
+
+
 def refuse_undrawable_wrap(
     config: GbdrawConfig,
     rows_by_record: Sequence[int],
     blocking: Sequence[str],
     *,
     anchor_feature: bool = False,
+    records: Sequence[SeqRecord] = (),
+    translations: Sequence[RecordTranslation] = (),
 ) -> None:
     """Refuse what rows cannot draw. Called only when a record is cut: with nothing to cut, the option has no effect.
 
-    ``anchor_feature`` says the records are aligned at a feature, which one x per record cannot do once a record
-    spans several rows.
+    ``anchor_feature`` says the records are aligned at a feature, and ``translations`` are the stored translations
+    of ``records``, whatever wrote them (Align at feature, a Similarity alignment, an anchored figure's Session, the
+    Python API). One x per record cannot place a record that spans several rows, so a cut record must keep x 0.
     """
 
     if blocking:
@@ -231,6 +246,21 @@ def refuse_undrawable_wrap(
         raise ValidationError(
             "anchor_feature cannot align a record cut by wrap_length: the record's rows share one place.",
             diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_ANCHOR_FEATURE"},
+        )
+    moved_keys = {translation.record_key for translation in translations if translation.x != 0}
+    if not moved_keys:
+        return
+    row_length = resolve_wrap_length(config.canvas.linear.wrap_length, [len(record.seq) for record in records])
+    moved = [
+        str(record.id)
+        for record, key in zip(records, stable_record_keys(records), strict=True)
+        if key in moved_keys and row_length is not None and len(record.seq) > row_length
+    ]
+    if moved:
+        raise ValidationError(
+            f"wrap_length cannot cut a record moved sideways ({', '.join(moved)}): the record's rows share one x. "
+            "Set the record's x translation to 0, or do not wrap.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_RECORD_POSITION"},
         )
 
 
