@@ -19,8 +19,10 @@ import { drawnRecordIdentities } from '../services/record-draw-selection.js';
  * @property {(payload: RegionDrawingHelperPayload) => Promise<{ result?: unknown }>} deriveRegion
  *   Runs the Worker helper `deriveRegionDrawing`; the reply is read here.
  * @property {(sourceId: DrawingId, derivation: RegionDerivation) => Promise<DrawingListOutcome>} newDrawingFromRegion
- * @property {() => Promise<readonly RegionSourceRecord[]>} shownRecords The shown drawing's records, in drawing
- *   order (`regionSourceRecords`).
+ * @property {() => Promise<RecordIdentitySources | null>} readRecordSources The shown drawing's discovered record
+ *   lists, read first when a Load left them deferred; null without the record discovery owner.
+ * @property {(recordKey: string) => readonly RegionSourceFeature[] | null} resultFeatures A record's features in
+ *   the shown Result, or null without a Result that drew it.
  */
 
 /**
@@ -244,7 +246,7 @@ const readRegionDrawingReply = (result) => {
  * @param {RegionDrawingPorts} ports
  */
 export const createRegionDrawing = ({
-  shownDrawingId, projectShownRequest, deriveRegion, newDrawingFromRegion, shownRecords
+  shownDrawingId, projectShownRequest, deriveRegion, newDrawingFromRegion, readRecordSources, resultFeatures
 }) => {
   /**
    * @param {readonly RegionDrawingRegion[]} regions Source coordinates, 1-based and inclusive.
@@ -330,7 +332,10 @@ export const createRegionDrawing = ({
     showStatus('deriving', '');
     let records;
     try {
-      records = await shownRecords();
+      // The read writes the record list that the projection reads, so it finishes first (as for Generate).
+      const sources = await readRecordSources();
+      const sent = sources ? await projectShownRequest() : null;
+      records = sources && sent ? regionSourceRecords(sent.envelope.renderRequest.records, sources, resultFeatures) : [];
     } catch (error) {
       if (mine !== request) return;
       const normalized = normalizeUserFacingError(error);

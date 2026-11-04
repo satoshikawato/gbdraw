@@ -162,3 +162,22 @@ test('the region dialog reads a deferred Circular list without writing Record Or
   await app.refreshCircularRecordOrder();
   assert.deepEqual(circular.adv.multi_record_positions, [{ selector: '#1', row: 1 }], 'Reload Records applies the read');
 });
+
+// The region dialog's rows come from the record list the deferred read
+// writes: the read finishes before the shown request is projected, so a
+// Multi-Record Canvas projected after a Load offers every record, not only
+// the ones of the empty list the read starts from.
+test('the region dialog offers every record of a deferred Multi-Record Canvas', async () => {
+  app.selectDrawing('circular');
+  app.setCircularSourceFile('c_gb', genbank('m.gb', ['M1', 80], ['M2', 90]));
+  await settle();
+  assert.equal(circular.circularRecordDiscovery.status, 'ready');
+  circular.form.multi_record_canvas = true;
+  // The state a Session Load leaves: the list deferred for the current file.
+  circular.circularRecordDiscovery.status = 'deferred';
+  circular.circularRecordList.value = [];
+  await app.regionDrawings.open();
+  assert.deepEqual(app.regionDrawings.dialog.rows.map((row) => [row.caption, row.length]), [['M1', 80], ['M2', 90]]);
+  app.regionDrawings.close();
+  circular.form.multi_record_canvas = false;
+});

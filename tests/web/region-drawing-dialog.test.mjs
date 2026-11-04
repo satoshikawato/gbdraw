@@ -9,7 +9,21 @@ const RECORDS = [
   { recordKey: 'record-1', caption: 'NC_1', length: 1200, features: [{ featureId: 'f1', label: 'dnaA' }] },
   { recordKey: 'record-2', caption: 'NC_2', length: 900, features: null }
 ];
-const sent = { envelope: { renderRequest: { mode: 'circular', records: [] }, resources: {} }, filesByResource: new Map() };
+/** The shown drawing's request, discovered records and Result features that give `records`. */
+const recordPorts = (records) => {
+  const sources = { mode: 'circular', circular: records.map((record, index) => (
+    { sourceIndex: index, selector: `#${index + 1}`, recordId: record.caption, recordLength: record.length }
+  )) };
+  const requestRecords = records.map((record, index) => ({ recordKey: record.recordKey, selector: { kind: 'recordIndex', index } }));
+  const features = new Map(records.map((record) => [record.recordKey, record.features]));
+  const sent = { envelope: { renderRequest: { mode: 'circular', records: requestRecords }, resources: {} }, filesByResource: new Map() };
+  return {
+    projectShownRequest: async () => sent,
+    readRecordSources: async () => sources,
+    resultFeatures: (recordKey) => features.get(recordKey) ?? null
+  };
+};
+const { projectShownRequest, readRecordSources, resultFeatures } = recordPorts(RECORDS);
 const derivedReply = (adaptSizes) => ({
   status: 'derived', mode: 'linear', renderRequest: { mode: 'linear' }, resourceSources: {},
   returnedToAuto: adaptSizes ? [{ setting: 'objects.scale.interval', explicit: 25000, auto: 1000 },
@@ -23,7 +37,7 @@ const harness = ({ reply = null, refusal = 'ORIGIN_CROSSING' } = {}) => {
   const pending = [];
   const owner = createRegionDrawing({
     shownDrawingId: () => 'circular',
-    projectShownRequest: async () => sent,
+    projectShownRequest,
     deriveRegion: async (payload) => {
       calls.derive.push(payload);
       if (reply === 'hold') await new Promise((resolve) => pending.push(resolve));
@@ -37,7 +51,8 @@ const harness = ({ reply = null, refusal = 'ORIGIN_CROSSING' } = {}) => {
       calls.created.push({ sourceId, derivation });
       return { drawingId: 'linear' };
     },
-    shownRecords: async () => RECORDS
+    readRecordSources,
+    resultFeatures
   });
   return { owner, calls, pending };
 };
@@ -59,9 +74,9 @@ test('a feature can be chosen only in a record whose Result drew features; each 
   assert.deepEqual(owner.dialog.rows.map((row) => row.featureReason),
     ['', 'Generate the drawing to choose a feature.']);
   const ownerOfEmpty = createRegionDrawing({
-    shownDrawingId: () => 'circular', projectShownRequest: async () => sent, deriveRegion: async () => ({ result: derivedReply(false) }),
+    shownDrawingId: () => 'circular', deriveRegion: async () => ({ result: derivedReply(false) }),
     newDrawingFromRegion: async () => ({ drawingId: 'linear' }),
-    shownRecords: async () => [{ recordKey: 'record-1', caption: 'NC_1', length: 1200, features: [] }]
+    ...recordPorts([{ recordKey: 'record-1', caption: 'NC_1', length: 1200, features: [] }])
   });
   await ownerOfEmpty.open();
   assert.deepEqual(ownerOfEmpty.dialog.rows.map((row) => row.featureReason), ['This record has no features to choose.']);
@@ -157,10 +172,11 @@ test('a close while the records are read keeps the dialog closed', async () => {
   let release = () => {};
   const owner = createRegionDrawing({
     shownDrawingId: () => 'circular',
-    projectShownRequest: async () => sent,
+    projectShownRequest,
     deriveRegion: async () => ({ result: null }),
     newDrawingFromRegion: async () => ({ drawingId: 'linear' }),
-    shownRecords: () => new Promise((resolve) => { release = () => resolve(RECORDS); })
+    readRecordSources: () => new Promise((resolve) => { release = () => resolve(readRecordSources()); }),
+    resultFeatures
   });
   const opening = owner.open();
   assert.equal(owner.dialog.show, true);
@@ -213,4 +229,32 @@ test('a setting that a section names in the pane names its track or section in t
     'GC content/skew window', 'GC content/skew step', 'Depth Window', 'Depth Step', 'GC content tick font size',
     'Definition font size'
   ]);
+});
+
+// The read of a deferred list empties it and fills it when the discovery
+// returns; the rows come from the request projected after that read, so every
+// record of a Multi-Record Canvas is offered.
+test('the rows come from the request projected after the records are read', async () => {
+  const discovered = [{ sourceIndex: 0, selector: '#1', recordId: 'NC_1', recordLength: 1200 },
+    { sourceIndex: 1, selector: '#2', recordId: 'NC_2', recordLength: 900 }];
+  const list = [];
+  const owner = createRegionDrawing({
+    shownDrawingId: () => 'circular',
+    // The projection keys the records of the list as it is when projected.
+    projectShownRequest: async () => ({ envelope: { renderRequest: { mode: 'circular', records: list.map((entry) => (
+      { recordKey: `record-${entry.sourceIndex + 1}`, selector: { kind: 'recordIndex', index: entry.sourceIndex } }
+    )) }, resources: {} }, filesByResource: new Map() }),
+    deriveRegion: async () => ({ result: null }),
+    newDrawingFromRegion: async () => ({ drawingId: 'linear' }),
+    readRecordSources: async () => {
+      list.splice(0);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      list.push(...discovered);
+      return { mode: 'circular', circular: [...list] };
+    },
+    resultFeatures: () => null
+  });
+  await owner.open();
+  assert.deepEqual(owner.dialog.rows.map((row) => [row.recordKey, row.caption, row.length]),
+    [['record-1', 'NC_1', 1200], ['record-2', 'NC_2', 900]]);
 });

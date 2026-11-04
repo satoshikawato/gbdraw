@@ -66,7 +66,7 @@ import {
 } from './record-display/feature-record-rotation.js';
 import { createDrawingState, drawingHasEdits, state, sessionOperationAvailability } from '../state.js';
 import { createDrawingBar, createDrawingList, createInputReplacement, moveTabFocus } from './drawing-list.js';
-import { createRegionDrawing, regionSourceRecords } from './region-drawing.js';
+import { createRegionDrawing } from './region-drawing.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -7777,11 +7777,8 @@ export const createAppSetup = () => {
     deriveRegion: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING, { ...payload,
       resources: /** @type {GenerationPayload['resources']} */ (payload.resources) }),
     newDrawingFromRegion: drawingList.newDrawingFromRegion,
-    shownRecords: async () => {
-      const drawing = state.activeDrawing();
-      const [sent, sources] = await Promise.all([projectShownRequest(), readDrawingRecordIdentities(drawing)]);
-      return sources ? regionSourceRecords(sent.envelope.renderRequest.records, sources, shownResultFeatures) : [];
-    }
+    readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
+    resultFeatures: shownResultFeatures
   });
   return {
     hostedBuild: readHostedBuild(document),
