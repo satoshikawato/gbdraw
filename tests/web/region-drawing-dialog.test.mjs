@@ -343,3 +343,71 @@ test('a refusal is read for each reason Python names and for no other', async ()
     assert.equal(owner.dialog.status, refusal === 'NOT_A_REASON' ? 'error' : 'refused', refusal);
   }
 });
+
+// The dialog names a setting as the settings pane's control names it: each
+// setting ID is matched to the form field the pane control writes (never to
+// a caption), and the control's label key is read from index.html.
+const PANE_FIELD = Object.freeze({
+  'objects.features.block_stroke_width': 'adv.block_stroke_width',
+  'objects.features.line_stroke_width': 'adv.line_stroke_width',
+  'objects.legends.color_rect_size': 'adv.legend_box_size',
+  'objects.legends.font_size': 'adv.legend_font_size',
+  'labels.font_size': 'adv.label_font_size',
+  'labels.font_size.linear': 'adv.label_font_size',
+  'objects.axis.circular.stroke_width': 'adv.axis_stroke_width',
+  'objects.axis.linear.stroke_width': 'adv.axis_stroke_width',
+  'canvas.linear.default_cds_height': 'adv.feature_height',
+  'objects.scale.font_size': 'adv.scale_font_size',
+  'objects.scale.ruler_label_font_size': 'adv.ruler_label_font_size',
+  depth_window: 'adv.depth_window_size',
+  depth_step: 'adv.depth_step_size',
+  'circularSlot.features.width': 'adv.feature_width_circular',
+  'circularSlot.gc_content.width': 'adv.gc_content_width_circular',
+  'circularSlot.gc_skew.width': 'adv.gc_skew_width_circular',
+  'circularSlot.depth.width': 'adv.depth_width_circular',
+  'objects.scale.interval': 'adv.scale_interval',
+  'canvas.linear.default_gc_height': 'adv.gc_height',
+  'canvas.linear.depth_height': 'adv.depth_height',
+  'objects.depth.tick_font_size': 'track.config.tick_font_size'
+});
+// A pane control whose label is read with its section heading; the dialog's
+// flat list names the section too.
+const SECTION_NAMED = Object.freeze({
+  window: ['adv.window_size', 'Window'],
+  step: ['adv.step_size', 'Step'],
+  'objects.gc_content.tick_font_size': ['adv.gc_content_tick_font_size', 'Tick Font Size'],
+  'objects.definition.linear.font_size': ['adv.def_font_size', 'Default font size']
+});
+// No settings-pane control writes these.
+const NO_PANE_CONTROL = Object.freeze(['canvas.linear.arrow_length_parameter']);
+
+/** The label keys of the pane controls that write `field` (v-model or :value). */
+const paneLabelKeys = async (field) => {
+  const { readFileSync } = await import('node:fs');
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const tag = new RegExp(`<(?:input|select)\\b(?:[^>"]|"[^"]*")*?(?:v-model(?:\\.number)?="${escaped}"|:value="[^"]*\\b${escaped}\\b[^"]*")(?:[^>"]|"[^"]*")*>`, 'g');
+  return [...html.matchAll(tag)].map((match) => /:aria-label="[^"]*?t\('([^']*)'/.exec(match[0])?.[1] ?? null);
+};
+
+test('each setting is named by the label of the pane control that writes it', async () => {
+  const { adaptableSettingLabel } = await import('../../gbdraw/web/js/app/region-drawing.js');
+  const { MODE_PROFILE_DATA } = await import('../../gbdraw/web/js/mode-profiles.generated.js');
+  for (const [mode, settings] of Object.entries(MODE_PROFILE_DATA.autoSizes.adaptableSettings)) {
+    for (const setting of settings) {
+      const label = adaptableSettingLabel(/** @type {'circular' | 'linear'} */ (mode), setting);
+      if (Object.hasOwn(PANE_FIELD, setting)) {
+        const keys = await paneLabelKeys(PANE_FIELD[setting]);
+        assert.ok(keys.length > 0, `${setting}: no pane control writes ${PANE_FIELD[setting]}`);
+        assert.ok(keys.includes(label), `${mode} ${setting}: "${label}" is not the pane label (${keys.join(', ')})`);
+      } else if (Object.hasOwn(SECTION_NAMED, setting)) {
+        const [field, paneKey] = SECTION_NAMED[setting];
+        assert.deepEqual([...new Set(await paneLabelKeys(field))], [paneKey], `${setting}: the pane label changed`);
+        assert.notEqual(label, paneKey, `${setting}: the dialog needs the section in its name`);
+      } else {
+        assert.ok(NO_PANE_CONTROL.includes(setting), `${mode} ${setting} is in no group of this test`);
+        assert.deepEqual(await paneLabelKeys(`adv.${setting.split('.').at(-1)}`), []);
+      }
+    }
+  }
+});

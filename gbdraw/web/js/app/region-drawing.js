@@ -94,10 +94,12 @@ export const regionSourceRecords = (requestRecords, sources, featuresOf) => draw
 /**
  * The English name of each setting that can return to Auto, by setting ID
  * (`autoSizes.adaptableSettings` of `mode-profiles.generated.js`, from
- * `ADAPTABLE_SETTINGS` in `gbdraw/auto_sizes.py`): the text of the settings
- * pane's control for it, or a name of its own where no control sets it or
- * where the control's text needs its section to be read (Window, Tick Font
- * Size). A setting that each mode names differently has one text per mode.
+ * `ADAPTABLE_SETTINGS` in `gbdraw/auto_sizes.py`): the accessible-name key of
+ * the settings pane's control that writes it, or a name of its own where no
+ * control sets it or where the control's text needs its section to be read
+ * (Window, Tick Font Size). A setting that each mode names differently has one
+ * text per mode. A twin of the pane labels: region-drawing-dialog.test.mjs
+ * checks each against the control that writes the setting.
  * @type {Readonly<Record<string, string | Readonly<Record<DerivedRegionDrawing['mode'], string>>>>}
  */
 const ADAPTABLE_SETTING_TEXT = Object.freeze({
@@ -112,8 +114,8 @@ const ADAPTABLE_SETTING_TEXT = Object.freeze({
   'canvas.linear.arrow_length_parameter': msg('Linear arrow length'),
   'canvas.linear.default_cds_height': msg('Feature Height'),
   'objects.definition.linear.font_size': msg('Definition font size'),
-  'objects.scale.font_size': msg('Scale Font Size'),
-  'objects.scale.ruler_label_font_size': msg('Ruler Label Font Size'),
+  'objects.scale.font_size': msg('Linear scale font size'),
+  'objects.scale.ruler_label_font_size': msg('Linear ruler label font size'),
   window: msg('GC content/skew window'),
   step: msg('GC content/skew step'),
   depth_window: msg('Depth Window'),
