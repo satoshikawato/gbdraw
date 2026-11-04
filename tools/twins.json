@@ -212,6 +212,21 @@
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
+      "id": "vector:tests/fixtures/legend_row_edit_vectors.json",
+      "concern": "Legend row edits on the drawn rows (rename, deletion, order)",
+      "pythonOwner": [
+        "gbdraw/legend/table.py:apply_legend_row_edits"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/svg-result-ingestion.js:applyLegendOperations"
+      ],
+      "vector": "tests/fixtures/legend_row_edit_vectors.json",
+      "reason": "The Web shows a Legend rename, deletion, or order at once; Python draws the same edits for Generate, the CLI, and the figure-size fit. The vector pins Python's drawn rows to the executor's.",
+      "retireWhen": "a Legend edit is drawn only by Python through the Worker",
+      "source": "figure-size-1427 PR-D (issue #1427, Owner D-26 A; DESIGN-PR-D.md)",
+      "pending": true
+    },
+    {
       "id": "vector:tests/fixtures/legend_rule_keys.json",
       "concern": "Legend row keys of a Specific color rule (PD-OI-042 rev 2)",
       "pythonOwner": [
