@@ -9299,23 +9299,24 @@
                     </label>
                     <div v-if="row.checked" class="mt-1.5 flex flex-wrap items-end gap-2 pl-6">
                         <label class="text-[11px] font-semibold text-slate-600">{{ t('Region') }}
-                            <select data-history-ignore data-region-drawing-kind class="form-select mt-0.5 px-2 py-1 text-xs font-normal"
+                            <select data-history-ignore data-region-drawing-kind class="form-select mt-0.5 block px-2 py-1 text-xs font-normal"
                                     :value="row.kind" @change="row.kind = $event.target.value; regionDrawings.refresh()">
                                 <option value="whole">{{ t('Whole record') }}</option>
                                 <option value="coordinates">{{ t('Coordinates') }}</option>
                                 <option value="feature" :disabled="!row.features">{{ t('A feature') }}</option>
                             </select>
                         </label>
-                        <template v-if="row.kind === 'coordinates'">
+                        <!-- Start and End wrap as one unit: never an End alone on a line -->
+                        <div v-if="row.kind === 'coordinates'" class="flex items-end gap-2">
                             <label class="text-[11px] font-semibold text-slate-600">{{ t('Start') }}
-                                <input type="text" inputmode="numeric" data-history-ignore data-region-drawing-start class="form-input mt-0.5 w-24 px-2 py-1 text-xs font-normal"
+                                <input type="text" inputmode="numeric" data-history-ignore data-region-drawing-start class="form-input mt-0.5 block w-24 px-2 py-1 text-xs font-normal"
                                        :value="row.start" @input="row.start = $event.target.value; regionDrawings.refresh()">
                             </label>
                             <label class="text-[11px] font-semibold text-slate-600">{{ t('End') }}
-                                <input type="text" inputmode="numeric" data-history-ignore data-region-drawing-end class="form-input mt-0.5 w-24 px-2 py-1 text-xs font-normal"
+                                <input type="text" inputmode="numeric" data-history-ignore data-region-drawing-end class="form-input mt-0.5 block w-24 px-2 py-1 text-xs font-normal"
                                        :value="row.end" @input="row.end = $event.target.value; regionDrawings.refresh()">
                             </label>
-                        </template>
+                        </div>
                         <label v-if="row.kind === 'feature'" class="min-w-0 max-w-full text-[11px] font-semibold text-slate-600">{{ t('Feature') }}
                             <select data-history-ignore data-region-drawing-feature class="form-select mt-0.5 block w-full max-w-xs px-2 py-1 text-xs font-normal"
                                     :value="row.featureId" @change="row.featureId = $event.target.value; regionDrawings.refresh()">
