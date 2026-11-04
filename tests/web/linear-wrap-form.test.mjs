@@ -142,23 +142,34 @@ test('Wrap Rows is one edit of the layout transition: Cancel restores every fiel
 // PD-OI-113 scenario revision 2: one rule for every source of a record's place. The blocker reads the stored
 // translations (Align at feature, a Similarity alignment, a loaded CLI or Python Session alike); only x moves a
 // record sideways, and whether a record is cut is Python's (WRAP_RECORD_POSITION).
-test('a record moved sideways is any stored translation with an x other than 0, whatever wrote it', () => {
-  assert.equal(movesARecordSideways([]), false);
-  assert.equal(movesARecordSideways([{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 0, y: 12 }]), false,
+// The x test repeats Python's `translation.x != 0` (gbdraw/layout/linear_wrap.py `refuse_undrawable_wrap`): a twin with
+// no generator, held by these cases and tests/test_linear_wrap_plan.py's x 0 / x 40 pair.
+test('a drawn record moved sideways is a translation the request carries with an x other than 0, whatever wrote it', () => {
+  const drawn = [{ uid: 'record-1' }, { uid: 'record-2' }];
+  assert.equal(movesARecordSideways([], drawn), false);
+  assert.equal(movesARecordSideways([{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 0, y: 12 }], drawn), false,
     'zero entries (a LOSAT request) and a vertical move only');
-  assert.equal(movesARecordSideways([{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: -62.8, y: 0 }]), true,
+  assert.equal(movesARecordSideways([{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: -62.8, y: 0 }], drawn), true,
     'Align at feature on HmmtDNA and NC_002333.2');
-  assert.equal(movesARecordSideways([{ recordKey: 'cli-record-2', x: 15, y: 0 }]), true, 'a loaded --anchor_feature Session');
+  assert.equal(movesARecordSideways([{ recordKey: 'cli-record-1', x: 15, y: 0 }], [{ uid: 'cli-record-1' }]), true,
+    'a loaded --anchor_feature Session');
+  // Review 1 L1: the entry of a record no longer drawn (its File removed, the record turned off) is not read, as the
+  // request leaves it out (`recordTranslationsFor`), so it blocks nothing Python would draw.
+  assert.equal(movesARecordSideways([{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: -62.8, y: 0 }],
+    [{ uid: 'record-1' }]), false);
 });
 
 test('each blocker keeps Wrap Rows from turning on, in its Generate refusal\'s words; Simple-mode Middle is none (case 3)', () => {
-  const none = { comparisons: false, sharedRecordRow: false, movedRecords: false, featureTrackOnAxis: false };
+  const none = { comparisons: false, sharedRecordRow: false, featureAlignment: false, movedRecords: false, featureTrackOnAxis: false };
   assert.deepEqual(linearWrapBlockers(none), []);
   assert.deepEqual(linearWrapBlockers({ ...none, comparisons: true }), ['WRAP']);
   assert.deepEqual(linearWrapBlockers({ ...none, sharedRecordRow: true }), ['WRAP_GRID_ROW']);
   assert.deepEqual(linearWrapBlockers({ ...none, movedRecords: true }), ['WRAP_RECORD_POSITION']);
+  // Review 1 M1 (D-65): Align at feature blocks also when its Apply moved no record; with a move, one hint.
+  assert.deepEqual(linearWrapBlockers({ ...none, featureAlignment: true }), ['WRAP_RECORD_POSITION']);
+  assert.deepEqual(linearWrapBlockers({ ...none, featureAlignment: true, movedRecords: true }), ['WRAP_RECORD_POSITION']);
   assert.deepEqual(linearWrapBlockers({ ...none, featureTrackOnAxis: true }), ['WRAP_TRACK_LAYOUT']);
-  assert.deepEqual(linearWrapBlockers({ comparisons: true, sharedRecordRow: true, movedRecords: true, featureTrackOnAxis: true }),
+  assert.deepEqual(linearWrapBlockers({ comparisons: true, sharedRecordRow: true, featureAlignment: true, movedRecords: true, featureTrackOnAxis: true }),
     ['WRAP', 'WRAP_GRID_ROW', 'WRAP_RECORD_POSITION', 'WRAP_TRACK_LAYOUT']);
   // The feature slot the blocker reads is the one the placement targets read: in simple mode, Middle puts the
   // features on the axis, which turning wrap on switches (no blocker); a custom stack's overlay slot is one.
@@ -204,7 +215,7 @@ test('the length field writes bp from an amount and a unit, and shows a value fr
   const store = withDrawings(drawing);
   const watchers = [];
   const field = createLinearWrapField({ state: store, watch: (_source, callback) => watchers.push(callback), shownWrap: () => ({ kind: 'unknown' }),
-    blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, movedRecords: false, featureTrackOnAxis: false }),
+    blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, featureAlignment: false, movedRecords: false, featureTrackOnAxis: false }),
     changeLayoutSetting: (_event, _field, value) => { drawing.form.linear_wrap_length = value; } });
   const changed = () => watchers.forEach((callback) => callback());
   field.changeLinearWrap({ target: { value: '20' } }, 'amount');
@@ -265,7 +276,7 @@ test('the shown Result names its rows only when it drew this value over these re
   drawing.form.linear_wrap_length = 'auto';
   let reading = read({});
   const field = createLinearWrapField({ state: withDrawings(drawing), watch: () => {}, changeLayoutSetting: () => {},
-    shownWrap: () => reading, blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, movedRecords: false, featureTrackOnAxis: false }) });
+    shownWrap: () => reading, blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, featureAlignment: false, movedRecords: false, featureTrackOnAxis: false }) });
   assert.equal(field.linearWrapAutoText.value, '10 kbp per row, 5 rows (auto)');
   reading = { kind: 'one-row' };
   assert.equal(field.linearWrapAutoText.value, 'One row (auto)');
@@ -361,7 +372,7 @@ test('Normalize Record Lengths and Ruler on Axis are fixed only while they hold 
   const drawing = linearDrawing();
   const field = createLinearWrapField({ state: withDrawings(drawing), watch: () => {}, changeLayoutSetting: () => {},
     shownWrap: () => ({ kind: 'unknown' }),
-    blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, movedRecords: false, featureTrackOnAxis: false }) });
+    blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, featureAlignment: false, movedRecords: false, featureTrackOnAxis: false }) });
   const fixed = () => [field.linearWrapFixesNormalize.value, field.linearWrapFixesRulerOnAxis.value];
   drawing.form.linear_wrap_length = null;
   drawing.form.normalize_length = false;

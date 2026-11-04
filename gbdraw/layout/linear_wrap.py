@@ -58,6 +58,12 @@ def resolve_wrap_length(requested: LinearWrapLength, record_lengths: Sequence[in
     return length if length is not None and longest > length else None
 
 
+def is_cut(record_length: int, row_length: int) -> bool:
+    """Whether a row of ``row_length`` cuts a record of ``record_length``: the one per-record test."""
+
+    return record_length > row_length
+
+
 def _length_words(length: int) -> str:
     """A row length for a person: ``10 kb``, ``1.5 Mb``, ``800 bp``."""
 
@@ -145,7 +151,7 @@ def resolve_wrap(
         return transforms, None
     bound = transforms if transforms is not None else [_unset_transform(record) for record in records]
     wrapped = tuple(
-        transform.with_wrap(row_length, length) if length > row_length else transform
+        transform.with_wrap(row_length, length) if is_cut(length, row_length) else transform
         for transform, length in zip(bound, lengths, strict=True)
     )
     return wrapped, LinearWrapSummary(row_length, requested, tuple(lengths))
@@ -203,6 +209,7 @@ def refuse_undrawable_wrap(
     blocking: Sequence[str],
     *,
     anchor_feature: bool = False,
+    row_length: int | None = None,
     records: Sequence[SeqRecord] = (),
     translations: Sequence[RecordTranslation] = (),
 ) -> None:
@@ -211,6 +218,7 @@ def refuse_undrawable_wrap(
     ``anchor_feature`` says the records are aligned at a feature, and ``translations`` are the stored translations
     of ``records``, whatever wrote them (Align at feature, a Similarity alignment, an anchored figure's Session, the
     Python API). One x per record cannot place a record that spans several rows, so a cut record must keep x 0.
+    ``row_length`` is the length the caller resolved (``resolve_wrap_length``) and cuts at.
     """
 
     if blocking:
@@ -248,13 +256,12 @@ def refuse_undrawable_wrap(
             diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_ANCHOR_FEATURE"},
         )
     moved_keys = {translation.record_key for translation in translations if translation.x != 0}
-    if not moved_keys:
+    if not moved_keys or row_length is None:
         return
-    row_length = resolve_wrap_length(config.canvas.linear.wrap_length, [len(record.seq) for record in records])
     moved = [
         str(record.id)
         for record, key in zip(records, stable_record_keys(records), strict=True)
-        if key in moved_keys and row_length is not None and len(record.seq) > row_length
+        if key in moved_keys and is_cut(len(record.seq), row_length)
     ]
     if moved:
         raise ValidationError(
@@ -282,6 +289,7 @@ __all__ = [
     "AUTO_WRAP_MAX_ROWS",
     "LinearWrapSummary",
     "auto_wrap_length",
+    "is_cut",
     "drawn_axis_length",
     "longer_row_lengths",
     "refuse_feature_track_on_the_axis",

@@ -95,6 +95,7 @@ import {
 } from './linear-sources.js';
 import {
   linearRecordLayoutHasSharedRow,
+  linearSeqRecordKey,
   recordTranslationsFor,
   resolveEffectiveLinearRecordRows
 } from './linear-record-layout.js';
@@ -1362,12 +1363,6 @@ const circularPresentationPayload = (form, { hasRegion = false } = {}) => ({
   ...circularRecordLabels(form)
 });
 
-/**
- * The record key Generate gives a Linear card (`buildRecords`); a card that
- * draws several records splits into its `expandedRecordKey` members.
- * @param {{ uid?: unknown }} seq @param {number} index
- */
-const linearSeqRecordKey = (seq, index) => String(seq.uid || `record-${index + 1}`);
 /** The label a Linear card's records draw. @param {RequestLinearSeq} seq */
 const linearRecordLabel = (seq) => presentationPayload({ label: resolveLinearRecordEffectiveDefinition(seq) }).label;
 /**

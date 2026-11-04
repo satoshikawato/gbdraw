@@ -61,7 +61,8 @@ def _context(error: BaseException, operation: str = "generate") -> dict:
          "INPUT_INVALID", "WRAP_ANCHOR_FEATURE"),
         (lambda: refuse_undrawable_wrap(
             _config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler", WRAP: 10_000}), [0], (),
-            records=[SeqIO.read(LAMBDA, "genbank")], translations=[LinearRecordTranslation(record_key="record-1", x=5.0)]),
+            row_length=10_000, records=[SeqIO.read(LAMBDA, "genbank")],
+            translations=[LinearRecordTranslation(record_key="record-1", x=5.0)]),
          "INPUT_INVALID", "WRAP_RECORD_POSITION"),
         (lambda: refuse_feature_track_on_the_axis("middle"), "INPUT_INVALID", "WRAP_TRACK_LAYOUT"),
     ],

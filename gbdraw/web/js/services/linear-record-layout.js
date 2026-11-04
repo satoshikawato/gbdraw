@@ -15,6 +15,13 @@
 /** @typedef {{ recordKey?: unknown, x?: unknown, y?: unknown } | null | undefined} StoredRecordTranslation A translation as the page holds it, before the request validates it. */
 
 /**
+ * The record key Generate gives a Linear card (`buildRecords` in session-request.js); a card that
+ * draws several records splits into its `expandedRecordKey` members.
+ * @param {{ uid?: unknown }} seq @param {number} index
+ */
+export const linearSeqRecordKey = (seq, index) => String(seq.uid || `record-${index + 1}`);
+
+/**
  * The stored translations of a set of records, in the records' order: each
  * record's stored entries as they are, or one at (0, 0) for a record that has
  * none. An entry of a record outside the set is left out, so a request carries
@@ -32,13 +39,18 @@ export const recordTranslationsFor = (stored, recordKeys) => recordKeys.flatMap(
 });
 
 /**
- * Whether a stored translation moves its record sideways (x other than 0), whatever wrote it: Align at feature, a
- * Similarity alignment, or a loaded Session (an anchored CLI figure, the Python API). One rule for every source
- * (PD-OI-113 scenario revision 2); whether Wrap Rows cuts the record is Python's (`refuse_undrawable_wrap`).
+ * Whether a drawn record's stored translation moves it sideways (x other than 0), whatever wrote it: Align at
+ * feature, a Similarity alignment, or a loaded Session (an anchored CLI figure, the Python API). One rule for every
+ * source (PD-OI-113 scenario revision 2); whether Wrap Rows cuts the record is Python's (`refuse_undrawable_wrap`,
+ * whose `x != 0` this repeats: a twin with no generator, held by tests/web/linear-wrap-form.test.mjs). It reads the
+ * translations the request carries (`recordTranslationsFor` by each drawn card's record key), so an entry of a
+ * record no longer drawn (its File removed, the record turned off) is not read.
  * @param {readonly StoredRecordTranslation[]} stored
+ * @param {readonly { uid?: unknown }[]} drawnSeqs The drawn Linear cards (`drawnLinearSeqs`).
  * @returns {boolean}
  */
-export const movesARecordSideways = (stored) => stored.some((entry) => typeof entry?.x === 'number' && entry.x !== 0);
+export const movesARecordSideways = (stored, drawnSeqs) => recordTranslationsFor(stored, drawnSeqs.map(linearSeqRecordKey))
+  .some((entry) => typeof entry?.x === 'number' && entry.x !== 0);
 
 /**
  * A row field that the Web fills from run-time identities, and that a reader

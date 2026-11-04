@@ -95,40 +95,42 @@ test('Apply over an active Similarity alignment writes the translations without 
   assert.equal(action.notice.value, '');
 });
 
-test('the notice holds while the records keep the positions Apply wrote', async () => {
+test('applied holds while the records keep the positions Apply wrote, which Wrap Rows reads as Align at feature', async () => {
   const { page, action } = fixture();
-  assert.equal(action.notice.value, '', 'nothing applied yet');
+  assert.equal(action.applied.value, false, 'nothing applied yet');
   action.selector.value = 'gene=COX1';
   await action.resolve();
-  assert.equal(action.notice.value, '', 'a preview moves nothing');
+  assert.equal(action.applied.value, false, 'a preview moves nothing');
   await action.apply();
-  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
+  assert.equal(action.applied.value, true);
   // Undo puts other positions back: Align at feature no longer holds.
   page.drawn = [{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 12, y: 3 }];
+  assert.equal(action.applied.value, false);
   assert.equal(action.notice.value, '');
 });
 
 // Review 3 F4 (D-54): a Session Load replaces the document. A Session that holds the positions Apply wrote (the one
 // saved after Apply, loaded again in the same page) is the same Session as in a fresh page, where Align at feature
-// is not known: the notice does not come back.
+// is not known: Wrap Rows stays enabled and the notice does not come back.
 test('a Session Load retires Align at feature even when the loaded positions are the ones Apply wrote', async () => {
   const { page, action } = fixture();
   action.selector.value = 'gene=COX1';
   await action.resolve();
   await action.apply();
-  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
+  assert.equal(action.applied.value, true);
   const written = page.drawn.map((entry) => ({ ...entry }));
   // Load another Session, then the saved one: the drawn positions are those Apply wrote.
   page.drawn = [];
   page.sessions.value += 1;
   page.drawn = written;
   page.sessions.value += 1;
+  assert.equal(action.applied.value, false);
   assert.equal(action.notice.value, '');
   // A new Apply in the loaded Session holds again.
   page.committed = committedSession();
   await action.resolve();
   await action.apply();
-  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
+  assert.equal(action.applied.value, true);
 });
 
 test('Apply without an active plan clears nothing', async () => {

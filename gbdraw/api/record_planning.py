@@ -2094,7 +2094,8 @@ def decide_linear_wrap(
     """
 
     defaults = options.wrap_defaults
-    if resolve_wrap_length(_requested_wrap_length(options), [len(record.seq) for record in records]) is None:
+    row_length = resolve_wrap_length(_requested_wrap_length(options), [len(record.seq) for record in records])
+    if row_length is None:
         if defaults is None:
             return options
         tracks = options.tracks if defaults.track_order is None else defaults.track_order.tracks(cut=False)
@@ -2114,6 +2115,7 @@ def decide_linear_wrap(
             similarity_alignment=similarity_alignment,
         ),
         anchor_feature=decided.anchor_feature is not None,
+        row_length=row_length,
         records=records,
         translations=layout.record_translations if layout is not None else (),
     )
