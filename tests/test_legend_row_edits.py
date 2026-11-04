@@ -135,6 +135,79 @@ def test_requests_without_the_leaves_draw_as_before(mode: str) -> None:
     assert "canvasPadding" not in _composition_metadata(plain)["spacing"]
 
 
+# --- every row hidden (D-36 A) ---
+
+# Every Legend row of HmmtDNA, by mode.
+ALL_ROWS = {
+    "circular": ["tRNA", "rRNA", "CDS", "GC content", "GC skew (+)", "GC skew (-)"],
+    "linear": ["tRNA", "rRNA", "CDS"],
+}
+
+
+def _all_hidden(mode: str, **options) -> gbdraw.Diagram:
+    return _draw(mode, config_overrides={LEGEND_HIDDEN_ROWS_PATH: ALL_ROWS[mode]}, **options)
+
+
+def _drawn_facts(drawing) -> tuple[str, ...]:
+    from gbdraw.legend.row_facts import collect_legend_row_facts
+
+    return tuple(collect_legend_row_facts(drawing, result_index=0, result_name="r")["drawn"])
+
+
+def _primary_bounds(drawing):
+    return next(p.final_bounds for p in applied_composition_plan(drawing).placements if p.role == "primary")
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_legend_with_every_row_hidden_is_drawn_and_takes_no_room(mode: str) -> None:
+    """The Legend keeps its hidden rows and records, so the row facts are the rows the SVG holds; the canvas is
+    the canvas with no Legend."""
+
+    diagram = _all_hidden(mode)
+    svg = diagram.to_svg()
+    rows = _rows(svg)
+    assert rows and all(display == "none" for _key, display, _text in rows)
+    assert 'data-gbdraw-base-display=""' in svg
+    assert list(dict.fromkeys(key for key, _d, _t in rows)) == list(_drawn_facts(diagram._drawing))
+    assert set(_drawn_facts(diagram._drawing)) == set(ALL_ROWS[mode])
+    metadata = _composition_metadata(svg)
+    assert metadata["legend"]["localBounds"] == {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
+    assert metadata["legend"]["automaticTranslation"] == [0.0, 0.0]
+    no_legend = applied_composition_plan(_draw(mode, legend="none")._drawing)
+    plan = applied_composition_plan(diagram._drawing)
+    assert plan.canvas_bounds == no_legend.canvas_bounds
+    assert [p.role for p in plan.placements] == ["primary"]
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_sized_figure_gives_the_map_the_room_of_a_legend_with_every_row_hidden(mode: str) -> None:
+    size = {"figure_width": "250mm"} if mode == "linear" else {"figure_width": "180mm", "figure_height": "180mm"}
+    hidden = _primary_bounds(_all_hidden(mode, **size)._drawing)
+    shown = _primary_bounds(_draw(mode, **size)._drawing)
+    no_legend = _primary_bounds(_draw(mode, legend="none", **size)._drawing)
+    assert (hidden.width, hidden.height) == pytest.approx((no_legend.width, no_legend.height))
+    assert hidden.width > shown.width
+
+
+def test_a_multi_record_legend_with_every_row_hidden_is_drawn_and_takes_no_room() -> None:
+    from gbdraw.api.diagram import assemble_circular_diagram_from_records
+
+    records = _mito() + gbdraw.read_genbank(INPUTS / "MERS-CoV.gbk")
+    hidden = sorted({key for key, _d, _t in _rows(
+        assemble_circular_diagram_from_records(records, legend="right", cfg=apply_config_overrides(None, None))
+        .tostring())})
+
+    def draw(legend: str, overrides: dict[str, object] | None = None):
+        return assemble_circular_diagram_from_records(
+            records, legend=legend, cfg=apply_config_overrides(None, overrides))
+
+    drawing = draw("right", {LEGEND_HIDDEN_ROWS_PATH: hidden})
+    rows = _rows(drawing.tostring())
+    assert rows and all(display == "none" for _key, display, _text in rows)
+    assert [key for key, _d, _t in rows] == list(_drawn_facts(drawing))
+    assert applied_composition_plan(drawing).canvas_bounds == applied_composition_plan(draw("none")).canvas_bounds
+
+
 # --- the fit and the composition ---
 
 

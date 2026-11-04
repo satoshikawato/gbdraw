@@ -1002,7 +1002,7 @@ quote is part of the cell it is in:
 A key the Legend does not draw is ignored. Two shown rows with one name and
 one swatch are drawn as one row; with different swatches their names are
 numbered, `Genes (1)` and `Genes (2)`. A hidden row stays in the SVG with
-`display="none"` and takes no room. Hidden rows and the attributes that record
+`display="none"` and takes no room, even when every row is hidden. Hidden rows and the attributes that record
 the drawn values (`data-gbdraw-base-*`) stay in the SVG so that a Session's
 Result can be edited in the Web app; viewers do not draw them. The edits reach the feature rows and the
 GC rows, not the similarity-ring or identity block. The config keys are

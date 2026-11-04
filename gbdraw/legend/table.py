@@ -329,6 +329,16 @@ def as_legend_table(legend_table: LegendTable | Mapping[object, LegendEntry]) ->
     return legend_table if isinstance(legend_table, LegendTable) else LegendTable(legend_table)
 
 
+def draws_legend(legend_table: LegendTable | Mapping[object, LegendEntry]) -> bool:
+    """Whether a Legend is drawn for the table: it has a row, shown or hidden.
+
+    A Legend whose rows a request's Legend row edits all hide is drawn with those rows and their records, as an
+    item that takes no room in the composition (D-36): the Result keeps the rows, so the Web can restore them.
+    """
+
+    return bool(as_legend_table(legend_table).drawn_keys())
+
+
 def legend_row_names(legend_table: LegendTable | Mapping[object, LegendEntry]) -> dict[LegendRowKey, LegendRowNames]:
     """The names the legend layouts measure and the legend drawers write, by row key."""
 
@@ -822,6 +832,7 @@ __all__ = [
     "LegendRowNames",
     "LegendTable",
     "apply_legend_row_edits",
+    "draws_legend",
     "PairwiseIdentityGradient",
     "PairwiseIdentityLegend",
     "as_legend_table",

@@ -22,7 +22,7 @@ from gbdraw.legend.linear_layout import (
     LinearLegendLayout,
     build_linear_legend_layout,
 )
-from gbdraw.legend.table import LegendTable
+from gbdraw.legend.table import LegendTable, draws_legend
 from gbdraw.legend.metrics import (
     legend_line_height,
     legend_swatch_size,
@@ -266,10 +266,11 @@ def measure_legend(
 ) -> LegendMeasurement:
     """Measure one legend table for a canvas, wrapped at ``wrap_width``.
 
-    A table with rows is measured by render stage ``legend_measurement``.
+    A table with rows is measured by render stage ``legend_measurement``; one whose rows are all hidden is laid
+    out with no row, so its bounds are empty and the composition gives it no room.
     """
 
-    if not legend_table:
+    if not draws_legend(legend_table):
         return legend_config._empty_measurement()
     return render_stage(
         "legend_measurement",

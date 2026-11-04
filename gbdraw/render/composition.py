@@ -281,6 +281,10 @@ def _metadata_payload(
     )
 
 
+# The placement an empty Legend is bound with (``apply_composition_plan``): the planner gives it no room.
+_EMPTY_LEGEND_PLACEMENT = CompositionPlacement(_LEGEND_ROLE, (0.0, 0.0), Aabb(0.0, 0.0, 0.0, 0.0))
+
+
 def _placement_for_role(
     plan: CompositionPlan, role: str
 ) -> CompositionPlacement | None:
@@ -437,6 +441,9 @@ def apply_composition_plan(
     the canvas with them for a moved scale.
     The role arguments name placements in ``plan``; the SVG bookkeeping roles
     remain the stable internal values ``primary``, ``legend``, and ``title``.
+    A ``legend_target`` that ``plan`` does not place is an empty Legend (every
+    row hidden, D-36), which the planner leaves out: it is bound with no
+    translation and empty bounds, so a replan also gives it no room.
     """
     if not isinstance(plan, CompositionPlan):
         raise TypeError("plan must be a CompositionPlan")
@@ -468,10 +475,8 @@ def apply_composition_plan(
         raise ValueError("primary placement does not match plan.primary_bounds")
     legend_placement = _placement_for_role(plan, legend_role)
     title_placement = _placement_for_role(plan, title_role)
-    if (legend_target is None) != (legend_placement is None):
-        raise ValueError(
-            "legend target and plan placement must either both exist or be absent"
-        )
+    if legend_target is None and legend_placement is not None:
+        raise ValueError("legend target and plan placement: a legend placement requires a legend target")
     if (title_target is None) != (title_placement is None):
         raise ValueError(
             "title target and plan placement must either both exist or be absent"
@@ -486,6 +491,8 @@ def apply_composition_plan(
         raise ValueError("composition plan contains unbound placement roles")
 
     _ensure_not_applied(drawing, all_targets)
+    if legend_target is not None and legend_placement is None:
+        legend_placement = _EMPTY_LEGEND_PLACEMENT
     metadata = _metadata_payload(
         plan,
         primary_placement=primary_placement,

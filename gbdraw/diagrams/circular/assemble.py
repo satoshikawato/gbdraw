@@ -118,7 +118,7 @@ from ...legend.sources import (
     feature_legend_presence,
     legend_slot_sources,
 )
-from ...legend.table import LegendRowEdits, LegendTable, apply_legend_row_edits, prepare_legend_table
+from ...legend.table import LegendRowEdits, LegendTable, apply_legend_row_edits, draws_legend, prepare_legend_table
 from ...tracks import (
     CircularTrackSlot,
     ScalarSpec,
@@ -3390,11 +3390,8 @@ def add_record_on_circular_canvas(
     )
 
     legend_target: Group | None = None
-    if (
-        canvas_config.legend_position != "none"
-        and legend_measurement.local_bounds.width > 0.0
-        and legend_measurement.local_bounds.height > 0.0
-    ):
+    # A Legend whose rows are all hidden is drawn too; its empty bounds take no room.
+    if canvas_config.legend_position != "none" and draws_legend(legend_table):
         legend_target_start = len(getattr(canvas, "elements", []))
         canvas = add_legend_group_on_canvas(canvas, legend_measurement, legend_table)
         legend_target = next(

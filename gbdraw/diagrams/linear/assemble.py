@@ -94,6 +94,7 @@ from ...legend.table import (
     LegendTable,
     PairwiseIdentityLegend,
     apply_legend_row_edits,
+    draws_legend,
     pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
 )
@@ -3419,10 +3420,8 @@ def assemble_linear_diagram(
             placement=canvas_config.legend_position,
             wrap_width=source_primary_bounds.width,
         )
-        if (
-            legend_measurement.local_bounds.width > 0.0
-            and legend_measurement.local_bounds.height > 0.0
-        ):
+        # A Legend whose rows are all hidden is drawn too; its empty bounds take no room.
+        if draws_legend(legend_table):
             legend_target = place_content(
                 canvas,
                 render_stage(

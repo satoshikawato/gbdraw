@@ -228,6 +228,7 @@ from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from gbdraw.legend.sources import LegendSources
 from gbdraw.legend.table import (
     LegendTable,
+    draws_legend,
     pairwise_identity_legend_from_comparisons,
 )
 from gbdraw.linear_comparison import (
@@ -3645,7 +3646,7 @@ def assemble_circular_diagram_from_records(
             conservation_legend=first_record_conservation_legend,
             conservation_min_identity=float(identity),
         )
-        if legend_table:
+        if draws_legend(legend_table):
             legend_config = LegendDrawingConfigurator(
                 profile=profile,
                 canvas_config=legend_canvas_config,
