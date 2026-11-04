@@ -90,6 +90,11 @@
       "id": "drawings_circular_region",
       "session": "tests/fixtures/sessions/web-region-circular-linear.v51.gbdraw-session.json.gz",
       "drawings": ["linear"]
+    },
+    {
+      "id": "python_linear_absent_output",
+      "session": "tests/fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz",
+      "drawings": ["linear"]
     }
   ]
 }

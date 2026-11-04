@@ -312,6 +312,12 @@ export const FRESH_PROTEIN_COMPARISON_DEFAULTS = Object.freeze({
   })
 });
 
+// gbdraw/session_request_codec.py: describe_absent_linear_output()
+export const ABSENT_LINEAR_OUTPUT = Object.freeze({
+  legend: 'right',
+  plotTitlePosition: 'bottom'
+});
+
 // gbdraw/session_request_codec.py: describe_record_source_files()
 export const RECORD_SOURCE_FILES = Object.freeze({
   genbank: Object.freeze([

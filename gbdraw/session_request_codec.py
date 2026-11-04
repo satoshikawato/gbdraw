@@ -125,6 +125,7 @@ from gbdraw.annotations import (
 
 from .api.options import (
     DEPTH_TRACK_POSITIVE_FIELDS,
+    LINEAR_DEFAULT_PLOT_TITLE_POSITION,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
     CircularOutputOptions,
@@ -5453,6 +5454,29 @@ class FreshProteinHitLimits(TypedDict):
 class FreshProteinComparisonDefaults(TypedDict):
     collinearInferOrthogroups: bool
     hitLimits: FreshProteinHitLimits
+
+
+class AbsentLinearOutput(TypedDict):
+    """The sides a Linear request draws with where its output states none."""
+
+    legend: str
+    plotTitlePosition: str
+
+
+def describe_absent_linear_output() -> AbsentLinearOutput:
+    """How a Linear request without ``diagramOptions.output`` is drawn (OV-2491).
+
+    Python draws it with ``LinearOutputOptions()``, and a null
+    ``plotTitlePosition`` with the Linear default title side. The Web's Load
+    reads such a request with these sides (Owner decision R17-38); a new Web
+    Linear drawing keeps its own sides and states them in what it saves.
+    """
+
+    default = LinearOutputOptions()
+    return {
+        "legend": default.legend,
+        "plotTitlePosition": default.plot_title_position or LINEAR_DEFAULT_PLOT_TITLE_POSITION,
+    }
 
 
 def describe_fresh_protein_comparison() -> FreshProteinComparisonDefaults:

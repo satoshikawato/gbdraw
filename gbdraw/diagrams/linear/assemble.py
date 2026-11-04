@@ -8,6 +8,7 @@ This module was extracted from `gbdraw.linear_diagram_components` to improve coh
 
 from __future__ import annotations
 
+from gbdraw.api.options import LINEAR_DEFAULT_PLOT_TITLE_POSITION
 from gbdraw.features.placement import FeaturePlacementSlot
 from gbdraw.render_stages import render_stage
 from ...layout.linear_wrap import drawn_axis_length, refuse_feature_track_on_the_axis, refuse_wrapped_anchor_moves
@@ -2173,7 +2174,7 @@ def assemble_linear_diagram(
     linear_track_axis_index: int | None = None,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
     plot_title: str | None = None,
-    plot_title_position: str = "bottom",
+    plot_title_position: str = LINEAR_DEFAULT_PLOT_TITLE_POSITION,
     plot_title_font_size: float = 32.0,
     protein_comparisons: ProteinComparisonFrames | None = None,
     pairwise_identity_legend: PairwiseIdentityLegend | None = None,
@@ -2288,7 +2289,7 @@ def assemble_linear_diagram(
         record_depth_tracks,
     )
     normalized_plot_title = str(plot_title or "").strip()
-    normalized_plot_title_position = str(plot_title_position or "bottom").strip().lower()
+    normalized_plot_title_position = str(plot_title_position or LINEAR_DEFAULT_PLOT_TITLE_POSITION).strip().lower()
     if normalized_plot_title_position not in {"center", "top", "bottom"}:
         raise ValueError("plot_title_position must be one of: center, top, bottom")
 

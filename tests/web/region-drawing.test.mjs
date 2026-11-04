@@ -434,7 +434,17 @@ const LINEAR_SETTINGS_LEFT_TO_LOAD = [
 ];
 // The installed Linear drawing writes the derived request, shown or not.
 test('(a) round trip of the Linear region drawing of a Circular source', async () => {
-  await assertRoundTrip(await deriveAndInstall(await circularSourceWithLook(), LOOK_REGION), { leftToLoad: LINEAR_SETTINGS_LEFT_TO_LOAD });
+  const installed = await deriveAndInstall(await circularSourceWithLook(), LOOK_REGION);
+  await assertRoundTrip(installed, { leftToLoad: LINEAR_SETTINGS_LEFT_TO_LOAD });
+  // Owner Q3 (R17-39, A): the derived request states no `output` (Python's
+  // region derivation writes none, so Python draws the legend at the right),
+  // yet the Web's new Linear drawing starts with legend and title at the
+  // bottom and saves them so.
+  assert.equal(at(installed.derived.renderRequest, '$.diagramOptions.output').found, false);
+  assert.deepEqual({ ...installed.made.layoutPreferences.linear }, { legend: 'bottom', plotTitlePosition: 'bottom' });
+  const { envelope } = await projectOf(installed.made);
+  assert.deepEqual(at(envelope.renderRequest, '$.diagramOptions.output').value,
+    { ...at(envelope.renderRequest, '$.diagramOptions.output').value, legend: 'bottom', plotTitlePosition: 'bottom' });
 });
 
 // A Linear drawing with one card whose file holds two records: the card draws both.

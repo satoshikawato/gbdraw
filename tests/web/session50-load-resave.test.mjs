@@ -252,3 +252,53 @@ test('a Session 50 that lists drawings (never released) is refused with a messag
   console.log('old combined 50:', JSON.stringify(loaded.error));
   assert.equal(loaded.error?.context?.reason, 'FIELDS');
 });
+
+// OV-2493: a drawing a Session 51 Load does not open takes its request's
+// legend and title sides, as the drawing it opens does. OV-2491 (Owner
+// decision R17-38): a Linear request that states no `output` reads with the
+// sides Python draws it with (`ABSENT_LINEAR_OUTPUT`, generated from
+// `LinearOutputOptions()`), opened or not; a Python-saved Linear Session
+// states none.
+test('each drawing of a Session 51 Load takes its request\'s layout, a Linear one without output Python\'s', async () => {
+  const { ABSENT_LINEAR_OUTPUT } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
+  const linearLayout = async (session) => {
+    await loadKeepingSlots(session);
+    return { ...state.drawingOf('linear').layoutPreferences.linear };
+  };
+  for (const opened of ['circular', 'linear']) {
+    const stated = v49Session();
+    stated.ui.activeDrawingId = opened;
+    assert.deepEqual(await linearLayout(stated), { legend: 'left', plotTitlePosition: 'bottom' }, `opened ${opened}`);
+    const absent = v49Session();
+    absent.ui.activeDrawingId = opened;
+    delete absent.drawings.find((entry) => entry.id === 'linear').renderRequest.diagramOptions.output;
+    assert.deepEqual(await linearLayout(absent), ABSENT_LINEAR_OUTPUT, `opened ${opened}, no output`);
+  }
+  const python = JSON.parse(gunzipSync(readFileSync(new URL(
+    '../fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz', import.meta.url
+  ))));
+  assert.equal(Object.hasOwn(python.drawings[0].renderRequest.diagramOptions, 'output'), false);
+  assert.deepEqual(await linearLayout(python), ABSENT_LINEAR_OUTPUT);
+});
+
+// Owner Q1 (R17-39, A): a Linear legend the mode cannot use (`upper_left`,
+// written by hand) stays `bottom`, and the pre-Load dialog lists the repair,
+// even when the drawing's request states no `output` (which reads `right`).
+test('a stored Linear legend outside its mode reads bottom, not the absent output\'s right, and is listed', async () => {
+  for (const opened of ['circular', 'linear']) {
+    const session = v49Session();
+    session.ui.activeDrawingId = opened;
+    const entry = session.drawings.find((drawing) => drawing.id === 'linear');
+    delete entry.renderRequest.diagramOptions.output;
+    entry.ui.layoutPreferences = { legend: 'upper_left', plotTitlePosition: 'bottom' };
+    let dialog = null;
+    const loaded = await importSession({
+      target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
+    }, { confirmLoadRepairs: async (asked) => { dialog = asked; return true; }, installLoadedArtifactSlots: () => {} });
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual({ ...state.drawingOf('linear').layoutPreferences.linear }, { legend: 'bottom', plotTitlePosition: 'bottom' }, `opened ${opened}`);
+    assert.deepEqual(dialog?.items, [
+      'Legend: the position "upper_left" (drawings[1].ui.layoutPreferences.legend) is not one of its mode\'s positions; bottom is used.'
+    ], `opened ${opened}`);
+  }
+});

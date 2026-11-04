@@ -92,6 +92,7 @@ from gbdraw.annotations import (
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.record_planning import ComparisonRecordBinding, decide_linear_wrap
 from gbdraw.api.options import (
+    LINEAR_DEFAULT_PLOT_TITLE_POSITION,
     AnnotationOptions,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
@@ -2165,7 +2166,7 @@ def assemble_linear_diagram_from_records(
     linear_track_axis_index: int | None = None,
     annotation_options: AnnotationOptions | None = None,
     plot_title: str | None = None,
-    plot_title_position: Literal["center", "top", "bottom"] = "bottom",
+    plot_title_position: Literal["center", "top", "bottom"] = LINEAR_DEFAULT_PLOT_TITLE_POSITION,
     plot_title_font_size: float | None = None,
     evalue: float = LINEAR_MODE_PROFILE.comparison.evalue,
     bitscore: float = LINEAR_MODE_PROFILE.comparison.bitscore,
@@ -4234,7 +4235,7 @@ def _build_linear_diagram(
             plot_title_position=(
                 output.plot_title_position
                 if output and output.plot_title_position is not None
-                else "bottom"
+                else LINEAR_DEFAULT_PLOT_TITLE_POSITION
             ),
             plot_title_font_size=options.plot_title_font_size,
             # The builder options resolved omitted thresholds from the mode profile.
