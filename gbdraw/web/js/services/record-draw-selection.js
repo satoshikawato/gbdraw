@@ -1,6 +1,5 @@
 // @ts-check
 import { downloadSafeName } from '../utils/download-names.js';
-import { linearSeqRecordKey } from './linear-record-layout.js';
 /** @import { StoredRecordTranslation } from './linear-record-layout.js' */
 import { CLI_RECORD_KEY_PREFIX, EXPANDED_RECORD_KEY_SEPARATOR } from '../contracts/schema.generated.js';
 import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from './drawing/feature-edits.js';
@@ -125,6 +124,13 @@ export const recordKeyExpansion = (recordKey, baseKey) => {
   const k = recordKey.startsWith(prefix) ? recordKey.slice(prefix.length) : '';
   return /^[1-9]\d*$/.test(k) ? Number(k) : null;
 };
+
+/**
+ * The record key Generate gives a Linear card (`buildRecords` in session-request.js); a card that
+ * draws several records splits into its `expandedRecordKey` members.
+ * @param {{ uid?: unknown }} seq @param {number} index
+ */
+export const linearSeqRecordKey = (seq, index) => String(seq.uid || `record-${index + 1}`);
 
 /**
  * Whether a record key belongs to a Linear card: the card's key, or a split member `<card key>:<k>` of a card that

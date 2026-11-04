@@ -84,7 +84,7 @@ import {
   isSingleCircularJourney,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
-import { cardHoldsRecordKey, circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey } from './record-draw-selection.js';
+import { cardHoldsRecordKey, circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey, linearSeqRecordKey } from './record-draw-selection.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -95,7 +95,6 @@ import {
 } from './linear-sources.js';
 import {
   linearRecordLayoutHasSharedRow,
-  linearSeqRecordKey,
   recordTranslationsFor,
   resolveEffectiveLinearRecordRows
 } from './linear-record-layout.js';

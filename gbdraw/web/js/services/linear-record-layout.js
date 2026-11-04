@@ -15,13 +15,6 @@
 /** @typedef {{ recordKey?: unknown, x?: unknown, y?: unknown } | null | undefined} StoredRecordTranslation A translation as the page holds it, before the request validates it. */
 
 /**
- * The record key Generate gives a Linear card (`buildRecords` in session-request.js); a card that
- * draws several records splits into its `expandedRecordKey` members.
- * @param {{ uid?: unknown }} seq @param {number} index
- */
-export const linearSeqRecordKey = (seq, index) => String(seq.uid || `record-${index + 1}`);
-
-/**
  * The stored translations of a set of records, in the records' order: each
  * record's stored entries as they are, or one at (0, 0) for a record that has
  * none. An entry of a record outside the set is left out, so a request carries
