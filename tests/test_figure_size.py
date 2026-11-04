@@ -129,37 +129,138 @@ def test_a_smaller_requested_canvas_keeps_the_content_size() -> None:
 # --- the base length resolver (D-09) ---
 
 
-def _fit(size_of_base, target: float):
+def _fit(size_of_base, target: float, *, first_base: int | None = None, slope: float = 1.0):
+    """Fit a measured size to ``target`` as a mode does: the measure returns the excess over the target."""
+
     bases: list[int] = []
 
-    def measure(base: int) -> tuple[float, int]:
+    def measure(base: int) -> tuple[float, int] | None:
         bases.append(base)
-        return size_of_base(base), base
+        size = size_of_base(base)
+        return None if size is None else (size - target, base)
 
-    return fit_base_length(measure, target), bases
+    first = max(1, math.floor(target)) if first_base is None else first_base
+    return fit_base_length(measure, first_base=first, slope=slope), bases
 
 
 def test_a_fixed_part_that_stays_put_fits_in_two_passes() -> None:
     fit, bases = _fit(lambda base: base + 100.0, 500.0)
-    assert fit.fits and 497.0 <= fit.size_px <= 500.0 and fit.built == fit.base
+    assert fit.fits and -3.0 <= fit.excess_px <= 0.0 and fit.built == fit.base
     assert len(bases) == 2
 
 
 def test_a_fixed_part_that_grows_as_the_base_shrinks_still_fits() -> None:
     fit, bases = _fit(lambda base: base + 100.0 + 40000.0 / base, 680.0)
-    assert fit.fits and 677.0 <= fit.size_px <= 680.0
+    assert fit.fits and -3.0 <= fit.excess_px <= 0.0
     assert len(bases) <= 8
 
 
 def test_a_size_flat_below_a_base_fits_on_the_flat_part() -> None:
     fit, _bases = _fit(lambda base: max(718.0, base + 150.0), 718.0)
-    assert fit.fits and fit.size_px == 718.0
+    assert fit.fits and fit.excess_px == 0.0
 
 
 def test_a_target_that_the_shortest_base_passes_is_refused_at_base_one() -> None:
+    """Base 1 is over, so the middle of base 1 and the next pass is measured once before refusing (N1)."""
+
     fit, bases = _fit(lambda base: base + 600.0, 500.0)
     assert not fit.fits and fit.base == 1 and fit.built == 1
-    assert bases[-1] == 1 and len(bases) == 2
+    assert bases == [500, 1, 250]
+
+
+def test_the_first_base_and_slope_come_from_the_mode() -> None:
+    """A size that grows 2 px per px of base (a Circular map) fits in two passes from the configured base."""
+
+    fit, bases = _fit(lambda base: 2.0 * base + 180.0, 680.3, first_base=390, slope=2.0)
+    assert bases[0] == 390 and len(bases) == 2
+    assert fit.fits and -3.0 <= fit.excess_px <= 0.0
+
+
+def test_a_bracket_is_searched_until_a_pass_lands_close_under() -> None:
+    """N2: a secant rounded down onto the pass under steps one base up instead of halving the bracket, so a steep
+    size lands within 3 px instead of returning a pass far under after 8 passes."""
+
+    fit, bases = _fit(lambda base: 3.0 * base + 100.0, 680.3)
+    assert fit.fits and -3.0 <= fit.excess_px <= 0.0 and fit.base == 193
+    assert len(bases) <= 4
+
+
+def test_a_middle_base_that_fits_is_found_before_refusing() -> None:
+    """N1: base 1 is over, but a base between it and the next pass fits (a measure that is not monotonic)."""
+
+    fit, bases = _fit(lambda base: 679.0 if 30 <= base <= 40 else 710.0, 680.0, first_base=100)
+    assert fit.fits and 30 <= fit.base <= 40
+    assert 1 in bases
+
+
+def test_bases_too_small_to_draw_are_not_searched_below_the_floor() -> None:
+    """Bases under 40 cannot be drawn; the refusal keeps the smallest drawn pass and no step goes below the floor
+    twice."""
+
+    fit, bases = _fit(lambda base: None if base < 40 else max(2.0 * base, 200.0) + 580.0, 680.0, first_base=390,
+                      slope=2.0)
+    assert not fit.fits and fit.base == 40
+    undrawable = [base for base in bases if base < 40]
+    assert undrawable and len(undrawable) <= 12
+    assert len(bases) - len(undrawable) <= 8
+    assert len(set(bases)) == len(bases)
+
+
+def test_a_base_too_small_to_draw_above_a_pass_under_bounds_the_search() -> None:
+    """A base that cannot be drawn above the widest pass under is a bound like a pass over: the search halves the
+    way to it instead of measuring it again, and ends."""
+
+    def size(base: int) -> float | None:
+        if base == 299:
+            return 630.0
+        return None if 310 <= base <= 330 else 2.0 * base + 80.0
+
+    fit, bases = _fit(size, 680.0, first_base=390, slope=2.0)
+    assert fit.fits and -3.0 <= fit.excess_px <= 0.0 and fit.base == 300
+    assert len(set(bases)) == len(bases)
+
+
+def test_bases_too_small_to_draw_end_the_search_after_their_bound() -> None:
+    """Every base below the first cannot be drawn: the refusal keeps the first pass after at most 12 such passes."""
+
+    fit, bases = _fit(lambda base: None if base < 390 else 2.0 * base + 180.0, 680.0, first_base=390, slope=2.0)
+    assert not fit.fits and fit.base == 390
+    assert 1 < len(bases) <= 13 and len(set(bases)) == len(bases)
+
+
+def test_a_size_that_jumps_returns_the_widest_pass_under() -> None:
+    """Labels not placed (CAPACITY-STOP) make a pass much narrower than its neighbour with labels: the measure jumps
+    over the target, and the fit keeps the widest pass under it."""
+
+    fit, bases = _fit(lambda base: base + 520.0 if base < 150 else base + 840.0, 680.0, first_base=300, slope=2.0)
+    assert fit.fits and fit.base < 150 and fit.excess_px <= 0.0
+    assert len(bases) <= 8
+
+
+def test_only_the_kept_pass_warns_once() -> None:
+    """D-16: warnings raised in a pass that is not kept do not reach the caller; the kept pass's arrive once."""
+
+    def measure(base: int) -> tuple[float, int]:
+        warnings.warn(f"pass {base}", UserWarning)
+        warnings.warn(f"pass {base} again", UserWarning)
+        return base + 100.0 - 500.0, base
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        fit = fit_base_length(measure, first_base=500, slope=1.0)
+    assert fit.base == 398
+    assert [str(item.message) for item in caught] == ["pass 398", "pass 398 again"]
+
+
+def test_a_refused_fit_emits_no_warning() -> None:
+    def measure(base: int) -> tuple[float, int]:
+        warnings.warn(f"pass {base}", UserWarning)
+        return base + 600.0 - 500.0, base
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        fit = fit_base_length(measure, first_base=500, slope=1.0)
+    assert not fit.fits and caught == []
 
 
 def test_the_width_fit_measures_the_figure_drawn_with_region_label_rows() -> None:
@@ -388,28 +489,214 @@ def test_a_height_shorter_than_the_figure_is_refused_with_its_parts() -> None:
     assert caught.value.diagnostic["configPath"] == FIGURE_HEIGHT_PATH
 
 
-# --- Circular waits for its fit (D-07) ---
+# --- the Circular radius fit (D-01, D-03, D-12, D-13) ---
 
 
-@pytest.mark.parametrize(
-    "options",
-    [
-        gbdraw.CircularOptions(figure_width="180mm"),
-        gbdraw.CircularOptions(config_overrides={FIGURE_HEIGHT_PATH: "120mm"}),
-    ],
-)
-def test_circular_refuses_a_requested_size(options) -> None:
-    with pytest.raises(ValidationError, match="not available for Circular maps yet") as caught:
-        gbdraw.draw_circular(_mito(), options=options)
+def _circular_plan(diagram: gbdraw.Diagram):
+    return applied_composition_plan(diagram._drawing)
+
+
+def _draw_mito_circular(**options) -> gbdraw.Diagram:
+    return gbdraw.draw_circular(_mito(), options=gbdraw.CircularOptions(**options))
+
+
+def test_a_circular_width_fits_the_map_and_keeps_the_fonts() -> None:
+    auto = _draw_mito_circular()
+    sized = _draw_mito_circular(figure_width="180mm")
+    plan = _circular_plan(sized)
+    assert plan.width == pytest.approx(MM_180_PX, abs=0.01)
+    assert MM_180_PX - 3 <= plan.content_bounds.width <= MM_180_PX
+    # A side left auto is the content's.
+    assert plan.height == pytest.approx(plan.content_bounds.height, abs=0.01)
+    assert plan.height < _circular_plan(auto).height
+    assert _font_sizes(sized.to_svg()) == _font_sizes(auto.to_svg())
+    width, height, _view_box = _svg_size(sized.to_svg())
+    assert width == "180mm" and height.endswith("mm")
+
+
+def test_a_circular_height_fits_the_map() -> None:
+    plan = _circular_plan(_draw_mito_circular(figure_height="120mm"))
+    target = 120 * 96 / 25.4
+    assert plan.height == pytest.approx(target, abs=0.01)
+    assert target - 3 <= plan.content_bounds.height <= target
+    assert plan.width == pytest.approx(plan.content_bounds.width, abs=0.01)
+
+
+def test_a_circular_width_and_height_take_the_largest_map_that_fits_both() -> None:
+    plan = _circular_plan(_draw_mito_circular(figure_width="180mm", figure_height="200mm"))
+    height = 200 * 96 / 25.4
+    assert (plan.width, plan.height) == (pytest.approx(MM_180_PX, abs=0.01), pytest.approx(height, abs=0.01))
+    # The width binds; the height has room left, centred.
+    assert MM_180_PX - 3 <= plan.content_bounds.width <= MM_180_PX
+    assert plan.content_bounds.height <= height
+    assert plan.content_bounds.min_y == pytest.approx(height - plan.content_bounds.max_y, abs=0.01)
+
+
+def test_a_circular_size_larger_than_auto_grows_the_map(monkeypatch) -> None:
+    import gbdraw.api.diagram as diagram_module
+
+    radii: list[float] = []
+    original = diagram_module.assemble_circular_diagram_from_record
+
+    def counting(*args, **kwargs):
+        radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(diagram_module, "assemble_circular_diagram_from_record", counting)
+    auto = _draw_mito_circular()
+    radii.clear()
+    sized = _draw_mito_circular(figure_width="400mm")
+    plan = _circular_plan(sized)
+    target = 400 * 96 / 25.4
+    assert target - 3 <= plan.content_bounds.width <= target
+    assert radii[0] == pytest.approx(390.0) and max(radii) > 390.0
+    assert _font_sizes(sized.to_svg()) == _font_sizes(auto.to_svg())
+
+
+def test_label_fit_rows_redraw_the_circular_map_at_the_fitted_radius(monkeypatch) -> None:
+    """MjeNMV at 180 mm: its centre definition reaches a track, so label fit rows are verified, and each redraws the
+    map at the radius the fit kept, not the configured one."""
+
+    import gbdraw.api.diagram as diagram_module
+    from gbdraw.labels.circular_capacity import label_capacity_checked
+
+    assemblies: list[tuple[float, bool]] = []
+    original = diagram_module.assemble_circular_diagram_from_record
+
+    def recording(*args, **kwargs):
+        assemblies.append((float(kwargs["cfg"].canvas.circular.radius), label_capacity_checked()))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(diagram_module, "assemble_circular_diagram_from_record", recording)
+    records = gbdraw.read_genbank(Path(__file__).resolve().parents[1] / "examples" / "MjeNMV.gb")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        gbdraw.draw_circular(records, options=gbdraw.CircularOptions(figure_width="180mm"))
+    fitted = [radius for radius, checked in assemblies if checked]
+    rows = [radius for radius, checked in assemblies if not checked]
+    assert rows and fitted[-1] < 390.0
+    assert set(rows) == {fitted[-1]}
+
+
+def test_a_circular_grid_fits_the_request_and_its_records_keep_their_own_canvas(monkeypatch) -> None:
+    import gbdraw.api.diagram as diagram_module
+
+    plans: list = []
+    original = diagram_module.assemble_circular_diagram_from_record
+
+    def keeping(*args, **kwargs):
+        drawing = original(*args, **kwargs)
+        plans.append(getattr(drawing, "_gbdraw_circular_assembly_result").composition_plan)
+        return drawing
+
+    monkeypatch.setattr(diagram_module, "assemble_circular_diagram_from_record", keeping)
+    records = [*_mito(), *gbdraw.read_genbank(INPUTS / "BGC0000712.gbk")]
+    diagram = gbdraw.draw_circular(
+        records, options=gbdraw.CircularOptions(figure_width="180mm"), layout=gbdraw.CircularLayout()
+    )
+    plan = _circular_plan(diagram)
+    assert plan.width == pytest.approx(MM_180_PX, abs=0.01)
+    assert MM_180_PX - 3 <= plan.content_bounds.width <= MM_180_PX
+    assert plans
+    for record_plan in plans:
+        assert record_plan.width == pytest.approx(record_plan.content_bounds.width, abs=0.01)
+        assert record_plan.height == pytest.approx(record_plan.content_bounds.height, abs=0.01)
+
+
+def test_a_circular_width_below_the_smallest_map_is_refused_with_its_parts() -> None:
+    with pytest.raises(ValidationError) as caught:
+        _draw_mito_circular(figure_width="100mm")
+    message = str(caught.value)
+    assert message.startswith("figure_width 100mm is narrower than the parts of the figure that do not shrink: ")
+    assert "map at its smallest" in message and "legend" in message and "padding" in message
+    assert "place the legend at the top or bottom" in message
+    diagnostic = caught.value.diagnostic
+    assert diagnostic["code"] == "INPUT_INVALID" and diagnostic["configPath"] == FIGURE_WIDTH_PATH
+    # The stated minimum draws.
+    minimum = diagnostic["minimumPx"]
+    plan = _circular_plan(_draw_mito_circular(figure_width=f"{minimum}px"))
+    assert plan.width == pytest.approx(minimum, abs=0.01)
+
+
+def test_a_circular_height_below_the_smallest_map_is_refused_with_its_parts() -> None:
+    with pytest.raises(ValidationError) as caught:
+        _draw_mito_circular(figure_height="50mm")
+    message = str(caught.value)
+    assert message.startswith("figure_height 50mm is shorter than the figure at ")
+    assert "map at its smallest" in message and "padding" in message
+    assert caught.value.diagnostic["configPath"] == FIGURE_HEIGHT_PATH
     assert caught.value.diagnostic["code"] == "INPUT_INVALID"
 
 
-def test_circular_multi_record_refuses_a_requested_size() -> None:
-    records = [*_mito(), *gbdraw.read_genbank(INPUTS / "BGC0000712.gbk")]
-    with pytest.raises(ValidationError, match="not available for Circular maps yet"):
+def test_tracks_that_do_not_fit_the_configured_radius_raise_as_before() -> None:
+    from gbdraw.diagrams.circular.radial_layout import track_layout_reason
+
+    overrides = {"canvas.circular.radius": 20}
+    with pytest.raises(ValidationError) as auto:
+        _draw_mito_circular(config_overrides=overrides)
+    with pytest.raises(ValidationError) as sized:
+        _draw_mito_circular(config_overrides=overrides, figure_width="180mm")
+    assert track_layout_reason(sized.value) is not None
+    assert str(sized.value) == str(auto.value)
+
+
+def _crowded_map():
+    """400 CDS labels at 16 pt on a 80 kb map: they need about 3.7 times the room, so they are not placed."""
+
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
+    from Bio.SeqRecord import SeqRecord
+
+    record = SeqRecord(Seq("ATGC" * 20000), id="SYN1", name="SYN1", description="crowded map")
+    record.annotations.update(molecule_type="DNA", topology="circular")
+    for index in range(400):
+        start = index * 200
+        record.features.append(SeqFeature(
+            FeatureLocation(start, start + 150, strand=1 if index % 2 else -1), type="CDS",
+            qualifiers={"product": [f"DNA polymerase subunit {index:03d}"]},
+        ))
+    return [record]
+
+
+CROWDED_LABELS = {"labels.circular.scope": "outer", "labels.font_size.short": 16, "labels.font_size.long": 16}
+
+
+def test_labels_not_placed_at_a_requested_size_offer_a_larger_figure() -> None:
+    from gbdraw.exceptions import LabelsDoNotFitError
+
+    with pytest.raises(LabelsDoNotFitError) as auto:
+        gbdraw.draw_circular(_crowded_map(), options=gbdraw.CircularOptions(config_overrides=CROWDED_LABELS))
+    assert "figure" not in str(auto.value)
+    assert "figure_size" not in auto.value.report.room_remedies
+
+    with pytest.raises(LabelsDoNotFitError) as sized:
         gbdraw.draw_circular(
-            records, options=gbdraw.CircularOptions(figure_width="180mm"), layout=gbdraw.CircularLayout()
+            _crowded_map(),
+            options=gbdraw.CircularOptions(config_overrides=CROWDED_LABELS, figure_width="150mm"),
         )
+    report = sized.value.report
+    assert report.room_remedies == ("filter", "label_text", "font", "figure_size", "linear")
+    assert report.larger_figure is not None and report.larger_figure.height is None
+    lines = str(sized.value).splitlines()
+    (line,) = [line for line in lines if "--figure_width" in line]
+    assert re.fullmatch(r"  - make the figure larger: --figure_width about \d+(\.\d)?mm;", line), line
+    assert lines.index(line) == lines.index("  - or draw a Linear map (gbdraw linear).") - 1
+    about = float(re.search(r"about ([\d.]+)mm", line)[1])
+    assert about > 150 * 3.0
+
+
+def test_the_larger_figure_estimate_adds_the_missing_room_to_each_requested_side() -> None:
+    from gbdraw.core.figure_length import RequestedFigureSize
+    from gbdraw.layout.figure_size import larger_figure
+
+    plan = plan_composition(CompositionRequest(primary=CompositionItem("primary", Aabb(0.0, 0.0, 300.0, 200.0))))
+    content = plan.content_bounds
+    size = RequestedFigureSize(FigureLength(100.0, "mm"), FigureLength(1000.0, "px"))
+    estimate = larger_figure(plan, size, 2.5)
+    width_px = content.width + 1.5 * 300.0
+    assert estimate.width == f"{math.ceil(round(width_px * 25.4 / 96 * 10, 6)) / 10:g}mm"
+    assert estimate.height == f"{math.ceil(content.height + 1.5 * 200.0)}px"
+    assert larger_figure(plan, RequestedFigureSize(FigureLength(100.0, "mm")), 2.5).height is None
 
 
 # --- export units and DPI (D-10) ---
@@ -491,11 +778,10 @@ def test_cli_warns_when_dpi_has_no_png(tmp_path, monkeypatch, caplog) -> None:
     assert "--dpi applies to PNG output only" in caplog.text
 
 
-def test_cli_circular_refuses_figure_width(tmp_path, monkeypatch, capsys) -> None:
-    with pytest.raises(SystemExit) as caught:
-        _run_cli(
-            tmp_path, monkeypatch, "circular", "--gbk", str(INPUTS / "HmmtDNA.gbk"), "--figure_width", "180mm"
-        )
-    assert caught.value.code == 1
-    assert "not available for Circular maps yet" in capsys.readouterr().err
-    assert not (tmp_path / "cli-out.svg").exists()
+def test_cli_circular_figure_width(tmp_path, monkeypatch) -> None:
+    output = _run_cli(
+        tmp_path, monkeypatch, "circular", "--gbk", str(INPUTS / "HmmtDNA.gbk"), "--figure_width", "180mm"
+    )
+    width, _height, view_box = _svg_size(output.with_suffix(".svg").read_text(encoding="utf-8"))
+    assert width == "180mm"
+    assert view_box[2] == pytest.approx(MM_180_PX, abs=0.01)

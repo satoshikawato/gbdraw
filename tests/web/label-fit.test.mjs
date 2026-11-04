@@ -412,7 +412,7 @@ test('rows Generate did not search are computed one after another when the dialo
 // CAPACITY-STOP (PD-OI-097): labels that need much more room than the map has
 // were not placed, so there are no rows. Python names the ways to make room; the
 // Web words each with its own controls, and the dialog offers only Close.
-const CAPACITY_REMEDIES = ['filter', 'label_text', 'font', 'linear'];
+const CAPACITY_REMEDIES = ['filter', 'label_text', 'font', 'figure_size', 'linear'];
 const capacityReport = (remedies = CAPACITY_REMEDIES, capacityRatio = 2.5) => {
   const value = report([]);
   return { ...value, overlapPairs: 0, crossingPairs: 0, remedies,

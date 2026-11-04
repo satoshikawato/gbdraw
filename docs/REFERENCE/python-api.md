@@ -57,7 +57,7 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 | `window`, `step`, `depth_window`, `depth_step` | positive integer or `None` | `None` |
 | `annotations`, `config`, `config_overrides` | mode-appropriate value or `None` | `None` |
 | `depth_tracks` | sequence of `DepthTrackOptions` | empty |
-| `figure_width`, `figure_height` (keyword only) | length with a unit (`"180mm"`, `"7in"`) or `None` (auto); Linear only for now, see [Figure size](output-formats-and-export.md#figure-size-and-png-dpi) | `None` |
+| `figure_width`, `figure_height` (keyword only) | length with a unit (`"180mm"`, `"7in"`) or `None` (auto), for Linear and Circular figures; see [Figure size](output-formats-and-export.md#figure-size-and-png-dpi) | `None` |
 
 Unset `Thresholds` values resolve through the mode profile:
 

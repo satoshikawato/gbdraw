@@ -188,8 +188,8 @@ def _add_figure_size_args(parser: argparse.ArgumentParser) -> None:
             f'--figure_{side}',
             help=(
                 f'{side.capitalize()} of the whole figure, legend and title included, with a unit: mm, cm, in, or px '
-                '(for example 180mm). The figure is laid out again to fit; fonts and line widths keep their size. '
-                'Linear figures only for now. Default: auto.'
+                '(for example 180mm). The figure is laid out again to fit (the Linear sequence width or the Circular '
+                'radius changes); fonts and line widths keep their size. Default: auto.'
             ),
             type=argparse_figure_length,
             metavar='LENGTH|auto',

@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias, TypeGuard, get_args
 
 from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
+from ..layout.figure_size import LargerFigure
 from ..layout.spatial import (
     Aabb,
     GridCell,
@@ -70,8 +71,8 @@ LabelFitRowStatus: TypeAlias = Literal["found", "found_with_notice", "not_found"
 # placement) and switches (separate overlapping features).
 LabelFitValue: TypeAlias = bool | float | str
 # What makes room for labels that need much more room than the map has (CAPACITY-STOP): label fewer features, shorten
-# the label text, use a smaller font, or draw a Linear map.
-LabelCapacityRemedy: TypeAlias = Literal["filter", "label_text", "font", "linear"]
+# the label text, use a smaller font, make a requested figure size larger, or draw a Linear map.
+LabelCapacityRemedy: TypeAlias = Literal["filter", "label_text", "font", "figure_size", "linear"]
 # The smallest label font the font rows try.
 FONT_LIMIT_PT = 6.0
 Polygon: TypeAlias = tuple[Point, ...]
@@ -499,12 +500,15 @@ class LabelFitReport:
     """Failing records and the rows that apply to them, in the dialog order.
 
     ``drawn`` is True when the figure was drawn anyway (crossing leaders or
-    covered definition text only).
+    covered definition text only). ``larger_figure`` is the size a requested
+    figure needs for the records not placed (CAPACITY-STOP); None without a
+    requested size.
     """
 
     records: tuple[LabelFitRecord, ...]
     rows: tuple[LabelFitRow, ...]
     drawn: bool
+    larger_figure: LargerFigure | None = None
 
     @property
     def overlap_pairs(self) -> int:
@@ -542,6 +546,8 @@ class LabelFitReport:
 
         if any(record.capacity for record in self.records):
             offered = {remedy for record in self.records if record.capacity for remedy in record.capacity.remedies}
+            if self.larger_figure is not None:
+                offered.add("figure_size")
         elif self.rows and all(row.values is None for row in self.rows):
             offered = {
                 remedy
@@ -692,6 +698,7 @@ _CLI_CAPACITY_REMEDIES: Mapping[LabelCapacityRemedy, str] = {
     "filter": "label fewer features with --label_blacklist or --label_whitelist;",
     "label_text": "shorten the label text with --qualifier_priority (for example gene names only);",
     "font": "use a smaller --label_font_size;",
+    "figure_size": "make the figure larger: {sizes};",
     "linear": "or draw a Linear map (gbdraw linear).",
 }
 
@@ -905,11 +912,20 @@ def _capacity_report(report: LabelFitReport) -> str:
     return "\n".join(lines)
 
 
+def _room_line(report: LabelFitReport, remedy: LabelCapacityRemedy) -> str:
+    words = _CLI_CAPACITY_REMEDIES[remedy]
+    larger = report.larger_figure
+    if remedy != "figure_size" or larger is None:
+        return words
+    sides = (("width", larger.width), ("height", larger.height))
+    return words.format(sizes=" ".join(f"--figure_{side} about {value}" for side, value in sides if value is not None))
+
+
 def _room_lines(report: LabelFitReport) -> list[str]:
     remedies = report.room_remedies
     if not remedies:
         return []
-    return ["To make room:", *(f"  - {_CLI_CAPACITY_REMEDIES[remedy]}" for remedy in remedies)]
+    return ["To make room:", *(f"  - {_room_line(report, remedy)}" for remedy in remedies)]
 
 
 def raise_or_warn(

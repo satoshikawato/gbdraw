@@ -78,9 +78,11 @@ from .fit import (
     LabelKind,
     label_fit_outcome,
     raise_or_warn,
+    shown_capacity_ratio,
     switch_row,
     verified_row,
 )
+from ..layout.figure_size import LargerFigure
 
 OFFSET_STEP = 0.025
 OFFSET_LIMIT = 2.0
@@ -778,6 +780,7 @@ def check_circular_label_fit(
     *,
     warn_search_seconds: float = WARN_SEARCH_SECONDS,
     assembly_seconds: float = 0.0,
+    larger_figure: Callable[[float], LargerFigure] | None = None,
 ) -> tuple[LabelFitReport, CircularLabelFitSearch] | None:
     """Raise, warn, or pass for a drawn figure's records.
 
@@ -792,7 +795,9 @@ def check_circular_label_fit(
     ``assembly_seconds`` is the time of one full assembly, so a verification
     that would overrun a deadline is not started. A record whose labels need
     much more room than the map has (CAPACITY-STOP) raises at once: the report
-    lists every failing record, has no rows, and no row is searched.
+    lists every failing record, has no rows, and no row is searched. With a
+    requested figure size, ``larger_figure`` gives the size those records need
+    from the largest room they need (the ratio the message states).
     """
 
     outcome = circular_label_outcome(layouts)
@@ -800,7 +805,16 @@ def check_circular_label_fit(
         return None
     failing = tuple(layout for layout in layouts if not layout.fits)
     if any(layout.capacity for layout in failing):
-        raise_or_warn(LabelFitReport(records=_fit_records(failing), rows=(), drawn=False))
+        records = _fit_records(failing)
+        ratio = max(shown_capacity_ratio(record.capacity) for record in records if record.capacity is not None)
+        raise_or_warn(
+            LabelFitReport(
+                records=records,
+                rows=(),
+                drawn=False,
+                larger_figure=None if larger_figure is None else larger_figure(ratio),
+            )
+        )
     drawn = outcome == "warn"
     search = CircularLabelFitSearch(
         failing, verify, offer_notice_rows=not drawn, assembly_seconds=assembly_seconds

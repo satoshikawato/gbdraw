@@ -122,7 +122,7 @@ from gbdraw.config.models.labels import LabelsFilteringConfig
 from gbdraw.config.models.objects import (
     normalize_pairwise_match_style,
 )
-from gbdraw.config.models.canvas import FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, LINEAR_SEQUENCE_WIDTH_PATH
+from gbdraw.config.models.canvas import LINEAR_SEQUENCE_WIDTH_PATH
 from gbdraw.config.modify import with_config_overrides, with_fit_row_overrides
 from gbdraw.configurators import (
     BlastMatchConfigurator,
@@ -197,7 +197,15 @@ from gbdraw.layout.composition import (
     TitlePlacement,
     plan_composition,
 )
-from gbdraw.layout.figure_size import check_figure_height, figure_too_narrow, fit_base_length
+from gbdraw.layout.figure_size import (
+    LargerFigure,
+    check_figure_height,
+    figure_size_excess,
+    figure_size_refusal,
+    figure_too_narrow,
+    fit_base_length,
+    larger_figure,
+)
 from gbdraw.layout.linear_multi_record import record_key_at, record_pairs_between_adjacent_rows, stable_record_keys
 from gbdraw.layout.linear_wrap import (
     LinearWrapSummary,
@@ -2717,6 +2725,7 @@ def assemble_circular_diagram_from_record(
     _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
     _record_presentation: RecordPresentation | None = None,
+    _requested_canvas: bool = True,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
 
@@ -3087,6 +3096,8 @@ def assemble_circular_diagram_from_record(
         center_reserved_radius=center_reserved_radius,
         title_content=title_content,
         title_placement=title_placement,
+        # A record of a multi-record canvas is composed at its own size; the canvas takes the requested one.
+        requested_size=cfg.canvas.figure_size if _requested_canvas else RequestedFigureSize(),
     )
     _attach_circular_label_layouts(result.drawing, [result.label_layout])
     return result.drawing
@@ -3467,6 +3478,7 @@ def assemble_circular_diagram_from_records(
             strain=strain,
             plot_title=None,
             plot_title_position="none",
+            _requested_canvas=False,
             center_reserved_radius=center_reserved_radius,
             circular_track_slots=parsed_circular_track_slots,
             circular_track_axis_index=circular_track_axis_index,
@@ -3762,6 +3774,9 @@ def assemble_circular_diagram_from_records(
             legend_placement=legend_placement,
             title_placement=title_placement,
             overlay_obstacles=tuple(grid_overlay_obstacles),
+            # The grid is the outermost composition; its records keep their own canvas.
+            requested_width_px=cfg.canvas.figure_size.width_px,
+            requested_height_px=cfg.canvas.figure_size.height_px,
         ),
     )
     apply_composition_plan(
@@ -3836,28 +3851,86 @@ def _unfit_row_verification(error: ValidationError) -> LabelFitVerification | No
     return None
 
 
-def _checked_circular_drawing(
-    assemble: Callable[[Mapping[str, LabelFitValue]], Drawing],
-    *,
-    warn_search_seconds: float,
-) -> Drawing:
-    """Assemble a Circular figure and apply the label fit check to it.
+_CircularAssemble: TypeAlias = Callable[[GbdrawConfig, Mapping[str, LabelFitValue]], Drawing]
+# The padded content of a Circular map grows about 2 px per px of radius (the map's diameter).
+_CIRCULAR_PX_PER_RADIUS = 2.0
+_CIRCULAR_MAP_NAME = "map at its smallest"
+_CIRCULAR_MAPS_NAME = "maps at their smallest"
 
-    Overlapping labels (or radial labels without room) raise
-    ``LabelsDoNotFitError``; crossing leaders or labels over the definition
-    text alone keep the drawing, warn, and attach the report and its search
-    (rows searched for ``warn_search_seconds``).
+
+@dataclass(frozen=True)
+class _CircularPass:
+    """One Circular assembly: the configuration it drew, the drawing, and the assembly's wall time."""
+
+    cfg: GbdrawConfig
+    drawing: Drawing
+    seconds: float
+
+
+def _circular_pass(assemble: _CircularAssemble, cfg: GbdrawConfig) -> _CircularPass:
+    started = time.monotonic()
+    drawing = assemble(cfg, {})
+    return _CircularPass(cfg, drawing, time.monotonic() - started)
+
+
+def _fitted_circular_pass(
+    assemble: _CircularAssemble, cfg: GbdrawConfig, size: RequestedFigureSize, *, map_name: str
+) -> _CircularPass:
+    """The Circular figure whose padded content fills the requested box (D-12): the largest radius that fits every
+    requested side, applied as a multi-record canvas scales its records (``_scale_circular_cfg``).
+
+    The first pass draws the configured radius, the auto figure. A smaller radius whose tracks cannot be drawn
+    (``TRACK_LAYOUT``) is too small; any other error, and any error at the configured radius, is raised. A box the
+    smallest drawn map does not fit is refused with that map's parts (D-13).
     """
 
-    started = time.monotonic()
-    drawing = assemble({})
-    assembly_seconds = time.monotonic() - started
+    radius = float(cfg.canvas.circular.radius)
+    first_base = max(1, round(radius))
+
+    def measure(base: int) -> tuple[float, _CircularPass] | None:
+        scaled = cfg if base == first_base else _scale_circular_cfg(cfg, scale=base / radius)
+        try:
+            built = _circular_pass(assemble, scaled)
+        except ValidationError as error:
+            if base < first_base and track_layout_reason(error) is not None:
+                return None
+            raise
+        return figure_size_excess(applied_composition_plan(built.drawing), size), built
+
+    fit = fit_base_length(measure, first_base=first_base, slope=_CIRCULAR_PX_PER_RADIUS)
+    if not fit.fits:
+        raise figure_size_refusal(applied_composition_plan(fit.built.drawing), size, primary_name=map_name)
+    return fit.built
+
+
+def _checked_circular_drawing(
+    assemble: _CircularAssemble,
+    cfg: GbdrawConfig,
+    *,
+    warn_search_seconds: float,
+    map_name: str,
+) -> Drawing:
+    """Assemble a Circular figure and apply the figure size and label fit checks to it.
+
+    The one owner of both for a single map and a multi-record canvas. A requested figure size sets the radius
+    (``_fitted_circular_pass``), and that pass is the drawn figure; label fit rows draw at the same radius.
+    Overlapping labels (or radial labels without room) raise ``LabelsDoNotFitError``; crossing leaders or labels
+    over the definition text alone keep the drawing, warn, and attach the report and its search (rows searched for
+    ``warn_search_seconds``). Labels not placed for lack of room at a requested size offer a larger figure.
+    """
+
+    size = cfg.canvas.figure_size
+    if size.requested:
+        drawn = _fitted_circular_pass(assemble, cfg, size, map_name=map_name)
+    else:
+        drawn = _circular_pass(assemble, cfg)
+    drawing = drawn.drawing
 
     def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         try:
             # A row is verified with the full placement and no capacity check, so the rows stay as they were.
             with label_capacity_unchecked():
-                verified = assemble(overrides)
+                verified = assemble(drawn.cfg, overrides)
         except ValidationError as error:
             unfit = _unfit_row_verification(error)
             if unfit is None:
@@ -3870,11 +3943,20 @@ def _checked_circular_drawing(
             fit=sum((layout.fit for layout in layouts), FITS),
         )
 
+    larger: Callable[[float], LargerFigure] | None = None
+    if size.requested:
+        bind_export_size(drawing, size)
+        plan = applied_composition_plan(drawing)
+
+        def larger(ratio: float) -> LargerFigure:
+            return larger_figure(plan, size, ratio)
+
     checked = check_circular_label_fit(
         _circular_label_layouts(drawing),
         verify,
-        assembly_seconds=assembly_seconds,
+        assembly_seconds=drawn.seconds,
         warn_search_seconds=warn_search_seconds,
+        larger_figure=larger,
     )
     if checked is not None:
         setattr(drawing, _LABEL_FIT_ATTR, checked)
@@ -3936,19 +4018,6 @@ def _linear_builder_options(
     raise ValidationError("options must be LinearDiagramOptions.")
 
 
-def _refuse_circular_figure_size(cfg: GbdrawConfig) -> None:
-    """A requested figure size draws only Linear figures until the Circular fit lands (D-07); it is never ignored."""
-
-    size = cfg.canvas.figure_size
-    if size.requested:
-        path = FIGURE_WIDTH_PATH if size.width is not None else FIGURE_HEIGHT_PATH
-        raise ValidationError(
-            "figure_width and figure_height are not available for Circular maps yet; leave them auto "
-            "(they size Linear figures).",
-            diagnostic={"code": "INPUT_INVALID", "configPath": path},
-        )
-
-
 def build_circular_diagram(
     gb_record: SeqRecord,
     *,
@@ -3970,7 +4039,6 @@ def build_circular_diagram(
     tracks = options.tracks
 
     cfg = _resolve_diagram_options_config(options)
-    _refuse_circular_figure_size(cfg)
     # Read every file once: the label fit rows reassemble the figure, on the
     # Web after its staged files are deleted (OV-720, OV-732).
     conservation_inputs = read_conservation_inputs(
@@ -4000,11 +4068,11 @@ def build_circular_diagram(
         )
     )
 
-    def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
+    def assemble(drawn_cfg: GbdrawConfig, overrides: Mapping[str, LabelFitValue]) -> Drawing:
         config_overrides, row_center_reserved_radius = split_row_option_values(overrides)
         return assemble_circular_diagram_from_record(
             gb_record,
-            cfg=with_fit_row_overrides(cfg, config_overrides, set_paths=_set_config_paths(options)),
+            cfg=with_fit_row_overrides(drawn_cfg, config_overrides, set_paths=_set_config_paths(options)),
             selected_features_set=options.selected_features_set,
             feature_shapes=options.feature_shapes,
             output_prefix="out",
@@ -4056,7 +4124,7 @@ def build_circular_diagram(
         )
 
     return _checked_circular_drawing(
-        assemble, warn_search_seconds=_label_fit_warn_search_seconds
+        assemble, cfg, warn_search_seconds=_label_fit_warn_search_seconds, map_name=_CIRCULAR_MAP_NAME
     )
 
 
@@ -4254,11 +4322,14 @@ def _checked_linear_build(
         result = build({})
     else:
 
+        target = figure_size.width.px
+
         def measure(base: int) -> tuple[float, Drawing | LinearDiagramBuildResult]:
             built = build({LINEAR_SEQUENCE_WIDTH_PATH: base})
-            return applied_composition_plan(_linear_drawing(built)).content_bounds.width, built
+            return applied_composition_plan(_linear_drawing(built)).content_bounds.width - target, built
 
-        fit = fit_base_length(measure, figure_size.width.px)
+        # The composed width grows about 1 px per px of sequence width.
+        fit = fit_base_length(measure, first_base=max(1, math.floor(target)), slope=1.0)
         if not fit.fits:
             raise figure_too_narrow(
                 applied_composition_plan(_linear_drawing(fit.built)),
@@ -4281,7 +4352,7 @@ def _checked_linear_build(
 
     drawing = _linear_drawing(result)
     if figure_size.requested:
-        check_figure_height(applied_composition_plan(drawing), figure_size)
+        check_figure_height(applied_composition_plan(drawing), figure_size, primary_name="records")
         bind_export_size(drawing, figure_size)
     report = check_linear_label_fit(_linear_label_fit(drawing), verify, features_separated=features_separated)
     if report is not None:
@@ -4387,7 +4458,6 @@ def build_circular_multi_diagram(
     output = options.output
     tracks = options.tracks
     cfg = _resolve_diagram_options_config(options)
-    _refuse_circular_figure_size(cfg)
     # Read every file once: the label fit rows reassemble the figure, on the
     # Web after its staged files are deleted (OV-720, OV-732).
     conservation_inputs = read_conservation_inputs(
@@ -4415,11 +4485,11 @@ def build_circular_multi_diagram(
         )
     )
 
-    def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
+    def assemble(drawn_cfg: GbdrawConfig, overrides: Mapping[str, LabelFitValue]) -> Drawing:
         config_overrides, row_center_reserved_radius = split_row_option_values(overrides)
         return assemble_circular_diagram_from_records(
             records,
-            cfg=with_fit_row_overrides(cfg, config_overrides, set_paths=_set_config_paths(options)),
+            cfg=with_fit_row_overrides(drawn_cfg, config_overrides, set_paths=_set_config_paths(options)),
             conservation_blast_files=conservation_inputs,
             conservation_dataframes=options.conservation_dataframes,
             conservation_reference=options.conservation_reference,
@@ -4474,7 +4544,7 @@ def build_circular_multi_diagram(
         )
 
     return _checked_circular_drawing(
-        assemble, warn_search_seconds=_label_fit_warn_search_seconds
+        assemble, cfg, warn_search_seconds=_label_fit_warn_search_seconds, map_name=_CIRCULAR_MAPS_NAME
     )
 
 
