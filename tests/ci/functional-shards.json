@@ -86,6 +86,7 @@
     "tests/web/python-rule-parity.playwright.spec.js": 1.04,
     "tests/web/record-display-discovery.playwright.spec.js": 0.5,
     "tests/web/record-draw-selection.playwright.spec.js": 0.63,
+    "tests/web/region-drawing.playwright.spec.js": 0.33,
     "tests/web/right-drawer.playwright.spec.js": 4.4,
     "tests/web/scale-visibility.playwright.spec.js": 0.3,
     "tests/web/session-active-mode.playwright.spec.js": 0.42,
@@ -145,7 +146,8 @@
       "tests/web/preview-navigation.playwright.spec.js",
       "tests/web/setting-application-notes.playwright.spec.js",
       "tests/web/source-recipe-cli-parity.playwright.spec.js",
-      "tests/web/source-visibility-reconciliation.playwright.spec.js"
+      "tests/web/source-visibility-reconciliation.playwright.spec.js",
+      "tests/web/region-drawing.playwright.spec.js"
     ],
     [
       "tests/web/auxiliary-file-history.playwright.spec.js",
@@ -248,8 +250,7 @@
       "tests/web/right-drawer.playwright.spec.js",
       "tests/web/session-loading-feedback.playwright.spec.js",
       "tests/web/session-operation-consistency.playwright.spec.js",
-      "tests/web/settings-section-index.playwright.spec.js",
-      "tests/web/region-drawing.playwright.spec.js"
+      "tests/web/settings-section-index.playwright.spec.js"
     ]
   ]
 }
