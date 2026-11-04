@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import test from 'node:test';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
-import { modeDrawing } from './helpers/drawing-state.mjs';
+import { createHash } from 'node:crypto';
+import { DRAWING_SLICES, modeDrawing } from './helpers/drawing-state.mjs';
 import { evaluatePython } from './helpers/python-evaluator.mjs';
 
 globalThis.window = {
@@ -26,6 +27,9 @@ globalThis.File = File;
 const { state, createDrawingState } = await import('../../gbdraw/web/js/state.js');
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { createRegionDrawing } = await import('../../gbdraw/web/js/app/region-drawing.js');
+const { createDrawingList } = await import('../../gbdraw/web/js/app/drawing-list.js');
+const { allocateDrawingId, defaultDrawingName } = await import('../../gbdraw/web/js/services/drawing-view.js');
+const { withNewDrawingDefaults } = await import('../../gbdraw/web/js/services/reset.js');
 const { bindDrawingInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
   installShownDrawing, installPreparedDrawing, prepareRegionDrawing, projectDraftRequest, serializeActiveRenderFiles
@@ -146,4 +150,83 @@ test('(c) a region that crosses the origin is refused: no drawing, the tabs and 
   assert.equal('create' in offer, false, 'a refusal offers no Create');
   assert.deepEqual(created, []);
   assert.deepEqual(listView(), before);
+});
+
+// Every slice of a drawing and its input type (as history-per-drawing hashes them).
+const hashOf = (drawingId) => {
+  const drawing = state.drawingOf(drawingId);
+  const slices = Object.fromEntries(Object.entries(DRAWING_SLICES)
+    .map(([name, slice]) => [name, slice.capture(drawing.slices[name])]));
+  return createHash('sha256').update(JSON.stringify({ slices, inputType: drawing.inputType.value })).digest('hex');
+};
+
+// The drawing list over the store and the app's History, with the region
+// port as the app builds it; a switch only changes the shown drawing.
+const drawingList = createDrawingList({
+  drawingTabs: () => state.drawingTabs.value,
+  shownDrawingId: () => state.activeDrawingId.value,
+  switchBusy: () => null,
+  drawingOf: state.drawingOf,
+  drawingHasResult: () => false,
+  drawingHasEdits: () => false,
+  boundFileIdsOf: () => [],
+  createDrawing: (drawingId, mode) => withNewDrawingDefaults(state, createDrawingState(drawingId, mode)),
+  styleDrawing: () => { throw new Error('not used'); },
+  copyDrawing: () => { throw new Error('not used'); },
+  regionDrawing: async (derivation) => {
+    const prepared = await prepareRegionDrawing(derivation);
+    return (drawingId) => {
+      const made = createDrawingState(drawingId, prepared.mode);
+      installPreparedDrawing(made, prepared);
+      return made;
+    };
+  },
+  addDrawing: state.addDrawing,
+  removeDrawing: (drawingId) => state.removeDrawing(drawingId, { takeSlot: () => null }),
+  putSlot: () => {},
+  renameDrawing: state.renameDrawing,
+  moveDrawing: state.moveDrawing,
+  addDrawingHistory: history.addMember,
+  removeDrawingHistory: history.removeMember,
+  runListStep: history.runListStep,
+  showDrawingNow: installShownDrawing
+});
+const regionDrawingsOf = () => createRegionDrawing({
+  shownDrawingId: () => state.activeDrawingId.value,
+  projectShownRequest: () => projectDraftRequest(state, state.activeDrawing(), facts),
+  deriveRegion: deriveInPython,
+  newDrawingFromRegion: drawingList.newDrawingFromRegion
+});
+
+test('(d) Create adds the region drawing as New does; Undo removes it, Redo brings it back', async () => {
+  const source = circularSource([recordA]);
+  const sourceHash = hashOf(source.id);
+  const before = listView();
+  const offer = await regionDrawingsOf().deriveFromShown([{ recordKey: 'record-1', start: 301, end: 700 }], true);
+  assert.equal(offer.status, 'derived');
+  assert.equal(offer.mode, 'linear', 'a part of a record is drawn Linear');
+  const drawingId = allocateDrawingId('linear', before.tabs.map(({ id }) => id));
+  assert.deepEqual(listView(), before, 'deriving adds nothing');
+
+  const outcome = await offer.create();
+  assert.deepEqual(outcome, { status: 'ok', drawingId });
+  assert.deepEqual(state.drawingTabs.value.map(({ id, name }) => ({ id, name })),
+    [...before.tabs, { id: drawingId, name: defaultDrawingName('linear', drawingId) }], 'the ID and name New gives');
+  assert.equal(state.activeDrawingId.value, drawingId, 'the new drawing is shown');
+  assert.equal(state.drawingOf(drawingId).mode, 'linear');
+  assert.equal(history.timeline().undo[0]?.label, 'New drawing from a region');
+  assert.equal(history.managerOf(drawingId).getUndoCount(), 0, 'its History starts empty');
+  assert.equal(hashOf(source.id), sourceHash, 'the source drawing is unchanged');
+
+  await history.undo();
+  assert.deepEqual(state.drawingTabs.value.map(({ id, name }) => ({ id, name })), before.tabs);
+  assert.equal(state.activeDrawingId.value, before.shown, 'the drawing shown before');
+  assert.equal(hashOf(source.id), sourceHash);
+
+  await history.redo();
+  assert.equal(state.activeDrawingId.value, drawingId);
+  assert.equal(state.drawingOf(drawingId).mode, 'linear');
+  assert.equal(hashOf(source.id), sourceHash);
+  // Leave the store as the next cases expect it.
+  await history.undo();
 });
