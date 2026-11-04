@@ -6,7 +6,7 @@
 /** @import { DrawingState } from '../state.js' */
 /** @import { LinearWrapBlocker, LinearWrapBlockerInputs, LinearWrapUnit, ShownLinearWrap } from '../services/linear-wrap-form.js' */
 import {
-  isLinearWrapUnit, linearWrapAmountText, linearWrapBlockers, linearWrapInputValue, linearWrapUnitOf
+  isLinearWrapUnit, linearWrapAmountText, linearWrapBlockers, linearWrapInputValue, linearWrapUnitOf, offersRecordPositionReset
 } from '../services/linear-wrap-form.js';
 import { reasonText } from '../utils/error-normalization.js';
 import { joinSentences, t, tm } from '../utils/i18n.js';
@@ -60,6 +60,9 @@ export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInput
   const linearWrapBlocked = computed(() => blockers.value.length > 0);
   // One visible hint names every blocker, in the words of its Generate refusal.
   const linearWrapBlockedText = computed(() => joinSentences(...blockers.value.map((blocker) => tm(/** @type {string} */ (reasonText(blocker))))));
+  // A drawn record moved sideways, or a Similarity alignment, offers Reset record positions under the hint, which names
+  // it (PD-OI-113 scenario revision 2, Q5 A).
+  const linearWrapResetsPositions = computed(() => offersRecordPositionReset(blockerInputs()));
   /**
    * @param {Event} event A change of the checkbox, the length, or the unit.
    * @param {LinearWrapFieldPart} part
@@ -77,6 +80,6 @@ export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInput
   };
   return {
     linearWrapOn, linearWrapFixesNormalize, linearWrapFixesRulerOnAxis, linearWrapUnit, linearWrapAmount, linearWrapAutoText,
-    linearWrapBlocked, linearWrapBlockedText, changeLinearWrap
+    linearWrapBlocked, linearWrapBlockedText, linearWrapResetsPositions, changeLinearWrap
   };
 };

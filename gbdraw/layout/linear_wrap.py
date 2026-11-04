@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Protocol
 
 from Bio.SeqRecord import SeqRecord
 
@@ -17,6 +18,7 @@ from gbdraw.config.models.root import GbdrawConfig
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import VerticalBand
+from gbdraw.layout.linear_multi_record import stable_record_keys
 from gbdraw.layout.record_coordinates import RecordDisplayTransform, wrapped_row_count
 
 
@@ -54,6 +56,12 @@ def resolve_wrap_length(requested: LinearWrapLength, record_lengths: Sequence[in
     longest = max(record_lengths)
     length = auto_wrap_length(longest) if requested == "auto" else requested
     return length if length is not None and longest > length else None
+
+
+def is_cut(record_length: int, row_length: int) -> bool:
+    """Whether a row of ``row_length`` cuts a record of ``record_length``: the one per-record test."""
+
+    return record_length > row_length
 
 
 def _length_words(length: int) -> str:
@@ -143,7 +151,7 @@ def resolve_wrap(
         return transforms, None
     bound = transforms if transforms is not None else [_unset_transform(record) for record in records]
     wrapped = tuple(
-        transform.with_wrap(row_length, length) if length > row_length else transform
+        transform.with_wrap(row_length, length) if is_cut(length, row_length) else transform
         for transform, length in zip(bound, lengths, strict=True)
     )
     return wrapped, LinearWrapSummary(row_length, requested, tuple(lengths))
@@ -185,20 +193,38 @@ def wrap_blocking_inputs(
     return tuple(name for name, value in given.items() if value is not None and value != () and value != [])
 
 
+class RecordTranslation(Protocol):
+    """A record's stored translation, as ``LinearMultiRecordOptions.record_translations`` holds it."""
+
+    @property
+    def record_key(self) -> str: ...
+
+    @property
+    def x(self) -> float: ...
+
+
 def refuse_undrawable_wrap(
     config: GbdrawConfig,
     rows_by_record: Sequence[int],
     blocking: Sequence[str],
     *,
+    row_length: int,
     anchor_feature: bool = False,
+    records: Sequence[SeqRecord] = (),
+    translations: Sequence[RecordTranslation] = (),
 ) -> None:
     """Refuse what rows cannot draw. Called only when a record is cut: with nothing to cut, the option has no effect.
 
-    ``anchor_feature`` says the records are aligned at a feature, which one x per record cannot do once a record
-    spans several rows.
+    ``anchor_feature`` says the records are aligned at a feature, and ``translations`` are the stored translations
+    of ``records``, whatever wrote them (Align at feature, a Similarity alignment, an anchored figure's Session, the
+    Python API). One x per record cannot place a record that spans several rows, so a cut record must keep x 0.
+    ``row_length`` is the length the caller resolved (``resolve_wrap_length``) and cuts at; it is required, so a
+    caller cannot leave the moved-record refusal out.
     """
 
-    if blocking:
+    # A Similarity alignment left without its comparison inputs moves records: it is refused as a moved record, below.
+    alignment_only = tuple(blocking) == ("similarity_alignment",)
+    if blocking and not alignment_only:
         raise ValidationError(
             "wrap_length cannot cut a record of a figure with comparison inputs "
             f"({', '.join(blocking)}): a wrapped figure draws no comparisons.",
@@ -232,6 +258,26 @@ def refuse_undrawable_wrap(
             "anchor_feature cannot align a record cut by wrap_length: the record's rows share one place.",
             diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_ANCHOR_FEATURE"},
         )
+    if alignment_only:
+        raise ValidationError(
+            "wrap_length cannot cut a record of a figure with a similarity alignment: the alignment moves records "
+            "sideways and a cut record's rows share one x. Remove the alignment, or do not wrap.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_RECORD_POSITION"},
+        )
+    moved_keys = {translation.record_key for translation in translations if translation.x != 0}
+    if not moved_keys:
+        return
+    moved = [
+        str(record.id)
+        for record, key in zip(records, stable_record_keys(records), strict=True)
+        if key in moved_keys and is_cut(len(record.seq), row_length)
+    ]
+    if moved:
+        raise ValidationError(
+            f"wrap_length cannot cut a record moved sideways ({', '.join(moved)}): the record's rows share one x. "
+            "Set the record's x translation to 0, or do not wrap.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_RECORD_POSITION"},
+        )
 
 
 def refuse_feature_track_on_the_axis(feature_track_layout: str) -> None:
@@ -252,6 +298,7 @@ __all__ = [
     "AUTO_WRAP_MAX_ROWS",
     "LinearWrapSummary",
     "auto_wrap_length",
+    "is_cut",
     "drawn_axis_length",
     "longer_row_lengths",
     "refuse_feature_track_on_the_axis",

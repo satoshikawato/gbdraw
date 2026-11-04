@@ -3,8 +3,10 @@ from __future__ import annotations
 import math
 from numbers import Integral
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any, Literal, Mapping, TypeAlias, cast
 
+from gbdraw.core.figure_length import FIGURE_LENGTH_AUTO, RequestedFigureSize, parse_figure_length
 from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, ascii_int, parse_length_bp
 from gbdraw.exceptions import ValidationError
 
@@ -56,6 +58,28 @@ def linear_wrap_length_from_config(value: object) -> LinearWrapLength:
             diagnostic={"code": "INPUT_INVALID", "configPath": LINEAR_WRAP_LENGTH_PATH},
         )
     return parsed
+
+
+FIGURE_WIDTH_PATH = "canvas.figure_width"
+FIGURE_HEIGHT_PATH = "canvas.figure_height"
+# The Linear sequence width (px): the base length a requested figure width sets.
+LINEAR_SEQUENCE_WIDTH_PATH = "canvas.linear.width"
+
+
+def figure_length_from_config(value: object, *, path: str) -> str:
+    """The one validator of ``canvas.figure_width`` and ``canvas.figure_height``, for a config and an override alike.
+
+    It returns ``"auto"`` (also for ``None``) or the canonical text of a length with a unit (``"180mm"``), so a
+    Session and Run Info keep the unit that was entered.
+    """
+
+    try:
+        length = parse_figure_length(value if value is None or isinstance(value, str) else repr(value))
+    except ValidationError as exc:
+        raise ValidationError(
+            f"{path} {exc}", diagnostic={"code": "INPUT_INVALID", "configPath": path}
+        ) from exc
+    return FIGURE_LENGTH_AUTO if length is None else length.text
 
 
 # The scale leaves an axis ruler takes from the axis color unless a request sets them.
@@ -290,10 +314,21 @@ class CanvasConfig:
     circular: CircularCanvasConfig
     linear: LinearCanvasConfig
     feature_overlap_tolerance_bp: int = 0
+    # The whole figure's size, legend and title included: ``"auto"`` or a length with a unit (``"180mm"``).
+    figure_width: str = field(
+        default=FIGURE_LENGTH_AUTO, metadata={LEAF_VALIDATOR: partial(figure_length_from_config, path=FIGURE_WIDTH_PATH)}
+    )
+    figure_height: str = field(
+        default=FIGURE_LENGTH_AUTO, metadata={LEAF_VALIDATOR: partial(figure_length_from_config, path=FIGURE_HEIGHT_PATH)}
+    )
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "feature_overlap_tolerance_bp",
                            validate_feature_overlap_tolerance(self.feature_overlap_tolerance_bp))
+        object.__setattr__(self, "figure_width", figure_length_from_config(self.figure_width, path=FIGURE_WIDTH_PATH))
+        object.__setattr__(
+            self, "figure_height", figure_length_from_config(self.figure_height, path=FIGURE_HEIGHT_PATH)
+        )
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "CanvasConfig":
@@ -312,17 +347,29 @@ class CanvasConfig:
             feature_overlap_tolerance_bp=d.get("feature_overlap_tolerance_bp", 0),
             circular=CircularCanvasConfig.from_dict(d["circular"]),
             linear=LinearCanvasConfig.from_dict(d["linear"]),
+            figure_width=d.get("figure_width", FIGURE_LENGTH_AUTO),
+            figure_height=d.get("figure_height", FIGURE_LENGTH_AUTO),
         )
+
+    @property
+    def figure_size(self) -> RequestedFigureSize:
+        """The requested figure size, read from the two leaves (their validator stored canonical text)."""
+
+        return RequestedFigureSize(parse_figure_length(self.figure_width), parse_figure_length(self.figure_height))
 
 
 __all__ = [
     "CanvasConfig",
     "CircularCanvasConfig",
+    "FIGURE_HEIGHT_PATH",
+    "FIGURE_WIDTH_PATH",
     "LinearCanvasConfig",
     "LinearTrackLayoutMode",
     "LEAF_VALIDATOR",
+    "LINEAR_SEQUENCE_WIDTH_PATH",
     "LINEAR_WRAP_LENGTH_PATH",
     "LinearWrapLength",
+    "figure_length_from_config",
     "linear_axis_ruler_applies",
     "linear_wrap_length_from_config",
 ]

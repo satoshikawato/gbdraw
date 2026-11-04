@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { RecordPlacementRun } from './align-at-feature.js' */
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
@@ -87,6 +88,7 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  committedLinearRecordCards,
   committedSettingNotePredicate,
   committedTrackHideDrawing,
   commitLiveSettingValues,
@@ -188,6 +190,7 @@ import { afterPaint, buildDefaultMultiRecordPositions, createRunAnalysis } from 
 import { createSimilarityAlignmentActions, featureNameParts } from './similarity-alignment.js';
 import { createRecordAutoOrientation } from './record-auto-orientation.js';
 import { createFeatureAnchorAction } from './align-at-feature.js';
+import { createRecordPositionReset } from './record-position-reset.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
@@ -281,6 +284,7 @@ import {
   circularRecordRequestKeys,
   circularRecordsToDraw,
   linearCardHasSettings,
+  movesARecordSideways,
   pruneRecordsOff,
   recordsWithEdits,
   removeRecordEdits
@@ -2427,6 +2431,20 @@ export const createAppSetup = () => {
     return records.every((record) => record.region === null) ? records.map((record) => record.sourceLength) : [];
   };
   const drawnLinearRecordLengths = () => linearRecordLengthsOf(state.activeDrawing());
+  // The records a shown Result without an input summary (a loaded one) drew:
+  // each committed record's region as its request asked for it, with the
+  // length of the source record its card reads, matched by record key, so a
+  // card edited since Load changes neither (D-73). [] while a record has no
+  // card that still draws it, or its length is unknown.
+  /** @param {DrawingState} drawing @returns {LinearDraftRecord[]} */
+  const committedLinearRecordsOf = (drawing) => {
+    const records = (committedLinearRecordCards(drawing) ?? []).map(({ record, seq }) => {
+      const sourceLength = Number(linearSeqRecord(drawing, seq)?.recordLength);
+      const { region } = record;
+      return sourceLength > 0 ? { sourceLength, region: region && { start: region.start, end: region.end } } : null;
+    });
+    return records.length && records.every((record) => record !== null) ? /** @type {LinearDraftRecord[]} */ (records) : [];
+  };
   // A Linear card whose record list is still deferred after a Load is read
   // now, through the record selector, as Generate reads it (DESIGN A4).
   /** @param {DrawingState} drawing */
@@ -5492,21 +5510,34 @@ export const createAppSetup = () => {
   });
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
-  // Align at feature writes the record translations as one step without the
+  // Align at feature and Reset record positions write the record translations as one step without the
   // alignment plan, as a manual record movement does (PD-OI-028).
+  /** @type {RecordPlacementRun} */
+  const runRecordPlacement = ({ canonical, label }) => runCommittedCanonicalCandidate({ canonical, label, alignmentResetReceipt: null });
   const featureAnchor = createFeatureAnchorAction({
     materializedSession: similarityAlignmentActions.materializedSession,
     hasAlignmentPlan: () => Boolean(state.similarityAlignmentPlan.value),
     runHelperOperation: runDiagramHelperOperation,
     resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_FEATURE_ANCHOR,
-    runPlacement: ({ canonical, label }) => runCommittedCanonicalCandidate({ canonical, label, alignmentResetReceipt: null }),
+    runPlacement: runRecordPlacement,
     notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
     projectPlacement: projectCommittedSimilarityAlignment,
     recordTranslations: () => state.linearRecordTranslations.value,
     sessionReplacements: () => sessionReplacements.value
   });
-  // Wrap Rows (PD-OI-113): its blockers read the owners the request reads. A Similarity alignment is a
-  // comparison input to Python's refusal; Align at feature is the positions its Apply wrote, while they hold.
+  // Reset record positions writes x 0 for every record through the channel Align at feature's Apply writes through.
+  const recordPositionReset = createRecordPositionReset({
+    materializedSession: similarityAlignmentActions.materializedSession,
+    hasAlignmentPlan: () => Boolean(state.similarityAlignmentPlan.value),
+    notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
+    runPlacement: runRecordPlacement,
+    projectPlacement: projectCommittedSimilarityAlignment,
+    onError: (error) => { errorLog.value = error; }
+  });
+  // Wrap Rows (PD-OI-113): its blockers read the owners the request reads. The comparison blocker reads the comparison
+  // inputs only; a drawn record moved sideways is read from the translations the request carries, whatever wrote them
+  // (Align at feature counts only through the records its Apply moved), and a Similarity alignment plan counts as
+  // moved records, also when its comparison inputs were removed (Q5 A).
   const linearWrapField = createLinearWrapField({
     state,
     changeLayoutSetting: featureActions.placementActions.changeLayoutSetting,
@@ -5514,9 +5545,10 @@ export const createAppSetup = () => {
     blockerInputs: () => {
       const drawing = state.activeDrawing();
       return {
-        comparisons: drawing.linearComparisonResolution.value.hasComparisonIntent || state.similarityAlignmentPlan.value !== null,
+        comparisons: drawing.linearComparisonResolution.value.hasComparisonIntent,
         sharedRecordRow: linearLabelHasSharedRow.value,
-        featureAlignment: featureAnchor.applied.value,
+        movedRecords: movesARecordSideways(state.linearRecordTranslations.value, drawing.drawnLinearSeqs.value),
+        alignmentPlan: state.similarityAlignmentPlan.value !== null,
         featureTrackOnAxis: Boolean(drawing.adv.linear_track_slots_enabled)
           && effectiveLinearSlotPlacement(draftFeatureSlot({ mode: drawing.mode, form: drawing.form, adv: drawing.adv })) === 'overlay'
       };
@@ -6413,16 +6445,17 @@ export const createAppSetup = () => {
       // The size check of a PNG or PDF reads the exported Result's wrap
       // (D-52, D-55): Python reads its stored leaf, and decides from it
       // whether a record is cut, and the row length it advises. A loaded
-      // Result has no input summary: its records are discovered first.
+      // Result has no input summary: its records are discovered first, and
+      // Python crops each by the region its request drew (D-70, D-73).
       const exportedDrawing = historySnapshots.displayedArtifactDrawing();
       const exportedSummary = shownInputSummary.value ?? undefined;
       const exportedWrapLeaf = shownLinearWrapLeaf(exportedDrawing);
       const linearWrap = () => exportLinearWrap({
         leaf: exportedWrapLeaf,
         summary: exportedSummary,
-        discoverRecordLengths: async () => {
+        discoverRecords: async () => {
           await awaitLinearRecordDiscovery(exportedDrawing);
-          return linearRecordLengthsOf(exportedDrawing);
+          return committedLinearRecordsOf(exportedDrawing);
         }
       });
       /** @type {import('../services/export.js').ExportPorts} */
@@ -8249,6 +8282,8 @@ export const createAppSetup = () => {
     resolveFeatureAnchor: featureAnchor.resolve,
     applyFeatureAnchor: featureAnchor.apply,
     cancelFeatureAnchor: featureAnchor.cancel,
+    recordPositionResetBusy: recordPositionReset.busy,
+    resetRecordPositions: recordPositionReset.reset,
     similarityAlignmentStatus: similarityAlignmentActions.status,
     similarityAlignmentBusy: similarityAlignmentActions.busy,
     similarityAlignmentError: similarityAlignmentActions.error,

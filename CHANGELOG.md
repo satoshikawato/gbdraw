@@ -12,6 +12,17 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Added: a Linear figure can be drawn to a requested size with a unit
+  (`--figure_width 180mm`, `--figure_height 12cm`; `figure_width` and
+  `figure_height` on `LinearOptions`; `canvas.figure_width` and
+  `canvas.figure_height`). The sequence width changes to fit; fonts, line
+  widths, the legend and padding keep their size, and extra height is centred.
+  A size the figure cannot fit is refused with the size of each part and the
+  smallest size that works. Written SVG and PDF state the size in its unit.
+  Circular maps refuse a requested size for now (#1427).
+- Added: `--dpi` and a `dpi` argument on `save_figure_to()`,
+  `render_to_bytes()`, `Diagram.to_bytes()`, `Diagram.save()`, and
+  `RenderOutputRequest` scale PNG pixels by `dpi / 96`.
 - Added: gzip-compressed input files (`.gbff.gz`, `.fna.gz`, `.gff.gz`, gzip
   TSV tables and depth files) are read as the plain files they hold, in the
   CLI, the Python API, and the Web app; a saved Session keeps the plain file.
@@ -36,7 +47,13 @@ write-up of a release.
 - Added: Web app: **Wrap Rows** in the Linear Layout card draws long records
   over several rows (Auto, or a length in bp, kbp, or Mbp), with the same rules
   as `--wrap_length`. A PNG over 32,767 px per side, or a wrapped figure's PDF
-  over 14,400 pt, is refused before a file is made.
+  over 14,400 pt, is refused before a file is made. While a record is moved
+  sideways (Align at feature, a Similarity alignment, or the record positions
+  of a loaded Session), Wrap Rows cannot be turned on, and **Reset record
+  positions** under the field sets every record's sideways position to 0 and
+  ends a Similarity alignment in one step that one Undo reverts. A Generate,
+  `--session`, or Python render that would cut a moved record is refused; it
+  drew the record's rows shifted by one x before.
 
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
 

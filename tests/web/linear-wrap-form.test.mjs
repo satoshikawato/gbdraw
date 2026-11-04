@@ -10,12 +10,13 @@ import { normalizeUserFacingError, reasonText } from '../../gbdraw/web/js/utils/
 import { createDefaultAdv, createDefaultForm } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import {
   LINEAR_WRAP_FORM_FIELDS, exportLinearWrap, linearWrapAmountText, linearWrapBlockers, linearWrapFormPatch, linearWrapInputValue,
-  linearWrapUnitOf, requestLinearWrapLeaf, requestLinearWrapLength, shownLinearWrap
+  linearWrapUnitOf, offersRecordPositionReset, requestLinearWrapLeaf, requestLinearWrapLength, shownLinearWrap
 } from '../../gbdraw/web/js/services/linear-wrap-form.js';
 import {
   createFeaturePlacementActions, draftFeatureSlot, draftPlacementTargets
 } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createLinearWrapField } from '../../gbdraw/web/js/app/linear-wrap-field.js';
+import { movesARecordSideways } from '../../gbdraw/web/js/services/record-draw-selection.js';
 import { createAutoValueDisplay } from '../../gbdraw/web/js/app/auto-value-display.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
@@ -26,7 +27,8 @@ const WRAP_REFUSALS = Object.freeze({
   WRAP_SCALE_STYLE: ['INPUT_INVALID', 'Set Scale Style to Ruler (Ticks), or turn Wrap Rows off.'],
   WRAP_NORMALIZE_LENGTH: ['INPUT_INVALID', 'Turn Normalize Record Lengths off, or turn Wrap Rows off.'],
   WRAP_GRID_ROW: ['INPUT_INVALID', 'Give each record its own row, or turn Wrap Rows off.'],
-  WRAP_ANCHOR_FEATURE: ['INPUT_INVALID', 'Undo Align at feature, or turn Wrap Rows off.']
+  WRAP_ANCHOR_FEATURE: ['INPUT_INVALID', 'Turn Wrap Rows off, then use Align at feature.'],
+  WRAP_RECORD_POSITION: ['INPUT_INVALID', 'Click Reset record positions under Wrap Rows, or turn Wrap Rows off.']
 });
 
 test('each wrap refusal names what rows cannot draw and the way out, the text its hint shows', () => {
@@ -137,15 +139,51 @@ test('Wrap Rows is one edit of the layout transition: Cancel restores every fiel
   assert.deepEqual(laned.featurePlacementOverrides, {});
 });
 
+// PD-OI-113 scenario revision 2: one rule for every source of a record's place. The blocker reads the stored
+// translations (Align at feature, a Similarity alignment, a loaded CLI or Python Session alike); only x moves a
+// record sideways, and whether a record is cut is Python's (WRAP_RECORD_POSITION).
+// The x test repeats Python's `translation.x != 0` (gbdraw/layout/linear_wrap.py `refuse_undrawable_wrap`): a twin with
+// no generator, held by these cases and tests/test_linear_wrap_plan.py's x 0 / x 40 pair.
+test('a drawn record moved sideways is a translation the request carries with an x other than 0, whatever wrote it', () => {
+  const drawn = [{ uid: 'record-1' }, { uid: 'record-2' }];
+  assert.equal(movesARecordSideways([], drawn), false);
+  assert.equal(movesARecordSideways([{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 0, y: 12 }], drawn), false,
+    'zero entries (a LOSAT request) and a vertical move only');
+  assert.equal(movesARecordSideways([{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: -62.8, y: 0 }], drawn), true,
+    'Align at feature on HmmtDNA and NC_002333.2');
+  assert.equal(movesARecordSideways([{ recordKey: 'cli-record-1', x: 15, y: 0 }], [{ uid: 'cli-record-1' }]), true,
+    'a loaded --anchor_feature Session');
+  // Review 1 L1: the entry of a record no longer drawn (its File removed, the record turned off) is not read, as the
+  // request leaves it out (`recordTranslationsFor`), so it blocks nothing Python would draw.
+  assert.equal(movesARecordSideways([{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: -62.8, y: 0 }],
+    [{ uid: 'record-1' }]), false);
+  // Review 2 M2: a card that draws every record of a multi-record file draws its members as `<card key>:<k>`, and
+  // the request keeps their entries, matched as `linearRecordCardIndexes` matches them (`cardHoldsRecordKey`).
+  assert.equal(movesARecordSideways([{ recordKey: 'record-1:2', x: 25, y: 0 }], [{ uid: 'record-1' }]), true, 'a split member');
+  assert.equal(movesARecordSideways([{ recordKey: 'record-10', x: 25, y: 0 }], [{ uid: 'record-1' }]), false,
+    'another card whose key starts the same');
+});
+
 test('each blocker keeps Wrap Rows from turning on, in its Generate refusal\'s words; Simple-mode Middle is none (case 3)', () => {
-  const none = { comparisons: false, sharedRecordRow: false, featureAlignment: false, featureTrackOnAxis: false };
+  const none = { comparisons: false, sharedRecordRow: false, movedRecords: false, alignmentPlan: false, featureTrackOnAxis: false };
   assert.deepEqual(linearWrapBlockers(none), []);
   assert.deepEqual(linearWrapBlockers({ ...none, comparisons: true }), ['WRAP']);
   assert.deepEqual(linearWrapBlockers({ ...none, sharedRecordRow: true }), ['WRAP_GRID_ROW']);
-  assert.deepEqual(linearWrapBlockers({ ...none, featureAlignment: true }), ['WRAP_ANCHOR_FEATURE']);
+  assert.deepEqual(linearWrapBlockers({ ...none, movedRecords: true }), ['WRAP_RECORD_POSITION']);
   assert.deepEqual(linearWrapBlockers({ ...none, featureTrackOnAxis: true }), ['WRAP_TRACK_LAYOUT']);
-  assert.deepEqual(linearWrapBlockers({ comparisons: true, sharedRecordRow: true, featureAlignment: true, featureTrackOnAxis: true }),
-    ['WRAP', 'WRAP_GRID_ROW', 'WRAP_ANCHOR_FEATURE', 'WRAP_TRACK_LAYOUT']);
+  // Q5 A (1): Align at feature counts only through the records its Apply moved (`movedRecords`); the browser case in
+  // tests/web/linear-wrap.playwright.spec.js checks that an Apply that moved none leaves Wrap Rows enabled.
+  // Q5 A (2): a Similarity alignment plan counts as moved records, also when its comparison inputs were removed, and
+  // a moved record keeps its hint under a comparison, so the button its hint names shows.
+  assert.deepEqual(linearWrapBlockers({ ...none, alignmentPlan: true }), ['WRAP_RECORD_POSITION']);
+  assert.deepEqual(linearWrapBlockers({ ...none, alignmentPlan: true, movedRecords: true }), ['WRAP_RECORD_POSITION']);
+  assert.deepEqual(linearWrapBlockers({ ...none, comparisons: true, movedRecords: true }), ['WRAP', 'WRAP_RECORD_POSITION']);
+  assert.deepEqual(linearWrapBlockers({ comparisons: true, sharedRecordRow: true, movedRecords: true, alignmentPlan: true, featureTrackOnAxis: true }),
+    ['WRAP', 'WRAP_GRID_ROW', 'WRAP_RECORD_POSITION', 'WRAP_TRACK_LAYOUT']);
+  assert.equal(offersRecordPositionReset({ ...none, movedRecords: true }), true);
+  assert.equal(offersRecordPositionReset({ ...none, alignmentPlan: true }), true, 'a plan whose comparison inputs were removed');
+  assert.equal(offersRecordPositionReset({ ...none, comparisons: true, movedRecords: true }), true, 'under a comparison');
+  assert.equal(offersRecordPositionReset({ ...none, comparisons: true }), false);
   // The feature slot the blocker reads is the one the placement targets read: in simple mode, Middle puts the
   // features on the axis, which turning wrap on switches (no blocker); a custom stack's overlay slot is one.
   const drawing = linearDrawing();
@@ -160,6 +198,16 @@ test('each blocker keeps Wrap Rows from turning on, in its Generate refusal\'s w
   assert.equal(field.linearWrapBlockedText.value, reasonText('WRAP'));
   inputs = { ...none, sharedRecordRow: true, featureTrackOnAxis: true };
   assert.equal(field.linearWrapBlockedText.value, `${reasonText('WRAP_GRID_ROW')} ${reasonText('WRAP_TRACK_LAYOUT')}`);
+  assert.equal(field.linearWrapResetsPositions.value, false, 'only a sideways move offers Reset record positions');
+  // PD-OI-113 scenario revision 2 (Q4, Q5 A): a drawn record moved sideways, or a plan, shows the button its hint
+  // names, also under a comparison; the hint names only actions the user can press.
+  for (const moved of [{ movedRecords: true }, { alignmentPlan: true }, { comparisons: true, movedRecords: true }]) {
+    inputs = { ...none, ...moved };
+    assert.equal(field.linearWrapResetsPositions.value, true, JSON.stringify(moved));
+    assert.match(field.linearWrapBlockedText.value, /Click Reset record positions under Wrap Rows/, JSON.stringify(moved));
+  }
+  // OV-2472: the Web text names Web-visible sources only, no CLI option.
+  assert.doesNotMatch(reasonText('WRAP_RECORD_POSITION'), /--/);
   // Turning it off is never blocked: the checkbox writes Off.
   field.changeLinearWrap(checkbox(false), 'on');
   assert.deepEqual(writes, [['linear_wrap_length', null]]);
@@ -190,7 +238,7 @@ test('the length field writes bp from an amount and a unit, and shows a value fr
   const store = withDrawings(drawing);
   const watchers = [];
   const field = createLinearWrapField({ state: store, watch: (_source, callback) => watchers.push(callback), shownWrap: () => ({ kind: 'unknown' }),
-    blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, featureAlignment: false, featureTrackOnAxis: false }),
+    blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, movedRecords: false, alignmentPlan: false, featureTrackOnAxis: false }),
     changeLayoutSetting: (_event, _field, value) => { drawing.form.linear_wrap_length = value; } });
   const changed = () => watchers.forEach((callback) => callback());
   field.changeLinearWrap({ target: { value: '20' } }, 'amount');
@@ -216,10 +264,10 @@ test('the length field writes bp from an amount and a unit, and shows a value fr
 // Case 6 (summary part): what the shown Result drew with the drawing's value comes from Python's input summary
 // and the committed request; the Web copies neither the Auto rule nor the drawn axis. "These records" compares each
 // drawn record's source length and requested region, as Python sent them, with the card's (review 3 F2, D-53).
-const LAMBDA = Object.freeze({ drawnLength: 48502, sourceLength: 48502, region: null });
+const LAMBDA = Object.freeze({ sourceLength: 48502, region: null });
 const SUMMARY = Object.freeze({ records: [LAMBDA],
   linearWrap: { rowLength: 10000, rowCount: 5, requested: 'auto', recordRows: [5], drawnAxisLength: 10000 } });
-const ONE_ROW = Object.freeze({ records: [{ drawnLength: 8000, sourceLength: 8000, region: null }], linearWrap: null });
+const ONE_ROW = Object.freeze({ records: [{ sourceLength: 8000, region: null }], linearWrap: null });
 /** @param {number} sourceLength @param {{ start: number, end: number } | null} [region] */
 const card = (sourceLength, region = null) => ({ sourceLength, region });
 
@@ -251,7 +299,7 @@ test('the shown Result names its rows only when it drew this value over these re
   drawing.form.linear_wrap_length = 'auto';
   let reading = read({});
   const field = createLinearWrapField({ state: withDrawings(drawing), watch: () => {}, changeLayoutSetting: () => {},
-    shownWrap: () => reading, blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, featureAlignment: false, featureTrackOnAxis: false }) });
+    shownWrap: () => reading, blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, movedRecords: false, alignmentPlan: false, featureTrackOnAxis: false }) });
   assert.equal(field.linearWrapAutoText.value, '10 kbp per row, 5 rows (auto)');
   reading = { kind: 'one-row' };
   assert.equal(field.linearWrapAutoText.value, 'One row (auto)');
@@ -264,11 +312,11 @@ test('the shown Result names its rows only when it drew this value over these re
 // that is not cut shows one row. A changed region, or a source of another length, is unknown until Generate.
 test('a cropped record shows the rows and one row Python drew while the card asks for the same region (review 3 F2)', () => {
   const region = { start: 1, end: 200_000 };
-  const cropped = { records: [{ drawnLength: 200_000, sourceLength: 5_000_000, region }],
+  const cropped = { records: [{ sourceLength: 5_000_000, region }],
     linearWrap: { rowLength: 50_000, rowCount: 4, requested: 'auto', recordRows: [4], drawnAxisLength: 50_000 } };
   const read = (inputs) => shownLinearWrap({ value: 'auto', requested: 'auto', summary: cropped, records: [card(5_000_000, region)], ...inputs });
   assert.deepEqual(read({}), { kind: 'rows', rowLength: 50_000, rowCount: 4, drawnAxisLength: 50_000 });
-  const uncut = { records: [{ drawnLength: 8000, sourceLength: 5_000_000, region: { start: 1001, end: 9000 } }], linearWrap: null };
+  const uncut = { records: [{ sourceLength: 5_000_000, region: { start: 1001, end: 9000 } }], linearWrap: null };
   assert.deepEqual(read({ summary: uncut, records: [card(5_000_000, { start: 1001, end: 9000 })] }), { kind: 'one-row' });
   assert.deepEqual(read({ records: [card(5_000_000, { start: 1, end: 300_000 })] }), { kind: 'unknown' }, 'another region');
   assert.deepEqual(read({ records: [card(5_000_000)] }), { kind: 'unknown' }, 'the region removed');
@@ -347,7 +395,7 @@ test('Normalize Record Lengths and Ruler on Axis are fixed only while they hold 
   const drawing = linearDrawing();
   const field = createLinearWrapField({ state: withDrawings(drawing), watch: () => {}, changeLayoutSetting: () => {},
     shownWrap: () => ({ kind: 'unknown' }),
-    blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, featureAlignment: false, featureTrackOnAxis: false }) });
+    blockerInputs: () => ({ comparisons: false, sharedRecordRow: false, movedRecords: false, alignmentPlan: false, featureTrackOnAxis: false }) });
   const fixed = () => [field.linearWrapFixesNormalize.value, field.linearWrapFixesRulerOnAxis.value];
   drawing.form.linear_wrap_length = null;
   drawing.form.normalize_length = false;
@@ -384,26 +432,28 @@ print(json.dumps(out))
 
 test('a PDF export of a wrapped Result without an input summary is refused when a record is cut, as on the CLI', async () => {
   // What the export sends: the committed request's wrap leaf as stored, with the records the summary names, or,
-  // without a summary, the records the drawing's discovery reads, awaited at export (review 3 F1, D-52); nothing
-  // while the records stay unknown, wrap is off, or no Linear Result is shown.
-  const discovered = (lengths) => async () => lengths;
-  assert.deepEqual(await exportLinearWrap({ leaf: 10000, summary: undefined, discoverRecordLengths: discovered([5_000_000]) }),
-    { requested: 10000, recordLengths: [5_000_000] });
-  assert.deepEqual(await exportLinearWrap({ leaf: 'auto', summary: SUMMARY, discoverRecordLengths: discovered([]) }),
-    { requested: 'auto', recordLengths: [48502] }, 'a Result drawn here: the records Python drew');
-  assert.equal(await exportLinearWrap({ leaf: null, summary: undefined, discoverRecordLengths: discovered([5_000_000]) }), null, 'wrap off');
-  assert.equal(await exportLinearWrap({ leaf: undefined, summary: undefined, discoverRecordLengths: discovered([5_000_000]) }), null,
+  // without a summary, the records the drawing's discovery reads, awaited at export (review 3 F1, D-52): each
+  // record's source length and region, cropped or not (D-70); nothing while the records stay unknown, wrap is off,
+  // or no Linear Result is shown.
+  const whole = (length) => ({ sourceLength: length, region: null });
+  const discovered = (lengths) => async () => lengths.map(whole);
+  assert.deepEqual(await exportLinearWrap({ leaf: 10000, summary: undefined, discoverRecords: discovered([5_000_000]) }),
+    { requested: 10000, records: [whole(5_000_000)] });
+  assert.deepEqual(await exportLinearWrap({ leaf: 'auto', summary: SUMMARY, discoverRecords: discovered([]) }),
+    { requested: 'auto', records: [whole(48502)] }, 'a Result drawn here: the records Python drew');
+  assert.equal(await exportLinearWrap({ leaf: null, summary: undefined, discoverRecords: discovered([5_000_000]) }), null, 'wrap off');
+  assert.equal(await exportLinearWrap({ leaf: undefined, summary: undefined, discoverRecords: discovered([5_000_000]) }), null,
     'no Linear request');
-  assert.equal(await exportLinearWrap({ leaf: 'auto', summary: undefined, discoverRecordLengths: discovered([]) }), null, 'records not known');
+  assert.equal(await exportLinearWrap({ leaf: 'auto', summary: undefined, discoverRecords: discovered([]) }), null, 'records not known');
 
   // The state after a Load: no input summary, and the cards' record lists deferred until something reads them. The
   // export awaits the discovery as Generate does, so the 5 Mb record is known when the check is asked.
-  const page = { deferred: true, lengths: [] };
-  const discoverRecordLengths = async () => {
-    if (page.deferred) { await Promise.resolve(); page.deferred = false; page.lengths = [5_000_000]; }
-    return page.lengths;
+  const page = { deferred: true, records: [] };
+  const discoverRecords = async () => {
+    if (page.deferred) { await Promise.resolve(); page.deferred = false; page.records = [whole(5_000_000)]; }
+    return page.records;
   };
-  const loaded = (leaf) => exportLinearWrap({ leaf, summary: undefined, discoverRecordLengths });
+  const loaded = (leaf) => exportLinearWrap({ leaf, summary: undefined, discoverRecords });
   const pdf = (linearWrap) => ({ format: 'pdf', width: 1500, height: 34_000, dpi: null, linearWrap });
   const [cut, unit, auto, none, uncut, plain, fraction] = pythonExportCheck([
     pdf(await loaded(10000)),
@@ -411,8 +461,8 @@ test('a PDF export of a wrapped Result without an input summary is refused when 
     pdf(await loaded('5kb')),
     pdf(await loaded('Auto')),
     pdf(await loaded('none')),
-    pdf(await exportLinearWrap({ leaf: 'auto', summary: undefined, discoverRecordLengths: discovered([8000]) })),
-    pdf(await exportLinearWrap({ leaf: null, summary: undefined, discoverRecordLengths: discovered([5_000_000]) })),
+    pdf(await exportLinearWrap({ leaf: 'auto', summary: undefined, discoverRecords: discovered([8000]) })),
+    pdf(await exportLinearWrap({ leaf: null, summary: undefined, discoverRecords: discovered([5_000_000]) })),
     { wrapLength: linearWrapInputValue('1.0000000001', 'kbp') }
   ]);
   for (const refusal of [cut, unit, auto]) {
@@ -424,4 +474,21 @@ test('a PDF export of a wrapped Result without an input summary is refused when 
   assert.deepEqual(plain, { ok: true });
   // D-57: a typed amount that is no whole bp reaches Python as typed and is refused with its diagnostic.
   assert.deepEqual(fraction, { code: 'INPUT_INVALID', configPath: 'canvas.linear.wrap_length' });
+});
+
+test('a loaded Result with a cropped record sends its region and Python checks the bases the drawing drew (D-70)', async () => {
+  // The D-59 residual: a loaded Result whose card crops its record. The card's source length and region go as they
+  // are; Python crops them with the drawing's rule, so 2 Mb of a 5 Mb record at 10 kbp rows is refused, and 8 kbp of
+  // it, which no 10 kbp row cuts, is an unwrapped PDF, as the CLI checks them. The Web computes no cropped length.
+  const cropped = (start, end) => async () => [{ sourceLength: 5_000_000, region: { start, end } }];
+  const sent = await exportLinearWrap({ leaf: 10000, summary: undefined, discoverRecords: cropped(1_000_001, 3_000_000) });
+  assert.deepEqual(sent, { requested: 10000, records: [{ sourceLength: 5_000_000, region: { start: 1_000_001, end: 3_000_000 } }] });
+  const pdf = (linearWrap) => ({ format: 'pdf', width: 1500, height: 34_000, dpi: null, linearWrap });
+  const [cut, short] = pythonExportCheck([
+    pdf(sent),
+    pdf(await exportLinearWrap({ leaf: 10000, summary: undefined, discoverRecords: cropped(1_001, 9_000) }))
+  ]);
+  assert.equal(cut.code, 'EXPORT_LIMIT', JSON.stringify(cut));
+  assert.equal(cut.reason, 'PDF_SIZE');
+  assert.deepEqual(short, { ok: true }, 'the crop cuts no row: an unwrapped PDF stays as it was');
 });

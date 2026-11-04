@@ -327,6 +327,7 @@ def _with_mock_circular_result(
             ),
         ),
         spacing=DEFAULT_COMPOSITION_SPACING,
+        content_bounds=Aabb(0.0, 0.0, width, height),
     )
     result = CircularAssemblyResult(
         drawing=canvas,

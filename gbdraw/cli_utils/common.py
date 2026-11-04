@@ -13,7 +13,10 @@ import sys
 from dataclasses import replace
 from typing import Sequence
 
+from gbdraw.cli_utils.losat_output import parse_positive_int
 from gbdraw.comparisons.identity_scale import IDENTITY_SCALE_RULE, identity_scale_from_config
+from gbdraw.config.models.canvas import FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH
+from gbdraw.core.figure_length import argparse_figure_length
 from gbdraw.core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
@@ -175,6 +178,41 @@ def _add_format_arg(parser: argparse.ArgumentParser) -> None:
         help=_OUTPUT_FORMAT_HELP,
         type=str,
         default="svg")
+
+
+def _add_figure_size_args(parser: argparse.ArgumentParser) -> None:
+    """``--figure_width``, ``--figure_height`` and ``--dpi``, the same for both diagram commands."""
+
+    for side in ("width", "height"):
+        parser.add_argument(
+            f'--figure_{side}',
+            help=(
+                f'{side.capitalize()} of the whole figure, legend and title included, with a unit: mm, cm, in, or px '
+                '(for example 180mm). The figure is laid out again to fit; fonts and line widths keep their size. '
+                'Linear figures only for now. Default: auto.'
+            ),
+            type=argparse_figure_length,
+            metavar='LENGTH|auto',
+        )
+    parser.add_argument(
+        '--dpi',
+        help='PNG resolution in pixels per inch (positive integer; default: 96, one pixel per SVG pixel). PNG only.',
+        type=parse_positive_int,
+    )
+
+
+def figure_size_overrides(args: argparse.Namespace) -> dict[str, str | None]:
+    """The config overrides of ``--figure_width`` and ``--figure_height`` (``None``: not given)."""
+
+    return {FIGURE_WIDTH_PATH: args.figure_width, FIGURE_HEIGHT_PATH: args.figure_height}
+
+
+def png_dpi(args: argparse.Namespace, formats: Sequence[str]) -> int | None:
+    """``--dpi``, with a warning when no PNG is written."""
+
+    if args.dpi is not None and "png" not in formats:
+        logger.warning("WARNING: --dpi applies to PNG output only; no PNG is written (-f).")
+    return args.dpi
 
 
 def _add_overwrite_arg(parser: argparse.ArgumentParser) -> None:

@@ -727,8 +727,11 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # source length and requested region (`records`, review 3 F2): with each
     # entry mapped back to its drawn length as `recordLengths`, the reply has
     # the earlier digest.
-    "similarity_groups": "b58c726435364367522ab1cbe8ec49269622540f1dbca7eac50c89c103af9d82",
-    "collinear": "c45d48412c492e9eea9903c2f8056858593d43d6d7f5aea6e0ff6fc37ad30d63",
+    # Updated again when the records dropped `drawnLength`, which Python now
+    # derives from the source length and region (D-71): with `drawnLength` put
+    # back on each record (no region here), the reply has the earlier digest.
+    "similarity_groups": "66a1a9ea7df805fec43c89e8df130031aed4998cfa0b71a4bf615177218e8c61",
+    "collinear": "e1b7e193de2e9e3db42e7e0a85bebfaa33a2600add8767f8cd464f360d30d844",
 }
 
 

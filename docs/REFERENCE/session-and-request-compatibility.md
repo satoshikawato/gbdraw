@@ -31,6 +31,10 @@ gbdraw 0.14.4 and earlier refuse a Session 50 file.
 Session 51 keeps these three values in each drawing (`config.form.linear_wrap_length`,
 `config.adv.italic_gene_labels`, `config.adv.identity_scale`, and the config leaf
 `canvas.linear.wrap_length`); reading a Session 50 moves each slice's values there.
+A Session 51 drawing's stored config also holds the **figure size** leaves
+`canvas.figure_width` and `canvas.figure_height` (`"auto"`, or a length such as
+`"180mm"`; see [Figure size and PNG DPI](output-formats-and-export.md#figure-size-and-png-dpi)).
+A Session without the leaves reads as auto.
 
 Session 49 stores the Circular **Show Definition** setting in each Circular
 slice (`modes.circular.config.adv.show_definition`). Off is saved in the
@@ -602,6 +606,14 @@ row in the Load dialog. **Save Session** writes the field's value, in bp or
 `"auto"`, as the form key and the config leaf.
 When a record is cut, Generate stops with an error and keeps the last Result if
 the request holds a setting that rows cannot draw.
+
+A Session that holds both a wrap length and a record position with an x other
+than 0 (`layout.recordTranslations`; for example one written by the Python API)
+for a record the length cuts is no longer drawn: `--session`,
+`session_to_request()` with `render_request()`, and Generate in the Web refuse
+it and say to set the position to 0 or not to wrap. gbdraw 0.14.5 drew every row
+of that record shifted by the one x. Loading the Session in the Web still shows
+the figure it saved.
 
 ## Fonts
 

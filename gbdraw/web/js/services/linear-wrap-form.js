@@ -103,28 +103,37 @@ export const linearWrapFormPatch = (form, value) => (value === null
 /**
  * What the shown Linear drawing holds that rows cannot draw with, each read from the owner its request reads.
  * @typedef {object} LinearWrapBlockerInputs
- * @property {boolean} comparisons BLAST, comparison pairs, LOSAT, Similarity groups or a Similarity alignment.
+ * @property {boolean} comparisons The comparison inputs: BLAST, comparison pairs, LOSAT, or Similarity groups.
  * @property {boolean} sharedRecordRow Record Layout puts several records in one row.
- * @property {boolean} featureAlignment Records where Align at feature put them.
+ * @property {boolean} movedRecords A drawn record moved sideways (`movesARecordSideways`), whatever moved it. Align at
+ *   feature counts only through the records its Apply moved (PD-OI-113 scenario revision 2, Q5 A).
+ * @property {boolean} alignmentPlan A Similarity alignment plan: its positions are moved positions also before they
+ *   are written, and also after its comparison inputs were removed (Q5 A).
  * @property {boolean} featureTrackOnAxis Custom Track Slots put the feature track on the axis (side overlay).
  */
 /**
  * Python's refusal reason for each (gbdraw/layout/linear_wrap.py), so the field's hint and the Generate refusal
  * show one text (`reasonText`).
- * @typedef {'WRAP' | 'WRAP_GRID_ROW' | 'WRAP_ANCHOR_FEATURE' | 'WRAP_TRACK_LAYOUT'} LinearWrapBlocker
+ * @typedef {'WRAP' | 'WRAP_GRID_ROW' | 'WRAP_RECORD_POSITION' | 'WRAP_TRACK_LAYOUT'} LinearWrapBlocker
  */
 /** @type {ReadonlyArray<[keyof LinearWrapBlockerInputs, LinearWrapBlocker]>} */
 const BLOCKERS = Object.freeze([
-  ['comparisons', 'WRAP'], ['sharedRecordRow', 'WRAP_GRID_ROW'],
-  ['featureAlignment', 'WRAP_ANCHOR_FEATURE'], ['featureTrackOnAxis', 'WRAP_TRACK_LAYOUT']
+  ['comparisons', 'WRAP'], ['sharedRecordRow', 'WRAP_GRID_ROW'], ['movedRecords', 'WRAP_RECORD_POSITION'],
+  ['alignmentPlan', 'WRAP_RECORD_POSITION'], ['featureTrackOnAxis', 'WRAP_TRACK_LAYOUT']
 ]);
+/**
+ * Whether the field offers Reset record positions: while a drawn record is moved or a Similarity alignment plan
+ * holds, also when another blocker holds; the hint of a moved record names it (Q5 A, R6).
+ * @param {LinearWrapBlockerInputs} inputs
+ */
+export const offersRecordPositionReset = (inputs) => inputs.movedRecords || inputs.alignmentPlan;
 /**
  * What keeps Wrap Rows from being turned on or its length changed. Turning it off is never blocked, so a Session
  * that holds both can follow the refusal's "turn Wrap Rows off". Whether a record is cut is Python's.
  * @param {LinearWrapBlockerInputs} inputs
  * @returns {LinearWrapBlocker[]}
  */
-export const linearWrapBlockers = (inputs) => BLOCKERS.filter(([input]) => inputs[input]).map(([, blocker]) => blocker);
+export const linearWrapBlockers = (inputs) => [...new Set(BLOCKERS.filter(([input]) => inputs[input]).map(([, blocker]) => blocker))];
 
 // The length's unit is view state (D-27): the form and the Session hold bp, and the Web never sends unit text,
 // so these factors are the field's own, not a copy of Python's length parser (D-57). Each is 10 to its exponent.
@@ -191,7 +200,7 @@ export const linearWrapInputValue = (text, unit) => {
  * A record the next Linear Generate draws, as its card asks for it: the bases of its source record and the region of
  * it the card states (1-based, both ends included, the smaller first), null without one. Python's input summary
  * names each drawn record by the same two facts (`RecordSummary`), so the Web never predicts a cropped length.
- * @typedef {Pick<RecordSummary, 'sourceLength' | 'region'>} LinearDraftRecord
+ * @typedef {RecordSummary} LinearDraftRecord
  */
 /**
  * @typedef {object} ShownLinearWrapInputs
@@ -225,19 +234,25 @@ export const shownLinearWrap = ({ value, requested, summary, records }) => {
 };
 
 /**
- * What the size check of a PNG or PDF export reads about the exported Result's wrap (D-52, D-55): the committed
- * request's wrap leaf as stored, and the bases of the records the Result drew, from its input summary, or, for a
- * Result without one (a loaded Session, a Gallery Session before Generate), of the records the drawing's discovery
- * reads, awaited as Generate awaits it. Python reads the leaf with its config validator (`"5kb"` and `"Auto"`
- * included) and decides from them whether a record is cut and what would fit (gbdraw/web_support/export_limit.py).
- * @param {{ leaf: unknown, summary: Pick<InputSummary, 'records'> | undefined,
- *   discoverRecordLengths: () => Promise<readonly number[]> }} inputs `leaf` as `requestLinearWrapLeaf` reads it,
- *   undefined when no Linear Result of the drawing is shown; `discoverRecordLengths` the lengths of the records the
- *   drawing reads once its discovery has run, [] while unknown (a cropped record).
- * @returns {Promise<{ requested: unknown, recordLengths: number[] } | null>} null with wrap off or the records unknown.
+ * The exported Result's wrap as the PNG/PDF size check reads it (gbdraw/web_support/export_limit.py `_WrapPayload`):
+ * the committed request's wrap leaf as stored, and each record the Result drew, by its source length and region.
+ * @typedef {{ requested: unknown, records: LinearDraftRecord[] }} ExportLinearWrap
  */
-export const exportLinearWrap = async ({ leaf, summary, discoverRecordLengths }) => {
+/**
+ * What the size check of a PNG or PDF export reads about the exported Result's wrap (D-52, D-55, D-70): the
+ * committed request's wrap leaf as stored, and the records the Result drew, from its input summary, or, for a Result
+ * without one (a loaded Session, a Gallery Session before Generate), the records its committed request drew, each
+ * with the length its card's discovery reads, awaited as Generate awaits it (D-73). Python reads the leaf with its config validator (`"5kb"` and `"Auto"` included),
+ * crops each record with the drawing's rule, and decides whether a record is cut and what would fit.
+ * @param {{ leaf: unknown, summary: Pick<InputSummary, 'records'> | undefined,
+ *   discoverRecords: () => Promise<readonly LinearDraftRecord[]> }} inputs `leaf` as `requestLinearWrapLeaf` reads it,
+ *   undefined when no Linear Result of the drawing is shown; `discoverRecords` the committed records once the
+ *   drawing's discovery has run, [] while unknown.
+ * @returns {Promise<ExportLinearWrap | null>} null with wrap off or the records unknown.
+ */
+export const exportLinearWrap = async ({ leaf, summary, discoverRecords }) => {
   if (leaf === undefined || leaf === null) return null;
-  const lengths = summary === undefined ? await discoverRecordLengths() : summary.records.map((record) => record.drawnLength);
-  return lengths.length === 0 ? null : { requested: leaf, recordLengths: [...lengths] };
+  const records = summary === undefined ? await discoverRecords() : summary.records;
+  return records.length === 0 ? null
+    : { requested: leaf, records: records.map(({ sourceLength, region }) => ({ sourceLength, region })) };
 };
