@@ -59,6 +59,7 @@ test('a report reads Python\'s larger-figure estimate only with the figure_size 
   assert.deepEqual(normalizeReport(sized({ width: '240.3 mm', height: null })).largerFigure, { width: '240.3 mm', height: null });
   assert.deepEqual(normalizeReport(sized({ width: null, height: '9.5 in' })).largerFigure, { width: null, height: '9.5 in' });
   for (const bad of [{ width: null, height: null }, { width: '240.3mm', height: null }, { width: '240.3 mm' },
+    { width: '240.3 millimetres', height: null }, { width: null, height: '9.5' },
     { width: '240.3 mm', height: null, depth: null }, null]) {
     assert.throws(() => normalizeReport(sized(bad)), undefined, JSON.stringify(bad));
   }

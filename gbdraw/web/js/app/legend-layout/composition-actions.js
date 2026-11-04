@@ -1107,19 +1107,32 @@ export const requestedCanvasOf = (svg) => {
   return requested && base ? { requested, base: { width: base.width, height: base.height } } : null;
 };
 
+// A root size in px: a number, with or without `px`.
+const PX_SIZE = /^([0-9.eE+-]+)(px)?$/;
 /**
- * The number text of a root size, verbatim for a pixel size ("817.0px" ->
- * "817.0"), so the automatic root is restored byte for byte. A size in
- * another unit (a CLI Session's `180mm`, OV-2513) reads as the viewBox extent.
+ * How the automatic root's size is recorded (`data-original-width`,
+ * `data-original-height`), so it is restored byte for byte: the number text of
+ * a pixel size ("817.0px" -> "817.0"), and a size in another unit as written
+ * (a CLI Session's `180mm`, review finding 3); the viewBox extent for none.
  * @param {string | null} value
- * @param {number} fallback The viewBox extent, for a size without a px number.
+ * @param {number} fallback The viewBox extent.
  * @returns {string}
  */
-const sizeText = (value, fallback) => {
-  const pixels = /^([0-9.eE+-]+)(px)?$/.exec(value ?? '');
-  if (!pixels) return String(fallback);
+const sizeRecord = (value, fallback) => {
+  if (!value) return String(fallback);
+  const pixels = PX_SIZE.exec(value);
+  if (!pixels) return value;
   return pixels[2] ? pixels[1] : String(Number.parseFloat(pixels[1]) || fallback);
 };
+/**
+ * The px size of a recorded root size: its number, or the viewBox extent for a
+ * size in another unit (OV-2513: `180mm` is not 180 px).
+ * @param {string} record
+ * @param {number} extent
+ */
+const recordPx = (record, extent) => (PX_SIZE.test(record) ? Number.parseFloat(record) : extent);
+/** The root size a record restores: a px number with `px`, any other as recorded. @param {string} record */
+const restoredSize = (record) => (/^[0-9.eE+-]+$/.test(record) ? `${record}px` : record);
 
 /** The root attributes that record the automatic canvas of a grown or padded Result. */
 const CANVAS_RECORD_ATTRIBUTES = ['data-original-view-box', 'data-original-width', 'data-original-height'];
@@ -1179,13 +1192,13 @@ export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = 
     bounds.x < x || bounds.y < y || maxX(bounds) > x + width || maxY(bounds) > y + height
   ));
   if (!recordedBase && !padded && !grows) return false;
-  const baseWidth = svg.getAttribute('data-original-width') || sizeText(svg.getAttribute('width'), width);
-  const baseHeight = svg.getAttribute('data-original-height') || sizeText(svg.getAttribute('height'), height);
+  const baseWidth = svg.getAttribute('data-original-width') || sizeRecord(svg.getAttribute('width'), width);
+  const baseHeight = svg.getAttribute('data-original-height') || sizeRecord(svg.getAttribute('height'), height);
   let changed = false;
   if (!padded && !grows) {
     changed = setRootAttribute(svg, 'viewBox', base) || changed;
-    changed = setRootAttribute(svg, 'width', `${baseWidth}px`) || changed;
-    changed = setRootAttribute(svg, 'height', `${baseHeight}px`) || changed;
+    changed = setRootAttribute(svg, 'width', restoredSize(baseWidth)) || changed;
+    changed = setRootAttribute(svg, 'height', restoredSize(baseHeight)) || changed;
     if (!refit) return changed;
     CANVAS_RECORD_ATTRIBUTES.forEach((name) => {
       if (!svg.hasAttribute(name)) return;
@@ -1203,9 +1216,9 @@ export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = 
   const canvas = grows ? /** @type {CompositionBounds} */ (unionBounds([automatic, ...moved])) : automatic;
   const outerWidth = canvas.width + padding.left + padding.right;
   const outerHeight = canvas.height + padding.top + padding.bottom;
-  /** @param {string} size @param {number} extent @param {number} outerExtent */
-  const scaled = (size, extent, outerExtent) => {
-    const number = Number.parseFloat(size);
+  /** @param {string} record @param {number} extent @param {number} outerExtent */
+  const scaled = (record, extent, outerExtent) => {
+    const number = recordPx(record, extent);
     return number === extent ? outerExtent : number * (outerExtent / extent);
   };
   changed = setRootAttribute(svg, 'viewBox', outerViewBox(canvas)) || changed;

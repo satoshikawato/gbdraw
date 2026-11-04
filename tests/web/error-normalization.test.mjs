@@ -465,8 +465,18 @@ test('summary shows Sequence, Line, Track row, Depth series, band and setting lo
     // Python's value in the Web's words (OV-2179).
     [{ code: 'LABEL_LAYOUT', context: { reason: 'LABEL_CAPACITY', labelCapacityOuter: 2.5 } },
       /^Labels do not fit\. Label fewer features, use a smaller Label Font Size, or draw a Linear map\. Outer labels need about 2\.5 times the room around the map\.$/],
-    [{ code: 'INPUT_INVALID', context: { reason: 'INTEGER', configPath: 'objects.scale.interval' } }, / Setting: objects\.scale\.interval\. Use an integer\.$/]
+    [{ code: 'INPUT_INVALID', context: { reason: 'INTEGER', configPath: 'objects.scale.interval' } }, / Setting: objects\.scale\.interval\. Use an integer\.$/],
+    // A refused figure size names its control in its own sentence (Figure width, Figure height), so the internal
+    // path is not repeated as a Setting line; with Python's lengths and without them.
+    [{ code: 'INPUT_INVALID', context: { reason: 'FIGURE_TOO_NARROW', configPath: 'canvas.figure_width', requested: '85 mm', minimum: '120.5 mm', primaryItem: 'records', primary: '60 mm', legend: '50.5 mm', padding: '10 mm', legendRemedy: true } },
+      /^An input value is invalid\. The figure cannot be 85 mm wide: the parts that do not shrink need 120\.5 mm \(records 60 mm, legend 50\.5 mm, padding 10 mm\)\. Set Figure width to at least 120\.5 mm, place the Legend at the top or bottom, or leave it empty \(Auto\)\.$/],
+    [{ code: 'INPUT_INVALID', context: { reason: 'FIGURE_TOO_SHORT', configPath: 'canvas.figure_height' } },
+      /^An input value is invalid\. The figure cannot be this short\. Set a larger Figure height, or leave it empty \(Auto\)\.$/]
   ]) assert.match(roundtrip(source).summary, pattern);
+  // A refused size keeps only lengths as Python's message writes them, with the check the label fit estimate uses.
+  const lengths = roundtrip({ code: 'INPUT_INVALID', context: { reason: 'FIGURE_TOO_NARROW', requested: '85 mm', minimum: '12', legend: '5mm', padding: '3.5 cm', title: '1 in', primary: '9 px <b>' } }).context;
+  assert.deepEqual([lengths.requested, lengths.minimum, lengths.legend, lengths.padding, lengths.title, lengths.primary],
+    ['85 mm', undefined, undefined, '3.5 cm', '1 in', undefined]);
   for (const configPath of ['PRIVATE VALUE', 'a', 'Objects.scale', `objects.${'x'.repeat(80)}`, 7]) {
     assert.equal(roundtrip({ code: 'INPUT_INVALID', context: { configPath } }).context.configPath, undefined);
   }
