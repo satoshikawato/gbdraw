@@ -132,9 +132,16 @@ export const adaptableSettingLabel = (mode, setting) => {
   return tm(typeof text === 'string' ? text : text[mode]);
 };
 
-/** @type {Readonly<Record<RegionNotCarriedItem['kind'], string>>} One English line per kind (wording owner). */
+/**
+ * One English line per kind (wording owner); a kind worded per mode is keyed,
+ * as `ADAPTABLE_SETTING_TEXT` is, by the new drawing's mode. The other mode's
+ * settings are those of the mode the new drawing is not.
+ * @type {Readonly<Record<RegionNotCarriedItem['kind'], string | Readonly<Record<DerivedRegionDrawing['mode'], string>>>>}
+ */
 const NOT_CARRIED_TEXT = Object.freeze({
-  OTHER_MODE_SETTINGS: msg('Settings of the other mode'),
+  OTHER_MODE_SETTINGS: Object.freeze({
+    linear: msg('Settings that apply only to Circular drawings'), circular: msg('Settings that apply only to Linear drawings')
+  }),
   FEATURE_PLACEMENTS: msg('Feature placements'),
   FEATURE_PLACEMENT_TABLE: msg('The feature placement table'),
   SIMILARITY_ALIGNMENT: msg('The Similarity alignment'),
@@ -148,6 +155,17 @@ const NOT_CARRIED_TEXT = Object.freeze({
   ANNOTATION_DRAWN_COORDINATES: msg('Annotations in drawn coordinates'),
   ANNOTATIONS_OUTSIDE: msg('Annotations outside the regions')
 });
+
+/**
+ * A not-carried line in the UI language, as a drawing of `mode` words it.
+ * @param {DerivedRegionDrawing['mode']} mode
+ * @param {RegionNotCarriedItem['kind']} kind
+ * @returns {string}
+ */
+const notCarriedLine = (mode, kind) => {
+  const text = NOT_CARRIED_TEXT[kind];
+  return tm(typeof text === 'string' ? text : text[mode]);
+};
 
 /** @param {unknown} value */
 const shownValue = (value) => (value === null || value === undefined ? t('Auto') : String(value));
@@ -273,7 +291,7 @@ export const createRegionDrawing = ({
         returnedToAuto: offer.returnedToAuto.map((item) => ({
           setting: item.setting, label: adaptableSettingLabel(offer.mode, item.setting), explicit: shownValue(item.explicit), auto: shownValue(item.auto)
         })),
-        notCarried: offer.notCarried.map((item) => tm(NOT_CARRIED_TEXT[item.kind]))
+        notCarried: offer.notCarried.map((item) => notCarriedLine(offer.mode, item.kind))
       });
       create = offer.create;
     } catch (error) {
