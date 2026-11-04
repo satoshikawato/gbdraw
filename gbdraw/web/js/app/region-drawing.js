@@ -1,7 +1,7 @@
 // @ts-check
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
-import { t } from '../utils/i18n.js';
+import { msg, t, tm } from '../utils/i18n.js';
 import { reactive } from '../utils/reactivity.js';
 
 /** @import { DrawingId } from '../services/drawing-view.js' */
@@ -59,19 +59,19 @@ import { reactive } from '../utils/reactivity.js';
 
 /** @type {Readonly<Record<RegionNotCarriedItem['kind'], string>>} One English line per kind (wording owner). */
 const NOT_CARRIED_TEXT = Object.freeze({
-  OTHER_MODE_SETTINGS: 'Settings of the other mode',
-  FEATURE_PLACEMENTS: 'Feature placements',
-  FEATURE_PLACEMENT_TABLE: 'The feature placement table',
-  SIMILARITY_ALIGNMENT: 'The Similarity alignment',
-  CONSERVATION_RINGS: 'Conservation rings',
-  CONSERVATION_RING_TABLES: 'The conservation ring tables',
-  LINEAR_COMPARISONS: 'Linear comparisons',
-  COMPARISON_TABLES: 'The uploaded comparison tables',
-  LOSAT_NO_PAIR: 'The LOSAT comparison (no pair of drawn records)',
-  ANNOTATION_TABLE: 'The annotation table',
-  ANNOTATION_CROSSES_ORIGIN: 'Annotations that cross the origin',
-  ANNOTATION_DRAWN_COORDINATES: 'Annotations in drawn coordinates',
-  ANNOTATIONS_OUTSIDE: 'Annotations outside the regions'
+  OTHER_MODE_SETTINGS: msg('Settings of the other mode'),
+  FEATURE_PLACEMENTS: msg('Feature placements'),
+  FEATURE_PLACEMENT_TABLE: msg('The feature placement table'),
+  SIMILARITY_ALIGNMENT: msg('The Similarity alignment'),
+  CONSERVATION_RINGS: msg('Conservation rings'),
+  CONSERVATION_RING_TABLES: msg('The conservation ring tables'),
+  LINEAR_COMPARISONS: msg('Linear comparisons'),
+  COMPARISON_TABLES: msg('The uploaded comparison tables'),
+  LOSAT_NO_PAIR: msg('The LOSAT comparison (no pair of drawn records)'),
+  ANNOTATION_TABLE: msg('The annotation table'),
+  ANNOTATION_CROSSES_ORIGIN: msg('Annotations that cross the origin'),
+  ANNOTATION_DRAWN_COORDINATES: msg('Annotations in drawn coordinates'),
+  ANNOTATIONS_OUTSIDE: msg('Annotations outside the regions')
 });
 
 /** @param {unknown} value */
@@ -200,7 +200,7 @@ export const createRegionDrawing = ({
         returnedToAuto: offer.returnedToAuto.map((item) => ({
           setting: item.setting, label: settingLabel(item.setting), explicit: shownValue(item.explicit), auto: shownValue(item.auto)
         })),
-        notCarried: offer.notCarried.map((item) => t(NOT_CARRIED_TEXT[item.kind]))
+        notCarried: offer.notCarried.map((item) => tm(NOT_CARRIED_TEXT[item.kind]))
       });
       create = offer.create;
     } catch (error) {
