@@ -157,7 +157,7 @@ def _crop_record_to_region(
     *,
     log: logging.Logger,
 ) -> SeqRecord:
-    start_0, end_0 = check_start_end_coords(record, spec.start, spec.end)
+    start_0, end_0 = check_start_end_coords(len(record.seq), spec.start, spec.end, str(record.id))
     coord_base, coord_step = _read_coord_map(record)
 
     if start_0 != spec.start - 1 or end_0 != spec.end:

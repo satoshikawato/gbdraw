@@ -6397,16 +6397,17 @@ export const createAppSetup = () => {
       // The size check of a PNG or PDF reads the exported Result's wrap
       // (D-52, D-55): Python reads its stored leaf, and decides from it
       // whether a record is cut, and the row length it advises. A loaded
-      // Result has no input summary: its records are discovered first.
+      // Result has no input summary: its records are discovered first, and
+      // Python crops each by its region as the drawing did (D-70).
       const exportedDrawing = historySnapshots.displayedArtifactDrawing();
       const exportedSummary = shownInputSummary.value ?? undefined;
       const exportedWrapLeaf = shownLinearWrapLeaf(exportedDrawing);
       const linearWrap = () => exportLinearWrap({
         leaf: exportedWrapLeaf,
         summary: exportedSummary,
-        discoverRecordLengths: async () => {
+        discoverRecords: async () => {
           await awaitLinearRecordDiscovery(exportedDrawing);
-          return linearRecordLengthsOf(exportedDrawing);
+          return linearDraftRecordsOf(exportedDrawing);
         }
       });
       /** @type {import('../services/export.js').ExportPorts} */

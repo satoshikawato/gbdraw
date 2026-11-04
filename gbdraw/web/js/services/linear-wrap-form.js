@@ -191,7 +191,7 @@ export const linearWrapInputValue = (text, unit) => {
  * A record the next Linear Generate draws, as its card asks for it: the bases of its source record and the region of
  * it the card states (1-based, both ends included, the smaller first), null without one. Python's input summary
  * names each drawn record by the same two facts (`RecordSummary`), so the Web never predicts a cropped length.
- * @typedef {Pick<RecordSummary, 'sourceLength' | 'region'>} LinearDraftRecord
+ * @typedef {RecordSummary} LinearDraftRecord
  */
 /**
  * @typedef {object} ShownLinearWrapInputs
@@ -225,19 +225,25 @@ export const shownLinearWrap = ({ value, requested, summary, records }) => {
 };
 
 /**
- * What the size check of a PNG or PDF export reads about the exported Result's wrap (D-52, D-55): the committed
- * request's wrap leaf as stored, and the bases of the records the Result drew, from its input summary, or, for a
- * Result without one (a loaded Session, a Gallery Session before Generate), of the records the drawing's discovery
- * reads, awaited as Generate awaits it. Python reads the leaf with its config validator (`"5kb"` and `"Auto"`
- * included) and decides from them whether a record is cut and what would fit (gbdraw/web_support/export_limit.py).
- * @param {{ leaf: unknown, summary: Pick<InputSummary, 'records'> | undefined,
- *   discoverRecordLengths: () => Promise<readonly number[]> }} inputs `leaf` as `requestLinearWrapLeaf` reads it,
- *   undefined when no Linear Result of the drawing is shown; `discoverRecordLengths` the lengths of the records the
- *   drawing reads once its discovery has run, [] while unknown (a cropped record).
- * @returns {Promise<{ requested: unknown, recordLengths: number[] } | null>} null with wrap off or the records unknown.
+ * The exported Result's wrap as the PNG/PDF size check reads it (gbdraw/web_support/export_limit.py `_WrapPayload`):
+ * the committed request's wrap leaf as stored, and each record the Result drew, by its source length and region.
+ * @typedef {{ requested: unknown, records: LinearDraftRecord[] }} ExportLinearWrap
  */
-export const exportLinearWrap = async ({ leaf, summary, discoverRecordLengths }) => {
+/**
+ * What the size check of a PNG or PDF export reads about the exported Result's wrap (D-52, D-55, D-70): the
+ * committed request's wrap leaf as stored, and the records the Result drew, from its input summary, or, for a Result
+ * without one (a loaded Session, a Gallery Session before Generate), the records the drawing's discovery reads,
+ * awaited as Generate awaits it. Python reads the leaf with its config validator (`"5kb"` and `"Auto"` included),
+ * crops each record with the drawing's rule, and decides whether a record is cut and what would fit.
+ * @param {{ leaf: unknown, summary: Pick<InputSummary, 'records'> | undefined,
+ *   discoverRecords: () => Promise<readonly LinearDraftRecord[]> }} inputs `leaf` as `requestLinearWrapLeaf` reads it,
+ *   undefined when no Linear Result of the drawing is shown; `discoverRecords` the records the drawing reads once its
+ *   discovery has run, [] while unknown.
+ * @returns {Promise<ExportLinearWrap | null>} null with wrap off or the records unknown.
+ */
+export const exportLinearWrap = async ({ leaf, summary, discoverRecords }) => {
   if (leaf === undefined || leaf === null) return null;
-  const lengths = summary === undefined ? await discoverRecordLengths() : summary.records.map((record) => record.drawnLength);
-  return lengths.length === 0 ? null : { requested: leaf, recordLengths: [...lengths] };
+  const records = summary === undefined ? await discoverRecords() : summary.records;
+  return records.length === 0 ? null
+    : { requested: leaf, records: records.map(({ sourceLength, region }) => ({ sourceLength, region })) };
 };

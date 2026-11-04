@@ -28,9 +28,9 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {number} drawnAxisLength The bases on the longest drawn axis, which sizes and ticks follow.
  */
 /**
- * One drawn record (gbdraw/api/input_summary.py `RecordPayload`).
+ * One drawn record (gbdraw/api/input_summary.py `RecordPayload`). Its drawn bases are Python's to derive from these
+ * two facts with the drawing's crop rule (gbdraw/web_support/export_limit.py, D-70); the Web predicts none.
  * @typedef {object} RecordSummary
- * @property {number} drawnLength The bases drawn.
  * @property {number} sourceLength The bases of its source record.
  * @property {{ start: number, end: number } | null} region The region of the source the request asked for (1-based,
  *   both ends included, as asked: the end may run past the record); null when it asked for none.
@@ -51,7 +51,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
 
 const SUMMARY_FIELDS = ['resultIndex', 'resultName', 'lines', 'warnings', 'records', 'linearWrap'];
 const WARNING_FIELDS = ['code', 'message'];
-const RECORD_FIELDS = ['drawnLength', 'sourceLength', 'region'];
+const RECORD_FIELDS = ['sourceLength', 'region'];
 const REGION_FIELDS = ['start', 'end'];
 const WRAP_FIELDS = ['rowLength', 'rowCount', 'requested', 'recordRows', 'drawnAxisLength'];
 
@@ -76,7 +76,7 @@ const isCount = (value) => Number.isSafeInteger(value) && Number(value) > 0;
 const isCounts = (value) => Array.isArray(value) && value.length > 0 && value.every(isCount);
 
 /** @param {unknown} value @returns {value is RecordSummary} */
-const isRecord = (value) => hasExactly(value, RECORD_FIELDS) && isCount(value.drawnLength) && isCount(value.sourceLength)
+const isRecord = (value) => hasExactly(value, RECORD_FIELDS) && isCount(value.sourceLength)
   && (value.region === null || (hasExactly(value.region, REGION_FIELDS) && isCount(value.region.start) && isCount(value.region.end)));
 
 /** @param {unknown} value @returns {value is readonly RecordSummary[]} */

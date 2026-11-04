@@ -58,14 +58,16 @@ def gbk_to_seqrecord(in_gbk):
     return record
 
 
-def check_start_end_coords(record, start, end):
+def check_start_end_coords(record_len: int, start: int, end: int, record_id: str) -> tuple[int, int]:
     """
     Converts 1-based inclusive start/end to 0-based exclusive slice indices.
 
     The order is checked before the end is clamped to the record length, so a
-    region that starts after the record ends is reported as such (CI-01).
+    region that starts after the record ends is reported as such (CI-01). It
+    reads only the record's length (``record_id`` names it in a refusal), so
+    the drawing's crop and the Web export check of a cropped record's drawn
+    bases share it (D-70).
     """
-    record_len = len(record.seq)
     full_record = start == 1 and end == record_len
     if start > end and not full_record:
         raise ValidationError(
@@ -77,7 +79,7 @@ def check_start_end_coords(record, start, end):
     end_0 = min(end, record_len)
     if start_0 >= end_0 and not full_record:
         raise ValidationError(
-            f"Region {start}..{end} starts after the end of record {record.id} "
+            f"Region {start}..{end} starts after the end of record {record_id} "
             f"({record_len} bp). Choose a region within 1..{record_len}.",
             diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
         )
@@ -226,7 +228,7 @@ def main():
 
     # 2. Load and Validate
     record = gbk_to_seqrecord(in_gbk)
-    start_0, end_0 = check_start_end_coords(record, start_1, end_1)
+    start_0, end_0 = check_start_end_coords(len(record.seq), start_1, end_1, str(record.id))
 
     # 3. Crop Sequence and Create New Record
     new_seq = record.seq[start_0:end_0]

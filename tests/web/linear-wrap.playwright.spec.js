@@ -4,7 +4,7 @@
 // a loaded Session, whose Generate then refuses and keeps the figure), a feature
 // cut over rows stays one feature, Save and Load keep the length, and a PNG or a
 // wrapped PDF over its size limit is refused before a file is made, also for a
-// loaded Result.
+// loaded Result, a cropped record's included.
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { copyFileSync, mkdirSync, readFileSync, writeFileSync } = require('node:fs');
@@ -293,4 +293,46 @@ test('Save then Load keeps the length, a loaded wrapped PDF over its limit and a
   await expect(page.getByText('Use SVG, which has no size limit.', { exact: false }).first()).toBeVisible();
   await page.waitForTimeout(1_000);
   expect(downloads).toEqual([]);
+});
+
+// D-59 residual (D-70): a loaded Result whose record is cropped. The Web sends the card's source length and region,
+// and Python crops them by the drawing's rule: 30 kbp of lambda in 150 bp rows (200 rows, about 20,300 pt) is
+// refused as the CLI refuses it; in 300 bp rows (100 rows, about 10,200 pt) the PDF is written.
+test('a loaded Result with a cropped wrapped record: a PDF over the limit makes no file, one under it downloads', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const downloads = [];
+  page.on('download', (file) => downloads.push(file.suggestedFilename()));
+  const directory = testInfo.outputPath('cropped');
+  mkdirSync(directory, { recursive: true });
+  copyFileSync(LAMBDA, path.join(directory, 'NC_001416.gb'));
+  const cliSession = (rowLength) => {
+    const file = path.join(directory, `crop${rowLength}.gbdraw-session.json`);
+    execFileSync(process.env.PYTHON || 'python', [
+      '-m', 'gbdraw.cli', 'linear', '--gbk', 'NC_001416.gb', '--region', 'NC_001416.1:5001-35000',
+      '--wrap_length', String(rowLength), '-o', `crop${rowLength}`, '--save_session', '--session_output', file
+    ], { cwd: directory, stdio: 'pipe', env: { ...process.env, PYTHONPATH: root } });
+    return file;
+  };
+  const cardRegion = () => page.evaluate(() => {
+    const [seq] = window.__GBDRAW_APP__.linearSeqs;
+    return [Number(seq.region_start), Number(seq.region_end)];
+  });
+  await openFresh(page);
+  await loadSessionFile(page, cliSession(150));
+  expect(await wrapState(page)).toMatchObject({ wrap: 150, amount: '150', unit: 'bp' });
+  expect(await cardRegion()).toEqual([5001, 35000]);
+  downloads.length = 0;
+  await page.getByRole('button', { name: 'PDF', exact: true }).click();
+  await expect(page.getByText('PDF is limited to 14,400 pt per side', { exact: false }).first()).toBeVisible({ timeout: 60_000 });
+  await page.waitForTimeout(1_000);
+  expect(downloads).toEqual([]);
+
+  await loadSessionFile(page, cliSession(300));
+  expect(await wrapState(page)).toMatchObject({ wrap: 300, amount: '300', unit: 'bp' });
+  expect(await cardRegion()).toEqual([5001, 35000]);
+  const [pdf] = await Promise.all([
+    page.waitForEvent('download', { timeout: 120_000 }),
+    page.getByRole('button', { name: 'PDF', exact: true }).click()
+  ]);
+  expect(pdf.suggestedFilename()).toMatch(/\.pdf$/);
 });

@@ -118,10 +118,10 @@ def web_helpers() -> dict:
 
 def _web_export_check(helpers: dict, fmt: str, size: tuple[float, float], wrap: LinearWrapSummary | None,
                       dpi: float | None) -> dict:
-    # What the Web sends (D-55): the committed request's length and the Result's record lengths.
+    # What the Web sends (D-55, D-70): the committed request's length and each record's source length and region.
     request = {"format": fmt, "width": size[0], "height": size[1], "dpi": dpi,
                "linearWrap": None if wrap is None
-               else {"requested": wrap.requested, "recordLengths": list(wrap.record_lengths)}}
+               else {"requested": wrap.requested, "records": _whole(wrap.record_lengths)}}
     return json.loads(helpers["call_web_json_helper"]("check_web_export_limit_json", json.dumps(request)))
 
 
@@ -144,9 +144,13 @@ def test_the_web_export_check_reads_the_wrap_and_refuses_as_the_cli_does(web_hel
     assert "error" in _web_export_check(web_helpers, "eps", SORANGIUM_SIZE, None, None)
 
 
+def _whole(record_lengths: tuple[int, ...] | list[int]) -> list[dict]:
+    return [{"sourceLength": length, "region": None} for length in record_lengths]
+
+
 def _web_export_leaf(helpers: dict, leaf: object, record_lengths: list[int]) -> dict:
     request = {"format": "pdf", "width": SORANGIUM_SIZE[0], "height": SORANGIUM_SIZE[1], "dpi": None,
-               "linearWrap": {"requested": leaf, "recordLengths": record_lengths}}
+               "linearWrap": {"requested": leaf, "records": _whole(record_lengths)}}
     return json.loads(helpers["call_web_json_helper"]("check_web_export_limit_json", json.dumps(request)))
 
 
@@ -162,6 +166,35 @@ def test_the_web_export_check_reads_the_stored_wrap_leaf_with_the_config_validat
     refused = _web_export_leaf(web_helpers, "50 parsecs", [13_033_779])["error"]
     assert refused["code"] == "INPUT_INVALID"
     assert refused["context"]["configPath"] == WRAP
+
+
+def _web_export_records(helpers: dict, records: list[dict], requested: object = 50_000) -> dict:
+    request = {"format": "pdf", "width": SORANGIUM_SIZE[0], "height": SORANGIUM_SIZE[1], "dpi": None,
+               "linearWrap": {"requested": requested, "records": records}}
+    return json.loads(helpers["call_web_json_helper"]("check_web_export_limit_json", json.dumps(request)))
+
+
+def _cli_refusal(record_lengths: tuple[int, ...]) -> dict:
+    with pytest.raises(ExportError) as caught:
+        check_export_limit("pdf", *SORANGIUM_SIZE, wrap=LinearWrapSummary(50_000, 50_000, record_lengths))
+    return serialize_web_error(caught.value, operation="checkExportLimit", stage="render")["context"]
+
+
+def test_the_web_export_check_crops_each_record_by_the_drawings_rule(web_helpers: dict) -> None:
+    # D-59 residual, D-70: a loaded Result's cropped record is known by its source length and region; Python crops
+    # it with the drawing's own function, so the refusal and its advice are the CLI's for the drawn bases.
+    region = {"sourceLength": 13_033_779, "region": {"start": 1_000_001, "end": 6_000_000}}
+    refusal = _web_export_records(web_helpers, [region])["error"]
+    assert refusal["context"] == _cli_refusal((5_000_000,))
+    # An end past the record is drawn to the record end, as the drawing clamps it.
+    past_end = {"sourceLength": 6_000_000, "region": {"start": 1_000_001, "end": 9_000_000}}
+    assert _web_export_records(web_helpers, [past_end])["error"]["context"] == _cli_refusal((5_000_000,))
+    # A crop that cuts nothing leaves the PDF as an unwrapped one, unchecked; its source record would be cut.
+    short = {"sourceLength": 13_033_779, "region": {"start": 1, "end": 40_000}}
+    assert _web_export_records(web_helpers, [short]) == {"ok": True}
+    # A region the drawing cannot crop stops the export with its region diagnostic, as a Generate of it would.
+    beyond = _web_export_records(web_helpers, [{"sourceLength": 60, "region": {"start": 1_000, "end": 2_000}}])["error"]
+    assert (beyond["code"], beyond["context"]) == ("REGION_INVALID", {"field": "region", "reason": "RECORD_BOUNDS"})
 
 
 def _summaries(tmp_path: Path, **overrides: object) -> list[dict]:
@@ -189,11 +222,11 @@ def test_each_input_summary_names_the_rows_its_result_drew(tmp_path: Path) -> No
         "recordRows": [5],
         "drawnAxisLength": 10_000,
     }
-    assert wrapped["records"] == [{"drawnLength": 48_502, "sourceLength": 48_502, "region": None}]
+    assert wrapped["records"] == [{"sourceLength": 48_502, "region": None}]
     [plain] = _summaries(tmp_path, **{WRAP: 100_000})
     assert plain["linearWrap"] is None
     # Nothing cut: the records still name what the Result drew (review 2 F2).
-    assert plain["records"] == [{"drawnLength": 48_502, "sourceLength": 48_502, "region": None}]
+    assert plain["records"] == [{"sourceLength": 48_502, "region": None}]
 
 
 def test_a_cropped_record_names_its_source_length_and_the_region_asked_for(tmp_path: Path) -> None:
@@ -216,7 +249,7 @@ def test_a_cropped_record_names_its_source_length_and_the_region_asked_for(tmp_p
         return entry
 
     cropped = summary(5_001, 35_000)
-    assert cropped["records"] == [{"drawnLength": 30_000, "sourceLength": 48_502, "region": {"start": 5_001, "end": 35_000}}]
+    assert cropped["records"] == [{"sourceLength": 48_502, "region": {"start": 5_001, "end": 35_000}}]
     assert cropped["linearWrap"]["recordRows"] == [len(range(0, 30_000, cropped["linearWrap"]["rowLength"]))]
     past_end = summary(1, 60_000)
-    assert past_end["records"] == [{"drawnLength": 48_502, "sourceLength": 48_502, "region": {"start": 1, "end": 60_000}}]
+    assert past_end["records"] == [{"sourceLength": 48_502, "region": {"start": 1, "end": 60_000}}]

@@ -133,10 +133,10 @@ class RegionPayload(TypedDict):
 
 
 class RecordPayload(TypedDict):
-    """One drawn record (:class:`RecordInputSummary`): its drawn bases, its source record's, and the region of the
-    source the request asked for."""
+    """One drawn record (:class:`RecordInputSummary`): its source record's bases and the region of the source the
+    request asked for. Its drawn bases follow from them by the crop rule (``check_start_end_coords``), which the Web
+    export check applies in Python (D-70)."""
 
-    drawnLength: int
     sourceLength: int
     region: RegionPayload | None
 
@@ -149,7 +149,7 @@ class InputSummaryPayload(TypedDict):
     lines: list[str]
     warnings: list[InputWarningPayload]
     # Each drawn record, in drawing order: the Web tells from them whether the records its cards ask for now are the
-    # ones this Result drew (and a wrapped Result's export check reads the drawn lengths).
+    # ones this Result drew (and a wrapped Result's export check sends them back).
     records: list[RecordPayload]
     # ``None`` when the Result cut no record (a Circular Result, or a Linear one drawn on one row each).
     linearWrap: LinearWrapPayload | None
@@ -423,7 +423,6 @@ def _linear_wrap_payload(wrap: LinearWrapSummary) -> LinearWrapPayload:
 def _record_payload(record: RecordInputSummary) -> RecordPayload:
     region = record.requested_region
     return {
-        "drawnLength": record.drawn_length,
         "sourceLength": record.source_length,
         "region": None if region is None else {"start": region[0], "end": region[1]},
     }
