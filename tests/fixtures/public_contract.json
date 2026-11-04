@@ -28,16 +28,16 @@
       "read_genbank",
       "read_gff"
     ],
-    "contract_sha256": "c9cdce9bb6445e7357726dec862590be9ee5a9eaabd9fd6d2b55d0644a124377"
+    "contract_sha256": "9ebae92b0bc672afa3c6f05f241f2e20b8ab5665ce71d625cd962a05bc73393b"
   },
   "circular_cli": {
-    "actions_sha256": "9cdde2c5a31d7873531c4f8f584a3c8566ad447f5ad3a1ba6db773d2d3557ab7",
-    "defaults_sha256": "14deedc027cd0f1725fba8586a68deb890f493b3398521b7684527016f33e3f2",
-    "representative_sha256": "da783cc025b54d1a8fc4813a7e7136a56161b0aaceb35c8ee84ec82da2727c1b"
+    "actions_sha256": "6fe55300c55f7c182ec753869b8aceb6bd5d77353238bc94897ea2c52b45add7",
+    "defaults_sha256": "22aa21deb3f53ab36dfbc722b4e99eaaa03938bc6c9de7f0253f8f37bfe9da8b",
+    "representative_sha256": "170932a2cd68c7ac725df8037e820df49ada00575b8ad04dc85a5db3c0a48b43"
   },
   "linear_cli": {
-    "actions_sha256": "1c5217976215555771b3fd557bb2929c4eacc4eed36dc7e5a32fa3496be283cd",
-    "defaults_sha256": "8c506b62acc5ae9514d299af70688f590f1b807355eb7b8e3457aa7dcc74576b",
-    "representative_sha256": "3dc434e0576f3b1380d3983c00aa9d253514b0f3fdf12786e2a0a0edfa24c6f7"
+    "actions_sha256": "ee1afddef9676d7289304b631247dc15ae39fe404e8e1be3513cf4e31382726c",
+    "defaults_sha256": "aaa9097d7f86f2f92bb05b011794b0cc14f66a07d8fd16b4adcb893838f3a582",
+    "representative_sha256": "1269a44b9f2f82d51fc691b2ecb24f873e10c7c67552bd31eb07d0559ad39acd"
   }
 }

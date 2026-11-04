@@ -100,6 +100,7 @@ from .cli_utils.common import (
     _add_depth_track_label_color_args,
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
+    _add_figure_size_args,
     _add_format_arg,
     _add_overwrite_arg,
     _add_gc_skew_toggle_args,
@@ -117,7 +118,9 @@ from .cli_utils.common import (
     validate_input_args,
     validate_label_args,
     validate_output_choice_args,
+    figure_size_overrides,
     handle_output_formats,
+    png_dpi,
 )
 from .cli_utils.session import (
     DiagramRunResult,
@@ -880,6 +883,7 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         action='store_true',
     )
     _add_format_arg(parser)
+    _add_figure_size_args(parser)
     parser.add_argument(
         '-l',
         '--legend',
@@ -1645,6 +1649,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "canvas.feature_overlap_tolerance_bp": args.feature_overlap_tolerance_bp,
         "canvas.linear.track_layout": args.track_layout,
         LINEAR_WRAP_LENGTH_PATH: args.wrap_length,
+        **figure_size_overrides(args),
         "canvas.linear.track_axis_gap": track_axis_gap,
         "canvas.linear.ruler_on_axis": ruler_on_axis,
         "canvas.linear.align_center": align_center,
@@ -1868,6 +1873,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             formats=tuple(out_formats),
             overwrite=args.overwrite,
             embed_fonts=args.embed_fonts,
+            dpi=png_dpi(args, out_formats),
         ),
     )
     diagram_output_paths = diagram_request_output_paths(canonical_request)

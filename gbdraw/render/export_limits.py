@@ -8,17 +8,17 @@ this format, is refused for it; an unwrapped PDF stays as it was. SVG, interacti
 from __future__ import annotations
 
 from collections.abc import Sequence
-from math import floor
+from math import floor, isfinite
 
 from svgwrite import Drawing
 
-from gbdraw.exceptions import ExportError
+from gbdraw.core.figure_length import CSS_PX_PER_INCH
+from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.layout.linear_wrap import LinearWrapSummary, longer_row_lengths, wrap_length_option
 from gbdraw.render.document import drawing_size
 
 PNG_MAX_PIXELS = 32_767
 PDF_MAX_PAGE_PT = 14_400
-CSS_PX_PER_INCH = 96.0
 PDF_PT_PER_SVG_PX = 0.75
 
 _EXPORT_WRAP_ATTR = "_gbdraw_export_wrap"
@@ -33,6 +33,19 @@ def bind_export_wrap(drawing: Drawing, wrap: LinearWrapSummary | None) -> None:
 def _export_wrap(drawing: Drawing) -> LinearWrapSummary | None:
     wrap = getattr(drawing, _EXPORT_WRAP_ATTR, None)
     return wrap if isinstance(wrap, LinearWrapSummary) else None
+
+
+def checked_png_dpi(dpi: float | None) -> float | None:
+    """A PNG DPI as an export takes it: ``None`` (one pixel per SVG pixel) or a positive finite number."""
+
+    if dpi is not None and (
+        isinstance(dpi, bool) or not isinstance(dpi, (int, float)) or not isfinite(dpi) or dpi <= 0
+    ):
+        raise ValidationError(
+            f"dpi must be a positive number; got {dpi!r}.",
+            diagnostic={"code": "INPUT_INVALID", "reason": "POSITIVE"},
+        )
+    return dpi
 
 
 def _row_length_advice(wrap: LinearWrapSummary, width: float, height: float, limit: int) -> tuple[int, float] | None:
@@ -58,10 +71,11 @@ def check_export_limit(
 ) -> None:
     """Raise ``ExportError`` when a figure of this SVG size is over ``fmt``'s limit.
 
-    ``wrap`` is what a wrapped figure drew, and it decides the advice. ``dpi`` is given only by a caller whose PNG
-    scales by it (the Web app); gbdraw's CairoSVG PNG is one pixel per SVG pixel whatever its DPI, and a PDF page
-    never depends on it. The error's diagnostic carries the same facts for the Web: the limit and the size in the
-    format's unit, and the advised row length and DPI when one fits.
+    ``wrap`` is what a wrapped figure drew, and it decides the advice. ``dpi`` is the PNG's DPI when its pixels scale
+    by it (``dpi / 96`` pixels per SVG pixel: the Web app, the CLI ``--dpi`` and the ``dpi`` of the Python exports);
+    ``None`` is one pixel per SVG pixel, and a PDF page never depends on it. The error's diagnostic carries the same
+    facts for the Web: the limit and the size in the format's unit, and the advised row length and DPI when one
+    fits.
     """
 
     if fmt == "png":
@@ -107,13 +121,13 @@ def check_export_limit(
     raise ExportError(f"{message} SVG has no size limit (-f svg).", diagnostic=diagnostic)
 
 
-def check_drawing_export_limits(drawing: Drawing, formats: Sequence[str]) -> None:
-    """Check each requested format against a drawing, before anything is converted or written."""
+def check_drawing_export_limits(drawing: Drawing, formats: Sequence[str], *, dpi: float | None = None) -> None:
+    """Check each requested format against a drawing, before anything is converted or written (``dpi``: the PNG's)."""
 
     width, height = drawing_size(drawing)
     wrap = _export_wrap(drawing)
     for fmt in formats:
-        check_export_limit(fmt, width, height, wrap=wrap)
+        check_export_limit(fmt, width, height, wrap=wrap, dpi=dpi)
 
 
 __all__ = [
@@ -122,4 +136,5 @@ __all__ = [
     "bind_export_wrap",
     "check_drawing_export_limits",
     "check_export_limit",
+    "checked_png_dpi",
 ]

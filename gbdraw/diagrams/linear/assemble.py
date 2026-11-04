@@ -3442,6 +3442,8 @@ def assemble_linear_diagram(
             ),
             legend_placement=legend_placement,
             title_placement=title_placement,
+            requested_width_px=cfg.canvas.figure_size.width_px,
+            requested_height_px=cfg.canvas.figure_size.height_px,
         ),
     )
     apply_composition_plan(

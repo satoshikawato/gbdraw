@@ -124,8 +124,10 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--center_reserved_radius CENTER_RESERVED_RADIUS]
               [--no_track_narrowing]
               [--track_narrowing_min_px TRACK_NARROWING_MIN_PX]
-              [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--gc | --no-gc]
-              [--skew | --no-skew] [--depth_track DEPTH [DEPTH ...]]
+              [--label_font_size LABEL_FONT_SIZE] [-f FORMAT]
+              [--figure_width LENGTH|auto] [--figure_height LENGTH|auto]
+              [--dpi DPI] [--gc | --no-gc] [--skew | --no-skew]
+              [--depth_track DEPTH [DEPTH ...]]
               [--depth_track_label LABEL [LABEL ...]]
               [--depth_track_color COLOR [COLOR ...]]
               [--depth_track_large_tick_interval VALUE [VALUE ...]]
@@ -330,6 +332,20 @@ options:
   -f, --format FORMAT   Comma-separated list of output file formats (svg,
                         interactive_svg, png, pdf, eps, ps; default: svg;
                         png/pdf/eps/ps require CairoSVG).
+  --figure_width LENGTH|auto
+                        Width of the whole figure, legend and title included,
+                        with a unit: mm, cm, in, or px (for example 180mm).
+                        The figure is laid out again to fit; fonts and line
+                        widths keep their size. Linear figures only for now.
+                        Default: auto.
+  --figure_height LENGTH|auto
+                        Height of the whole figure, legend and title included,
+                        with a unit: mm, cm, in, or px (for example 180mm).
+                        The figure is laid out again to fit; fonts and line
+                        widths keep their size. Linear figures only for now.
+                        Default: auto.
+  --dpi DPI             PNG resolution in pixels per inch (positive integer;
+                        default: 96, one pixel per SVG pixel). PNG only.
   --gc                  Show the GC content track.
   --no-gc               Hide the GC content track.
   --skew                Show the GC skew track.
@@ -1150,7 +1166,8 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--linear_track_order LINEAR_TRACK_ORDER]
               [--linear_track_slot SLOT]
               [--linear_track_axis_index LINEAR_TRACK_AXIS_INDEX]
-              [--ruler_on_axis] [-f FORMAT] [-l LEGEND]
+              [--ruler_on_axis] [-f FORMAT] [--figure_width LENGTH|auto]
+              [--figure_height LENGTH|auto] [--dpi DPI] [-l LEGEND]
               [--show_labels [{all,first,orthogroup_top,none}]]
               [--resolve_overlaps] [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
@@ -1607,6 +1624,20 @@ options:
   -f, --format FORMAT   Comma-separated list of output file formats (svg,
                         interactive_svg, png, pdf, eps, ps; default: svg;
                         png/pdf/eps/ps require CairoSVG).
+  --figure_width LENGTH|auto
+                        Width of the whole figure, legend and title included,
+                        with a unit: mm, cm, in, or px (for example 180mm).
+                        The figure is laid out again to fit; fonts and line
+                        widths keep their size. Linear figures only for now.
+                        Default: auto.
+  --figure_height LENGTH|auto
+                        Height of the whole figure, legend and title included,
+                        with a unit: mm, cm, in, or px (for example 180mm).
+                        The figure is laid out again to fit; fonts and line
+                        widths keep their size. Linear figures only for now.
+                        Default: auto.
+  --dpi DPI             PNG resolution in pixels per inch (positive integer;
+                        default: 96, one pixel per SVG pixel). PNG only.
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left",
                         "top", "bottom", "none")
   --show_labels [{all,first,orthogroup_top,none}]

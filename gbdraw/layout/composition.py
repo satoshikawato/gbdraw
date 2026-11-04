@@ -168,6 +168,8 @@ class CompositionRequest:
     Overlay obstacles use the same plot-space coordinate system as the primary
     item. Their tuple order is retained so conflict indices can be mapped back
     to mode-owned geometry without putting that geometry in the shared planner.
+    A requested canvas side (px) is the canvas size on that axis when the padded
+    content fits in it; the content is centred, never stretched or shrunk.
     """
 
     primary: CompositionItem
@@ -177,8 +179,13 @@ class CompositionRequest:
     title_placement: TitlePlacement | str = TitlePlacement.NONE
     overlay_obstacles: tuple[Aabb, ...] = ()
     spacing: CompositionSpacing = DEFAULT_COMPOSITION_SPACING
+    requested_width_px: float | None = None
+    requested_height_px: float | None = None
 
     def __post_init__(self) -> None:
+        for requested in (self.requested_width_px, self.requested_height_px):
+            if requested is not None and not (math.isfinite(requested) and requested > 0.0):
+                raise ValueError("a requested canvas side must be a positive finite value")
         if not isinstance(self.primary, CompositionItem):
             raise ValueError("composition request requires a primary item")
         if self.primary.is_empty:
@@ -251,6 +258,8 @@ class CompositionPlan:
 
     ``primary_local_bounds`` is the request's primary bounds, kept exactly as
     given; ``primary_bounds`` is the same box after the automatic translation.
+    ``content_bounds`` is the padded content: the canvas itself unless a
+    requested canvas side is larger, in which case it is centred in the canvas.
     """
 
     canvas_bounds: Aabb
@@ -259,6 +268,7 @@ class CompositionPlan:
     primary_local_bounds: Aabb
     placements: tuple[CompositionPlacement, ...]
     spacing: CompositionSpacing
+    content_bounds: Aabb
     overlay_obstacles: tuple[Aabb, ...] = ()
     overlay_conflict_indices: tuple[int, ...] = ()
     overlay_resolution: OverlayResolution | None = None
@@ -270,6 +280,8 @@ class CompositionPlan:
             raise TypeError("primary_bounds must be an Aabb")
         if not isinstance(self.primary_local_bounds, Aabb):
             raise TypeError("primary_local_bounds must be an Aabb")
+        if not isinstance(self.content_bounds, Aabb):
+            raise TypeError("content_bounds must be an Aabb")
         view_box = tuple(float(value) for value in self.view_box)
         if len(view_box) != 4 or not all(math.isfinite(value) for value in view_box):
             raise ValueError("view_box must contain four finite values")
@@ -706,8 +718,13 @@ def plan_composition(request: CompositionRequest) -> CompositionPlan:
     if painted_union is None:  # pragma: no cover - validated primary is always present
         raise RuntimeError("composition has no painted bounds")
     padded_union = painted_union.expanded(request.spacing.edge_padding_px)
-    outer_dx = -padded_union.min_x
-    outer_dy = -padded_union.min_y
+    canvas_width = max(padded_union.width, request.requested_width_px or 0.0)
+    canvas_height = max(padded_union.height, request.requested_height_px or 0.0)
+    # Room a requested canvas leaves around the padded content is shared equally by both sides.
+    content_x = 0.5 * (canvas_width - padded_union.width)
+    content_y = 0.5 * (canvas_height - padded_union.height)
+    outer_dx = content_x - padded_union.min_x
+    outer_dy = content_y - padded_union.min_y
 
     placements = tuple(
         CompositionPlacement(
@@ -718,7 +735,7 @@ def plan_composition(request: CompositionRequest) -> CompositionPlan:
         for placement in working
     )
     primary_placement = placements[0]
-    canvas_bounds = Aabb(0.0, 0.0, padded_union.width, padded_union.height)
+    canvas_bounds = Aabb(0.0, 0.0, canvas_width, canvas_height)
     return CompositionPlan(
         canvas_bounds=canvas_bounds,
         view_box=(0.0, 0.0, canvas_bounds.width, canvas_bounds.height),
@@ -726,6 +743,7 @@ def plan_composition(request: CompositionRequest) -> CompositionPlan:
         primary_local_bounds=request.primary.local_bounds,
         placements=placements,
         spacing=request.spacing,
+        content_bounds=padded_union.translated(outer_dx, outer_dy),
         overlay_obstacles=tuple(
             obstacle.translated(outer_dx, outer_dy)
             for obstacle in request.overlay_obstacles

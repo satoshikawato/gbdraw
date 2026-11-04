@@ -56,6 +56,7 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 | `window`, `step`, `depth_window`, `depth_step` | positive integer or `None` | `None` |
 | `annotations`, `config`, `config_overrides` | mode-appropriate value or `None` | `None` |
 | `depth_tracks` | sequence of `DepthTrackOptions` | empty |
+| `figure_width`, `figure_height` (keyword only) | length with a unit (`"180mm"`, `"7in"`) or `None` (auto); Linear only for now, see [Figure size](output-formats-and-export.md#figure-size-and-png-dpi) | `None` |
 
 Unset `Thresholds` values resolve through the mode profile:
 
@@ -191,7 +192,9 @@ New requests use these dotted paths. Retired flat label names and
 | `to_svg()` | static SVG text |
 | `to_svg(interactive=True)` | interactive SVG text with supported metadata |
 | `to_bytes(format="svg")` | SVG, interactive SVG, PNG, PDF, EPS, or PS bytes |
-| `save(path, *, format=None, overwrite=False, embed_fonts=True)` | writes exactly one file and returns its `Path` |
+| `save(path, *, format=None, overwrite=False, embed_fonts=True, dpi=None)` | writes exactly one file and returns its `Path` |
+
+`dpi` on `to_bytes()` and `save()` scales a PNG to `dpi / 96` pixels per SVG pixel (default: one).
 
 For static SVG, `to_svg()` equals
 `to_bytes("svg").decode("utf-8")`. `save(..., format="svg")` writes that same

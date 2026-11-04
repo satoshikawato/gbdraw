@@ -2274,6 +2274,7 @@ def resolve_circular_batch_outputs(
                 overwrite=policy.overwrite,
                 interactive_metadata_policy=policy.interactive_metadata_policy,
                 embed_fonts=policy.embed_fonts,
+                dpi=policy.dpi,
             )
         )
     return tuple(outputs)
