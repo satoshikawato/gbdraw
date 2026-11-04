@@ -1540,16 +1540,6 @@ export const createHistorySnapshotService = ({
     }
   };
 
-  /**
-   * @param {{ identity?: { fingerprint?: string, compactSignature?: string } } | null | undefined} before
-   * @param {{ identity?: { fingerprint?: string, compactSignature?: string } } | null | undefined} after
-   */
-  const compareGeneratedArtifactHandles = (before, after) => Boolean(
-    before?.identity?.fingerprint
-    && before.identity.fingerprint === after?.identity?.fingerprint
-    && before.identity.compactSignature === after?.identity?.compactSignature
-  );
-
   // The alignment plan, its Reset receipt, and record translations of
   // drawing `drawingId`; intents and checkpoints capture and restore them
   // together. The receipt is an artifact slot value, the drawing's own
@@ -1949,7 +1939,6 @@ export const createHistorySnapshotService = ({
     captureGeneratedArtifactOwnerSet,
     clearGeneratedArtifactIdentity,
     collectCurrentFileIds: () => boundInputFileIds(inputBindingsOf(state)),
-    compareGeneratedArtifactHandles,
     drawingHistory,
     sessionHistory,
     artifactSlots,

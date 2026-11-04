@@ -43,7 +43,6 @@ const history = createHistoryManager({
   applyCheckpoint: () => assert.fail('Generate must restore its owner handle'),
   captureGeneratedArtifactHandle: () => snapshots.captureGeneratedArtifactHandle(state.activeDrawing()),
   restoreGeneratedArtifactHandle: snapshots.restoreGeneratedArtifactHandle,
-  compareGeneratedArtifactHandles: snapshots.compareGeneratedArtifactHandles
 });
 await history.initializeIntentBaseline();
 await history.runUndoable('Change labels', () => { state.activeDrawing().form.labels_mode = 'none'; });

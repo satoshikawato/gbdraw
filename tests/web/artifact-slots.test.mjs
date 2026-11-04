@@ -348,7 +348,6 @@ test('an unchanged Generate in a drawing records no step after a Generate in ano
     ...snapshots.drawingHistory(id),
     captureGeneratedArtifactHandle: () => snapshots.captureGeneratedArtifactHandle(modeDrawing(state, id)),
     restoreGeneratedArtifactHandle: snapshots.restoreGeneratedArtifactHandle,
-    compareGeneratedArtifactHandles: snapshots.compareGeneratedArtifactHandles
   })]));
   const slots = new Map();
   const baselines = new Set();

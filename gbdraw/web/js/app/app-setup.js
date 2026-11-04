@@ -1834,7 +1834,6 @@ export const createAppSetup = () => {
         ),
         captureGeneratedArtifactHandle: () => historySnapshots.captureGeneratedArtifactHandle(drawing()),
         restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
-        compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
         signatureFor: historySnapshots.snapshotSignature,
         collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
         identityMapPath: ports.identityMapPath,
