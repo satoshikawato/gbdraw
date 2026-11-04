@@ -32,7 +32,7 @@ const { allocateDrawingId, defaultDrawingName } = await import('../../gbdraw/web
 const { withNewDrawingDefaults } = await import('../../gbdraw/web/js/services/reset.js');
 const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
 const { coordinateTarget } = await import('../../gbdraw/web/js/app/annotations/target-actions.js');
-const { bindDrawingInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { bindDrawingInputFile, createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
   installShownDrawing, installPreparedDrawing, prepareRegionDrawing, prepareStoredDrawing, projectDraftRequest
 } = await import('../../gbdraw/web/js/services/config.js');
@@ -186,15 +186,28 @@ const putAt = (request, path, value) => {
  * source); the drawing installs them as Load installs a request that leaves
  * them out, and writes them. `leftToLoad` lists the paths the derived request
  * leaves out and the drawing writes with an effect on the request; any other
- * difference fails.
+ * difference fails. With `defaultLayout`, the derived request states the
+ * Linear layout at its defaults (Python draws a request without one the same:
+ * a 24 px record gap, no shared row), which the drawing writes as no layout,
+ * and puts each cropped record's selector in its crop.
  */
-const assertRoundTrip = async (installed, leftToLoad = []) => {
+const DEFAULT_LINEAR_LAYOUT = { recordGapPx: 24, multiRecordPositions: null, recordTranslations: [], similarityAlignment: null };
+const assertRoundTrip = async (installed, { leftToLoad = [], defaultLayout = false } = {}) => {
   const { envelope } = await projectShown(installed.made);
   const compare = (expectedRequest) => compareCanonicalRenderRequests({
     expectedRequest, expectedResources: derivedResources(installed),
     actualRequest: envelope.renderRequest, actualResources: envelope.resources
   });
   let expected = installed.derived.renderRequest;
+  if (defaultLayout) {
+    assert.deepEqual(expected.layout, DEFAULT_LINEAR_LAYOUT, 'the derived request states the default layout');
+    assert.deepEqual(envelope.renderRequest.layout, {});
+    expected = { ...expected, layout: {} };
+    // A cropped record of a file of several records: Python writes its record
+    // selector as the record's `selector`, the Web as the crop's (OV-2464).
+    expected = { ...expected, records: expected.records.map((record) => (record.selector && record.region
+      ? { ...record, selector: null, region: { ...record.region, selector: record.selector } } : record)) };
+  }
   const taken = [];
   let comparison = await compare(expected);
   while (comparison.differences.length && taken.length <= leftToLoad.length) {
@@ -415,5 +428,30 @@ const LINEAR_SETTINGS_LEFT_TO_LOAD = [
 // The installed Linear drawing writes the derived request when it is shown,
 // as the app projects it (the request's mode is the shown drawing's).
 test('(a) round trip of the Linear region drawing of a Circular source', async () => {
-  await assertRoundTrip(await deriveAndInstall(await circularSourceWithLook(), LOOK_REGION), LINEAR_SETTINGS_LEFT_TO_LOAD);
+  await assertRoundTrip(await deriveAndInstall(await circularSourceWithLook(), LOOK_REGION), { leftToLoad: LINEAR_SETTINGS_LEFT_TO_LOAD });
+});
+
+// A Linear drawing with one card whose file holds two records: the card draws both.
+const recordB = genbankRecord('recB', 900, [[51, 300, 'B1'], [501, 800, 'B2']], 'linear');
+test('(a) regions of two records of one file are one Linear drawing bound to that one file', async () => {
+  const source = withNewDrawingDefaults(state, createDrawingState('two-records', 'linear'));
+  source.inputType.value = 'gb';
+  const fileRef = state.inputFiles.registerFile(genbankFile('two.gb', [recordA, recordB]));
+  source.linearSeqs.splice(0, Infinity, createLinearSeq({ uid: 'two', gb: fileRef }));
+  Object.assign(source.form, { labels_mode: 'none' });
+  const sent = await projectShown(source);
+  // The card's records, as the request names them (`<card uid>:<record number>`).
+  const regions = [{ recordKey: 'two:1', start: 101, end: 900 }, { recordKey: 'two:2', start: 1, end: 600 }];
+  const { value: installed, registered } = await countingRegistrations(() => deriveAndInstall(source, regions));
+  console.log(JSON.stringify({ rs: installed.derived.resourceSources, seqs: installed.made.linearSeqs.map((r) => [r.uid, r.gb, r.region_record_id, r.region_start, r.region_end]) }));
+  assert.equal(installed.made.mode, 'linear');
+  assert.deepEqual(installed.prepared.repairs, []);
+  assert.deepEqual(registered, [], 'no new entry in the file store');
+  assert.deepEqual(installed.made.linearSeqs.map((row) => row.gb?.fileId), [fileRef.fileId, fileRef.fileId],
+    'both records bound to the source drawing\'s one Web file');
+  assert.equal(new Set(Object.values(installed.derived.resourceSources)).size, 1, 'both read the one sent resource');
+  // The source's card drew its two records on one row; the region drawing draws
+  // each record on a row of its own.
+  assert.deepEqual(installed.derived.renderRequest.records.map((record) => record.presentation.gridRow), [null, null]);
+  await assertRoundTrip(installed, { defaultLayout: true });
 });
