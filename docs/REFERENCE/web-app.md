@@ -1142,13 +1142,22 @@ inference, support-count ranking and multi-hop automatic selection are unsupport
 drawn records up at one named feature, as `gbdraw linear --anchor_feature`
 does, with no comparison needed. Type a `KEY=VALUE` selector such as
 `gene=COX1` in **Align at feature** and choose **Align at feature…**. Python
-resolves it on the Result as drawn and lists, per record, whether it keeps its
-place or moves, and by how many px. **Align records** writes the record positions once,
-as one History step, and draws them; later changes do not align the records
-again. Applying clears an active Similarity alignment, as a record drag does.
-A selector that no record matches, matches at different starts in one record,
-or records that share a row or that `canvas.linear.wrap_length` splits over
-several rows, are refused with the reason. See [Record selection and
+resolves it on the Result as drawn and lists what happens to each record. A
+complete circular record is rotated so that the feature starts at its left end
+("starts at base 5904 (rotated)"); its **Display start** shows that base and
+replaces the earlier start. A linear record, a record cropped by **Region**,
+or a record drawn linear by its topology moves sideways ("moves -62.8 px")
+so that the feature starts below the left end of the first rotated record, or,
+when no record is rotated, below the feature of the first record that has it.
+A record without the feature keeps its start and place. **Align records**
+writes the starts and the record positions once, as one History step that one
+Undo reverts, and draws them; the next Generate draws the same figure, and
+later changes do not align the records again. Applying clears an active
+Similarity alignment, as a record drag does. A selector that no record
+matches, matches at different starts in one record, records that share a row,
+a record that Wrap Rows cuts and Align at feature would move sideways, and
+records that share one File card (a file with several records that is not yet
+split into one card per record) are refused with the reason. See [Record selection and
 layout](command-line.md#record-selection-and-layout) for the matching rules.
 
 ### Wrap Rows
@@ -1180,18 +1189,20 @@ comparisons (BLAST, comparison pairs, LOSAT, or Similarity groups), a Record
 Layout row with several records, a record moved sideways, or a feature track on
 the axis in Custom Track Slots. A record is moved sideways when its stored
 position has an x other than 0, whatever wrote it: **Align at feature** (an
-Apply that moved no record blocks nothing), a Similarity alignment, or a loaded
+Apply that only rotated records moves none, so it blocks nothing and the rotated
+records wrap), a Similarity alignment, or a loaded
 Session (one saved after either, from `gbdraw linear --anchor_feature`, or from
 the Python API). A Similarity alignment counts as moved records also after its
 comparison inputs are removed. The note under the field names what to remove.
 While a record is moved, **Reset record positions** under the note sets every
-record's sideways position to 0 (its vertical position and direction stay),
+record's sideways position to 0 (its vertical position, direction, and display
+start stay, so rotations made by Align at feature remain),
 ends a Similarity alignment, and draws the Result again, as one History step
 that one Undo reverts. Turning Wrap Rows off is always possible. When one of
 these is added after Wrap Rows is on, or a loaded Session holds both, and
 Generate cuts a record that rows cannot draw, Generate stops with the same
-message and keeps the last Result, and **Align at feature…** on a Result whose
-records are cut is refused.
+message and keeps the last Result, and **Align at feature…** that would move a
+cut record sideways is refused.
 
 A feature cut over two rows stays one feature: its popup, highlight, selection,
 label, and editor rows are the feature's, and any of its pieces opens them. A

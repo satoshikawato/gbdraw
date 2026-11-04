@@ -68,7 +68,7 @@ const REASONS = Object.freeze({
   WRAP_NORMALIZE_LENGTH: 'Wrapped rows draw at one scale. Turn Normalize Record Lengths off, or turn Wrap Rows off.',
   WRAP_GRID_ROW: 'A wrapped record needs a Record Layout row of its own. Give each record its own row, or turn Wrap Rows off.',
   // Align at feature's Resolve and gbdraw linear --anchor_feature (gbdraw/api/record_planning.py, gbdraw/layout/linear_wrap.py).
-  WRAP_ANCHOR_FEATURE: 'A wrapped record cannot be aligned at a feature. Turn Wrap Rows off, then use Align at feature.',
+  WRAP_ANCHOR_FEATURE: 'Align at feature would move a wrapped record sideways, and the rows of a wrapped record share one x. Only a complete circular record is aligned by rotation and can be wrapped. Turn Wrap Rows off, then use Align at feature.',
   // A cut record whose stored translation moves it sideways, whatever wrote it, or a Similarity alignment without
   // its comparison inputs (gbdraw/layout/linear_wrap.py). Web text names Web-visible sources only (OV-2472).
   WRAP_RECORD_POSITION: 'A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, or a loaded Session). Click Reset record positions under Wrap Rows, or turn Wrap Rows off.',
@@ -80,6 +80,8 @@ const REASONS = Object.freeze({
   SELECTOR_AMBIGUOUS: 'In one record, this selector names features that start at different bases. Use a selector that names one feature, such as locus_tag=<tag>.',
   ANCHOR_SHARED_ROW: 'Records that share a row cannot be aligned at a feature. Give each record its own row in Record Layout.',
   ANCHOR_STALE: 'The diagram changed after the preview. Align at feature again.',
+  // Align at feature writes a rotated record's start to its File card's record (OV-2474).
+  ANCHOR_RECORD_CARDS: 'Align at feature writes each record\'s start on its own File card, and these records share one File card (a file with several records). Give each record its own File card, then use Align at feature again.',
   LINEAR_SETTING: 'It applies only to Linear diagrams. Reset it under Preserved session settings, or switch to Linear.',
   TRACK_SCHEMA: 'Recreate Custom Track Slots with the current schema.',
   SESSION_FIELDS: 'Remove unsupported top-level Session fields.',

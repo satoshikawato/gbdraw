@@ -1451,7 +1451,7 @@ export const createSimilarityAlignmentActions = ({
       reverseComplement: baseReverseComplement(record) }));
     const materialized = projectCommittedAlignment({ committed: canonical,
       plan: materializePlan ? null : request.layout?.similarityAlignment,
-      translations, orientations });
+      translations, orientations, starts: [] });
     return { canonical: materialized, request: materialized.renderRequest, translations };
   };
 
@@ -1584,7 +1584,7 @@ export const createSimilarityAlignmentActions = ({
     // `activeRequest`, and every clear of one is followed by a stale `actionId`, checked above.
     const canonical = projectCommittedAlignment({
       committed: /** @type {AlignmentBaseline} */ (activeBaseline).canonical,
-      plan: response.plan, orientations,
+      plan: response.plan, orientations, starts: [],
       translations: projected.records.map(({ recordKey, translation }) => ({recordKey, ...translation})) });
     const promise = runAlignmentCandidate({canonical, label: msg('Align Similarity Group'),
       alignmentResetBefore: /** @type {AlignmentBaseline} */ (activeBaseline).canonical});
@@ -1977,7 +1977,7 @@ export const createSimilarityAlignmentActions = ({
           translation.y += fact.beforeAxisY - fact.variants[Number(vector[translation.recordKey])].axisY;
         });
       }
-      const canonical = projectCommittedAlignment({committed: current.canonical, plan:null, translations, orientations});
+      const canonical = projectCommittedAlignment({committed: current.canonical, plan:null, translations, orientations, starts: []});
       promise = runAlignmentCandidate({canonical, label: scope === 'positions'
         ? msg('Reset alignment positions') : msg('Reset alignment positions and directions'), alignmentResetReceipt:null});
       activeApply = promise;

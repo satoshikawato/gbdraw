@@ -120,11 +120,19 @@ test('turning Wrap Rows on switches the settings rows decide, one Undo restores 
 test('comparisons and a record moved by Align at feature keep Wrap Rows from being turned on and name what to remove', async ({ page }) => {
   test.setTimeout(480_000);
   await openLinear(page, MITOGENOMES);
+  // NC_002333.2 drawn linear: Align at feature moves it sideways (a circular record would rotate).
+  await page.evaluate(async () => {
+    const controls = window.__GBDRAW_APP__.recordDisplayControls;
+    const rows = controls.allRows.value ?? controls.allRows;
+    await controls.setTopology(rows.find((row) => row.recordId === 'NC_002333.2'), false);
+  });
+  await settle(page);
   await generateAndWaitForResult(page);
   await settle(page);
   await expect(wrapBox(page)).toBeEnabled();
 
-  // Align at feature moves NC_002333.2 sideways; while a record is moved, rows cannot draw it.
+  // Align at feature rotates NC_012920.1 and moves the linear NC_002333.2 sideways; while a record is moved, rows
+  // cannot draw it.
   const selector = page.getByLabel('Align at feature', { exact: true });
   await selector.evaluate((element) => {
     for (let details = element.closest('details'); details; details = details.parentElement?.closest('details')) details.open = true;
@@ -162,11 +170,12 @@ test('comparisons and a record moved by Align at feature keep Wrap Rows from bei
   await expect(page.locator('#linear-wrap-blocked')).toContainText(COMPARISONS_TEXT);
 });
 
-// Q5 A (1): Align at feature counts only through the records its Apply moved. The same record twice has its
-// feature at one place in both, so Apply moves neither and Wrap Rows stays enabled.
-test('an Align at feature Apply that moves no record leaves Wrap Rows enabled', async ({ page }) => {
+// Q5 A (1), PD-OI-113 scenario revision 3: Align at feature counts only through the records its Apply moved. Both
+// mitogenomes are complete circular records, so Apply rotates them and moves neither: Wrap Rows stays enabled, and
+// Generate wraps the rotated records.
+test('an Align at feature Apply that only rotated leaves Wrap Rows enabled, and Generate wraps', async ({ page }) => {
   test.setTimeout(480_000);
-  await openLinear(page, [MITOGENOMES[1], MITOGENOMES[1]]);
+  await openLinear(page, MITOGENOMES);
   await generateAndWaitForResult(page);
   await settle(page);
   const selector = page.getByLabel('Align at feature', { exact: true });
@@ -182,6 +191,18 @@ test('an Align at feature Apply that moves no record leaves Wrap Rows enabled', 
   expect((await translations(page)).map(({ x }) => x)).toEqual([0, 0]);
   await expect(wrapBox(page)).toBeEnabled();
   await expect(page.locator('#linear-wrap-blocked')).toHaveCount(0);
+
+  await setWrap(page, 5, 'kbp');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const committed = await page.evaluate(async () => {
+    const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
+    return getCommittedCanonicalRenderRequest().records.map(({ display }) => display?.startCoordinate ?? null);
+  });
+  expect(committed).toEqual([5904, 6425]);
+  // Each 16.6 kb record is cut into four 5 kbp rows.
+  expect(await page.evaluate(() => new Set([...document.querySelectorAll('[data-gbdraw-wrap-row]')]
+    .map((row) => row.getAttribute('data-gbdraw-wrap-row'))).size)).toBeGreaterThan(1);
 });
 
 // Q5 A (2): a Similarity alignment counts as moved records, also beside comparisons, so its hint names Reset record

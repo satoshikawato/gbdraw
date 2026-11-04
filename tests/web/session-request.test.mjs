@@ -24,6 +24,7 @@ const {
   promoteCanonicalRenderRequestToCurrent,
   projectCommittedEditorIntent: projectDrawingEditorIntent,
   projectCommittedRecordTransform,
+  projectCommittedSimilarityAlignment,
   projectCanonicalSessionRequest,
   readStoredRenderRequest
 } = await import(
@@ -2546,6 +2547,39 @@ assert.equal(
     [['AAA.1', 7], ['BBB.1', 11]],
     'OV-278: Load then Generate keeps the display start of a record selected by ID'
   );
+}
+
+// Align at feature's Apply (PD-OI-113 scenario revision 3): the placement candidate writes Python's display start of
+// each rotated record with the translations, and keeps every other record's start; a start for a record the
+// committed request does not draw is refused as stale. Reset record positions and Similarity alignment pass none.
+{
+  const committedLinear = (starts) => ({
+    renderRequest: { schema: CANONICAL_REQUEST_SCHEMA, mode: 'linear', grouping: 'single',
+      records: ['first', 'second'].map((recordKey, index) => ({ recordKey, cardinality: 'exactly_one',
+        source: { kind: 'genbank', resourceId: 'shared' }, selector: { kind: 'recordIndex', index }, region: null,
+        presentation: { label: null, subtitle: null, reverseComplement: false, gridRow: null, gridColumn: null },
+        display: { isCircular: null, startCoordinate: starts[index] } })),
+      diagramOptions: { featurePlacements: [], featureOverrides: [] }, output: { prefix: 'anchor' } },
+    resources: { shared: unchangedOneSource.resources[Object.keys(unchangedOneSource.resources)[0]] },
+    webFiles: {}
+  });
+  const committed = committedLinear([null, 40]);
+  const before = structuredClone(committed);
+  const translations = [{ recordKey: 'first', x: 0, y: 0 }, { recordKey: 'second', x: -12.5, y: 3 }];
+  const orientations = [{ recordKey: 'first', reverseComplement: false }, { recordKey: 'second', reverseComplement: false }];
+  const candidate = projectCommittedSimilarityAlignment({ committed, plan: null, translations, orientations,
+    starts: [{ recordKey: 'first', startCoordinate: 21 }] });
+  assert.deepEqual(committed, before, 'the committed Session is not written');
+  assert.deepEqual(candidate.renderRequest.records.map(({ display }) => display),
+    [{ isCircular: null, startCoordinate: 21 }, { isCircular: null, startCoordinate: 40 }]);
+  assert.deepEqual(candidate.renderRequest.layout.recordTranslations, translations);
+  assert.equal(candidate.renderRequest.layout.similarityAlignment, null);
+  const reset = projectCommittedSimilarityAlignment({ committed, plan: null, translations, orientations, starts: [] });
+  assert.deepEqual(reset.renderRequest.records.map(({ display }) => display.startCoordinate), [null, 40], 'no start, no rotation change');
+  for (const starts of [[{ recordKey: 'third', startCoordinate: 5 }], [{ recordKey: 'first', startCoordinate: 0 }]]) {
+    assert.throws(() => projectCommittedSimilarityAlignment({ committed, plan: null, translations, orientations, starts }),
+      (error) => error.code === 'INPUT_INVALID' && error.context?.reason === 'ANCHOR_STALE', JSON.stringify(starts));
+  }
 }
 
 const committedBeforeProjection = structuredClone(unchangedOneSource);

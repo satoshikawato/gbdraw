@@ -35,6 +35,7 @@ import { errorText } from '../utils/error-text.js';
 /** @import { RecordOrientationWrite } from './record-auto-orientation.js' */
 /** @import { AnchorIntent, RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow, RecordDisplayScope } from '../services/record-display-model.js' */
 /** @import { RecordEntryInput } from '../services/record-options.js' */
+/** @import { RecordPlacementStart } from '../services/session-request.js' */
 
 // Session Load reads no record bytes (776a2f93), so a loaded Result can have a
 // current source whose records are not read yet. That popup target failure is
@@ -95,6 +96,11 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  * record-display/feature-record-rotation.js, its one writer).
  * `writeResolvedTransform` checks each field again before a draft takes it.
  * @typedef {{ startCoordinate: number, reverseComplement: boolean, anchorIntent: AnchorIntent }} ResolvedRecordTransform
+ */
+
+/**
+ * A display start a record placement writes, with the committed row whose draft takes it (`recordStartTargets`).
+ * @typedef {{ row: CommittedDisplayRow, startCoordinate: number }} RecordStartTarget
  */
 
 /**
@@ -571,6 +577,34 @@ export const createRecordDisplayControls = ({
       drawing.recordDisplayDrafts.splice(insertAt, 0, cloneJsonData(checkpoint.draft));
     }
   };
+  // The display starts a record placement writes (Align at feature's rotated records), each with the committed row of
+  // its record key in the Linear drawing, so Generate draws them from the drafts (the caller reads the records
+  // first, so a loaded Session's records have their rows). A record without one such row has no File card of its
+  // own: the start is then refused, not written to a draft that the next Generate would not read.
+  /** @param {DrawingState} drawing @param {readonly RecordPlacementStart[]} starts @returns {RecordStartTarget[]} */
+  const recordStartTargets = (drawing, starts) => {
+    if (starts.length) refreshCommittedRows();
+    return starts.map(({ recordKey, startCoordinate }) => {
+      const matches = committedRows.filter((row) => row.drawingId === drawing.id && row.recordKey === recordKey);
+      if (matches.length !== 1) {
+        throw diagnosticError('INPUT_INVALID', { field: 'anchor_feature', reason: 'ANCHOR_RECORD_CARDS' });
+      }
+      return { row: matches[0], startCoordinate: /** @type {number} */ (parseRecordDisplayStart(startCoordinate)) };
+    });
+  };
+  /** @param {readonly RecordStartTarget[]} targets @returns {TargetDraftCheckpoint[]} */
+  const captureRecordStarts = (targets) => targets.map(({ row }) => captureTargetDraft(row));
+  /** @param {readonly TargetDraftCheckpoint[]} checkpoints */
+  const restoreRecordStarts = (checkpoints) => checkpoints.forEach(restoreTargetDraft);
+  // The start is the record's own now: like an edit of its Display start, it replaces any earlier anchor intent.
+  /** @param {DrawingState} drawing @param {readonly RecordStartTarget[]} targets */
+  const commitRecordStarts = (drawing, targets) => {
+    if (!targets.length) return;
+    settleDrafts(drawing);
+    targets.forEach(({ row, startCoordinate }) => {
+      Object.assign(draftOf(drawing, row), { startCoordinate, anchorIntent: null });
+    });
+  };
   return { rows, allRows, draftFor, surfaceFor, hasPendingChanges, changeRecordSources,
     // The data of isCurrentFeature (services/feature-identity.js), refreshed
     // for the committed request before it is read (R13).
@@ -619,5 +653,9 @@ export const createRecordDisplayControls = ({
     writeDecidedOrientations,
     captureTargetDraft,
     restoreTargetDraft,
+    recordStartTargets,
+    captureRecordStarts,
+    restoreRecordStarts,
+    commitRecordStarts,
     targetForFeature };
 };
