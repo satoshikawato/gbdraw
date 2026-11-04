@@ -14,7 +14,8 @@ await writeFile(join(tempRoot, 'linear-record-selector.js'), (await readFile(joi
   .replace('../utils/error-normalization.js', pathToFileURL(join(sourceRoot, '../utils/error-normalization.js')).href)
   .replace('../utils/error-text.js', pathToFileURL(join(sourceRoot, '../utils/error-text.js')).href)
   .replace('../services/record-options.js', pathToFileURL(join(sourceRoot, '../services/record-options.js')).href)
-  .replace('../services/record-discovery.js', pathToFileURL(join(sourceRoot, '../services/record-discovery.js')).href), 'utf8');
+  .replace('../services/record-discovery.js', pathToFileURL(join(sourceRoot, '../services/record-discovery.js')).href)
+  .replace('../services/input-types.js', pathToFileURL(join(sourceRoot, '../services/input-types.js')).href), 'utf8');
 
 const {
   AUTOMATIC_RECORD_OPTION_LABEL,
@@ -23,6 +24,7 @@ const {
   formatRecordLength
 } = await import(pathToFileURL(join(tempRoot, 'linear-record-selector.js')));
 const {
+  discoverFastaInputRecords,
   discoverGffFastaRecords,
   discoverSequenceRecords,
   normalizeSequenceRecords,
@@ -143,6 +145,33 @@ const paired = await discoverGffFastaRecords({
 });
 assert.equal(paired[0].recordId, 'GffOwned');
 assert.deepEqual(pairedHelperPayload.files.map(({ role }) => role), ['gff', 'fasta']);
+
+// A FASTA alone: Python's FASTA-only loader owns its records and its nucleotide refusal, so the browser
+// never answers from the text; every file goes to the Worker helper (R4: decline when not sure).
+/** @param {string} text */
+const fastaFile = (text) => ({
+  name: 'input.fasta',
+  text: async () => text,
+  arrayBuffer: async () => new TextEncoder().encode(text).buffer
+});
+const fastaHelperCalls = [];
+const fastaOnly = await discoverFastaInputRecords({
+  file: fastaFile('>alpha\nACGT\n'),
+  runHelperOperation: async (operation, payload) => {
+    fastaHelperCalls.push({ operation, format: payload.format, roles: payload.files.map(({ role }) => role) });
+    return { result: { records: [{ selector: '#1', record_id: 'alpha', record_length: 4, topology: 'unknown' }] } };
+  }
+});
+assert.deepEqual(fastaOnly.map(({ recordId, detectedTopology }) => [recordId, detectedTopology]), [['alpha', 'unknown']]);
+assert.deepEqual(fastaHelperCalls, [{ operation: 'listSequenceRecords', format: 'fasta', roles: ['source'] }]);
+const refusal = { code: 'INPUT_INVALID', context: { reason: 'NOT_NUCLEOTIDE', recordName: 'LvMJNV_ORF1', codepoint: 76 } };
+await assert.rejects(
+  discoverFastaInputRecords({
+    file: fastaFile('>LvMJNV_ORF1\nMKLVE\n'),
+    runHelperOperation: async () => ({ result: { error: refusal } })
+  }),
+  (error) => error === refusal
+);
 
 await assert.rejects(
   discoverSequenceRecords({

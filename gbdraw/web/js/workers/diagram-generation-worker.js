@@ -655,8 +655,9 @@ const prepareCanonicalResources = (
 // The staged paths of a canonical record source: `{ kind: 'genbank', resourceId }`
 // or `{ kind: 'gffFasta', gffResourceId, fastaResourceId }`.
 const stagedRecordSourcePaths = (recordSource, resourcePaths, operation) => {
-  const ids = recordSource?.kind === 'genbank' ? [recordSource.resourceId]
-    : recordSource?.kind === 'gffFasta' ? [recordSource.gffResourceId, recordSource.fastaResourceId] : [];
+  // A record source names its files in this order (CanonicalRecordSource): the source file, then a GFF3 file's FASTA.
+  const ids = ['resourceId', 'gffResourceId', 'fastaResourceId']
+    .filter((field) => recordSource && Object.hasOwn(recordSource, field)).map((field) => recordSource[field]);
   const paths = ids.map((id) => (typeof id === 'string' && Object.hasOwn(resourcePaths, id) ? resourcePaths[id] : null));
   if (!paths.length || paths.some((path) => !path)) {
     throw new TypeError(`Diagram helper '${operation}' requires a staged record source.`);

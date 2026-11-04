@@ -470,7 +470,8 @@ export const bindLoadedInputs = (store, loaded) => {
 // (`drawing.slices.inputs`); the input type and the record catalog stay
 // written by their controls and discovery, as settings are.
 
-/** @typedef {'gb' | 'gff'} InputType */
+/** @typedef {import('../input-types.js').InputType} InputType */
+/** @typedef {import('../input-types.js').InputSlot} InputSlot */
 /** One Circular record as discovery lists it. @typedef {Readonly<Record<string, unknown>>} CircularRecordEntry */
 /**
  * What `capture` returns and `install` writes.

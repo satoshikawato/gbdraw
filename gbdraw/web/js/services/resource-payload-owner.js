@@ -1,5 +1,7 @@
 // @ts-check
 import { getSessionResourceSource } from './file-content-cache.js';
+import { INPUT_SLOT_RESOURCES, INPUT_TYPES, inputTypeOfSourceKind } from './input-types.js';
+/** @import { InputSlot } from './input-types.js' */
 /** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 
 /**
@@ -72,24 +74,31 @@ export const resourceIdOwnedBy = (resources, file, kind) => {
 };
 
 /**
- * The source a request names a record by when it draws these files: a GenBank
- * file, or a GFF3 file and its FASTA file (`fastaFile`), each by the id of the
- * resource of `resources` that holds it (`resourceIdOwnedBy`); null when one
- * of them holds no file. Both Generate's staging and the live record names
- * read a card's files through it.
+ * The source a request names a record by when it draws these files: the files
+ * of a record source of `sourceKind` (a GenBank file, a GFF3 file and its FASTA
+ * file `fastaFile`, or a FASTA file alone), each by the id of the resource of
+ * `resources` that holds it (`resourceIdOwnedBy`); null when one of them holds
+ * no file. Both Generate's staging and the live record names read a card's
+ * files through it.
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources
+ * @param {CanonicalRecordSource['kind']} sourceKind
  * @param {object | null | undefined} sourceFile
  * @param {object | null | undefined} fastaFile
  * @returns {CanonicalRecordSource | null}
  */
-export const recordSourceOwnedBy = (resources, sourceFile, fastaFile) => {
-  if (!fastaFile) {
-    const resourceId = resourceIdOwnedBy(resources, sourceFile, 'genbank');
-    return resourceId ? { kind: 'genbank', resourceId } : null;
+export const recordSourceOwnedBy = (resources, sourceKind, sourceFile, fastaFile) => {
+  const { primary, paired } = INPUT_TYPES[inputTypeOfSourceKind(sourceKind)];
+  /** @type {Record<string, string>} */
+  const source = { kind: sourceKind };
+  for (const [slot, file] of /** @type {[InputSlot, object | null | undefined][]} */ (
+    paired ? [[primary, sourceFile], [paired, fastaFile]] : [[primary, sourceFile]]
+  )) {
+    const [kind, field] = INPUT_SLOT_RESOURCES[slot];
+    const resourceId = resourceIdOwnedBy(resources, file, kind);
+    if (!resourceId) return null;
+    source[field] = resourceId;
   }
-  const gffResourceId = resourceIdOwnedBy(resources, sourceFile, 'gff3');
-  const fastaResourceId = resourceIdOwnedBy(resources, fastaFile, 'fasta');
-  return gffResourceId && fastaResourceId ? { kind: 'gffFasta', gffResourceId, fastaResourceId } : null;
+  return /** @type {CanonicalRecordSource} */ (/** @type {unknown} */ (source));
 };
 
 /**
@@ -97,6 +106,10 @@ export const recordSourceOwnedBy = (resources, sourceFile, fastaFile) => {
  * @param {CanonicalRecordSource} source
  * @returns {string[]}
  */
-export const recordSourceResourceIds = (source) => (
-  source.kind === 'genbank' ? [source.resourceId] : [source.gffResourceId, source.fastaResourceId]
-);
+export const recordSourceResourceIds = (source) => {
+  /** @type {Readonly<Record<string, unknown>>} */
+  const fields = source;
+  // A record source names its files in this order: the source file, then a GFF3 file's FASTA.
+  return Object.values(INPUT_SLOT_RESOURCES).map(([, field]) => field)
+    .filter((field) => Object.hasOwn(fields, field)).map((field) => String(fields[field]));
+};

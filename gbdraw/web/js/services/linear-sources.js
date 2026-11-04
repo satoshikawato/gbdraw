@@ -1,6 +1,8 @@
 // @ts-check
 /** @import { LinearSeq } from '../state.js' */
 /** @import { InputFileRef } from './history-files.js' */
+import { inputTypeSpec } from './input-types.js';
+/** @import { InputSlot } from './input-types.js' */
 import { depthFileSlotsFromValue } from './depth-track-state.js';
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 import { plainTextLinearRecordLabel } from './linear-comparisons.js';
@@ -104,7 +106,7 @@ export const restoreFoldedLinearSources = (folded, uids) => {
   uids.forEach((uid) => folded.add(uid));
 };
 
-/** @typedef {'gb' | 'gff' | 'fasta'} LinearFileField */
+/** @typedef {InputSlot} LinearFileField */
 
 /**
  * The file slots a File card shows for an input type, in the order of its
@@ -112,7 +114,10 @@ export const restoreFoldedLinearSources = (folded, uids) => {
  * @param {string} inputType
  * @returns {readonly LinearFileField[]}
  */
-export const linearCardFileFields = (inputType) => (inputType === 'gff' ? ['gff', 'fasta'] : ['gb']);
+export const linearCardFileFields = (inputType) => {
+  const { primary, paired } = inputTypeSpec(inputType);
+  return paired ? [primary, paired] : [primary];
+};
 
 /**
  * A card holds its input when every slot it shows has a file. The folded line

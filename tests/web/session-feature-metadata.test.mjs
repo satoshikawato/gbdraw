@@ -29,6 +29,7 @@ for (const name of ['services/record-options.js', 'services/record-draw-selectio
   'services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js']) {
   await copyModule(`gbdraw/web/js/${name}`, name);
 }
+await copyModule('gbdraw/web/js/services/input-types.js', 'services/input-types.js');
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
 // losat-normalization.js reads the comparison settings from the generated request description.
 await copyModule('gbdraw/web/js/contracts/request-shape.generated.js', 'contracts/request-shape.generated.js');

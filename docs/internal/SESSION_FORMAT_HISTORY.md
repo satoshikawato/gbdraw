@@ -46,6 +46,16 @@ once at Load. A Session 49's Circular `adv.show_definition` becomes the
 Circular drawing's `config.adv.show_definition`. Fixtures:
 `tests/fixtures/sessions/`.
 
+Session 51 also adds the record source kind `fasta` (PD-OI-068 rev 2): a FASTA
+given without GFF3, named by `fastaResourceId` and stored as a resource of kind
+`fasta`. Its records have sequence and no features, and the file makes no
+topology claim. The Web app writes it for the input type `fasta` (the third
+source choice, `config.inputType` / `webFiles.bindings.c_fasta` or a Linear
+card's `fasta` slot), and the CLI writes it for `--fasta` without `--gff` and for
+a records table row with only a `fasta` path. Request schema 9 is unchanged:
+the kind is a new value of the record source's `kind`. Fixture:
+`tests/fixtures/sessions/cli-circular-fasta.v51.gbdraw-session.json.gz`.
+
 Measured against `main`'s build (0.14.5, 033a3aa89, Session 50): `load_session_document` on each of the four
 `tests/fixtures/sessions/drawings-*.v51.*` fixtures raises `SessionVersionError`: "Session version 51 is newer
 than this gbdraw supports (50).". The wrap length, italic gene names and identity colour scale reached `main` in

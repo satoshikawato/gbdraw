@@ -218,3 +218,19 @@ def test_worker_helper_lists_a_fasta_alone_through_the_fasta_only_loader(tmp_pat
         "code": "INPUT_INVALID", "operation": "listSequenceRecords", "stage": "helper",
         "context": {"reason": "NOT_NUCLEOTIDE", "recordName": "LvMJNV_ORF1", "codepoint": ord("L")},
     }
+
+
+FASTA_SESSION = Path(__file__).resolve().parent / "fixtures/sessions/cli-circular-fasta.v51.gbdraw-session.json.gz"
+
+
+def test_a_session_51_with_a_fasta_source_loads_and_replays(tmp_path: Path) -> None:
+    from gbdraw.api import load_session_document
+    from gbdraw.session import session_drawing_artifacts
+
+    session = load_session_document(FASTA_SESSION)
+    drawing = session_drawing_artifacts(session, "circular").fields
+    assert drawing["renderRequest"]["records"][0]["source"] == {"kind": "fasta", "fastaResourceId": "record-1-fasta"}
+
+    circular_main(["--session", str(FASTA_SESSION), "-o", str(tmp_path / "replay"), "-f", "svg"])
+
+    assert "NC_012920.1" in (tmp_path / "replay.svg").read_text()
