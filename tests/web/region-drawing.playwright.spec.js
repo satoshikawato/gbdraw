@@ -115,6 +115,8 @@ test('Coordinates that start after their end are refused with the reason, Create
   test.setTimeout(300_000);
   const page = await load(browser, seeds.circular);
   try {
+    // Generate first: before it a derive after a Load ends 'error' (OV-2490).
+    await generate(page);
     const ids = await drawingIds(page);
     const steps = await undoLabels(page);
     const dialog = await openRegionDialog(page);
