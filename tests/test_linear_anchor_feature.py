@@ -585,6 +585,25 @@ def test_a_wrap_that_would_move_a_cut_record_is_refused(linear: tuple[int, ...])
 
 
 @pytest.mark.linear
+def test_the_anchor_rotates_a_cut_record_a_stored_translation_moved() -> None:
+    # OV-2496: a 0.14.5 anchored Session moved the zebrafish record sideways; aligned again under a wrap, the
+    # anchor rotates it to x 0 and it wraps, whatever its stored x was.
+    planned = plan_linear_request(_request()).request
+    keys = tuple(str(record.record_key) for record in planned.records)
+    held = replace(
+        planned,
+        options=replace(planned.options, anchor_feature=_COX1, config_overrides={_WRAP: 5000}),
+        layout=LinearMultiRecordOptions(record_translations=(
+            LinearRecordTranslation(record_key=keys[0]),
+            LinearRecordTranslation(record_key=keys[1], x=-62.8),
+        )),
+    )
+    svg = _svg(held)
+    assert "data-gbdraw-wrap-row" in svg
+    assert _record_shifts(svg) == [0.0, 0.0]
+
+
+@pytest.mark.linear
 def test_a_moved_record_the_wrap_does_not_cut_draws() -> None:
     # The human record is cut and rotated, at x 0; the cropped zebrafish record is not cut, and moves.
     from gbdraw.io.regions import parse_region_spec
