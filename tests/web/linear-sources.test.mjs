@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
+import { RECORD_SOURCE_FILES } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import {
+  INPUT_TYPES, inputSourceFiles, inputSourceSlotFiles, isRecordSource, recordSourceOf, recordSourceResourceIds,
+  recordSourceSlotIds, storedRecordSourceResourceIds
+} from '../../gbdraw/web/js/services/input-types.js';
 import {
   foldLoadedLinearSources,
   linearCardFileFields,
@@ -637,4 +642,29 @@ test('the fold state follows a File through Move up and Move down', () => {
   assert.deepEqual(moved.map(({ uid }) => uid), ['b1', 'a1', 'empty']);
   assert.deepEqual(moved.map(({ uid }) => folded.has(uid)), [true, false, false]);
   assert.equal(moved[0].sequence.gb.name, 'b.gbk');
+});
+
+// The input-type table (services/input-types.js): each type's record source files are the generated
+// RECORD_SOURCE_FILES of its source kind, the one builder refuses a source that misses a file, and a card holds an
+// input only through a slot its type reads.
+test('input types read the record source files Python names, and a card holds a file only in its type\'s slots', () => {
+  for (const inputType of Object.keys(INPUT_TYPES)) {
+    const { sourceKind } = INPUT_TYPES[inputType];
+    assert.deepEqual(inputSourceSlotFiles(inputType).map(({ resource, field }) => ({ resource, field })),
+      RECORD_SOURCE_FILES[sourceKind], inputType);
+  }
+  assert.deepEqual(recordSourceOf('gffFasta', ({ slot }) => `${slot}-id`),
+    { kind: 'gffFasta', gffResourceId: 'gff-id', fastaResourceId: 'fasta-id' });
+  assert.equal(recordSourceOf('gffFasta', ({ slot }) => (slot === 'gff' ? 'gff-id' : null)), null);
+  assert.deepEqual(recordSourceOf('fasta', () => 'only'), { kind: 'fasta', fastaResourceId: 'only' });
+  assert.equal(isRecordSource({ kind: 'gffFasta', gffResourceId: 'a' }), false);
+  assert.equal(isRecordSource({ kind: 'fasta', fastaResourceId: 'a', resourceId: 'b' }), false);
+  assert.deepEqual(recordSourceResourceIds({ kind: 'gffFasta', gffResourceId: 'a', fastaResourceId: 'b' }), ['a', 'b']);
+  assert.deepEqual(recordSourceSlotIds({ kind: 'fasta', fastaResourceId: 'f', resourceId: 'stale' }),
+    { gb: '', gff: '', fasta: 'f' });
+  assert.deepEqual(storedRecordSourceResourceIds({ kind: 'unknown', resourceId: 'x' }), []);
+  // A card that held GFF3 + FASTA and was switched to FASTA holds nothing once its FASTA is removed.
+  assert.equal(inputSourceFiles('fasta', { gff: 'annotation.gff3', fasta: null }).holdsFile, false);
+  assert.equal(inputSourceFiles('gff', { gff: 'annotation.gff3', fasta: null }).holdsFile, true);
+  assert.equal(inputSourceFiles('gb', { gb: null, fasta: 'genome.fasta' }).holdsFile, false);
 });

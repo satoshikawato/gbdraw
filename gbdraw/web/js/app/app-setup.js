@@ -11,6 +11,7 @@
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { DrawingInputSite } from './drawing-list.js' */
 /** @import { ReplaceableInputSlot } from '../services/drawing/inputs.js' */
+/** @import { InputSlot } from '../services/input-types.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
@@ -118,18 +119,8 @@ import {
 import { setLegacySessionUpgrader } from '../services/legacy-session-upgrade.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryRouter } from '../services/history.js';
-import {
-  bindDrawingCanonicalComparisons,
-  bindDrawingInputFile,
-  bindDrawingInputFileList,
-  bindDrawingInputFileTree,
-  setConservationBlastsSource,
-  createLinearSeq,
-  normalizeLinearSeqList,
-  replaceLinearSeqs,
-  retainHistoryAndBoundFiles,
-  boundInputFileIds
-} from '../services/drawing/inputs.js';
+import { bindDrawingCanonicalComparisons, bindDrawingInputFile, bindDrawingInputFileList, bindDrawingInputFileTree, setConservationBlastsSource, createLinearSeq, normalizeLinearSeqList, replaceLinearSeqs, retainHistoryAndBoundFiles, boundInputFileIds } from '../services/drawing/inputs.js';
+import { CIRCULAR_INPUT_FIELDS, circularInputSlots, inputSourceFiles, inputTypeSpec, normalizeInputType } from '../services/input-types.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import {
   groupLinearSourceRecords,
@@ -296,8 +287,7 @@ import {
 } from './comparison-ui.js';
 import {
   circularDiscoveryForInput,
-  discoverGffFastaRecords,
-  discoverSequenceRecords,
+  discoverInputRecords,
   readComparisonSequence
 } from '../services/record-discovery.js';
 import {
@@ -900,9 +890,7 @@ export const createAppSetup = () => {
   const canRunLinearLosat = computed(() => {
     const drawing = shownDrawingOfMode('linear');
     return drawing !== null && drawing.drawnLinearSeqs.value.filter((sequence) => (
-      drawing.inputType.value === 'gff'
-        ? sequence.gff && sequence.fasta
-        : sequence.gb
+      inputSourceFiles(drawing.inputType.value, sequence).complete
     )).length >= 2;
   });
 
@@ -939,6 +927,17 @@ export const createAppSetup = () => {
     return fields.map((field) => (
       source.sequence[field] ? chosenFileName(source.sequence[field]) : t('no {file}', { file: LINEAR_FILE_SLOT_NAMES[field] })
     )).join(' + ');
+  };
+  /**
+   * Whether the shown drawing of a mode has every file its input type reads.
+   * @param {'circular' | 'linear'} drawingMode
+   * @param {Readonly<Partial<Record<InputSlot, unknown>>>} [linearSlots] a Linear card's slots; Circular reads the drawing's own files
+   */
+  const shownInputComplete = (drawingMode, linearSlots = {}) => {
+    const drawing = shownDrawingOfMode(drawingMode);
+    if (drawing === null) return false;
+    const slots = drawingMode === 'circular' ? circularInputSlots(drawing.files) : linearSlots;
+    return inputSourceFiles(drawing.inputType.value, slots).complete;
   };
   /** @param {LinearSourceGroup} source */
   const linearCardHoldsInput = (source) => {
@@ -1590,16 +1589,14 @@ export const createAppSetup = () => {
     await linearRecordSelector.refresh(drawing);
   };
   /**
-   * The records of one input: a GenBank file, or a GFF3 file with its FASTA.
+   * The records of one input: a GenBank file, a GFF3 file with its FASTA, or a FASTA alone.
    * The bindings name the files by ref; their bytes come from the store.
    * @param {string} inputType
    * @param {InputFileRef | null} primaryFile
    * @param {InputFileRef | null} pairedFile
    */
-  const readInputRecords = (inputType, primaryFile, pairedFile) => (
-    inputType === 'gff'
-      ? discoverGffFastaRecords({ gffFile: state.inputFiles.fileOf(primaryFile), fastaFile: state.inputFiles.fileOf(pairedFile) })
-      : discoverSequenceRecords({ file: state.inputFiles.fileOf(primaryFile), format: 'genbank' })
+  const readInputRecords = (inputType, primaryFile, pairedFile) => discoverInputRecords(
+    inputTypeSpec(inputType), state.inputFiles.fileOf(primaryFile), state.inputFiles.fileOf(pairedFile)
   );
   const paletteLoader = createPaletteLoader({ state });
   const linearRecordSelector = createLinearRecordSelector({
@@ -1614,8 +1611,7 @@ export const createAppSetup = () => {
   const circularAnnotationSourceKey = (drawing) => annotationSourceKey({
     scope: 'circular',
     inputType: drawing.inputType.value,
-    primaryFile: drawing.inputType.value === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
-    pairedFile: drawing.inputType.value === 'gff' ? drawing.files.c_fasta : null
+    ...inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files))
   });
   /**
    * A Linear record card as the annotation record catalog reads it.
@@ -1626,8 +1622,7 @@ export const createAppSetup = () => {
    */
   const linearAnnotationSource = (drawing, seq, drawn) => {
     const inputType = drawing.inputType.value;
-    const primaryFile = inputType === 'gff' ? seq.gff : seq.gb;
-    const pairedFile = inputType === 'gff' ? seq.fasta : null;
+    const { primaryFile, pairedFile, complete } = inputSourceFiles(inputType, seq);
     return {
       sourceKey: annotationSourceKey({
         scope: 'linear',
@@ -1638,7 +1633,7 @@ export const createAppSetup = () => {
       }),
       selector: seq.region_record_id,
       drawn,
-      hasInput: Boolean(primaryFile && (inputType !== 'gff' || pairedFile)),
+      hasInput: complete,
       status: linearRecordSelector.statusFor(drawing, seq),
       error: linearRecordSelector.errorFor(drawing, seq),
       records: linearRecordSelector.recordsFor(drawing, seq)
@@ -5253,8 +5248,7 @@ export const createAppSetup = () => {
     if (drawing.mode !== 'linear') return { catalog: null, error: '' };
     const hasAutomaticSequence = drawing.linearSeqs.some((sequence) => {
       if (String(sequence?.region_record_id || '').trim()) return false;
-      const primary = drawing.inputType.value === 'gff' ? sequence?.gff : sequence?.gb;
-      return Boolean(primary && (drawing.inputType.value !== 'gff' || sequence?.fasta));
+      return inputSourceFiles(drawing.inputType.value, sequence).complete;
     });
     const hasRegionAnnotations = drawing.annotationSets.some((/** @type {{ annotations?: unknown } | null | undefined} */ set) => (
       Array.isArray(set?.annotations) && set.annotations.length > 0
@@ -5267,8 +5261,7 @@ export const createAppSetup = () => {
       const sources = await Promise.all(drawing.linearSeqs.map(async (seq) => {
         const drawn = !linearRecordsOff.has(seq.uid);
         const inputType = drawing.inputType.value;
-        const primaryFile = inputType === 'gff' ? seq.gff : seq.gb;
-        const pairedFile = inputType === 'gff' ? seq.fasta : null;
+        const { primaryFile, pairedFile } = inputSourceFiles(inputType, seq);
         const sourceKey = annotationSourceKey({ scope: 'linear', uid: seq.uid, inputType, primaryFile, pairedFile });
         try {
           const records = await readInputRecords(inputType, primaryFile, pairedFile);
@@ -7258,7 +7251,9 @@ export const createAppSetup = () => {
         removed: !nextValue, previousRecordCount: group.records.length
       }) ? RETIRED_LINEAR_RECORD_PRESENTATION : RETIRED_LINEAR_RECORD_REFERENCE)
     });
-    const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
+    // The card stays when it gets a file, or, on Remove, while it still holds a file its input type reads: a file
+    // left in another type's slot keeps no card.
+    const keepSource = Boolean(nextValue) || inputSourceFiles(drawing.inputType.value, replacement).holdsFile;
     const nextSeqs = drawing.linearSeqs.flatMap((entry) => (
       entry.uid === group.uid ? (keepSource ? [replacement] : [])
         : members.has(entry.uid) ? [] : [entry]
@@ -7442,7 +7437,7 @@ export const createAppSetup = () => {
       const entries = circularRecordEntries(drawing);
       return {
         key: 'circular',
-        name: [drawing.inputType.value === 'gff' ? drawing.files.c_gff : drawing.files.c_gb, drawing.inputType.value === 'gff' ? drawing.files.c_fasta : null]
+        name: (({ primaryFile, pairedFile }) => [primaryFile, pairedFile])(inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files)))
           .filter(Boolean).map((file) => String(file?.name || 'Unnamed file')).join(' + '),
         records: owners.map((owner, index) => ({
           key: owner.key, recordId: entries[index].recordId, length: entries[index].recordLength ?? null,
@@ -7508,11 +7503,9 @@ export const createAppSetup = () => {
       // The shown Circular drawing's input, which its File card removes from.
       const drawing = shownDrawingOfMode('circular');
       if (drawing === null) return undefined;
-      if (drawing.inputType.value === 'gff') {
-        setCircularSourceFile('c_gff', null);
-        return setCircularSourceFile('c_fasta', null);
-      }
-      return setCircularSourceFile('c_gb', null);
+      const { primary, paired } = inputTypeSpec(drawing.inputType.value);
+      if (paired) setCircularSourceFile(CIRCULAR_INPUT_FIELDS[primary], null);
+      return setCircularSourceFile(CIRCULAR_INPUT_FIELDS[paired ?? primary], null);
     }
     const drawing = shownDrawingOfMode('linear');
     if (!drawing) return false;
@@ -7622,7 +7615,7 @@ export const createAppSetup = () => {
     if (busy) return busy;
     const drawing = shownDrawingOfMode('circular');
     if (!drawing) return { status: 'unavailable' };
-    const next = value === 'gff' ? 'gff' : 'gb';
+    const next = normalizeInputType(value);
     if (drawing.inputType.value === next) return { status: 'ok' };
     changeRecordSources(drawing, () => { drawing.inputType.value = next; });
     // The other input's records are not the ones the OFF list names.
@@ -7637,7 +7630,7 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     const drawing = shownDrawingOfMode('linear');
     if (!drawing) return false;
-    const next = value === 'gff' ? 'gff' : 'gb';
+    const next = normalizeInputType(value);
     if (drawing.inputType.value === next) return false;
     similarityAlignmentActions?.clearForMutation?.(msg('source type changed.'));
     changeRecordSources(drawing, () => { drawing.inputType.value = next; });
@@ -8290,6 +8283,7 @@ export const createAppSetup = () => {
     uploadCircularSourceFile,
     uploadCircularDepthFile,
     uploadLinearSeqPrimaryFile,
+    shownInputComplete,
     uploadLinearDepthFile,
     uploadLinearSourceDepthFile,
     uploadLinearComparisonCardFile,

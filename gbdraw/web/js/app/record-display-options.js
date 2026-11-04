@@ -2,6 +2,7 @@
 /** @import { DrawingState } from '../state.js' */
 /** @import { CommittedRecord, CommittedRecordRequest } from '../services/feature-identity.js' */
 // Source-bound editable rotation intent. The request service owns serialization.
+import { circularInputSlots, inputSourceFiles, storedRecordSourceResourceIds } from '../services/input-types.js';
 import {
   bindRecordDisplayDrafts,
   buildRecordDisplayRows,
@@ -154,15 +155,15 @@ export const createRecordDisplayControls = ({
   /** @param {DrawingState} drawing @returns {DrawingRecordSource[]} */
   const sourcesOf = (drawing) => (drawing.mode === 'circular'
     ? [{ scope: 'circular', drawingId: drawing.id, sourceUid: 'circular',
-        source: drawing.inputType.value === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
-        paired: drawing.inputType.value === 'gff' ? drawing.files.c_fasta : null,
+        ...(({ primaryFile, pairedFile }) => ({ source: primaryFile, paired: pairedFile }))(
+          inputSourceFiles(drawing.inputType.value, circularInputSlots(drawing.files))),
         records: drawing.circularRecordList.value.map((/** @type {CircularListRecord} */ record) => ({ ...record,
           recordId: record.record_id ?? record.recordId, recordLength: record.record_length ?? record.recordLength })), selector: drawing.form.circular_record_selector,
         cropped: circularDrawingCropped(drawing.circularRecordList.value, drawing),
         reverse: drawing.form.circular_reverse }]
     : drawing.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({ scope: 'linear', drawingId: drawing.id, sourceUid: seq.uid,
-        source: drawing.inputType.value === 'gff' ? seq.gff : seq.gb,
-        paired: drawing.inputType.value === 'gff' ? seq.fasta : null,
+        ...(({ primaryFile, pairedFile }) => ({ source: primaryFile, paired: pairedFile }))(
+          inputSourceFiles(drawing.inputType.value, seq)),
         records: linearRecordsFor(drawing, seq), selector: seq.region_record_id,
         cropped: Boolean(seq.region_start || seq.region_end), reverse: seq.region_reverse })));
   // The sources of every drawing, in the drawings' order.
@@ -272,11 +273,12 @@ export const createRecordDisplayControls = ({
       }
       const record = records[0];
       const input = inputs[0];
+      // The resource of each file of the record's source, in source order: the File card's, then a GFF3 file's FASTA.
+      const [primaryId, pairedId] = storedRecordSourceResourceIds(record.source);
       if (!boundSources.some(source => source.scope === input.scope && source.sourceUid === input.sourceUid
           && source.source === input.source && source.paired === input.paired)
-        || !input.source || !matchesSavedSource(input.source, record.source.resourceId || record.source.gffResourceId)
-        || (record.source.kind === 'gffFasta'
-          && (!input.paired || !matchesSavedSource(input.paired, record.source.fastaResourceId)))) {
+        || !input.source || !matchesSavedSource(input.source, primaryId)
+        || (pairedId !== undefined && (!input.paired || !matchesSavedSource(input.paired, pairedId)))) {
         throw new Error('Alignment record source binding changed.');
       }
       const selector = record.region?.selector || record.selector;
@@ -338,8 +340,8 @@ export const createRecordDisplayControls = ({
       });
       if (!selected) return [];
       const source = selected.source;
-      if (!matchesSavedSource(row.source, source.resourceId || source.gffResourceId)
-        || (row.paired && !matchesSavedSource(row.paired, source.fastaResourceId))) return [];
+      const [primaryId, pairedId] = storedRecordSourceResourceIds(source);
+      if (!matchesSavedSource(row.source, primaryId) || (row.paired && !matchesSavedSource(row.paired, pairedId))) return [];
       return [{ ...row,
         committedDisplay: selected.display || { isCircular: null, startCoordinate: null },
         committedReverseComplement: selected.region

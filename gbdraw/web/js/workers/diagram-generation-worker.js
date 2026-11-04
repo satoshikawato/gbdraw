@@ -11,7 +11,7 @@ import {
 } from '../services/diagram-worker-protocol.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
-import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
+import { ORTHOGROUP_INFERENCE_VERSION, RECORD_SOURCE_FILES } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
 import {
   fetchPyodideSnapshot, installRuntimePackages, pyodideSnapshotFailureDetail, pyodideSnapshotStep, runtimeWheelDownloads
@@ -652,11 +652,11 @@ const prepareCanonicalResources = (
   pyodide, workspace, resourceManifest, stagedResources, retainedResourceTokens, testLifecycleEnabled, requestId, prune
 );
 
-// The staged paths of a canonical record source: `{ kind: 'genbank', resourceId }`
-// or `{ kind: 'gffFasta', gffResourceId, fastaResourceId }`.
+// The staged paths of a canonical record source, in the order its kind names its
+// files (RECORD_SOURCE_FILES, generated from the Python codec).
 const stagedRecordSourcePaths = (recordSource, resourcePaths, operation) => {
-  const ids = recordSource?.kind === 'genbank' ? [recordSource.resourceId]
-    : recordSource?.kind === 'gffFasta' ? [recordSource.gffResourceId, recordSource.fastaResourceId] : [];
+  const files = Object.hasOwn(RECORD_SOURCE_FILES, String(recordSource?.kind)) ? RECORD_SOURCE_FILES[recordSource.kind] : [];
+  const ids = files.map(({ field }) => recordSource[field]);
   const paths = ids.map((id) => (typeof id === 'string' && Object.hasOwn(resourcePaths, id) ? resourcePaths[id] : null));
   if (!paths.length || paths.some((path) => !path)) {
     throw new TypeError(`Diagram helper '${operation}' requires a staged record source.`);

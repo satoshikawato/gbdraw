@@ -31,6 +31,7 @@ from gbdraw.analysis.protein_colinearity import (
 from gbdraw.annotations import AnnotationOptions, ResolutionWarning
 from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_fasta
 from gbdraw.io.comparison_sequences import read_comparison_sequence_records
+from gbdraw.io.genome import load_fasta as _load_fasta
 from gbdraw.api.options import (
     CircularDiagramOptions as _CircularDiagramOptions,
     CircularMultiRecordOptions as _CircularLayout,
@@ -809,6 +810,18 @@ def read_genbank(
     return _load_gbks(_paths(paths, field_name="paths"))
 
 
+def read_fasta(
+    paths: str | PathLike[str] | Sequence[str | PathLike[str]],
+) -> list[SeqRecord]:
+    """Read all records from one or more FASTA files given without GFF3.
+
+    Each entry is a record with its sequence and no features; a file whose
+    sequences are not nucleotide is refused with the record's name.
+    """
+
+    return _load_fasta(_paths(paths, field_name="paths"))
+
+
 def read_gff(
     gff_paths: str | PathLike[str] | Sequence[str | PathLike[str]],
     fasta_paths: str | PathLike[str] | Sequence[str | PathLike[str]],
@@ -1344,5 +1357,6 @@ __all__ = [
     "draw_circular",
     "draw_linear",
     "read_genbank",
+    "read_fasta",
     "read_gff",
 ]

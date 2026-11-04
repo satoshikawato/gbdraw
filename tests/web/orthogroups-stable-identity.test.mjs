@@ -25,6 +25,7 @@ const copyModule = async (sourceRelative, targetRelative) => {
 };
 
 await copyModule('gbdraw/web/js/services/feature-utils.js', 'services/feature-utils.js');
+await copyModule('gbdraw/web/js/services/input-types.js', 'services/input-types.js');
 await copyModule('gbdraw/web/js/services/feature-sequence-fasta.js', 'services/feature-sequence-fasta.js');
 await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
 // losat-normalization.js reads the comparison settings from the generated request description.

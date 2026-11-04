@@ -7,6 +7,7 @@
 // Sessions up to 47 stored the protein results of such a record in the drawn
 // frame; Python converts them once the stored figure is shown (OV-1145, D-128).
 import { base64ToBytes, sha256Hex } from './byte-utils.js';
+import { storedRecordSourceResourceIds } from './input-types.js';
 import { isResourceBackedCanonicalComparison } from './canonical-comparisons.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION } from '../contracts/schema.generated.js';
@@ -54,18 +55,6 @@ const heldResource = (resources, resourceId) => {
 
 /**
  * @param {StoredRecord} record
- * @returns {{ primary: unknown, fasta: unknown } | { primary: unknown, fasta?: undefined }} the resource IDs of its
- *   source files: a GFF3 source names its FASTA file too
- */
-const recordResourceIds = (record) => {
-  const source = /** @type {StoredSource} */ (record?.source);
-  return source?.kind === 'gffFasta'
-    ? { primary: source.gffResourceId, fasta: source.fastaResourceId }
-    : { primary: source?.resourceId };
-};
-
-/**
- * @param {StoredRecord} record
  * @returns {boolean} whether the stored record is drawn reverse-complemented
  */
 const storedRecordReverses = (record) => {
@@ -94,8 +83,8 @@ const storesReversedProteinResult = (stored, resources) => {
   const records = request.records;
   const reversed = new Set(records.flatMap((item, position) => {
     const record = /** @type {StoredRecord} */ (item);
-    const ids = recordResourceIds(record);
-    const held = heldResource(resources, ids.primary) && (ids.fasta === undefined || heldResource(resources, ids.fasta));
+    const ids = storedRecordSourceResourceIds(/** @type {StoredSource} */ (record?.source));
+    const held = ids.length > 0 && ids.every((id) => heldResource(resources, id));
     return storedRecordReverses(record) && held ? [String(position)] : [];
   }));
   /** @param {unknown} item */

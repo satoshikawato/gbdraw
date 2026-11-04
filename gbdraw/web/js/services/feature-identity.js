@@ -1,4 +1,5 @@
 // @ts-check
+import { storedRecordSourceResourceIds } from './input-types.js';
 /** @typedef {Record<string, unknown>} AliasSource Any object whose alias keys are read. */
 /** @typedef {{ valid: boolean, supplied: boolean, value: string }} TextAliasStatus */
 /** @typedef {{ valid: boolean, supplied: boolean, value: number | null }} IntegerAliasStatus */
@@ -31,7 +32,7 @@
  *   region?: { selector?: CommittedRecordSelector | null, reverseComplement?: unknown } | null,
  *   presentation?: { reverseComplement?: unknown } | null,
  *   display?: { isCircular: boolean | null, startCoordinate: number | null },
- *   source: { resourceId?: string, gffResourceId?: string, fastaResourceId?: string }
+ *   source: { kind?: string, resourceId?: string, gffResourceId?: string, fastaResourceId?: string }
  * }} CommittedRecord
  */
 /** @typedef {{ mode?: string, records: CommittedRecord[] }} CommittedRecordRequest */
@@ -339,9 +340,11 @@ export const isCurrentFeature = (feature, { request, sources, boundSources, matc
   const key = feature.record_key;
   const record = typeof key === 'string' ? committedRecordForKey(request, key) : undefined;
   if (!record) return false;
+  // The resource of each file of the record's source, in source order: the File card's, then a GFF3 file's FASTA.
+  const [primaryId, pairedId] = storedRecordSourceResourceIds(record.source);
   return sources.some((source) => source.source && committedRecordUsesSource(request, record, source)
     && boundSources.some((bound) => bound.scope === source.scope && bound.sourceUid === source.sourceUid
       && bound.source === source.source && bound.paired === source.paired)
-    && matchesSavedSource(source.source, record.source.resourceId || record.source.gffResourceId)
-    && (!source.paired || matchesSavedSource(source.paired, record.source.fastaResourceId)));
+    && matchesSavedSource(source.source, primaryId)
+    && (!source.paired || matchesSavedSource(source.paired, pairedId)));
 };

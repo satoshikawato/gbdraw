@@ -1,6 +1,7 @@
 // @ts-check
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
-import { discoveryErrorIsFinal } from '../services/record-discovery.js';
+import { discoveryErrorIsFinal, inputRecordsOperation } from '../services/record-discovery.js';
+import { inputSourceFiles, inputTypeSpec } from '../services/input-types.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
@@ -156,12 +157,9 @@ export const createLinearRecordSelector = ({
   /**
    * @param {LinearSeqLike} seq
    * @param {string} inputType the input type of the row's drawing
-   * @returns {{ primaryFile: InputFileRef | null, pairedFile: InputFileRef | null }}
    */
-  const sourceFilesFor = (seq, inputType) => (
-    inputType === 'gff'
-      ? { primaryFile: seq?.gff || null, pairedFile: seq?.fasta || null }
-      : { primaryFile: seq?.gb || null, pairedFile: null }
+  const sourceFilesFor = (seq, inputType) => inputSourceFiles(
+    inputType, { gb: seq?.gb || null, gff: seq?.gff || null, fasta: seq?.fasta || null }
   );
 
   /**
@@ -175,13 +173,12 @@ export const createLinearRecordSelector = ({
     // A drawing no refresh has written yet has no entry.
     const stored = selectorStateByDrawing.get(drawing.id)?.[uid] || emptySelectorState();
     const inputType = drawing.inputType.value;
-    const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
+    const { primaryFile, pairedFile, complete: readable } = sourceFilesFor(seq, inputType);
     if (
       stored.inputType !== inputType ||
       stored.primaryFile !== primaryFile ||
       stored.pairedFile !== pairedFile
     ) {
-      const readable = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
       // A card this drawing has not read yet (a Duplicate's) shows the settled
       // read of the same files, as its refresh would reuse it.
       const settled = readable ? settledStateFor(inputType, primaryFile, pairedFile) : null;
@@ -298,8 +295,8 @@ export const createLinearRecordSelector = ({
     for (const seq of drawing.linearSeqs) {
       const uid = uidFor(seq);
       if (!uid) continue;
-      const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
-      if (!primaryFile || (inputType === 'gff' && !pairedFile)) {
+      const { primaryFile, pairedFile, complete } = sourceFilesFor(seq, inputType);
+      if (!primaryFile || !complete) {
         replaceState(drawing.id, uid, { ...emptySelectorState(), inputType, primaryFile, pairedFile });
         continue;
       }
@@ -344,7 +341,7 @@ export const createLinearRecordSelector = ({
         replaceState(drawing.id, uid, {
           status: 'error',
           records: [],
-          error: normalizeUserFacingError(error, { operation: inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', stage: 'helper' }),
+          error: normalizeUserFacingError(error, { operation: inputRecordsOperation(inputTypeSpec(inputType)), stage: 'helper' }),
           inputType,
           primaryFile,
           pairedFile

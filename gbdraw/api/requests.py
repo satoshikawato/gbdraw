@@ -121,6 +121,20 @@ class GffFastaInputSource:
 
 
 @dataclass(frozen=True)
+class FastaInputSource:
+    """One materialized FASTA file given without GFF3: records with sequence and no features."""
+
+    fasta_path: str | Path
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "fasta_path",
+            _materialized_path(self.fasta_path, field_name="FASTA path"),
+        )
+
+
+@dataclass(frozen=True)
 class InMemoryRecordSource:
     """One already-parsed sequence record.
 
@@ -139,7 +153,7 @@ class InMemoryRecordSource:
 
 
 RecordInputSource: TypeAlias = (
-    GenBankInputSource | GffFastaInputSource | InMemoryRecordSource
+    GenBankInputSource | GffFastaInputSource | FastaInputSource | InMemoryRecordSource
 )
 
 
@@ -216,10 +230,10 @@ class RecordInput:
     def __post_init__(self) -> None:
         if not isinstance(
             self.source,
-            (GenBankInputSource, GffFastaInputSource, InMemoryRecordSource),
+            (GenBankInputSource, GffFastaInputSource, FastaInputSource, InMemoryRecordSource),
         ):
             raise ValidationError(
-                "Record source must be GenBank, GFF3/FASTA, or an in-memory SeqRecord."
+                "Record source must be GenBank, GFF3/FASTA, FASTA, or an in-memory SeqRecord."
             )
         if not isinstance(self.cardinality, RecordCardinality):
             raise ValidationError(
@@ -857,6 +871,7 @@ __all__ = [
     "DiagramRequest",
     "GenBankInputSource",
     "GffFastaInputSource",
+    "FastaInputSource",
     "InMemoryRecordSource",
     "LinearDiagramRequest",
     "RecordCardinality",

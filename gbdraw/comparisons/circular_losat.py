@@ -31,7 +31,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.conservation import ConservationSearchResult
 from gbdraw.api.options import CircularDiagramOptions
-from gbdraw.api.requests import GenBankInputSource, GffFastaInputSource, RecordInputSource
+from gbdraw.api.requests import FastaInputSource, GenBankInputSource, GffFastaInputSource, RecordInputSource
 from gbdraw.comparisons.losat_jobs import (
     LOSAT_OUTFMT,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -121,14 +121,15 @@ def comparison_query_fasta(comparison: ComparisonSequenceFile, *, ordinal: int) 
 def ring_subject_records(
     sources: Iterable[RecordInputSource],
     *,
-    genbank_records: Callable[[GenBankInputSource], Sequence[SeqRecord]],
+    file_records: Callable[[GenBankInputSource | FastaInputSource], Sequence[SeqRecord]],
 ) -> tuple[SeqRecord, ...]:
     """The records of the ring subject database, in request order (Owner D-25).
 
     Every distinct subject-side source the request reads gives all of its
     records, uncropped, in file order, on the file's strand, also records that
-    are not drawn. A GenBank file gives the records the render's loader read
-    (``genbank_records``: the planner's parse, so no source is parsed twice). A
+    are not drawn. A source whose file holds whole records (a GenBank file, a
+    FASTA given without GFF3) gives the records the render's loader read
+    (``file_records``: the planner's parse, so no source is parsed twice). A
     GFF3/FASTA pair gives every entry of its FASTA file, also one the GFF3 file
     does not name: the GFF3 parse keeps only named entries, so the FASTA file is
     read again. An in-memory record (Python API) is its own source, as given.
@@ -139,14 +140,14 @@ def ring_subject_records(
     for source in sources:
         key: Hashable = (
             ("genbank", str(source.path)) if isinstance(source, GenBankInputSource)
-            else ("fasta", str(source.fasta_path)) if isinstance(source, GffFastaInputSource)
+            else ("fasta", str(source.fasta_path)) if isinstance(source, (GffFastaInputSource, FastaInputSource))
             else ("memory", id(source.record))
         )
         if key in seen:
             continue
         seen.add(key)
-        if isinstance(source, GenBankInputSource):
-            records.extend(genbank_records(source))
+        if isinstance(source, (GenBankInputSource, FastaInputSource)):
+            records.extend(file_records(source))
         elif isinstance(source, GffFastaInputSource):
             records.extend(read_sequence_file_records(str(source.fasta_path), "fasta"))
         else:

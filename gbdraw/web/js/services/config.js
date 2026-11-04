@@ -14,11 +14,8 @@ import {
   restoreRightDrawerState
 } from './right-drawer-state.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from './reset.js';
-import {
-  INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree,
-  bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList,
-  setConservationBlastsSource
-} from './drawing/inputs.js';
+import { INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
+import { circularInputSlots, inputSourceFiles } from './input-types.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { FILE_IMPORT_CARDS, userTableRows } from './file-imports.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
@@ -4047,16 +4044,18 @@ const installGroupNames = (drawing, orthogroupState, groupIdSet) => {
  */
 export const assertDrawingInputs = (drawing) => {
   const { files } = drawing;
-  const gff = drawing.inputType.value === 'gff';
+  /** @param {ReturnType<typeof inputSourceFiles>} input @param {{ inputOrdinal?: number }} context */
+  const requireInput = ({ primaryFile, complete }, context) => {
+    if (!primaryFile) throw diagnosticError('INPUT_REQUIRED', context);
+    if (!complete) throw diagnosticError('FASTA_REQUIRED', context);
+  };
   if (drawing.mode === 'circular') {
-    if (!(gff ? files.c_gff : files.c_gb)) throw diagnosticError('INPUT_REQUIRED');
-    if (gff && !files.c_fasta) throw diagnosticError('FASTA_REQUIRED');
+    requireInput(inputSourceFiles(drawing.inputType.value, circularInputSlots(files)), {});
     return;
   }
   const sequences = drawing.linearSeqs;
   sequences.forEach((seq, index) => {
-    if (!(gff ? seq?.gff : seq?.gb)) throw diagnosticError('INPUT_REQUIRED', { inputOrdinal: index + 1 });
-    if (gff && !seq?.fasta) throw diagnosticError('FASTA_REQUIRED', { inputOrdinal: index + 1 });
+    requireInput(inputSourceFiles(drawing.inputType.value, seq ?? {}), { inputOrdinal: index + 1 });
   });
   // Only a hand-edited Session turns every record OFF (D-06 asks first).
   if (sequences.length > 0
@@ -4966,18 +4965,15 @@ const applyFiles = (filesData, {
           recordKey: String(record?.recordKey || '')
         };
       });
+    const { primaryFile, pairedFile, complete } = inputSourceFiles(
+      targetState.cInputType.value, circularInputSlots(targetState.files)
+    );
     Object.assign(targetState.circularRecordDiscovery, {
-      status: (targetState.cInputType.value === 'gff'
-        ? targetState.files.c_gff && targetState.files.c_fasta
-        : targetState.files.c_gb) ? 'deferred' : 'idle',
+      status: complete ? 'deferred' : 'idle',
       error: '',
       inputType: targetState.cInputType.value,
-      primaryFile: targetState.cInputType.value === 'gff'
-        ? targetState.files.c_gff
-        : targetState.files.c_gb,
-      pairedFile: targetState.cInputType.value === 'gff'
-        ? targetState.files.c_fasta
-        : null
+      primaryFile,
+      pairedFile
     });
   }
 

@@ -701,6 +701,37 @@ def test_ring_database_of_gff3_is_every_fasta_entry(
 
 
 @pytest.mark.circular
+def test_ring_database_of_a_fasta_alone_reads_the_file_once(
+    tmp_path: Path, captured_ring_searches: list[tuple[str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A FASTA given without GFF3 holds whole records: the planner's parse is the database, as for GenBank."""
+
+    import gbdraw.io.genome as genome_module
+    from gbdraw.api.request_render import plan_circular_request
+    from gbdraw.api.requests import FastaInputSource
+    from gbdraw.io.record_select import parse_record_selector
+
+    fasta = tmp_path / "subject.fasta"
+    fasta.write_text(
+        "".join(f">{record_id} entry\n{_SUBJECT_SEQUENCES[record_id]}\n" for record_id in ("SUBA", "SUBB")),
+        encoding="ascii",
+    )
+    fasta_reads: list[str] = []
+    real_reader = genome_module._read_fasta_records
+
+    def counting_reader(path):
+        fasta_reads.append(str(path))
+        return real_reader(path)
+
+    monkeypatch.setattr(genome_module, "_read_fasta_records", counting_reader)
+    plan_circular_request(_ring_request(
+        tmp_path, RecordInput(source=FastaInputSource(fasta), selector=parse_record_selector("#2"))
+    ))
+    assert [subject for _query, subject in captured_ring_searches] == [_expected_database("SUBA", "SUBB")]
+    assert fasta_reads == [str(fasta)]
+
+
+@pytest.mark.circular
 def test_ring_database_of_a_file_with_a_byte_order_mark_is_what_the_loader_reads(
     tmp_path: Path, captured_ring_searches: list[tuple[str, str]]
 ) -> None:

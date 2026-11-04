@@ -21,7 +21,8 @@ import { recordKeyBelongsToRequest } from '../services/feature-placement.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
 import { cliRecordKey, expandedRecordKey, recordKeyExpansion } from '../services/record-draw-selection.js';
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
-import { FEATURE_INSTANCE_SEPARATOR } from '../contracts/schema.generated.js';
+import { FEATURE_INSTANCE_SEPARATOR, RECORD_SOURCE_FILES } from '../contracts/schema.generated.js';
+import { inputSequenceSource, inputTypeOfSourceKind } from '../services/input-types.js';
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from '../services/linear-wrap-form.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
@@ -46,7 +47,9 @@ import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from '../services/linear-wrap-
  * @property {Map<string, RecipeFileMetadata>} fileMetadata
  * @property {RecipeGeneratedFile[]} generatedFiles
  * @typedef {{ schema: number, consumedPaths: Set<string>, metadataPaths: Set<string> }} RecipeCoverage The semantic fields of a request, by path.
- * @typedef {{ kind: 'genbank' | 'gffFasta', ids: string[] }} SourceSpec The resource ids that one record needs.
+ * @typedef {{ kind: CanonicalRecord['source']['kind'], ids: string[], options: readonly CliSourceOption[], extensions: readonly string[], countFormat: 'genbank' | 'fasta' }} SourceSpec
+ *   The resource ids that one record needs, in source order, the CLI option and the fallback file extension of each,
+ *   and the format its records are counted in.
  * @typedef {{ path: string, name: string, slot: string }} RecipeHelperFile A file the recipe or the replay needs beside the uploaded inputs.
  * @typedef {{ program: string, kind: string, version: string | null, source: string, path: string | null }} LosatRuntimeRecord
  * @typedef {LosatRuntimeRecord & { text: string, textParts: ErrorTextPart[] }} LosatRuntimeLine A runtime record and its line: the English `text` and the parts it is made of.
@@ -704,9 +707,7 @@ const validateCurrentSemanticCoverage = (request) => {
       coverage,
       record.source,
       `${path}.source`,
-      record.source?.kind === 'gffFasta'
-        ? ['kind', 'gffResourceId', 'fastaResourceId']
-        : ['kind', 'resourceId']
+      ['kind', ...sourceFilesOf(record.source?.kind).map(({ field }) => field)]
     );
     if (record.selector) {
       if (!['recordId', 'recordIndex'].includes(record.selector.kind)) {
@@ -849,25 +850,47 @@ const validateCurrentSemanticCoverage = (request) => {
 };
 
 /**
+ * The CLI option of each resource kind of a record source file, which is also its records-table column, and the
+ * extension of the file name a recipe gives a file without one. The one CLI projection of the input types: a
+ * GenBank file is `--gbk`, a GFF3 file `--gff` with its FASTA `--fasta`, a FASTA alone `--fasta`.
+ * @typedef {'gbk' | 'gff' | 'fasta'} CliSourceOption
+ * @type {Readonly<Record<RecordSourceFileResource, Readonly<{ option: CliSourceOption, extension: string }>>>}
+ */
+const CLI_SOURCE_FILES = Object.freeze({
+  genbank: Object.freeze({ option: 'gbk', extension: 'gbk' }),
+  gff3: Object.freeze({ option: 'gff', extension: 'gff3' }),
+  fasta: Object.freeze({ option: 'fasta', extension: 'fasta' })
+});
+/** @typedef {(typeof RECORD_SOURCE_FILES)[CanonicalRecord['source']['kind']][number]['resource']} RecordSourceFileResource */
+
+/**
+ * The files of a record source kind, in source order; none for an unknown kind.
+ * @param {unknown} kind
+ * @returns {readonly (typeof RECORD_SOURCE_FILES)[CanonicalRecord['source']['kind']][number][]}
+ */
+const sourceFilesOf = (kind) => (
+  Object.hasOwn(RECORD_SOURCE_FILES, String(kind)) ? RECORD_SOURCE_FILES[/** @type {CanonicalRecord['source']['kind']} */ (kind)] : []
+);
+
+/**
  * @param {CanonicalRecord | null | undefined} record
  * @returns {SourceSpec}
  */
 const sourceSpec = (record) => {
-  /** @type {CanonicalRecord['source'] | Record<string, unknown>} */
+  /** @type {Record<string, unknown>} */
   const source = isPlainObject(record?.source) ? record.source : {};
-  if (source.kind === 'genbank') {
-    return { kind: 'genbank', ids: [String(source.resourceId || '').trim()] };
+  const files = sourceFilesOf(source.kind);
+  if (!files.length) {
+    throw recipeUnavailable(msg('source kind "{kind}" has no CLI recipe.'), { kind: String(source.kind || 'unknown') });
   }
-  if (source.kind === 'gffFasta') {
-    return {
-      kind: 'gffFasta',
-      ids: [
-        String(source.gffResourceId || '').trim(),
-        String(source.fastaResourceId || '').trim()
-      ]
-    };
-  }
-  throw recipeUnavailable(msg('source kind "{kind}" has no CLI recipe.'), { kind: String(source.kind || 'unknown') });
+  const kind = /** @type {CanonicalRecord['source']['kind']} */ (source.kind);
+  return {
+    kind,
+    ids: files.map(({ field }) => String(source[field] || '').trim()),
+    options: files.map(({ resource }) => CLI_SOURCE_FILES[resource].option),
+    extensions: files.map(({ resource }) => CLI_SOURCE_FILES[resource].extension),
+    countFormat: inputSequenceSource(inputTypeOfSourceKind(kind)).format
+  };
 };
 
 // The row of each record, and, when the order of the positions within a row is
@@ -957,13 +980,11 @@ const appendInputArgs = async (args, request, files) => {
   if (new Set(specs.map((spec) => spec.kind)).size !== 1) {
     throw recipeUnavailable(msg('the committed render mixes source kinds that the CLI cannot combine.'));
   }
-  const inputKind = specs[0].kind;
+  const { options, countFormat } = specs[0];
   const sourcePaths = specs.map((spec, recordIndex) => spec.ids.map((resourceId, partIndex) => (
     files.resourcePath(resourceId, {
       source: true,
-      fallback: inputKind === 'genbank'
-        ? `record-${recordIndex + 1}.gbk`
-        : (partIndex === 0 ? `record-${recordIndex + 1}.gff3` : `record-${recordIndex + 1}.fasta`)
+      fallback: `record-${recordIndex + 1}.${spec.extensions[partIndex]}`
     })
   )));
   const sourceKeys = sourcePaths.map((paths) => paths.join('\0'));
@@ -984,10 +1005,7 @@ const appendInputArgs = async (args, request, files) => {
     for (const [index, record] of records.entries()) {
       if (
         (record.region?.selector || record.selector)
-        && await files.resourceRecordCount(
-          specs[index].ids.at(-1),
-          inputKind === 'genbank' ? 'genbank' : 'fasta'
-        ) !== 1
+        && await files.resourceRecordCount(specs[index].ids.at(-1), countFormat) !== 1
       ) {
         circularSelectorNeedsTable = true;
         break;
@@ -1005,9 +1023,7 @@ const appendInputArgs = async (args, request, files) => {
   if (recordsTableRequired) {
     for (const [index, record] of records.entries()) {
       if (record.cardinality === 'exactly_one') continue;
-      if (await files.resourceRecordCount(
-        specs[index].ids.at(-1), inputKind === 'genbank' ? 'genbank' : 'fasta'
-      ) === 1) continue;
+      if (await files.resourceRecordCount(specs[index].ids.at(-1), countFormat) === 1) continue;
       throw recipeUnavailable(msg('this record cardinality cannot be preserved by a CLI records table.'));
     }
   }
@@ -1018,7 +1034,8 @@ const appendInputArgs = async (args, request, files) => {
       && request.comparisons.length > 0;
     const effectiveCardinality = request.mode === 'circular'
       ? 'all'
-      : ((inputKind === 'gffFasta' || records.length > 1) && loadComparison ? 'first' : 'all');
+      // gbdraw/linear.py `_linear_cli_record_cardinality`: compared `--gff` input, or several inputs, read each file's first record.
+      : ((options.includes('gff') || records.length > 1) && loadComparison ? 'first' : 'all');
     for (const [index, record] of records.entries()) {
       const canonicalCardinality = String(record.cardinality || '');
       const cliCardinality = (record.region?.selector || record.selector)
@@ -1026,10 +1043,7 @@ const appendInputArgs = async (args, request, files) => {
         : effectiveCardinality;
       if (
         canonicalCardinality !== cliCardinality
-        && await files.resourceRecordCount(
-          specs[index].ids.at(-1),
-          inputKind === 'genbank' ? 'genbank' : 'fasta'
-        ) !== 1
+        && await files.resourceRecordCount(specs[index].ids.at(-1), countFormat) !== 1
       ) {
         throw recipeUnavailable(msg('record cardinality "{cardinality}" cannot be preserved by the current CLI.'), { cardinality: canonicalCardinality || 'missing' });
       }
@@ -1038,16 +1052,12 @@ const appendInputArgs = async (args, request, files) => {
 
   if (recordsTableRequired) {
     const requestedTableRows = requestedRows;
-    const columns = inputKind === 'genbank'
-      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', 'topology', 'display_start']
-      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', 'topology', 'display_start'];
+    const columns = [...options, 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', 'topology', 'display_start'];
     const rows = records.map((record, index) => {
       const region = isPlainObject(record.region) ? record.region : null;
       const selector = selectorText(region?.selector || record.selector);
       const row = {
-        gbk: inputKind === 'genbank' ? files.visibleName(sourcePaths[index][0]) : '',
-        gff: inputKind === 'gffFasta' ? files.visibleName(sourcePaths[index][0]) : '',
-        fasta: inputKind === 'gffFasta' ? files.visibleName(sourcePaths[index][1]) : '',
+        ...Object.fromEntries(options.map((option, part) => [option, files.visibleName(sourcePaths[index][part])])),
         record_label: String(record.presentation?.label || ''),
         record_subtitle: String(record.presentation?.subtitle || ''),
         record_id: selector,
@@ -1072,12 +1082,7 @@ const appendInputArgs = async (args, request, files) => {
     return true;
   }
 
-  if (inputKind === 'genbank') {
-    args.push('--gbk', ...sourcePaths.map(([gbk]) => gbk));
-  } else {
-    args.push('--gff', ...sourcePaths.map(([gff]) => gff));
-    args.push('--fasta', ...sourcePaths.map(([, fasta]) => fasta));
-  }
+  options.forEach((option, part) => args.push(`--${option}`, ...sourcePaths.map((paths) => paths[part])));
 
   if (request.mode !== 'linear') return false;
   const selectors = records.map((record) => selectorText(record.selector));
@@ -1883,7 +1888,7 @@ const requireExactRecords = async (renderRequest, files) => {
   for (const record of renderRequest.records) {
     if (record.cardinality === 'exactly_one') continue;
     const source = sourceSpec(record);
-    if (await files.resourceRecordCount(source.ids.at(-1), source.kind === 'genbank' ? 'genbank' : 'fasta') !== 1) {
+    if (await files.resourceRecordCount(source.ids.at(-1), source.countFormat) !== 1) {
       throw identityTableUnavailable(msg('feature placements and feature edits require each input file to hold exactly one record or to have exactly one selected.'));
     }
   }

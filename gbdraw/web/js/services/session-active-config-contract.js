@@ -14,6 +14,8 @@ import { requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, re
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, labelStyleForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { INPUT_TYPES } from './input-types.js';
+/** @import { InputType } from './drawing/inputs.js' */
 import { isUnsetValue } from '../utils/field-reading.js';
 import { depthTrackEditDefaults, ensureDepthTrackConfigCount } from './depth-track-state.js';
 import { validateRecordDisplayDrafts } from './record-display-model.js';
@@ -161,7 +163,7 @@ export const holdsCliWriterConfig = (session) => [40, 41].includes(session?.vers
 /** The configuration domains a draft stores, with the compatibility field `colorsAreOverrides`. */
 export const STORED_CONFIG_DOMAINS = Object.freeze([...CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, 'colorsAreOverrides']);
 /** The input types of a Session's `ui.cInputType` and `ui.lInputType` (Save refuses another; Load reads it, OV-594). */
-export const SESSION_INPUT_TYPES = Object.freeze(['gb', 'gff']);
+export const SESSION_INPUT_TYPES = Object.freeze(/** @type {InputType[]} */ (Object.keys(INPUT_TYPES)));
 /** The PNG DPI the export uses unless the user picks another. */
 export const DEFAULT_PNG_DPI = 300;
 /** The PNG DPI choices the DPI menu lists; Load reads a stored DPI among them (OV-595). */

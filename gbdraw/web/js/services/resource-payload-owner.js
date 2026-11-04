@@ -1,5 +1,6 @@
 // @ts-check
 import { getSessionResourceSource } from './file-content-cache.js';
+import { recordSourceOf } from './input-types.js';
 /** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 
 /**
@@ -72,31 +73,21 @@ export const resourceIdOwnedBy = (resources, file, kind) => {
 };
 
 /**
- * The source a request names a record by when it draws these files: a GenBank
- * file, or a GFF3 file and its FASTA file (`fastaFile`), each by the id of the
- * resource of `resources` that holds it (`resourceIdOwnedBy`); null when one
- * of them holds no file. Both Generate's staging and the live record names
- * read a card's files through it.
+ * The source a request names a record by when it draws these files: the files
+ * of a record source of `sourceKind` (a GenBank file, a GFF3 file and its FASTA
+ * file `fastaFile`, or a FASTA file alone), each by the id of the resource of
+ * `resources` that holds it (`resourceIdOwnedBy`); null when one of them holds
+ * no file. Both Generate's staging and the live record names read a card's
+ * files through it.
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources
+ * @param {CanonicalRecordSource['kind']} sourceKind
  * @param {object | null | undefined} sourceFile
  * @param {object | null | undefined} fastaFile
  * @returns {CanonicalRecordSource | null}
  */
-export const recordSourceOwnedBy = (resources, sourceFile, fastaFile) => {
-  if (!fastaFile) {
-    const resourceId = resourceIdOwnedBy(resources, sourceFile, 'genbank');
-    return resourceId ? { kind: 'genbank', resourceId } : null;
-  }
-  const gffResourceId = resourceIdOwnedBy(resources, sourceFile, 'gff3');
-  const fastaResourceId = resourceIdOwnedBy(resources, fastaFile, 'fasta');
-  return gffResourceId && fastaResourceId ? { kind: 'gffFasta', gffResourceId, fastaResourceId } : null;
-};
-
-/**
- * The resource ids a record source names, in request order.
- * @param {CanonicalRecordSource} source
- * @returns {string[]}
- */
-export const recordSourceResourceIds = (source) => (
-  source.kind === 'genbank' ? [source.resourceId] : [source.gffResourceId, source.fastaResourceId]
+export const recordSourceOwnedBy = (resources, sourceKind, sourceFile, fastaFile) => recordSourceOf(
+  sourceKind, ({ resource }, index) => resourceIdOwnedBy(resources, index === 0 ? sourceFile : fastaFile, resource)
 );
+
+// The resource ids of a record source's files, in source order (input-types.js owns the reading).
+export { recordSourceResourceIds } from './input-types.js';

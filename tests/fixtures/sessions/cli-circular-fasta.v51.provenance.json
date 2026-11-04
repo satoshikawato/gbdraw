@@ -1,0 +1,15 @@
+{
+  "purpose": "Positive fixture of the fasta record source kind in Session 51: a Circular CLI Session drawn from a FASTA given without GFF3 (PD-OI-068 rev 2)",
+  "writer": "gbdraw/circular.py --save_session (CLI sidecar), run from the feat/fasta-only-input worktree on PYTHONPATH",
+  "writerCommit": "4133cff1f27b0f5929e4a4b07163fbb005a825a1 (branch feat/fasta-only-input)",
+  "command": "PYTHONPATH=<worktree> python -P -c 'from gbdraw.cli import main; main()' circular --fasta HmmtDNA.fasta -o cli-circular-fasta -f svg --save_session",
+  "workingDirectory": "a scratch folder holding HmmtDNA.fasta, written from tests/test_inputs/HmmtDNA.gbk by Bio.SeqIO.write(..., 'fasta') (input paths stay relative in cliInvocation)",
+  "inputs": {
+    "HmmtDNA.fasta": "9893484675b21612dfbb92d1a655125c997f1eeacf272ec9eaa395aa8c256e92"
+  },
+  "values": "drawings[0].renderRequest.records[0].source {kind: fasta, fastaResourceId: record-1-fasta}; resources.record-1-fasta kind fasta; webFiles.bindings.c_fasta only",
+  "decompressedSha256": "2489529f89e63d727b7ce89950efa2edaeddf8b734a27db3c199db1d179f76fd",
+  "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
+  "sessionVersion": 51,
+  "requestSchema": 9
+}

@@ -26,17 +26,18 @@
       "draw_circular",
       "draw_linear",
       "read_genbank",
+      "read_fasta",
       "read_gff"
     ],
-    "contract_sha256": "9ebae92b0bc672afa3c6f05f241f2e20b8ab5665ce71d625cd962a05bc73393b"
+    "contract_sha256": "8b175173d57133d3c43b0db921719ded39aee2e9d11cd3b4cf09d89ad245209a"
   },
   "circular_cli": {
-    "actions_sha256": "6fe55300c55f7c182ec753869b8aceb6bd5d77353238bc94897ea2c52b45add7",
+    "actions_sha256": "00f10f5a40fff484e03f3726da747592e063f5374362660781f1f06c479d81a8",
     "defaults_sha256": "22aa21deb3f53ab36dfbc722b4e99eaaa03938bc6c9de7f0253f8f37bfe9da8b",
     "representative_sha256": "170932a2cd68c7ac725df8037e820df49ada00575b8ad04dc85a5db3c0a48b43"
   },
   "linear_cli": {
-    "actions_sha256": "ee1afddef9676d7289304b631247dc15ae39fe404e8e1be3513cf4e31382726c",
+    "actions_sha256": "c86da241a8c2978c21f4193a29d186775a3958e3757fad490395a3ede7c816c2",
     "defaults_sha256": "aaa9097d7f86f2f92bb05b011794b0cc14f66a07d8fd16b4adcb893838f3a582",
     "representative_sha256": "1269a44b9f2f82d51fc691b2ecb24f873e10c7c67552bd31eb07d0559ad39acd"
   }

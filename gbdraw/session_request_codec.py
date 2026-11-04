@@ -73,6 +73,7 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.comparisons.losat_jobs import record_source_paths
+from gbdraw.api.record_planning import _source_details
 from gbdraw.core.numeric import ascii_float, parse_ascii_nonnegative_integer
 from gbdraw.io.input_text import GZIP_ERRORS, open_input_text, read_input_bytes
 from gbdraw.session_legacy_values import (
@@ -146,6 +147,7 @@ from .api.requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
+    FastaInputSource,
     GenBankInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
@@ -154,6 +156,7 @@ from .api.requests import (
     RecordCollectionOptions,
     RecordDisplayOptions,
     RecordInput,
+    RecordInputSource,
     RecordPresentation,
     RenderOutputRequest,
     _LegacySimilarityAlignment,
@@ -1021,10 +1024,19 @@ def _shared_record_selector(
     )
 
 
-# The resources of a source file read by the planner: (resource kind, source field).
+# The resources of a source file read by the planner, by its source kind
+# (``record_planning._source_details``, whose paths come in this order):
+# (resource kind, source field). The wire kind is the camel-cased source kind.
 _SOURCE_FILE_RESOURCES: Mapping[str, tuple[tuple[str, str], ...]] = {
     "genbank": (("genbank", "resourceId"),),
     "gff_fasta": (("gff3", "gffResourceId"), ("fasta", "fastaResourceId")),
+    "fasta": (("fasta", "fastaResourceId"),),
+}
+# The request source each source kind decodes to, built from its paths in resource order.
+_SOURCE_FILE_CLASSES: Mapping[str, Callable[..., RecordInputSource]] = {
+    "genbank": GenBankInputSource,
+    "gff_fasta": GffFastaInputSource,
+    "fasta": FastaInputSource,
 }
 
 
@@ -1162,7 +1174,7 @@ def _encode_records(
                 members_records[0].annotations["gbdraw_source_kind"]
             ]
             source_payload: dict[str, Any] = {
-                "kind": "genbank" if len(file_resources) == 1 else "gffFasta"
+                "kind": _camel(members_records[0].annotations["gbdraw_source_kind"])
             }
             for path, (kind, field) in zip(paths, file_resources, strict=True):
                 source_payload[field] = resources.add_bytes(
@@ -1248,23 +1260,11 @@ def _encode_record(
     selector = record.selector
     if shared_source is not None:
         source_payload, selector = shared_source
-    elif isinstance(source, GenBankInputSource):
-        resource_id = resources.add_path(
-            f"record-{index}-genbank", kind="genbank", value=source.path
-        )
-        source_payload = {"kind": "genbank", "resourceId": resource_id}
-    elif isinstance(source, GffFastaInputSource):
-        gff_id = resources.add_path(
-            f"record-{index}-gff3", kind="gff3", value=source.gff_path
-        )
-        fasta_id = resources.add_path(
-            f"record-{index}-fasta", kind="fasta", value=source.fasta_path
-        )
-        source_payload = {
-            "kind": "gffFasta",
-            "gffResourceId": gff_id,
-            "fastaResourceId": fasta_id,
-        }
+    elif isinstance(source, (GenBankInputSource, GffFastaInputSource, FastaInputSource)):
+        source_kind, paths = _source_details(source)
+        source_payload = {"kind": _camel(source_kind)}
+        for path, (kind, field) in zip(paths, _SOURCE_FILE_RESOURCES[source_kind], strict=True):
+            source_payload[field] = resources.add_path(f"record-{index}-{kind}", kind=kind, value=path)
     elif isinstance(source, InMemoryRecordSource):
         resource_id = resources.add_bytes(
             f"record-{index}-genbank",
@@ -1340,40 +1340,21 @@ def _decode_record(
         item["source"], path=f"{path}.source", required={"kind"}, exact=False
     )
     kind = source_payload["kind"]
-    source: GenBankInputSource | GffFastaInputSource
-    if kind == "genbank":
-        _require_exact_fields(
-            source_payload, path=f"{path}.source", required={"kind", "resourceId"}
-        )
-        source = GenBankInputSource(
-            _resolve_resource(
-                source_payload["resourceId"],
-                path=f"{path}.source.resourceId",
-                resource_paths=resource_paths,
-            )
-        )
-    elif kind == "gffFasta":
-        _require_exact_fields(
-            source_payload,
-            path=f"{path}.source",
-            required={"kind", "gffResourceId", "fastaResourceId"},
-        )
-        source = GffFastaInputSource(
-            _resolve_resource(
-                source_payload["gffResourceId"],
-                path=f"{path}.source.gffResourceId",
-                resource_paths=resource_paths,
-            ),
-            _resolve_resource(
-                source_payload["fastaResourceId"],
-                path=f"{path}.source.fastaResourceId",
-                resource_paths=resource_paths,
-            ),
-        )
-    else:
+    source_kind = next(
+        (candidate for candidate in _SOURCE_FILE_RESOURCES if _camel(candidate) == kind), None
+    )
+    if source_kind is None:
         raise CanonicalRequestDecodingError(
             f"Unsupported record source kind at {path}.source: {kind!r}."
         )
+    fields_of_kind = [field for _resource_kind, field in _SOURCE_FILE_RESOURCES[source_kind]]
+    _require_exact_fields(source_payload, path=f"{path}.source", required={"kind", *fields_of_kind})
+    source = _SOURCE_FILE_CLASSES[source_kind](*(
+        _resolve_resource(
+            source_payload[field], path=f"{path}.source.{field}", resource_paths=resource_paths
+        )
+        for field in fields_of_kind
+    ))
 
     presentation_payload = _object(
         item["presentation"],
@@ -5491,6 +5472,24 @@ def describe_fresh_protein_comparison() -> FreshProteinComparisonDefaults:
     }
 
 
+class RecordSourceFile(TypedDict):
+    resource: str
+    field: str
+
+
+def describe_record_source_files() -> dict[str, list[RecordSourceFile]]:
+    """The files of each record source kind, with wire names: its resource kind and source field, in resource order.
+
+    ``_SOURCE_FILE_RESOURCES`` stays their owner; the Web reads them from the
+    generated ``RECORD_SOURCE_FILES`` to build, read, and stage a record source.
+    """
+
+    return {
+        _camel(kind): [{"resource": resource, "field": field} for resource, field in files]
+        for kind, files in _SOURCE_FILE_RESOURCES.items()
+    }
+
+
 def describe_legacy_request_tables() -> dict[str, Any]:
     """The tables of the request schemas 1-2 reading, with wire names.
 
@@ -6006,6 +6005,7 @@ __all__ = [
     "describe_canonical_typed_resources",
     "describe_fresh_protein_comparison",
     "describe_legacy_request_tables",
+    "describe_record_source_files",
     "encode_canonical_table",
     "encode_canonical_typed_resource",
     "encode_canonical_request",

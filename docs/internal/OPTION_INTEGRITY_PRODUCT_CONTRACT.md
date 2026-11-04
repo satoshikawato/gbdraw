@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `112`
+- Contract revision: `113`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -4183,6 +4183,46 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 113 changes: `PD-OI-068` is replaced for scenario revision `2`
+  (concern `diagram-generation.gff-fasta-record-universe`; the outcome `A`,
+  FASTA without GFF3 is accepted in both modes, CLI and Web, as records with
+  sequence and no features). It comes from the Product Decision Owner `satoshikawato`'s
+  replies of `2026-11-04` in the Claude Code session of the campaign
+  `region-select-seq-search-20261104` (`DECISIONS.md` `D-06`). The Owner had
+  asked: 「もうgbdrawでもFASTA/GFAオンリーの入力を受け入れて、描画->検索->興味のある配列/領域切り出し->描画/更なる編集、みたいにできるようにする？」
+  Each reply is quoted as written.
+  - D-06 (`2026-11-04`). The session offered A, accept FASTA without GFF3 in
+    both modes, CLI and Web: records with sequence and no features
+    (recommended), or B, keep refusing. Reply: 「とりあえず推奨通りで」. The
+    Owner said it is open to revision after the mocks; the mocks were
+    approved in Q-F5 to Q-F7 below.
+  - Q-F0 to Q-F4 (`2026-11-04`). The session listed five questions with
+    recommendations (`DECISIONS.md` `D-12`): Q-F0 the wording of Rationale,
+    Must preserve, May retire and Accepted residual risk, drafted by the
+    session; Q-F1 in a GFF3 + FASTA pair, FASTA entries without GFF3 rows stay
+    non-records; Q-F2 a third source choice "FASTA" beside GenBank and
+    GFF3 + FASTA; Q-F3 a FASTA that is not nucleotide is refused before
+    Generate with the reason and the record's name; Q-F4 the file makes no
+    topology claim, a circle in Circular and a line in Linear. Reply:
+    「推奨どおり」, the recommended option A for each. The four fields of the
+    receipt are the drafted wording, approved exactly as written.
+  - Q-F5 to Q-F7 (`2026-11-04`, `DECISIONS.md` `D-14`). After the session
+    showed mocks of the Input Genomes card it asked: Q-F5 the three source
+    choices fit on one row, or wrap; Q-F6 FASTA records get the per-record
+    "Circular record" checkbox, off by default, so the user can mark a record
+    circular, which enables Display start and origin-crossing spans, or no
+    checkbox; Q-F7 Linear keeps the Organism / strain and Subtitle / title
+    fields for FASTA records, or hides them. Reply:
+    「すべて推奨通りでOK」, the recommended option A for each. Q-F6 and Q-F7 are
+    in the receipt's Choice; Q-F5 is spacing of a control row and is not.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-068` scenario revision `2`
+    `1cdd44b97d270f1d7a9447689ff394e5e9753feeacfcb8623ea7aa7b53dc7e46`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -7687,23 +7727,28 @@ Decision date: 2026-10-25
 }
 ```
 
-### PD-OI-068: GFF3+FASTA record universe
+### PD-OI-068: Record universe of FASTA and GFF3+FASTA inputs
 
 - Concern key: `diagram-generation.gff-fasta-record-universe`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-068`, scenario revision `1`
+  (`A / GFF-ANNOTATED-RECORDS-ONLY`). Scenario revision `1` kept the records
+  of a GFF3 with FASTA to those with GFF3 rows and accepted that a sequence
+  only in the FASTA cannot be drawn. Scenario revision `2` replaces that
+  outcome with the receipt below.
 - Status: `ACCEPTED`
-- Selected outcome: `A / GFF-ANNOTATED-RECORDS-ONLY`
+- Selected outcome: `A`, FASTA without GFF3 is accepted
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the complete `D-13` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
-  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
-  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
-  JSON below reproduce all nine supplied fields without translation or
-  additional terms. This record does not supersede another decision.
-  Dependent runtime requires this authority merged into its base; this
-  amendment supplies no runtime acceptance evidence.
+  and its JSON representation below.
+- Decision source: the Owner replies of `2026-11-04` quoted in the Revision 113
+  entry above. The receipt and JSON below reproduce the approved fields
+  without translation or additional terms. The runtime that implements it
+  merges with it (static Product Contract co-change); this record supplies no
+  runtime acceptance evidence. Scenario revision `1` (receipt SHA-256
+  `a4a04f680c03b1e1a13ccf82fd35d62b10c01700546c147ab567d28c47ebd14c`) is
+  retained in Git history.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `a4a04f680c03b1e1a13ccf82fd35d62b10c01700546c147ab567d28c47ebd14c`.
+  `1cdd44b97d270f1d7a9447689ff394e5e9753feeacfcb8623ea7aa7b53dc7e46`.
 - Acceptance contracts: `OIC-015`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -7711,27 +7756,35 @@ Decision date: 2026-10-25
 ```text
 PRODUCT_DECISION
 Concern: diagram-generation.gff-fasta-record-universe
-Scenario revision: 1
-Choice: A / GFF-ANNOTATED-RECORDS-ONLY
-Rationale: GFF3+FASTA の record の集合を CLI と同じにし、科学的な出力を変えない。
-Must preserve: GFF の行を持つ record の表示（feature が 0 でも region 行や埋め込み ##FASTA を持つものを含む）、FASTA の順序、CLI の出力、PD-OI-018 の他の項目。
-May retire: GFF の行を 1 つも持たない FASTA の配列を、record の候補として一覧に出す動作（Generate できない候補）。
-Accepted residual risk: FASTA だけにある配列は描けない。描くには GFF に region 行を足す必要がある。
+Scenario revision: 2
+Supersedes: PD-OI-068, scenario revision 1 (diagram-generation.gff-fasta-record-universe)
+Choice: A. Accept FASTA without GFF3 in both modes (Circular and Linear), CLI and Web: records with sequence and no features.
+  - In a GFF3 + FASTA pair, FASTA entries without GFF3 rows stay non-records. Only a FASTA given without any GFF3 is new.
+  - The Web offers a third source choice "FASTA" beside GenBank and GFF3 + FASTA.
+  - A FASTA that is not nucleotide is refused before Generate, with the reason and the record's name.
+  - The file makes no topology claim: a record is drawn as a circle in Circular and as a line in Linear.
+  - Each FASTA record gets the per-record "Circular record" checkbox, off at first, so the user can mark a record circular, which enables Display start and origin-crossing spans.
+  - In Linear, FASTA records keep the Organism / strain and Subtitle / title fields.
+Rationale: 描画、検索、領域の切り出し、再描画の流れを、アノテーションのない FASTA からも始められるようにする。
+Must preserve: GenBank の入力と、GFF3 と FASTA を組にした入力の record の集合、表示、CLI の出力（OIC-015 を含む）。FASTA の順序。Session を読み込む動作（0.14.5 までに保存した Session を含む）。塩基配列でないファイルは理由を示して断ること。
+May retire: `--fasta` だけを渡すと「--fasta requires --gff」で断る動作。GFF3 を伴わない FASTA を record にしない扱い。
+Accepted residual risk: feature のない record は GC content と skew、depth、注釈、検索の hit だけを描く。topology は FASTA にないので既定の扱いになる。
 Owner: satoshikawato
-Decision date: 2026-09-30
+Decision date: 2026-11-04
 ```
 
 ```json
 {
   "concern": "diagram-generation.gff-fasta-record-universe",
-  "scenarioRevision": 1,
-  "choice": "A / GFF-ANNOTATED-RECORDS-ONLY",
-  "rationale": "GFF3+FASTA の record の集合を CLI と同じにし、科学的な出力を変えない。",
-  "mustPreserve": "GFF の行を持つ record の表示（feature が 0 でも region 行や埋め込み ##FASTA を持つものを含む）、FASTA の順序、CLI の出力、PD-OI-018 の他の項目。",
-  "mayRetire": "GFF の行を 1 つも持たない FASTA の配列を、record の候補として一覧に出す動作（Generate できない候補）。",
-  "acceptedResidualRisk": "FASTA だけにある配列は描けない。描くには GFF に region 行を足す必要がある。",
+  "scenarioRevision": 2,
+  "supersedes": "PD-OI-068, scenario revision 1 (diagram-generation.gff-fasta-record-universe)",
+  "choice": "A. Accept FASTA without GFF3 in both modes (Circular and Linear), CLI and Web: records with sequence and no features.\n  - In a GFF3 + FASTA pair, FASTA entries without GFF3 rows stay non-records. Only a FASTA given without any GFF3 is new.\n  - The Web offers a third source choice \"FASTA\" beside GenBank and GFF3 + FASTA.\n  - A FASTA that is not nucleotide is refused before Generate, with the reason and the record's name.\n  - The file makes no topology claim: a record is drawn as a circle in Circular and as a line in Linear.\n  - Each FASTA record gets the per-record \"Circular record\" checkbox, off at first, so the user can mark a record circular, which enables Display start and origin-crossing spans.\n  - In Linear, FASTA records keep the Organism / strain and Subtitle / title fields.",
+  "rationale": "描画、検索、領域の切り出し、再描画の流れを、アノテーションのない FASTA からも始められるようにする。",
+  "mustPreserve": "GenBank の入力と、GFF3 と FASTA を組にした入力の record の集合、表示、CLI の出力（OIC-015 を含む）。FASTA の順序。Session を読み込む動作（0.14.5 までに保存した Session を含む）。塩基配列でないファイルは理由を示して断ること。",
+  "mayRetire": "`--fasta` だけを渡すと「--fasta requires --gff」で断る動作。GFF3 を伴わない FASTA を record にしない扱い。",
+  "acceptedResidualRisk": "feature のない record は GC content と skew、depth、注釈、検索の hit だけを描く。topology は FASTA にないので既定の扱いになる。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-30"
+  "decisionDate": "2026-11-04"
 }
 ```
 

@@ -102,7 +102,7 @@ for (const mode of ['linear', 'circular']) {
     await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
     const suffix = mode === 'linear' ? '' : ' File';
     await page.getByLabel(`GFF3${suffix}`, { exact: true }).setInputFiles(gffPath);
-    const upload = () => page.getByLabel(`FASTA${suffix}`, { exact: true })
+    const upload = () => page.getByLabel(`FASTA${suffix}`, { exact: true }).and(page.locator('input[type="file"]'))
       .setInputFiles({ name: 'mismatch.fasta', mimeType: 'text/plain', buffer: mismatch });
     await upload();
     await expect.poll(discoveryError, { timeout: 180_000 }).toContain('matching FASTA');
@@ -156,7 +156,7 @@ test('W1/W2/W4/W8/W9: retained M23 recovery succeeds once and resource ownership
     await showDrawing(page, { kind: 'linear' });
     await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
     await page.getByLabel('GFF3', { exact: true }).setInputFiles(gffPath);
-    const fasta = page.getByLabel('FASTA', { exact: true });
+    const fasta = page.getByLabel('FASTA', { exact: true }).and(page.locator('input[type="file"]'));
     await fasta.setInputFiles(fastaPath);
     await generate('ok');
     const a = await agree('original-A');

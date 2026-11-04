@@ -58,6 +58,7 @@ def test_root_namespace_is_the_small_beginner_facing_api() -> None:
         "draw_circular",
         "draw_linear",
         "read_genbank",
+        "read_fasta",
         "read_gff",
     ]
 

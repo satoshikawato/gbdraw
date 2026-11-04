@@ -1,6 +1,12 @@
 // @ts-check
 import { writeCanonicalRecordReverseComplement } from './record-display-model.js';
 import {
+  CIRCULAR_INPUT_FIELDS, INPUT_TYPES, circularInputSlots, inputSourceFiles, inputTypeOfSourceKind, inputTypeSpec,
+  recordSourceOf, recordSourceSlotIds
+} from './input-types.js';
+/** @import { InputType } from './drawing/inputs.js' */
+/** @import { InputSlot } from './input-types.js' */
+import {
   canonicalFeatureOverrides,
   canonicalFeaturePlacements,
   featureDraftMap,
@@ -1442,22 +1448,28 @@ const linearSeqRecordFields = (record) => ({
   region_reverse: Boolean(record?.region?.reverseComplement || record?.presentation?.reverseComplement)
 });
 
+
 /**
- * The source of the drawn Linear record at `index`, its files added to `resources`: the first record that reads a
- * file names its resource (`addFile`).
+ * The record source of one input (a Linear card, or the Circular slots) by its input type, its files added to
+ * `resources`: the first record that reads a file names its resource (`addFile`). The one projection of an input's
+ * source for every input type.
  * @param {ResourceBuilder} resources
- * @param {unknown} inputType `gff` for a GFF3 and FASTA pair, otherwise GenBank.
- * @param {RequestLinearSeq} seq
+ * @param {unknown} inputType
+ * @param {Readonly<Partial<Record<InputSlot, RawSessionResourceDescriptor | null | undefined>>>} slots
  * @param {number} index
  * @returns {CanonicalRecord['source']}
  */
-const linearRecordSource = (resources, inputType, seq, index) => (inputType === 'gff'
-  ? {
-      kind: 'gffFasta',
-      gffResourceId: resources.addFile(`record-${index + 1}-gff3`, 'gff3', seq.gff),
-      fastaResourceId: resources.addFile(`record-${index + 1}-fasta`, 'fasta', seq.fasta)
-    }
-  : { kind: 'genbank', resourceId: resources.addFile(`record-${index + 1}-genbank`, 'genbank', seq.gb) });
+const inputRecordSource = (resources, inputType, slots, index) => {
+  const source = recordSourceOf(inputTypeSpec(inputType).sourceKind, ({ slot, resource }) => (
+    resources.addFile(`record-${index + 1}-${resource}`, resource, slots[slot])
+  ));
+  // `addFile` names every file or throws, so the source has each of its files.
+  if (source === null) throw new Error(`Canonical record ${index + 1} names no source file.`);
+  return source;
+};
+
+/** @param {ResourceBuilder} resources @param {unknown} inputType @param {RequestLinearSeq} seq @param {number} index */
+const linearRecordSource = (resources, inputType, seq, index) => inputRecordSource(resources, inputType, seq, index);
 
 /**
  * The record-source resources the next Generate's request names for these drawn Linear cards, under the same ids
@@ -1526,13 +1538,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
   if (Array.isArray(filesData.circularRecords) && filesData.circularRecords.length > 0) {
     /** @type {RequestDraftRecord[]} */
     const records = filesData.circularRecords.map((record, index) => {
-      /** @type {CanonicalRecord['source']} */
-      const source = record.sourceKind === 'gffFasta'
-        ? { kind: 'gffFasta',
-            gffResourceId: resources.addFile(`record-${index + 1}-gff3`, 'gff3', record.gff),
-            fastaResourceId: resources.addFile(`record-${index + 1}-fasta`, 'fasta', record.fasta) }
-        : { kind: 'genbank', resourceId: resources.addFile(
-            `record-${index + 1}-genbank`, 'genbank', record.gb) };
+      const source = inputRecordSource(resources, inputTypeOfSourceKind(record.sourceKind), record, index);
       return {
         recordKey: String(record.recordKey || `record-${index + 1}`),
         cardinality: record.cardinality || 'exactly_one',
@@ -1597,17 +1603,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
       circularPresentedCount: records.length
     };
   }
-  /** @type {CanonicalRecord['source']} */
-  const source = drawing.inputType.value === 'gff'
-    ? {
-        kind: 'gffFasta',
-        gffResourceId: resources.addFile('record-1-gff3', 'gff3', filesData.c_gff),
-        fastaResourceId: resources.addFile('record-1-fasta', 'fasta', filesData.c_fasta)
-      }
-    : {
-        kind: 'genbank',
-        resourceId: resources.addFile('record-1-genbank', 'genbank', filesData.c_gb)
-      };
+  const source = inputRecordSource(resources, drawing.inputType.value, circularInputSlots(filesData), 0);
   // The drawing is the Circular drawing of `state.js`, which holds every field the record set reads.
   const recordSet = circularDrawingRecordSet(drawing.circularRecordList.value, /** @type {CircularRecordDrawing} */ (drawing));
   if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
@@ -1908,9 +1904,8 @@ const configWrite = (key, value) => [['diagramOptions', 'configOverrides', key],
  */
 const cardDrawsRecord = (seq, cardKey, record, resources, fileOf) => {
   const { source } = record;
-  const drawn = source.kind === 'genbank'
-    ? recordSourceOwnedBy(resources, fileOf(seq.gb), null)
-    : recordSourceOwnedBy(resources, fileOf(seq.gff), fileOf(seq.fasta));
+  const { primaryFile, pairedFile } = inputSourceFiles(inputTypeOfSourceKind(source.kind), seq);
+  const drawn = recordSourceOwnedBy(resources, source.kind, fileOf(primaryFile), pairedFile === null ? null : fileOf(pairedFile));
   return drawn !== null && drawn.kind === source.kind
     && recordSourceResourceIds(drawn).join('\n') === recordSourceResourceIds(source).join('\n')
     && (record.recordKey === cardKey
@@ -4811,11 +4806,9 @@ export const buildCanonicalRenderRequest = (args) => projectCanonicalRenderInput
  * @param {string} field
  */
 const recordSourceResourceId = (record, field) => {
-  const source = record?.source || {};
-  if (field === 'gb' && source.kind === 'genbank') return String(source.resourceId || '');
-  if (field === 'gff' && source.kind === 'gffFasta') return String(source.gffResourceId || '');
-  if (field === 'fasta' && source.kind === 'gffFasta') return String(source.fastaResourceId || '');
-  return '';
+  /** @type {Readonly<Record<string, string>>} */
+  const ids = recordSourceSlotIds(record?.source);
+  return Object.hasOwn(ids, field) ? ids[field] : '';
 };
 
 /** @param {{ resourceId?: unknown } | null | undefined} ref */
@@ -6216,13 +6209,14 @@ export const projectCanonicalSessionRequest = ({
       const resourceFile = (/** @type {string} */ id) => resolveResourceFile
         ? resolveResourceFile(id)
         : resourceAsLegacyFile(resources, id);
+      const ids = recordSourceSlotIds(source);
       return {
         recordKey: String(record.recordKey || ''),
         cardinality: record.cardinality || 'exactly_one',
         sourceKind: source.kind,
-        gb: source.kind === 'genbank' ? resourceFile(source.resourceId) : null,
-        gff: source.kind === 'gffFasta' ? resourceFile(source.gffResourceId) : null,
-        fasta: source.kind === 'gffFasta' ? resourceFile(source.fastaResourceId) : null,
+        gb: ids.gb ? resourceFile(ids.gb) : null,
+        gff: ids.gff ? resourceFile(ids.gff) : null,
+        fasta: ids.fasta ? resourceFile(ids.fasta) : null,
         selector: cloneCanonicalJsonValue(record.selector),
         region: cloneCanonicalJsonValue(record.region),
         presentation: cloneCanonicalJsonValue(record.presentation),
@@ -6238,13 +6232,14 @@ export const projectCanonicalSessionRequest = ({
         { resolveResourceFile, sessionResourceTable }
       );
     }
-    if (source.kind === 'gffFasta') {
-      files.c_gff = resolveResourceFile
-        ? resolveResourceFile(source.gffResourceId)
-        : resourceAsLegacyFile(resources, source.gffResourceId);
-      files.c_fasta = resolveResourceFile
-        ? resolveResourceFile(source.fastaResourceId)
-        : resourceAsLegacyFile(resources, source.fastaResourceId);
+    if (source.kind !== 'genbank') {
+      const ids = recordSourceSlotIds(source);
+      for (const slot of /** @type {const} */ (['gff', 'fasta'])) {
+        if (!ids[slot]) continue;
+        files[CIRCULAR_INPUT_FIELDS[slot]] = resolveResourceFile
+          ? resolveResourceFile(ids[slot])
+          : resourceAsLegacyFile(resources, ids[slot]);
+      }
     }
   } else {
     files.linearSeqs = records.map((record, index) => {
@@ -6256,23 +6251,14 @@ export const projectCanonicalSessionRequest = ({
       const fileSubtitle = String(savedMetadata.fileSubtitle ?? savedMetadata.file_subtitle ?? '');
       const recordLabel = String(record.presentation?.label || '');
       const recordSubtitle = String(record.presentation?.subtitle || '');
+      const ids = recordSourceSlotIds(source);
+      const slotFile = (/** @type {InputSlot} */ slot) => (!ids[slot] ? null
+        : resolveResourceFile ? resolveResourceFile(ids[slot]) : resourceAsLegacyFile(resources, ids[slot]));
       return {
         uid: String(record.recordKey || `canonical-seq-${index + 1}`),
-        gb: source.kind === 'genbank'
-          ? (resolveResourceFile
-              ? resolveResourceFile(source.resourceId)
-              : resourceAsLegacyFile(resources, source.resourceId))
-          : null,
-        gff: source.kind === 'gffFasta'
-          ? (resolveResourceFile
-              ? resolveResourceFile(source.gffResourceId)
-              : resourceAsLegacyFile(resources, source.gffResourceId))
-          : null,
-        fasta: source.kind === 'gffFasta'
-          ? (resolveResourceFile
-              ? resolveResourceFile(source.fastaResourceId)
-              : resourceAsLegacyFile(resources, source.fastaResourceId))
-          : null,
+        gb: slotFile('gb'),
+        gff: slotFile('gff'),
+        fasta: slotFile('fasta'),
         depth: null,
         blast: null,
         losat_gencode: integerSettingOr(savedMetadata.losatGencode ?? savedMetadata.losat_gencode, 1, 1),
@@ -6996,14 +6982,17 @@ export const projectCanonicalSessionRequest = ({
   const blacklistImport = fromCardFiles && explicitBindings?.blacklist != null
     ? withImportedBlacklistWords('', parseBlacklistWords(projectedBlacklistText).words).imported : null;
   if (blacklistImport) projectedFileImports.blacklist = blacklistImport;
-  let inputType = records[0]?.source?.kind === 'gffFasta' ? 'gff' : 'gb';
+  let inputType = inputTypeOfSourceKind(records[0]?.source?.kind);
   // CLI rendering can normalize GFF records to GenBank resources. Without a
   // saved Web draft, initialize the input selector from the original bindings.
   if (storedConfig == null && explicitBindings) {
     const source = renderRequest.mode === 'circular'
       ? { gb: files.c_gb, gff: files.c_gff, fasta: files.c_fasta }
       : files.linearSeqs[0];
-    if (!source?.gb && source?.gff && source?.fasta) inputType = 'gff';
+    // The first input type whose files are all bound (GenBank, then GFF3 + FASTA, then FASTA).
+    const boundSlots = source ?? {};
+    inputType = /** @type {InputType[]} */ (Object.keys(INPUT_TYPES))
+      .find((candidate) => inputSourceFiles(candidate, boundSlots).complete) ?? inputType;
   }
   // Legend and plot-title positions are layout preferences, not form fields:
   // the committed request sets the slot of its own mode and grouping.

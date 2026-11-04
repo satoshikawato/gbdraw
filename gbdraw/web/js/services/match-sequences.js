@@ -1,4 +1,5 @@
 // @ts-check
+import { CIRCULAR_INPUT_FIELDS, inputSequenceSource } from './input-types.js';
 import { formatFastaEntry } from './feature-sequence-fasta.js';
 import { recordSourceInterval } from './record-source-coordinates.js';
 import {
@@ -1106,12 +1107,11 @@ const materializeLinearSequenceRecord = (record, sequenceState) => {
  * the browser reader's, or the Worker's for a file that reader declines (one that starts with a UTF-8 byte order
  * mark), so `#N` and the first record name the records the drawing reads (OV-1599).
  * @param {FileLike | null | undefined} file
- * @param {unknown} inputType
+ * @param {'genbank' | 'fasta'} fmt
  * @returns {Promise<InputSequenceRecord[]>}
  */
-const readInputSequenceRecords = async (file, inputType) => {
+const readInputSequenceRecords = async (file, fmt) => {
   if (!file) return [];
-  const fmt = text(inputType).toLowerCase() === 'gb' ? 'genbank' : 'fasta';
   return (await readAllSequenceRecords(file, fmt))
     .map(({ id, aliases, sequence }) => ({ recordId: id, aliases, sequence }));
 };
@@ -1161,13 +1161,14 @@ export const buildRestoredMatchSequenceSources = async ({
   /** @type {SequenceSourceInput[]} */
   const sources = [];
   if (text(mode).toLowerCase() === 'linear') {
-    const inputType = text(lInputType).toLowerCase() === 'gff' ? 'fasta' : 'gb';
+    const { spec, slot: sequenceSlot, format: fmt } = inputSequenceSource(text(lInputType).toLowerCase());
     for (let recordIndex = 0; recordIndex < (linearSeqs || []).length; recordIndex += 1) {
       const sequenceState = linearSeqs[recordIndex] || {};
-      const file = inputType === 'gb' ? sequenceState.gb : sequenceState.fasta;
-      const records = await readInputSequenceRecords(file, inputType);
+      const file = sequenceState[sequenceSlot];
+      const records = await readInputSequenceRecords(file, fmt);
       const selector = text(sequenceState.region_record_id);
-      const selected = selectInputSequenceRecord(records, inputType === 'gb' ? selector
+      // A FASTA reader of a GFF3 pair counts every FASTA entry; the pair's records are the ones the GFF3 names.
+      const selected = selectInputSequenceRecord(records, spec.paired === null ? selector
         : await gffFastaReaderSelector({ gffFile: sequenceState.gff, fastaFile: file, selector }));
       const record = materializeLinearSequenceRecord(selected, sequenceState);
       if (!record?.sequence) continue;
@@ -1183,9 +1184,9 @@ export const buildRestoredMatchSequenceSources = async ({
     return sources;
   }
 
-  const circularInputType = text(cInputType).toLowerCase() === 'gff' ? 'fasta' : 'gb';
-  const referenceFile = circularInputType === 'gb' ? files?.c_gb : files?.c_fasta;
-  const referenceRecords = await readInputSequenceRecords(referenceFile, circularInputType);
+  const circular = inputSequenceSource(text(cInputType).toLowerCase());
+  const referenceFile = files?.[CIRCULAR_INPUT_FIELDS[circular.slot]];
+  const referenceRecords = await readInputSequenceRecords(referenceFile, circular.format);
   referenceRecords.forEach((record, recordIndex) => {
     if (!record.sequence) return;
     sources.push({

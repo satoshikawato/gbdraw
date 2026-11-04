@@ -69,7 +69,7 @@ Examples:
 Options (examples):
   --gbk                Input GenBank file(s)
   --gff                Input GFF3 file(s) (requires --fasta; mutually exclusive with --gbk)
-  --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)
+  --fasta              Input FASTA file(s) (with --gff, its sequences; alone, records without features; mutually exclusive with --gbk)
   -o, --output         Output file prefix (optional)
   --overwrite          Replace existing output files (default: refuse)
   -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)
@@ -233,10 +233,11 @@ options:
                         compressed
   --gff [GFF3_FILE ...]
                         GFF3 file, plain or gzip-compressed (instead of --gbk;
-                        --fasta is required)
+                        requires --fasta)
   --fasta [FASTA_FILE ...]
-                        FASTA file, plain or gzip-compressed (required with
-                        --gff)
+                        FASTA file, plain or gzip-compressed: with --gff, its
+                        sequences; alone (instead of --gbk), each nucleotide
+                        entry is a record without features
   --records_table TSV   TSV manifest for row-based input records and circular
                         placement metadata.
   -o, --output OUTPUT   output file prefix (default: accession number of the
@@ -837,7 +838,7 @@ The table options accept UTF-8, tab-separated files with a header row, with or w
 
 ### `--records_table`
 
-Use `--records_table` in circular or linear mode when each displayed record needs its own input path, selector, crop, orientation, label, or circular grid placement. It is an alternative to `--gbk` or `--gff` plus `--fasta`, and cannot be combined with those input options.
+Use `--records_table` in circular or linear mode when each displayed record needs its own input path, selector, crop, orientation, label, or circular grid placement. It is an alternative to `--gbk`, `--gff` plus `--fasta`, or `--fasta` alone, and cannot be combined with those input options. Rows of one table use one input kind: GenBank, GFF3/FASTA, or FASTA.
 
 Allowed columns:
 
@@ -845,7 +846,7 @@ Allowed columns:
 | --- | --- | --- |
 | `gbk` | required for GenBank rows | GenBank/GBFF path. |
 | `gff` | required for GFF3/FASTA rows | GFF3 path. |
-| `fasta` | required for GFF3/FASTA rows | FASTA path paired with `gff`. |
+| `fasta` | required for GFF3/FASTA and FASTA rows | FASTA path: the sequences of `gff`, or, in a row without `gff`, a FASTA whose nucleotide entries are records without features. |
 | `record_label` | optional | Linear record label, equivalent to one repeated `--record_label` value. |
 | `record_subtitle` | optional | Linear subtitle line, equivalent to one repeated `--record_subtitle` value. |
 | `record_id` | optional | Record selector for this row, such as a record ID or `#1`. Required when the source file would otherwise load more than one displayed record. |
@@ -1216,10 +1217,11 @@ options:
                         compressed
   --gff [GFF3_FILE ...]
                         GFF3 file, plain or gzip-compressed (instead of --gbk;
-                        --fasta is required)
+                        requires --fasta)
   --fasta [FASTA_FILE ...]
-                        FASTA file, plain or gzip-compressed (required with
-                        --gff)
+                        FASTA file, plain or gzip-compressed: with --gff, its
+                        sequences; alone (instead of --gbk), each nucleotide
+                        entry is a record without features
   --records_table TSV   TSV manifest for row-based input records and per-
                         record options.
   --multi_record_position SELECTOR@ROW

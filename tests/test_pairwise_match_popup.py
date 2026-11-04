@@ -86,6 +86,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
         .replace("./conservation-series.js", "./conservation-series.mjs")
         .replace("./record-discovery.js", "./record-discovery.mjs")
+        .replace("./input-types.js", "./input-types.mjs")
         .replace("./file-content-cache.js", "./file-content-cache.mjs")
         .replace("./record-options.js", "./record-options.mjs")
         .replace("../utils/i18n.js", "./i18n.mjs"),
@@ -125,6 +126,12 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "utils" / "download-names.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    (tmp_path / "input-types.mjs").write_text(
+        (WEB_ROOT / "js" / "services" / "input-types.js")
+        .read_text(encoding="utf-8")
+        .replace("../contracts/schema.generated.js", "./schema.generated.mjs"),
+        encoding="utf-8",
+    )
     (tmp_path / "file-content-cache.mjs").write_text(
         "export const readFileText = (file) => file.text();\n",
         encoding="utf-8",
@@ -156,7 +163,9 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     )
     feature_identity_path = tmp_path / "feature-identity.mjs"
     feature_identity_path.write_text(
-        (WEB_ROOT / "js" / "services" / "feature-identity.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "services" / "feature-identity.js")
+        .read_text(encoding="utf-8")
+        .replace("./input-types.js", "./input-types.mjs"),
         encoding="utf-8",
     )
     (tmp_path / "i18n.mjs").write_text(

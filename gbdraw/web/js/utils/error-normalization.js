@@ -170,12 +170,15 @@ const REASONS = Object.freeze({
   PAIR_TOPOLOGY: 'Each selected pair must join two different available records on adjacent rows, and appear once.',
   OUTFMT7_FIELDS: 'List all 12 standard BLAST outfmt 6 fields in the "# Fields:" line, or remove the line so that the first 12 columns are read in the standard order.',
   EMPTY_FILE: 'The file is empty.', NOT_GENBANK: 'The file is not a GenBank/DDBJ flat file: it has no record header line.',
-  FASTA_IN_GENBANK: 'This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.',
+  FASTA_IN_GENBANK: 'This file looks like FASTA. Choose FASTA (or GFF3 + FASTA when it has a GFF3 file) as the input type, or use a GenBank/DDBJ flat file.',
   // OV-1258, OV-1257: what a GenBank/DDBJ, GFF3, or FASTA slot file lacks.
   GENBANK_PARSE: 'The GenBank/DDBJ file could not be parsed: it may be cut off or damaged. Download or export it again.',
   SEQUENCE_UNDEFINED: 'Sequence content is undefined: a record has no sequence after ORIGIN. Use a GenBank/DDBJ file that includes the sequence.',
   GFF_NO_FEATURES: 'The GFF3 file has no feature lines.',
   FASTA_NO_ENTRIES: 'The FASTA file has no sequence entry: no line starts with ">".',
+  // gbdraw/io/genome.py require_nucleotide_records: a FASTA given without GFF3 holds nucleotide records only.
+  NOT_NUCLEOTIDE: 'This FASTA file holds a sequence that is not nucleotide, such as a protein; gbdraw draws nucleotide records. Use a FASTA file of DNA or RNA sequences (IUPAC codes A C G T U R Y S W K M B D H V N).',
+  EMPTY_SEQUENCE: 'A record of this FASTA file has no sequence. Give each FASTA record its sequence.',
   FONT_FILE: 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.',
   FONT_EMBEDDING: 'Turn off Embed font in exported SVG in Font to export without the font, or choose another font.',
   FONT_RASTER: 'The PNG cannot draw this font. Choose another font.',
@@ -341,6 +344,7 @@ const PHRASES = Object.freeze({
   // OV-2179: the room the labels not placed need (CAPACITY-STOP), the largest of each side, as Python sends it.
   outerLabelRoom: 'Outer labels need about {ratio} times the room around the map.',
   innerLabelRoom: 'Inner labels need about {ratio} times the room around the map.',
+  record: 'Record: {record}.', recordPosition: 'Record #{position}.', letter: 'First letter that is not a nucleotide code: {letter}.',
   position: 'At character {position}.', requiredColumns: 'Required columns: {count}.', loadedRecords: 'Loaded records: {count}.',
   exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
   schema: 'Load a Session file that this version of gbdraw supports.',
@@ -442,6 +446,8 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {string} [featureId]
  * @property {string} [featureType]
  * @property {string} [featureCaption]
+ * @property {string} [recordName] the record a FASTA-only refusal names, as Python sends it (Python decides it can be shown)
+ * @property {number} [recordPosition] the 1-based position of that record in its file, when Python cannot show its ID
  * @property {string} [sessionTable]
  * @property {'circular' | 'linear'} [diagramMode]
  * @property {string} [drawingId] the drawing whose Result the failure concerns, when it is not the one shown
@@ -728,6 +734,8 @@ const contextFor = (value) => {
   // The Web names the feature of a reported placement row (nameFeaturePlacementFailure).
   const caption = typeof value.featureCaption === 'string' ? value.featureCaption.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 80).trimEnd() : '';
   if (caption) context.featureCaption = caption;
+  // Python alone decides whether a record ID can be shown (gbdraw/web_support/error_adapter.py); else it sends the position.
+  if (typeof value.recordName === 'string' && value.recordName !== '') context.recordName = value.recordName;
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
   if (Number.isSafeInteger(value.sessionVersion)) context.sessionVersion = value.sessionVersion;
   if (Number.isSafeInteger(value.latestSessionVersion)) context.latestSessionVersion = value.latestSessionVersion;
@@ -759,9 +767,9 @@ const contextFor = (value) => {
     if (tracks.length) context.keptInsideTracks = tracks.join(',');
   }
   if (typeof value.slotTrack === 'string' && Object.hasOwn(SWITCHED_TRACKS, value.slotTrack)) context.slotTrack = value.slotTrack;
-  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex' | 'limit' | 'width' | 'height' | 'rowLength' | 'dpi'>} */ ([
+  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex' | 'limit' | 'width' | 'height' | 'rowLength' | 'dpi' | 'recordPosition'>} */ ([
     'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex',
-    'limit', 'width', 'height', 'rowLength', 'dpi'
+    'limit', 'width', 'height', 'rowLength', 'dpi', 'recordPosition'
   ])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
@@ -849,6 +857,10 @@ export const normalizeUserFacingError = (value, {
   const [message, actions] = DEFINITIONS[result.code];
   const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
   const { featureId, featureType, featureStart, featureEnd, featureCount, field, reason, position, columnCount, recordCount } = result.context;
+  const { recordName, recordPosition, codepoint } = result.context;
+  // A letter Python names by its code point: itself when printable, else its U+ form.
+  const letter = codepoint === undefined ? '' : codepoint > 0x20 && codepoint < 0x7f
+    ? `"${String.fromCodePoint(codepoint)}"` : `U+${codepoint.toString(16).toUpperCase().padStart(4, '0')}`;
   const featureSpan = featureStart !== undefined && featureEnd !== undefined ? `${featureStart}..${featureEnd}` : '';
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
@@ -876,6 +888,8 @@ export const normalizeUserFacingError = (value, {
     queryRecordIndex !== undefined && subjectRecordIndex !== undefined
       && { text: PHRASES.pair, params: { query: queryRecordIndex + 1, subject: subjectRecordIndex + 1 } },
     featureCaption !== undefined && { text: PHRASES.featureCaption, params: { caption: featureCaption } },
+    recordName !== undefined && { text: PHRASES.record, params: { record: recordName } },
+    recordName === undefined && recordPosition !== undefined && { text: PHRASES.recordPosition, params: { position: recordPosition } },
     row !== undefined && { text: PHRASES.line, params: { row } },
     column !== undefined && { text: PHRASES.column, params: { column } },
     slotIndex !== undefined && { text: PHRASES.trackRow, params: { row: slotIndex + 1 } },
@@ -890,6 +904,7 @@ export const normalizeUserFacingError = (value, {
     exportSize && dpi !== undefined && { text: PHRASES.exportDpi, params: { dpi } },
     sessionVersionGuidance(result.context)
       || (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null),
+    reason === 'NOT_NUCLEOTIDE' && letter && { text: PHRASES.letter, params: { letter } },
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
     ...trackRoomParts(result.context),
     labelFitCounts && { text: labelFitCounts, verbatim: /** @type {const} */ (true) },

@@ -5,6 +5,7 @@
 // (`readOncePerFile`), so a File a Generate already hashed is not read again.
 // The hash pairs a request names (`ConservationPairs`) are recorded with the
 // request when Generate or Load installs it; Save reads that record, no file.
+import { circularInputSlots, inputSequenceSource } from './input-types.js';
 import { normalizeFileList, orderedConservationSources } from './conservation-series.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { CIRCULAR_CONSERVATION_FLOW } from './losat-cache.js';
@@ -80,9 +81,9 @@ export const circularConservationKeys = async (drawing, fileOf, beforeRing = () 
   if (String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload') return { subject: null, rings: [] };
   const sources = orderedConservationSources(normalizeFileList(drawing.files.c_conservation_fastas), drawing.circularConservation);
   if (!sources.length) return { subject: null, rings: [] };
-  const genbank = drawing.inputType.value === 'gb';
-  const subjectFile = fileOf(genbank ? drawing.files.c_gb : drawing.files.c_fasta);
-  const subject = subjectFile ? await readConservationSubject(subjectFile, genbank ? 'genbank' : 'fasta') : null;
+  const { slot, format } = inputSequenceSource(drawing.inputType.value);
+  const subjectFile = fileOf(circularInputSlots(drawing.files)[slot]);
+  const subject = subjectFile ? await readConservationSubject(subjectFile, format) : null;
   /** @type {ConservationRingKey[]} */
   const rings = [];
   for (const source of sources) {
