@@ -18,19 +18,11 @@ import pytest
 import gbdraw
 from gbdraw.api import FastaInputSource
 from gbdraw.api.record_planning import _detected_topology, record_input_manifest_from_table, resolve_record_inputs
-from gbdraw.api.requests import (
-    CircularDiagramRequest,
-    LinearDiagramRequest,
-    RecordCardinality,
-    RecordInput,
-    RenderOutputRequest,
-)
 from gbdraw.circular import circular_main
 from gbdraw.cli_utils.common import add_input_args, validate_input_args
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.genome import load_fasta, load_gff_fasta
 from gbdraw.linear import linear_main
-from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
 from gbdraw.web_support.error_adapter import serialize_web_error
 
 def _two_records(path: Path) -> Path:
@@ -175,29 +167,6 @@ def test_records_table_refuses_mixing_fasta_rows_with_gff_rows(tmp_path: Path) -
 
     with pytest.raises(ValidationError, match="cannot mix GFF3/FASTA rows with FASTA rows"):
         record_input_manifest_from_table(str(table))
-
-
-@pytest.mark.parametrize("mode", ["circular", "linear"])
-def test_canonical_request_round_trips_a_fasta_source(tmp_path: Path, mode: str) -> None:
-    fasta = _two_records(tmp_path / "two.fasta")
-    request_type = CircularDiagramRequest if mode == "circular" else LinearDiagramRequest
-    request = request_type(
-        records=(RecordInput(source=FastaInputSource(fasta), cardinality=RecordCardinality.ALL),),
-        output=RenderOutputRequest(output_directory=tmp_path, output_prefix="out"),
-    )
-
-    encoded = encode_canonical_request(request)
-    payload = json.loads(json.dumps(encoded.payload))
-    source = payload["records"][0]["source"]
-    assert source == {"kind": "fasta", "fastaResourceId": source["fastaResourceId"]}
-    (resource,) = encoded.resources
-    assert (resource.resource_id, resource.kind) == (source["fastaResourceId"], "fasta")
-    decoded = decode_canonical_request(
-        payload, resource_paths={resource.resource_id: fasta}, output_directory=tmp_path
-    )
-
-    assert decoded.records[0].source == FastaInputSource(fasta)
-    assert encode_canonical_request(decoded).payload == encoded.payload
 
 
 def test_worker_helper_lists_a_fasta_alone_through_the_fasta_only_loader(tmp_path: Path) -> None:

@@ -54,6 +54,7 @@ from gbdraw.api.request_render import render_request
 from gbdraw.api.requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
+    FastaInputSource,
     GenBankInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
@@ -733,6 +734,29 @@ def test_codec_module_does_not_import_cli_or_legacy_session_owners() -> None:
         for module in imported_modules
         for prefix in forbidden_prefixes
     )
+
+
+def test_a_fasta_source_round_trips_in_both_modes(tmp_path: Path) -> None:
+    """A FASTA given without GFF3 is the record source kind ``fasta`` (PD-OI-068 rev 2)."""
+
+    fasta = _source_file(tmp_path / "two.fasta", ">first\nACGT\n>second\nGGCC\n")
+    for request_type in (CircularDiagramRequest, LinearDiagramRequest):
+        request = request_type(
+            records=(RecordInput(source=FastaInputSource(fasta)),),
+            output=RenderOutputRequest(output_directory=tmp_path, output_prefix="out"),
+        )
+        encoded = encode_canonical_request(request)
+        source = encoded.payload["records"][0]["source"]
+        assert source == {"kind": "fasta", "fastaResourceId": source["fastaResourceId"]}
+        (resource,) = encoded.resources
+        assert (resource.resource_id, resource.kind) == (source["fastaResourceId"], "fasta")
+        decoded = decode_canonical_request(
+            json.loads(json.dumps(encoded.payload)),
+            resource_paths={resource.resource_id: fasta},
+            output_directory=tmp_path,
+        )
+        assert decoded.records[0].source == FastaInputSource(fasta)
+        assert encode_canonical_request(decoded).payload == encoded.payload
 
 
 def test_circular_request_payload_round_trip_uses_stable_resources(tmp_path: Path) -> None:
