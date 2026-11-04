@@ -4317,6 +4317,17 @@ const buildKeptTrackParts = ({ drawing, filesData, recordCount, resolvedCircular
 // (`recordDisplayControls.allRows`); the caller reads them from the owner that
 // the composition root wires, never from `state` (R13).
 /**
+ * The row of a record that a split of a File card makes (the request builder's split and the Rotate popup's).
+ * While Arrange in rows is off the request carries no row, so the planner gives each record its own row; while it
+ * is on, a member takes its card's row (Owner decision R17-41).
+ * @param {number | null | undefined} cardRow
+ * @param {number} cardIndex
+ * @param {boolean} arranged
+ * @returns {number | null}
+ */
+const splitMemberGridRow = (cardRow, cardIndex, arranged) => (arranged ? cardRow ?? cardIndex + 1 : null);
+
+/**
  * @param {Record<string, any>} input
  * @returns {CanonicalRenderEnvelope}
  */
@@ -4365,6 +4376,7 @@ const projectCanonicalRenderInput = ({
   /** @type {Record<string, any>} */
   const webFiles = {};
   const recordPlan = buildRecords({ drawing, filesData, resources });
+  const arrangedRows = Boolean(drawing.linearRecordLayoutEnabled?.value);
   const drafts = bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows);
   /** @type {number[]} */
   const sourceInputIndexes = [];
@@ -4387,7 +4399,7 @@ const projectCanonicalRenderInput = ({
           cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 },
           presentation: { ...record.presentation,
             reverseComplement: record.region ? false : transforms[rowIndex].reverseComplement,
-            gridRow: record.presentation.gridRow ?? index + 1 },
+            gridRow: splitMemberGridRow(record.presentation.gridRow, index, arrangedRows) },
           display: transforms[rowIndex].display }));
       }
     }
@@ -4408,7 +4420,7 @@ const projectCanonicalRenderInput = ({
         reverseComplement: record.region ? false : transform.reverseComplement },
       display: transform.display }];
   });
-  if (mode === 'linear' && records.length !== recordPlan.records.length) {
+  if (mode === 'linear' && arrangedRows && records.length !== recordPlan.records.length) {
     records.forEach((record, index) => { record.presentation.gridRow ??= sourceInputIndexes[index] + 1; });
   }
   if (records.length === 0) throw new Error('A canonical request requires at least one record.');
@@ -7788,8 +7800,9 @@ const validateRecordTransformTarget = (target, transform, mode) => {
  * @param {CanonicalRecord} record
  * @param {RecordTransformTarget} target
  * @param {number} recordIndex
+ * @param {boolean} arranged whether the committed request places records in rows (a record carries a row)
  */
-const materializeCanonicalRecordCollection = (record, target, recordIndex) => {
+const materializeCanonicalRecordCollection = (record, target, recordIndex, arranged) => {
   const members = Array.isArray(target.members) ? target.members : [];
   const identities = new Set();
   const selectors = new Set();
@@ -7815,7 +7828,7 @@ const materializeCanonicalRecordCollection = (record, target, recordIndex) => {
       presentation: {
         ...(cloneCanonicalJsonValue(record.presentation) || {}),
         reverseComplement: member.committedReverseComplement,
-        gridRow: record.presentation?.gridRow ?? recordIndex + 1
+        gridRow: splitMemberGridRow(record.presentation?.gridRow, recordIndex, arranged)
       }
     };
   });
@@ -7900,7 +7913,8 @@ export const projectCommittedRecordTransform = ({ committed, target, transform }
     const replacements = materializeCanonicalRecordCollection(
       sourceRecord,
       target,
-      sourceIndex
+      sourceIndex,
+      request.records.some((record) => record.presentation.gridRow != null)
     );
     records.splice(sourceIndex, 1, ...replacements);
     targetIndex = sourceIndex + replacements.findIndex(
