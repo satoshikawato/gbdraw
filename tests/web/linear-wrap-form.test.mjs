@@ -44,6 +44,15 @@ test('each wrap refusal names what rows cannot draw and the way out, the text it
   assert.equal(reasonText('toString'), null, 'only the owner\'s own reasons');
 });
 
+// Python raises WRAP_ANCHOR_FEATURE for two causes (refuse_wrapped_anchor_moves): a cut record the anchor moves
+// sideways, and records lined up with a cut reference the anchor does not rotate. One text is true for both.
+test('the Align at feature wrap refusal names both causes Python refuses', () => {
+  const text = reasonText('WRAP_ANCHOR_FEATURE');
+  assert.match(text, /would move a cut record sideways/);
+  assert.match(text, /line the others up with the feature of a cut record that it does not rotate/);
+  assert.doesNotMatch(text, /would move a wrapped record sideways, and/, 'the text that named one cause only');
+});
+
 test('an export over the format limit names the limit, the size and what would fit, and offers SVG', () => {
   const png = normalizeUserFacingError({ code: 'EXPORT_LIMIT', operation: 'export-png', stage: 'export-capture',
     context: { reason: 'PNG_SIZE', limit: 32767, width: 6250, height: 143647, rowLength: 500000, dpi: 68 } });

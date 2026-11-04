@@ -10,6 +10,7 @@ import { diagnosticError, normalizeUserFacingError } from '../utils/error-normal
 import { msg, t } from '../utils/i18n.js';
 import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
 import { recordKeyExpansion } from '../services/record-draw-selection.js';
+import { recordKeyBelongsToRequest } from '../services/feature-placement.js';
 import { computed, ref } from '../utils/reactivity.js';
 
 /** @import { CommittedCanonicalSession, RecordPlacementStart } from '../services/session-request.js' */
@@ -100,15 +101,6 @@ const isFinite = (value) => typeof value === 'number' && Number.isFinite(value);
 const isBase = (value) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
 
 /**
- * The request record a drawn record's key belongs to: the record of that key, or, for a record that draws every
- * record of its file, one of its members `<key>:<k>`, which Python draws one by one.
- * @param {{ recordKey: string, cardinality: string }} record
- * @param {string} key
- */
-const drawsRecordKey = (record, key) => key === record.recordKey
-  || (record.cardinality === 'all' && recordKeyExpansion(key, record.recordKey) !== null);
-
-/**
  * Check the helper reply against the request it was asked for: one entry per
  * drawn record, by record key, in the request's order, every request record
  * drawn (a record that draws every record of its file by its members, each
@@ -131,7 +123,9 @@ export const validateFeatureAnchorReply = (value, requestRecords) => {
       status: record.status, startCoordinate: record.startCoordinate, beforeX: record.beforeX, afterX: record.afterX });
   });
   const keys = records.map(({ recordKey }) => recordKey);
-  const owners = keys.map((key) => requestRecords.findIndex((record) => drawsRecordKey(record, key)));
+  // The request record each drawn key belongs to: the record of that key, or, for a record that draws every record of
+  // its file, one of its members `<key>:<k>`, which Python draws one by one.
+  const owners = keys.map((key) => requestRecords.findIndex((record) => recordKeyBelongsToRequest(key, [record])));
   const members = keys.map((key, index) => (owners[index] < 0 ? null : recordKeyExpansion(key, requestRecords[owners[index]].recordKey)));
   // Each request record in its order, and the members of one in theirs.
   const ordered = owners.every((owner, index) => owner >= 0 && (index === 0 || owner > owners[index - 1]
@@ -192,7 +186,7 @@ export const createFeatureAnchorAction = ({
         return current.recordKey === entry.recordKey && current.x === entry.x && current.y === entry.y;
       })
       && starts.every(({ recordKey, startCoordinate }) => request.records.some((record) => record.recordKey === recordKey
-        && record.display?.startCoordinate === startCoordinate));
+        && record.display.startCoordinate === startCoordinate));
   });
   const notice = computed(() => (applied.value ? noticeState.value.text : ''));
   let actionId = 0;

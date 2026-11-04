@@ -1154,10 +1154,12 @@ writes the starts and the record positions once, as one History step that one
 Undo reverts, and draws them; the next Generate draws the same figure, and
 later changes do not align the records again. Applying clears an active
 Similarity alignment, as a record drag does. A selector that no record
-matches, matches at different starts in one record, records that share a row,
-a record that Wrap Rows cuts and Align at feature would move sideways, and
-records that share one File card (a file with several records that is not yet
-split into one card per record) are refused with the reason. See [Record selection and
+matches, matches at different starts in one record, records that share a row
+(new Record Layout rows count after Generate), a record that Wrap Rows cuts and
+Align at feature would move sideways, records lined up with a record that Wrap
+Rows cuts and Align at feature does not rotate, and records that share one File
+card (a loaded Session can keep a file with several records on one card;
+Generate gives each record its own card) are refused with the reason. See [Record selection and
 layout](command-line.md#record-selection-and-layout) for the matching rules.
 
 ### Wrap Rows

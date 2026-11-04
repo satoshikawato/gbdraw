@@ -23,14 +23,18 @@ write-up of a release.
 - Added: `--dpi` and a `dpi` argument on `save_figure_to()`,
   `render_to_bytes()`, `Diagram.to_bytes()`, `Diagram.save()`, and
   `RenderOutputRequest` scale PNG pixels by `dpi / 96`.
-- Changed: `--anchor_feature` and the Python `anchor_feature` rotate a complete
-  circular record so that the feature starts at its left end, at the base it was
-  aligned at before, instead of moving it sideways; its display start becomes
-  that base. Linear records, records drawn linear, and records cropped by
-  `--region` still move sideways, to the left end of the first rotated record.
-  Records the anchor only rotates can be wrapped by `--wrap_length`; a wrap is
-  refused only when the anchor would move a cut record sideways. Saved Sessions
-  store the starts with the translations.
+- Changed: `--anchor_feature`, the Python `anchor_feature`, and **Align at
+  feature** in the Web app rotate a complete circular record so that the feature
+  starts at its left end, at the base it was aligned at before, instead of
+  moving it sideways; its display start becomes that base. Linear records,
+  records drawn linear, and records cropped by `--region` still move sideways,
+  to the left end of the first rotated record. In the Web app, **Align records**
+  rotates the records, their **Display start** shows the new base, and one Undo
+  restores the starts and the positions. Records the anchor only rotates can be
+  wrapped by `--wrap_length` and **Wrap Rows**; a wrap is refused when the
+  anchor would move a cut record sideways, or line the records up with a cut
+  record it does not rotate. Saved Sessions store the starts with the
+  translations.
 - Fixed: the Python API drew the rows of a wrapped figure with a light gray
   ruler where the CLI and the Web app drew dim gray; all three now draw dim gray
   (OV-2495).

@@ -121,7 +121,7 @@ test('validateFeatureAnchorReply admits the members of a File card that draws se
 // several records have no row of their own, so Resolve refuses such a reply with the reason.
 test('a reply for the members of a File card that draws several records is refused at Resolve with the reason', async () => {
   const committed = { renderRequest: { mode: 'linear', layout: {},
-    records: [{ recordKey: 'card', cardinality: 'all', display: null, presentation: { reverseComplement: false } }] }, resources: {} };
+    records: [{ recordKey: 'card', cardinality: 'all', display: { isCircular: null, startCoordinate: null }, presentation: { reverseComplement: false } }] }, resources: {} };
   const members = { selector: 'gene=COX1',
     records: [1, 2].map((k) => ({ recordKey: `card:${k}`, recordId: `R${k}`, status: 'rotated', startCoordinate: 10 * k, beforeX: 0, afterX: 0 })),
     recordTranslations: [1, 2].map((k) => ({ recordKey: `card:${k}`, x: 0, y: 0 })) };
@@ -130,10 +130,24 @@ test('a reply for the members of a File card that draws several records is refus
   assert.deepEqual(await action.resolve(), { status: 'error' });
   assert.equal(action.error.value.code, 'INPUT_INVALID');
   assert.equal(reasonOf(action.error.value), 'ANCHOR_RECORD_CARDS');
-  assert.match(action.error.value.summary, /Give each record its own File card, then use Align at feature again\./);
+  assert.match(action.error.value.summary, /Click Generate Diagram, which gives each record its own File card, then use Align at feature again\./);
   assert.equal(action.preview.value, null);
   assert.equal(action.status.value, 'idle');
   assert.equal(page.runs.length, 0);
+});
+
+// Align at feature reads the drawn request: new Record Layout rows count after a Generate (OV-2501).
+test('a refusal for records that share a row names the Generate that makes new rows count', async () => {
+  const refusal = Object.assign(new Error('Worker error'), {
+    code: 'INPUT_INVALID', operation: 'resolveFeatureAnchor', stage: 'helper',
+    context: { field: 'anchor_feature', reason: 'ANCHOR_SHARED_ROW' }
+  });
+  const { action } = fixture({ helper: async () => { throw refusal; } });
+  action.selector.value = 'gene=COX1';
+  assert.deepEqual(await action.resolve(), { status: 'error' });
+  assert.equal(reasonOf(action.error.value), 'ANCHOR_SHARED_ROW');
+  assert.match(action.error.value.summary,
+    /Give each record its own row in Record Layout, click Generate Diagram, then use Align at feature again\./);
 });
 
 test('Apply over an active Similarity alignment writes the translations and starts without the plan, in one step, and announces the clearing', async () => {

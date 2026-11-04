@@ -8071,7 +8071,7 @@ export const projectCommittedSimilarityAlignment = ({ committed, plan, translati
       // The start names a record the committed request does not draw: it was resolved on another Result.
       throw diagnosticError('INPUT_INVALID', { field: 'anchor_feature', reason: 'ANCHOR_STALE' });
     }
-    targets[0].display = { ...(targets[0].display || { isCircular: null }), startCoordinate };
+    targets[0].display = { ...targets[0].display, startCoordinate };
   }
   request.layout = { recordGapPx: DEFAULT_LINEAR_RECORD_GAP_PX, multiRecordPositions: null, ...request.layout,
     similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
