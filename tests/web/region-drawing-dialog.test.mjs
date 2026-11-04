@@ -186,3 +186,12 @@ test('every setting that can return to Auto is named by an English UI text, neve
   }
   assert.equal(adaptableSettingLabel('linear', 'objects.unknown.size'), 'objects.unknown.size');
 });
+
+test('a setting that a section names in the pane names its track or section in the dialog list', async () => {
+  const { adaptableSettingLabel } = await import('../../gbdraw/web/js/app/region-drawing.js');
+  assert.deepEqual(['window', 'step', 'depth_window', 'depth_step', 'objects.gc_content.tick_font_size',
+    'objects.definition.linear.font_size'].map((setting) => adaptableSettingLabel('linear', setting)), [
+    'GC content/skew window', 'GC content/skew step', 'Depth Window', 'Depth Step', 'GC content tick font size',
+    'Definition font size'
+  ]);
+});

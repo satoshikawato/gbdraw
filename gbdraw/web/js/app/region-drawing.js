@@ -84,8 +84,9 @@ export const regionSourceRecords = (requestRecords, sources, featuresOf) => draw
  * The English name of each setting that can return to Auto, by setting ID
  * (`autoSizes.adaptableSettings` of `mode-profiles.generated.js`, from
  * `ADAPTABLE_SETTINGS` in `gbdraw/auto_sizes.py`): the text of the settings
- * pane's control for it, or a name of its own where no control sets it. A
- * setting that each mode names differently has one text per mode.
+ * pane's control for it, or a name of its own where no control sets it or
+ * where the control's text needs its section to be read (Window, Tick Font
+ * Size). A setting that each mode names differently has one text per mode.
  * @type {Readonly<Record<string, string | Readonly<Record<DerivedRegionDrawing['mode'], string>>>>}
  */
 const ADAPTABLE_SETTING_TEXT = Object.freeze({
@@ -99,11 +100,11 @@ const ADAPTABLE_SETTING_TEXT = Object.freeze({
   'objects.axis.linear.stroke_width': msg('Axis Stroke Width'),
   'canvas.linear.arrow_length_parameter': msg('Linear arrow length'),
   'canvas.linear.default_cds_height': msg('Feature Height'),
-  'objects.definition.linear.font_size': msg('Default font size'),
+  'objects.definition.linear.font_size': msg('Definition font size'),
   'objects.scale.font_size': msg('Scale Font Size'),
   'objects.scale.ruler_label_font_size': msg('Ruler Label Font Size'),
-  window: msg('Window'),
-  step: msg('Step'),
+  window: msg('GC content/skew window'),
+  step: msg('GC content/skew step'),
   depth_window: msg('Depth Window'),
   depth_step: msg('Depth Step'),
   'circularSlot.features.width': msg('Feature Track Width'),
@@ -115,7 +116,7 @@ const ADAPTABLE_SETTING_TEXT = Object.freeze({
   }),
   'canvas.linear.default_gc_height': msg('GC Height'),
   'canvas.linear.depth_height': msg('Default Depth Height'),
-  'objects.gc_content.tick_font_size': msg('Tick Font Size'),
+  'objects.gc_content.tick_font_size': msg('GC content tick font size'),
   'objects.depth.tick_font_size': msg('Depth tick font size')
 });
 
