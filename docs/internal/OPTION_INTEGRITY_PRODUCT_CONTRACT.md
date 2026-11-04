@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `114`
+- Contract revision: `115`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -4312,6 +4312,45 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
+- Revision 115 changes: `PD-OI-096` gains scenario revision `3` (concern
+  `web.legend.position-of-mode`, the same choice
+  `B / MODE-DEFAULT-LISTED-AT-LOAD`). A Python- or CLI-saved Linear Session
+  that states no `output` (or a null title position) is read as Python and the
+  CLI draw it: the legend on the right and the title at the bottom. This holds
+  for the drawing a Load opens and for a drawing it does not open; the latter
+  now reads the legend and title positions of its own request (OV-2493)
+  instead of the Web's new-drawing layout. A stated position is read as
+  stated. A position Linear cannot use is still read as the Linear default
+  position (`bottom`). A new Linear drawing in the Web, including one made
+  from a Region, still starts with the legend and the title at the bottom and
+  saves them so.
+  - The question was R17-38 (campaign `multi-drawing-project-20261007`,
+    OV-2491): Python and the CLI draw an absent Linear `output` with the legend
+    on the right, while the Web's Load filled its new-Linear layout. The Claude
+    Code session `5418b5ed` asked, and the Owner replied
+    「B: Web が Python 既定で読む (推奨)」.
+  - R17-39 (`2026-11-04`, session `1e59bee5` of the same campaign) asked four
+    questions; each question and reply is quoted as recorded:
+    - Q1 「OV-2491（R17-38 B の続き）Q1: Linear の Session の request に、Linear で使えない凡例の位置（例: upper_left。Python は拒否するので手で書き換えたファイルにだけありうる）があるとき、Web の Load はどの位置で読みますか？（R17-38 で「output がないとき」は Python の既定 right になります）」
+      Reply: 「bottom のまま (推奨)」
+    - Q2 「OV-2491 Q2: Linear の request に output がない（または題の位置が null の）とき、題（plot title）の位置はどこから取りますか？ 今は Python の既定も Web の新しい Linear の図も bottom なので、どちらを選んでも今の図は変わりません。」
+      Reply: 「Python の既定 (推奨)」
+    - Q3 「OV-2491 Q3: Web の「領域から新しい図」で Circular の図から作る Linear の図の凡例の位置は？ Python の領域の導出（derive_region_request）は output を書かないので、Python/CLI では凡例が right になります。」
+      Reply: 「Web の新規図 bottom (推奨)」
+    - Q4 「OV-2491 Q4: PD-OI-096 の scenario revision 3 の receipt 案（/home/kawato/gbdraw-baselines/multi-drawing-project-20261007/postb/DRAFT-PD-OI-096-r3.md）を、Q1〜Q3 の答えに合わせて直したうえで Contract revision 115 に書き、PR を開いてよいですか？ 案には次の受け入れるリスクが入ります: 以前の版の Web で Python 保存の Session を開き、凡例が下にあった Linear の図（Load で開かない図だけ）は、読み込みのあと最初の Generate か凡例の編集で凡例が右へ移る（読み込んだ直後の図は保存されたまま）。」
+      Reply: 「案のとおり承認 (推奨)」
+  - R17-40 (`2026-11-04`, session `1e59bee5`) was asked because the R17-39 Q4
+    preview did not show the rewritten sentence of Must preserve verbatim. Its
+    preview held the full receipt verbatim. The question was 「OV-2491 の確認（1 問だけ）: 先ほどの Q4 の preview には、〔集合の外の値〕の文の書き換え（[CHANGED-2]）が正確な文で入っていませんでした（Q1 では「その mode の既定の位置（Linear は bottom）」と略して書きました）。Contract revision 115 に書く PD-OI-096 scenario revision 3 の receipt 全文は preview のとおりです。この全文で承認しますか？」
+    Reply: 「この全文で承認 (推奨)」
+  - Only the R17-40 receipt is serialized, as scenario revision `3`.
+  - New receipt SHA-256: `PD-OI-096` scenario revision `3`
+    `b3ce0c33f7b73660c7ce717f5368d52d268fee41c312bcbb2d85d289c7d7d528`.
+  - `PD-OI-096` scenario revision `3` supersedes scenario revision `2`.
+  - The runtime, tests, and documentation that implement it are in the same
+    pull request. This change is a static Product Contract co-change; the
+    Review is `REQUIRED`.
+  - No other record is amended or retired.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -9396,50 +9435,50 @@ Decision date: 2026-10-13
 ### PD-OI-096: Legend position of a diagram mode at Load
 
 - Concern key: `web.legend.position-of-mode`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-096`, scenario revision `1`. Scenario revision `2`
-  keeps every field of scenario revision `1` except its Accepted residual
-  risk, its scenario revision, and its decision date.
+- Scenario revision: `3`
+- Supersedes: `PD-OI-096`, scenario revision `2` (Revision 115 entry above).
+  Scenario revision `3` keeps every field of scenario revision `2` except
+  those its Revision 115 entry names: its Rationale, Must preserve, May
+  retire, and Accepted residual risk, its scenario revision, and its decision
+  date. Scenario revision `2` superseded scenario revision `1`.
 - Status: `ACCEPTED`
 - Selected outcome: `B / MODE-DEFAULT-LISTED-AT-LOAD`
-- Normative outcome: exactly the complete approved scenario revision `2`
+- Normative outcome: exactly the complete approved scenario revision `3`
   `PRODUCT_DECISION` receipt and its JSON representation below.
 - Decision source: the Owner replies quoted verbatim in the Revision 48 entry
-  (scenario revision `1`) and the Revision 55 entry (scenario revision `2`)
-  above. The Owner approved the scenario revision `1` receipt as written, and
-  the Accepted residual risk of scenario revision `2` as written; the other
-  fields are those of scenario revision `1`. The receipt reproduces its
-  fields without translation or additional terms. Dependent runtime requires
-  this authority merged into its base, or merged together with it through the
-  reviewed static Product Contract co-change route; this record supplies no
-  runtime acceptance evidence.
-- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
-  `abb6fe7056b5b15c82a883c3b5e3d9f13892a472a499e9fbca3986cdda2f6a87`.
+  (scenario revision `1`), the Revision 55 entry (scenario revision `2`), and
+  the Revision 115 entry (scenario revision `3`) above. The Owner approved the
+  scenario revision `3` receipt as written (R17-40). The receipt reproduces its
+  fields without translation or additional terms. Dependent runtime merges
+  together with this authority through the reviewed static Product Contract
+  co-change route; this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `b3ce0c33f7b73660c7ce717f5368d52d268fee41c312bcbb2d85d289c7d7d528`.
 
 ```text
 PRODUCT_DECISION
 Concern: web.legend.position-of-mode
-Scenario revision: 2
+Scenario revision: 3
 Choice: B / MODE-DEFAULT-LISTED-AT-LOAD
-Rationale: 0.13.0 までの版が保存したファイルにも、その mode で使えない凡例の位置（Linear の upper_left など）がありうる。拒否せずに読み込み、Generate が失敗しないようにする。直せなかった値は読み込む前に知らせる。Session 31 以降はすでに描画済みの側をこう読んでいるので、古い Session もそろえる。
-Must preserve: 〔mode の位置〕mode の集合にある位置（Circular: left、right、top、bottom、upper_left、upper_right、lower_left、lower_right、none。Linear: left、right、top、bottom、none）の読み込み、保存、Generate、History。大文字や前後の空白を含む値は小文字にして位置として読み、知らせない。〔集合の外の値〕その mode で使えない値は、設定の凡例の位置なら値がないときと同じ位置（ふつうはその mode の既定の位置。Circular は left、Linear は bottom）として、読み込んだ Result に保存された描画済みの凡例の側ならその mode の既定の位置として読み、読み込む前の確認 dialog に載せる。構成 metadata に保存された側が空のときも、その mode の既定の位置として読む。〔値がないとき〕値がないときは現在の既定の位置のまま（構成 metadata のない古い Result の描画済みの側は、空白だけの値も含めて none）。〔図〕読み込んだ直後の図は保存されたときのまま。〔CLI と Python〕CLI と Python API の検証とエラー文は変えない。
-May retire: 集合の外の凡例の位置をそのまま保持し、Generate が "Input validation failed" で失敗する動作。集合の外の描画済みの側で、最初の凡例の編集が Linear の角へ凡例を置く動作。大文字や空白を含む、または集合の外や空の描画済みの側で、読み込みや表示が失敗する動作。
-Accepted residual risk: 0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る。0.13.0 までの版が mode を切り替えてから保存した Session のうち、最後の Generate の mode を記録していないものは、保存したときに表示していた mode の Result として読む。
+Rationale: 0.13.0 までの版が保存したファイルにも、その mode で使えない凡例の位置（Linear の upper_left など）がありうる。拒否せずに読み込み、Generate が失敗しないようにする。直せなかった値は読み込む前に知らせる。Session 31 以降はすでに描画済みの側をこう読んでいるので、古い Session もそろえる。Python で保存した Linear の Session は output を書かない。Web も Python と同じ位置で読み、どの画面でも同じ図にする（R17-38）。
+Must preserve: 〔mode の位置〕mode の集合にある位置（Circular: left、right、top、bottom、upper_left、upper_right、lower_left、lower_right、none。Linear: left、right、top、bottom、none）の読み込み、保存、Generate、History。大文字や前後の空白を含む値は小文字にして位置として読み、知らせない。〔集合の外の値〕その mode で使えない値は、設定の凡例の位置ならその mode の既定の位置（Circular は left、Linear は bottom）として、読み込んだ Result に保存された描画済みの凡例の側ならその mode の既定の位置として読み、読み込む前の確認 dialog に載せる。構成 metadata に保存された側が空のときも、その mode の既定の位置として読む。〔値がないとき〕値がないときは現在の既定の位置のまま（構成 metadata のない古い Result の描画済みの側は、空白だけの値も含めて none）。ただし Linear の図の保存された request に output がないとき、または output の題の位置が null のときは、Python と CLI が描く位置（凡例は right、題は bottom）として読む。読み込みで開く図でも開かない図でも同じ。Web で新しく作る Linear の図（領域から作る図も含む）は凡例も題も bottom で始まり、保存にもそう書く。〔図〕読み込んだ直後の図は保存されたときのまま。〔CLI と Python〕CLI と Python API の検証とエラー文は変えない。
+May retire: 集合の外の凡例の位置をそのまま保持し、Generate が "Input validation failed" で失敗する動作。集合の外の描画済みの側で、最初の凡例の編集が Linear の角へ凡例を置く動作。大文字や空白を含む、または集合の外や空の描画済みの側で、読み込みや表示が失敗する動作。Linear の request に output がないとき、凡例も題も下として読む動作。読み込みで開かない図で、request に書かれた凡例と題の位置を読まない動作。
+Accepted residual risk: 0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る。0.13.0 までの版が mode を切り替えてから保存した Session のうち、最後の Generate の mode を記録していないものは、保存したときに表示していた mode の Result として読む。以前の版の Web で Python が保存した Session を開き、凡例が下にあった Linear の図は、読み込みのあと最初の Generate か凡例の編集で凡例が右へ移る。
 Owner: satoshikawato
-Decision date: 2026-10-16
+Decision date: 2026-11-04
 ```
 
 ```json
 {
   "concern": "web.legend.position-of-mode",
-  "scenarioRevision": 2,
+  "scenarioRevision": 3,
   "choice": "B / MODE-DEFAULT-LISTED-AT-LOAD",
-  "rationale": "0.13.0 までの版が保存したファイルにも、その mode で使えない凡例の位置（Linear の upper_left など）がありうる。拒否せずに読み込み、Generate が失敗しないようにする。直せなかった値は読み込む前に知らせる。Session 31 以降はすでに描画済みの側をこう読んでいるので、古い Session もそろえる。",
-  "mustPreserve": "〔mode の位置〕mode の集合にある位置（Circular: left、right、top、bottom、upper_left、upper_right、lower_left、lower_right、none。Linear: left、right、top、bottom、none）の読み込み、保存、Generate、History。大文字や前後の空白を含む値は小文字にして位置として読み、知らせない。〔集合の外の値〕その mode で使えない値は、設定の凡例の位置なら値がないときと同じ位置（ふつうはその mode の既定の位置。Circular は left、Linear は bottom）として、読み込んだ Result に保存された描画済みの凡例の側ならその mode の既定の位置として読み、読み込む前の確認 dialog に載せる。構成 metadata に保存された側が空のときも、その mode の既定の位置として読む。〔値がないとき〕値がないときは現在の既定の位置のまま（構成 metadata のない古い Result の描画済みの側は、空白だけの値も含めて none）。〔図〕読み込んだ直後の図は保存されたときのまま。〔CLI と Python〕CLI と Python API の検証とエラー文は変えない。",
-  "mayRetire": "集合の外の凡例の位置をそのまま保持し、Generate が \"Input validation failed\" で失敗する動作。集合の外の描画済みの側で、最初の凡例の編集が Linear の角へ凡例を置く動作。大文字や空白を含む、または集合の外や空の描画済みの側で、読み込みや表示が失敗する動作。",
-  "acceptedResidualRisk": "0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る。0.13.0 までの版が mode を切り替えてから保存した Session のうち、最後の Generate の mode を記録していないものは、保存したときに表示していた mode の Result として読む。",
+  "rationale": "0.13.0 までの版が保存したファイルにも、その mode で使えない凡例の位置（Linear の upper_left など）がありうる。拒否せずに読み込み、Generate が失敗しないようにする。直せなかった値は読み込む前に知らせる。Session 31 以降はすでに描画済みの側をこう読んでいるので、古い Session もそろえる。Python で保存した Linear の Session は output を書かない。Web も Python と同じ位置で読み、どの画面でも同じ図にする（R17-38）。",
+  "mustPreserve": "〔mode の位置〕mode の集合にある位置（Circular: left、right、top、bottom、upper_left、upper_right、lower_left、lower_right、none。Linear: left、right、top、bottom、none）の読み込み、保存、Generate、History。大文字や前後の空白を含む値は小文字にして位置として読み、知らせない。〔集合の外の値〕その mode で使えない値は、設定の凡例の位置ならその mode の既定の位置（Circular は left、Linear は bottom）として、読み込んだ Result に保存された描画済みの凡例の側ならその mode の既定の位置として読み、読み込む前の確認 dialog に載せる。構成 metadata に保存された側が空のときも、その mode の既定の位置として読む。〔値がないとき〕値がないときは現在の既定の位置のまま（構成 metadata のない古い Result の描画済みの側は、空白だけの値も含めて none）。ただし Linear の図の保存された request に output がないとき、または output の題の位置が null のときは、Python と CLI が描く位置（凡例は right、題は bottom）として読む。読み込みで開く図でも開かない図でも同じ。Web で新しく作る Linear の図（領域から作る図も含む）は凡例も題も bottom で始まり、保存にもそう書く。〔図〕読み込んだ直後の図は保存されたときのまま。〔CLI と Python〕CLI と Python API の検証とエラー文は変えない。",
+  "mayRetire": "集合の外の凡例の位置をそのまま保持し、Generate が \"Input validation failed\" で失敗する動作。集合の外の描画済みの側で、最初の凡例の編集が Linear の角へ凡例を置く動作。大文字や空白を含む、または集合の外や空の描画済みの側で、読み込みや表示が失敗する動作。Linear の request に output がないとき、凡例も題も下として読む動作。読み込みで開かない図で、request に書かれた凡例と題の位置を読まない動作。",
+  "acceptedResidualRisk": "0.13.0 が Linear の角に描いた凡例は、最初の凡例の編集で図の下へ移る。0.13.0 までの版が mode を切り替えてから保存した Session のうち、最後の Generate の mode を記録していないものは、保存したときに表示していた mode の Result として読む。以前の版の Web で Python が保存した Session を開き、凡例が下にあった Linear の図は、読み込みのあと最初の Generate か凡例の編集で凡例が右へ移る。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-16"
+  "decisionDate": "2026-11-04"
 }
 ```
 
