@@ -76,7 +76,9 @@ _DIAGNOSTIC_INTEGER_KEYS = frozenset(
     "row column columnCount seriesIndex slotIndex innerPx outerPx keptInsidePx placementIndex queryRecordIndex "
     "subjectRecordIndex limit width height rowLength dpi codepoint".split()
 )
-# A record named in a diagnostic (a FASTA-only record gbdraw cannot draw): one line of printable text.
+# A record named in a diagnostic (a FASTA-only record gbdraw cannot draw): its ID when the ID is one line of
+# printable ASCII text, else its 1-based position (``recordPosition``). The one owner of this bound: the Web shows
+# what it receives.
 _RECORD_NAME = re.compile(r"[\x21-\x7e][\x20-\x7e]{0,79}")
 
 # The engine computes a Result from the request alone, so an unclassified failure
@@ -233,8 +235,11 @@ def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
         if type(value) is int and 0 <= value <= 10_000_000:
             context[key] = value
     record_name = diagnostic.get("recordName")
+    record_position = diagnostic.get("recordPosition")
     if isinstance(record_name, str) and _RECORD_NAME.fullmatch(record_name):
         context["recordName"] = record_name
+    elif type(record_position) is int and 1 <= record_position <= 10_000_000:
+        context["recordPosition"] = record_position
     # A context value is a bounded scalar: the kept rows travel as one comma-separated text.
     kept_tracks = diagnostic.get("keptInsideTracks")
     if diagnostic["code"] == "TRACK_LAYOUT" and isinstance(kept_tracks, list):

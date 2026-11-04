@@ -204,6 +204,7 @@ from .requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
+    FastaInputSource,
     GenBankInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
@@ -1867,7 +1868,7 @@ def _resolve_ring_losat(
     if options.losat_search is None:
         return options, ()
 
-    def genbank_records(source: GenBankInputSource) -> tuple[SeqRecord, ...]:
+    def file_records(source: GenBankInputSource | FastaInputSource) -> tuple[SeqRecord, ...]:
         parsed = parsed_sources.get(_source_key(source))
         # A request served from the prepared resolved-record cache made no parse
         # here: the prepared parsed source holds it.
@@ -1883,7 +1884,7 @@ def _resolve_ring_losat(
     return resolve_circular_conservation_losat(
         options,
         subject_records=ring_subject_records(
-            (item.source for item in record_inputs), genbank_records=genbank_records
+            (item.source for item in record_inputs), file_records=file_records
         ),
         drawn_records=drawn_records,
         load_sequences=load_sequences,

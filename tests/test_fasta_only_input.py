@@ -70,17 +70,40 @@ def test_load_fasta_refuses_a_record_that_is_not_nucleotide(
     with pytest.raises(ValidationError) as caught:
         load_fasta([str(path)])
 
-    expected = {"code": "INPUT_INVALID", "reason": reason, "recordName": "LvMJNV_ORF1"}
+    position = 1 if text.startswith(">LvMJNV_ORF1") else 2
+    expected = {"code": "INPUT_INVALID", "reason": reason, "recordName": "LvMJNV_ORF1", "recordPosition": position}
     if letter is not None:
         expected["codepoint"] = ord(letter)
     assert caught.value.diagnostic == expected
     assert "LvMJNV_ORF1" in str(caught.value)
-    # The Web receives the record's name and the letter, not the message.
+    # The Web receives the record's name (not its position, as the name can be shown) and the letter, not the message.
     payload = serialize_web_error(caught.value, operation="listSequenceRecords", stage="helper")
     assert payload["code"] == "INPUT_INVALID"
-    assert {key: payload["context"][key] for key in expected if key != "code"} == {
-        key: value for key, value in expected.items() if key != "code"
+    assert payload["context"] == {
+        key: value for key, value in expected.items() if key not in {"code", "recordPosition"}
     }
+
+
+@pytest.mark.parametrize(
+    ("header", "shown"),
+    [
+        ("\u30bf\u30f3\u30d1\u30af", "\u30bf\u30f3\u30d1\u30af"),  # a non-ASCII ID: the CLI shows it, the Web gets the position
+        ("x" * 81, "x" * 81),  # an ID over the bound
+        ("", "#2"),  # ">" alone: no ID
+    ],
+)
+def test_a_refused_record_whose_id_cannot_be_shown_is_named_by_its_position(
+    tmp_path: Path, header: str, shown: str
+) -> None:
+    path = tmp_path / "input.fasta"
+    path.write_text(f">dna\nACGT\n>{header}\nMKLVE\n", encoding="utf-8")
+
+    with pytest.raises(ValidationError) as caught:
+        load_fasta([str(path)])
+
+    assert f"FASTA record {shown} in input.fasta holds 'L'" in str(caught.value)
+    payload = serialize_web_error(caught.value, operation="listSequenceRecords", stage="helper")
+    assert payload["context"] == {"reason": "NOT_NUCLEOTIDE", "recordPosition": 2, "codepoint": ord("L")}
 
 
 def test_load_fasta_warns_on_repeated_ids(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:

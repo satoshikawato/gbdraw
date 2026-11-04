@@ -224,9 +224,16 @@ def load_gbks(
     )
 
 
-def _fasta_record_diagnostic(reason: str, record: SeqRecord, letter: str | None = None) -> dict[str, object]:
-    """The diagnostic of a FASTA-only record gbdraw cannot draw: the Web names the record and the letter."""
-    diagnostic: dict[str, object] = {"code": "INPUT_INVALID", "reason": reason, "recordName": str(record.id)}
+def _fasta_record_diagnostic(
+    reason: str, record: SeqRecord, position: int, letter: str | None = None
+) -> dict[str, object]:
+    """The diagnostic of a FASTA-only record gbdraw cannot draw: its ID, its 1-based position, and the letter.
+
+    The Web error adapter keeps the ID when it can be shown, else the position.
+    """
+    diagnostic: dict[str, object] = {
+        "code": "INPUT_INVALID", "reason": reason, "recordName": str(record.id), "recordPosition": position,
+    }
     if letter is not None:
         diagnostic["codepoint"] = ord(letter)
     return diagnostic
@@ -237,23 +244,26 @@ def require_nucleotide_records(records: list[SeqRecord], path: str) -> list[SeqR
 
     A record needs a sequence, and its sequence may hold only IUPAC nucleotide
     codes (A C G T U R Y S W K M B D H V N, either case). The diagnostic names the
-    record and, for a letter that is not a nucleotide code, that letter.
+    record (its ID and its 1-based position) and, for a letter that is not a
+    nucleotide code, that letter.
     """
 
     name = os.path.basename(path)
-    for record in records:
+    for position, record in enumerate(records, start=1):
         sequence = str(record.seq)
+        shown = record.id or f"#{position}"
         if not sequence:
             raise ValidationError(
-                f"FASTA record {record.id} in {name} has no sequence. Give each FASTA record its sequence.",
-                diagnostic=_fasta_record_diagnostic("EMPTY_SEQUENCE", record),
+                f"FASTA record {shown} in {name} has no sequence. Give each FASTA record its sequence.",
+                diagnostic=_fasta_record_diagnostic("EMPTY_SEQUENCE", record, position),
             )
-        letter = next((char for char in sequence if char not in _IUPAC_NUCLEOTIDE_CODES), None)
-        if letter is not None:
+        # The first letter that is not a nucleotide code is looked for only when one exists.
+        if set(sequence) - _IUPAC_NUCLEOTIDE_CODES:
+            letter = next(char for char in sequence if char not in _IUPAC_NUCLEOTIDE_CODES)
             raise ValidationError(
-                f"FASTA record {record.id} in {name} holds {letter!r}, which is not a nucleotide code: "
+                f"FASTA record {shown} in {name} holds {letter!r}, which is not a nucleotide code: "
                 "gbdraw draws nucleotide records (IUPAC codes A C G T U R Y S W K M B D H V N).",
-                diagnostic=_fasta_record_diagnostic("NOT_NUCLEOTIDE", record, letter),
+                diagnostic=_fasta_record_diagnostic("NOT_NUCLEOTIDE", record, position, letter),
             )
     return records
 
