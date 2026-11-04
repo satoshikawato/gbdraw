@@ -308,7 +308,7 @@ const displayText = (...values) => values
  * @param {FeatureFacts} [facts]
  * @param {string} [fallback]
  */
-const featureNameParts = (anchor, facts = {}, fallback = '') => {
+export const featureNameParts = (anchor, facts = {}, fallback = '') => {
   const feature = facts.sequenceFeature || facts;
   const qualifiers = feature.qualifiers || {};
   const gene = displayText(feature.gene, facts.gene, qualifiers.gene);

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { createRegionDrawing } = await import('../../gbdraw/web/js/app/region-drawing.js');
+const { createRegionDrawing, regionSourceRecords } = await import('../../gbdraw/web/js/app/region-drawing.js');
 
 const RECORDS = [
   { recordKey: 'record-1', caption: 'NC_1', length: 1200, features: [{ featureId: 'f1', label: 'dnaA' }] },
@@ -36,15 +36,15 @@ const harness = ({ reply = null } = {}) => {
       calls.created.push({ sourceId, derivation });
       return { drawingId: 'linear' };
     },
-    shownRecords: () => RECORDS,
+    shownRecords: async () => RECORDS,
     settingLabel: (setting) => (setting === 'objects.scale.interval' ? 'Tick interval' : setting)
   });
   return { owner, calls, pending };
 };
 
-test('open lists the shown records by key, unchecked, and offers features only with a Result', () => {
+test('open lists the shown records by key, unchecked, and offers features only with a Result', async () => {
   const { owner } = harness();
-  owner.open();
+  await owner.open();
   const { dialog } = owner;
   assert.equal(dialog.show, true);
   assert.deepEqual(dialog.rows.map((row) => [row.recordKey, row.checked, row.kind, row.start, row.end]),
@@ -55,7 +55,7 @@ test('open lists the shown records by key, unchecked, and offers features only w
 
 test('a derived reply shows the returned sizes and the not-carried lines; Keep my values derives without adapting', async () => {
   const { owner, calls } = harness();
-  owner.open();
+  await owner.open();
   Object.assign(owner.dialog.rows[0], { checked: true, kind: 'coordinates', start: '101', end: '400' });
   await owner.refresh();
   assert.deepEqual(calls.derive.at(-1).regions, [{ recordKey: 'record-1', start: 101, end: 400 }]);
@@ -71,7 +71,7 @@ test('a derived reply shows the returned sizes and the not-carried lines; Keep m
 
 test('a feature row sends the feature identity; an empty feature or a bad number derives nothing', async () => {
   const { owner, calls } = harness();
-  owner.open();
+  await owner.open();
   Object.assign(owner.dialog.rows[0], { checked: true, kind: 'feature' });
   await owner.refresh();
   assert.equal(owner.dialog.status, 'invalid');
@@ -86,7 +86,7 @@ test('a feature row sends the feature identity; an empty feature or a bad number
 
 test('the newest request wins', async () => {
   const { owner, pending } = harness({ reply: 'hold' });
-  owner.open();
+  await owner.open();
   Object.assign(owner.dialog.rows[0], { checked: true, kind: 'coordinates', start: '900', end: '100' });
   const first = owner.refresh();
   Object.assign(owner.dialog.rows[0], { start: '100', end: '900' });
@@ -102,7 +102,7 @@ test('the newest request wins', async () => {
 
 test('a refusal shows the reason and Create does nothing', async () => {
   const { owner, calls } = harness();
-  owner.open();
+  await owner.open();
   Object.assign(owner.dialog.rows[0], { checked: true, kind: 'coordinates', start: '900', end: '100' });
   await owner.refresh();
   assert.equal(owner.dialog.status, 'refused');
@@ -113,18 +113,57 @@ test('a refusal shows the reason and Create does nothing', async () => {
 
 test('Create runs one list step and closes; Cancel records nothing', async () => {
   const { owner, calls } = harness();
-  owner.open();
+  await owner.open();
   owner.dialog.rows[0].checked = true;
   await owner.refresh();
   assert.deepEqual(await owner.confirm(), { drawingId: 'linear' });
   assert.equal(calls.created.length, 1);
   assert.equal(calls.created[0].sourceId, 'circular');
   assert.equal(owner.dialog.show, false);
-  owner.open();
+  await owner.open();
   owner.dialog.rows[1].checked = true;
   await owner.refresh();
   owner.close();
   assert.equal(owner.dialog.show, false);
   assert.equal(await owner.confirm(), null);
   assert.equal(calls.created.length, 1);
+});
+
+test('a close while the records are read keeps the dialog closed', async () => {
+  let release = () => {};
+  const owner = createRegionDrawing({
+    shownDrawingId: () => 'circular',
+    projectShownRequest: async () => sent,
+    deriveRegion: async () => ({ result: null }),
+    newDrawingFromRegion: async () => ({ drawingId: 'linear' }),
+    shownRecords: () => new Promise((resolve) => { release = () => resolve(RECORDS); }),
+    settingLabel: (setting) => setting
+  });
+  const opening = owner.open();
+  assert.equal(owner.dialog.show, true);
+  owner.close();
+  release();
+  await opening;
+  assert.equal(owner.dialog.show, false);
+  assert.deepEqual(owner.dialog.rows, []);
+});
+
+test('without a Result the records come from the request and discovery, with no feature choice', () => {
+  // A Multi-Record Canvas of three discovered records, the third of unknown length, the second OFF.
+  const sources = {
+    mode: 'circular',
+    circular: [
+      { sourceIndex: 0, selector: '#1', recordId: 'NC_1', recordLength: 1200 },
+      { sourceIndex: 1, selector: '#2', recordId: 'NC_2', recordLength: 900 },
+      { sourceIndex: 2, selector: '#3', recordId: 'NC_3', recordLength: null }
+    ]
+  };
+  const requestRecords = [
+    { recordKey: 'record-1', selector: { kind: 'recordIndex', index: 0 } },
+    { recordKey: 'record-3', selector: { kind: 'recordIndex', index: 2 } }
+  ];
+  const asked = [];
+  const records = regionSourceRecords(requestRecords, sources, (recordKey) => { asked.push(recordKey); return null; });
+  assert.deepEqual(records, [{ recordKey: 'record-1', caption: 'NC_1', length: 1200, features: null }]);
+  assert.deepEqual(asked, ['record-1']);
 });

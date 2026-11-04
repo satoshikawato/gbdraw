@@ -3,11 +3,13 @@ import { diagnosticError, normalizeUserFacingError } from '../utils/error-normal
 import { errorText } from '../utils/error-text.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { reactive } from '../utils/reactivity.js';
+import { drawnRecordIdentities } from '../services/record-draw-selection.js';
 
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { ProjectedDraftRequest, RegionDerivation } from '../services/config.js' */
 /** @import { DerivedRegionDrawing, RefusedRegionDrawing, RegionNotCarriedItem, RegionDrawingHelperPayload, RegionDrawingRegion, RegionDrawingReply } from '../services/diagram-worker-protocol.js' */
 /** @import { DrawingListOutcome } from './drawing-list.js' */
+/** @import { IdentityRequestRecord, RecordIdentitySources } from '../services/record-draw-selection.js' */
 
 /**
  * @typedef {object} RegionDrawingPorts
@@ -16,7 +18,8 @@ import { reactive } from '../utils/reactivity.js';
  * @property {(payload: RegionDrawingHelperPayload) => Promise<{ result?: unknown }>} deriveRegion
  *   Runs the Worker helper `deriveRegionDrawing`; the reply is read here.
  * @property {(sourceId: DrawingId, derivation: RegionDerivation) => Promise<DrawingListOutcome>} newDrawingFromRegion
- * @property {() => readonly RegionSourceRecord[]} shownRecords The shown drawing's records, in drawing order.
+ * @property {() => Promise<readonly RegionSourceRecord[]>} shownRecords The shown drawing's records, in drawing
+ *   order (`regionSourceRecords`).
  * @property {(setting: string) => string} settingLabel A setting's label in the settings catalog.
  */
 
@@ -27,8 +30,29 @@ import { reactive } from '../utils/reactivity.js';
  * @property {string} recordKey The record key of the source drawing's request (the identity).
  * @property {string} caption Display only.
  * @property {number} length Source length in bases.
- * @property {readonly { featureId: string, label: string }[] | null} features
+ * @property {readonly RegionSourceFeature[] | null} features
  */
+
+/** @typedef {{ featureId: string, label: string }} RegionSourceFeature A feature by its biological feature ID. */
+
+/**
+ * The records the dialog offers: the drawn records of the shown drawing's
+ * request, keyed as that request keys them, from the one owner of a request
+ * record's source entry (`drawnRecordIdentities`), with the discovered length.
+ * A record of unknown length is not offered (its whole span is not known).
+ * @param {readonly IdentityRequestRecord[]} requestRecords The projected request's records.
+ * @param {RecordIdentitySources} sources The discovered record lists of the drawing.
+ * @param {(recordKey: string) => readonly RegionSourceFeature[] | null} featuresOf A record's features in the
+ *   shown Result, or null without a Result that drew it.
+ * @returns {RegionSourceRecord[]}
+ */
+export const regionSourceRecords = (requestRecords, sources, featuresOf) => drawnRecordIdentities(requestRecords, sources)
+  .flatMap(({ requestKey, entry }) => {
+    const length = Number(entry.recordLength);
+    if (!Number.isSafeInteger(length) || length <= 0) return [];
+    const caption = String(entry.recordId ?? entry.record_id ?? requestKey);
+    return [{ recordKey: requestKey, caption, length, features: featuresOf(requestKey) }];
+  });
 
 /**
  * One record row of the dialog: display values and the user's input only.
@@ -41,7 +65,7 @@ import { reactive } from '../utils/reactivity.js';
  * @property {string} start
  * @property {string} end
  * @property {string} featureId
- * @property {readonly { featureId: string, label: string }[] | null} features
+ * @property {readonly RegionSourceFeature[] | null} features
  */
 
 /**
@@ -219,13 +243,26 @@ export const createRegionDrawing = ({
     });
   };
 
-  const open = () => {
+  /** Opens on the shown drawing's records; a close before they are read keeps it closed. */
+  const open = async () => {
     close();
-    dialog.rows = shownRecords().map((record) => ({
+    const mine = request;
+    dialog.show = true;
+    showStatus('deriving', '');
+    let records;
+    try {
+      records = await shownRecords();
+    } catch (error) {
+      if (mine !== request) return;
+      const normalized = normalizeUserFacingError(error);
+      showStatus('error', normalized ? errorText(normalized.summaryParts) : String(error));
+      return;
+    }
+    if (mine !== request) return;
+    dialog.rows = records.map((record) => ({
       recordKey: record.recordKey, caption: record.caption, length: record.length, checked: false, kind: 'whole',
       start: '1', end: String(record.length), featureId: '', features: record.features
     }));
-    dialog.show = true;
     showStatus('idle', t('Choose at least one record.'));
   };
 
