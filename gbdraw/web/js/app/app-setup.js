@@ -183,6 +183,7 @@ import { afterPaint, buildDefaultMultiRecordPositions, createRunAnalysis } from 
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { createRecordAutoOrientation } from './record-auto-orientation.js';
 import { createFeatureAnchorAction } from './align-at-feature.js';
+import { createRecordPositionReset } from './record-position-reset.js';
 import { createLabelFitDialog } from './label-fit-dialog.js';
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../utils/popup-bounds.js';
@@ -5488,6 +5489,16 @@ export const createAppSetup = () => {
     recordTranslations: () => state.linearRecordTranslations.value,
     sessionReplacements: () => sessionReplacements.value
   });
+  // Reset record positions writes x 0 for every record through the channel Align at feature's Apply writes through.
+  const recordPositionReset = createRecordPositionReset({
+    materializedSession: similarityAlignmentActions.materializedSession,
+    hasAlignmentPlan: () => Boolean(state.similarityAlignmentPlan.value),
+    runPlacement: ({ canonical, label }) => runCommittedCanonicalCandidate({ canonical, label, alignmentResetReceipt: null }),
+    notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
+    projectPlacement: projectCommittedSimilarityAlignment,
+    retireFeatureAlignment: featureAnchor.retire,
+    onError: (error) => { errorLog.value = error; }
+  });
   // Wrap Rows (PD-OI-113): its blockers read the owners the request reads. A Similarity alignment is a
   // comparison input to Python's refusal; Align at feature is the positions its Apply wrote, while they hold; a drawn
   // record moved sideways is read from the translations the request carries, whatever wrote them, as Python reads them.
@@ -8194,6 +8205,8 @@ export const createAppSetup = () => {
     resolveFeatureAnchor: featureAnchor.resolve,
     applyFeatureAnchor: featureAnchor.apply,
     cancelFeatureAnchor: featureAnchor.cancel,
+    recordPositionResetBusy: recordPositionReset.busy,
+    resetRecordPositions: recordPositionReset.reset,
     similarityAlignmentStatus: similarityAlignmentActions.status,
     similarityAlignmentBusy: similarityAlignmentActions.busy,
     similarityAlignmentError: similarityAlignmentActions.error,

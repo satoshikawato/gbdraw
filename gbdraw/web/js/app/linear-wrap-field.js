@@ -60,6 +60,9 @@ export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInput
   const linearWrapBlocked = computed(() => blockers.value.length > 0);
   // One visible hint names every blocker, in the words of its Generate refusal.
   const linearWrapBlockedText = computed(() => joinSentences(...blockers.value.map((blocker) => tm(/** @type {string} */ (reasonText(blocker))))));
+  // A sideways move, or Align at feature, offers Reset record positions beside the hint, which names it (PD-OI-113
+  // scenario revision 2).
+  const linearWrapResetsPositions = computed(() => blockers.value.includes('WRAP_RECORD_POSITION'));
   /**
    * @param {Event} event A change of the checkbox, the length, or the unit.
    * @param {LinearWrapFieldPart} part
@@ -77,6 +80,6 @@ export const createLinearWrapField = ({ state, changeLayoutSetting, blockerInput
   };
   return {
     linearWrapOn, linearWrapFixesNormalize, linearWrapFixesRulerOnAxis, linearWrapUnit, linearWrapAmount, linearWrapAutoText,
-    linearWrapBlocked, linearWrapBlockedText, changeLinearWrap
+    linearWrapBlocked, linearWrapBlockedText, linearWrapResetsPositions, changeLinearWrap
   };
 };

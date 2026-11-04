@@ -70,7 +70,7 @@ const REASONS = Object.freeze({
   // Align at feature's Resolve and gbdraw linear --anchor_feature (gbdraw/api/record_planning.py, gbdraw/layout/linear_wrap.py).
   WRAP_ANCHOR_FEATURE: 'A wrapped record cannot be aligned at a feature. Turn Wrap Rows off, then use Align at feature.',
   // A cut record whose stored translation moves it sideways, whatever wrote it (gbdraw/layout/linear_wrap.py).
-  WRAP_RECORD_POSITION: 'A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, --anchor_feature, or the Python API). Undo the move, or turn Wrap Rows off.',
+  WRAP_RECORD_POSITION: 'A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, --anchor_feature, or the Python API). Click Reset record positions under Wrap Rows, or turn Wrap Rows off.',
   // A PNG or PDF over its format's size limit (gbdraw/render/export_limits.py). The limit and the advice are the
   // EXPORT_LIMIT phrases: a row length or DPI is advised only when Python found one that fits (D-46).
   PNG_SIZE: 'Use SVG, which has no size limit.',

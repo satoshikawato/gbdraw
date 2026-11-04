@@ -133,6 +133,17 @@ test('a Session Load retires Align at feature even when the loaded positions are
   assert.equal(action.applied.value, true);
 });
 
+test('retire ends Align at feature while the drawn positions are still the ones Apply wrote', async () => {
+  const { action } = fixture();
+  action.selector.value = 'gene=COX1';
+  await action.resolve();
+  await action.apply();
+  assert.equal(action.applied.value, true);
+  action.retire();
+  assert.equal(action.applied.value, false);
+  assert.equal(action.notice.value, '');
+});
+
 test('Apply without an active plan clears nothing', async () => {
   const { page, action } = fixture();
   action.selector.value = 'gene=COX1';

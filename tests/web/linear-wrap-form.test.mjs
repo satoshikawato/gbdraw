@@ -28,7 +28,7 @@ const WRAP_REFUSALS = Object.freeze({
   WRAP_NORMALIZE_LENGTH: ['INPUT_INVALID', 'Turn Normalize Record Lengths off, or turn Wrap Rows off.'],
   WRAP_GRID_ROW: ['INPUT_INVALID', 'Give each record its own row, or turn Wrap Rows off.'],
   WRAP_ANCHOR_FEATURE: ['INPUT_INVALID', 'Turn Wrap Rows off, then use Align at feature.'],
-  WRAP_RECORD_POSITION: ['INPUT_INVALID', 'Undo the move, or turn Wrap Rows off.']
+  WRAP_RECORD_POSITION: ['INPUT_INVALID', 'Click Reset record positions under Wrap Rows, or turn Wrap Rows off.']
 });
 
 test('each wrap refusal names what rows cannot draw and the way out, the text its hint shows', () => {
@@ -185,6 +185,13 @@ test('each blocker keeps Wrap Rows from turning on, in its Generate refusal\'s w
   assert.equal(field.linearWrapBlockedText.value, reasonText('WRAP'));
   inputs = { ...none, sharedRecordRow: true, featureTrackOnAxis: true };
   assert.equal(field.linearWrapBlockedText.value, `${reasonText('WRAP_GRID_ROW')} ${reasonText('WRAP_TRACK_LAYOUT')}`);
+  assert.equal(field.linearWrapResetsPositions.value, false, 'only a sideways move offers Reset record positions');
+  // PD-OI-113 scenario revision 2 (Q4): a move, or Align at feature, shows the button its hint names.
+  for (const moved of [{ movedRecords: true }, { featureAlignment: true }]) {
+    inputs = { ...none, ...moved };
+    assert.equal(field.linearWrapResetsPositions.value, true, JSON.stringify(moved));
+    assert.match(field.linearWrapBlockedText.value, /Click Reset record positions under Wrap Rows/);
+  }
   // Turning it off is never blocked: the checkbox writes Off.
   field.changeLinearWrap(checkbox(false), 'on');
   assert.deepEqual(writes, [['linear_wrap_length', null]]);

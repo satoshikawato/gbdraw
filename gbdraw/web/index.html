@@ -4360,6 +4360,7 @@
                                             </select>
                                         </div>
                                         <p v-if="linearWrapBlockedText" id="linear-wrap-blocked" class="ui-hint" data-linear-wrap-blocked>{{ linearWrapBlockedText }}</p>
+                                        <button v-if="linearWrapResetsPositions" type="button" data-history-managed class="btn btn-secondary px-1 py-0.5 text-[10px]" @click="resetRecordPositions" :disabled="!semanticMutationAvailable || recordPositionResetBusy || Boolean(sessionOperationAvailability('not-during-run'))" data-testid="linear-wrap-reset-positions">{{ t('Reset record positions') }}</button>
                                     </div>
                                     <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">
                                         <div class="flex items-center text-xs">

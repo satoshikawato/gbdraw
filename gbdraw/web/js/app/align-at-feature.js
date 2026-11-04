@@ -52,14 +52,18 @@ import { computed, ref } from '../utils/reactivity.js';
  * @property {boolean} clearsAlignment Whether Apply clears the active Similarity alignment.
  */
 /**
+ * Draws a candidate of the committed Session and commits it as one History step under `label`
+ * (`runCommittedCanonicalCandidate` in app/run-analysis.js, wired by the composition root).
+ * @typedef {(run: { canonical: CommittedCanonicalSession, label: string }) => Promise<{ status?: string, error?: unknown } | null | undefined>} RecordPlacementRun
+ */
+/**
  * @typedef {object} FeatureAnchorPorts
  * @property {() => CommittedCanonicalSession} materializedSession The committed Session with
  *   the active alignment plan materialized into its record translations, and no plan.
  * @property {() => boolean} hasAlignmentPlan
  * @property {(operation: string, payload: FeatureAnchorHelperPayload) => Promise<{ result?: unknown }>} runHelperOperation
  * @property {string} resolveOperation
- * @property {(run: { canonical: CommittedCanonicalSession, label: string }) => Promise<{ status?: string, error?: unknown } | null | undefined>} runPlacement
- *   Draws `canonical` and commits it as one History step under `label`.
+ * @property {RecordPlacementRun} runPlacement Draws `canonical` and commits it as one History step under `label`.
  * @property {(reason: string) => void} notePlanReplaced
  * @property {(input: { committed: CommittedCanonicalSession, plan: null, translations: FeatureAnchorTranslation[],
  *   orientations: { recordKey: string, reverseComplement: boolean }[] }) => CommittedCanonicalSession} projectPlacement
@@ -144,6 +148,9 @@ export const createFeatureAnchorAction = ({
     });
   });
   const notice = computed(() => (applied.value ? noticeState.value.text : ''));
+  // Reset record positions moves the records off the places Apply gave them, also when those were their places
+  // already, so Align at feature no longer holds (D-68).
+  const retire = () => { noticeState.value = { text: '', written: [], session: -1 }; };
   let actionId = 0;
   const busy = computed(() => status.value === 'resolving' || status.value === 'applying');
   const previewLines = computed(() => (preview.value ? preview.value.reply.records.map(previewLine) : []));
@@ -235,5 +242,5 @@ export const createFeatureAnchorAction = ({
     return { status: String(outcome?.status || 'error') };
   };
 
-  return { selector, status, busy, preview, previewLines, error, notice, applied, resolve, apply, cancel };
+  return { selector, status, busy, preview, previewLines, error, notice, applied, resolve, apply, cancel, retire };
 };

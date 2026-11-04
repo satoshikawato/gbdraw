@@ -1182,8 +1182,11 @@ or a feature track on the axis in Custom Track Slots. A record is moved
 sideways when its stored position has an x other than 0, whatever wrote it:
 **Align at feature**, a Similarity alignment, or a loaded Session (one saved
 after either, from `gbdraw linear --anchor_feature`, or from the Python API).
-The note under the field names what to remove. Turning it off is always
-possible. When one of these is added after Wrap Rows is on, or a loaded Session
+The note under the field names what to remove. While a record is moved, or
+Align at feature holds the records, **Reset record positions** under the note
+sets every record's sideways position to 0 (its vertical position and direction
+stay) and draws the Result again, as one History step that one Undo reverts; it
+also ends a Similarity alignment. Turning it off is always possible. When one of these is added after Wrap Rows is on, or a loaded Session
 holds both, and Generate cuts a record that rows cannot draw, Generate stops
 with the same message and keeps the last Result, and **Align at feature…** on a
 Result whose records are cut is refused.

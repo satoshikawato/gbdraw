@@ -23,7 +23,7 @@ const MITOGENOMES = [
 ];
 // The texts of the refusals the field's hint shares (REASONS in gbdraw/web/js/utils/error-normalization.js).
 const COMPARISONS_TEXT = 'A wrapped figure draws no comparisons.';
-const MOVED_TEXT = 'A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, --anchor_feature, or the Python API). Undo the move, or turn Wrap Rows off.';
+const MOVED_TEXT = 'A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, --anchor_feature, or the Python API). Click Reset record positions under Wrap Rows, or turn Wrap Rows off.';
 
 const openLinear = async (page, files) => {
   await openFresh(page);
@@ -55,6 +55,11 @@ const wrapState = (page) => page.evaluate(() => {
 });
 
 const wrapBox = (page) => page.locator('#linear-wrap-rows');
+// The record translations the page holds (`state.linearRecordTranslations`), the ones the next request carries.
+const translations = (page) => page.evaluate(async () => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  return state.linearRecordTranslations.value.map(({ x, y }) => ({ x, y }));
+});
 const undo = async (page) => { await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo()); await settle(page); };
 const setWrap = async (page, amount, unit) => {
   if (!(await wrapBox(page).isChecked())) await wrapBox(page).check();
@@ -146,8 +151,9 @@ test('comparisons and a record moved by Align at feature keep Wrap Rows from bei
 // PD-OI-113 scenario revision 2: a record's place is read alike whatever wrote it. A Session holding a wrap length
 // and a record moved sideways (as a Python API Session can; made here from a CLI Session with one translation
 // written in) keeps its figure on Load. The field cannot be changed but can be turned off, and a Generate that would
-// cut the moved record is refused with the hint's words and keeps the figure.
-test('a loaded Session with a record moved sideways blocks Wrap Rows, and its Generate refuses and keeps the figure', async ({ page }, testInfo) => {
+// cut the moved record is refused with the hint's words and keeps the figure. Reset record positions beside the
+// field puts the record at x 0 in one step, and its Undo blocks the field again.
+test('a loaded Session with a record moved sideways blocks Wrap Rows until Reset record positions, and its Generate refuses and keeps the figure', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   const directory = testInfo.outputPath('moved');
   mkdirSync(directory, { recursive: true });
@@ -175,7 +181,26 @@ test('a loaded Session with a record moved sideways blocks Wrap Rows, and its Ge
   expect(outcome.errorSummary).toContain(MOVED_TEXT);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content), 'the figure is kept').toBe(shown);
 
-  // The way out the hint names: Wrap Rows turns off while blocked, and then cannot be turned on again.
+  // The button the hint names (Q4): one press puts every record at x 0 as one History step and draws it, so Wrap
+  // Rows can be changed again; one Undo puts the move back, and the field is blocked again.
+  const reset = page.getByTestId('linear-wrap-reset-positions');
+  await expect(reset).toBeVisible();
+  const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await reset.click();
+  await expect(page.locator('#linear-wrap-blocked')).toHaveCount(0, { timeout: 180_000 });
+  await settle(page);
+  expect(await translations(page)).toEqual([{ x: 0, y: 0 }]);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(steps + 1);
+  await expect(reset).toHaveCount(0);
+  await expect(page.locator('#linear-wrap-length')).toBeEnabled();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toContain('data-gbdraw-wrap-row');
+  await undo(page);
+  expect(await translations(page)).toEqual([{ x: 40, y: 0 }]);
+  expect(await wrapState(page)).toMatchObject({ wrap: 5000, blocked: MOVED_TEXT });
+  await expect(page.locator('#linear-wrap-length')).toBeDisabled();
+  await expect(reset).toBeVisible();
+
+  // The other way out: Wrap Rows turns off while blocked, and then cannot be turned on again.
   await expect(wrapBox(page)).toBeEnabled();
   await wrapBox(page).uncheck();
   await settle(page);
