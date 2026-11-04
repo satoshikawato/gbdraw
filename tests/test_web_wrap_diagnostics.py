@@ -64,6 +64,12 @@ def _context(error: BaseException, operation: str = "generate") -> dict:
             row_length=10_000, records=[SeqIO.read(LAMBDA, "genbank")],
             translations=[LinearRecordTranslation(record_key="record-1", x=5.0)]),
          "INPUT_INVALID", "WRAP_RECORD_POSITION"),
+        # Q5 A: a Similarity alignment whose comparison inputs were removed moves records; the Web names Reset record
+        # positions for it, not the comparison inputs it no longer has.
+        (lambda: refuse_undrawable_wrap(_config(), [0], ("similarity_alignment",), row_length=10_000),
+         "INPUT_INVALID", "WRAP_RECORD_POSITION"),
+        (lambda: refuse_undrawable_wrap(_config(), [0], ("blast_files", "similarity_alignment"), row_length=10_000),
+         "COMPARISON_INPUT", "WRAP"),
         (lambda: refuse_feature_track_on_the_axis("middle"), "INPUT_INVALID", "WRAP_TRACK_LAYOUT"),
     ],
 )

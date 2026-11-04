@@ -4100,14 +4100,17 @@ Status: active Product authority
   `web.linear.wrap-length`, the same outcome `WEB-WRAP-CONTROL`). A record
   moved sideways is read alike whatever wrote its position (Align at feature's
   Apply, a Similarity groups alignment, CLI `--anchor_feature`, or the Python
-  API). While a record is moved, the Wrap field cannot be selected, says
-  what to remove, and offers a button that sets every record's sideways
-  position to 0 in one operation that one Undo reverts. When a Generate would
-  cut a moved record, the Web, the CLI, and Python draw nothing and say what
-  cannot be combined and how to fix it, and the Web keeps the previous figure.
-  The same holds after Save and Load. A Session that holds both a wrap length
-  and record translations no longer draws a cut record's rows all shifted by
-  the record's one x.
+  API). In the Web, Align at feature counts while its Apply has moved a
+  record; an Apply that moved no record does not stop wrapping. While a record
+  is moved, the Wrap field cannot be selected, says what to remove, and offers
+  a button that sets every record's sideways position to 0; for records a
+  Similarity groups alignment moved, the button also ends the alignment. The
+  button is one operation that one Undo reverts, the alignment included.
+  When a Generate would cut a moved record, the Web, the CLI, and Python draw
+  nothing and say what cannot be combined and how to fix it, and the Web keeps
+  the previous figure. The same holds after Save and Load. A Session that
+  holds both a wrap length and record translations no longer draws a cut
+  record's rows all shifted by the record's one x.
   - The question came from the runtime pull request of scenario revision `1`
     (PR `#1592`, merged): a Generate that cut a record whose translation Align
     at feature had written, after a Save and Load, drew every row of the record
@@ -4142,13 +4145,34 @@ Status: active Product authority
     changed: beside what to remove, the field offers the button that sets
     every record's sideways position to 0, one operation that one Undo
     reverts.
-  - Only the approved draft `r5` is serialized, as scenario revision `2`.
-    Draft `r4` never reached `dev` and is not serialized; no copy of it is
-    kept in this Contract.
+  - Q5 (`2026-11-04`) came from the review of the same pull request: two
+    readings of draft `r5`. The session showed:
+    「**Q5: receipt r5 の読み方 2 点** (案は `/home/kawato/gbdraw-baselines/linear-wrap-1428-20261030/receipts/PD-linear-wrap-web-DRAFT-r6.txt`。r5 の移動レコードの項目に 2 文足しただけで、scenario revision は 2 のままです)」
+    and
+    「**(1) 「Align at feature があるとき」は折り返しの欄を選べない (5 番目の項目)**」
+    with
+    「**A (推奨)**: Web では「Apply でレコードを動かしている間」と読みます。どのレコードも動かさない Apply は、折り返しを止めません。図は Apply しなかった場合と同じで、Python も問題なく描けるためです。」
+    and
+    「**(2) Similarity の整列で動いたレコードにも「位置を 0 に戻す」ボタンを出すか**」
+    with
+    「**A (推奨)**: 出します。押すと整列も終わり、Undo 1 回で整列ごと元に戻ります。比較の入力を外しても整列の計画は残るため、ボタンがないと Web から抜け出せません。」
+    and
+    「両方 A なら「Q5:A」と返信いただければ、r6 の承認として扱います。」
+    Reply: 「Q5:A」
+  - The reply chose option A for both readings, whose receipt is draft
+    `r6`, and the session recorded it as the approval of draft `r6`
+    unchanged. Draft `r6` is draft `r5` with two sentences added to the
+    Choice item on records moved sideways: the Web's Align at feature counts
+    while its Apply has moved a record, and the button also shows for records
+    a Similarity groups alignment moved and ends that alignment, one Undo
+    reverting both.
+  - Only the approved draft `r6` is serialized, as scenario revision `2`.
+    Drafts `r4` and `r5` never reached `dev` and are not serialized; no copy
+    of them is kept in this Contract.
   - The receipt and JSON reproduce the approved fields without translation or
     additional terms.
   - New receipt SHA-256: `PD-OI-113` scenario revision `2`
-    `103d7c6d8df3b6e7c328074fa40ad3ade45d4a2e63c6243e036c2af396eb528d`.
+    `eade4b7b8e6aa27cf3e9a8107c33bf7bef75c638f34bea26d0f20bafa669a0e9`.
   - `PD-OI-113` scenario revision `2` supersedes scenario revision `1`; its
     May retire names what is retired. The scenario revision `1` receipt and
     JSON are kept as they were approved.
@@ -10945,13 +10969,13 @@ Decision date: 2026-11-02
 - Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `182bb5259caf226d1496e96390839faa608a4cad219d1a06dc32c38644152b38`.
 - Decision source (scenario revision `2`): the Owner replies of `2026-11-04`
-  quoted in the Revision 112 entry above (Q3 and Q4). The receipt and JSON
-  below reproduce all nine fields of the approved receipt without translation
-  or additional terms. The runtime, tests, and documentation that implement it
+  quoted in the Revision 112 entry above (Q3, Q4, and Q5). The receipt and
+  JSON below reproduce all nine fields of the approved receipt without
+  translation or additional terms. The runtime, tests, and documentation that implement it
   merge with it (static Product Contract co-change); this record supplies no
   runtime acceptance evidence.
 - Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
-  `103d7c6d8df3b6e7c328074fa40ad3ade45d4a2e63c6243e036c2af396eb528d`.
+  `eade4b7b8e6aa27cf3e9a8107c33bf7bef75c638f34bea26d0f20bafa669a0e9`.
 
 ```text
 PRODUCT_DECISION
@@ -10989,7 +11013,7 @@ Decision date: 2026-11-03
 ```
 
 Scenario revision `2` receipt (approved by `satoshikawato` on `2026-11-04`;
-Q3 and Q4 of the Revision 112 entry above):
+Q3, Q4, and Q5 of the Revision 112 entry above):
 
 ```text
 PRODUCT_DECISION
@@ -11001,7 +11025,7 @@ Choice: WEB-WRAP-CONTROL
   - 折り返しをオンにすると、一緒に使えない設定と折り返しで決まる設定を見える形で切り替え、オンの間は選べなくして理由を出す。Track Layout の Features on axis は Above に、Scale Style の Bar (Simple) は Ruler (Ticks) に、Normalize Record Lengths はオフに、Ruler on Axis はオンにする（各行は目盛りを軸に描くため）。どのレコードも切れない長さでも同じで、フォームに見えている値で描く。
   - オフに戻すと、それらの設定はまた選べるが、値は自動では戻さない。Undo 1 回で、オンにする前の設定に全部戻る。
   - 比較（BLAST、comparisons table、similarity groups）、Record Layout で 1 行に複数のレコードを置く配置、Align at feature、軸の上に置いた feature track（side=overlay）のどれかがあるときは、折り返しの欄を選べなくして、何を外せばよいかを出す。折り返しをオンにした後でそれらを足し、Generate でレコードが切れるときは、何が一緒に使えないかと直し方を言うメッセージを出し、前の図を残す。
-  - レコードを横に動かした位置（Align at feature の Apply、similarity groups の整列、CLI の `--anchor_feature`、Python API で書いた位置）は、どこで書かれたかにかかわらず同じに扱う。動かしたレコードがある間は折り返しの欄を選べなくし、何を外せばよいかと、全部のレコードの横の位置を 0 に戻すボタンを出す。ボタンは 1 回の操作で、Undo 1 回で元に戻る。Generate で動かしたレコードが切れるときは、Web・CLI・Python とも描かずに、何が一緒に使えないかと直し方を言うメッセージを出し、Web では前の図を残す。Session を保存して開き直した後も同じ。
+  - レコードを横に動かした位置（Align at feature の Apply、similarity groups の整列、CLI の `--anchor_feature`、Python API で書いた位置）は、どこで書かれたかにかかわらず同じに扱う。Web の Align at feature は、Apply でレコードを動かしている間を「Align at feature がある」とし、どのレコードも動かさない Apply は折り返しを止めない。動かしたレコードがある間は折り返しの欄を選べなくし、何を外せばよいかと、全部のレコードの横の位置を 0 に戻すボタンを出す。similarity groups の整列で動かしたレコードでもボタンを出し、押すと整列も終わる。ボタンは 1 回の操作で、Undo 1 回で整列も含めて元に戻る。Generate で動かしたレコードが切れるときは、Web・CLI・Python とも描かずに、何が一緒に使えないかと直し方を言うメッセージを出し、Web では前の図を残す。Session を保存して開き直した後も同じ。
   - 折り返した図でも 1 本のレコードは 1 本のまま。行をまたぐ feature は、どの断片にカーソルを置いてもクリックしても 1 つのポップアップが開き、全部の断片が強調される。feature editor、レコードの選択、ラベルの編集、Session はレコード単位のまま。
   - 長さは Session に保存され、読み込むと欄に戻る。CLI の `--save_session` や Web 0.14.5 で保存した、長さの入った Session も欄に戻る。
   - PNG・PDF の書き出しが形式の上限（PNG は 1 辺 32,767 px、PDF は 14,400 pt）を超えるときは、ファイルを作らず、上限と、長い 1 行の長さ、または低い DPI を示すメッセージを出す。SVG は常に書き出せる。
@@ -11017,7 +11041,7 @@ Decision date: 2026-11-04
 {
   "concern": "web.linear.wrap-length（Web で Linear の折り返しの長さを設定する）",
   "scenarioRevision": 2,
-  "choice": "WEB-WRAP-CONTROL\n  - Linear の設定の Normalize Record Lengths の近くに「折り返し」の欄を置く。初めはオフ（折り返さない）。オンにすると、Auto か、数値と単位（bp / kbp / Mbp）を選べる。オンにしたときの初めの値は Auto。\n  - 長さと Auto の決め方は CLI・Python（`--wrap_length`、`canvas.linear.wrap_length`）と同じ。Auto は、いちばん長いレコードが 5 行以内に収まる 10 kb・20 kb・50 kb のうちいちばん短い長さで、収まらなければ 50 kb。10 kb 以下のレコードしかなければ折り返さない。Auto で描いた後、欄の横に実際の 1 行の長さと行数を出す。\n  - 折り返しをオンにすると、一緒に使えない設定と折り返しで決まる設定を見える形で切り替え、オンの間は選べなくして理由を出す。Track Layout の Features on axis は Above に、Scale Style の Bar (Simple) は Ruler (Ticks) に、Normalize Record Lengths はオフに、Ruler on Axis はオンにする（各行は目盛りを軸に描くため）。どのレコードも切れない長さでも同じで、フォームに見えている値で描く。\n  - オフに戻すと、それらの設定はまた選べるが、値は自動では戻さない。Undo 1 回で、オンにする前の設定に全部戻る。\n  - 比較（BLAST、comparisons table、similarity groups）、Record Layout で 1 行に複数のレコードを置く配置、Align at feature、軸の上に置いた feature track（side=overlay）のどれかがあるときは、折り返しの欄を選べなくして、何を外せばよいかを出す。折り返しをオンにした後でそれらを足し、Generate でレコードが切れるときは、何が一緒に使えないかと直し方を言うメッセージを出し、前の図を残す。\n  - レコードを横に動かした位置（Align at feature の Apply、similarity groups の整列、CLI の `--anchor_feature`、Python API で書いた位置）は、どこで書かれたかにかかわらず同じに扱う。動かしたレコードがある間は折り返しの欄を選べなくし、何を外せばよいかと、全部のレコードの横の位置を 0 に戻すボタンを出す。ボタンは 1 回の操作で、Undo 1 回で元に戻る。Generate で動かしたレコードが切れるときは、Web・CLI・Python とも描かずに、何が一緒に使えないかと直し方を言うメッセージを出し、Web では前の図を残す。Session を保存して開き直した後も同じ。\n  - 折り返した図でも 1 本のレコードは 1 本のまま。行をまたぐ feature は、どの断片にカーソルを置いてもクリックしても 1 つのポップアップが開き、全部の断片が強調される。feature editor、レコードの選択、ラベルの編集、Session はレコード単位のまま。\n  - 長さは Session に保存され、読み込むと欄に戻る。CLI の `--save_session` や Web 0.14.5 で保存した、長さの入った Session も欄に戻る。\n  - PNG・PDF の書き出しが形式の上限（PNG は 1 辺 32,767 px、PDF は 14,400 pt）を超えるときは、ファイルを作らず、上限と、長い 1 行の長さ、または低い DPI を示すメッセージを出す。SVG は常に書き出せる。",
+  "choice": "WEB-WRAP-CONTROL\n  - Linear の設定の Normalize Record Lengths の近くに「折り返し」の欄を置く。初めはオフ（折り返さない）。オンにすると、Auto か、数値と単位（bp / kbp / Mbp）を選べる。オンにしたときの初めの値は Auto。\n  - 長さと Auto の決め方は CLI・Python（`--wrap_length`、`canvas.linear.wrap_length`）と同じ。Auto は、いちばん長いレコードが 5 行以内に収まる 10 kb・20 kb・50 kb のうちいちばん短い長さで、収まらなければ 50 kb。10 kb 以下のレコードしかなければ折り返さない。Auto で描いた後、欄の横に実際の 1 行の長さと行数を出す。\n  - 折り返しをオンにすると、一緒に使えない設定と折り返しで決まる設定を見える形で切り替え、オンの間は選べなくして理由を出す。Track Layout の Features on axis は Above に、Scale Style の Bar (Simple) は Ruler (Ticks) に、Normalize Record Lengths はオフに、Ruler on Axis はオンにする（各行は目盛りを軸に描くため）。どのレコードも切れない長さでも同じで、フォームに見えている値で描く。\n  - オフに戻すと、それらの設定はまた選べるが、値は自動では戻さない。Undo 1 回で、オンにする前の設定に全部戻る。\n  - 比較（BLAST、comparisons table、similarity groups）、Record Layout で 1 行に複数のレコードを置く配置、Align at feature、軸の上に置いた feature track（side=overlay）のどれかがあるときは、折り返しの欄を選べなくして、何を外せばよいかを出す。折り返しをオンにした後でそれらを足し、Generate でレコードが切れるときは、何が一緒に使えないかと直し方を言うメッセージを出し、前の図を残す。\n  - レコードを横に動かした位置（Align at feature の Apply、similarity groups の整列、CLI の `--anchor_feature`、Python API で書いた位置）は、どこで書かれたかにかかわらず同じに扱う。Web の Align at feature は、Apply でレコードを動かしている間を「Align at feature がある」とし、どのレコードも動かさない Apply は折り返しを止めない。動かしたレコードがある間は折り返しの欄を選べなくし、何を外せばよいかと、全部のレコードの横の位置を 0 に戻すボタンを出す。similarity groups の整列で動かしたレコードでもボタンを出し、押すと整列も終わる。ボタンは 1 回の操作で、Undo 1 回で整列も含めて元に戻る。Generate で動かしたレコードが切れるときは、Web・CLI・Python とも描かずに、何が一緒に使えないかと直し方を言うメッセージを出し、Web では前の図を残す。Session を保存して開き直した後も同じ。\n  - 折り返した図でも 1 本のレコードは 1 本のまま。行をまたぐ feature は、どの断片にカーソルを置いてもクリックしても 1 つのポップアップが開き、全部の断片が強調される。feature editor、レコードの選択、ラベルの編集、Session はレコード単位のまま。\n  - 長さは Session に保存され、読み込むと欄に戻る。CLI の `--save_session` や Web 0.14.5 で保存した、長さの入った Session も欄に戻る。\n  - PNG・PDF の書き出しが形式の上限（PNG は 1 辺 32,767 px、PDF は 14,400 pt）を超えるときは、ファイルを作らず、上限と、長い 1 行の長さ、または低い DPI を示すメッセージを出す。SVG は常に書き出せる。",
   "rationale": "折り返しは 0.14.5 で CLI と Python からは使えるのに、Web には長さを入れる欄がなく、CLI で作った Session を読み込む以外に使えない。エンジンは同じなので、Web にはフォームの欄だけを足し、長さの決め方と断り方は CLI と同じものを使う。",
   "mustPreserve": "折り返しがオフのときの描き方と設定（初めはオフ）。同じ設定なら Web と CLI・Python で同じ図になること、ライブプレビューと Generate で同じ図になること。0.14.5 までに保存した Session の開き方と図（May retire に書いたものを除く）。プレビューの Fit・ズーム・パン。feature とレコードの識別子と、レコード単位の操作",
   "mayRetire": "Web で折り返しの長さを「Preserved session settings」でしか持てず、Web では変えられなかった扱い。エラーメッセージの「Preserved session settings で canvas.linear.wrap_length を戻す」という案内。折り返しの長さと横に動かしたレコードの位置を両方持つ Session（Python API などで作ったもの）で、切れたレコードの全部の行を同じだけ横にずらして描いていた扱い（今後は描かずにメッセージを出す）",

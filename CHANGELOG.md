@@ -33,11 +33,11 @@ write-up of a release.
   as `--wrap_length`. A PNG over 32,767 px per side, or a wrapped figure's PDF
   over 14,400 pt, is refused before a file is made. While a record is moved
   sideways (Align at feature, a Similarity alignment, or the record positions
-  of a loaded Session), Wrap Rows cannot be turned on; without comparisons,
-  **Reset record positions** under the field sets every record's sideways
-  position to 0 in one step that one Undo reverts. A Generate, `--session`, or Python render that
-  would cut a moved record is refused; it drew the record's rows shifted by one
-  x before.
+  of a loaded Session), Wrap Rows cannot be turned on, and **Reset record
+  positions** under the field sets every record's sideways position to 0 and
+  ends a Similarity alignment in one step that one Undo reverts. A Generate,
+  `--session`, or Python render that would cut a moved record is refused; it
+  drew the record's rows shifted by one x before.
 
 ## [0.14.5](./docs/RELEASE_NOTES_0.14.5.md) - 2026-11-01
 

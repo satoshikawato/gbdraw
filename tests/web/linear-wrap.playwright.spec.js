@@ -23,7 +23,7 @@ const MITOGENOMES = [
 ];
 // The texts of the refusals the field's hint shares (REASONS in gbdraw/web/js/utils/error-normalization.js).
 const COMPARISONS_TEXT = 'A wrapped figure draws no comparisons.';
-const MOVED_TEXT = 'A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, --anchor_feature, or the Python API). Click Reset record positions under Wrap Rows, or turn Wrap Rows off.';
+const MOVED_TEXT = 'A wrapped record cannot keep a sideways move (from Align at feature, Similarity groups, or a loaded Session). Click Reset record positions under Wrap Rows, or turn Wrap Rows off.';
 
 const openLinear = async (page, files) => {
   await openFresh(page);
@@ -137,8 +137,8 @@ test('comparisons and a record moved by Align at feature keep Wrap Rows from bei
   await settle(page);
   await expect(wrapBox(page)).toBeDisabled();
   await expect(page.locator('#linear-wrap-blocked')).toHaveText(MOVED_TEXT);
-  // Reset record positions moves the records off Align at feature's places, so it no longer holds; one Undo puts the
-  // positions back and, with them, Align at feature and its notice (D-74).
+  // Reset record positions moves the records off Align at feature's places, so its notice goes; one Undo puts the
+  // positions back and, with them, the block and the notice (Q5 A: Align at feature counts through moved records).
   const reset = page.getByTestId('linear-wrap-reset-positions');
   await reset.click();
   await expect(page.locator('#linear-wrap-blocked')).toHaveCount(0, { timeout: 180_000 });

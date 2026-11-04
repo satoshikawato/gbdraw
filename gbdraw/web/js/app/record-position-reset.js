@@ -1,10 +1,10 @@
 // @ts-check
-// Reset record positions (Linear, PD-OI-113 scenario revision 2): one button under a Wrap Rows field that a drawn
-// record moved sideways blocks, offered only while no comparison blocks it (`offersRecordPositionReset`, D-74). It
-// writes every record's sideways position (x) as 0 through the channel Align at feature's Apply writes them through:
-// a candidate of the committed Session with those record translations, drawn and committed as one History step
-// (`runPlacement`), so one Undo restores the positions. A vertical position (y) and the record directions stay.
-// Align at feature's hold follows the positions: the press retires it and its Undo brings it back.
+// Reset record positions (Linear, PD-OI-113 scenario revision 2, Q5 A): one button under a Wrap Rows field that a
+// drawn record moved sideways, or a Similarity alignment, blocks (`offersRecordPositionReset`). It writes every
+// record's sideways position (x) as 0 through the channel Align at feature's Apply writes them through: a candidate
+// of the committed Session (the alignment plan's positions materialized) with those record translations and no
+// plan, drawn and committed as one History step (`runPlacement`), so one Undo restores the positions and the plan.
+// A vertical position (y) and the record directions stay.
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
@@ -17,7 +17,10 @@ import { ref } from '../utils/reactivity.js';
 
 /**
  * @typedef {object} RecordPositionResetPorts
- * @property {() => CommittedCanonicalSession} materializedSession The committed Session (Align at feature's port).
+ * @property {() => CommittedCanonicalSession} materializedSession The committed Session with the active alignment
+ *   plan materialized into its record translations, and no plan (Align at feature's port).
+ * @property {() => boolean} hasAlignmentPlan
+ * @property {(reason: string) => void} notePlanReplaced Says that the press ended the Similarity alignment.
  * @property {RecordPlacementRun} runPlacement Draws `canonical` and commits it as one History step under `label`
  *   (Align at feature's port).
  * @property {(input: { committed: CommittedCanonicalSession, plan: null, translations: FeatureAnchorTranslation[],
@@ -40,7 +43,9 @@ export const recordTranslationsAtX0 = (request) => {
 };
 
 /** @param {RecordPositionResetPorts} ports */
-export const createRecordPositionReset = ({ materializedSession, runPlacement, projectPlacement, onError }) => {
+export const createRecordPositionReset = ({
+  materializedSession, hasAlignmentPlan, notePlanReplaced, runPlacement, projectPlacement, onError
+}) => {
   const busy = ref(false);
   /** @param {unknown} cause */
   const publishError = (cause) => onError(/** @type {Record<string, unknown>} */ (
@@ -49,8 +54,10 @@ export const createRecordPositionReset = ({ materializedSession, runPlacement, p
     if (busy.value) return { status: 'busy' };
     /** @type {CommittedCanonicalSession} */
     let canonical;
+    let endsAlignment = false;
     try {
       const committed = materializedSession();
+      endsAlignment = hasAlignmentPlan();
       canonical = projectPlacement({ committed, plan: null,
         translations: recordTranslationsAtX0(committed.renderRequest),
         orientations: committed.renderRequest.records.map((record) => ({ recordKey: record.recordKey,
@@ -65,7 +72,8 @@ export const createRecordPositionReset = ({ materializedSession, runPlacement, p
       let outcome;
       try { outcome = await runPlacement({ canonical, label: msg('Reset record positions') }); }
       catch (cause) { outcome = { status: 'error', error: cause }; }
-      if (outcome?.status === 'error') publishError(outcome.error);
+      if (outcome?.status === 'ok' && endsAlignment) notePlanReplaced(msg('record positions reset.'));
+      else if (outcome?.status === 'error') publishError(outcome.error);
       return { status: String(outcome?.status || 'error') };
     } finally {
       busy.value = false;

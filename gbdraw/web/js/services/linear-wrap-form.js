@@ -103,43 +103,37 @@ export const linearWrapFormPatch = (form, value) => (value === null
 /**
  * What the shown Linear drawing holds that rows cannot draw with, each read from the owner its request reads.
  * @typedef {object} LinearWrapBlockerInputs
- * @property {boolean} comparisons BLAST, comparison pairs, LOSAT, Similarity groups or a Similarity alignment.
+ * @property {boolean} comparisons The comparison inputs: BLAST, comparison pairs, LOSAT, or Similarity groups.
  * @property {boolean} sharedRecordRow Record Layout puts several records in one row.
- * @property {boolean} featureAlignment Records where Align at feature put them (its `applied`), also when it moved none.
- * @property {boolean} movedRecords A drawn record moved sideways (`movesARecordSideways`), whatever moved it.
+ * @property {boolean} movedRecords A drawn record moved sideways (`movesARecordSideways`), whatever moved it. Align at
+ *   feature counts only through the records its Apply moved (PD-OI-113 scenario revision 2, Q5 A).
+ * @property {boolean} alignmentPlan A Similarity alignment plan: its positions are moved positions also before they
+ *   are written, and also after its comparison inputs were removed (Q5 A).
  * @property {boolean} featureTrackOnAxis Custom Track Slots put the feature track on the axis (side overlay).
  */
 /**
  * Python's refusal reason for each (gbdraw/layout/linear_wrap.py), so the field's hint and the Generate refusal
- * show one text (`reasonText`); `WRAP_FEATURE_ALIGNMENT` is the field's own (Align at feature with no record moved,
- * which Python draws).
- * @typedef {'WRAP' | 'WRAP_GRID_ROW' | 'WRAP_RECORD_POSITION' | 'WRAP_FEATURE_ALIGNMENT' | 'WRAP_TRACK_LAYOUT'} LinearWrapBlocker
+ * show one text (`reasonText`).
+ * @typedef {'WRAP' | 'WRAP_GRID_ROW' | 'WRAP_RECORD_POSITION' | 'WRAP_TRACK_LAYOUT'} LinearWrapBlocker
  */
+/** @type {ReadonlyArray<[keyof LinearWrapBlockerInputs, LinearWrapBlocker]>} */
+const BLOCKERS = Object.freeze([
+  ['comparisons', 'WRAP'], ['sharedRecordRow', 'WRAP_GRID_ROW'], ['movedRecords', 'WRAP_RECORD_POSITION'],
+  ['alignmentPlan', 'WRAP_RECORD_POSITION'], ['featureTrackOnAxis', 'WRAP_TRACK_LAYOUT']
+]);
 /**
- * Whether the field offers Reset record positions: a drawn record is moved sideways and no comparison blocks, so a
- * press can unblock the field without ending a comparison (PD-OI-113 scenario revision 2, D-74).
+ * Whether the field offers Reset record positions: while a drawn record is moved or a Similarity alignment plan
+ * holds, also when another blocker holds; the hint of a moved record names it (Q5 A, R6).
  * @param {LinearWrapBlockerInputs} inputs
  */
-export const offersRecordPositionReset = (inputs) => inputs.movedRecords && !inputs.comparisons;
-/**
- * Each reason and when it shows. A moved record names the button its hint offers, so under a comparison, where the
- * button is not offered, only the comparison is named; Align at feature with no record moved names its Undo (D-75).
- * @type {ReadonlyArray<[LinearWrapBlocker, (inputs: LinearWrapBlockerInputs) => boolean]>}
- */
-const BLOCKERS = Object.freeze([
-  ['WRAP', (inputs) => inputs.comparisons],
-  ['WRAP_GRID_ROW', (inputs) => inputs.sharedRecordRow],
-  ['WRAP_RECORD_POSITION', offersRecordPositionReset],
-  ['WRAP_FEATURE_ALIGNMENT', (inputs) => inputs.featureAlignment && !inputs.movedRecords],
-  ['WRAP_TRACK_LAYOUT', (inputs) => inputs.featureTrackOnAxis]
-]);
+export const offersRecordPositionReset = (inputs) => inputs.movedRecords || inputs.alignmentPlan;
 /**
  * What keeps Wrap Rows from being turned on or its length changed. Turning it off is never blocked, so a Session
  * that holds both can follow the refusal's "turn Wrap Rows off". Whether a record is cut is Python's.
  * @param {LinearWrapBlockerInputs} inputs
  * @returns {LinearWrapBlocker[]}
  */
-export const linearWrapBlockers = (inputs) => BLOCKERS.filter(([, holds]) => holds(inputs)).map(([blocker]) => blocker);
+export const linearWrapBlockers = (inputs) => [...new Set(BLOCKERS.filter(([input]) => inputs[input]).map(([, blocker]) => blocker))];
 
 // The length's unit is view state (D-27): the form and the Session hold bp, and the Web never sends unit text,
 // so these factors are the field's own, not a copy of Python's length parser (D-57). Each is 10 to its exponent.

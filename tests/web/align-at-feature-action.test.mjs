@@ -24,7 +24,7 @@ const reply = () => ({
 
 // A fixture page: one committed Session, the drawn translations, and the calls the owner makes.
 const fixture = ({ plan = false, helper = async () => ({ result: reply() }) } = {}) => {
-  const page = { committed: committedSession(), plan, drawn: [], runs: [], replaced: [], helperCalls: [], sessions: ref(0), steps: [] };
+  const page = { committed: committedSession(), plan, drawn: [], runs: [], replaced: [], helperCalls: [], sessions: ref(0) };
   const action = createFeatureAnchorAction({
     materializedSession: () => {
       if (!page.committed) throw new Error('Generate a Linear diagram before aligning.');
@@ -35,20 +35,10 @@ const fixture = ({ plan = false, helper = async () => ({ result: reply() }) } = 
     resolveOperation: 'resolveFeatureAnchor',
     runPlacement: async (run) => {
       page.runs.push(run);
-      // As `runCommittedCanonicalCandidate` and its History step do: capture the intent before, commit the candidate
-      // (the plan is gone, its translations are drawn), commit the intent, capture it after. Undo puts both back.
-      const before = { committed: page.committed, plan: page.plan, drawn: page.drawn, intent: run.intent?.capture() };
+      // As the History step does: the candidate is committed, the plan is gone, its translations are drawn.
       page.committed = run.canonical;
       page.plan = false;
       page.drawn = run.canonical.renderRequest.layout.recordTranslations.map((entry) => ({ ...entry }));
-      run.intent?.commit();
-      const after = { committed: page.committed, plan: page.plan, drawn: page.drawn, intent: run.intent?.capture() };
-      /** @param {typeof before} side */
-      const install = (side) => {
-        Object.assign(page, { committed: side.committed, plan: side.plan, drawn: side.drawn });
-        if (run.intent) run.intent.restore(side.intent);
-      };
-      page.steps.push({ undo: () => install(before), redo: () => install(after) });
       return { status: 'ok' };
     },
     notePlanReplaced: (reason) => page.replaced.push(reason),
@@ -105,17 +95,17 @@ test('Apply over an active Similarity alignment writes the translations without 
   assert.equal(action.notice.value, '');
 });
 
-test('applied holds while the records keep the positions Apply wrote, which Wrap Rows reads as Align at feature', async () => {
+test('the notice holds while the records keep the positions Apply wrote', async () => {
   const { page, action } = fixture();
-  assert.equal(action.applied.value, false, 'nothing applied yet');
+  assert.equal(action.notice.value, '', 'nothing applied yet');
   action.selector.value = 'gene=COX1';
   await action.resolve();
-  assert.equal(action.applied.value, false, 'a preview moves nothing');
+  assert.equal(action.notice.value, '', 'a preview moves nothing');
   await action.apply();
-  assert.equal(action.applied.value, true);
+  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
   // Undo puts other positions back: Align at feature no longer holds.
   page.drawn = [{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 12, y: 3 }];
-  assert.equal(action.applied.value, false);
+  assert.equal(action.notice.value, '');
   assert.equal(action.notice.value, '');
 });
 
@@ -127,55 +117,19 @@ test('a Session Load retires Align at feature even when the loaded positions are
   action.selector.value = 'gene=COX1';
   await action.resolve();
   await action.apply();
-  assert.equal(action.applied.value, true);
+  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
   const written = page.drawn.map((entry) => ({ ...entry }));
   // Load another Session, then the saved one: the drawn positions are those Apply wrote.
   page.drawn = [];
   page.sessions.value += 1;
   page.drawn = written;
   page.sessions.value += 1;
-  assert.equal(action.applied.value, false);
+  assert.equal(action.notice.value, '');
   assert.equal(action.notice.value, '');
   // A new Apply in the loaded Session holds again.
   page.committed = committedSession();
   await action.resolve();
   await action.apply();
-  assert.equal(action.applied.value, true);
-});
-
-// Review 2 M1 (D-74, OV-2471): the hold is a value of Apply's History step. Its Undo ends it also when Apply moved
-// no record (the positions Undo puts back are the ones Apply wrote), and its Redo brings it back.
-test('the Undo of an Apply that moved no record ends Align at feature, and its Redo brings it back', async () => {
-  const { page, action } = fixture({ helper: async () => ({ result: { ...reply(),
-    records: reply().records.map((record) => ({ ...record, status: 'unmatched', afterX: record.beforeX })),
-    recordTranslations: [{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 0, y: 0 }] } }) });
-  page.drawn = [{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 0, y: 0 }];
-  action.selector.value = 'gene=COX1';
-  await action.resolve();
-  assert.deepEqual(await action.apply(), { status: 'ok' });
-  assert.equal(action.applied.value, true);
-  assert.equal(page.steps.length, 1);
-  page.steps[0].undo();
-  assert.deepEqual(page.drawn, [{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 0, y: 0 }]);
-  assert.equal(action.applied.value, false, 'the same positions, but Align at feature no longer holds');
-  assert.equal(action.notice.value, '');
-  page.steps[0].redo();
-  assert.equal(action.applied.value, true);
-  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
-});
-
-test('a later move of the records retires the hold, and putting the positions back restores it with its notice', async () => {
-  const { page, action } = fixture();
-  action.selector.value = 'gene=COX1';
-  await action.resolve();
-  await action.apply();
-  const written = page.drawn;
-  // Reset record positions writes x 0 and keeps the hold value; the positions alone retire it.
-  page.drawn = written.map((entry) => ({ ...entry, x: 0 }));
-  assert.equal(action.applied.value, false);
-  // Its Undo puts Apply's positions back: the notice is back too.
-  page.drawn = written;
-  assert.equal(action.applied.value, true);
   assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
 });
 
