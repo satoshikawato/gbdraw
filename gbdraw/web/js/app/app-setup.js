@@ -7723,7 +7723,10 @@ export const createAppSetup = () => {
     // The projection's resource table holds the descriptors Save would write.
     deriveRegion: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING, { ...payload,
       resources: /** @type {GenerationPayload['resources']} */ (payload.resources) }),
-    newDrawingFromRegion: drawingList.newDrawingFromRegion
+    newDrawingFromRegion: drawingList.newDrawingFromRegion,
+    // The dialog is not offered yet: its record list and setting labels are wired with its template.
+    shownRecords: () => [],
+    settingLabel: (setting) => setting
   });
   return {
     hostedBuild: readHostedBuild(document),

@@ -129,10 +129,8 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * One region of `deriveRegionDrawing` (`RegionInput` in
  * gbdraw/web_support/region_drawing.py): the source drawing's record key and
  * source coordinates, 1-based and inclusive.
- * @typedef {object} RegionDrawingRegion
- * @property {string} recordKey
- * @property {number} start
- * @property {number} end
+ * @typedef {{ recordKey: string, start: number, end: number } | { recordKey: string, featureId: string }} RegionDrawingRegion
+ *   Coordinates (`CoordinateRegionInput`) or a feature by its biological feature ID (`FeatureRegionInput`).
  */
 
 /**
