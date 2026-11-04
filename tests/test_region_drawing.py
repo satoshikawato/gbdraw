@@ -420,12 +420,26 @@ def test_the_drawing_derivation_is_the_request_core(materialize) -> None:
 
 
 def test_an_origin_crossing_region_has_its_own_reason(materialize) -> None:
-    from gbdraw.api.region_drawing import OriginCrossingRegion
+    from gbdraw.api.region_drawing import StartAfterEndRegion
 
-    with pytest.raises(OriginCrossingRegion) as refusal:
+    with pytest.raises(StartAfterEndRegion) as refusal:
         derive_region_drawing(materialize(_mito_circular()), [RegionSelection("mito", 16000, 200)])
     assert refusal.value.diagnostic == {"code": "REGION_INVALID", "field": "region", "reason": "ORIGIN_CROSSING"}
     assert (refusal.value.record_key, refusal.value.start, refusal.value.end) == ("mito", 16000, 200)
+
+
+def test_a_start_after_the_end_of_a_linear_record_is_worded_without_the_origin(tmp_path: Path) -> None:
+    """A linear record has no origin to cross: its refusal names the order only."""
+    from gbdraw.api import RecordDisplayOptions
+    from gbdraw.api.region_drawing import StartAfterEndRegion
+
+    linear = _mito_circular(record={"display": RecordDisplayOptions(is_circular=False)})
+    with pytest.raises(StartAfterEndRegion) as refusal:
+        derive_region_request(linear, [RegionSelection("mito", 16000, 200)])
+    assert refusal.value.diagnostic == {"code": "REGION_INVALID", "field": "region", "reason": "START_AFTER_END"}
+    assert "origin" not in str(refusal.value)
+    reply = _web_region(linear, [{"recordKey": "mito", "start": 16000, "end": 200}], tmp_path)[2]
+    assert reply == {"status": "refused", "reason": "START_AFTER_END", "recordKey": "mito", "start": 16000, "end": 200}
 
 
 def _web_source(request: DiagramRequest) -> tuple[dict[str, Any], dict[str, str]]:
@@ -530,10 +544,10 @@ def test_a_feature_region_is_the_span_of_its_location(tmp_path: Path) -> None:
 
 
 def test_a_feature_across_the_origin_is_refused(tmp_path: Path) -> None:
-    from gbdraw.api.region_drawing import FeatureRegionSelection, OriginCrossingRegion
+    from gbdraw.api.region_drawing import FeatureRegionSelection, StartAfterEndRegion
 
     source = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_origin_record(tmp_path)), record_key="o")])
-    with pytest.raises(OriginCrossingRegion) as refusal:
+    with pytest.raises(StartAfterEndRegion) as refusal:
         derive_region_request(source, [FeatureRegionSelection("o", _feature_id(source, "across"))])
     assert (refusal.value.record_key, refusal.value.start, refusal.value.end) == ("o", 901, 50)
 

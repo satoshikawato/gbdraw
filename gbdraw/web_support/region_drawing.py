@@ -17,9 +17,10 @@ from typing import Literal, TypedDict
 from gbdraw.api.region_drawing import (
     FeatureRegionSelection,
     NotCarriedKind,
-    OriginCrossingRegion,
     RegionChoice,
     RegionSelection,
+    StartAfterEndReason,
+    StartAfterEndRegion,
     derive_region_request,
 )
 from gbdraw.auto_sizes import AutoValue
@@ -81,10 +82,10 @@ class DerivedRegionDrawing(TypedDict):
 
 
 class RefusedRegionDrawing(TypedDict):
-    """A refused region: the reason and the region it names."""
+    """A refused region: the reason (worded for the record's topology) and the region it names."""
 
     status: Literal["refused"]
-    reason: Literal["ORIGIN_CROSSING"]
+    reason: StartAfterEndReason
     recordKey: str
     start: int
     end: int
@@ -132,9 +133,9 @@ def derive_web_region_drawing(
     source = decode_canonical_request(request_payload, resource_paths=resource_paths, output_directory=output_directory)
     try:
         derived = derive_region_request(source, _regions(regions), adapt_sizes=adapt_sizes)
-    except OriginCrossingRegion as refusal:
+    except StartAfterEndRegion as refusal:
         return {
-            "status": "refused", "reason": "ORIGIN_CROSSING",
+            "status": "refused", "reason": refusal.reason,
             "recordKey": refusal.record_key, "start": refusal.start, "end": refusal.end,
         }
     # The source's staged files, held under their own IDs: the encoder takes

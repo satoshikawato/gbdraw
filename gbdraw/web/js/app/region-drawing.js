@@ -1,5 +1,5 @@
 // @ts-check
-import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError, reasonText } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { reactive } from '../utils/reactivity.js';
@@ -201,7 +201,7 @@ const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Arra
 const readRegionDrawingReply = (result) => {
   if (!isRecord(result)) throw REPLY_INVALID();
   if (result.status === 'refused') {
-    if (result.reason !== 'ORIGIN_CROSSING' || typeof result.recordKey !== 'string'
+    if ((result.reason !== 'ORIGIN_CROSSING' && result.reason !== 'START_AFTER_END') || typeof result.recordKey !== 'string'
       || !Number.isSafeInteger(result.start) || !Number.isSafeInteger(result.end)) throw REPLY_INVALID();
     return /** @type {RefusedRegionDrawing} */ (result);
   }
@@ -265,10 +265,8 @@ export const createRegionDrawing = ({
     try {
       const offer = await deriveFromShown(choice.regions, !dialog.keepValues);
       if (mine !== request) return undefined;
-      if (offer.status === 'refused') {
-        const refusal = normalizeUserFacingError(diagnosticError('REGION_INVALID', { field: 'region', reason: offer.reason }));
-        return showStatus('refused', refusal ? errorText(refusal.summaryParts) : '');
-      }
+      // The reason alone, from the wording owner of diagnostic reasons: the dialog's rows are the region.
+      if (offer.status === 'refused') return showStatus('refused', tm(/** @type {string} */ (reasonText(offer.reason))));
       Object.assign(dialog, {
         status: 'derived',
         message: '',

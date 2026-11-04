@@ -134,6 +134,7 @@ const REASONS = Object.freeze({
   ARRAY: 'Use a list.', OBJECT: 'Use an object.', FIELDS: 'Check the required fields.', REQUIRED: 'Supply the required value.',
   ORDER: 'The start or minimum must not exceed the end or maximum.', INCREASING: 'Use a minimum below the maximum.', RECORD_BOUNDS: 'Keep the region within the record length.',
   ORIGIN_CROSSING: 'Choose a start before the end: a region cannot cross the origin of a circular record.',
+  START_AFTER_END: 'Choose a start before the end.',
   STRAND: 'Use -1, 1, or no strand.', DISPLAY_START_BOUNDS: 'Use a display start between 1 and the record length.', CROP_START_CONFLICT: 'Choose a crop or an explicit display start.',
   REFERENCE_REQUIRED: 'Fill in the reference name on every row of the Depth TSV.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
   WORKSPACE: 'Retry the operation.', OUT_OF_RANGE: 'Choose a record within the loaded range.',

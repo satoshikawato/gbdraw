@@ -164,18 +164,27 @@ class NotCarried:
         }[self.kind]()
 
 
-class OriginCrossingRegion(ValidationError):
-    """A region whose start is after its end: it would cross the origin of a circular record."""
+StartAfterEndReason = Literal["ORIGIN_CROSSING", "START_AFTER_END"]
 
-    def __init__(self, record_key: str, start: int, end: int) -> None:
+
+class StartAfterEndRegion(ValidationError):
+    """A region whose start is after its end, worded for the record's topology.
+
+    On a circular record it would cross the origin (``ORIGIN_CROSSING``); a
+    linear record has no origin to cross (``START_AFTER_END``).
+    """
+
+    def __init__(self, record_key: str, start: int, end: int, *, circular: bool) -> None:
+        reason: StartAfterEndReason = "ORIGIN_CROSSING" if circular else "START_AFTER_END"
+        why = "regions that cross the origin of a circular record are not supported" if circular else "choose a start before the end"
         super().__init__(
-            f"Region {start}..{end} of {record_key!r} ends before it starts; "
-            "regions that cross the origin of a circular record are not supported.",
-            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "ORIGIN_CROSSING"},
+            f"Region {start}..{end} of {record_key!r} ends before it starts; {why}.",
+            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": reason},
         )
         self.record_key = record_key
         self.start = start
         self.end = end
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -403,7 +412,9 @@ def _resolve_regions(
         length = int(item.source_length or len(collection.records[item.resolved_index]))
         start, end = _selected_span(selection, item, length)
         if start > end:
-            raise OriginCrossingRegion(selection.record_key, start, end)
+            display = item.resolved_display
+            circular = display.is_circular if display is not None else item.detected_topology == "circular"
+            raise StartAfterEndRegion(selection.record_key, start, end, circular=circular)
         if start < 1 or end > length:
             raise ValidationError(
                 f"Region {start}..{end} of {selection.record_key!r} is outside 1..{length}.",
@@ -666,7 +677,8 @@ def _has_any(options: object, names: Sequence[str]) -> bool:
 __all__ = [
     "NotCarried",
     "NotCarriedKind",
-    "OriginCrossingRegion",
+    "StartAfterEndReason",
+    "StartAfterEndRegion",
     "RegionDrawing",
     "RegionRequest",
     "RegionSelection",

@@ -16,7 +16,7 @@ const derivedReply = (adaptSizes) => ({
   notCarried: [{ kind: 'COMPARISON_TABLES', count: 1, items: [] }]
 });
 
-const harness = ({ reply = null } = {}) => {
+const harness = ({ reply = null, refusal = 'ORIGIN_CROSSING' } = {}) => {
   const calls = { derive: [], created: [] };
   /** @type {Array<() => void>} */
   const pending = [];
@@ -28,7 +28,7 @@ const harness = ({ reply = null } = {}) => {
       if (reply === 'hold') await new Promise((resolve) => pending.push(resolve));
       const first = payload.regions[0];
       if ('start' in first && first.start > first.end) {
-        return { result: { status: 'refused', reason: 'ORIGIN_CROSSING', recordKey: first.recordKey, start: first.start, end: first.end } };
+        return { result: { status: 'refused', reason: refusal, recordKey: first.recordKey, start: first.start, end: first.end } };
       }
       return { result: derivedReply(payload.adaptSizes) };
     },
@@ -99,15 +99,20 @@ test('the newest request wins', async () => {
   assert.equal(owner.dialog.status, 'derived');
 });
 
-test('a refusal shows the reason and Create does nothing', async () => {
-  const { owner, calls } = harness();
-  await owner.open();
-  Object.assign(owner.dialog.rows[0], { checked: true, kind: 'coordinates', start: '900', end: '100' });
-  await owner.refresh();
-  assert.equal(owner.dialog.status, 'refused');
-  assert.match(owner.dialog.message, /cross the origin/);
-  assert.equal(await owner.confirm(), null);
-  assert.equal(calls.created.length, 0);
+test('a refusal shows its reason alone, worded for the topology, and Create does nothing', async () => {
+  for (const [refusal, message] of [
+    ['ORIGIN_CROSSING', 'Choose a start before the end: a region cannot cross the origin of a circular record.'],
+    ['START_AFTER_END', 'Choose a start before the end.']
+  ]) {
+    const { owner, calls } = harness({ refusal });
+    await owner.open();
+    Object.assign(owner.dialog.rows[0], { checked: true, kind: 'coordinates', start: '900', end: '100' });
+    await owner.refresh();
+    assert.equal(owner.dialog.status, 'refused');
+    assert.equal(owner.dialog.message, message, 'the reason only: no field name or invalid-region preface');
+    assert.equal(await owner.confirm(), null);
+    assert.equal(calls.created.length, 0);
+  }
 });
 
 test('Create runs one list step and closes; Cancel records nothing', async () => {
