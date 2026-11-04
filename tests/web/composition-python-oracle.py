@@ -150,6 +150,18 @@ def main() -> None:
                 overlay_obstacles=(Aabb(0.0, 0.0, 40.0, 60.0),),
             ),
         ),
+        _case(
+            # A figure drawn to a requested size: the metadata carries the requested sides, and the replan keeps the
+            # canvas at them with the content centred (issue #1427).
+            "requested_canvas",
+            CompositionRequest(
+                primary=primary,
+                legend=legend,
+                legend_placement=LegendPlacement.RIGHT,
+                requested_width_px=400.0,
+                requested_height_px=300.0,
+            ),
+        ),
     ]
     print(json.dumps(cases, allow_nan=False, separators=(",", ":")))
 

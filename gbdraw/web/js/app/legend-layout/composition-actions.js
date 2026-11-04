@@ -8,7 +8,7 @@ import { planLegendComposition } from '../../services/legend-layout.js';
 import { legendPositionOfMode, readLegendPositionOfMode } from '../../services/layout-preferences.js';
 import { LEGEND_POSITIONS } from '../../contracts/schema.generated.js';
 import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
-/** @import { LayoutBox, CompositionSpacingPx, CompositionOverlayPolicy } from '../../services/legend-layout.js' */
+/** @import { LayoutBox, CompositionSpacingPx, CompositionOverlayPolicy, RequestedCanvas } from '../../services/legend-layout.js' */
 /** @import { LoadRepair } from '../../utils/load-repairs.js' */
 
 /**
@@ -50,6 +50,8 @@ import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
  * @property {CompositionBounds[]} overlayObstacles
  * @property {CompositionOverlayPolicy} overlayPolicy
  * @property {CompositionPrimaryTarget} primary
+ * @property {RequestedCanvas | null} requestedCanvas The canvas a requested
+ *   figure size asked for; null for a Result drawn at Auto.
  * @property {CompositionSpacingPx} spacing
  * @property {CompositionLocalTarget | null} title
  * @property {string} titleSide
@@ -334,6 +336,32 @@ const validateLengthBar = (value) => {
 };
 
 /**
+ * The canvas a requested figure size asked for: absent or null at Auto, else
+ * exactly `{ widthPx, heightPx }`, each a positive px side or null, with at
+ * least one side set (gbdraw/render/composition.py `requestedCanvas`).
+ * @param {unknown} value
+ * @returns {RequestedCanvas | null}
+ */
+const validateRequestedCanvas = (value) => {
+  if (value === undefined || value === null) return null;
+  if (!isPlainObject(value) || Object.keys(value).sort().join() !== 'heightPx,widthPx') {
+    fail('composition.requestedCanvas must be an object with widthPx and heightPx only.');
+  }
+  /** @param {unknown} side @param {string} name */
+  const pxSide = (side, name) => {
+    if (side === null) return null;
+    if (typeof side !== 'number' || !Number.isFinite(side) || side <= 0) {
+      fail(`composition.requestedCanvas.${name} must be a positive number or null.`);
+    }
+    return side;
+  };
+  const widthPx = pxSide(value.widthPx, 'widthPx');
+  const heightPx = pxSide(value.heightPx, 'heightPx');
+  if (widthPx === null && heightPx === null) fail('composition.requestedCanvas must request a side.');
+  return { widthPx, heightPx };
+};
+
+/**
  * @param {unknown} value
  * @returns {CompositionSpacingPx}
  */
@@ -520,6 +548,7 @@ export const parseCompositionMetadata = (svg) => {
     )),
     overlayPolicy: validateOverlayPolicy(source.overlayPolicy),
     primary: /** @type {CompositionPrimaryTarget} */ (validateTarget(source.primary, 'primary', 'finalBounds')), // carries finalBounds
+    requestedCanvas: validateRequestedCanvas(source.requestedCanvas),
     spacing: validateSpacing(source.spacing),
     title: validateOptionalTarget(source.title, 'title'),
     titleSide: /** @type {string} */ (source.titleSide) // a member of TITLE_SIDES
@@ -688,7 +717,8 @@ const toPayloadBounds = (box) => ({
  *   primaryBounds: unknown, legendBounds?: unknown, titleBounds?: unknown,
  *   legendBox?: import('../../services/legend-layout.js').LayoutBox | null,
  *   primaryBox?: import('../../services/legend-layout.js').LayoutBox | null,
- *   legendSide?: string, titleSide?: string, spacing: unknown, overlayPolicy: unknown, overlayObstacles?: unknown[]
+ *   legendSide?: string, titleSide?: string, spacing: unknown, overlayPolicy: unknown, overlayObstacles?: unknown[],
+ *   requestedCanvas?: unknown
  * }} request
  */
 export const planComposition = ({
@@ -701,7 +731,8 @@ export const planComposition = ({
   titleSide = 'none',
   spacing,
   overlayPolicy,
-  overlayObstacles = []
+  overlayObstacles = [],
+  requestedCanvas = null
 }) => {
   if (!LEGEND_SIDES.has(legendSide)) fail(`Unknown legend side ${JSON.stringify(legendSide)}.`);
   if (!TITLE_SIDES.has(titleSide)) fail(`Unknown title side ${JSON.stringify(titleSide)}.`);
@@ -727,7 +758,8 @@ export const planComposition = ({
     titleSide,
     overlayObstacles: obstacles.map(toBox),
     spacing: resolvedSpacing,
-    overlayPolicy: resolvedOverlayPolicy
+    overlayPolicy: resolvedOverlayPolicy,
+    requestedCanvas: validateRequestedCanvas(requestedCanvas)
   });
   const placements = Object.fromEntries(plan.placements.map((placement) => [
     placement.role,
@@ -800,7 +832,8 @@ export const replanCompositionMetadata = (
     titleSide,
     spacing: metadata.spacing,
     overlayPolicy: metadata.overlayPolicy,
-    overlayObstacles: sourceObstacles
+    overlayObstacles: sourceObstacles,
+    requestedCanvas: metadata.requestedCanvas
   });
 };
 
@@ -1060,15 +1093,32 @@ const viewBoxBounds = (value) => {
 };
 
 /**
+ * What a root drawn to a requested size was asked for, and the canvas before
+ * Canvas padding and moved items grew it (the recorded automatic canvas, else
+ * the viewBox), for the Figure size line; null for a root drawn at Auto or
+ * without composition metadata.
+ * @param {Element} svg
+ * @returns {{ requested: RequestedCanvas, base: { width: number, height: number } } | null}
+ */
+export const requestedCanvasOf = (svg) => {
+  if (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== String(COMPOSITION_SCHEMA_VERSION)) return null;
+  const requested = parseCompositionMetadata(svg).requestedCanvas;
+  const base = viewBoxBounds(svg.getAttribute('data-original-view-box') || svg.getAttribute('viewBox'));
+  return requested && base ? { requested, base: { width: base.width, height: base.height } } : null;
+};
+
+/**
  * The number text of a root size, verbatim for a pixel size ("817.0px" ->
- * "817.0"), so the automatic root is restored byte for byte.
+ * "817.0"), so the automatic root is restored byte for byte. A size in
+ * another unit (a CLI Session's `180mm`, OV-2513) reads as the viewBox extent.
  * @param {string | null} value
- * @param {number} fallback The viewBox extent, for a size without a number.
+ * @param {number} fallback The viewBox extent, for a size without a px number.
  * @returns {string}
  */
 const sizeText = (value, fallback) => {
-  const pixels = /^([0-9.eE+-]+)px$/.exec(value ?? '');
-  return pixels ? pixels[1] : String(Number.parseFloat(value ?? '') || fallback);
+  const pixels = /^([0-9.eE+-]+)(px)?$/.exec(value ?? '');
+  if (!pixels) return String(fallback);
+  return pixels[2] ? pixels[1] : String(Number.parseFloat(pixels[1]) || fallback);
 };
 
 /** The root attributes that record the automatic canvas of a grown or padded Result. */
@@ -1269,6 +1319,8 @@ export const applyCompositionEdit = (svg, options = {}) => {
       'finalBounds',
       wireBounds(primaryPlacement.finalBounds)
     ),
+    // A requested canvas stays for every later replan; absent at Auto, as Python writes it.
+    ...(metadata.requestedCanvas ? { requestedCanvas: { ...metadata.requestedCanvas } } : {}),
     spacing: { ...plan.spacing },
     title: titlePayload,
     titleSide

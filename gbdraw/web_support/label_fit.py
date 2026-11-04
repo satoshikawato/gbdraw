@@ -24,6 +24,7 @@ from svgwrite import Drawing
 from gbdraw.api.diagram import label_fit_report, label_fit_row
 from gbdraw.core.numeric import parse_ascii_nonnegative_integer
 from gbdraw.exceptions import LabelsDoNotFitError, LabelsMayNotFitWarning, ValidationError
+from gbdraw.labels.circular_capacity import label_capacity_progress
 from gbdraw.labels.fit import (
     ALL_OUTSIDE_SCOPE,
     CENTER_RESERVED_RADIUS_PATH,
@@ -313,9 +314,16 @@ def label_capacity_notice_payload(warning: LabelsMayNotFitWarning) -> LabelCapac
 def label_capacity_notices(notice: Callable[[str], object]) -> Iterator[None]:
     """Send each ``LabelsMayNotFitWarning`` of a render to ``notice`` as the JSON text of its
     :class:`LabelCapacityNoticePayload`, when it is warned (CAPACITY-WARN): before the labels are placed, so the Web
-    shows it while the render runs."""
+    shows it while the render runs. Each pass of a figure-size fit sends its own (``label_capacity_progress``, D-17);
+    the kept pass's warning, emitted again after the fit, is not sent twice."""
 
-    with warnings.catch_warnings():
+    sent: list[LabelsMayNotFitWarning] = []
+
+    def progress(warning: LabelsMayNotFitWarning) -> None:
+        sent.append(warning)
+        notice(json.dumps(label_capacity_notice_payload(warning)))
+
+    with warnings.catch_warnings(), label_capacity_progress(progress):
         warnings.simplefilter("always", LabelsMayNotFitWarning)
         show_other = warnings.showwarning
 
@@ -328,7 +336,8 @@ def label_capacity_notices(notice: Callable[[str], object]) -> Iterator[None]:
             line: str | None = None,
         ) -> None:
             if isinstance(message, LabelsMayNotFitWarning):
-                notice(json.dumps(label_capacity_notice_payload(message)))
+                if not any(message is warned for warned in sent):
+                    notice(json.dumps(label_capacity_notice_payload(message)))
                 return
             show_other(message, category, filename, lineno, file, line)
 

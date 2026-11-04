@@ -270,7 +270,13 @@ const diagramProgressMessage = ({ stage = '', step, total, label } = {}) => {
 export const showDiagramProgress = (progress, { processingStatus, labelCapacityNotices }) => {
   const message = diagramProgressMessage(progress);
   if (message) processingStatus.value = message;
-  if (progress.notice) labelCapacityNotices.value = [...labelCapacityNotices.value, progress.notice];
+  const { notice } = progress;
+  if (!notice) return;
+  // A record's labels of one kind show once: a later pass of a figure-size fit replaces its notice in place (D-17).
+  const same = (/** @type {LabelCapacityNotice} */ shown) => shown.recordId === notice.recordId && shown.labelKind === notice.labelKind;
+  labelCapacityNotices.value = labelCapacityNotices.value.some(same)
+    ? labelCapacityNotices.value.map((shown) => (same(shown) ? notice : shown))
+    : [...labelCapacityNotices.value, notice];
 };
 
 export const afterPaint = ({ requestFrame = globalThis.requestAnimationFrame } = {}) => {

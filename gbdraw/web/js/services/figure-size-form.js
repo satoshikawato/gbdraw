@@ -100,6 +100,17 @@ export const requestFigureSizeLeaves = (request) => {
 };
 
 /**
+ * The size a committed request asks for, each side as stored, as the export check reads it
+ * (gbdraw/web_support/export_limit.py `_FigureSizePayload`); null for a request with both sides Auto.
+ * @param {CanonicalRenderRequest} request
+ * @returns {Record<FigureSide, unknown> | null}
+ */
+export const requestedFigureSize = (request) => {
+  const leaves = requestFigureSizeLeaves(request);
+  return leaves.width === null && leaves.height === null ? null : leaves;
+};
+
+/**
  * The value a side's typed amount and unit write: empty is Auto; otherwise the amount as typed and the unit. An
  * amount Python refuses (`0`, `-5`, `1e3`) is sent as typed, and Generate shows Python's refusal (R7).
  * @param {string} text
@@ -146,4 +157,48 @@ export const shownFigureSize = ({ widthPx, heightPx, requested }) => {
   /** @param {FigureLengthUnit} shownUnit */
   const size = (shownUnit) => `${lengthText(widthPx, shownUnit)} × ${lengthText(heightPx, shownUnit)} ${shownUnit}`;
   return { first: size(unit), second: size(unit === 'px' ? 'mm' : 'px') };
+};
+
+// A side counts as larger than requested from half a px on: the line shows px without decimals.
+const LARGER_PX = 0.5;
+
+/**
+ * Web-only additions after Python's fit, which the fit never sees (Owner D-26: until they reach Python): Legend
+ * edits (the replan grew the canvas past the box), Canvas padding, and a moved Legend, title, or scale.
+ * @typedef {'legend-edits' | 'canvas-padding' | 'moved-items'} FigureGrowthCause
+ * @typedef {{ sides: FigureSide[], causes: FigureGrowthCause[] }} FigureGrowth
+ */
+
+/**
+ * Why a shown Result drawn to a requested size is larger than the canvas it asked for, or null when it is not.
+ * @param {{ shown: { width: number, height: number }, base: { width: number, height: number },
+ *   requested: import('./legend-layout.js').RequestedCanvas, padded: boolean, moved: boolean }} inputs `shown` is the
+ *   root's px size; `base` the canvas before padding and moved items grew it (the recorded automatic canvas);
+ *   `requested` the composition metadata's `requestedCanvas`.
+ * @returns {FigureGrowth | null}
+ */
+export const figureGrowth = ({ shown, base, requested, padded, moved }) => {
+  /** @type {FigureSide[]} */
+  const sides = [];
+  /** @type {Set<FigureGrowthCause>} */
+  const causes = new Set();
+  for (const [side, px] of /** @type {const} */ ([['width', requested.widthPx], ['height', requested.heightPx]])) {
+    if (px === null || shown[side] < px + LARGER_PX) continue;
+    sides.push(side);
+    if (base[side] >= px + LARGER_PX) causes.add('legend-edits');
+    if (shown[side] >= base[side] + LARGER_PX) {
+      if (padded) causes.add('canvas-padding');
+      if (moved) causes.add('moved-items');
+    }
+  }
+  return sides.length === 0 ? null : { sides, causes: [...causes] };
+};
+
+/**
+ * A requested side as the size line names it: `180 mm`; null for a value the form cannot split.
+ * @param {unknown} value
+ */
+export const requestedLengthText = (value) => {
+  const split = splitFigureLength(value);
+  return split === null ? null : `${split.amount} ${split.unit}`;
 };

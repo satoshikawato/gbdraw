@@ -1091,6 +1091,28 @@ test('a v0.14.5 Session that stores "5kb" in its draft and request loads wrapped
   }
 });
 
+// Issue #1427: a Web Save of a Circular drawing sized 180 x 180 mm
+// (tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.provenance.json) keeps both sides as typed in the
+// form and in the committed request; Load reads them back with no repair row, and its Save keeps them.
+test('a Session 51 with a 180 x 180 mm figure size loads both sides into the form, and its Save keeps them', async () => {
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.gbdraw-session.json.gz', import.meta.url))));
+  const sides = { figure_width: '180mm', figure_height: '180mm' };
+  const stored = fixture.drawings.find((entry) => entry.id === 'circular');
+  assert.deepEqual({ figure_width: stored.config.form.figure_width, figure_height: stored.config.form.figure_height }, sides);
+  for (const session of [fixture, null]) {
+    const document = session ?? await save('figure-size-180mm');
+    resetDrawings();
+    loadDialogs.length = 0;
+    const loaded = await load(document);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    const drawing = state.drawingOf('circular');
+    assert.deepEqual({ figure_width: drawing.form.figure_width, figure_height: drawing.form.figure_height }, sides);
+    const overrides = (session ?? document).drawings.find((entry) => entry.id === 'circular').renderRequest.diagramOptions.configOverrides;
+    assert.deepEqual({ width: overrides['canvas.figure_width'], height: overrides['canvas.figure_height'] }, { width: '180mm', height: '180mm' });
+    assert.deepEqual(loadDialogs.flatMap((dialog) => dialog.items), [], session ? 'the fixture' : 'its Save');
+  }
+});
+
 // Italic gene names are one setting per drawing (`config.adv.italic_gene_labels`):
 // of two Linear drawings, the one that holds it on keeps it through Load and Save.
 test('a Session 51 keeps each Linear drawing\'s own Italic gene names through Load and Save', async () => {

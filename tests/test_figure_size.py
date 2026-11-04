@@ -716,6 +716,83 @@ def test_saved_svg_carries_the_requested_unit(tmp_path) -> None:
     assert float(height[:-2]) == pytest.approx(view_box[3] * 25.4 / 96, abs=0.001)
 
 
+def test_the_export_root_size_writes_each_requested_side_as_written_and_converts_the_other() -> None:
+    from gbdraw.core.figure_length import RequestedFigureSize
+    from gbdraw.render.document import export_root_size
+
+    width = FigureLength(180.0, "mm")
+    assert export_root_size(RequestedFigureSize(), 700.0, 500.0) is None
+    assert export_root_size(RequestedFigureSize(width=width), width.px, 96 / 25.4 * 100) == {
+        "width": "180mm", "height": "100mm"}
+    assert export_root_size(RequestedFigureSize(height=FigureLength(4.0, "in")), 480.0, 384.0) == {
+        "width": "5in", "height": "4in"}
+    both = RequestedFigureSize(width=width, height=FigureLength(15.0, "cm"))
+    assert export_root_size(both, width.px + 0.005, FigureLength(15.0, "cm").px) == {"width": "180mm", "height": "15cm"}
+
+
+def test_the_export_root_size_converts_a_requested_side_the_canvas_grew_past() -> None:
+    # A Web-only addition after the fit (Legend edits, Canvas padding) can make the canvas larger than the box.
+    from gbdraw.core.figure_length import RequestedFigureSize
+    from gbdraw.render.document import export_root_size
+
+    size = RequestedFigureSize(width=FigureLength(180.0, "mm"))
+    assert export_root_size(size, 200 * 96 / 25.4, 96.0) == {"width": "200mm", "height": "25.4mm"}
+
+
+def test_a_sized_web_render_keeps_the_page_root_in_px(tmp_path) -> None:
+    """OV-2512: the Web reply read the written file, whose root states 300mm, beside px pieces; the page root is px."""
+
+    from tests.test_web_label_fit import _sars_request, _web_render
+
+    reply = _web_render(_sars_request({"canvas.figure_width": "300mm", "labels.circular.scope": "none"}), tmp_path)
+    result = reply["results"][0]
+    width, _height, view_box = _svg_size(result["content"])
+    assert width.endswith("px")
+    assert float(width.removesuffix("px")) == pytest.approx(300 * 96 / 25.4, abs=0.01) == view_box[2]
+    assert result["document"]["head"] in result["content"]
+    # At Auto the page's text is the written file's, byte for byte.
+    auto = _web_render(_sars_request({"labels.circular.scope": "none"}), tmp_path / "auto")["results"][0]
+    assert auto["content"] == (tmp_path / "auto" / "out" / auto["name"]).read_text(encoding="utf-8")
+
+
+def test_the_web_export_check_states_a_sized_svg_root_as_python_writes_it() -> None:
+    import json
+
+    from gbdraw.web_support.export_limit import check_web_export_limit_json
+
+    request = {"format": "svg", "width": MM_180_PX, "height": 96.0, "dpi": None, "linearWrap": None,
+               "figureSize": {"width": "180 MM", "height": None}}
+    assert json.loads(check_web_export_limit_json(json.dumps(request))) == {
+        "ok": True, "root": {"width": "180mm", "height": "25.4mm"}}
+    with pytest.raises(ValueError):
+        check_web_export_limit_json(json.dumps({**request, "figureSize": None}))
+
+
+def _composition_metadata(svg: str) -> dict:
+    import html
+    import json
+
+    head = svg[svg.index("<svg") : svg.index(">", svg.index("<svg"))]
+    found = re.search(r'data-gbdraw-composition="([^"]+)"', head)
+    assert found
+    return json.loads(html.unescape(found[1]))
+
+
+def test_only_a_sized_figure_carries_its_requested_canvas_in_the_composition_metadata() -> None:
+    """Section 6: the Web replans a Legend edit within the requested canvas; Auto metadata keeps its keys and bytes."""
+
+    auto = _composition_metadata(gbdraw.draw_linear(_mito()).to_svg())
+    assert "requestedCanvas" not in auto
+    assert sorted(auto) == ["legend", "legendReflow", "legendSide", "lengthBar", "overlayObstacles", "overlayPolicy",
+                            "primary", "spacing", "title", "titleSide"]
+    sized = _composition_metadata(
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="180mm")).to_svg())
+    assert sized["requestedCanvas"] == {"widthPx": pytest.approx(MM_180_PX), "heightPx": None}
+    circular = _composition_metadata(gbdraw.draw_circular(_mito(), options=gbdraw.CircularOptions(
+        figure_height="150mm")).to_svg())
+    assert circular["requestedCanvas"] == {"widthPx": None, "heightPx": pytest.approx(150 * 96 / 25.4)}
+
+
 def test_png_dpi_scales_the_pixels() -> None:
     pytest.importorskip("cairosvg")
     diagram = gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="180mm"))

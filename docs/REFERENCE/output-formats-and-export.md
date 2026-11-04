@@ -86,14 +86,22 @@ labels need, for example `make the figure larger: --figure_width about 410.5mm;`
 The SVG, PDF, EPS, and PS files that the command line, `save_figure_to()`,
 `render_to_bytes()`, and `Diagram.save()` write state the requested size in its
 unit (`width="180mm"`; a side left auto is written in the other side's unit),
-with the `viewBox` in px, so a PDF page is 180 mm wide. The Web app and the
-in-memory drawing keep px.
+with the `viewBox` in px, so a PDF page is 180 mm wide. The in-memory drawing
+keeps px.
+
+In the Web app, **Figure size** in the **Layout** card sets the same two sides
+(see [Figure size](web-app.md#figure-size)); it applies on Generate, and the
+line under it shows the drawn size. The preview keeps px. Its SVG export states
+the requested size as the command line writes it; its PDF page has the same
+physical size (0.75 pt per px), its PNG has `dpi / 96` pixels per px with the
+DPI in the file, and Interactive SVG still opens to fit the browser window. A
+Result drawn at Auto exports as before.
 
 `--dpi` on the command line and `dpi` on `save_figure_to()`,
 `render_to_bytes()`, `Diagram.to_bytes()`, `Diagram.save()`, and
 `RenderOutputRequest` scale a PNG to `dpi / 96` pixels per SVG pixel (default
 96: one pixel per SVG pixel). Other formats ignore it, and the command line
-warns when `--dpi` is given without PNG output. The PNG carries no DPI metadata.
+warns when `--dpi` is given without PNG output. A command-line or Python PNG carries no DPI metadata.
 
 ## PNG and PDF size limits
 

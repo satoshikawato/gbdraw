@@ -557,6 +557,10 @@ test('the processing overlay keeps each label notice Python sends while it rende
   showDiagramProgress({ requestId: 1, stage: 'finalizing' }, overlay);
   assert.deepEqual([overlay.processingStatus.value, overlay.labelCapacityNotices.value],
     ['Finalizing diagram results...', [first, second]]);
+  // D-17: each pass of a figure-size fit sends its notice; a record's labels of one kind show once, the latest in place.
+  const refitted = Object.freeze({ ...first, capacityRatio: 1.2 });
+  showDiagramProgress({ requestId: 1, stage: 'rendering', notice: refitted }, overlay);
+  assert.deepEqual(overlay.labelCapacityNotices.value, [refitted, second]);
   // Both runs that show the overlay start it without the last run's notices.
   const source = await readFile(new URL('../../gbdraw/web/js/app/run-analysis.js', import.meta.url), 'utf8');
   assert.equal(source.match(/processing\.value = true;\n\s*labelCapacityNotices\.value = \[\];/g)?.length, 2);

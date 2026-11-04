@@ -129,7 +129,8 @@ const layoutCase = (vector) => {
     titleSide: inputs.titleSide,
     overlayObstacles: inputs.overlayObstacles.map(box),
     spacing: inputs.spacing,
-    overlayPolicy: vectors.overlayPolicy
+    overlayPolicy: vectors.overlayPolicy,
+    requestedCanvas: inputs.requestedCanvas ?? null
   });
   return {
     ...result,
@@ -154,6 +155,9 @@ test('the vectors cover every Gallery Legend, its edits, and the synthetic branc
   assert.ok(branches.some((expected) => expected.gradient?.compact === true), 'a compact Circular gradient');
   assert.ok(branches.some((expected) => expected.horizontal?.gradient?.compact === true), 'a compact Linear gradient');
   assert.ok(branches.some((expected) => expected.composition.overlayResolution === 'canvas_growth'), 'an overlay that grows the canvas');
+  const sized = vectors.layout.filter((vector) => vector.composition.requestedCanvas);
+  assert.ok(sized.some((vector) => vector.expected.composition.canvas[2] === vector.composition.requestedCanvas.widthPx), 'a requested canvas width');
+  assert.ok(sized.some((vector) => vector.expected.composition.canvas[3] === vector.composition.requestedCanvas.heightPx), 'a requested canvas height');
   assert.ok(vectors.measurement.length >= 200);
 });
 

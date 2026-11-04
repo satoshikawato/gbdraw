@@ -1,0 +1,14 @@
+{
+  "purpose": "Positive fixture of Session 51 with a requested figure size: a Web Save Session of a Circular HmmtDNA drawing with Figure size 180 mm x 180 mm (issue #1427), generated, with the Legend row CDS renamed to Genes. Load reads both sides back into the Figure size field.",
+  "sourceCommit": "53cd62a65 plus the uncommitted step-2 changes of branch feat/figure-size-web (PR-C step 2)",
+  "history": "branch feat/figure-size-web; Session 51 is not on main yet (docs/internal/SESSION_FORMAT_HISTORY.md)",
+  "route": "tests/web/figure-size.playwright.spec.js, test 'a Circular 180 x 180 mm figure ...': open the Web app, upload HmmtDNA.gbk, set Figure width and Figure height to 180 mm, Generate, rename the Legend row CDS to Genes, Save Session with an empty title; the downloaded file was decompressed and written again with gzip -n -9",
+  "inputs": {
+    "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
+  },
+  "values": "drawings[0].config.form: figure_width \"180mm\", figure_height \"180mm\"; drawings[0].renderRequest.diagramOptions.configOverrides: canvas.figure_width \"180mm\", canvas.figure_height \"180mm\"",
+  "decompressedSha256": "a26277f1c4431cb759891747cc71df82f4b351e4a9a9285c050f7a0816fa71b4",
+  "compression": "gzip -n -9",
+  "sessionVersion": 51,
+  "requestSchema": 9
+}

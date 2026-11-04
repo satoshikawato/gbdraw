@@ -1013,6 +1013,13 @@ export const circularLegendLocalBounds = (layout, colorRectSize) => {
  * @property {readonly LayoutBox[]} [overlayObstacles] In the primary item's coordinates.
  * @property {CompositionSpacingPx} spacing
  * @property {CompositionOverlayPolicy} overlayPolicy
+ * @property {RequestedCanvas | null} [requestedCanvas] The canvas a figure size asked for; null for Auto.
+ */
+
+/**
+ * The canvas sides a requested figure size asks for, in px (Python's `CompositionRequest.requested_width_px` and
+ * `requested_height_px`); a side that is null is Auto, and at least one side is set.
+ * @typedef {{ widthPx: number | null, heightPx: number | null }} RequestedCanvas
  */
 
 /** @typedef {{ role: string, dx: number, dy: number, local: LayoutBox, bounds: LayoutBox }} WorkingPlacement */
@@ -1202,7 +1209,9 @@ const isEmptyBox = (box) => !box || boxWidth(box) <= 0.0 || boxHeight(box) <= 0.
 
 /**
  * Python's `plan_composition`: dock or overlay the Legend, place the title,
- * pad the union, and move everything to start at (0, 0).
+ * pad the union, and move everything to start at (0, 0). A requested canvas
+ * side larger than the padded content is the canvas side, with the content
+ * centred in it.
  * @param {CompositionPlanRequest} request
  * @returns {CompositionPlanResult}
  */
@@ -1214,7 +1223,8 @@ export const planLegendComposition = ({
   titleSide = 'none',
   overlayObstacles = [],
   spacing,
-  overlayPolicy
+  overlayPolicy,
+  requestedCanvas = null
 }) => {
   if (isEmptyBox(primary)) throw new Error('Primary bounds must have positive width and height.');
   /** @type {WorkingPlacement[]} */
@@ -1256,10 +1266,13 @@ export const planLegendComposition = ({
     working.push(placeTitle(working[0].bounds, title, titleSide, spacing, legendPlacement));
   }
   const padded = expandedBox(unionBoxes(working.map((placement) => placement.bounds)), spacing.edgePaddingPx);
-  const outerDx = -padded.minX;
-  const outerDy = -padded.minY;
+  const canvasWidth = Math.max(boxWidth(padded), requestedCanvas?.widthPx ?? 0.0);
+  const canvasHeight = Math.max(boxHeight(padded), requestedCanvas?.heightPx ?? 0.0);
+  // Room a requested canvas leaves around the padded content is shared equally by both sides.
+  const outerDx = 0.5 * (canvasWidth - boxWidth(padded)) - padded.minX;
+  const outerDy = 0.5 * (canvasHeight - boxHeight(padded)) - padded.minY;
   return {
-    canvas: layoutBox(0.0, 0.0, boxWidth(padded), boxHeight(padded)),
+    canvas: layoutBox(0.0, 0.0, canvasWidth, canvasHeight),
     placements: working.map((placement) => ({
       role: placement.role,
       translation: /** @type {[number, number]} */ ([placement.dx + outerDx, placement.dy + outerDy]),

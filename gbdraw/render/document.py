@@ -51,26 +51,41 @@ def bind_export_size(drawing: Drawing, size: RequestedFigureSize) -> None:
     setattr(drawing, _EXPORT_SIZE_ATTR, size if size.requested else None)
 
 
-def _export_root_size(drawing: Drawing) -> dict[str, str] | None:
-    """The root ``width`` and ``height`` of a written file: each side in its requested unit, else in the other's.
+# A requested side the drawn canvas kept: within this many px it is written as requested.
+_KEPT_SIDE_PX = 0.01
 
-    The ``viewBox`` stays in px, so a viewer scales the px drawing to the physical size.
+
+def export_root_size(size: RequestedFigureSize, width_px: float, height_px: float) -> dict[str, str] | None:
+    """The root ``width`` and ``height`` a written file of a ``width_px`` x ``height_px`` drawing fitted to ``size``
+    states; ``None`` for a size with no requested side (the root stays in px).
+
+    A requested side the canvas kept is written as requested; any other side is converted, into its own requested
+    unit (a canvas that grew past the box after the fit) or into the first requested unit, and rounded to
+    ``_CONVERTED_DECIMALS``. The ``viewBox`` stays in px, so a viewer scales the px drawing to the physical size.
+    The one owner for the CLI and Python export and the Web SVG export (``gbdraw/web_support/export_limit.py``).
     """
 
-    size = getattr(drawing, _EXPORT_SIZE_ATTR, None)
-    if not isinstance(size, RequestedFigureSize) or not size.requested:
+    if not size.requested:
         return None
-    unit = size.width if size.width is not None else size.height
-    assert unit is not None
-    width_px, height_px = drawing_size(drawing)
+    first = size.width if size.width is not None else size.height
+    assert first is not None
 
     def side(requested: FigureLength | None, px: float) -> str:
-        if requested is not None:
+        if requested is not None and abs(requested.px - px) <= _KEPT_SIDE_PX:
             return requested.text
-        converted = unit.of_px(px)
+        converted = (requested or first).of_px(px)
         return FigureLength(round(converted.value, _CONVERTED_DECIMALS), converted.unit).text
 
     return {"width": side(size.width, width_px), "height": side(size.height, height_px)}
+
+
+def _export_root_size(drawing: Drawing) -> dict[str, str] | None:
+    """The written root size of ``drawing``: ``export_root_size`` of the size it was bound to, if any."""
+
+    size = getattr(drawing, _EXPORT_SIZE_ATTR, None)
+    if not isinstance(size, RequestedFigureSize):
+        return None
+    return export_root_size(size, *drawing_size(drawing))
 
 
 def _root_with(drawing: Drawing, attribs: dict[str, str] | None) -> Drawing:
@@ -242,6 +257,7 @@ __all__ = [
     "SvgDocument",
     "bind_export_size",
     "document_parts",
+    "export_root_size",
     "write_svg_document",
     "write_text",
 ]

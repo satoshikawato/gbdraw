@@ -9,7 +9,7 @@ import test from 'node:test';
 
 import {
   DEFAULT_FIGURE_LENGTH_UNIT, FIGURE_LENGTH_UNITS, figureLengthAmountText, figureLengthFormValue, figureLengthInputValue,
-  figureLengthUnitOf, requestFigureSizeLeaves, shownFigureSize, splitFigureLength
+  figureGrowth, figureLengthUnitOf, requestFigureSizeLeaves, requestedLengthText, shownFigureSize, splitFigureLength
 } from '../../gbdraw/web/js/services/figure-size-form.js';
 import { createFigureSizeField } from '../../gbdraw/web/js/app/figure-size-field.js';
 import { getSvgDimensions } from '../../gbdraw/web/js/services/svg-dimensions.js';
@@ -123,8 +123,27 @@ test('the field writes each side, keeps its unit as view state, and shows a valu
   changed();
   assert.equal(drawing.form.figure_width, null);
   assert.equal(field.figureWidthUnit.value, 'in', 'Auto keeps the unit');
-  shown = { first: '180 × 143.2 mm', second: '680 × 541 px' };
+  shown = { first: '180 × 143.2 mm', second: '680 × 541 px', larger: null };
   assert.equal(field.figureSizeLine.value, 'Figure: 180 × 143.2 mm (680 × 541 px)');
+  assert.equal(field.figureSizeLarger.value, '');
+  // Section 6: a canvas that Web-only additions grew past the requested box says so, naming them.
+  shown = { first: '190 × 143.2 mm', second: '718 × 541 px', larger: { sides: [{ side: 'width', length: '180 mm' }], causes: ['legend-edits', 'canvas-padding'] } };
+  assert.equal(field.figureSizeLine.value, 'Figure: 190 × 143.2 mm (718 × 541 px)');
+  assert.equal(field.figureSizeLarger.value, 'Larger than the requested 180 mm width: Legend edits and Canvas padding are added after the fit.');
+});
+
+test('a shown Result is larger than requested only past the box, by its Web-only causes', () => {
+  const requested = { widthPx: 680, heightPx: null };
+  const box = { width: 680, height: 541 };
+  assert.equal(figureGrowth({ shown: box, base: box, requested, padded: true, moved: true }), null, 'within the box');
+  assert.equal(figureGrowth({ shown: { width: 680.4, height: 900 }, base: box, requested, padded: false, moved: false }), null,
+    'an Auto side and half a px are not larger');
+  assert.deepEqual(figureGrowth({ shown: { width: 720, height: 541 }, base: { width: 700, height: 541 }, requested, padded: true, moved: false }),
+    { sides: ['width'], causes: ['legend-edits', 'canvas-padding'] });
+  assert.deepEqual(figureGrowth({ shown: { width: 720, height: 600 }, base: box, requested: { widthPx: 680, heightPx: 541 }, padded: false, moved: true }),
+    { sides: ['width', 'height'], causes: ['moved-items'] });
+  assert.equal(requestedLengthText('180mm'), '180 mm');
+  assert.equal(requestedLengthText('180 MM'), null);
 });
 
 // What Python sends for a refused size, through the Web error adapter (gbdraw/web_support/error_adapter.py).
@@ -172,4 +191,42 @@ test('the larger-figure remedy names Python\'s estimate for each requested side'
   assert.deepEqual(labelCapacityRemedyText('figure_size', { width: '240.3 mm', height: '9.5 in' }).params,
     { width: '240.3 mm', height: '9.5 in' });
   assert.deepEqual(labelCapacityRemedyText('filter', { width: '240.3 mm', height: null }).params, {});
+});
+
+// D-24: the plain SVG of a Result drawn to a requested size states the root size Python's `export_root_size` gives
+// for the shown root's px size, on the export copy only; a Result drawn at Auto (no port) exports its root as shown.
+test('a sized Result exports its SVG root in the requested unit, and the page root stays px', async () => {
+  const { downloadSVG } = await import('../../gbdraw/web/js/services/export.js');
+  const svg = {
+    attributes: new Map([['width', '680.3149606299213px'], ['height', '541px'], ['viewBox', '0 0 680.3149606299213 541']]),
+    getAttribute(name) { return this.attributes.get(name) ?? null; },
+    setAttribute(name, value) { this.attributes.set(name, String(value)); },
+    removeAttribute(name) { this.attributes.delete(name); },
+    querySelectorAll: () => [],
+    classList: { toggle() {}, remove() {}, length: 0 }
+  };
+  const page = svg;
+  const serialized = [];
+  const saved = { document: globalThis.document, XMLSerializer: globalThis.XMLSerializer };
+  globalThis.document = { createElement: (tag) => {
+    if (tag === 'template') return { set innerHTML(_markup) {}, content: { querySelector: () => ({ ...svg, attributes: new Map(svg.attributes) }) } };
+    throw new Error(`the export created a ${tag}`);
+  } };
+  globalThis.XMLSerializer = class { serializeToString(root) { serialized.push(Object.fromEntries(root.attributes)); return '<svg/>'; } };
+  try {
+    const asked = [];
+    const sizedSvgRoot = async (size) => { asked.push(size); return { width: '180mm', height: '143.1396mm' }; };
+    const snapshot = { name: 'sized.svg', svgContent: '<svg/>' };
+    await assert.rejects(downloadSVG(snapshot, { sizedSvgRoot }), /created a a/);
+    assert.deepEqual(asked, [{ width: 680.3149606299213, height: 541 }]);
+    assert.equal(serialized.at(-1).width, '180mm');
+    assert.equal(serialized.at(-1).height, '143.1396mm');
+    assert.equal(serialized.at(-1).viewBox, '0 0 680.3149606299213 541');
+    assert.equal(page.getAttribute('width'), '680.3149606299213px', 'the page root stays px');
+    serialized.length = 0;
+    await assert.rejects(downloadSVG(snapshot, { sizedSvgRoot: null }), /created a a/);
+    assert.equal(serialized.at(-1).width, '680.3149606299213px', 'an Auto Result exports its root as shown');
+  } finally {
+    Object.assign(globalThis, saved);
+  }
 });

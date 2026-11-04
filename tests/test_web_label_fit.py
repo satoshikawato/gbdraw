@@ -198,6 +198,37 @@ def test_capacity_warnings_reach_the_notice_while_other_warnings_pass_on() -> No
     assert [str(item.message) for item in caught] == ["other"]
 
 
+def test_each_fit_pass_sends_its_capacity_notice_while_the_caller_gets_the_kept_pass_once() -> None:
+    """D-17: the Web overlay gets each figure-size fit pass's CAPACITY-WARN when it is warned (progress); the caller's
+    warnings stay those of the kept pass, once (D-16)."""
+
+    from gbdraw.labels.circular_capacity import CircularLabelCapacity, check_label_capacity
+    from gbdraw.layout.figure_size import fit_base_length
+
+    notices: list[str] = []
+    events: list[str] = []
+
+    def measure(base: int) -> tuple[float, int]:
+        events.append(f"pass {base} with {len(notices)} notices")
+        ratio = round(base / 1000, 2)
+        check_label_capacity("r", [CircularLabelCapacity(
+            "circular_outer", LabelCapacityRecord(195, 14.0, ratio, ()), 1.0, "near")])
+        return base + 100.0 - 500.0, base
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with label_capacity_notices(notices.append):
+            fit = fit_base_length(measure, first_base=500, slope=1.0)
+    assert fit.base == 398
+    assert events == ["pass 500 with 0 notices", "pass 398 with 1 notices"]
+    assert [json.loads(notice)["capacityRatio"] for notice in notices] == [0.5, 0.4]
+    assert caught == []
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        fit_base_length(measure, first_base=500, slope=1.0)
+    assert [item.message.capacity.ratio for item in caught] == [0.4]
+
+
 def test_a_row_with_an_unknown_config_path_is_an_error() -> None:
     report = LabelFitReport(
         records=(),

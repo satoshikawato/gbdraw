@@ -242,6 +242,7 @@
       "tests/web/contracts/active-result-edit-transaction.playwright.spec.js",
       "tests/web/contracts/session-regenerate-intent.playwright.spec.js",
       "tests/web/feature-edits-tsv.playwright.spec.js",
+      "tests/web/figure-size.playwright.spec.js",
       "tests/web/gallery-tutorial.playwright.spec.js",
       "tests/web/gui-audit-20260930-comparisons.playwright.spec.js",
       "tests/web/history-generated-authority.playwright.spec.js",
