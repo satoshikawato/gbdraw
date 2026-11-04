@@ -376,3 +376,93 @@ def test_circular_track_widths_follow_the_rule(materialize) -> None:
         slots[0],
         replace(slots[1], renderer="dinucleotide_content"),
     ]
+
+
+# The request-level core and the Worker helper of New drawing from a region.
+
+
+def test_the_drawing_derivation_is_the_request_core(materialize) -> None:
+    from gbdraw.api.region_drawing import derive_region_request
+    from gbdraw.session import session_to_request
+
+    source = _mito_circular(config_overrides={"canvas.circular.track_type": "middle"})
+    materialized = materialize(source)
+    selection = [RegionSelection("mito", 100, 900)]
+    drawing = derive_region_drawing(materialized, selection)
+    core = derive_region_request(session_to_request(materialized), selection)
+    assert (core.request, core.mode, core.adaptation) == (drawing.drawing.request, "linear", drawing.adaptation)
+    assert [(item.kind, item.items) for item in core.not_carried] == [
+        ("OTHER_MODE_SETTINGS", ("canvas.circular.track_type",))
+    ]
+    assert drawing.dropped == ("Circular-only settings: canvas.circular.track_type.",)
+
+
+def test_an_origin_crossing_region_has_its_own_reason(materialize) -> None:
+    from gbdraw.api.region_drawing import OriginCrossingRegion
+
+    with pytest.raises(OriginCrossingRegion) as refusal:
+        derive_region_drawing(materialize(_mito_circular()), [RegionSelection("mito", 16000, 200)])
+    assert refusal.value.diagnostic == {"code": "REGION_INVALID", "field": "region", "reason": "ORIGIN_CROSSING"}
+    assert (refusal.value.record_key, refusal.value.start, refusal.value.end) == ("mito", 16000, 200)
+
+
+def _web_source(request: DiagramRequest) -> tuple[dict[str, Any], dict[str, str]]:
+    from gbdraw.session_request_codec import encode_canonical_request
+
+    encoded = encode_canonical_request(request)
+    return encoded.payload, {resource.resource_id: str(resource.source_path) for resource in encoded.resources}
+
+
+def _web_region(request: DiagramRequest, regions: list[dict[str, Any]], tmp_path: Path, *, adapt_sizes: bool = True):
+    from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+
+    payload, paths = _web_source(request)
+    reply = json.loads(derive_web_region_drawing_json(
+        json.dumps(payload), json.dumps(paths), str(tmp_path / "out"), json.dumps(regions), json.dumps(adapt_sizes)
+    ))
+    return payload, paths, reply
+
+
+def test_the_web_helper_derives_one_record_of_a_circular_drawing(tmp_path: Path) -> None:
+    from gbdraw.session_request_codec import decode_canonical_request
+
+    source = _mito_circular(config_overrides={"labels.font_size.short": 16, "labels.font_size.long": 16})
+    payload, paths, reply = _web_region(source, [{"recordKey": "mito", "start": 100, "end": 900}], tmp_path)
+    assert (reply["status"], reply["mode"]) == ("derived", "linear")
+    request = reply["renderRequest"]
+    # The new drawing names the source's resource: the same file, no new upload.
+    assert request["records"][0]["source"] == payload["records"][0]["source"]
+    assert request["records"][0]["region"]["start"] == 100
+    assert [item["setting"] for item in reply["returnedToAuto"]] == ["labels.font_size"]
+    assert reply["returnedToAuto"][0]["explicit"] == 16
+    decoded = decode_canonical_request(request, resource_paths=paths, output_directory=tmp_path / "out")
+    assert isinstance(decoded, LinearDiagramRequest)
+    kept = _web_region(
+        source, [{"recordKey": "mito", "start": 100, "end": 900}], tmp_path, adapt_sizes=False
+    )[2]
+    assert kept["returnedToAuto"] == []
+
+
+def test_the_web_helper_keeps_a_whole_circular_record_circular(tmp_path: Path) -> None:
+    reply = _web_region(_mito_circular(), [{"recordKey": "mito", "start": 1, "end": 16569}], tmp_path)[2]
+    assert (reply["status"], reply["mode"], reply["renderRequest"]["mode"]) == ("derived", "circular", "circular")
+
+
+def test_the_web_helper_draws_two_records_in_one_linear_drawing(tmp_path: Path) -> None:
+    source = LinearDiagramRequest(
+        records=[RecordInput(GenBankInputSource(TWO_RECORDS), record_key="pair", cardinality=RecordCardinality.ALL)],
+    )
+    payload, _paths, reply = _web_region(
+        source, [{"recordKey": "pair:1", "start": 1, "end": 40}, {"recordKey": "pair:2", "start": 1, "end": 40}], tmp_path
+    )
+    assert (reply["status"], reply["mode"]) == ("derived", "linear")
+    records = reply["renderRequest"]["records"]
+    assert [record["recordKey"] for record in records] == ["pair:1", "pair:2"]
+    # Each input keeps a resource of its own (the codec's rule); each reads the source's file.
+    source_id = payload["records"][0]["source"]["resourceId"]
+    assert {reply["resourceSources"][record["source"]["resourceId"]] for record in records} == {source_id}
+
+
+def test_the_web_helper_refuses_an_origin_crossing_region(tmp_path: Path) -> None:
+    reply = _web_region(_mito_circular(), [{"recordKey": "mito", "start": 16000, "end": 200}], tmp_path)[2]
+    assert reply == {"status": "refused", "reason": "ORIGIN_CROSSING", "recordKey": "mito", "start": 16000, "end": 200}
