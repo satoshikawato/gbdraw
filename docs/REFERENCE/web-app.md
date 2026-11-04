@@ -197,8 +197,8 @@ selected records and regions, Depth assignments, Result, and History. A change,
 **Generate Diagram**, a failure, or Undo in one drawing does not change another
 drawing's settings, legend, History, or Result. Drawings share the content of
 the input files, the Session title, and the settings that are not part of a
-drawing: **Auto Reflow**, PNG DPI, palette **Instant Preview**, and the LOSAT
-run method and thread count. Export and **Save Session** use the shown
+drawing: **Auto Reflow**, PNG DPI, palette **Instant Preview**, **Rich Feature
+Popup**, and the LOSAT run method and thread count. Export and **Save Session** use the shown
 drawing's current Result and values.
 
 The same file content is stored once per Session. A drawing can pick a file
@@ -221,10 +221,13 @@ title or **Auto Reflow**.
 **Reset Settings** asks for a choice: **Reset this drawing**, **Reset all
 drawings**, or **Cancel**. **Reset this drawing** returns the shown drawing's
 settings and edits to their defaults and leaves the Session-wide values as they
-are. **Reset all drawings** does that for every drawing and also resets the
-Session-wide values as **Reset Settings** did before drawings existed. Either
-choice keeps the input files, the record selection, file defaults, Depth
-assignments, and Result, and one Undo reverses it. **Cancel** changes nothing.
+are. **Reset all drawings** does that for every drawing and also returns the
+Session-wide values to their defaults. Reset edits (colors, strokes, hidden
+features, legend, labels) reach the shown figure at once; reset settings that
+apply on Generate change at the next **Generate Diagram**; a drawing that is not
+shown takes its reset when it is shown next. Either choice keeps the input
+files, the record selection, file defaults, Depth assignments, and Result, and
+one Undo reverses it. **Cancel** changes nothing and records no step.
 
 The table below states when each kind of edit reaches the Result. A clock
 icon beside a setting's heading or label marks a change that applies on
