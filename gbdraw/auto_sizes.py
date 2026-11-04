@@ -81,6 +81,36 @@ _CIRCULAR_SLOT_RENDERERS = {
     "gc_skew": "dinucleotide_skew",
     "depth": "depth",
 }
+_WINDOW_SETTINGS = ("window", "step", "depth_window", "depth_step")
+# The settings whose Auto value follows the drawn extent but is no length pair.
+_MODE_EXTENT_SETTINGS: Mapping[DiagramMode, tuple[str, ...]] = {
+    "circular": (
+        *(f"circularSlot.{slot_id}.width" for slot_id in _CIRCULAR_SLOT_RENDERERS),
+        "objects.scale.interval",
+    ),
+    "linear": (
+        "labels.font_size.linear",
+        "objects.scale.interval",
+        "canvas.linear.default_gc_height",
+        "canvas.linear.depth_height",
+    ),
+}
+# The tick font of each scalar track, keyed as _TRACK_THICKNESS_SETTINGS.
+_TICK_FONT_SETTINGS = {
+    "gc_content": "objects.gc_content.tick_font_size",
+    "depth": "objects.depth.tick_font_size",
+}
+ADAPTABLE_SETTINGS: Mapping[DiagramMode, tuple[str, ...]] = {
+    mode: (
+        *_SHARED_LENGTH_PAIRS,
+        *pairs,
+        *_WINDOW_SETTINGS,
+        *_MODE_EXTENT_SETTINGS[mode],
+        *_TICK_FONT_SETTINGS.values(),
+    )
+    for mode, pairs in _MODE_LENGTH_PAIRS.items()
+}
+"""The settings of each mode that can return to Auto, keyed as ``auto_setting_values`` keys them."""
 
 
 def determine_length_parameter(record_length: int, length_threshold: int) -> SizeClass:
@@ -271,8 +301,7 @@ def auto_setting_values(
         for path in (*_SHARED_LENGTH_PAIRS, *_MODE_LENGTH_PAIRS[mode])
     }
     window, step = sliding_window(longest, cfg)
-    depth_window, depth_step = depth_sliding_window(window, step)
-    values.update(window=window, step=step, depth_window=depth_window, depth_step=depth_step)
+    values.update(zip(_WINDOW_SETTINGS, (window, step, *depth_sliding_window(window, step))))
     if mode == "circular":
         circular = cfg.canvas.circular
         for slot_id, renderer in _CIRCULAR_SLOT_RENDERERS.items():
@@ -292,8 +321,8 @@ def auto_setting_values(
         track: float(values[setting]) for track, setting in _TRACK_THICKNESS_SETTINGS[mode].items()
     }
     thickness.update(track_thickness_px or {})
-    values["objects.gc_content.tick_font_size"] = scalar_axis_tick_font_size(mode, thickness["gc_content"])
-    values["objects.depth.tick_font_size"] = scalar_axis_tick_font_size(mode, thickness["depth"])
+    for track, setting in _TICK_FONT_SETTINGS.items():
+        values[setting] = scalar_axis_tick_font_size(mode, thickness[track])
     return values
 
 
@@ -370,6 +399,7 @@ def adapt_explicit_settings(
 
 
 __all__ = [
+    "ADAPTABLE_SETTINGS",
     "AutoValue",
     "DrawnExtent",
     "SettingAdaptation",
