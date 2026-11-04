@@ -14,6 +14,7 @@ import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement } from '../
 import { validateCustomTrackPlan } from '../../services/track-slot-validation.js';
 import { setFeaturePlacementRow } from '../../services/drawing/feature-edits.js';
 import { LINEAR_WRAP_FORM_FIELDS, linearWrapFormPatch } from '../../services/linear-wrap-form.js';
+import { controlValueText, describeControl } from '../../utils/control-description.js';
 import { msg, t } from '../../utils/i18n.js';
 
 /**
@@ -232,14 +233,13 @@ export const createFeaturePlacementActions = ({
     const lost = lostLaneKeys(drawing, before);
     if (!lost.length) return result;
     restoreTrackLayout(drawing, saved);
-    const checkbox = control?.type === 'checkbox';
-    const value = checkbox ? (control.checked ? t('On') : t('Off')) : control?.selectedOptions?.[0]?.text || '';
-    // The checkbox shows the kept value again; a bound select re-renders to it.
-    if (checkbox) control.checked = !control.checked;
+    // The dialog names the control and its new value as the History list does, read before
+    // the checkbox shows the kept value again; a bound select re-renders to it.
+    const described = control ? describeControl(control) : null;
+    if (control?.type === 'checkbox') control.checked = !control.checked;
     pendingLayout = { control, apply };
-    Object.assign(layoutChange, { open: true, count: lost.length, value,
-      setting: control?.getAttribute?.('aria-label') || control?.labels?.[0]?.textContent.trim()
-        || (control?.tagName === 'BUTTON' && control.textContent.trim()) || control?.title || '' });
+    Object.assign(layoutChange, { open: true, count: lost.length, setting: described?.name ?? '',
+      value: described ? controlValueText(described) : '' });
     // The primary choice of the layout dialog is a button.
     void focusAfterRender(() => /** @type {HTMLElement | null | undefined} */ (globalThis.document?.querySelector('[data-placement-layout-primary]')));
     return false;

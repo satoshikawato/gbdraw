@@ -1,20 +1,7 @@
 // @ts-check
 /** @import { HistoryStepDetail } from '../services/history.js' */
-const TEXT_INPUT_TYPES = new Set([
-  '',
-  'date',
-  'datetime-local',
-  'email',
-  'month',
-  'number',
-  'password',
-  'search',
-  'tel',
-  'text',
-  'time',
-  'url',
-  'week'
-]);
+import { TEXT_INPUT_TYPES, describeControl } from '../utils/control-description.js';
+import { msg } from '../utils/i18n.js';
 
 /**
  * A control the adapter tracks: an input, textarea, select, button, or
@@ -37,11 +24,6 @@ const isEditableControl = (element) => {
   return TEXT_INPUT_TYPES.has(String(element.type || '').toLowerCase());
 };
 
-// This module stays import-free (tests/web/history-inputs.test.mjs loads it
-// alone), so it declares the key marker of utils/i18n.js itself.
-/** @param {string} text @returns {string} */
-const msg = (text) => text;
-
 // A step label is History's identity: English, marked for translation where it is shown.
 /** @param {HistoryControl | null} element */
 const controlLabel = (element) => {
@@ -54,64 +36,6 @@ const controlLabel = (element) => {
   if (type === 'checkbox' || type === 'radio') return msg('Change setting');
   if (type === 'color') return msg('Change color');
   return msg('Edit setting');
-};
-
-/** @param {Element | null | undefined} element */
-const shownText = (element) => String(/** @type {HTMLElement | null | undefined} */ (element)?.innerText ?? element?.textContent ?? '')
-  .replace(/\s+/g, ' ').trim();
-
-/**
- * The control's accessible name as shown now: its `aria-label`, the elements
- * its `aria-labelledby` names, its labels, or a button's text.
- * @param {HistoryControl} element
- */
-const accessibleName = (element) => {
-  const aria = element.getAttribute?.('aria-label')?.trim();
-  if (aria) return aria;
-  const labelledBy = String(element.getAttribute?.('aria-labelledby') || '').split(/\s+/).filter(Boolean)
-    .map((id) => shownText(element.ownerDocument?.getElementById(id))).join(' ').trim();
-  if (labelledBy) return labelledBy;
-  const labels = [.../** @type {HTMLInputElement} */ (element).labels ?? []].map(shownText).join(' ').trim();
-  if (labels) return labels;
-  return String(element.tagName || '').toLowerCase() === 'button' ? shownText(element) : '';
-};
-
-/**
- * A radio's group name: its fieldset's legend, or its radio group's name.
- * @param {HistoryControl} element
- */
-const radioGroupName = (element) => {
-  const group = element.closest?.('fieldset, [role="radiogroup"]');
-  if (!group) return '';
-  const legend = String(group.tagName || '').toLowerCase() === 'fieldset' ? group.querySelector?.('legend') : null;
-  return legend ? shownText(legend) : accessibleName(group);
-};
-
-/**
- * PD-OI-112: what the History list shows of a control's step, read as the
- * step ends: the control's name and the value it holds (a select's option
- * text, a checkbox's state, a color, a text field's value, a radio's label
- * under its group's name, or under the step's label when the group has none);
- * a button, a file input, or an editable element shows its name alone. A
- * control without a name has none, and the step shows its label.
- * @param {HistoryControl} element
- * @returns {HistoryStepDetail | null}
- */
-const describeControl = (element) => {
-  const name = accessibleName(element);
-  if (!name) return null;
-  const tag = String(element.tagName || '').toLowerCase();
-  const type = String(element.type || '').toLowerCase();
-  if (type === 'radio') return { name: radioGroupName(element), value: name };
-  if (tag === 'select') {
-    const option = /** @type {HTMLSelectElement} */ (element).selectedOptions?.[0];
-    return { name, value: option ? shownText(option) : '' };
-  }
-  const value = String(/** @type {HTMLInputElement} */ (element).value ?? '');
-  if (type === 'checkbox') return { name, checked: Boolean(/** @type {HTMLInputElement} */ (element).checked) };
-  if (type === 'color') return { name, value, color: value };
-  if (tag === 'textarea' || (tag === 'input' && type !== 'password' && TEXT_INPUT_TYPES.has(type))) return { name, value };
-  return { name };
 };
 
 /**
@@ -211,6 +135,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
       const existing = txByElement.get(element);
       if (existing && !existing.closed) return existing;
       // The control owns its transaction; another owner settles it first (R11).
+      // PD-OI-112: the step keeps the control's name and value, read as it ends.
       const tx = await history.begin(controlLabel(element), { source, owner: element, detail: () => describeControl(element) });
       if (tx) txByElement.set(element, tx);
       return tx;

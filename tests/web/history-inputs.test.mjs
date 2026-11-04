@@ -12,6 +12,10 @@ const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-history-inputs-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
 await writeFile(join(tempDir, 'app', 'history-inputs.js'), await readFile(sourcePath, 'utf8'), 'utf8');
+await mkdir(join(tempDir, 'utils'), { recursive: true });
+for (const name of ['control-description.js', 'i18n.js', 'error-normalization.js']) {
+  await writeFile(join(tempDir, 'utils', name), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', name), 'utf8'));
+}
 
 const { isIgnoredTarget, setupHistoryInputs } = await import(pathToFileURL(join(tempDir, 'app', 'history-inputs.js')));
 await mkdir(join(tempDir, 'services'), { recursive: true });
@@ -21,11 +25,6 @@ for (const name of ['history.js', 'history-files.js', 'runtime-test-hooks.js']) 
     await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', name), 'utf8')
   );
 }
-await mkdir(join(tempDir, 'utils'), { recursive: true });
-await writeFile(
-  join(tempDir, 'utils', 'error-normalization.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8')
-);
 const { createHistoryManager } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
 
 const createSelectHarness = async (attributes = {}) => {

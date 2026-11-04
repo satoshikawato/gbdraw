@@ -61,7 +61,8 @@ test('a stack edit that drops a lane asks, Cancel keeps the draft, and Reset is 
   const before = everything(state);
   const click = () => {
     const event = new Event('click');
-    Object.defineProperty(event, 'currentTarget', { value: { tagName: 'BUTTON', textContent: '', title: 'Move outside Axis' } });
+    // A Row actions item: its text names it (R12), not its title.
+    Object.defineProperty(event, 'currentTarget', { value: { tagName: 'BUTTON', textContent: ' Move outside Axis ', title: 'Outside' } });
     return event;
   };
   assert.equal(editor.moveCircularTrackSlotOutside(features(), click()), false);
@@ -106,6 +107,32 @@ test('a checkbox edit that drops a lane names its new value in the shown languag
     await placement.resolveLayoutChange('cancel');
   } finally {
     await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// The dialog and the History list read one description of the control (describeControl): its name from its
+// aria-label, the elements its aria-labelledby names, or its labels, and the value it holds now.
+test('the layout dialog names the control and its new value as the History list does', async () => {
+  const linear = draftState('linear');
+  // The simple controls hold the feature slot: Features on axis splits it into lanes.
+  linear.adv.linear_track_slots_enabled = false;
+  const store = withModeDrawings(linear, { circular: draftState('circular'), linear });
+  const placement = createFeaturePlacementActions({ state: store, getCommittedRequest: () => null, isCurrentFeature: () => true,
+    runUndoable: async (label, fn) => { fn(); } });
+  const heading = { textContent: 'Track Layout' };
+  const controls = [
+    [{ type: 'select-one', tagName: 'SELECT', value: 'above', getAttribute: (name) => (name === 'aria-labelledby' ? 'heading' : null),
+      ownerDocument: { getElementById: (id) => (id === 'heading' ? heading : null) }, selectedOptions: [{ textContent: 'Above' }] },
+    'linear_track_layout', { setting: 'Track Layout', value: 'Above' }],
+    [{ type: 'checkbox', tagName: 'INPUT', checked: true, getAttribute: () => null, labels: [{ textContent: ' Separate\n Strands ' }] },
+      'separate_strands', { setting: 'Separate Strands', value: 'On' }]
+  ];
+  for (const [control, field, expected] of controls) {
+    Object.assign(linear.form, { linear_track_layout: 'middle', separate_strands: false });
+    linear.featurePlacementOverrides.l = lane('linear', 'above');
+    assert.equal(placement.changeLayoutSetting({ target: control }, field), false);
+    assert.deepEqual({ setting: placement.layoutChange.setting, value: placement.layoutChange.value }, expected);
+    await placement.resolveLayoutChange('cancel');
   }
 });
 

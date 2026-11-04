@@ -10,13 +10,9 @@ import { overlayRowsReaching } from '../services/track-slot-validation.js';
 import { joinSentences, listText, msg, t, tn } from '../utils/i18n.js';
 
 /**
- * The edited checkbox, select, or button, with the members the placement owner reads.
- * @typedef {HTMLElement & {
- *   type?: string,
- *   checked?: boolean,
- *   selectedOptions?: ArrayLike<{ text: string }>,
- *   labels?: ArrayLike<{ textContent: string }> | null
- * }} LayoutControl
+ * The edited checkbox, select, or button, with the members the placement owner reads; it names the
+ * control with `describeControl` (utils/control-description.js).
+ * @typedef {HTMLElement & { type?: string, checked?: boolean }} LayoutControl
  */
 
 /**
