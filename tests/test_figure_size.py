@@ -3,9 +3,11 @@ canvas, the Linear width fit, its refusals, and export units and DPI."""
 
 from __future__ import annotations
 
+import math
 import re
 import struct
 import sys
+import warnings
 import zlib
 from dataclasses import asdict
 from pathlib import Path
@@ -19,8 +21,10 @@ from gbdraw.config.models.canvas import FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, f
 from gbdraw.config.toml import load_config_toml
 from gbdraw.core.figure_length import FigureLength, argparse_figure_length, parse_figure_length
 from gbdraw.exceptions import ValidationError
+from gbdraw.layout.figure_size import fit_base_length
 from gbdraw.layout.composition import CompositionItem, CompositionRequest, LegendPlacement, plan_composition
 from gbdraw.layout.spatial import Aabb
+from gbdraw.render.composition import applied_composition_plan
 
 INPUTS = Path(__file__).resolve().parent / "test_inputs"
 MM_180_PX = 180 * 96 / 25.4
@@ -122,6 +126,77 @@ def test_a_smaller_requested_canvas_keeps_the_content_size() -> None:
     assert plan.placements == plain.placements
 
 
+# --- the base length resolver (D-09) ---
+
+
+def _fit(size_of_base, target: float):
+    bases: list[int] = []
+
+    def measure(base: int) -> tuple[float, int]:
+        bases.append(base)
+        return size_of_base(base), base
+
+    return fit_base_length(measure, target), bases
+
+
+def test_a_fixed_part_that_stays_put_fits_in_two_passes() -> None:
+    fit, bases = _fit(lambda base: base + 100.0, 500.0)
+    assert fit.fits and 497.0 <= fit.size_px <= 500.0 and fit.built == fit.base
+    assert len(bases) == 2
+
+
+def test_a_fixed_part_that_grows_as_the_base_shrinks_still_fits() -> None:
+    fit, bases = _fit(lambda base: base + 100.0 + 40000.0 / base, 680.0)
+    assert fit.fits and 677.0 <= fit.size_px <= 680.0
+    assert len(bases) <= 8
+
+
+def test_a_size_flat_below_a_base_fits_on_the_flat_part() -> None:
+    fit, _bases = _fit(lambda base: max(718.0, base + 150.0), 718.0)
+    assert fit.fits and fit.size_px == 718.0
+
+
+def test_a_target_that_the_shortest_base_passes_is_refused_at_base_one() -> None:
+    fit, bases = _fit(lambda base: base + 600.0, 500.0)
+    assert not fit.fits and fit.base == 1 and fit.built == 1
+    assert bases[-1] == 1 and len(bases) == 2
+
+
+def test_the_width_fit_measures_the_figure_drawn_with_region_label_rows() -> None:
+    """The figure kept is the one with the feature label rows a region label asked for (RGN-YIELD-ROW), so the
+    fit measures that one, not the first assembly."""
+
+    from svgwrite import Drawing
+    from svgwrite.container import Group
+
+    from gbdraw.api.diagram import _checked_linear_build, _linear_label_fit
+    from gbdraw.core.figure_length import RequestedFigureSize
+    from gbdraw.labels.linear import (
+        LINEAR_LABEL_FIT_ATTR, FeatureLabelRow, FeatureLabelRows, RecordRegionLabels, linear_label_fit,
+    )
+    from gbdraw.render.composition import apply_composition_plan
+
+    rows = FeatureLabelRows((FeatureLabelRow(0, 3, 4),), overlaps=1, region_labels=((0, 0),))
+    asking = linear_label_fit([("rec", [])], 8.0, [RecordRegionLabels((10.0, 10.0), 2, conflicted=(0, 1))], rows)
+    cleared = linear_label_fit([("rec", [])], 8.0, [RecordRegionLabels((10.0, 10.0), 1, conflicted=(1,))])
+
+    def assemble(overrides, feature_label_rows):
+        base = float(overrides["canvas.linear.width"])
+        width = base + (100.0 if feature_label_rows is None else 150.0)
+        plan = plan_composition(CompositionRequest(primary=CompositionItem("primary", Aabb(0.0, 0.0, width, 50.0))))
+        drawing = Drawing(debug=False)
+        apply_composition_plan(drawing, plan, primary_targets=[Group()])
+        setattr(drawing, LINEAR_LABEL_FIT_ATTR, asking if feature_label_rows is None else cleared)
+        return drawing
+
+    size = RequestedFigureSize(FigureLength(500.0, "px"))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        drawing = _checked_linear_build(assemble, features_separated=False, figure_size=size)
+    assert _linear_label_fit(drawing) is cleared
+    assert 497.0 <= applied_composition_plan(drawing).content_bounds.width <= 500.0
+
+
 # --- the Linear width fit (D-01, D-09) ---
 
 
@@ -183,6 +258,83 @@ def test_a_wrapped_record_draws_its_rows_at_the_fitted_width() -> None:
     assert _svg_size(diagram.to_svg())[2][2] == pytest.approx(MM_180_PX, abs=0.01)
 
 
+LABELS_ALL = {"labels.linear.scope": "all"}
+TITLE = gbdraw.TitleOptions(
+    text="Homo sapiens mitochondrion, complete genome (NC_012920.1)", position="top", font_size=24
+)
+
+
+def _count_assemblies(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """The sequence width of every Linear assembly the build makes."""
+
+    import gbdraw.api.diagram as diagram_module
+
+    widths: list[int] = []
+    original = diagram_module.assemble_linear_diagram_from_records
+
+    def counting(*args, **kwargs):
+        widths.append(kwargs["cfg"].canvas.linear.width)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(diagram_module, "assemble_linear_diagram_from_records", counting)
+    return widths
+
+
+def _content_width(diagram: gbdraw.Diagram) -> float:
+    return applied_composition_plan(diagram._drawing).content_bounds.width
+
+
+def _content_width_at_base_one(**options) -> float:
+    overrides = {**options.pop("config_overrides", {}), "canvas.linear.width": 1}
+    return _content_width(
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(config_overrides=overrides, **options))
+    )
+
+
+def test_a_figure_without_labels_fits_in_two_assemblies(monkeypatch) -> None:
+    widths = _count_assemblies(monkeypatch)
+    diagram = gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="180mm"))
+    assert len(widths) == 2
+    assert MM_180_PX - 3 <= _content_width(diagram) <= MM_180_PX
+
+
+def test_labels_that_widen_as_the_sequence_narrows_still_fit(monkeypatch) -> None:
+    """The labels past the sequence ends grow as the sequence width shrinks, so a slope-1 step lands over."""
+
+    widths = _count_assemblies(monkeypatch)
+    diagram = gbdraw.draw_linear(
+        _mito(), options=gbdraw.LinearOptions(figure_width="180mm", config_overrides=LABELS_ALL)
+    )
+    assert _svg_size(diagram.to_svg())[2][2] == pytest.approx(MM_180_PX, abs=0.01)
+    assert MM_180_PX - 3 <= _content_width(diagram) <= MM_180_PX
+    assert len(widths) <= 3
+
+
+def test_too_narrow_with_labels_states_the_width_at_the_shortest_sequence() -> None:
+    minimum = _content_width_at_base_one(config_overrides=LABELS_ALL)
+    with pytest.raises(ValidationError) as caught:
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="40mm", config_overrides=LABELS_ALL))
+    assert caught.value.diagnostic["minimumPx"] == math.ceil(minimum)
+    assert "record names and labels past the sequence ends" in str(caught.value)
+    assert "place the legend at the top or bottom" in str(caught.value)
+
+
+@pytest.mark.parametrize("width", ["85mm", "120mm"])
+def test_a_title_wider_than_the_records_sets_the_minimum_width(width) -> None:
+    minimum = _content_width_at_base_one(title=TITLE, legend="top")
+    with pytest.raises(ValidationError) as caught:
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(title=TITLE, legend="top", figure_width=width))
+    message = str(caught.value)
+    assert ": title " in message and "padding" in message
+    assert "record names" not in message and "place the legend" not in message
+    assert caught.value.diagnostic["minimumPx"] == math.ceil(minimum)
+    at_minimum = f"{math.ceil(minimum)}px"
+    diagram = gbdraw.draw_linear(
+        _mito(), options=gbdraw.LinearOptions(title=TITLE, legend="top", figure_width=at_minimum)
+    )
+    assert _svg_size(diagram.to_svg())[2][2] == pytest.approx(math.ceil(minimum), abs=0.01)
+
+
 def test_a_requested_height_centres_the_figure_and_keeps_the_width() -> None:
     auto_width, auto_height, _ = _svg_size(gbdraw.draw_linear(_mito()).to_svg())
     diagram = gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_height="10in"))
@@ -210,12 +362,12 @@ def test_a_width_narrower_than_the_fixed_parts_names_them_and_the_legend_remedy(
     assert diagnostic["code"] == "INPUT_INVALID" and diagnostic["configPath"] == FIGURE_WIDTH_PATH
     minimum_px = diagnostic["minimumPx"]
     assert isinstance(minimum_px, int) and minimum_px > 40 * 96 / 25.4
-    # The same width fits once the legend no longer sits beside the records.
-    at_minimum = f"{minimum_px}px"
+    # The stated minimum is drawn; one px less is refused.
+    assert minimum_px == math.ceil(_content_width_at_base_one())
+    at_minimum = gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width=f"{minimum_px}px"))
+    assert _svg_size(at_minimum.to_svg())[2][2] == pytest.approx(minimum_px, abs=0.01)
     with pytest.raises(ValidationError, match="narrower"):
-        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width=at_minimum))
-    top = gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width=at_minimum, legend="top"))
-    assert _svg_size(top.to_svg())[2][2] == pytest.approx(minimum_px, abs=0.01)
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width=f"{minimum_px - 1}px"))
 
 
 def test_a_narrow_width_without_a_side_legend_offers_no_legend_remedy() -> None:

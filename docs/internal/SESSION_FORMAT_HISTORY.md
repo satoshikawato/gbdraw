@@ -51,6 +51,13 @@ Measured against `main`'s build (0.14.5, 033a3aa89, Session 50): `load_session_d
 than this gbdraw supports (50).". The wrap length, italic gene names and identity colour scale reached `main` in
 Session 50 (entry below); Session 51 only moves them from the slices into each drawing.
 
+Session 51 also adds the config leaves `canvas.figure_width` and `canvas.figure_height` (`"auto"`, the default, or
+a length with a unit, issue #1427) to a drawing's stored full config; a CLI or Python writer sets them as config
+overrides. The request schema keeps config opaque, and Session 51 has not reached `main`, so the version does not
+change. A Session without the leaves reads as auto, and no reader converts it. `main`'s build (0.14.5) ignores the
+leaves in a stored full config and refuses them as a `configOverrides` entry ("Unknown config override path").
+The Web has no control for them yet; a Web re-plan (a legend drag) does not keep a requested canvas.
+
 ## Unreleased: Session 50 stores the Linear wrap length, italic gene names, and the identity colour scale
 
 Session version 50 adds the config leaf `canvas.linear.wrap_length` (`"none"`,

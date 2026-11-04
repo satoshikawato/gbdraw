@@ -134,7 +134,7 @@ from gbdraw.configurators import (
 )
 from gbdraw.configurators.legend import measure_legend
 from gbdraw.core.color import normalize_hex_color
-from gbdraw.core.figure_length import FigureLength, RequestedFigureSize
+from gbdraw.core.figure_length import RequestedFigureSize
 from gbdraw.core.fonts import resolve_font_family
 from gbdraw.core.numeric import compensated_sum
 from gbdraw.core.sequence import create_dict_for_sequence_lengths
@@ -197,7 +197,7 @@ from gbdraw.layout.composition import (
     TitlePlacement,
     plan_composition,
 )
-from gbdraw.layout.figure_size import check_figure_size, figure_too_narrow, fit_base_length
+from gbdraw.layout.figure_size import check_figure_height, figure_too_narrow, fit_base_length
 from gbdraw.layout.linear_multi_record import record_key_at, record_pairs_between_adjacent_rows
 from gbdraw.layout.linear_wrap import (
     LinearWrapSummary,
@@ -4182,7 +4182,6 @@ def _build_linear_diagram(
         assemble,
         features_separated=bool(cfg.canvas.resolve_overlaps),
         figure_size=cfg.canvas.figure_size,
-        sequence_width=cfg.canvas.linear.width,
     )
 
 
@@ -4201,56 +4200,22 @@ _LinearAssemble: TypeAlias = Callable[
 _LINEAR_FIXED_WIDTH_NAME = "record names and labels past the sequence ends"
 
 
-def _width_fitted_linear_assemble(assemble: _LinearAssemble, width: FigureLength) -> tuple[_LinearAssemble, int]:
-    """``assemble`` with the sequence width that fills a requested figure width, and that width (D-09).
-
-    Every assembly draws at that width (label fit rows included), and the first plain assembly is the best
-    measured one, so a sized figure costs about two assemblies.
-    """
-
-    def measure(base: int) -> tuple[float, Drawing | LinearDiagramBuildResult]:
-        built = assemble({LINEAR_SEQUENCE_WIDTH_PATH: base}, None)
-        return applied_composition_plan(_linear_drawing(built)).content_bounds.width, built
-
-    fit = fit_base_length(measure, width.px)
-    if not fit.fits:
-        raise figure_too_narrow(
-            applied_composition_plan(_linear_drawing(fit.built)),
-            width,
-            base_px=fit.base,
-            fixed_primary_name=_LINEAR_FIXED_WIDTH_NAME,
-        )
-    measured: list[Drawing | LinearDiagramBuildResult] = [fit.built]
-
-    def fitted(
-        overrides: Mapping[str, LabelFitValue], rows: FeatureLabelRows | None
-    ) -> Drawing | LinearDiagramBuildResult:
-        if measured and not overrides and rows is None:
-            return measured.pop()
-        return assemble({**overrides, LINEAR_SEQUENCE_WIDTH_PATH: fit.base}, rows)
-
-    return fitted, fit.base
-
-
 def _checked_linear_build(
     assemble: _LinearAssemble,
     *,
     features_separated: bool,
     figure_size: RequestedFigureSize,
-    sequence_width: int,
 ) -> Drawing | LinearDiagramBuildResult:
     """Assemble a Linear figure and apply the figure size and label fit checks to it.
 
-    A requested figure width sets the sequence width first. A figure whose
-    region labels need feature labels in a new row (LP-D82 ``RGN-YIELD-ROW``)
-    is assembled once more with those rows, and that figure is kept when
-    ``keeps_feature_label_rows`` accepts it. The figure kept must fit a
-    requested size. A figure drawn with labels that do not fit keeps its
-    report (the Web notice).
+    A figure whose region labels need feature labels in a new row (LP-D82
+    ``RGN-YIELD-ROW``) is assembled once more with those rows, and that figure
+    is kept when ``keeps_feature_label_rows`` accepts it. A requested figure
+    width sets the sequence width (D-09) by measuring that kept figure, which
+    is then the drawn one; label fit rows draw at the same sequence width. The
+    figure kept must fit a requested height. A figure drawn with labels that do
+    not fit keeps its report (the Web notice).
     """
-
-    if figure_size.width is not None:
-        assemble, sequence_width = _width_fitted_linear_assemble(assemble, figure_size.width)
 
     def build(overrides: Mapping[str, LabelFitValue]) -> Drawing | LinearDiagramBuildResult:
         first = assemble(overrides, None)
@@ -4260,11 +4225,28 @@ def _checked_linear_build(
         second = assemble(overrides, label_fit.new_rows)
         return second if keeps_feature_label_rows(label_fit, _linear_label_fit(_linear_drawing(second))) else first
 
-    result = build({})
+    fitted: dict[str, LabelFitValue] = {}
+    if figure_size.width is None:
+        result = build({})
+    else:
+
+        def measure(base: int) -> tuple[float, Drawing | LinearDiagramBuildResult]:
+            built = build({LINEAR_SEQUENCE_WIDTH_PATH: base})
+            return applied_composition_plan(_linear_drawing(built)).content_bounds.width, built
+
+        fit = fit_base_length(measure, figure_size.width.px)
+        if not fit.fits:
+            raise figure_too_narrow(
+                applied_composition_plan(_linear_drawing(fit.built)),
+                figure_size.width,
+                fixed_primary_name=_LINEAR_FIXED_WIDTH_NAME,
+            )
+        result = fit.built
+        fitted[LINEAR_SEQUENCE_WIDTH_PATH] = fit.base
 
     def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         try:
-            verified = _linear_drawing(build(overrides))
+            verified = _linear_drawing(build({**overrides, **fitted}))
         except ValidationError as error:
             unfit = _unfit_row_verification(error)
             if unfit is None:
@@ -4275,12 +4257,7 @@ def _checked_linear_build(
 
     drawing = _linear_drawing(result)
     if figure_size.requested:
-        check_figure_size(
-            applied_composition_plan(drawing),
-            figure_size,
-            base_px=sequence_width,
-            fixed_primary_name=_LINEAR_FIXED_WIDTH_NAME,
-        )
+        check_figure_height(applied_composition_plan(drawing), figure_size)
         bind_export_size(drawing, figure_size)
     report = check_linear_label_fit(_linear_label_fit(drawing), verify, features_separated=features_separated)
     if report is not None:

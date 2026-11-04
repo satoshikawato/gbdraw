@@ -19,16 +19,22 @@ from gbdraw.layout.composition import CompositionPlan
 from gbdraw.layout.spatial import Aabb, union_aabbs
 
 Built = TypeVar("Built")
-# Measurements after the first: the first gives the fixed part, the next lands on the target when the composed size
-# grows one px per px of base length; the rest correct a slope that is not exactly one.
-_CORRECTION_PASSES = 3
+# Each step aims this far under the target, and a pass this close under it is accepted: the planner centres the
+# rest in the requested canvas, so the canvas stays exact. A pass over the target is never accepted.
+_AIM_UNDER_PX = 2.0
+_ACCEPT_UNDER_PX = 3.0
+_MAX_PASSES = 8
+# The composed size grows with the base length, but labels past the ends can make a stretch nearly flat; a slope
+# measured there is raised to this so one step cannot jump far.
+_MIN_SLOPE = 0.25
 
 
 @dataclass(frozen=True)
 class BaseLengthFit(Generic[Built]):
-    """The widest measured base length whose composed size fits the target, or the probe when none fits.
+    """A measured base length, its composed size, and what that measurement assembled.
 
-    ``built`` is what that measurement assembled, so the caller can keep it as the drawn figure.
+    ``fits`` is False only for base length 1 still over the target; ``built`` is then the figure at base 1, whose
+    parts the refusal names. The caller keeps a fitting ``built`` as the drawn figure.
     """
 
     base: int
@@ -37,32 +43,64 @@ class BaseLengthFit(Generic[Built]):
     fits: bool
 
 
-def fit_base_length(measure: Callable[[int], tuple[float, Built]], target_px: float) -> BaseLengthFit[Built]:
-    """The base length whose composed size (``measure``) comes closest to ``target_px`` without passing it.
+def _step(start: BaseLengthFit[Built], aim: float, slope: float) -> int:
+    return start.base + math.floor((aim - start.size_px) / max(_MIN_SLOPE, slope))
 
-    The first measurement uses the target itself as the base; the composed size less the base is the part that
-    does not grow with it. Each next base adds what is left to the target (slope 1), down when the size passed it
-    and up while at least 1 px is left, for at most a few passes.
+
+def _slope(a: BaseLengthFit[Built], b: BaseLengthFit[Built]) -> float:
+    return (b.size_px - a.size_px) / (b.base - a.base)
+
+
+def fit_base_length(measure: Callable[[int], tuple[float, Built]], target_px: float) -> BaseLengthFit[Built]:
+    """The base length whose composed size (``measure``) is within a few px under ``target_px``.
+
+    The first measurement uses the target as the base. Each step aims 2 px under the target: the first with
+    slope 1, later ones with the slope between the last two passes. Once one pass is under and one over, the next
+    base stays between them. After 8 passes the widest pass under the target is taken. The base never goes below
+    1, and the target is refused (``fits`` False) only when base 1 is over it.
     """
 
+    aim = target_px - _AIM_UNDER_PX
+    measured: dict[int, BaseLengthFit[Built]] = {}
+    under: BaseLengthFit[Built] | None = None
+    over: BaseLengthFit[Built] | None = None
+    last: BaseLengthFit[Built] | None = None
     base = max(1, math.floor(target_px))
-    size, built = measure(base)
-    probe = BaseLengthFit(base, size, built, fits=False)
-    if size - base >= target_px:
-        return probe
-    measured = {base}
-    best = BaseLengthFit(base, size, built, fits=True) if size <= target_px else None
-    for _ in range(_CORRECTION_PASSES):
-        if best is not None and target_px - best.size_px < 1.0:
-            break
-        base = math.floor(base + target_px - size)
-        if base < 1 or base in measured:
-            break
-        measured.add(base)
+    while True:
         size, built = measure(base)
-        if size <= target_px and (best is None or base > best.base):
-            best = BaseLengthFit(base, size, built, fits=True)
-    return best if best is not None else probe
+        current = BaseLengthFit(base, size, built, fits=size <= target_px)
+        if current.fits and size >= target_px - _ACCEPT_UNDER_PX:
+            return current
+        if not current.fits and base == 1:
+            return current
+        if current.fits and (under is None or base > under.base):
+            under = current
+        if not current.fits and (over is None or base < over.base):
+            over = current
+        previous, last = last, current
+        measured[base] = current
+        if len(measured) >= _MAX_PASSES:
+            if under is not None:
+                return under
+            base = 1
+            continue
+        if under is not None and over is not None:
+            if over.base - under.base <= 1:
+                return under
+            base = _step(under, aim, _slope(under, over))
+            if not under.base < base < over.base or base in measured:
+                base = (under.base + over.base) // 2
+            if base in measured:
+                return under
+            continue
+        base = max(1, _step(current, aim, 1.0 if previous is None else _slope(previous, current)))
+        if base in measured:
+            base = current.base + (1 if current.fits else -1)
+        if base in measured or base < 1:
+            # Only reachable when the size is not monotonic in the base.
+            if under is not None:
+                return under
+            base = 1
 
 
 @dataclass(frozen=True)
@@ -115,75 +153,84 @@ def _parts_text(length: FigureLength, parts: list[tuple[str, float]]) -> str:
     return ", ".join(f"{name} {length.message_text(px)}" for name, px in parts if px > 0.0)
 
 
-def check_figure_size(
+def check_figure_height(
     plan: CompositionPlan,
     size: RequestedFigureSize,
     *,
-    base_px: float,
-    fixed_primary_name: str,
     legend_role: str = "legend",
     title_role: str = "title",
 ) -> None:
-    """Refuse a drawn figure whose padded content is larger than a requested side.
+    """Refuse a drawn figure whose padded content is taller than a requested height.
 
-    ``base_px`` is the base length of the primary item along the width (the Linear sequence width), and
-    ``fixed_primary_name`` names the rest of the primary item's width in the message.
+    A requested width is the base-length fit's: the figure drawn is the one that fit it.
     """
 
     content = plan.content_bounds
-    if size.width is not None and content.width > size.width.px:
-        raise figure_too_narrow(
-            plan, size.width, base_px=base_px, fixed_primary_name=fixed_primary_name,
-            legend_role=legend_role, title_role=title_role,
-        )
-    if size.height is not None and content.height > size.height.px:
-        width = size.width if size.width is not None else size.height.of_px(plan.width)
-        parts = _axis_parts(plan, "y", legend_role=legend_role, title_role=title_role)
-        minimum = size.height.message_text(content.height, round_up=True)
-        detail = _parts_text(
-            size.height,
-            [("records", parts.primary), ("legend", parts.legend), ("title", parts.title), ("padding", parts.padding)],
-        )
-        raise ValidationError(
-            f"figure_height {size.height.text} is shorter than the figure at {width.message_text(plan.width)} "
-            f"wide: {minimum} ({detail}). Use a figure_height of at least {minimum}, or leave figure_height auto.",
-            diagnostic={
-                "code": "INPUT_INVALID",
-                "configPath": FIGURE_HEIGHT_PATH,
-                "minimumPx": math.ceil(content.height),
-            },
-        )
+    if size.height is None or content.height <= size.height.px:
+        return
+    width = size.width if size.width is not None else size.height.of_px(plan.width)
+    parts = _axis_parts(plan, "y", legend_role=legend_role, title_role=title_role)
+    minimum = size.height.message_text(content.height, round_up=True)
+    detail = _parts_text(
+        size.height,
+        [("records", parts.primary), ("legend", parts.legend), ("title", parts.title), ("padding", parts.padding)],
+    )
+    raise ValidationError(
+        f"figure_height {size.height.text} is shorter than the figure at {width.message_text(plan.width)} "
+        f"wide: {minimum} ({detail}). Use a figure_height of at least {minimum}, or leave figure_height auto.",
+        diagnostic={
+            "code": "INPUT_INVALID",
+            "configPath": FIGURE_HEIGHT_PATH,
+            "minimumPx": math.ceil(content.height),
+        },
+    )
 
 
 def figure_too_narrow(
     plan: CompositionPlan,
     width: FigureLength,
     *,
-    base_px: float,
     fixed_primary_name: str,
     legend_role: str = "legend",
     title_role: str = "title",
 ) -> ValidationError:
-    """The refusal of a requested width that the parts that do not shrink fill (``plan`` drew ``base_px``)."""
+    """The refusal of a requested width narrower than ``plan``, the figure at base length 1.
 
-    parts = _axis_parts(plan, "x", legend_role=legend_role, title_role=title_role)
-    fixed = parts.total - base_px
-    minimum = width.message_text(fixed, round_up=True)
-    detail = _parts_text(
-        width,
-        [
-            (fixed_primary_name, parts.primary - base_px),
-            ("legend", parts.legend),
-            ("title", parts.title),
-            ("padding", parts.padding),
-        ],
-    )
-    legend_remedy = " place the legend at the top or bottom," if _beside_primary(plan, legend_role) else ""
+    The narrowest figure is that plan's padded content. When the primary row (the primary item with a legend
+    beside it) is its widest item, the message names ``fixed_primary_name`` (the primary item at base 1), the
+    legend beside it, and the padding; otherwise the widest item above or below (the title or the legend) and the
+    padding.
+    """
+
+    content = plan.content_bounds.width
+    legend = plan.placement_for(legend_role)
+    title = plan.placement_for(title_role)
+    beside = _beside_primary(plan, legend_role)
+    row_boxes = [plan.primary_bounds]
+    if legend is not None and beside:
+        row_boxes.append(legend.final_bounds)
+    primary = _span([plan.primary_bounds], "x")
+    row = _span(row_boxes, "x")
+    above_or_below = [
+        (name, placement.final_bounds)
+        for name, placement in (("title", title), ("legend", None if beside else legend))
+        if placement is not None
+    ]
+    painted = _span([*row_boxes, *(bounds for _name, bounds in above_or_below)], "x")
+    row_binds = painted - row < 0.5
+    if row_binds:
+        parts = [(fixed_primary_name, primary), ("legend", row - primary)]
+    else:
+        widest = max(above_or_below, key=lambda item: item[1].width)[0]
+        parts = [(widest, painted)]
+    minimum = width.message_text(content, round_up=True)
+    detail = _parts_text(width, [*parts, ("padding", content - painted)])
+    legend_remedy = " place the legend at the top or bottom," if row_binds and beside else ""
     return ValidationError(
         f"figure_width {width.text} is narrower than the parts of the figure that do not shrink: {detail} "
-        f"({minimum} in all). Use a figure_width wider than {minimum},{legend_remedy} or leave figure_width auto.",
-        diagnostic={"code": "INPUT_INVALID", "configPath": FIGURE_WIDTH_PATH, "minimumPx": math.ceil(fixed)},
+        f"({minimum} in all). Use a figure_width of at least {minimum},{legend_remedy} or leave figure_width auto.",
+        diagnostic={"code": "INPUT_INVALID", "configPath": FIGURE_WIDTH_PATH, "minimumPx": math.ceil(content)},
     )
 
 
-__all__ = ["BaseLengthFit", "check_figure_size", "figure_too_narrow", "fit_base_length"]
+__all__ = ["BaseLengthFit", "check_figure_height", "figure_too_narrow", "fit_base_length"]

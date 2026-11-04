@@ -56,13 +56,16 @@ legend and title included.
 
 gbdraw lays the figure out again to fit: the sequence width
 (`canvas.linear.width`) changes, while fonts, line widths, the legend, record
-names, and padding keep their size. A requested height adds room above and
-below; it does not stretch the figure. A figure that cannot fit is refused with
-the sizes of its parts and the smallest size that works: a width narrower than
-the record names, labels past the sequence ends, a legend beside the records,
-and padding, or a height shorter than the figure drawn at that width. The
-message offers placing a side legend at the top or bottom when that would help.
-Circular maps refuse a requested size for now.
+names, and padding keep their size. The figure fills the requested width to
+within 3 px, and the rest is added evenly to both sides. A requested height
+adds room above and below; it does not stretch the figure. A figure that cannot
+fit is refused with the sizes of its parts and the smallest size that works: a
+width narrower than the figure drawn with a 1 px sequence, or a height shorter
+than the figure drawn at the requested width. The message names the record
+names and labels past the sequence ends, a legend beside the records, and the
+padding, or a title or a legend above or below the records when that is wider.
+It offers placing a side legend at the top or bottom when the records and that
+legend set the width. Circular maps refuse a requested size for now.
 
 The SVG, PDF, EPS, and PS files that the command line, `save_figure_to()`,
 `render_to_bytes()`, and `Diagram.save()` write state the requested size in its
