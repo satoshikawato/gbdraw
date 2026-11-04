@@ -79,9 +79,10 @@ const filesFor = (mode) => (mode === 'circular'
   ? { c_gb: genbank, linearSeqs: [] }
   : { linearSeqs: [{ uid: 'first', gb: genbank, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null, region_reverse: false }] });
 const comparisonPlanSnapshot = { hasComparisonIntent: true, hasLosatIntent: false, edges: [] };
+// The drawing states its own mode, as `createDrawingState` gives it.
 const project = (mode, adv, state = baseState(mode, adv)) => buildCanonicalRenderRequest({
   state,
-  drawing: state,
+  drawing: { ...state, mode: state.mode.value },
   filesData: filesFor(mode),
   ...(mode === 'linear' ? { comparisonPlanSnapshot } : {})
 }).renderRequest;
