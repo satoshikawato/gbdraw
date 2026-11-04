@@ -2009,6 +2009,34 @@ assert.deepEqual(
   canonical.renderRequest,
   'canonical Session projection rebuilds the same render request'
 );
+// A FASTA given without GFF3 (PD-OI-068 rev 2): the request names its file as a `fasta` source in both modes, and the
+// Session projection reads it back as the FASTA input type, into the FASTA slot only.
+{
+  const fastaText = '>alpha\nACGTACGT\n';
+  const fasta = { name: 'input.fasta', type: 'text/plain', size: fastaText.length, lastModified: 0, data: btoa(fastaText) };
+  for (const mode of ['circular', 'linear']) {
+    const fastaState = { ...state, mode: ref(mode), inputType: ref('fasta') };
+    const files = mode === 'circular'
+      ? { c_fasta: fasta, linearSeqs: [] }
+      : { linearSeqs: [{ uid: 'alpha', fasta, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null,
+          region_reverse: false }], linearComparisons: [] };
+    // Not one of the characterized requests: those stay the recorded set.
+    const built = buildCanonicalRenderRequestRaw({ state: fastaState, filesData: files,
+      ...(mode === 'linear' ? { comparisonPlanSnapshot: resolveLinearComparisonPlan({
+        plan: { mode: 'none', defaultSource: 'losat', edges: [] }, sequences: files.linearSeqs }) } : {}) });
+    assert.deepEqual(built.renderRequest.records.map((record) => record.source),
+      [{ kind: 'fasta', fastaResourceId: 'record-1-fasta' }], mode);
+    assert.equal(built.resources['record-1-fasta'].kind, 'fasta', mode);
+    const projected = projectCanonicalSessionRequest(built);
+    assert.equal(projected.inputType, 'fasta', mode);
+    const slots = mode === 'circular'
+      ? { gb: projected.files.c_gb, gff: projected.files.c_gff, fasta: projected.files.c_fasta }
+      : projected.files.linearSeqs[0];
+    assert.equal(slots.fasta.data, fasta.data, mode);
+    assert.equal(slots.gb ?? null, null, mode);
+    assert.equal(slots.gff ?? null, null, mode);
+  }
+}
 assert.equal(projection.mode, 'circular');
 assert.equal(projection.inputType, 'gb');
 assert.equal(projection.files.c_gb.data, genbank.data);
@@ -6024,6 +6052,15 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   assert.equal(originalGff.files.c_gff.name, 'original.gff');
   assert.equal(originalGff.files.c_gff.data, gffCli.resources['annotation-0'].data);
   assert.equal(originalGff.files.c_fasta.data, gffCli.resources['sequence-0'].data);
+  // Without a Web draft the input type is the first whose files are all bound (GenBank, GFF3 + FASTA, FASTA):
+  // a FASTA bound alone reads as the FASTA input type.
+  const fastaCli = projectCanonicalSessionRequest({ ...canonical,
+    resources: { ...canonical.resources, ...gffCli.resources },
+    webFiles: { bindings: { ...emptyCliSlots,
+      c_fasta: { resourceId: 'sequence-0', name: 'original.fa', type: '', lastModified: 8 } } },
+    initializeCliInputs: true });
+  assert.equal(fastaCli.inputType, 'fasta');
+  assert.equal(fastaCli.files.c_fasta.data, gffCli.resources['sequence-0'].data);
 }
 
 // A helper-produced typed resource uses the Python codec bytes without serializing its graph again.

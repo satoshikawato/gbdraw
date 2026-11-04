@@ -312,6 +312,32 @@ export const FRESH_PROTEIN_COMPARISON_DEFAULTS = Object.freeze({
   })
 });
 
+// gbdraw/session_request_codec.py: describe_record_source_files()
+export const RECORD_SOURCE_FILES = Object.freeze({
+  genbank: Object.freeze([
+    Object.freeze({
+      resource: 'genbank',
+      field: 'resourceId'
+    })
+  ]),
+  gffFasta: Object.freeze([
+    Object.freeze({
+      resource: 'gff3',
+      field: 'gffResourceId'
+    }),
+    Object.freeze({
+      resource: 'fasta',
+      field: 'fastaResourceId'
+    })
+  ]),
+  fasta: Object.freeze([
+    Object.freeze({
+      resource: 'fasta',
+      field: 'fastaResourceId'
+    })
+  ])
+});
+
 // gbdraw/core/record_metadata.py: organism_name_rule_data()
 export const ORGANISM_NAME_RULE = Object.freeze({
   nonOrganismNames: Object.freeze(['artificial sequence', 'cloning vector', 'expression vector', 'synthetic construct', 'unidentified', 'unidentified cloning vector', 'unidentified organism', 'unknown', 'unknown organism', 'vector']),

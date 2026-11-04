@@ -5472,6 +5472,24 @@ def describe_fresh_protein_comparison() -> FreshProteinComparisonDefaults:
     }
 
 
+class RecordSourceFile(TypedDict):
+    resource: str
+    field: str
+
+
+def describe_record_source_files() -> dict[str, list[RecordSourceFile]]:
+    """The files of each record source kind, with wire names: its resource kind and source field, in resource order.
+
+    ``_SOURCE_FILE_RESOURCES`` stays their owner; the Web reads them from the
+    generated ``RECORD_SOURCE_FILES`` to build, read, and stage a record source.
+    """
+
+    return {
+        _camel(kind): [{"resource": resource, "field": field} for resource, field in files]
+        for kind, files in _SOURCE_FILE_RESOURCES.items()
+    }
+
+
 def describe_legacy_request_tables() -> dict[str, Any]:
     """The tables of the request schemas 1-2 reading, with wire names.
 
@@ -5987,6 +6005,7 @@ __all__ = [
     "describe_canonical_typed_resources",
     "describe_fresh_protein_comparison",
     "describe_legacy_request_tables",
+    "describe_record_source_files",
     "encode_canonical_table",
     "encode_canonical_typed_resource",
     "encode_canonical_request",

@@ -839,8 +839,11 @@ test('a FASTA-only refusal names the record and the letter Python found (PD-OI-0
   assert.match(producerSummary('INPUT_INVALID', { reason: 'NOT_NUCLEOTIDE', recordName: 'r', codepoint: 9 }), /code: U\+0009\.$/);
   assert.equal(producerSummary('INPUT_INVALID', { reason: 'EMPTY_SEQUENCE', recordName: 'r 2' }),
     'An input value is invalid. Record: r 2. A record of this FASTA file has no sequence. Give each FASTA record its sequence.');
-  // A name that is not one line of printable text is left out.
-  assert.doesNotMatch(producerSummary('INPUT_INVALID', { reason: 'EMPTY_SEQUENCE', recordName: 'a\nb' }), /Record:/);
+  // Python decides whether an ID can be shown (error_adapter.py); when it cannot, it sends the record's position.
+  assert.equal(producerSummary('INPUT_INVALID', { reason: 'NOT_NUCLEOTIDE', recordPosition: 2, codepoint: 0x4c }),
+    'An input value is invalid. Record #2. This FASTA file holds a sequence that is not nucleotide, such as a protein; '
+    + 'gbdraw draws nucleotide records. Use a FASTA file of DNA or RNA sequences (IUPAC codes A C G T U R Y S W K M B D H V N). '
+    + 'First letter that is not a nucleotide code: "L".');
 });
 
 // TK-06: a Depth series with no file in any record names the series and offers

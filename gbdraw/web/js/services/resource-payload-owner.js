@@ -1,7 +1,6 @@
 // @ts-check
 import { getSessionResourceSource } from './file-content-cache.js';
-import { INPUT_SLOT_RESOURCES, INPUT_TYPES, inputTypeOfSourceKind } from './input-types.js';
-/** @import { InputSlot } from './input-types.js' */
+import { recordSourceOf } from './input-types.js';
 /** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 
 /**
@@ -86,30 +85,9 @@ export const resourceIdOwnedBy = (resources, file, kind) => {
  * @param {object | null | undefined} fastaFile
  * @returns {CanonicalRecordSource | null}
  */
-export const recordSourceOwnedBy = (resources, sourceKind, sourceFile, fastaFile) => {
-  const { primary, paired } = INPUT_TYPES[inputTypeOfSourceKind(sourceKind)];
-  /** @type {Record<string, string>} */
-  const source = { kind: sourceKind };
-  for (const [slot, file] of /** @type {[InputSlot, object | null | undefined][]} */ (
-    paired ? [[primary, sourceFile], [paired, fastaFile]] : [[primary, sourceFile]]
-  )) {
-    const [kind, field] = INPUT_SLOT_RESOURCES[slot];
-    const resourceId = resourceIdOwnedBy(resources, file, kind);
-    if (!resourceId) return null;
-    source[field] = resourceId;
-  }
-  return /** @type {CanonicalRecordSource} */ (/** @type {unknown} */ (source));
-};
+export const recordSourceOwnedBy = (resources, sourceKind, sourceFile, fastaFile) => recordSourceOf(
+  sourceKind, ({ resource }, index) => resourceIdOwnedBy(resources, index === 0 ? sourceFile : fastaFile, resource)
+);
 
-/**
- * The resource ids a record source names, in request order.
- * @param {CanonicalRecordSource} source
- * @returns {string[]}
- */
-export const recordSourceResourceIds = (source) => {
-  /** @type {Readonly<Record<string, unknown>>} */
-  const fields = source;
-  // A record source names its files in this order: the source file, then a GFF3 file's FASTA.
-  return Object.values(INPUT_SLOT_RESOURCES).map(([, field]) => field)
-    .filter((field) => Object.hasOwn(fields, field)).map((field) => String(fields[field]));
-};
+// The resource ids of a record source's files, in source order (input-types.js owns the reading).
+export { recordSourceResourceIds } from './input-types.js';

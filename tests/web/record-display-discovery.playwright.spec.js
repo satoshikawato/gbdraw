@@ -333,6 +333,27 @@ test('a protein FASTA alone is refused before Generate with the record named', a
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(0);
 });
 
+// In Linear the refusal is in the card's Record options. A refused FASTA file leaves Generate as a refused GenBank
+// file of the same card does (D-21): the same protein file, given as each input type.
+for (const [inputType, testId, named] of [
+  ['gb', 'linear-genbank-1', /looks like FASTA/],
+  ['fasta', 'linear-fasta-1', /LvMJNV_ORF1[\s\S]*"L"/]
+]) {
+  test(`a protein file refused as ${inputType} in linear names the failure in Record options and Generate reports it`, async ({ page }) => {
+    test.setTimeout(240000);
+    await openApp(page);
+    await showDrawing(page, { kind: 'linear' });
+    await page.locator(`input[type=radio][value=${inputType}]`).first().check();
+    await page.getByTestId(testId).setInputFiles({
+      name: 'protein.fasta', mimeType: 'text/plain', buffer: Buffer.from('>LvMJNV_ORF1 hypothetical protein\nMKLVEQRSTWYF\n')
+    });
+    await expect(page.locator('p.text-red-600', { hasText: named })).toHaveCount(1, { timeout: 180000 });
+    await expect(page.locator('.upload-zone.failed')).toHaveCount(1);
+    await generateAndWaitForResult(page, { expectedStatus: 'error' });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(0);
+  });
+}
+
 test('a saved Session with a FASTA source loads its Result without the Worker', async ({ page, context }) => {
   test.setTimeout(300000);
   await openApp(page);

@@ -96,6 +96,8 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
     ("LEGACY_REQUEST_TABLES", "gbdraw.session_request_codec", "describe_legacy_request_tables"),
     ("SESSION_DRAWINGS_LAYOUT", "gbdraw.session_drawings", "describe_session_drawings_layout"),
     ("FRESH_PROTEIN_COMPARISON_DEFAULTS", "gbdraw.session_request_codec", "describe_fresh_protein_comparison"),
+    # The files of each record source kind (resource kind, source field), in the order the source names them.
+    ("RECORD_SOURCE_FILES", "gbdraw.session_request_codec", "describe_record_source_files"),
     # The Auto organism name rule's data; the Web fast path runs its steps (R4).
     ("ORGANISM_NAME_RULE", "gbdraw.core.record_metadata", "organism_name_rule_data"),
     # The raw-cache args keep one spelling; the LOSAT Wasm reads the runtime spelling.

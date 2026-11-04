@@ -1,8 +1,8 @@
 // @ts-check
 import { writeCanonicalRecordReverseComplement } from './record-display-model.js';
 import {
-  CIRCULAR_INPUT_FIELDS, INPUT_SLOT_RESOURCES, INPUT_TYPES, circularInputSlots, inputSourceFiles, inputTypeOfSourceKind,
-  inputTypeSpec
+  CIRCULAR_INPUT_FIELDS, INPUT_TYPES, circularInputSlots, inputSourceFiles, inputTypeOfSourceKind, inputTypeSpec,
+  recordSourceOf, recordSourceSlotIds
 } from './input-types.js';
 /** @import { InputType } from './drawing/inputs.js' */
 /** @import { InputSlot } from './input-types.js' */
@@ -1460,27 +1460,12 @@ const linearSeqRecordFields = (record) => ({
  * @returns {CanonicalRecord['source']}
  */
 const inputRecordSource = (resources, inputType, slots, index) => {
-  const { primary, paired, sourceKind } = inputTypeSpec(inputType);
-  /** @type {Record<string, string>} */
-  const source = { kind: sourceKind };
-  for (const slot of paired ? [primary, paired] : [primary]) {
-    const [kind, field] = INPUT_SLOT_RESOURCES[slot];
-    source[field] = resources.addFile(`record-${index + 1}-${kind}`, kind, slots[slot]);
-  }
-  return /** @type {CanonicalRecord['source']} */ (/** @type {unknown} */ (source));
-};
-
-/**
- * The resource id each input slot's file has in a record source, or '' for a slot the source does not read.
- * @param {Readonly<Record<string, unknown>> | null | undefined} source
- * @returns {Record<InputSlot, string>}
- */
-const sourceSlotResourceIds = (source) => {
-  const idOf = (/** @type {InputSlot} */ slot) => {
-    const field = INPUT_SLOT_RESOURCES[slot][1];
-    return source && Object.hasOwn(source, field) ? String(source[field] || '') : '';
-  };
-  return { gb: idOf('gb'), gff: idOf('gff'), fasta: idOf('fasta') };
+  const source = recordSourceOf(inputTypeSpec(inputType).sourceKind, ({ slot, resource }) => (
+    resources.addFile(`record-${index + 1}-${resource}`, resource, slots[slot])
+  ));
+  // `addFile` names every file or throws, so the source has each of its files.
+  if (source === null) throw new Error(`Canonical record ${index + 1} names no source file.`);
+  return source;
 };
 
 /** @param {ResourceBuilder} resources @param {unknown} inputType @param {RequestLinearSeq} seq @param {number} index */
@@ -4820,9 +4805,11 @@ export const buildCanonicalRenderRequest = (args) => projectCanonicalRenderInput
  * @param {{ source?: { kind?: unknown, resourceId?: unknown, gffResourceId?: unknown, fastaResourceId?: unknown } | null } | null | undefined} record
  * @param {string} field
  */
-const recordSourceResourceId = (record, field) => (
-  Object.hasOwn(INPUT_SLOT_RESOURCES, field) ? sourceSlotResourceIds(record?.source)[/** @type {InputSlot} */ (field)] : ''
-);
+const recordSourceResourceId = (record, field) => {
+  /** @type {Readonly<Record<string, string>>} */
+  const ids = recordSourceSlotIds(record?.source);
+  return Object.hasOwn(ids, field) ? ids[field] : '';
+};
 
 /** @param {{ resourceId?: unknown } | null | undefined} ref */
 const referencedResourceId = (ref) => String(ref?.resourceId || '').trim();
@@ -6222,7 +6209,7 @@ export const projectCanonicalSessionRequest = ({
       const resourceFile = (/** @type {string} */ id) => resolveResourceFile
         ? resolveResourceFile(id)
         : resourceAsLegacyFile(resources, id);
-      const ids = sourceSlotResourceIds(source);
+      const ids = recordSourceSlotIds(source);
       return {
         recordKey: String(record.recordKey || ''),
         cardinality: record.cardinality || 'exactly_one',
@@ -6246,7 +6233,7 @@ export const projectCanonicalSessionRequest = ({
       );
     }
     if (source.kind !== 'genbank') {
-      const ids = sourceSlotResourceIds(source);
+      const ids = recordSourceSlotIds(source);
       for (const slot of /** @type {const} */ (['gff', 'fasta'])) {
         if (!ids[slot]) continue;
         files[CIRCULAR_INPUT_FIELDS[slot]] = resolveResourceFile
@@ -6264,7 +6251,7 @@ export const projectCanonicalSessionRequest = ({
       const fileSubtitle = String(savedMetadata.fileSubtitle ?? savedMetadata.file_subtitle ?? '');
       const recordLabel = String(record.presentation?.label || '');
       const recordSubtitle = String(record.presentation?.subtitle || '');
-      const ids = sourceSlotResourceIds(source);
+      const ids = recordSourceSlotIds(source);
       const slotFile = (/** @type {InputSlot} */ slot) => (!ids[slot] ? null
         : resolveResourceFile ? resolveResourceFile(ids[slot]) : resourceAsLegacyFile(resources, ids[slot]));
       return {

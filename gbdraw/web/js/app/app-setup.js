@@ -7251,7 +7251,8 @@ export const createAppSetup = () => {
         removed: !nextValue, previousRecordCount: group.records.length
       }) ? RETIRED_LINEAR_RECORD_PRESENTATION : RETIRED_LINEAR_RECORD_REFERENCE)
     });
-    const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
+    // The card stays while it holds a file its input type reads; a file of another type's slot keeps no card.
+    const keepSource = inputSourceFiles(drawing.inputType.value, replacement).holdsFile;
     const nextSeqs = drawing.linearSeqs.flatMap((entry) => (
       entry.uid === group.uid ? (keepSource ? [replacement] : [])
         : members.has(entry.uid) ? [] : [entry]
