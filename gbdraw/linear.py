@@ -657,10 +657,11 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         help=(
             'Align the records at the start as drawn (its 5\' base when it reads rightward, '
             'else its 3\' base) of the feature this exact selector names in each record, for example gene=dnaA or locus_tag=b0001 '
-            '(the feature_selector form of the placement and override tables). The first '
-            'record that has the feature keeps its place; a record without it keeps its '
-            'place and is reported. Wins over --align_center for the records it moves '
-            '(default: off).'
+            '(the feature_selector form of the placement and override tables). A complete circular '
+            'record is rotated so that the feature starts at its left end, replacing its display start; '
+            'a linear or cropped record moves sideways to that place (to the first record\'s feature '
+            'when none is rotated). A record without the feature keeps its place and start and is '
+            'reported. Wins over --align_center for the records it moves (default: off).'
         ),
     )
     parser.add_argument(

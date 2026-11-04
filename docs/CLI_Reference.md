@@ -1472,10 +1472,14 @@ options:
                         feature this exact selector names in each record, for
                         example gene=dnaA or locus_tag=b0001 (the
                         feature_selector form of the placement and override
-                        tables). The first record that has the feature keeps
-                        its place; a record without it keeps its place and is
-                        reported. Wins over --align_center for the records it
-                        moves (default: off).
+                        tables). A complete circular record is rotated so that
+                        the feature starts at its left end, replacing its
+                        display start; a linear or cropped record moves
+                        sideways to that place (to the first record's feature
+                        when none is rotated). A record without the feature
+                        keeps its place and start and is reported. Wins over
+                        --align_center for the records it moves (default:
+                        off).
   --keep_definition_left_aligned
                         Keep linear record definitions in the left column. In
                         a multi-record row, a label or subtitle that no record

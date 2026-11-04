@@ -138,21 +138,33 @@ part that is its left end as drawn (on a reverse-complemented record, its end
 with the higher source coordinate). A join starts on the part its path begins
 with as drawn, even when another of its parts lies further left, and a feature
 across the origin or a display start begins on its piece before that seam.
-Only features that start inside the drawn region count. The first record
-that has the feature keeps its place; every other record that has it moves
-so that the feature's start lies directly below, and that place replaces the
-record's own x, as with Similarity alignment. A record without the feature
-keeps its place, with a warning naming it, or saying that its match starts
-outside the drawn region. A gene and its CDS that start at the same base
-count as one match; matches at different starts stop the run with the
-candidates listed, and so does a selector that no record matches. With
-`--align_center`, the first record keeps its centred place and the records the
-anchor moves leave theirs. A moved record can widen the canvas. With
-`--auto_orient`, the anchor is read after the automatic reverse complement.
-`--anchor_feature` cannot be combined with `--similarity_alignment_feature`,
-with records that share a row (`--multi_record_position`), or with a
-`--wrap_length` that cuts a record. A saved Session stores the resulting
-record translations, not the option.
+Only features that start inside the drawn region count. A complete circular
+record that has the feature is rotated, as `--origin_feature` rotates a
+Circular record: the source base of the feature's start becomes its display
+start, replacing any start it had (`--display_start_coordinate`, the records
+table `display_start`), so the feature starts at its left end. The base is the
+one the record would have been aligned at before, but the rotation also takes
+features that the Rotate popup and `--origin_feature` refuse (no strand, inexact
+or overlapping parts, `order()`), as their parts are listed. A linear record,
+a record drawn linear (`--record_topology linear`, the records table
+`topology`), and a record cropped by `--region` move sideways instead. The
+first rotated record is drawn at x 0; every other record that has the feature
+lines up with its left end, a rotated one at x 0 and a moved one so that the
+feature's start lies directly below, and that place replaces the record's own
+x, as with Similarity alignment. In a figure of circular and linear records the
+linear records can stick out to the left and widen the canvas. When no record
+is rotated, the first record that has the feature keeps its place and the
+others move below it. A record without the feature keeps its place and its
+start, with a warning naming it, or saying that its match starts outside the
+drawn region. A gene and its CDS that start at the same base count as one
+match; matches at different starts stop the run with the candidates listed, and
+so does a selector that no record matches. With `--align_center`, the first
+record keeps its centred place and the records the anchor rotates or moves
+leave theirs to line up with it. With `--auto_orient`, the anchor is read after
+the automatic reverse complement. `--anchor_feature` cannot be combined with
+`--similarity_alignment_feature` or with records that share a row
+(`--multi_record_position`). A saved Session stores the resulting display
+starts and record translations, not the option.
 
 On-axis ruler coordinates depend on the canvas topology. If any Linear row
 contains multiple records, every ruler on that canvas uses record-local
@@ -191,8 +203,10 @@ record in the same figure stays one row at the same scale.
 When a record is cut, `--track_layout` defaults to `above`, `--scale_style` to
 `ruler`, and the ruler stands on each row's axis. `--track_layout middle`, a
 feature slot with `side=overlay`, `--scale_style bar`, `--normalize_length`,
-comparison inputs, several records in one `--multi_record_position` row, and
-`--anchor_feature` are refused, comparison inputs before any search runs. So is
+comparison inputs, and several records in one `--multi_record_position` row are
+refused, comparison inputs before any search runs. `--anchor_feature` wraps the
+records it only rotates; it is refused when it would move a cut record
+sideways, or line the records up with a cut record it does not rotate. So is
 a cut record moved sideways by a stored position with an x other than 0 (a
 Session's `layout.recordTranslations` read by `--session`, or
 `LinearMultiRecordOptions.record_translations` in Python), whatever wrote it:
@@ -534,7 +548,8 @@ feature starts at 12 o'clock. On the tobacco plastome,
 `--origin_feature gene=psbA` draws the same figure as
 `--display_start_coordinate 536`. The selector has the `feature_selector` form
 of the placement and override tables and matches a qualifier value exactly, as
-`gbdraw linear --anchor_feature` does. The feature's start as drawn becomes the
+`gbdraw linear --anchor_feature` does, which rotates complete circular records
+to the same base. The feature's start as drawn becomes the
 display start: its 5' base when the feature reads clockwise as drawn, and its
 3' base otherwise, following its parts in biological order. A minus-strand gene
 therefore starts at its low source coordinate (psbA,

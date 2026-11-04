@@ -114,16 +114,22 @@ drawn linear, and it refuses a feature without one strand and exact parts.
 `LinearOptions.anchor_feature` (default `None`) takes a `"key=value"` feature
 selector, such as `"gene=COX1"`, and aligns the records at that feature's first
 drawn base, like the CLI `--anchor_feature` (see [Record selection and
-layout](command-line.md#record-selection-and-layout) for the rules). The typed
+layout](command-line.md#record-selection-and-layout) for the rules): a complete
+circular record is rotated so that the feature starts at its left end, and a
+linear or cropped one moves sideways. The typed
 `LinearDiagramOptions.anchor_feature` accepts the same string or a
 `FeatureSelector`. It cannot be combined with `similarity_alignment`.
-`resolve_request()` draws the request once, writes each record's translation
-into `LinearMultiRecordOptions.record_translations`, and clears the option, so
-the resolved request, and a Session saved from it, carries the translations.
-`encode_canonical_request()` refuses a request that still sets it. For each record
-it moves, its x replaces the record's own x, including an explicit
+`resolve_request()` draws the request once, writes each rotated record's start
+into `RecordDisplayOptions.start_coordinate` (replacing its own) and each
+record's translation into `LinearMultiRecordOptions.record_translations`, and
+clears the option, so the resolved request, and a Session saved from it,
+carries the starts and translations. `encode_canonical_request()` refuses a
+request that still sets it. For each record it rotates or moves, its x replaces
+the record's own x, including an explicit
 `LinearMultiRecordOptions.record_translations` entry, as Similarity alignment
-does; the y is kept.
+does; the y is kept. `plan_linear_request()` returns the decision as
+`LinearRequestPlan.feature_anchor`: each record's status (`rotated`, `aligned`,
+`reference`, `unmatched`) and the reference record.
 
 Important `LinearComparisonOptions` defaults are:
 

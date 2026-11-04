@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal, Sequence
 
 from Bio.SeqRecord import SeqRecord
@@ -12,6 +13,39 @@ from gbdraw.io.record_select import parse_record_selector
 
 
 _PlacementCompatibility = Literal["linear", "circular"]
+
+# What ``anchor_feature`` does to one record: ``rotated``, a complete circular record turned so that the feature
+# starts at its left end; ``aligned``, any other record moved sideways so that its feature starts below the
+# reference's; ``reference``, the record the others line up with when none is rotated, which keeps its place;
+# ``unmatched``, a record without the feature, which keeps its place and its start.
+FeatureAnchorStatus = Literal["reference", "rotated", "aligned", "unmatched"]
+
+
+@dataclass(frozen=True)
+class FeatureAnchorPlacement:
+    """Where ``anchor_feature`` puts each record, decided once by the planner (``resolve_anchor_feature``).
+
+    ``starts`` are where the feature starts in each drawn record, in display bp (0.0 for a rotated record; ``None``
+    for an unmatched one). ``reference_index`` is the record the others line up with: the first rotated record,
+    else the first record with the feature. The build reads them to give each record its x
+    (``_final_record_translations``); a rotated reference is drawn at x 0.
+    """
+
+    starts: tuple[float | None, ...]
+    statuses: tuple[FeatureAnchorStatus, ...]
+    reference_index: int
+
+    def __post_init__(self) -> None:
+        # The planner's invariants, not a user's input: one start and status per record, an unmatched record
+        # without a start, and a reference that is rotated or the reference.
+        assert len(self.starts) == len(self.statuses)
+        assert all((status == "unmatched") == (start is None) for start, status in zip(self.starts, self.statuses))
+        assert self.statuses[self.reference_index] in ("reference", "rotated")
+
+    @property
+    def rotates(self) -> bool:
+        """Whether the anchor rotated a record (then the request stores its new start)."""
+        return "rotated" in self.statuses
 
 
 def parse_record_row_position(
@@ -181,4 +215,9 @@ def resolve_record_row_positions(
     return tuple(item[2] for item in ordered), tuple(rows_by_index)
 
 
-__all__ = ["parse_record_row_position", "resolve_record_row_positions"]
+__all__ = [
+    "FeatureAnchorPlacement",
+    "FeatureAnchorStatus",
+    "parse_record_row_position",
+    "resolve_record_row_positions",
+]

@@ -198,7 +198,7 @@ from gbdraw.layout.composition import (
     plan_composition,
 )
 from gbdraw.layout.figure_size import check_figure_height, figure_too_narrow, fit_base_length
-from gbdraw.layout.linear_multi_record import record_key_at, record_pairs_between_adjacent_rows
+from gbdraw.layout.linear_multi_record import record_key_at, record_pairs_between_adjacent_rows, stable_record_keys
 from gbdraw.layout.linear_wrap import (
     LinearWrapSummary,
     drawn_axis_length,
@@ -208,7 +208,7 @@ from gbdraw.layout.linear_wrap import (
     wrap_blocking_inputs,
 )
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_placement import resolve_record_row_positions
+from gbdraw.layout.record_placement import FeatureAnchorPlacement, resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.layout.spatial import Aabb
 from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
@@ -2169,6 +2169,7 @@ def assemble_linear_diagram_from_records(
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _feature_anchor: FeatureAnchorPlacement | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
     _feature_label_rows: FeatureLabelRows | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
@@ -2224,12 +2225,10 @@ def assemble_linear_diagram_from_records(
                 losat_search=losat_search,
                 similarity_alignment=similarity_alignment,
             ),
-            # Anchor positions without a Similarity alignment plan come from anchor_feature.
-            anchor_feature=similarity_alignment is None
-            and any(center is not None for center in (_alignment_anchor_centers or ())),
             row_length=row_length,
             records=records,
-            translations=layout.record_translations if layout is not None else (),
+            # The anchor decides the x of the records it places; the assembly refuses what it cannot wrap.
+            translations=_unplaced_translations(records, layout, _feature_anchor),
         )
         _record_transforms, wrap_summary = resolve_wrap(wrap_length, records, _record_transforms)
         # Rows carry their ruler on the axis: there is no other place for it.
@@ -2629,6 +2628,7 @@ def assemble_linear_diagram_from_records(
         orthogroups=resolved_orthogroups,
         similarity_alignment=similarity_alignment,
         alignment_anchor_centers=_alignment_anchor_centers,
+        feature_anchor=_feature_anchor,
         feature_label_rows=_feature_label_rows,
     )
     build_result = LinearDiagramBuildResult(
@@ -4074,6 +4074,7 @@ def _build_linear_diagram(
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _feature_anchor: FeatureAnchorPlacement | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
     """Build a linear diagram using mode-specific typed options."""
@@ -4178,6 +4179,7 @@ def _build_linear_diagram(
             _record_transforms=_record_transforms,
             _record_presentations=_record_presentations,
             _alignment_anchor_centers=_alignment_anchor_centers,
+            _feature_anchor=_feature_anchor,
             _return_build_result=_return_build_result,
             _feature_label_rows=feature_label_rows,
         )
@@ -4187,6 +4189,24 @@ def _build_linear_diagram(
         features_separated=bool(cfg.canvas.resolve_overlaps),
         figure_size=cfg.canvas.figure_size,
     )
+
+
+def _unplaced_translations(
+    records: Sequence[SeqRecord],
+    layout: LinearMultiRecordOptions | None,
+    feature_anchor: FeatureAnchorPlacement | None,
+) -> tuple[LinearRecordTranslation, ...]:
+    """The stored translations of the records an ``anchor_feature`` does not place (all of them without one)."""
+
+    translations = tuple(layout.record_translations) if layout is not None else ()
+    if feature_anchor is None:
+        return translations
+    placed = {
+        str(key)
+        for key, status in zip(stable_record_keys(records), feature_anchor.statuses, strict=True)
+        if status != "unmatched"
+    }
+    return tuple(item for item in translations if str(item.record_key) not in placed)
 
 
 def _linear_drawing(result: Drawing | LinearDiagramBuildResult) -> Drawing:
@@ -4282,6 +4302,7 @@ def build_linear_diagram(
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _feature_anchor: FeatureAnchorPlacement | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build a linear diagram using mode-specific typed options."""
@@ -4299,6 +4320,7 @@ def build_linear_diagram(
         _record_transforms=_record_transforms,
         _record_presentations=_record_presentations,
         _alignment_anchor_centers=_alignment_anchor_centers,
+        _feature_anchor=_feature_anchor,
     )
     return cast(Drawing, result)
 
@@ -4316,6 +4338,7 @@ def build_linear_diagram_result(
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _record_presentations: Sequence[RecordPresentation] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _feature_anchor: FeatureAnchorPlacement | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> LinearDiagramBuildResult:
     """Build a Linear drawing with its computed analysis metadata."""
@@ -4333,6 +4356,7 @@ def build_linear_diagram_result(
         _record_transforms=_record_transforms,
         _record_presentations=_record_presentations,
         _alignment_anchor_centers=_alignment_anchor_centers,
+        _feature_anchor=_feature_anchor,
         _return_build_result=True,
     )
     if not isinstance(result, LinearDiagramBuildResult):  # pragma: no cover

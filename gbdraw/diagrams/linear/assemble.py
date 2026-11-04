@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from gbdraw.features.placement import FeaturePlacementSlot
 from gbdraw.render_stages import render_stage
-from ...layout.linear_wrap import drawn_axis_length, refuse_feature_track_on_the_axis
+from ...layout.linear_wrap import drawn_axis_length, refuse_feature_track_on_the_axis, refuse_wrapped_anchor_moves
 from ...layout.record_labels import source_ruler_ticks
 
 import copy
@@ -128,7 +128,7 @@ from ...layout.linear_multi_record import (
     stable_record_keys,
 )
 from ...layout.record_coordinates import RecordDisplayTransform
-from ...layout.record_placement import resolve_record_row_positions
+from ...layout.record_placement import FeatureAnchorPlacement, resolve_record_row_positions
 from ...layout.similarity_alignment import (
     AlignmentDecisionStatus,
     SimilarityAlignmentPlan,
@@ -2044,14 +2044,17 @@ def _final_record_translations(
     layout: LinearMultiRecordOptions | None,
     similarity_alignment: SimilarityAlignmentPlan | None,
     anchor_centers: Sequence[float | None] | None,
+    feature_anchor: FeatureAnchorPlacement | None = None,
 ) -> tuple[tuple[float, float], ...]:
     """Resolve base translations and absolute anchor alignment exactly once.
 
-    ``anchor_centers`` are the display positions the records align at: the
-    Similarity alignment anchor centres with ``similarity_alignment``, else the
-    ``anchor_feature`` starts, whose reference is the first record that has one.
-    An aligned record moves so that its position meets the reference's; any
-    other record keeps its base translation.
+    The records align at display positions: the Similarity alignment anchor
+    centres (``anchor_centers``) with ``similarity_alignment``, else the
+    ``anchor_feature`` starts and reference the planner decided
+    (``feature_anchor``). An aligned or rotated record moves so that its
+    position meets the reference's; a rotated reference is drawn at x 0 (its y
+    kept), any other reference and every other record keep their base
+    translation.
     """
 
     base_by_key = {
@@ -2059,18 +2062,22 @@ def _final_record_translations(
         for item in (layout.record_translations if layout is not None else ())
     }
     base = tuple(base_by_key.get(str(key), (0.0, 0.0)) for key in record_keys)
-    centers = tuple(anchor_centers or ())
     if similarity_alignment is None:
-        reference_index = next(
-            (index for index, center in enumerate(centers) if center is not None), None
-        )
-        if reference_index is None:
+        if feature_anchor is None:
             return base
+        centers = feature_anchor.starts
+        reference_index = feature_anchor.reference_index
+        if feature_anchor.statuses[reference_index] == "rotated":
+            base = tuple(
+                (0.0, base_y) if index == reference_index else (base_x, base_y)
+                for index, (base_x, base_y) in enumerate(base)
+            )
         aligned = {
-            index for index, center in enumerate(centers)
-            if center is not None and index != reference_index
+            index for index, status in enumerate(feature_anchor.statuses)
+            if status in ("rotated", "aligned") and index != reference_index
         }
     else:
+        centers = tuple(anchor_centers or ())
         similarity_alignment.validate_record_coverage(record_keys)
         if len(centers) != len(record_keys):
             raise ValidationError(
@@ -2175,6 +2182,7 @@ def assemble_linear_diagram(
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None,
     similarity_alignment: SimilarityAlignmentPlan | None = None,
     alignment_anchor_centers: Sequence[float | None] | None = None,
+    feature_anchor: FeatureAnchorPlacement | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
     record_presentations: Sequence[RecordPresentation] | None = None,
     feature_label_rows: FeatureLabelRows | None = None,
@@ -2530,7 +2538,15 @@ def assemble_linear_diagram(
             layout=linear_layout,
             similarity_alignment=similarity_alignment,
             anchor_centers=alignment_anchor_centers,
+            feature_anchor=feature_anchor,
         )
+        if feature_anchor is not None and record_transforms is not None:
+            refuse_wrapped_anchor_moves(
+                feature_anchor,
+                [x for x, _y in translations],
+                [transform.row_count > 1 for transform in record_transforms],
+                [str(record.id) for record in records],
+            )
         record_xs = [placements[index].x + translations[index][0] for index in range(len(records))]
         column_left = min(record_xs, default=0.0)
         keep_clear = [
