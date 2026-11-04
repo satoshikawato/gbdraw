@@ -1758,9 +1758,11 @@ export const createRunAnalysis = ({
   let latestOperationId = 0;
   // Each drawing's Circular discovery: its read generation, the read still
   // running, and the generation of a settled read whose Record Order is not
-  // applied yet (D-15-205: the region dialog only reads).
-  /** @type {Map<DrawingId, number>} */
-  const circularRecordRefreshGenerations = new Map();
+  // applied yet (D-15-205: the region dialog only reads). The generations
+  // belong to the drawing object (D-15-207): a drawing a Load installs under a
+  // reused ID starts without them, and a removed drawing's go with it.
+  /** @type {WeakMap<DrawingState, number>} */
+  const circularRecordRefreshGenerations = new WeakMap();
   /**
    * A drawing's Circular record read: `read` writes the list and discovery,
    * `refresh` is that read followed by its Record Order, made by the first
@@ -1770,8 +1772,8 @@ export const createRunAnalysis = ({
    */
   /** @type {Map<DrawingId, CircularRecordRead>} */
   const activeCircularRecordRefreshes = new Map();
-  /** @type {Map<DrawingId, number>} */
-  const unappliedCircularRecordReads = new Map();
+  /** @type {WeakMap<DrawingState, number>} */
+  const unappliedCircularRecordReads = new WeakMap();
   /** @type {AbortController | null} */
   let activeLosatAbortController = null;
   /** @type {readonly Record<string, any>[]} */
@@ -2378,7 +2380,7 @@ export const createRunAnalysis = ({
   };
 
   /** @param {DrawingState} drawing */
-  const circularRecordReadGeneration = (drawing) => circularRecordRefreshGenerations.get(drawing.id) ?? 0;
+  const circularRecordReadGeneration = (drawing) => circularRecordRefreshGenerations.get(drawing) ?? 0;
 
   /**
    * Reads the Circular records of `drawing`'s inputs into its record list and
@@ -2399,7 +2401,7 @@ export const createRunAnalysis = ({
     if (reuseFinalError && circularDiscoveryTargetsCurrentInput(drawing)
       && drawing.circularRecordDiscovery.status === 'error' && discoveryErrorIsFinal(drawing.circularRecordDiscovery.error)) return;
     const refreshGeneration = currentGeneration() + 1;
-    circularRecordRefreshGenerations.set(drawing.id, refreshGeneration);
+    circularRecordRefreshGenerations.set(drawing, refreshGeneration);
     if (suppress || recordDiscoverySuppressed()) return;
     const inputType = drawing.inputType.value;
     const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
@@ -2438,7 +2440,7 @@ export const createRunAnalysis = ({
     } : idleCircularRecordDiscovery());
     drawing.circularRecordList.value = [];
     if (!hasCompleteInput) {
-      unappliedCircularRecordReads.set(drawing.id, refreshGeneration);
+      unappliedCircularRecordReads.set(drawing, refreshGeneration);
       return;
     }
     if (
@@ -2484,7 +2486,7 @@ export const createRunAnalysis = ({
       drawing.circularRecordDiscovery.canonicalRecordIdentities = nextRecords
         .filter((record) => record.recordKey)
         .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
-      unappliedCircularRecordReads.set(drawing.id, refreshGeneration);
+      unappliedCircularRecordReads.set(drawing, refreshGeneration);
       if (nextRecords.length > 0) releaseSourceInputFailure(drawing);
       onCircularRecordsDiscovered?.({ drawingId: drawing.id, primaryFile, pairedFile, recordCount: nextRecords.length });
     } catch (error) {
@@ -2505,7 +2507,7 @@ export const createRunAnalysis = ({
       drawing.circularRecordList.value = [];
       drawing.circularRecordDiscovery.status = 'error';
       drawing.circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
-      unappliedCircularRecordReads.set(drawing.id, refreshGeneration);
+      unappliedCircularRecordReads.set(drawing, refreshGeneration);
       releaseSourceInputFailure(drawing);
       onCircularRecordsDiscovered?.({ drawingId: drawing.id, primaryFile, pairedFile, recordCount: 0 });
     }
@@ -2519,8 +2521,8 @@ export const createRunAnalysis = ({
    * @param {number | null} generation
    */
   const applyCircularRecordOrder = (drawing, generation) => {
-    if (generation === null || unappliedCircularRecordReads.get(drawing.id) !== generation) return;
-    unappliedCircularRecordReads.delete(drawing.id);
+    if (generation === null || unappliedCircularRecordReads.get(drawing) !== generation) return;
+    unappliedCircularRecordReads.delete(drawing);
     if (generation !== circularRecordReadGeneration(drawing)) return;
     if (!Array.isArray(drawing.adv.multi_record_positions)) drawing.adv.multi_record_positions = [];
     const positions = drawing.adv.multi_record_positions;

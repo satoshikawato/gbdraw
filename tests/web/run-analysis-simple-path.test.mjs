@@ -3711,3 +3711,63 @@ test('the Circular record refresh writes the drawing it reads and keys its read 
     state.removeDrawing(second.id, { takeSlot: () => null });
   }
 });
+
+// D-15-207: a drawing's record-read bookkeeping belongs to the drawing
+// object. A drawing removed and re-added under its ID (as a Load installs new
+// drawings under reused IDs) does not inherit the old drawing's read that the
+// region dialog left unapplied: its Generate writes no Record Order from it.
+test('a drawing re-added under its ID does not inherit the old drawing\'s unapplied record read', async () => {
+  const id = 'circular-reused';
+  const source = (name) => bound(new AuditFile([`LOCUS ${name} 8 bp DNA circular\nORIGIN\n        1 acgtacgt\n//\n`], `${name}.gb`));
+  const reply = { ok: true, result: { records: [{ selector: '#1', record_id: 'reused', record_length: 8 }] } };
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    recordDisplayRows: { value: [] },
+    readRecordIdentitySources: async () => ({}),
+    setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
+    serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => serializeActiveRenderFiles(state, activeDrawing),
+    adoptCanonicalRenderArtifacts: () => {},
+    validateAnnotationTargets: () => '',
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+  const old = createDrawingState(id, 'circular');
+  state.addDrawing(old, 'Old', 2);
+  old.inputType.value = 'gb';
+  old.files.c_gb = source('old');
+  // The state a Load leaves: the list deferred for the current file.
+  Object.assign(old.circularRecordDiscovery, {
+    status: 'deferred', error: '', inputType: 'gb', primaryFile: old.files.c_gb, pairedFile: null, canonicalRecordIdentities: []
+  });
+  workerHelperResponses.splice(0, workerHelperResponses.length, reply);
+  // The region dialog's read: the list, no Record Order (D-15-205).
+  await runner.readDrawingRecordIdentities(old);
+  assert.deepEqual(old.adv.multi_record_positions, []);
+  state.removeDrawing(id, { takeSlot: () => null });
+  const fresh = createDrawingState(id, 'circular');
+  state.addDrawing(fresh, 'Fresh', 2);
+  try {
+    installShownDrawing(id);
+    fresh.inputType.value = 'gb';
+    fresh.form.prefix = 'circular-reused';
+    fresh.form.multi_record_canvas = false;
+    fresh.circularConservation.enabled = false;
+    fresh.files.c_gb = source('fresh');
+    fresh.circularRecordList.value = [{ selector: '#1', record_id: 'reused', record_length: 8 }];
+    Object.assign(fresh.circularRecordDiscovery, {
+      status: 'ready', error: '', inputType: 'gb', primaryFile: fresh.files.c_gb, pairedFile: null, canonicalRecordIdentities: []
+    });
+    const generated = result('circular-reused.svg', 'circular-reused');
+    workerResponses.push(response(generated, validCatalog(generated.name)));
+    assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual(fresh.adv.multi_record_positions, [], 'the old drawing\'s read is not applied to the new one');
+  } finally {
+    installShownDrawing('circular');
+    state.removeDrawing(id, { takeSlot: () => null });
+  }
+});
