@@ -72,6 +72,11 @@ export const regionSourceRecords = (requestRecords, sources, featuresOf) => draw
  */
 
 /**
+ * The user's input to one row; the other row fields are display values.
+ * @typedef {Partial<Pick<RegionDialogRow, 'checked' | 'kind' | 'start' | 'end' | 'featureId'>>} RegionRowEdit
+ */
+
+/**
  * The dialog's view. `status`: 'idle' (no region yet), 'invalid' (an input
  * is not a region), 'deriving', 'derived', 'creating' (Create runs; the derived
  * view stays shown), 'refused', or 'error'.
@@ -268,7 +273,7 @@ export const createRegionDrawing = ({
     return { ...reply, create: () => newDrawingFromRegion(sourceId, { derived: reply, sent }) };
   };
 
-  // The dialog (the one owner of its open, close and reset).
+  // The dialog (the one owner of its open, close, reset and input edits; the template assigns none of its state).
   /** @type {RegionDialogView} */
   const dialog = reactive({
     show: false, rows: [], keepValues: false, status: 'idle', message: '', returnedToAuto: [], notCarried: []
@@ -310,6 +315,25 @@ export const createRegionDrawing = ({
       showStatus('error', normalized ? errorText(normalized.summaryParts) : String(error));
     }
     return undefined;
+  };
+
+  /**
+   * A row edit: writes the user's input into the row found by its record key and derives again; an unknown key
+   * changes nothing.
+   * @param {string} recordKey
+   * @param {RegionRowEdit} patch
+   */
+  const editRow = (recordKey, patch) => {
+    const row = dialog.rows.find((candidate) => candidate.recordKey === recordKey);
+    if (!row) return Promise.resolve(undefined);
+    Object.assign(row, patch);
+    return refresh();
+  };
+
+  /** "Keep my values": derives again with or without adapting the sizes. @param {boolean} value */
+  const setKeepValues = (value) => {
+    dialog.keepValues = value;
+    return refresh();
   };
 
   const close = () => {
@@ -373,5 +397,5 @@ export const createRegionDrawing = ({
     }
   };
 
-  return { deriveFromShown, dialog, open, refresh, confirm, close };
+  return { deriveFromShown, dialog, open, refresh, editRow, setKeepValues, confirm, close };
 };

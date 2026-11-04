@@ -9294,14 +9294,14 @@
                 <li v-for="row in regionDrawings.dialog.rows" :key="row.recordKey" :data-region-drawing-row="row.recordKey" class="px-2 py-1.5 text-xs">
                     <label class="flex min-w-0 items-center gap-2">
                         <input type="checkbox" data-history-ignore data-region-drawing-check class="form-checkbox shrink-0"
-                               :checked="row.checked" @change="row.checked = $event.target.checked; regionDrawings.refresh()">
+                               :checked="row.checked" @change="regionDrawings.editRow(row.recordKey, { checked: $event.target.checked })">
                         <span class="min-w-0 truncate font-semibold text-slate-800" :title="row.caption">{{ row.caption }}</span>
                         <span class="ml-auto shrink-0 tabular-nums text-slate-500">{{ formatRecordLength(row.length) }}</span>
                     </label>
                     <div v-if="row.checked" class="mt-1.5 flex flex-wrap items-end gap-2 pl-6">
                         <label class="text-[11px] font-semibold text-slate-600">{{ t('Region') }}
                             <select data-history-ignore data-region-drawing-kind class="form-select mt-0.5 block px-2 py-1 text-xs font-normal"
-                                    :value="row.kind" @change="row.kind = $event.target.value; regionDrawings.refresh()">
+                                    :value="row.kind" @change="regionDrawings.editRow(row.recordKey, { kind: $event.target.value })">
                                 <option value="whole">{{ t('Whole record') }}</option>
                                 <option value="coordinates">{{ t('Coordinates') }}</option>
                                 <option value="feature" :disabled="Boolean(row.featureReason)">{{ t('A feature') }}</option>
@@ -9311,16 +9311,16 @@
                         <div v-if="row.kind === 'coordinates'" class="flex items-end gap-2">
                             <label class="text-[11px] font-semibold text-slate-600">{{ t('Start') }}
                                 <input type="text" inputmode="numeric" data-history-ignore data-region-drawing-start class="form-input mt-0.5 block w-24 px-2 py-1 text-xs font-normal"
-                                       :value="row.start" @input="row.start = $event.target.value; regionDrawings.refresh()">
+                                       :value="row.start" @input="regionDrawings.editRow(row.recordKey, { start: $event.target.value })">
                             </label>
                             <label class="text-[11px] font-semibold text-slate-600">{{ t('End') }}
                                 <input type="text" inputmode="numeric" data-history-ignore data-region-drawing-end class="form-input mt-0.5 block w-24 px-2 py-1 text-xs font-normal"
-                                       :value="row.end" @input="row.end = $event.target.value; regionDrawings.refresh()">
+                                       :value="row.end" @input="regionDrawings.editRow(row.recordKey, { end: $event.target.value })">
                             </label>
                         </div>
                         <label v-if="row.kind === 'feature'" class="min-w-0 max-w-full text-[11px] font-semibold text-slate-600">{{ t('Feature') }}
                             <select data-history-ignore data-region-drawing-feature class="form-select mt-0.5 block w-full max-w-xs px-2 py-1 text-xs font-normal"
-                                    :value="row.featureId" @change="row.featureId = $event.target.value; regionDrawings.refresh()">
+                                    :value="row.featureId" @change="regionDrawings.editRow(row.recordKey, { featureId: $event.target.value })">
                                 <option value="">{{ t('Choose a feature') }}</option>
                                 <option v-for="feature in row.features || []" :key="feature.featureId" :value="feature.featureId">{{ feature.label }}</option>
                             </select>
@@ -9349,7 +9349,7 @@
                 </template>
                 <label v-if="regionDrawings.dialog.status === 'derived' || regionDrawings.dialog.keepValues" class="mt-2 flex items-center gap-2 font-semibold text-slate-700">
                     <input type="checkbox" data-history-ignore data-region-drawing-keep class="form-checkbox shrink-0"
-                           :checked="regionDrawings.dialog.keepValues" @change="regionDrawings.dialog.keepValues = $event.target.checked; regionDrawings.refresh()">
+                           :checked="regionDrawings.dialog.keepValues" @change="regionDrawings.setKeepValues($event.target.checked)">
                     <span>{{ t('Keep my values') }}</span>
                 </label>
             </div>

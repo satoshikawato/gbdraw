@@ -294,3 +294,28 @@ test('a Create that fails shows its reason and stays open', async () => {
   assert.notEqual(owner.dialog.message, '');
   assert.equal(await owner.confirm(), null, 'Create stays disabled until the region derives again');
 });
+
+// The owner holds every dialog transition: the template calls editRow and
+// setKeepValues and assigns no dialog state.
+test('an edit through the owner writes the row found by its record key and derives again', async () => {
+  const { owner, calls } = harness();
+  await owner.open();
+  await owner.editRow('record-2', { checked: true, kind: 'coordinates', start: '11', end: '20' });
+  assert.deepEqual(calls.derive.at(-1).regions, [{ recordKey: 'record-2', start: 11, end: 20 }]);
+  assert.deepEqual([owner.dialog.rows[0].checked, owner.dialog.rows[1].start], [false, '11']);
+  assert.equal(owner.dialog.status, 'derived');
+  await owner.setKeepValues(true);
+  assert.equal(owner.dialog.keepValues, true);
+  assert.equal(calls.derive.at(-1).adaptSizes, false);
+});
+
+test('an edit of an unknown record key changes nothing and derives nothing', async () => {
+  const { owner, calls } = harness();
+  await owner.open();
+  await owner.editRow('record-2', { checked: true });
+  const before = JSON.stringify(owner.dialog);
+  const derives = calls.derive.length;
+  await owner.editRow('record-9', { checked: false, start: '5' });
+  assert.equal(JSON.stringify(owner.dialog), before);
+  assert.equal(calls.derive.length, derives);
+});
