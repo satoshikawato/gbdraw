@@ -15,7 +15,7 @@ const ref = (value) => ({ value });
 const genbankText = 'LOCUS       WEBTEST                    4 bp    DNA     linear   UNK 01-JAN-1980\nORIGIN\n        1 atgc\n//\n';
 const genbank = { name: 'input.gb', type: 'text/plain', size: genbankText.length, lastModified: 0, data: btoa(genbankText) };
 const baseState = (mode, adv = {}) => ({
-  mode,
+  mode: ref(mode),
   cInputType: ref('gb'),
   lInputType: ref('gb'),
   inputType: ref('gb'),
