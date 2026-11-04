@@ -553,6 +553,31 @@ def test_a_circular_size_larger_than_auto_grows_the_map(monkeypatch) -> None:
     assert _font_sizes(sized.to_svg()) == _font_sizes(auto.to_svg())
 
 
+def test_label_fit_rows_redraw_the_circular_map_at_the_fitted_radius(monkeypatch) -> None:
+    """MjeNMV at 180 mm: its centre definition reaches a track, so label fit rows are verified, and each redraws the
+    map at the radius the fit kept, not the configured one."""
+
+    import gbdraw.api.diagram as diagram_module
+    from gbdraw.labels.circular_capacity import label_capacity_checked
+
+    assemblies: list[tuple[float, bool]] = []
+    original = diagram_module.assemble_circular_diagram_from_record
+
+    def recording(*args, **kwargs):
+        assemblies.append((float(kwargs["cfg"].canvas.circular.radius), label_capacity_checked()))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(diagram_module, "assemble_circular_diagram_from_record", recording)
+    records = gbdraw.read_genbank(Path(__file__).resolve().parents[1] / "examples" / "MjeNMV.gb")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        gbdraw.draw_circular(records, options=gbdraw.CircularOptions(figure_width="180mm"))
+    fitted = [radius for radius, checked in assemblies if checked]
+    rows = [radius for radius, checked in assemblies if not checked]
+    assert rows and fitted[-1] < 390.0
+    assert set(rows) == {fitted[-1]}
+
+
 def test_a_circular_grid_fits_the_request_and_its_records_keep_their_own_canvas(monkeypatch) -> None:
     import gbdraw.api.diagram as diagram_module
 
