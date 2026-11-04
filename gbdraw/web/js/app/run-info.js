@@ -22,7 +22,7 @@ import { namedFeatureInstance } from '../services/feature-selector.js';
 import { cliRecordKey, expandedRecordKey, recordKeyExpansion } from '../services/record-draw-selection.js';
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
 import { FEATURE_INSTANCE_SEPARATOR, RECORD_SOURCE_FILES } from '../contracts/schema.generated.js';
-import { inputSequenceSource, inputTypeOfSourceKind } from '../services/input-types.js';
+import { inputSequenceSource, inputTypeOfSourceKind, recordSourceFilesOf } from '../services/input-types.js';
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from '../services/linear-wrap-form.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
@@ -707,7 +707,7 @@ const validateCurrentSemanticCoverage = (request) => {
       coverage,
       record.source,
       `${path}.source`,
-      ['kind', ...sourceFilesOf(record.source?.kind).map(({ field }) => field)]
+      ['kind', ...recordSourceFilesOf(record.source?.kind).map(({ field }) => field)]
     );
     if (record.selector) {
       if (!['recordId', 'recordIndex'].includes(record.selector.kind)) {
@@ -863,14 +863,6 @@ const CLI_SOURCE_FILES = Object.freeze({
 });
 /** @typedef {(typeof RECORD_SOURCE_FILES)[CanonicalRecord['source']['kind']][number]['resource']} RecordSourceFileResource */
 
-/**
- * The files of a record source kind, in source order; none for an unknown kind.
- * @param {unknown} kind
- * @returns {readonly (typeof RECORD_SOURCE_FILES)[CanonicalRecord['source']['kind']][number][]}
- */
-const sourceFilesOf = (kind) => (
-  Object.hasOwn(RECORD_SOURCE_FILES, String(kind)) ? RECORD_SOURCE_FILES[/** @type {CanonicalRecord['source']['kind']} */ (kind)] : []
-);
 
 /**
  * @param {CanonicalRecord | null | undefined} record
@@ -879,7 +871,7 @@ const sourceFilesOf = (kind) => (
 const sourceSpec = (record) => {
   /** @type {Record<string, unknown>} */
   const source = isPlainObject(record?.source) ? record.source : {};
-  const files = sourceFilesOf(source.kind);
+  const files = recordSourceFilesOf(source.kind);
   if (!files.length) {
     throw recipeUnavailable(msg('source kind "{kind}" has no CLI recipe.'), { kind: String(source.kind || 'unknown') });
   }
