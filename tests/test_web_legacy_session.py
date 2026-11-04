@@ -365,6 +365,22 @@ def test_a_session_30_hash_rule_is_named_through_its_cards_read_again() -> None:
         assert [rule["val"] for rule in drawing["config"]["rules"]] == ["fbc76b20f"], drawing["mode"]
 
 
+def test_a_session_30_shown_circular_names_no_hash_rule_through_its_linear_cards() -> None:
+    # OV-2056: the old Web Load (2d71b1611^ services/config.js) took a Session
+    # 27-30's Linear cards as the hash rule's records only when its generated
+    # mode (its invocation's mode, else ui.mode) was Linear. Shown Circular,
+    # the reverse-complemented card does not make the rule's value unmapped:
+    # it is kept as saved and no repair is listed.
+    document = json.loads(_text("hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"))
+    assert "cliInvocation" not in document
+    document["ui"]["mode"] = "circular"
+    payload = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
+    assert [warning["code"] for warning in payload["warnings"]] == []
+    for drawing in payload["document"]["drawings"]:
+        assert [rule["val"] for rule in drawing["config"]["rules"]] == ["f2869b912_record_2"], drawing["mode"]
+
+
 def test_a_session_30_reads_its_sources_again_only_when_a_hash_rule_needs_drawn_hashes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
