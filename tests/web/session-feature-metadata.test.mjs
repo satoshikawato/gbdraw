@@ -38,6 +38,7 @@ await copyModule('gbdraw/web/js/utils/field-reading.js', 'utils/field-reading.js
 await copyModule('gbdraw/web/js/services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('gbdraw/web/js/services/legend-svg.js', 'services/legend-svg.js');
 await copyModule('gbdraw/web/js/services/result-paint-bases.js', 'services/result-paint-bases.js');
+await copyModule('gbdraw/web/js/services/result-records.generated.js', 'services/result-records.generated.js');
 await copyModule('gbdraw/web/js/services/svg-transform.js', 'services/svg-transform.js');
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
 await copyModule('gbdraw/web/js/services/label-fit.js', 'services/label-fit.js');

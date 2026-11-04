@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from numbers import Integral
+from numbers import Integral, Real
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, Literal, Mapping, TypeAlias, cast
@@ -9,6 +9,7 @@ from typing import Any, Literal, Mapping, TypeAlias, cast
 from gbdraw.core.figure_length import FIGURE_LENGTH_AUTO, RequestedFigureSize, parse_figure_length
 from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, ascii_int, parse_length_bp
 from gbdraw.exceptions import ValidationError
+from gbdraw.layout.composition import NO_CANVAS_PADDING_SIDES, CanvasPaddingSides
 
 LinearTrackLayoutMode: TypeAlias = Literal["above", "middle", "below"]
 
@@ -80,6 +81,31 @@ def figure_length_from_config(value: object, *, path: str) -> str:
             f"{path} {exc}", diagnostic={"code": "INPUT_INVALID", "configPath": path}
         ) from exc
     return FIGURE_LENGTH_AUTO if length is None else length.text
+
+
+CANVAS_PADDING_PATH = "canvas.padding"
+# The canvas padding sides in the order ``canvas.padding`` and ``--canvas_padding`` list them.
+CANVAS_PADDING_SIDES = ("top", "right", "bottom", "left")
+
+
+def canvas_padding_from_config(value: object) -> CanvasPaddingSides:
+    """The one validator of ``canvas.padding``, for a config and an override alike: four px numbers, top, right,
+    bottom, left, each finite and not negative. ``None`` is no padding."""
+
+    if value is None:
+        return NO_CANVAS_PADDING_SIDES
+    if (
+        isinstance(value, (list, tuple))
+        and len(value) == len(CANVAS_PADDING_SIDES)
+        and all(isinstance(side, Real) and not isinstance(side, bool) for side in value)
+        and all(math.isfinite(float(side)) and float(side) >= 0.0 for side in value)
+    ):
+        top, right, bottom, left = (float(side) for side in value)
+        return (top, right, bottom, left)
+    raise ValidationError(
+        f"{CANVAS_PADDING_PATH} must be four numbers of px, top, right, bottom, left, each 0 or more; got {value!r}.",
+        diagnostic={"code": "INPUT_INVALID", "configPath": CANVAS_PADDING_PATH},
+    )
 
 
 # The scale leaves an axis ruler takes from the axis color unless a request sets them.
@@ -321,8 +347,12 @@ class CanvasConfig:
     figure_height: str = field(
         default=FIGURE_LENGTH_AUTO, metadata={LEAF_VALIDATOR: partial(figure_length_from_config, path=FIGURE_HEIGHT_PATH)}
     )
+    # Room added outside the figure's edge padding, px per side (top, right, bottom, left); zeros by default, and a
+    # request carries the leaf only when a side is not zero.
+    padding: CanvasPaddingSides = field(default=NO_CANVAS_PADDING_SIDES, metadata={LEAF_VALIDATOR: canvas_padding_from_config})
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "padding", canvas_padding_from_config(self.padding))
         object.__setattr__(self, "feature_overlap_tolerance_bp",
                            validate_feature_overlap_tolerance(self.feature_overlap_tolerance_bp))
         object.__setattr__(self, "figure_width", figure_length_from_config(self.figure_width, path=FIGURE_WIDTH_PATH))
@@ -349,6 +379,7 @@ class CanvasConfig:
             linear=LinearCanvasConfig.from_dict(d["linear"]),
             figure_width=d.get("figure_width", FIGURE_LENGTH_AUTO),
             figure_height=d.get("figure_height", FIGURE_LENGTH_AUTO),
+            padding=d.get("padding", NO_CANVAS_PADDING_SIDES),
         )
 
     @property
@@ -359,6 +390,8 @@ class CanvasConfig:
 
 
 __all__ = [
+    "CANVAS_PADDING_PATH",
+    "CANVAS_PADDING_SIDES",
     "CanvasConfig",
     "CircularCanvasConfig",
     "FIGURE_HEIGHT_PATH",
@@ -369,6 +402,7 @@ __all__ = [
     "LINEAR_SEQUENCE_WIDTH_PATH",
     "LINEAR_WRAP_LENGTH_PATH",
     "LinearWrapLength",
+    "canvas_padding_from_config",
     "figure_length_from_config",
     "linear_axis_ruler_applies",
     "linear_wrap_length_from_config",

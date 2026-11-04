@@ -48,6 +48,7 @@ from gbdraw.configurators.legend import (  # noqa: E402
 )
 from gbdraw.core.fonts import resolve_font_face  # noqa: E402
 from gbdraw.core.text import drawn_text_box  # noqa: E402
+from gbdraw.config.models.canvas import CANVAS_PADDING_SIDES  # noqa: E402
 from gbdraw.layout.composition import (  # noqa: E402
     OVERLAY_CANDIDATE_SCORE_ORDER,
     OVERLAY_CANVAS_GROWTH_CANDIDATE_ORDER,
@@ -307,6 +308,21 @@ def _synthetic(template: dict[str, Any]) -> list[dict[str, Any]]:
                 "options": {**options, "side": side, "wrapWidth": 900.0},
                 "composition": {**composition, "requestedCanvas": requested},
             })
+        # Canvas padding: room outside the edge padding, per side; with a requested canvas the padded content is
+        # what fits and is centred.
+        padding = {"top": 12.0, "right": 40.5, "bottom": 0.0, "left": 7.25}
+        for label, side, requested in (
+            ("canvas padding", "right", None),
+            ("canvas padding, an overlay Legend", "lower_left", None),
+            ("canvas padding in a requested width and height", "top", {"widthPx": 3000.0, "heightPx": 2800.0}),
+            ("canvas padding in requested sides smaller than the content", "left", {"widthPx": 100.0, "heightPx": 100.0}),
+        ):
+            padded = {**composition, "spacing": {**composition["spacing"], "canvasPadding": padding}}
+            cases.append({
+                "name": f"synthetic {mode}", "mode": mode, "edit": f"solid rows, {label}", "rows": solid,
+                "options": {**options, "side": side, "wrapWidth": 900.0},
+                "composition": {**padded, "requestedCanvas": requested} if requested else padded,
+            })
     cases.extend(_ring_cases(options, composition, solid))
     return cases
 
@@ -481,6 +497,9 @@ def _composition_expected(case: dict[str, Any], legend: Aabb) -> dict[str, Any]:
             edge_padding_px=spacing["edgePaddingPx"], dock_gap_px=spacing["dockGapPx"],
             title_gap_px=spacing["titleGapPx"], stack_gap_px=spacing["stackGapPx"],
             overlay_clearance_px=spacing["overlayClearancePx"],
+            canvas_padding_px=tuple(
+                (spacing.get("canvasPadding") or {}).get(side, 0.0) for side in CANVAS_PADDING_SIDES
+            ),
         ),
         requested_width_px=(inputs.get("requestedCanvas") or {}).get("widthPx"),
         requested_height_px=(inputs.get("requestedCanvas") or {}).get("heightPx"),

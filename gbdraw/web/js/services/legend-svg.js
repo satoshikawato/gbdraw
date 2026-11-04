@@ -4,6 +4,7 @@ import { isAutoFeatureUnderlay } from './feature-dom.js';
 import { legendSwatch, sameLegendLine } from './legend-row-names.js';
 /** @import { DrawnLegendName, LegendRowName, LegendSwatchIdentity } from './legend-row-names.js' */
 import { LEGEND_ORDER_RECORD, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
+import { LEGEND_MERGED_ROW } from './result-records.generated.js';
 import { legendEntryKey } from './drawing/paint.js';
 
 export { parseTransform };
@@ -89,7 +90,8 @@ export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';
 // D-28: the marker of a Legend row the naming pass hides because an earlier
 // row has its name and its swatch (svg-result-ingestion.js `nameLegendRows`);
 // its value is the key of that earlier row, which the Legend draws for both.
-export const LEGEND_MERGED_ROW = 'data-legend-merged';
+// Python's name (gbdraw/svg/result_records.py), which it writes on such a row too.
+export { LEGEND_MERGED_ROW };
 
 // The one absence predicate of a Legend row: a row is absent when the Result
 // lacks it or a Legend delete hid it (the executor keeps a deleted row of

@@ -99,6 +99,9 @@ from ...layout.composition import (
     CompositionPlan,
     CompositionRequest,
     DEFAULT_COMPOSITION_SPACING,
+    NO_CANVAS_PADDING_SIDES,
+    CanvasPaddingSides,
+    CompositionSpacing,
     LegendPlacement,
     TitlePlacement,
     plan_composition,
@@ -115,7 +118,7 @@ from ...legend.sources import (
     feature_legend_presence,
     legend_slot_sources,
 )
-from ...legend.table import LegendTable, prepare_legend_table
+from ...legend.table import LegendRowEdits, LegendTable, apply_legend_row_edits, prepare_legend_table
 from ...tracks import (
     CircularTrackSlot,
     ScalarSpec,
@@ -3428,8 +3431,10 @@ def _compose_circular_plot(
     title_content: GroupContent | None = None,
     title_placement: TitlePlacement | str = TitlePlacement.NONE,
     requested_size: RequestedFigureSize = RequestedFigureSize(),
+    canvas_padding: CanvasPaddingSides = NO_CANVAS_PADDING_SIDES,
 ) -> CircularAssemblyResult:
-    """Compose one fully measured Circular plot exactly once, in the ``requested_size`` canvas when one is set."""
+    """Compose one fully measured Circular plot exactly once, in the ``requested_size`` canvas when one is set, with
+    ``canvas_padding`` outside its edge padding."""
     resolved_title_placement = (
         title_placement
         if isinstance(title_placement, TitlePlacement)
@@ -3470,6 +3475,7 @@ def _compose_circular_plot(
             legend_placement=legend_placement,
             title_placement=resolved_title_placement,
             overlay_obstacles=plot.source_overlay_obstacles,
+            spacing=CompositionSpacing(canvas_padding_px=canvas_padding),
             requested_width_px=requested_size.width_px,
             requested_height_px=requested_size.height_px,
         ),
@@ -3541,6 +3547,7 @@ def build_circular_legend_table(
     conservation_legend: Sequence[ConservationLegendSource] = (),
     conservation_colors: tuple[str, str] = ("", ""),
     conservation_domain: IdentityColorDomain | None = None,
+    edits: LegendRowEdits = LegendRowEdits(),
 ) -> LegendTable:
     """Build the one Circular legend table for the records drawn on a canvas.
 
@@ -3548,7 +3555,7 @@ def build_circular_legend_table(
     renderer parameters, region annotation and depth ``legend_label`` values,
     and conservation rows reach every Circular legend in the same order.
     ``circular_legend_table`` translates the drawing settings into these
-    legend-only arguments.
+    legend-only arguments. The request's Legend row edits are applied last.
     """
 
     features_present, used_color_rules, default_used_features = feature_legend_presence(
@@ -3586,7 +3593,7 @@ def build_circular_legend_table(
     )
     if annotations is not None:
         legend_table = sync_annotation_legend_entries(legend_table, annotations, annotation_slots)
-    return legend_table
+    return apply_legend_row_edits(legend_table, edits)
 
 
 def circular_legend_table(
@@ -3632,6 +3639,7 @@ def circular_legend_table(
         conservation_legend=tuple(conservation_legend),
         conservation_colors=(conservation.min_color, conservation.max_color),
         conservation_domain=identity_color_domain(conservation_min_identity, conservation.identity_scale),
+        edits=LegendRowEdits.of_config(profile.config.objects.legends),
     )
 
 
@@ -3670,6 +3678,7 @@ def _assemble_circular_diagram_result(
     record_transform: RecordDisplayTransform | None = None,
     record_presentation: RecordPresentation | None = None,
     requested_size: RequestedFigureSize = RequestedFigureSize(),
+    canvas_padding: CanvasPaddingSides = NO_CANVAS_PADDING_SIDES,
 ) -> CircularAssemblyResult:
     """
     Assembles a circular diagram for a GenBank record and returns the SVG canvas.
@@ -3782,6 +3791,7 @@ def _assemble_circular_diagram_result(
         title_content=title_content,
         title_placement=title_placement,
         requested_size=requested_size,
+        canvas_padding=canvas_padding,
     )
 
 

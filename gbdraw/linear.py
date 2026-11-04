@@ -120,6 +120,7 @@ from .cli_utils.common import (
     validate_label_args,
     validate_output_choice_args,
     figure_size_overrides,
+    legend_row_overrides,
     handle_output_formats,
     png_dpi,
 )
@@ -1652,6 +1653,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "canvas.linear.track_layout": args.track_layout,
         LINEAR_WRAP_LENGTH_PATH: args.wrap_length,
         **figure_size_overrides(args),
+        **legend_row_overrides(args),
         "canvas.linear.track_axis_gap": track_axis_gap,
         "canvas.linear.ruler_on_axis": ruler_on_axis,
         "canvas.linear.align_center": align_center,

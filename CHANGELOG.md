@@ -29,6 +29,14 @@ write-up of a release.
   shows the drawn size, and the SVG export states the size in its unit. A size
   that cannot fit is refused with its parts, and the previous figure stays
   (#1427).
+- Added: Python draws Legend row edits and canvas padding:
+  `--legend_rows FILE` (a TSV of `key name hidden position`) renames, hides,
+  and orders Legend rows, and `--canvas_padding TOP,RIGHT,BOTTOM,LEFT` adds room
+  in px around the figure, in both modes (config keys
+  `objects.legends.row_names`, `hidden_rows`, `row_order`, and
+  `canvas.padding`). A requested figure size fits the edited Legend and the
+  padding, and a saved Session keeps them. The rows are drawn as the Web app's
+  Legend editor draws them (#1427).
 - Added: `--dpi` and a `dpi` argument on `save_figure_to()`,
   `render_to_bytes()`, `Diagram.to_bytes()`, `Diagram.save()`, and
   `RenderOutputRequest` scale PNG pixels by `dpi / 96`.

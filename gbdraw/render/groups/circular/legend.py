@@ -10,10 +10,11 @@ from ....legend.circular_layout import (
     RING_OUTER_CAPTION,
     CircularRingLegendLayout,
 )
-from ....legend.table import LegendTable, write_legend_row_names
+from ....legend.table import as_legend_table, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.text_path import generate_text_path
 from ....svg.ids import stable_svg_id
+from ....svg.result_records import LEGEND_ORDER_RECORD
 from ....svg.path_data import path_number, path_point
 
 # The colour of the similarity-ring block's captions (``outer``, ``inner``, ``identity``) and scale labels; the
@@ -29,7 +30,7 @@ class LegendGroup:
     ) -> None:
         self.legend_group = Group(id="legend")
         self.legend_measurement = legend_measurement
-        self.legend_table = legend_table
+        self.legend_table = as_legend_table(legend_table)
         self._name_entry = write_legend_row_names(legend_table)
         self.font_family = self.legend_measurement.font_family
         self.font_size = self.legend_measurement.font_size
@@ -147,18 +148,21 @@ class LegendGroup:
         path_desc = self.create_rectangle_path_for_legend()
         font = self.font_family
         feature_group = Group(id="feature_legend") if layout.gradient is not None else self.legend_group
-        for entry in layout.solid_entries:
+        order_record = self.legend_table.order_record()
+        if order_record is not None:
+            feature_group.attribs[LEGEND_ORDER_RECORD] = order_record
+        # The shown rows where the layout placed them; a hidden row (a Legend row edit) at a shown row's place.
+        feature_rows = self.legend_table.feature_rows({entry.key: entry for entry in layout.solid_entries})
+        for key, properties, entry in feature_rows:
             entry_group = Group()
-            drawn_name = self._name_entry(entry_group.attribs, entry.key)
+            drawn_name = self._name_entry(entry_group.attribs, key)
 
             rect_path = Path(
                 d=path_desc,
-                fill=entry.properties["fill"],
-                stroke=entry.properties["stroke"],
-                stroke_width=entry.properties["width"],
+                fill=properties["fill"],
+                stroke=properties["stroke"],
+                stroke_width=properties["width"],
             )
-            rect_path.translate(entry.rect_x, entry.rect_y)
-            entry_group.add(rect_path)
             legend_path = generate_text_path(
                 drawn_name,
                 0,
@@ -170,11 +174,14 @@ class LegendGroup:
                 dominant_baseline="central",
                 text_anchor="start",
             )
-            legend_path.translate(entry.text_x, entry.text_y)
+            if entry is not None:
+                rect_path.translate(entry.rect_x, entry.rect_y)
+                legend_path.translate(entry.text_x, entry.text_y)
+            entry_group.add(rect_path)
             entry_group.add(legend_path)
             feature_group.add(entry_group)
 
-        if layout.gradient is not None and layout.solid_entries:
+        if layout.gradient is not None and feature_rows:
             self.legend_group.add(feature_group)
         if layout.gradient is not None:
             gradient_group = self._build_ring_legend(layout.gradient)

@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Container, Hashable, Iterator, Mapping, MutableMapping
-from typing import Iterable, List, NamedTuple, NewType, Optional, Sequence, Set, Tuple
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Iterable, List, NamedTuple, NewType, Optional, Sequence, Set, Tuple, TypeVar
 
 from pandas import DataFrame
 
@@ -14,6 +16,7 @@ from gbdraw.core.color import (
     normalize_hex_color,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.svg.result_records import LEGEND_MERGED_ROW, result_base_attribute
 from gbdraw.legend.sources import (
     ComparisonLegendSource,
     DepthLegendSource,
@@ -21,8 +24,12 @@ from gbdraw.legend.sources import (
     NumericLegendSource,
 )
 
+if TYPE_CHECKING:
+    from gbdraw.config.models.objects import ObjectsLegendsConfig
+
 
 LegendEntry = Mapping[str, object]
+
 
 # A legend row's identity (``data-legend-key``), such as ``name [fill]`` or ``label (2)``; never drawn.
 LegendRowKey = NewType("LegendRowKey", str)
@@ -134,6 +141,9 @@ class _LegendRow(NamedTuple):
     entry: LegendEntry
 
 
+_Placed = TypeVar("_Placed")
+
+
 class LegendTable(Mapping[LegendRowKey, LegendEntry]):
     """The legend rows of one drawing, in legend order, by row key.
 
@@ -150,6 +160,13 @@ class LegendTable(Mapping[LegendRowKey, LegendEntry]):
         self._sources: dict[LegendRowKey, int] = {}
         self._shared_keys: list[LegendRowKey] = []
         self._default_tracks: dict[LegendRowKey, LegendRowKey] = {}
+        # The request's Legend row edits (``apply_legend_row_edits``): the rows drawn hidden, each with the key of
+        # the row it merges into (None: a hidden row), the names the edits give, the text each row had before the
+        # edits, and Python's order of the feature rows when the edits reorder them.
+        self._hidden: dict[LegendRowKey, LegendRowKey | None] = {}
+        self._renamed: dict[LegendRowKey, LegendRowName] = {}
+        self._unedited_texts: dict[LegendRowKey, DrawnLegendName] = {}
+        self._python_order: tuple[LegendRowKey, ...] | None = None
         for key, entry in (rows or {}).items():
             self.add(str(key), entry)
 
@@ -217,8 +234,13 @@ class LegendTable(Mapping[LegendRowKey, LegendEntry]):
 
         return tuple(key for key in dict.fromkeys(self._shared_keys) if key not in self._rows)
 
+    def _name(self, key: LegendRowKey) -> LegendRowName:
+        """A row's name: the one an edit gives it, else the one written."""
+
+        return self._renamed.get(key, self._rows[key].name)
+
     def names(self) -> dict[LegendRowKey, LegendRowNames]:
-        """Each row's name and drawn name, by key.
+        """Each shown row's name and drawn name, by key.
 
         The names are numbered in the order the legends draw the rows: the
         solid rows, then the gradient and ring rows (the block beside or below
@@ -226,19 +248,79 @@ class LegendTable(Mapping[LegendRowKey, LegendEntry]):
         order it shows them, so both give one answer.
         """
 
-        solid_first = sorted(self._rows.items(), key=lambda item: item[1].swatch[0] != "solid")
-        drawn = drawn_legend_names([(row.name, row.swatch) for _, row in solid_first])
+        shown = [(key, row) for key, row in self._rows.items() if key not in self._hidden]
+        solid_first = sorted(shown, key=lambda item: item[1].swatch[0] != "solid")
+        drawn = drawn_legend_names([(self._name(key), row.swatch) for key, row in solid_first])
         texts = {key: text for (key, _), text in zip(solid_first, drawn)}
-        return {key: LegendRowNames(row.name, texts[key]) for key, row in self._rows.items()}
+        return {key: LegendRowNames(self._name(key), texts[key]) for key, _ in shown}
+
+    def drawn_keys(self) -> tuple[LegendRowKey, ...]:
+        """The keys of every row the legend draws, the hidden ones included, in the order it draws them."""
+
+        return tuple(self._rows)
+
+    def hidden_entry(self, key: LegendRowKey) -> LegendEntry | None:
+        """The entry of a row the legend draws hidden (a deleted or merged row), else None."""
+
+        return self._rows[key].entry if key in self._hidden else None
+
+    def feature_rows(self, placed: Mapping[LegendRowKey, _Placed]) -> list[tuple[LegendRowKey, LegendEntry, _Placed | None]]:
+        """The feature rows a legend drawer writes, in the order it writes them: each row of ``placed`` (the shown
+        rows its layout placed) with its placement, and each hidden row, which no layout places, at the place of the
+        next shown row (else of the last one; None when no row is shown). The Web's executor orders a group's rows
+        by where they are, so a hidden row there keeps a second pass of the order a no-op."""
+
+        keys = [key for key in self._rows if key in placed or key in self._hidden]
+        rows: list[tuple[LegendRowKey, LegendEntry, _Placed | None]] = []
+        for index, key in enumerate(keys):
+            place = placed.get(key)
+            if place is None:
+                later = (placed[other] for other in keys[index + 1:] if other in placed)
+                earlier = (placed[other] for other in reversed(keys[:index]) if other in placed)
+                place = next(later, None)
+                if place is None:
+                    place = next(earlier, None)
+            rows.append((key, self._rows[key].entry, place))
+        return rows
+
+    def order_record(self) -> str | None:
+        """``LEGEND_ORDER_RECORD`` of a feature Legend group: Python's order of its rows when the edits reorder
+        them, as the Web's executor writes it (JSON of the keys), else None."""
+
+        if self._python_order is None:
+            return None
+        return json.dumps(list(self._python_order), ensure_ascii=False, separators=(",", ":"))
+
+    def _row_attributes(self, key: LegendRowKey) -> dict[str, str]:
+        """The attributes a row's group carries: its key, its name where it is not the key, and the records of an
+        edit as the Web's executor writes them (a rename keeps Python's key; a hidden row keeps Python's shown
+        ``display``; a merged row names the row it merges into)."""
+
+        row = self._rows[key]
+        attributes = {"data-legend-key": str(self._renamed.get(key, key))}
+        if key in self._renamed:
+            attributes[result_base_attribute("data-legend-key")] = key
+        if row.name != key:
+            attributes["data-legend-name"] = row.name
+        if key in self._hidden:
+            merged_into = self._hidden[key]
+            attributes["display"] = "none"
+            if merged_into is None:
+                attributes[result_base_attribute("display")] = ""
+            else:
+                attributes[LEGEND_MERGED_ROW] = merged_into
+        return attributes
 
     def __getitem__(self, key: LegendRowKey) -> LegendEntry:
+        if key in self._hidden:
+            raise KeyError(key)
         return self._rows[key].entry
 
     def __iter__(self) -> Iterator[LegendRowKey]:
-        return iter(self._rows)
+        return (key for key in self._rows if key not in self._hidden)
 
     def __len__(self) -> int:
-        return len(self._rows)
+        return len(self._rows) - len(self._hidden)
 
 
 def as_legend_table(legend_table: LegendTable | Mapping[object, LegendEntry]) -> LegendTable:
@@ -256,23 +338,102 @@ def legend_row_names(legend_table: LegendTable | Mapping[object, LegendEntry]) -
 def write_legend_row_names(
     legend_table: LegendTable | None,
 ) -> Callable[[MutableMapping[str, object], LegendRowKey], DrawnLegendName]:
-    """The legend drawers' one writer of a row's key, name, and drawn name.
+    """The legend drawers' one writer of a row's key, name, records, and drawn name.
 
     The returned function writes ``data-legend-key`` on a row group's
     attributes, and ``data-legend-name`` where the row's name is not its key (a
     reader takes the key as the name of a row without it, so a drawing whose
-    names are its keys keeps its bytes), and returns the name the legend draws.
+    names are its keys keeps its bytes), and the records of the request's row
+    edits (``LegendTable._row_attributes``), and returns the text the legend
+    draws: the drawn name of a shown row, and the text a hidden row had before
+    the edits (the Web's executor leaves a hidden row's text as it was).
     """
 
-    names = legend_row_names(legend_table if legend_table is not None else LegendTable())
+    table = as_legend_table(legend_table if legend_table is not None else LegendTable())
+    names = table.names()
 
     def write(attribs: MutableMapping[str, object], key: LegendRowKey) -> DrawnLegendName:
-        attribs["data-legend-key"] = key
-        if names[key].name != key:
-            attribs["data-legend-name"] = names[key].name
-        return names[key].drawn
+        attribs.update(table._row_attributes(key))
+        return names[key].drawn if key in names else table._unedited_texts[key]
 
     return write
+
+
+@dataclass(frozen=True)
+class LegendRowEdits:
+    """A request's Legend row edits, each by row key (``data-legend-key``, ``LegendRowKey``): the name a row is
+    given (``objects.legends.row_names``), the rows hidden (``hidden_rows``), and the rows' order (``row_order``;
+    empty: Python's). A render stage keys on it."""
+
+    names: tuple[tuple[LegendRowKey, LegendRowName], ...] = ()
+    hidden: tuple[LegendRowKey, ...] = ()
+    order: tuple[LegendRowKey, ...] = ()
+
+    @classmethod
+    def of_config(cls, legends: ObjectsLegendsConfig) -> LegendRowEdits:
+        return cls(
+            names=tuple((LegendRowKey(key), LegendRowName(name)) for key, name in legends.row_names),
+            hidden=tuple(LegendRowKey(key) for key in legends.hidden_rows),
+            order=tuple(LegendRowKey(key) for key in legends.row_order),
+        )
+
+    def __bool__(self) -> bool:
+        return bool(self.names or self.hidden or self.order)
+
+
+def apply_legend_row_edits(legend_table: LegendTable, edits: LegendRowEdits) -> LegendTable:
+    """THE one place Python applies a request's Legend row edits; returns the table the legend measures and draws.
+
+    The edits reach the feature rows (the solid rows; the gradient and ring rows are drawn in their own block, which
+    no edit reaches) and are applied as the Web's Result executor applies them to Python's drawing of the request
+    without them (``applyLegendOperations`` and ``nameLegendRows`` in ``services/svg-result-ingestion.js``; vector
+    ``tests/fixtures/legend_row_edit_vectors.json``):
+
+    1. A rename gives the row of a key its name; the row shows that name as its key and keeps Python's key as a
+       record. The drawn names then follow the naming rule (``drawn_legend_names``).
+    2. A hidden row stays in the drawing, hidden, with a record that Python drew it shown; it is not measured.
+    3. The order puts the rows of the listed keys first, in the listed order, then the other rows in their order;
+       the feature Legend group records Python's order when the rows move.
+    4. Then the shown rows of one name and one swatch are one row (D-28): a later one is hidden and names the
+       earlier one's key. A hidden row keeps the text it had before the edits.
+
+    A key the table lacks is ignored.
+    """
+
+    if not edits:
+        return legend_table
+    solid = [key for key, row in legend_table._rows.items() if row.swatch[0] == "solid"]
+    edited = LegendTable()
+    edited._sources = dict(legend_table._sources)
+    edited._shared_keys = list(legend_table._shared_keys)
+    edited._default_tracks = dict(legend_table._default_tracks)
+    # The executor ranks a row by its key among the listed keys, trimmed; an unlisted row comes after the listed
+    # ones, in its place.
+    rank: dict[str, int] = {}
+    for key in edits.order:
+        rank.setdefault(key.strip(), len(rank))
+    ordered = sorted(solid, key=lambda key: rank.get(key, len(rank)))
+    rows = dict(legend_table._rows)
+    if ordered != solid:
+        rows = {key: legend_table._rows[key] for key in ordered}
+        rows.update({key: row for key, row in legend_table._rows.items() if key not in rows})
+        edited._python_order = tuple(solid)
+    edited._rows = rows
+    edited._unedited_texts = {key: names.drawn for key, names in legend_table.names().items()}
+    edited._renamed = {
+        key: name for key, name in dict(edits.names).items() if key in solid and name != key
+    }
+    edited._hidden = {key: None for key in edits.hidden if key in solid}
+    seen: dict[tuple[LegendRowName, tuple[object, ...]], LegendRowKey] = {}
+    for key in ordered:
+        if key in edited._hidden:
+            continue
+        identity = (edited._name(key), rows[key].swatch)
+        if identity in seen:
+            edited._hidden[key] = seen[identity]
+        else:
+            seen[identity] = key
+    return edited
 
 
 def _rule_fill_key(caption: str, fill: str) -> str:
@@ -655,10 +816,12 @@ def prepare_legend_table(
 
 __all__ = [
     "DrawnLegendName",
+    "LegendRowEdits",
     "LegendRowKey",
     "LegendRowName",
     "LegendRowNames",
     "LegendTable",
+    "apply_legend_row_edits",
     "PairwiseIdentityGradient",
     "PairwiseIdentityLegend",
     "as_legend_table",

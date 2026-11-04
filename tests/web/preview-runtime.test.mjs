@@ -18,6 +18,7 @@ const serviceNames = [
   'json-clone.js',
   'legend-svg.js',
   'result-paint-bases.js',
+  'result-records.generated.js',
   'rule-matchers.js',
   'runtime-test-hooks.js',
   'session-feature-metadata.js',

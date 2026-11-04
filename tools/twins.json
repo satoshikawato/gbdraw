@@ -223,8 +223,7 @@
       "vector": "tests/fixtures/legend_row_edit_vectors.json",
       "reason": "The Web shows a Legend rename, deletion, or order at once; Python draws the same edits for Generate, the CLI, and the figure-size fit. The vector pins Python's drawn rows to the executor's.",
       "retireWhen": "a Legend edit is drawn only by Python through the Worker",
-      "source": "figure-size-1427 PR-D (issue #1427, Owner D-26 A; DESIGN-PR-D.md)",
-      "pending": true
+      "source": "figure-size-1427 PR-D (issue #1427, Owner D-26 A; DESIGN-PR-D.md)"
     },
     {
       "id": "vector:tests/fixtures/legend_rule_keys.json",

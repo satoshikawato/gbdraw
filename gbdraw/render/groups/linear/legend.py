@@ -11,9 +11,10 @@ from ....legend.linear_layout import (
     LinearGradientLegendLayout,
     LinearOrientationLegendLayout,
 )
-from ....legend.table import LegendRowKey, LegendTable, write_legend_row_names
+from ....legend.table import as_legend_table, LegendRowKey, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.ids import stable_svg_id
+from ....svg.result_records import LEGEND_ORDER_RECORD
 from ....svg.path_data import path_number, path_point
 from ....svg.text_path import generate_text_path
 
@@ -28,7 +29,7 @@ class LegendGroup:
     ) -> None:
         self.legend_group = Group(id="legend")
         self.legend_measurement = legend_measurement
-        self.legend_table = legend_table
+        self.legend_table = as_legend_table(legend_table)
         self._name_entry = write_legend_row_names(legend_table)
         self.font_family: str = legend_measurement.font_family
         self.font_weight: str = legend_measurement.font_weight
@@ -104,19 +105,20 @@ class LegendGroup:
         group_id: str,
     ) -> Group:
         group = Group(id=group_id)
+        order_record = self.legend_table.order_record()
+        if order_record is not None:
+            group.attribs[LEGEND_ORDER_RECORD] = order_record
         path_desc = self.create_rectangle_path_for_legend()
-        for entry in layout.entries:
+        # The shown rows where the layout placed them; a hidden row (a Legend row edit) at a shown row's place.
+        for key, properties, entry in self.legend_table.feature_rows({entry.key: entry for entry in layout.entries}):
             entry_group = Group()
-            drawn_name = self._name_entry(entry_group.attribs, entry.key)
+            drawn_name = self._name_entry(entry_group.attribs, key)
             rect_path = Path(
                 d=path_desc,
-                fill=entry.properties["fill"],
-                stroke=entry.properties["stroke"],
-                stroke_width=entry.properties["width"],
+                fill=properties["fill"],
+                stroke=properties["stroke"],
+                stroke_width=properties["width"],
             )
-            rect_path.translate(entry.rect_x, entry.rect_y)
-            entry_group.add(rect_path)
-
             legend_path = generate_text_path(
                 drawn_name,
                 0,
@@ -128,7 +130,10 @@ class LegendGroup:
                 dominant_baseline="central",
                 text_anchor="start",
             )
-            legend_path.translate(entry.text_x, entry.text_y)
+            if entry is not None:
+                rect_path.translate(entry.rect_x, entry.rect_y)
+                legend_path.translate(entry.text_x, entry.text_y)
+            entry_group.add(rect_path)
             entry_group.add(legend_path)
             group.add(entry_group)
         return group

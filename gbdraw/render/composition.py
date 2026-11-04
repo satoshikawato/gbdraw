@@ -74,12 +74,28 @@ class OverlayPolicyPayload(TypedDict):
     quadrantBoundaryRatio: float
 
 
-class SpacingPayload(TypedDict):
+class CanvasPaddingPayload(TypedDict):
+    """A request's canvas padding, px per side (``canvas.padding``)."""
+
+    bottom: float
+    left: float
+    right: float
+    top: float
+
+
+class _SpacingPayloadRequired(TypedDict):
     dockGapPx: float
     edgePaddingPx: float
     overlayClearancePx: float
     stackGapPx: float
     titleGapPx: float
+
+
+class SpacingPayload(_SpacingPayloadRequired, total=False):
+    """``canvasPadding`` exists only for a figure drawn with canvas padding, so a Result without it keeps its
+    metadata bytes; the Web replans with it as ``plan_composition`` does."""
+
+    canvasPadding: CanvasPaddingPayload
 
 
 class _CompositionMetadataRequired(TypedDict):
@@ -192,6 +208,21 @@ def _metadata_payload(
     length_bar_local_bounds: Aabb | None,
 ) -> str:
     spacing = plan.spacing
+    spacing_payload: SpacingPayload = {
+        "dockGapPx": _wire_number(spacing.dock_gap_px),
+        "edgePaddingPx": _wire_number(spacing.edge_padding_px),
+        "overlayClearancePx": _wire_number(spacing.overlay_clearance_px),
+        "stackGapPx": _wire_number(spacing.stack_gap_px),
+        "titleGapPx": _wire_number(spacing.title_gap_px),
+    }
+    if any(spacing.canvas_padding_px):
+        top, right, bottom, left = spacing.canvas_padding_px
+        spacing_payload["canvasPadding"] = {
+            "bottom": _wire_number(bottom),
+            "left": _wire_number(left),
+            "right": _wire_number(right),
+            "top": _wire_number(top),
+        }
     payload: CompositionMetadataPayload = {
         "legend": (
             _local_target_payload(legend_placement, composition_role=_LEGEND_ROLE)
@@ -223,13 +254,7 @@ def _metadata_payload(
             ),
         },
         "primary": _primary_target_payload(primary_placement),
-        "spacing": {
-            "dockGapPx": _wire_number(spacing.dock_gap_px),
-            "edgePaddingPx": _wire_number(spacing.edge_padding_px),
-            "overlayClearancePx": _wire_number(spacing.overlay_clearance_px),
-            "stackGapPx": _wire_number(spacing.stack_gap_px),
-            "titleGapPx": _wire_number(spacing.title_gap_px),
-        },
+        "spacing": spacing_payload,
         "title": (
             _local_target_payload(title_placement, composition_role=_TITLE_ROLE)
             if title_placement is not None

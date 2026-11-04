@@ -2826,6 +2826,31 @@ def _without_unwritten_feature_tolerance(name: str, value: object, error_type):
     return result
 
 
+# Config fields a request writes only when they are set (figure-size D-29): without them, a full config is the one
+# written before they existed, and a reader takes their defaults.
+_CONFIG_FIELDS_WRITTEN_WHEN_SET: tuple[tuple[str, ...], ...] = (
+    ("canvas", "padding"),
+    ("objects", "legends", "row_names"),
+    ("objects", "legends", "hidden_rows"),
+    ("objects", "legends", "row_order"),
+)
+
+
+def _without_unset_config_fields(config: GbdrawConfig, value: dict[str, Any]) -> dict[str, Any]:
+    for *sections, name in _CONFIG_FIELDS_WRITTEN_WHEN_SET:
+        owner: object = config
+        written = value
+        for section in sections:
+            owner = getattr(owner, section)
+            written = written[section]
+        if not is_dataclass(owner) or isinstance(owner, type):
+            raise TypeError(f"config section {'.'.join(sections)} is not a dataclass")
+        default = next(item.default for item in fields(owner) if item.name == name)
+        if getattr(owner, name) == default:
+            written.pop(name)
+    return value
+
+
 def _encode_option_value(
     name: str,
     value: object,
@@ -2835,7 +2860,7 @@ def _encode_option_value(
     if name == "config":
         if isinstance(value, GbdrawConfig):
             config = value
-            value = asdict(config)
+            value = _without_unset_config_fields(config, asdict(config))
             value["labels"]["filtering"] = deepcopy(
                 config.labels.filtering.as_dict()
             )
