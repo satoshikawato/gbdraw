@@ -224,6 +224,9 @@ import { classifyOptionalPositiveNumber } from '../utils/optional-positive-numbe
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearWrapField } from './linear-wrap-field.js';
+import { createFigureSizeField } from './figure-size-field.js';
+import { requestFigureSizeLeaves, shownFigureSize } from '../services/figure-size-form.js';
+import { getSvgDimensions } from '../services/svg-dimensions.js';
 import { exportLinearWrap, requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
 import { draftFeatureSlot } from './feature-editor/placement-actions.js';
 import { effectiveLinearSlotPlacement } from '../services/linear-track-slot-model.js';
@@ -5534,6 +5537,24 @@ export const createAppSetup = () => {
   // inputs only; a drawn record moved sideways is read from the translations the request carries, whatever wrote them
   // (Align at feature counts only through the records its Apply moved), and a Similarity alignment plan counts as
   // moved records, also when its comparison inputs were removed (Q5 A).
+  // Figure size (issue #1427): the line under the field reads the shown Result's root (px) after each change of it,
+  // and its committed request's sides; none while the drawing shows no Result of its own.
+  /** @type {{ value: { width: number, height: number } | null }} */
+  const shownFigurePx = shallowRef(null);
+  watch(() => [svgContent.value, resultEditRevision.value, state.activeDrawingId.value], () => {
+    shownFigurePx.value = getSvgDimensions(svgContainer.value?.querySelector?.('svg') ?? null);
+  }, { flush: 'post' });
+  const figureSizeField = createFigureSizeField({
+    state,
+    watch,
+    shownSize: () => {
+      const drawing = state.activeDrawing();
+      const request = state.generatedDrawingId.value === drawing.id && results.value.length > 0
+        ? getCommittedCanonicalRenderRequest() : null;
+      const px = shownFigurePx.value;
+      return request && px ? shownFigureSize({ widthPx: px.width, heightPx: px.height, requested: requestFigureSizeLeaves(request) }) : null;
+    }
+  });
   const linearWrapField = createLinearWrapField({
     state,
     changeLayoutSetting: featureActions.placementActions.changeLayoutSetting,
@@ -8093,6 +8114,7 @@ export const createAppSetup = () => {
     autoValueVisible: autoValueDisplay.autoValueVisible,
     canUseLinearRulerOnAxis,
     ...linearWrapField,
+    ...figureSizeField,
     canUseCircularScaleStyling,
     circularTrackNewRenderer,
     linearTrackNewRenderer,

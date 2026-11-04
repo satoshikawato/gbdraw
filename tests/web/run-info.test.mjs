@@ -1288,6 +1288,26 @@ test('a Linear wrap length has its CLI flag in the Source recipe', async () => {
   }
 });
 
+// A figure size writes `--figure_width` and `--figure_height` with the request's value in either mode; Auto writes
+// nothing (issue #1427).
+test('a figure size has its CLI flags in the Source recipe of either mode', async () => {
+  for (const session of [circularGallerySession, linearGallerySession]) {
+    for (const [width, height] of [['180mm', '5in'], ['1200px', undefined], [undefined, undefined]]) {
+      const copy = structuredClone(session);
+      const overrides = copy.renderRequest.diagramOptions.configOverrides;
+      if (width !== undefined) overrides['canvas.figure_width'] = width;
+      if (height !== undefined) overrides['canvas.figure_height'] = height;
+      const recipe = await buildSourceRecipe(copy);
+      assert.equal(recipe.available, true, recipe.unavailableReason);
+      for (const [flag, value] of [['--figure_width', width], ['--figure_height', height]]) {
+        const at = recipe.args.indexOf(flag);
+        assert.equal(at === -1 ? undefined : recipe.args[at + 1], value, JSON.stringify(recipe.args));
+      }
+      await assertCliParserAccepts(recipe);
+    }
+  }
+});
+
 // A fixed identity colour scale writes `--identity_scale MIN MAX` from the mode's leaf; no scale writes nothing.
 test('a fixed identity scale has its CLI flag in the Source recipe of either mode', async () => {
   const leaves = { circular: 'objects.conservation.identity_scale', linear: 'objects.blast_match.identity_scale' };

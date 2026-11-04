@@ -274,6 +274,26 @@ export const MODE_PROFILE_DATA = deepFreeze({
     "misc_RNA",
     "repeat_region"
   ],
+  "figureLength": {
+    "messageDecimals": {
+      "cm": 1,
+      "in": 2,
+      "mm": 1,
+      "px": 0
+    },
+    "pxPerUnit": {
+      "cm": 37.79527559055118,
+      "in": 96.0,
+      "mm": 3.7795275590551185,
+      "px": 1.0
+    },
+    "units": [
+      "mm",
+      "cm",
+      "in",
+      "px"
+    ]
+  },
   "labelStyleChoices": {
     "line": [
       "none",

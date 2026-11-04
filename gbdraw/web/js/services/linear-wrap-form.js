@@ -6,6 +6,8 @@
 // (gbdraw/layout/linear_wrap.py), and parses a length typed with a unit.
 /** @import { InputSummary, RecordSummary } from './input-summary.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
+/** @import { StoredLeafReadings } from './stored-leaf-readings.js' */
+import { NO_STORED_READINGS, storedLeafKey } from './stored-leaf-readings.js';
 
 /** The request leaf of the wrap length (a config override path). */
 export const LINEAR_WRAP_LENGTH_PATH = 'canvas.linear.wrap_length';
@@ -19,32 +21,20 @@ export const LINEAR_WRAP_LENGTH_PATH = 'canvas.linear.wrap_length';
  * @typedef {{ value: LinearWrapFormValue, lost: boolean }} LinearWrapReading
  */
 /**
- * Python's readings of the stored wrap lengths the form cannot hold as stored (a length typed with a unit such as
- * `"5kb"`, `"Auto"`, `" 20000 "`), by `wrapReadingKey` of the stored value. Load asks Python
- * (`linear_wrap_length_from_config`, through the Worker's configuration check) before its readers run; a value
- * Python refuses has no reading.
- * @typedef {ReadonlyMap<string, LinearWrapFormValue>} StoredWrapReadings
- */
-/** @type {StoredWrapReadings} */
-export const NO_WRAP_READINGS = new Map();
-/** @param {unknown} raw */
-export const wrapReadingKey = (raw) => JSON.stringify(raw);
-
-/**
  * Reads a stored wrap length (a Session's form value, a request or config leaf, a preserved override) as the form
  * holds it. The form's own values and Python's canonical ones read as they are: absent, `null` and `"none"` are
- * off, `"auto"` is Auto, a positive safe integer is a length in bp. Any other value is Python's to read: its
- * reading in `readings`, else lost.
+ * off, `"auto"` is Auto, a positive safe integer is a length in bp. Any other value (`"5kb"`, `"Auto"`) is
+ * Python's to read (`linear_wrap_length_from_config`): its reading in `readings`, else lost.
  * @param {unknown} raw
- * @param {StoredWrapReadings} [readings]
+ * @param {StoredLeafReadings} [readings]
  * @returns {LinearWrapReading}
  */
-export const wrapFormValue = (raw, readings = NO_WRAP_READINGS) => {
+export const wrapFormValue = (raw, readings = NO_STORED_READINGS) => {
   if (raw === undefined || raw === null || raw === 'none') return { value: null, lost: false };
   if (raw === 'auto') return { value: 'auto', lost: false };
   if (typeof raw === 'number' && Number.isSafeInteger(raw) && raw > 0) return { value: raw, lost: false };
-  const reading = readings.get(wrapReadingKey(raw));
-  return reading === undefined ? { value: null, lost: true } : { value: reading, lost: false };
+  const key = storedLeafKey(LINEAR_WRAP_LENGTH_PATH, raw);
+  return readings.has(key) ? wrapFormValue(readings.get(key) ?? null) : { value: null, lost: true };
 };
 
 /**

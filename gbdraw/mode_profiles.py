@@ -282,6 +282,7 @@ def mode_profiles_payload() -> dict[str, object]:
     from gbdraw.auto_sizes import ADAPTABLE_SETTINGS, linear_label_size_records, tick_and_window_tiers
     from gbdraw.comparisons.identity_scale import IDENTITY_SCALE_PATHS
     from gbdraw.config.models import GbdrawConfig
+    from gbdraw.core.figure_length import figure_length_unit_table
     from gbdraw.diagrams.circular.presets import circular_auto_slot_sizes, circular_track_preset_table
     from gbdraw.labels.label_style import (
         DEFAULT_ITALIC_GENE_LABELS,
@@ -324,6 +325,9 @@ def mode_profiles_payload() -> dict[str, object]:
             for name, domain in COMPARISON_THRESHOLD_DOMAINS.items()
         },
         "featureTypes": list(DEFAULT_FEATURE_TYPES),
+        # The units of canvas.figure_width and canvas.figure_height (gbdraw/core/figure_length.py): the Figure size
+        # field's unit choices and the size line's conversion and decimals.
+        "figureLength": figure_length_unit_table(),
         # The vocabularies of a region drawing's reply (gbdraw/api/region_drawing.py):
         # the kinds of a part the new drawing does not carry and the reasons a
         # region is refused.

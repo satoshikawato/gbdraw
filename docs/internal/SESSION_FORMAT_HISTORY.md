@@ -66,7 +66,12 @@ a length with a unit, issue #1427) to a drawing's stored full config; a CLI or P
 overrides. The request schema keeps config opaque, and Session 51 has not reached `main`, so the version does not
 change. A Session without the leaves reads as auto, and no reader converts it. `main`'s build (0.14.5) ignores the
 leaves in a stored full config and refuses them as a `configOverrides` entry ("Unknown config override path").
-The Web has no control for them yet; a Web re-plan (a legend drag) does not keep a requested canvas.
+The Web's Figure size field (Layout, both modes) writes each drawing's `config.form.figure_width` and
+`config.form.figure_height`, `copy` rows of the mode-scoped registry: `null` for Auto, else the amount and unit as
+typed (`"180mm"`). A set side is the request leaf; Auto writes none, so an Auto drawing's request is unchanged, and
+its saved form holds the two keys as `null`. A Session without the form keys reads as Auto. Load reads a stored leaf
+the form cannot hold as stored (`"180 MM"`) with Python's configuration check and drops one Python refuses with a
+Load repair row. A Web re-plan (a legend drag) does not keep a requested canvas yet.
 
 A Linear request that states no `diagramOptions.output`, or a null `plotTitlePosition`, draws with Python's
 `LinearOutputOptions()` sides: legend `right`, title `bottom` (OV-2491, Owner decision R17-38). The generated

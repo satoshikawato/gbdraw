@@ -13,11 +13,12 @@ import math
 import re
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Literal, TypeAlias, cast
+from typing import Literal, TypeAlias, TypedDict, cast, get_args
 
 from gbdraw.exceptions import ValidationError
 
 FigureLengthUnit: TypeAlias = Literal["mm", "cm", "in", "px"]
+FIGURE_LENGTH_UNITS: tuple[FigureLengthUnit, ...] = get_args(FigureLengthUnit)
 CSS_PX_PER_INCH = 96.0
 _PX_PER_UNIT: dict[FigureLengthUnit, float] = {
     "mm": CSS_PX_PER_INCH / 25.4,
@@ -61,6 +62,12 @@ class FigureLength:
     def text(self) -> str:
         return f"{_plain_number(self.value)}{self.unit}"
 
+    @property
+    def spaced_text(self) -> str:
+        """The length as a message names it, with a space before the unit: ``180 mm``, ``7.5 in``."""
+
+        return f"{_plain_number(self.value)} {self.unit}"
+
     def of_px(self, px: float) -> FigureLength:
         """The length ``px`` measures in this length's unit."""
 
@@ -77,6 +84,25 @@ class FigureLength:
         # A float a hair over a whole step (53.900000001) is still that step.
         rounded = math.ceil(round(scaled, 6)) if round_up else round(scaled)
         return f"{_plain_number(rounded / 10**decimals)} {self.unit}"
+
+
+class FigureLengthUnitTable(TypedDict):
+    """The units a figure length takes, as the Web reads them (``gbdraw/mode_profiles.py`` ``figureLength``): each
+    unit in the order the Web lists it, its CSS px, and the decimals a message writes it with."""
+
+    units: list[FigureLengthUnit]
+    pxPerUnit: dict[FigureLengthUnit, float]
+    messageDecimals: dict[FigureLengthUnit, int]
+
+
+def figure_length_unit_table() -> FigureLengthUnitTable:
+    """The unit table of a figure length, the one source of the Web's units, px per unit, and decimals."""
+
+    return {
+        "units": list(FIGURE_LENGTH_UNITS),
+        "pxPerUnit": dict(_PX_PER_UNIT),
+        "messageDecimals": dict(_MESSAGE_DECIMALS),
+    }
 
 
 def parse_figure_length(value: str | None) -> FigureLength | None:
@@ -133,9 +159,12 @@ class RequestedFigureSize:
 __all__ = [
     "CSS_PX_PER_INCH",
     "FIGURE_LENGTH_AUTO",
+    "FIGURE_LENGTH_UNITS",
     "FigureLength",
     "FigureLengthUnit",
+    "FigureLengthUnitTable",
     "RequestedFigureSize",
     "argparse_figure_length",
+    "figure_length_unit_table",
     "parse_figure_length",
 ]

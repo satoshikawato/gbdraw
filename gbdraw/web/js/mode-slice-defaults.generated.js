@@ -41,6 +41,8 @@ export const MODE_SLICE_DEFAULTS = deepFreeze({
       {"domain":"config.form","path":"species","value":""},
       {"domain":"config.form","path":"strain","value":""},
       {"domain":"config.form","path":"plot_title","value":""},
+      {"domain":"config.form","path":"figure_width","value":null},
+      {"domain":"config.form","path":"figure_height","value":null},
       {"domain":"config.form","path":"track_type","value":"tuckin"},
       {"domain":"config.form","path":"show_scale","value":true},
       {"domain":"config.form","path":"labels_mode","value":"none"},
@@ -170,6 +172,8 @@ export const MODE_SLICE_DEFAULTS = deepFreeze({
     "linear": [
       {"domain":"config.form","path":"prefix","value":""},
       {"domain":"config.form","path":"plot_title","value":""},
+      {"domain":"config.form","path":"figure_width","value":null},
+      {"domain":"config.form","path":"figure_height","value":null},
       {"domain":"config.form","path":"linear_track_layout","value":"middle"},
       {"domain":"config.form","path":"show_scale","value":true},
       {"domain":"config.form","path":"scale_style","value":"bar"},

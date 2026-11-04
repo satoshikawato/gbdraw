@@ -155,7 +155,15 @@ class LabelCapacityNoticePayload(TypedDict):
     capacityRatio: float
 
 
-class LabelFitReportPayload(TypedDict):
+class LargerFigurePayload(TypedDict):
+    """About how large a requested figure must be for the labels not placed (``LargerFigure``): each requested side as
+    Python's message writes it (``829 mm``), null for a side left auto."""
+
+    width: str | None
+    height: str | None
+
+
+class _LabelFitReportFields(TypedDict):
     schema: Literal[1]
     drawn: bool
     overlapPairs: int
@@ -168,6 +176,12 @@ class LabelFitReportPayload(TypedDict):
     # The ways to make room for records that were not placed (CAPACITY-STOP), or when no row has a value (NO-ROW-WAYS,
     # listed once every row is known not to fit); the Web words each with its controls.
     remedies: list[LabelCapacityRemedy]
+
+
+class LabelFitReportPayload(_LabelFitReportFields, total=False):
+    # The size the ``figure_size`` remedy names, present only when it is offered, so a report without it keeps its
+    # bytes.
+    largerFigure: LargerFigurePayload
 
 
 class LabelFitFailurePayload(TypedDict):
@@ -265,7 +279,8 @@ def _record_payload(record: LabelFitRecord) -> LabelFitRecordPayload:
 def label_fit_report_payload(report: LabelFitReport, mode: LabelFitMode) -> LabelFitReportPayload:
     """The bounded JSON form of a report: identifiers, counts, values, and Python's words."""
 
-    return {
+    remedies, larger = report.room_remedies, report.larger_figure
+    payload: LabelFitReportPayload = {
         "schema": LABEL_FIT_PAYLOAD_SCHEMA,
         "drawn": report.drawn,
         "overlapPairs": report.overlap_pairs,
@@ -275,8 +290,11 @@ def label_fit_report_payload(report: LabelFitReport, mode: LabelFitMode) -> Labe
         "notice": list(label_fit_notice(report)),
         "records": [_record_payload(record) for record in report.records],
         "rows": [label_fit_row_payload(row, mode) for row in report.rows],
-        "remedies": list(report.room_remedies),
+        "remedies": list(remedies),
     }
+    if "figure_size" in remedies and larger is not None:
+        payload["largerFigure"] = {"width": larger.width, "height": larger.height}
+    return payload
 
 
 def label_capacity_notice_payload(warning: LabelsMayNotFitWarning) -> LabelCapacityNoticePayload:

@@ -48,6 +48,7 @@ import {
 } from '../utils/feature-rendering.js';
 import { LINEAR_LABEL_VISIBILITY_MODES } from './linear-label-visibility.js';
 import { wrapFormValue } from './linear-wrap-form.js';
+import { figureLengthFormValue } from './figure-size-form.js';
 import { featureColorEditColor } from './specific-color-rules.js';
 import { isLabelOverrideRow } from './label-override-table.js';
 import { isCardRow, markedRows } from './file-imports.js';
@@ -862,6 +863,10 @@ const containerTables = (mode) => Object.freeze([
   { at: 'form', rows: [
     row('linear_track_layout', textChoice(LINEAR_TRACK_LAYOUTS, 'middle', { aliases: LINEAR_TRACK_LAYOUT_ALIASES })),
     row('linear_wrap_length', wrapFormValue),
+    // A side the field cannot show (`"180 MM"` typed into a stored draft) is Auto, with its row; the Web writes only
+    // an amount and a unit.
+    row('figure_width', (value) => figureLengthFormValue('width', value)),
+    row('figure_height', (value) => figureLengthFormValue('height', value)),
     // A null lock is an omission, the historical OFF (`importSessionDocument`; E-OD24, no row); the merge keeps
     // the target's value for one of another kind, with its row.
     row('keep_definition_left_aligned', onlyTrue)

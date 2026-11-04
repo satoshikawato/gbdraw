@@ -49,6 +49,22 @@ const report = (rows, { drawn = false } = {}) => ({
 const failure = (value, rowToken = null) => JSON.stringify({ report: value, rowToken });
 const normalizeReport = (value) => normalizeLabelFitFailure(failure(value)).report;
 
+// At a requested size Python sends its estimate of each requested side with the figure_size remedy (issue #1427).
+test('a report reads Python\'s larger-figure estimate only with the figure_size remedy', () => {
+  const sized = (largerFigure, remedies = ['filter', 'figure_size']) => ({
+    ...report([]), remedies, ...(largerFigure === undefined ? {} : { largerFigure })
+  });
+  assert.equal(normalizeReport(sized(undefined)).largerFigure, null);
+  assert.equal(normalizeReport(report([])).largerFigure, null);
+  assert.deepEqual(normalizeReport(sized({ width: '240.3 mm', height: null })).largerFigure, { width: '240.3 mm', height: null });
+  assert.deepEqual(normalizeReport(sized({ width: null, height: '9.5 in' })).largerFigure, { width: null, height: '9.5 in' });
+  for (const bad of [{ width: null, height: null }, { width: '240.3mm', height: null }, { width: '240.3 mm' },
+    { width: '240.3 mm', height: null, depth: null }, null]) {
+    assert.throws(() => normalizeReport(sized(bad)), undefined, JSON.stringify(bad));
+  }
+  assert.throws(() => normalizeReport(sized({ width: '240.3 mm', height: null }, ['filter'])), undefined, 'no estimate without the remedy');
+});
+
 test('the failure reader keeps Python\'s rows in order, the record counts, and the row token', () => {
   const rows = [foundRow('outward_vertical', 1.15), row('tighter_rows', 'not_found', { reason: 'No fit' }),
     row('combination', 'not_computed'),
@@ -516,10 +532,10 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   const state = dialog.labelFitDialog;
   assert.equal(state.show, true);
   assert.equal(state.capacity, true);
-  assert.deepEqual(state.remedies, [
-    'Label fewer features: Blacklist or Whitelist under LABEL FILTERING.',
-    'Shorten the label text: a priority rule, for example gene before product.',
-    'Draw a Linear map.'
+  assert.deepEqual(state.remedies.map(({ text, params }) => [text, params]), [
+    ['Label fewer features: Blacklist or Whitelist under LABEL FILTERING.', {}],
+    ['Shorten the label text: a priority rule, for example gene before product.', {}],
+    ['Draw a Linear map.', {}]
   ]);
   assert.deepEqual(state.rows, []);
   assert.deepEqual(state.records.map((record) => [record.recordId, record.capacity]),
@@ -538,7 +554,7 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   const start = html.indexOf('<choice-dialog v-if="labelFitDialog.show"');
   const markup = html.slice(start, html.indexOf('</choice-dialog>', start));
   assert.match(markup, /\{\{ labelFitDialog\.capacity\s+\? t\('Nothing was drawn\. These labels need much more room than the map has, so placing them was not tried\.'\)/);
-  assert.match(markup, /<div v-if="labelFitDialog\.remedies\.length"[^>]*data-label-fit-remedies>\s*<p[^>]*>\{\{ t\('To make room:'\) \}\}<\/p>\s*<ul[^>]*>\s*<li v-for="remedy in labelFitDialog\.remedies" :key="remedy">\{\{ tm\(remedy\) \}\}<\/li>/);
+  assert.match(markup, /<div v-if="labelFitDialog\.remedies\.length"[^>]*data-label-fit-remedies>\s*<p[^>]*>\{\{ t\('To make room:'\) \}\}<\/p>\s*<ul[^>]*>\s*<li v-for="remedy in labelFitDialog\.remedies" :key="remedy\.text">\{\{ tm\(remedy\.text, remedy\.params\) \}\}<\/li>/);
   // No rows section and no Apply over a capacity stop; the one button reads Close.
   assert.match(markup, /<fieldset v-if="labelFitDialog\.rows\.length"/);
   assert.match(markup, /<p v-else-if="!labelFitDialog\.capacity"[^>]*>\{\{ t\('No setting in this dialog makes these labels fit\.'\) \}\}<\/p>/);
@@ -546,6 +562,18 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   assert.match(markup, />\{\{ labelFitDialog\.capacity \? t\('Close'\) : labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
   // A record not placed for lack of room reads in the Web's words (OV-2179); other records keep their counts in brackets.
   assert.match(markup, /<i18n-text v-if="record\.capacity" :text="labelCapacityText\(record\.capacity\)"><template #record><span[^>]*>\{\{ record\.recordId \}\}<\/span><\/template><\/i18n-text>\s*<template v-else><span[^>]*>\{\{ record\.recordId \}\}<\/span>: \{\{ record\.labelCount \}\} \{\{ record\.labelKindTitle \}\} at \{\{ record\.fontSize \}\} pt \(\{\{ record\.counts \}\}\)<\/template>/);
+});
+
+// At a requested size the figure_size remedy names Python's estimate and the control (issue #1427, D-14).
+test('the dialog over a sized capacity stop names the larger figure Python estimates', async () => {
+  const { dialog } = dialogHarness();
+  await dialog.openLabelFitDialog(normalizeReport({ ...capacityReport(['filter', 'figure_size', 'linear']),
+    largerFigure: { width: '240.3 mm', height: null } }), { mode: 'circular' });
+  assert.deepEqual(dialog.labelFitDialog.remedies[1], {
+    text: 'Make the figure larger: Figure width about {width} (Figure size in Layout).', params: { width: '240.3 mm' }
+  });
+  await dialog.openLabelFitDialog(normalizeReport(capacityReport(['filter', 'figure_size', 'linear'])), { mode: 'circular' });
+  assert.deepEqual(dialog.labelFitDialog.remedies[1], { text: 'Make the figure larger (Figure size in Layout).', params: {} });
 });
 
 test('when every row does not fit, the dialog also lists Python\'s ways to make room (NO-ROW-WAYS, OV-2180)', async () => {
@@ -563,7 +591,7 @@ test('when every row does not fit, the dialog also lists Python\'s ways to make 
   assert.equal(state.capacity, false);
   assert.deepEqual(state.rows.map((item) => [item.kind, item.status, item.offered]),
     [['outward_both', 'not_found', false], ['smaller_font', 'not_found', false]]);
-  assert.deepEqual(state.remedies, words);
+  assert.deepEqual(state.remedies.map(({ text }) => text), words);
   assert.equal(state.selectedKind, '');
   await dialog.resolveLabelFitChoice('cancel');
   assert.equal(state.show, false);
@@ -581,7 +609,7 @@ test('when every row does not fit, the dialog also lists Python\'s ways to make 
   later.splice(0).forEach((resolve) => resolve());
   await opened;
   assert.deepEqual(lazy.dialog.labelFitDialog.rows.map((item) => item.status), ['not_found', 'not_found']);
-  assert.deepEqual(lazy.dialog.labelFitDialog.remedies, words);
+  assert.deepEqual(lazy.dialog.labelFitDialog.remedies.map(({ text }) => text), words);
 
   // A row that fits: no ways, even when the report names them.
   await dialog.openLabelFitDialog(normalizeReport({ ...report([notFound('outward_both'), foundRow('outward_vertical', 1.5)]),

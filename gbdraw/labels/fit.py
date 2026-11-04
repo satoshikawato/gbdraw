@@ -918,7 +918,10 @@ def _room_line(report: LabelFitReport, remedy: LabelCapacityRemedy) -> str:
     if remedy != "figure_size" or larger is None:
         return words
     sides = (("width", larger.width), ("height", larger.height))
-    return words.format(sizes=" ".join(f"--figure_{side} about {value}" for side, value in sides if value is not None))
+    # The message's value ("240.3 mm") written as an argument ("240.3mm").
+    return words.format(
+        sizes=" ".join(f"--figure_{side} about {value.replace(' ', '')}" for side, value in sides if value is not None)
+    )
 
 
 def _room_lines(report: LabelFitReport) -> list[str]:

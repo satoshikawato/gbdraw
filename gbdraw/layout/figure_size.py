@@ -11,12 +11,12 @@ import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Generic, Literal, TypeVar
+from typing import Generic, Literal, TypeAlias, TypeVar, get_args
 
 from gbdraw.config.models.canvas import FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH
 from gbdraw.core.figure_length import FigureLength, RequestedFigureSize
 from gbdraw.exceptions import ValidationError
-from gbdraw.layout.composition import CompositionPlan
+from gbdraw.layout.composition import CompositionPlacement, CompositionPlan
 from gbdraw.layout.spatial import Aabb, union_aabbs
 
 Built = TypeVar("Built")
@@ -32,6 +32,23 @@ _MAX_UNDRAWABLE_PASSES = 12
 # The composed size grows with the base length, but labels past the ends can make a stretch nearly flat; a slope
 # measured there is raised to this so one step cannot jump far.
 _MIN_SLOPE = 0.25
+
+# The primary item a refusal names, by the id its diagnostic carries (``primaryItem``): the Linear records at their
+# smallest (``record_ends``: what stays of them as the sequence shrinks), the Linear records, the Circular map, or a
+# multi-record grid of maps. The Web words each (utils/error-normalization.js).
+FigurePrimaryItem: TypeAlias = Literal["record_ends", "records", "map", "maps"]
+FIGURE_PRIMARY_ITEMS: tuple[FigurePrimaryItem, ...] = get_args(FigurePrimaryItem)
+_PRIMARY_NAMES: dict[FigurePrimaryItem, str] = {
+    "record_ends": "record names and labels past the sequence ends",
+    "records": "records",
+    "map": "map at its smallest",
+    "maps": "maps at their smallest",
+}
+# A part a refusal names, by its diagnostic key: the primary item, the legend, the title, the padding.
+FigureSizePart: TypeAlias = Literal["primary", "legend", "title", "padding"]
+FIGURE_SIZE_PARTS: tuple[FigureSizePart, ...] = get_args(FigureSizePart)
+# The refusals of a requested size, by their diagnostic reason (the Web words each).
+FIGURE_SIZE_REASONS = ("FIGURE_TOO_NARROW", "FIGURE_TOO_SHORT")
 
 
 @dataclass(frozen=True)
@@ -222,8 +239,15 @@ def _beside_primary(plan: CompositionPlan, legend_role: str) -> bool:
     return bounds.max_x <= primary.min_x or bounds.min_x >= primary.max_x
 
 
-def _parts_text(length: FigureLength, parts: list[tuple[str, float]]) -> str:
-    return ", ".join(f"{name} {length.message_text(px)}" for name, px in parts if px > 0.0)
+def _parts_context(
+    length: FigureLength, parts: list[tuple[FigureSizePart, float]], primary: FigurePrimaryItem
+) -> tuple[str, dict[str, str]]:
+    """The parts of a refusal as its message words them (``records 120.3 mm, legend 40 mm``) and as its diagnostic
+    carries them (each part's length by its key), the parts of zero length left out."""
+
+    shown = [(part, length.message_text(px)) for part, px in parts if px > 0.0]
+    text = ", ".join(f"{_PRIMARY_NAMES[primary] if part == 'primary' else part} {value}" for part, value in shown)
+    return text, dict(shown)
 
 
 def figure_too_short(
@@ -231,43 +255,52 @@ def figure_too_short(
     height: FigureLength,
     width: FigureLength | None,
     *,
-    primary_name: str,
+    primary: FigurePrimaryItem,
     legend_role: str = "legend",
     title_role: str = "title",
 ) -> ValidationError:
     """The refusal of a requested height shorter than the padded content of ``plan``.
 
-    ``primary_name`` names the primary item (Linear records, a Circular map at its smallest); ``width`` is the
-    requested width, if any.
+    ``primary`` names the primary item (Linear records, a Circular map at its smallest); ``width`` is the
+    requested width, if any. The diagnostic carries each length of the message as the message writes it
+    (``FIGURE_TOO_SHORT``), so the Web words the same numbers.
     """
 
     content = plan.content_bounds
     shown_width = width if width is not None else height.of_px(plan.width)
     parts = _axis_parts(plan, "y", legend_role=legend_role, title_role=title_role)
     minimum = height.message_text(content.height, round_up=True)
-    detail = _parts_text(
+    at_width = shown_width.message_text(plan.width)
+    detail, lengths = _parts_context(
         height,
-        [(primary_name, parts.primary), ("legend", parts.legend), ("title", parts.title), ("padding", parts.padding)],
+        [("primary", parts.primary), ("legend", parts.legend), ("title", parts.title), ("padding", parts.padding)],
+        primary,
     )
     return ValidationError(
-        f"figure_height {height.text} is shorter than the figure at {shown_width.message_text(plan.width)} "
+        f"figure_height {height.text} is shorter than the figure at {at_width} "
         f"wide: {minimum} ({detail}). Use a figure_height of at least {minimum}, or leave figure_height auto.",
         diagnostic={
             "code": "INPUT_INVALID",
+            "reason": "FIGURE_TOO_SHORT",
             "configPath": FIGURE_HEIGHT_PATH,
             "minimumPx": math.ceil(content.height),
+            "requested": height.spaced_text,
+            "minimum": minimum,
+            "atWidth": at_width,
+            "primaryItem": primary,
+            **lengths,
         },
     )
 
 
-def check_figure_height(plan: CompositionPlan, size: RequestedFigureSize, *, primary_name: str) -> None:
+def check_figure_height(plan: CompositionPlan, size: RequestedFigureSize, *, primary: FigurePrimaryItem) -> None:
     """Refuse a drawn figure whose padded content is taller than a requested height.
 
     A requested width is the base-length fit's: the figure drawn is the one that fit it.
     """
 
     if size.height is not None and plan.content_bounds.height > size.height.px:
-        raise figure_too_short(plan, size.height, size.width, primary_name=primary_name)
+        raise figure_too_short(plan, size.height, size.width, primary=primary)
 
 
 def figure_size_excess(plan: CompositionPlan, size: RequestedFigureSize) -> float:
@@ -284,21 +317,24 @@ def figure_size_excess(plan: CompositionPlan, size: RequestedFigureSize) -> floa
     return max(excesses)
 
 
-def figure_size_refusal(plan: CompositionPlan, size: RequestedFigureSize, *, primary_name: str) -> ValidationError:
+def figure_size_refusal(
+    plan: CompositionPlan, size: RequestedFigureSize, *, primary: FigurePrimaryItem
+) -> ValidationError:
     """The refusal of a requested box that ``plan``, the smallest figure the fit drew, does not fit: the width
     refusal when it is wider than a requested width, else the height refusal."""
 
     if size.height is None or (size.width is not None and plan.content_bounds.width > size.width.px):
         if size.width is None:
             raise ValueError("a refusal needs a requested side")
-        return figure_too_narrow(plan, size.width, fixed_primary_name=primary_name)
-    return figure_too_short(plan, size.height, size.width, primary_name=primary_name)
+        return figure_too_narrow(plan, size.width, primary=primary)
+    return figure_too_short(plan, size.height, size.width, primary=primary)
 
 
 @dataclass(frozen=True)
 class LargerFigure:
     """About how large a requested figure must be for labels that were not placed for lack of room (CAPACITY-STOP):
-    each requested side as an argument value (``240.3mm``), None for a side left auto."""
+    each requested side as a message writes it (``240.3 mm``), None for a side left auto; the CLI writes it as an
+    argument without the space (``240.3mm``)."""
 
     width: str | None
     height: str | None
@@ -311,8 +347,7 @@ def larger_figure(plan: CompositionPlan, size: RequestedFigureSize, ratio: float
     def side(length: FigureLength | None, content: float, primary: float) -> str | None:
         if length is None:
             return None
-        # The message's rounded value ("240.3 mm") written as an argument.
-        return length.message_text(content + (ratio - 1.0) * primary, round_up=True).replace(" ", "")
+        return length.message_text(content + (ratio - 1.0) * primary, round_up=True)
 
     content, primary = plan.content_bounds, plan.primary_bounds
     return LargerFigure(
@@ -324,16 +359,16 @@ def figure_too_narrow(
     plan: CompositionPlan,
     width: FigureLength,
     *,
-    fixed_primary_name: str,
+    primary: FigurePrimaryItem,
     legend_role: str = "legend",
     title_role: str = "title",
 ) -> ValidationError:
     """The refusal of a requested width narrower than ``plan``, the smallest figure the fit drew.
 
     The narrowest figure is that plan's padded content. When the primary row (the primary item with a legend
-    beside it) is its widest item, the message names ``fixed_primary_name`` (the primary item at its smallest), the
+    beside it) is its widest item, the message names ``primary`` (the primary item at its smallest), the
     legend beside it, and the padding; otherwise the widest item above or below (the title or the legend) and the
-    padding.
+    padding. The diagnostic carries each length of the message as the message writes it (``FIGURE_TOO_NARROW``).
     """
 
     content = plan.content_bounds.width
@@ -343,32 +378,48 @@ def figure_too_narrow(
     row_boxes = [plan.primary_bounds]
     if legend is not None and beside:
         row_boxes.append(legend.final_bounds)
-    primary = _span([plan.primary_bounds], "x")
+    primary_px = _span([plan.primary_bounds], "x")
     row = _span(row_boxes, "x")
-    above_or_below = [
-        (name, placement.final_bounds)
-        for name, placement in (("title", title), ("legend", None if beside else legend))
-        if placement is not None
-    ]
+    candidates: tuple[tuple[FigureSizePart, CompositionPlacement | None], ...] = (
+        ("title", title),
+        ("legend", None if beside else legend),
+    )
+    above_or_below = [(name, placement.final_bounds) for name, placement in candidates if placement is not None]
     painted = _span([*row_boxes, *(bounds for _name, bounds in above_or_below)], "x")
     row_binds = painted - row < 0.5
+    parts: list[tuple[FigureSizePart, float]]
     if row_binds:
-        parts = [(fixed_primary_name, primary), ("legend", row - primary)]
+        parts = [("primary", primary_px), ("legend", row - primary_px)]
     else:
         widest = max(above_or_below, key=lambda item: item[1].width)[0]
         parts = [(widest, painted)]
     minimum = width.message_text(content, round_up=True)
-    detail = _parts_text(width, [*parts, ("padding", content - painted)])
-    legend_remedy = " place the legend at the top or bottom," if row_binds and beside else ""
+    detail, lengths = _parts_context(width, [*parts, ("padding", content - painted)], primary)
+    legend_remedy = row_binds and beside
     return ValidationError(
         f"figure_width {width.text} is narrower than the parts of the figure that do not shrink: {detail} "
-        f"({minimum} in all). Use a figure_width of at least {minimum},{legend_remedy} or leave figure_width auto.",
-        diagnostic={"code": "INPUT_INVALID", "configPath": FIGURE_WIDTH_PATH, "minimumPx": math.ceil(content)},
+        f"({minimum} in all). Use a figure_width of at least {minimum},"
+        f"{' place the legend at the top or bottom,' if legend_remedy else ''} or leave figure_width auto.",
+        diagnostic={
+            "code": "INPUT_INVALID",
+            "reason": "FIGURE_TOO_NARROW",
+            "configPath": FIGURE_WIDTH_PATH,
+            "minimumPx": math.ceil(content),
+            "requested": width.spaced_text,
+            "minimum": minimum,
+            "primaryItem": primary,
+            **lengths,
+            **({"legendRemedy": True} if legend_remedy else {}),
+        },
     )
 
 
 __all__ = [
+    "FIGURE_PRIMARY_ITEMS",
+    "FIGURE_SIZE_PARTS",
+    "FIGURE_SIZE_REASONS",
     "BaseLengthFit",
+    "FigurePrimaryItem",
     "LargerFigure",
     "check_figure_height",
     "figure_size_excess",

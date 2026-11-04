@@ -5,6 +5,7 @@
 /** @import { CanonicalLinearLayout, CanonicalLinearRenderRequest, CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js' */
 /** @import { FieldLeaf, FieldReading } from '../utils/field-reading.js' */
 /** @import { LinearWrapFormValue } from './linear-wrap-form.js' */
+/** @import { FigureLengthFormValue } from './figure-size-form.js' */
 import { adoptCurrentSessionResources, createSessionResourceFileView, readSessionResourceBytes } from './session-resource-backing.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { canonicalRecordReverseComplement } from './record-display-model.js';
@@ -87,7 +88,10 @@ export const createDefaultForm = () => ({
   separate_strands: WEB_UX_PROFILE.separateStrands, suppress_gc: !circularTracks.gc, suppress_skew: !circularTracks.skew, align_center: false,
   keep_definition_left_aligned: true, show_gc: linearTracks.gc, show_skew: linearTracks.skew, show_depth: false, normalize_length: false,
   // Off. Wrap Rows writes it through the layout transition (services/linear-wrap-form.js `linearWrapFormPatch`).
-  linear_wrap_length: /** @type {LinearWrapFormValue} */ (null)
+  linear_wrap_length: /** @type {LinearWrapFormValue} */ (null),
+  // Auto. The Figure size field of the Layout card writes each side (app/figure-size-field.js).
+  figure_width: /** @type {FigureLengthFormValue} */ (null),
+  figure_height: /** @type {FigureLengthFormValue} */ (null)
 });
 // A new drawing's Depth settings. It holds one Depth series, the default
 // series of these settings, as 0.14.0 stored it in every mode (OV-1901,

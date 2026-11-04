@@ -13,12 +13,14 @@ from typing import Iterator, Protocol, cast, get_args
 
 from Bio.Seq import UndefinedSequenceError
 
+from gbdraw.core.figure_length import FIGURE_LENGTH_UNITS
 from gbdraw.diagrams.circular.radial_layout import SWITCHED_TRACK_IDS
 from gbdraw.exceptions import (
     ComparisonIdentityError, ConfigError, ExportError, GbdrawError, InputFileError, ParseError, ValidationError,
     label_capacity_context_key,
 )
 from gbdraw.labels.fit import HorizontalLabelKind
+from gbdraw.layout.figure_size import FIGURE_PRIMARY_ITEMS, FIGURE_SIZE_PARTS, FIGURE_SIZE_REASONS
 
 OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg export-png export-pdf evaluateRules embedFonts pdfFonts
 buildProteinLosatCacheKeys checkExportLimit convertLosatpPairsToGenomicPayload decideAutoOrientation deriveRegionDrawing convertRingTablesToSearchFrame convertStoredProteinResultFrames
@@ -64,7 +66,7 @@ LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
 RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES ANNOTATION_LANE_CONFLICT CIRCULAR_SETTING LINEAR_SETTING
 ORDER RECORD_BOUNDS ORIGIN_CROSSING START_AFTER_END EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES NOT_NUCLEOTIDE EMPTY_SEQUENCE RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER LABEL_CAPACITY WRAP
 WRAP_ANCHOR_FEATURE WRAP_RECORD_POSITION WRAP_TRACK_LAYOUT WRAP_SCALE_STYLE WRAP_NORMALIZE_LENGTH WRAP_GRID_ROW
-SELECTOR_NO_MATCH SELECTOR_AMBIGUOUS ANCHOR_SHARED_ROW ANCHOR_RECORD_CARDS PNG_SIZE PDF_SIZE""".split())
+SELECTOR_NO_MATCH SELECTOR_AMBIGUOUS ANCHOR_SHARED_ROW ANCHOR_RECORD_CARDS PNG_SIZE PDF_SIZE""".split()) | frozenset(FIGURE_SIZE_REASONS)
 # The room each side's labels need when they were not placed (CAPACITY-STOP): bounded numbers, by the key the producer
 # derives from the label kind.
 _LABEL_CAPACITY_KEYS = frozenset(label_capacity_context_key(kind) for kind in get_args(HorizontalLabelKind))
@@ -72,6 +74,10 @@ _LABEL_CAPACITY_KEYS = frozenset(label_capacity_context_key(kind) for kind in ge
 
 def _is_label_capacity(key: str, value: object) -> bool:
     return key in _LABEL_CAPACITY_KEYS and type(value) is float and 0.0 < value <= 1_000_000.0
+# A refused figure size (FIGURE_TOO_NARROW, FIGURE_TOO_SHORT): each length of Python's message as it writes it
+# (``FigureLength.message_text``, ``180 mm``), so the Web words the same numbers; the primary item by its id.
+_FIGURE_SIZE_LENGTH_KEYS = frozenset(("requested", "minimum", "atWidth", *FIGURE_SIZE_PARTS))
+_FIGURE_SIZE_LENGTH = re.compile(rf"[0-9]{{1,30}}(\.[0-9]{{1,6}})? ({'|'.join(FIGURE_LENGTH_UNITS)})")
 _DIAGNOSTIC_INTEGER_KEYS = frozenset(
     "row column columnCount seriesIndex slotIndex innerPx outerPx keptInsidePx placementIndex queryRecordIndex "
     "subjectRecordIndex limit width height rowLength dpi codepoint".split()
@@ -253,6 +259,15 @@ def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
     counts = diagnostic.get("labelFitCounts")
     if diagnostic["code"] == "LABEL_LAYOUT" and isinstance(counts, str):
         context["labelFitCounts"] = counts
+    if diagnostic.get("reason") in FIGURE_SIZE_REASONS:
+        for key in sorted(_FIGURE_SIZE_LENGTH_KEYS & diagnostic.keys()):
+            value = diagnostic[key]
+            if isinstance(value, str) and _FIGURE_SIZE_LENGTH.fullmatch(value):
+                context[key] = value
+        if diagnostic.get("primaryItem") in FIGURE_PRIMARY_ITEMS:
+            context["primaryItem"] = diagnostic["primaryItem"]
+        if diagnostic.get("legendRemedy") is True:
+            context["legendRemedy"] = True
     # The room each side's labels need when they were not placed (CAPACITY-STOP); the Web words it (OV-2179).
     for key in sorted(_LABEL_CAPACITY_KEYS & diagnostic.keys()):
         if diagnostic["code"] == "LABEL_LAYOUT" and _is_label_capacity(key, diagnostic[key]):
@@ -364,7 +379,8 @@ def serialize_web_error(error: BaseException, *, operation: str, stage: str) -> 
                if (isinstance(value, str) and len(value) <= 80 and
                    (key != "reason" or value in {"EMPTY_ENDPOINT", "INDEX_ALIGNMENT", "SOURCE_INDEX", "SOURCE_VIEW_CONFLICT"} or code != "COMPARISON_IDENTITY"))
                or (type(value) is int and 0 <= value <= 10_000_000)
-               or _is_label_capacity(key, value)}
+               or _is_label_capacity(key, value)
+               or (key == "legendRemedy" and value is True)}
     payload = {"code": code, "operation": operation, "stage": stage, "context": context}
     secondary = getattr(error, "_web_error_secondary", None)
     if isinstance(secondary, list) and secondary:

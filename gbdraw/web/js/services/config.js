@@ -169,8 +169,10 @@ import {
   convertStoredProteinResultFrames, withConvertedResources
 } from './main-session-comparison-frame.js';
 import { upgradeLegacySession } from './legacy-session-upgrade.js';
-/** @import { LinearWrapFormValue, StoredWrapReadings } from './linear-wrap-form.js' */
-import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue, wrapReadingKey } from './linear-wrap-form.js';
+/** @import { StoredLeafReadings } from './stored-leaf-readings.js' */
+import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from './linear-wrap-form.js';
+import { FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, figureLengthFormValue } from './figure-size-form.js';
+import { storedLeafKey } from './stored-leaf-readings.js';
 /** @import { LegacySessionUpgrade } from './legacy-session-upgrade.js' */
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
@@ -1310,52 +1312,72 @@ const readStoredUnmanagedConfigOverrides = async (options, path, repairs) => {
 };
 
 /**
- * The wrap lengths a Session stores where Load's readers read them (each stored request's override leaf and
- * full config, each draft's preserved override) that the form cannot hold as stored (`wrapFormValue`).
- * @param {unknown} data The Session as `readSessionImportParts` reads it (unvalidated).
- * @returns {unknown[]}
+ * A config leaf Load asks Python to read when the form cannot hold it as stored: the form's reader, the mode whose
+ * configuration check reads it (a shared leaf reads the same in both), where a stored request's full config holds
+ * it, and whether a draft's preserved overrides can hold it (a leaf the GUI managed only later).
+ * @typedef {object} StoredLeafRow
+ * @property {string} path
+ * @property {'circular' | 'linear'} mode
+ * @property {(raw: unknown) => { lost: boolean }} read
+ * @property {readonly string[]} configKeys
+ * @property {boolean} preserved
  */
-const unreadStoredWrapLengths = (data) => {
-  /** @type {unknown[]} */
-  const values = [];
-  /** @param {unknown} holder @param {readonly string[]} keys */
-  const add = (holder, keys) => {
+/** @type {readonly StoredLeafRow[]} */
+const STORED_LEAF_ROWS = Object.freeze([
+  { path: LINEAR_WRAP_LENGTH_PATH, mode: 'linear', read: (raw) => wrapFormValue(raw), configKeys: ['canvas', 'linear', 'wrap_length'], preserved: true },
+  { path: FIGURE_WIDTH_PATH, mode: 'linear', read: (raw) => figureLengthFormValue('width', raw), configKeys: ['canvas', 'figure_width'], preserved: false },
+  { path: FIGURE_HEIGHT_PATH, mode: 'linear', read: (raw) => figureLengthFormValue('height', raw), configKeys: ['canvas', 'figure_height'], preserved: false }
+]);
+
+/**
+ * The leaves a Session stores where Load's readers read them (each stored request's override leaf and full config,
+ * each draft's preserved override) that their form cannot hold as stored, each once.
+ * @param {unknown} data The Session as `readSessionImportParts` reads it (unvalidated).
+ * @returns {{ row: StoredLeafRow, value: unknown }[]}
+ */
+const unreadStoredLeaves = (data) => {
+  /** @type {Map<string, { row: StoredLeafRow, value: unknown }>} */
+  const found = new Map();
+  /** @param {StoredLeafRow} row @param {unknown} holder @param {readonly string[]} keys */
+  const add = (row, holder, keys) => {
     const value = keys.reduce((/** @type {unknown} */ node, key) => (isPlainObject(node) ? node[key] : undefined), holder);
-    if (wrapFormValue(value).lost && !values.some((seen) => wrapReadingKey(seen) === wrapReadingKey(value))) values.push(value);
+    if (row.read(value).lost) found.set(storedLeafKey(row.path, value), { row, value });
   };
-  for (const { set } of storedResultSets(/** @type {SessionChecked} */ (data))) {
-    add(set, ['renderRequest', 'diagramOptions', 'configOverrides', LINEAR_WRAP_LENGTH_PATH]);
-    add(set, ['renderRequest', 'diagramOptions', 'config', 'canvas', 'linear', 'wrap_length']);
-  }
   const document = /** @type {{ config?: unknown, modes?: Record<string, unknown>, drawings?: unknown }} */ (data);
   const drafts = [document.config, ...SLICE_MODES.map((mode) => (isPlainObject(document.modes) ? document.modes[mode] : undefined)),
     ...(Array.isArray(document.drawings) ? document.drawings : [])];
-  for (const draft of drafts) add(draft, [...(draft === document.config ? [] : ['config']), 'unmanagedConfigOverrides', LINEAR_WRAP_LENGTH_PATH]);
-  return values;
+  for (const row of STORED_LEAF_ROWS) {
+    for (const { set } of storedResultSets(/** @type {SessionChecked} */ (data))) {
+      add(row, set, ['renderRequest', 'diagramOptions', 'configOverrides', row.path]);
+      add(row, set, ['renderRequest', 'diagramOptions', 'config', ...row.configKeys]);
+    }
+    if (!row.preserved) continue;
+    for (const draft of drafts) add(row, draft, [...(draft === document.config ? [] : ['config']), 'unmanagedConfigOverrides', row.path]);
+  }
+  return [...found.values()];
 };
 
 /**
- * Python's readings of the stored wrap lengths the form cannot hold as stored (D-36): Load asks the Worker's
+ * Python's readings of the stored leaves the form cannot hold as stored (D-36): Load asks the Worker's
  * configuration check, which reads each with the config model's validator, before its readers run. A value the
  * check refuses has no reading, and its reader drops it with a row.
  * @param {unknown} data The Session as `readSessionImportParts` reads it (unvalidated).
- * @returns {Promise<StoredWrapReadings>}
+ * @returns {Promise<StoredLeafReadings>}
  */
-const readStoredWrapLengths = async (data) => {
-  const values = unreadStoredWrapLengths(data);
+const readStoredLeaves = async (data) => {
+  const leaves = unreadStoredLeaves(data);
   const validator = unmanagedConfigOverrideValidator;
-  /** @type {Map<string, LinearWrapFormValue>} */
+  /** @type {Map<string, unknown>} */
   const readings = new Map();
-  if (values.length === 0 || !validator) return readings;
-  const managedPaths = managedConfigOverridePathsForMode('linear');
-  for (const value of values) {
+  if (leaves.length === 0 || !validator) return readings;
+  for (const { row, value } of leaves) {
     const reply = await validator({
-      mode: 'linear', config: null, configOverrides: { [LINEAR_WRAP_LENGTH_PATH]: value }, managedPaths, source: 'storedRequest'
+      mode: row.mode, config: null, configOverrides: { [row.path]: value },
+      managedPaths: managedConfigOverridePathsForMode(row.mode), source: 'storedRequest'
     });
     const canonical = reply?.result?.error === undefined && isPlainObject(reply?.result?.canonical)
-      ? /** @type {Record<string, unknown>} */ (reply.result.canonical)[LINEAR_WRAP_LENGTH_PATH] : undefined;
-    const reading = wrapFormValue(canonical);
-    if (canonical !== undefined && !reading.lost) readings.set(wrapReadingKey(value), reading.value);
+      ? /** @type {Record<string, unknown>} */ (reply.result.canonical)[row.path] : undefined;
+    if (canonical !== undefined && !row.read(canonical).lost) readings.set(storedLeafKey(row.path, value), canonical);
   }
   return readings;
 };
@@ -1807,14 +1829,14 @@ const withoutLegacyNullCircularSlotSpacing = (configData) => {
  * @template {object} T
  * @param {T} data
  * @param {LoadRepair[]} repairs
- * @param {StoredWrapReadings} wrapReadings Python's readings of the stored wrap lengths (`readStoredWrapLengths`).
+ * @param {StoredLeafReadings} leafReadings Python's readings of the stored leaves the form cannot hold (`readStoredLeaves`).
  * @returns {T}
  */
-const adoptPromotedPreservedSettings = (data, repairs, wrapReadings) => {
+const adoptPromotedPreservedSettings = (data, repairs, leafReadings) => {
   const document = /** @type {{ config?: unknown, modes?: unknown, drawings?: unknown }} */ (data);
   /** @param {unknown} config @param {string} path */
   const adopt = (config, path) => {
-    const adoption = adoptPromotedPreservedOverrides(config, wrapReadings);
+    const adoption = adoptPromotedPreservedOverrides(config, leafReadings);
     // The cast: the adoption changes only a plain object.
     const stored = /** @type {Record<string, unknown>} */ (config);
     for (const container of adoption.containers) repairs.push(...valueRepairs(readPlainObject, stored[container], `${path}.${container}`));
@@ -2440,7 +2462,7 @@ const drawingInputTypeOf = (stored, requestInputType) => {
  * @property {boolean} hasStoredDraft
  * @property {boolean} cardRowsAreFileRows
  * @property {ReturnType<typeof adoptCurrentSessionResources> | null} sessionResourceTable
- * @property {StoredWrapReadings} wrapReadings Python's readings of the stored wrap lengths (`readStoredWrapLengths`).
+ * @property {StoredLeafReadings} leafReadings Python's readings of the stored leaves the form cannot hold (`readStoredLeaves`).
  */
 /**
  * The one builder of a drawing's request projection input (B2d-3a-3a): the
@@ -2452,7 +2474,7 @@ const drawingInputTypeOf = (stored, requestInputType) => {
  */
 const drawingProjectionInputOf = (view, {
   sourceSessionVersion, drawingsBand, currentSession, comparisonClassification, storedConfig, hasStoredDraft, cardRowsAreFileRows,
-  sessionResourceTable, wrapReadings
+  sessionResourceTable, leafReadings
 }) => {
   const request = /** @type {UnvalidatedFields<'mode'>} */ (view.renderRequest);
   return {
@@ -2483,7 +2505,7 @@ const drawingProjectionInputOf = (view, {
     markCardFileRows: !hasStoredDraft && cardRowsAreFileRows,
     // A Session 51 drawing binds its own mode's input.
     bindingInputSlot: webBindingInputSlot(drawingsBand, /** @type {UnvalidatedFields<'mode'>} */ (view.ui)?.mode),
-    wrapReadings
+    leafReadings
   };
 };
 
@@ -2519,10 +2541,10 @@ const drawingProjectionInputOf = (view, {
  * @param {SessionDrawing51} drawing
  * @param {ReturnType<typeof adoptCurrentSessionResources> | null} sessionResourceTable
  * @param {SourceFacts} sourceFacts The source facts of the file the document came from.
- * @param {StoredWrapReadings} wrapReadings Python's readings of the stored wrap lengths (`readStoredWrapLengths`).
+ * @param {StoredLeafReadings} leafReadings Python's readings of the stored leaves the form cannot hold (`readStoredLeaves`).
  * @returns {StoredDrawingInputs}
  */
-const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFacts, wrapReadings) => {
+const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFacts, leafReadings) => {
   const view = /** @type {SessionInput} */ (/** @type {unknown} */ (drawingViewOf(document, drawing)));
   const { mode } = drawing;
   const ui = /** @type {UnvalidatedFields<'cInputType' | 'lInputType'>} */ (view.ui);
@@ -2554,7 +2576,7 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFa
     // A drawing without a draft holds each table as its card's file when its file says so (DESIGN §6).
     cardRowsAreFileRows: sourceFacts.cardRowsAreFileRows,
     sessionResourceTable,
-    wrapReadings
+    leafReadings
   }));
   const inputType = drawingInputTypeOf(storedInputType, projection.inputType || null);
   const overrides = unmanagedConfigValidationOf(projection.mode, storedConfig,
@@ -2652,7 +2674,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
   /** @type {StoredSetProject} */
   const project = { resources: authorityData.resources };
   const rawData = await readEachResultSet(authorityData, (entry) => readResultSetResetReceipt(entry, project, repairs));
-  const wrapReadings = await readStoredWrapLengths(rawData);
+  const leafReadings = await readStoredLeaves(rawData);
   const currentSession = isDrawingsBand(rawData) || isAuthorityBand(rawData);
   /** @type {ModeScopedUpgrade | null} The Session 51 of a Session 46-50, below. */
   let upgrade = null;
@@ -2686,7 +2708,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
     });
     // A Session 51's drafts take their promoted preserved settings once, so
     // the projected view and every drawing's entry read the same draft.
-    const readSets = drawingsBand ? adoptPromotedPreservedSettings(catalogSets, repairs, wrapReadings) : catalogSets;
+    const readSets = drawingsBand ? adoptPromotedPreservedSettings(catalogSets, repairs, leafReadings) : catalogSets;
     const projectedAt = storedResultSets(rawData).find((entry) => entry.projected)?.at;
     validatedFeatureCatalog = projectedAt === undefined ? null : setCatalogs.get(projectedAt) ?? null;
     recordSessionLifecycleEvent('feature-catalog-validation-end');
@@ -2742,7 +2764,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');
   return {
     sourceSessionVersion, drawingsBand, openedDrawingAt, requestRead, currentSession, upgrade, adoptedSession,
-    currentResourceTable, validatedFeatureCatalog, setCatalogs, normalizedEditorState, data: cacheData, wrapReadings
+    currentResourceTable, validatedFeatureCatalog, setCatalogs, normalizedEditorState, data: cacheData, leafReadings
   };
 };
 
@@ -2756,11 +2778,11 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
  */
 const readCommittedRequestProjection = (read, sessionData, repairs) => {
-  const { sourceSessionVersion, drawingsBand, requestRead, currentSession, currentResourceTable, data: cacheData, wrapReadings } = read;
+  const { sourceSessionVersion, drawingsBand, requestRead, currentSession, currentResourceTable, data: cacheData, leafReadings } = read;
   let { upgrade } = read;
   const data = adoptPromotedPreservedSettings(currentSession
     ? cacheData
-    : migrateSessionDataToCurrent(cacheData, sourceSessionVersion), repairs, wrapReadings);
+    : migrateSessionDataToCurrent(cacheData, sourceSessionVersion), repairs, leafReadings);
   // The Session 51 of a Session 46-50 (DESIGN §4.2): each drawing's part of
   // the file is its own entry, found by drawing ID, and so is where the file
   // holds its saved Result set (`setSources`). Its Legend edits were read by
@@ -2823,7 +2845,7 @@ const readCommittedRequestProjection = (read, sessionData, repairs) => {
         hasStoredDraft,
         cardRowsAreFileRows: Boolean(upgrade?.sourceFacts.cardRowsAreFileRows),
         sessionResourceTable: currentResourceTable,
-        wrapReadings
+        leafReadings
       })
     : null;
   /** @type {SessionRequestProjection | null} */
@@ -2966,7 +2988,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     upgrade,
     // Each other Session 51 drawing's inputs, by drawing ID.
     storedDrawingInputs: new Map(document50 && upgrade ? document50.drawings.filter((entry) => entry !== openedDrawingOf(document50))
-      .map((entry) => [/** @type {DrawingId} */ (entry.id), storedDrawingInputsOf(document50, entry, currentResourceTable, upgrade.sourceFacts, read.wrapReadings)]) : []),
+      .map((entry) => [/** @type {DrawingId} */ (entry.id), storedDrawingInputsOf(document50, entry, currentResourceTable, upgrade.sourceFacts, read.leafReadings)]) : []),
     openedDrawingAt,
     // The drawing whose set Load projects: a Session 51's opened drawing.
     projectedDrawingId: drawingsBand ? /** @type {DrawingId} */ (openedDrawingOf(/** @type {Session51} */ (/** @type {unknown} */ (sessionData))).id) : null
@@ -6770,7 +6792,7 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
   // A Session 51 document holds the resources beside its drawings (OV-2462).
   const document = /** @type {Session51} */ (/** @type {unknown} */ ({ version: SESSION_VERSION, resources, drawings: [entry] }));
   const inputs = storedDrawingInputsOf(document, entry, adoptCurrentSessionResources(resources),
-    sessionSourceFactsOf(SESSION_VERSION, false), await readStoredWrapLengths(document));
+    sessionSourceFactsOf(SESSION_VERSION, false), await readStoredLeaves(document));
   if (inputs.restoredConfig && inputs.requestOverrides) {
     inputs.restoredConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides(inputs.requestOverrides);
   }

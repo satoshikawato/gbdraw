@@ -11,6 +11,7 @@ import { downloadBlob } from './text-download.js';
 import { preparePdfFonts } from './pdf-fonts.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { parseMarkupInertly } from '../utils/inert-markup.js';
+import { getSvgDimensions } from './svg-dimensions.js';
 /** @import { ResolvePdfFonts } from './pdf-fonts.js' */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -264,23 +265,6 @@ const getInteractiveSvgString = async (snapshot, embedFonts) => {
 const getSvgFromString = (svgString) => {
   if (!svgString) return null;
   return parseMarkupInertly(svgString).querySelector('svg');
-};
-
-/** @param {SVGSVGElement | null} svg */
-const getSvgDimensions = (svg) => {
-  if (!svg) return null;
-  let w = parseFloat(svg.getAttribute('width') ?? '');
-  let h = parseFloat(svg.getAttribute('height') ?? '');
-  if (!w || !h) {
-    const viewBox = svg.getAttribute('viewBox');
-    if (!viewBox) return null;
-    const parts = viewBox.trim().split(/[\s,]+/);
-    if (parts.length < 4) return null;
-    w = parseFloat(parts[2]);
-    h = parseFloat(parts[3]);
-  }
-  if (!w || !h) return null;
-  return { width: w, height: h };
 };
 
 /** @param {SVGSVGElement} svg */

@@ -1140,6 +1140,9 @@ const CONFIG_VALUE_OPTIONS = Object.freeze({
   'objects.features.block_stroke_color': '--block_stroke_color',
   'objects.features.line_stroke_color': '--line_stroke_color',
   'objects.text.font_family': '--font_family',
+  // A requested figure size, as the request holds it ("180mm"); Auto has no leaf and writes no flag.
+  'canvas.figure_width': '--figure_width',
+  'canvas.figure_height': '--figure_height',
   'labels.rendering': '--label_rendering',
   'objects.gc_content.mode': '--gc_content_mode',
   'objects.gc_content.min_percent': '--gc_content_min_percent',

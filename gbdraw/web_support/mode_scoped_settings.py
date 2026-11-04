@@ -94,6 +94,9 @@ _FORM_ROWS = _rows(
     ("species", "circular", "own"),
     ("strain", "circular", "own"),
     ("plot_title", "both", "profile"),
+    # The requested figure size (canvas.figure_width / figure_height): null (Auto) or a length with a unit.
+    ("figure_width", "both", "copy"),
+    ("figure_height", "both", "copy"),
     ("track_type", "circular", "own"),
     ("linear_track_layout", "linear", "own"),
     ("show_scale", "both", "copy"),

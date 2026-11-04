@@ -694,8 +694,8 @@ def test_the_larger_figure_estimate_adds_the_missing_room_to_each_requested_side
     size = RequestedFigureSize(FigureLength(100.0, "mm"), FigureLength(1000.0, "px"))
     estimate = larger_figure(plan, size, 2.5)
     width_px = content.width + 1.5 * 300.0
-    assert estimate.width == f"{math.ceil(round(width_px * 25.4 / 96 * 10, 6)) / 10:g}mm"
-    assert estimate.height == f"{math.ceil(content.height + 1.5 * 200.0)}px"
+    assert estimate.width == f"{math.ceil(round(width_px * 25.4 / 96 * 10, 6)) / 10:g} mm"
+    assert estimate.height == f"{math.ceil(content.height + 1.5 * 200.0)} px"
     assert larger_figure(plan, RequestedFigureSize(FigureLength(100.0, "mm")), 2.5).height is None
 
 
@@ -785,3 +785,100 @@ def test_cli_circular_figure_width(tmp_path, monkeypatch) -> None:
     width, _height, view_box = _svg_size(output.with_suffix(".svg").read_text(encoding="utf-8"))
     assert width == "180mm"
     assert view_box[2] == pytest.approx(MM_180_PX, abs=0.01)
+
+
+# --- what the Web reads of a refusal, the remedy estimate, and a form's replay (PR-C) ---
+
+
+def _web_context(error: BaseException) -> dict:
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    return serialize_web_error(error, operation="generate", stage="render")["context"]
+
+
+def test_a_refused_width_carries_the_lengths_of_its_message_to_the_web() -> None:
+    with pytest.raises(ValidationError) as caught:
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="40mm"))
+    message = str(caught.value)
+    context = _web_context(caught.value)
+    assert context["reason"] == "FIGURE_TOO_NARROW" and context["configPath"] == FIGURE_WIDTH_PATH
+    assert (context["requested"], context["primaryItem"], context["legendRemedy"]) == ("40 mm", "record_ends", True)
+    # Each length is the one the message writes: the Web words the same numbers.
+    assert f"({context['minimum']} in all)" in message
+    assert f"record names and labels past the sequence ends {context['primary']}, legend {context['legend']}" in message
+    assert f"padding {context['padding']}" in message and "title" not in context
+
+
+def test_a_refused_width_without_a_side_legend_offers_no_legend_remedy_to_the_web() -> None:
+    with pytest.raises(ValidationError) as caught:
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="10mm", legend="top"))
+    context = _web_context(caught.value)
+    assert context["reason"] == "FIGURE_TOO_NARROW" and "legendRemedy" not in context
+
+
+def test_a_refused_height_carries_the_width_it_was_measured_at() -> None:
+    with pytest.raises(ValidationError) as caught:
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="180mm", figure_height="10mm"))
+    message = str(caught.value)
+    context = _web_context(caught.value)
+    assert (context["reason"], context["requested"], context["atWidth"]) == ("FIGURE_TOO_SHORT", "10 mm", "180 mm")
+    assert context["primaryItem"] == "records" and f"records {context['primary']}" in message
+    assert f"at least {context['minimum']}" in message
+
+
+def test_a_refused_circular_size_names_the_map() -> None:
+    with pytest.raises(ValidationError) as narrow:
+        _draw_mito_circular(figure_width="100mm")
+    with pytest.raises(ValidationError) as short:
+        _draw_mito_circular(figure_height="50mm")
+    assert _web_context(narrow.value)["primaryItem"] == "map"
+    assert (_web_context(short.value)["reason"], _web_context(short.value)["primaryItem"]) == ("FIGURE_TOO_SHORT", "map")
+
+
+def test_the_web_reads_figure_size_lengths_only_from_a_figure_size_refusal() -> None:
+    lengths = {"requested": "40 mm", "minimum": "112.3 mm", "primaryItem": "map", "legendRemedy": True}
+    other = ValidationError("PRIVATE", diagnostic={"code": "INPUT_INVALID", "reason": "WRAP", **lengths})
+    assert not set(lengths) & set(_web_context(other))
+    unbounded = ValidationError(
+        "PRIVATE",
+        diagnostic={
+            "code": "INPUT_INVALID", "reason": "FIGURE_TOO_NARROW", "requested": "40 mm <b>", "minimum": "1e9 mm",
+            "primaryItem": "PRIVATE", "legendRemedy": "yes", "padding": "12.2 mm",
+        },
+    )
+    context = _web_context(unbounded)
+    assert context["reason"] == "FIGURE_TOO_NARROW" and context["padding"] == "12.2 mm"
+    assert not {"requested", "minimum", "primaryItem", "legendRemedy"} & set(context)
+
+
+@pytest.mark.parametrize(
+    ("form", "expected"),
+    [
+        ({"figure_width": "180mm"}, ["--figure_width", "180mm"]),
+        ({"figure_width": "180mm", "figure_height": "5in"}, ["--figure_width", "180mm", "--figure_height", "5in"]),
+        ({"figure_height": "1200px"}, ["--figure_height", "1200px"]),
+        ({"figure_width": None, "figure_height": "auto"}, []),
+        ({"figure_width": "", "figure_height": "AUTO"}, []),
+        ({}, []),
+    ],
+)
+def test_a_drawing_form_size_replays_as_its_cli_options(form: dict, expected: list[str]) -> None:
+    from gbdraw.session_io import _append_common_gui_args
+
+    run_args: list[str] = []
+    _append_common_gui_args(run_args, [], form=form, adv={})
+    assert [arg for index, arg in enumerate(run_args) if arg.startswith("--figure_") or (
+        index > 0 and run_args[index - 1].startswith("--figure_"))] == expected
+
+
+def test_the_web_words_each_primary_item_and_part_python_names() -> None:
+    from gbdraw.layout.figure_size import FIGURE_PRIMARY_ITEMS, FIGURE_SIZE_PARTS
+
+    wording = (Path(__file__).resolve().parents[1] / "gbdraw" / "web" / "js" / "utils" / "error-normalization.js").read_text(
+        encoding="utf-8"
+    )
+    items = wording[wording.index("const FIGURE_PRIMARY_ITEMS") :]
+    parts = wording[wording.index("const FIGURE_PARTS") :]
+    assert set(re.findall(r"\b([a-z_]+): '", items[: items.index("});")])) == set(FIGURE_PRIMARY_ITEMS)
+    assert {*re.findall(r"\b([a-z_]+): '", parts[: parts.index("});")]), "primary"} == set(FIGURE_SIZE_PARTS)
+    assert f"@typedef {{{' | '.join(repr(item) for item in FIGURE_PRIMARY_ITEMS)}}} FigurePrimaryItem" in wording
