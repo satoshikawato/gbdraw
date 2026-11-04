@@ -22,8 +22,8 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
  * @property {(sourceId: DrawingId, derivation: RegionDerivation) => Promise<DrawingListOutcome>} newDrawingFromRegion
  * @property {() => Promise<RecordIdentitySources | null>} readRecordSources The shown drawing's discovered record
  *   lists, read first when a Load left them deferred; null without the record discovery owner.
- * @property {(recordKey: string) => readonly RegionSourceFeature[] | null} resultFeatures A record's features in
- *   the shown Result, or null without a Result that drew it.
+ * @property {(recordKey: string) => readonly RegionSourceFeature[] | null} resultFeatures The features the shown
+ *   Result drew under a record key (the committed request's), or null when it drew none under that key.
  */
 
 /**
@@ -45,16 +45,20 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
  * A record of unknown length is not offered (its whole span is not known).
  * @param {readonly IdentityRequestRecord[]} requestRecords The projected request's records.
  * @param {RecordIdentitySources} sources The discovered record lists of the drawing.
- * @param {(recordKey: string) => readonly RegionSourceFeature[] | null} featuresOf A record's features in the
- *   shown Result, or null without a Result that drew it.
+ * @param {(recordKey: string) => readonly RegionSourceFeature[] | null} featuresOf The features the shown Result
+ *   drew under a record key, or null when it drew no record under that key; asked for the record's request key and
+ *   then its aliases (`drawnRecordIdentities`).
  * @returns {RegionSourceRecord[]}
  */
 export const regionSourceRecords = (requestRecords, sources, featuresOf) => drawnRecordIdentities(requestRecords, sources)
-  .flatMap(({ requestKey, entry }) => {
+  .flatMap(({ requestKey, aliases, entry }) => {
     const length = Number(entry.recordLength);
     if (!Number.isSafeInteger(length) || length <= 0) return [];
     const caption = String(entry.recordId ?? entry.record_id ?? requestKey);
-    return [{ recordKey: requestKey, caption, length, features: featuresOf(requestKey) }];
+    // The Result keys the record as the committed request did: its draft key, or a key it has under the other
+    // canvas (its aliases).
+    const features = [...new Set([requestKey, ...aliases])].map(featuresOf).find((found) => found !== null) ?? null;
+    return [{ recordKey: requestKey, caption, length, features }];
   });
 
 /**

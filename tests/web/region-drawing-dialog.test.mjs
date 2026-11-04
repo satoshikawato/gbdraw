@@ -205,7 +205,23 @@ test('without a Result the records come from the request and discovery, with no 
   const asked = [];
   const records = regionSourceRecords(requestRecords, sources, (recordKey) => { asked.push(recordKey); return null; });
   assert.deepEqual(records, [{ recordKey: 'record-1', caption: 'NC_1', length: 1200, features: null }]);
-  assert.deepEqual(asked, ['record-1']);
+  assert.equal(asked[0], 'record-1');
+});
+
+// The shown Result keyed its records as the committed request did; the rows
+// are keyed as the draft is. The join is by the record's identity: its
+// request key, then the keys it has under the other canvas (aliases).
+test('a record drawn alone after a Multi-Record Canvas Generate offers the features the Result drew of it', async () => {
+  const { circularSingleRecordKey } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+  const entry = { sourceIndex: 1, selector: '#2', recordId: 'NC_2', recordLength: 900 };
+  const sources = { mode: 'circular', circular: [{ sourceIndex: 0, selector: '#1', recordId: 'NC_1', recordLength: 1200 }, entry] };
+  const draftKey = circularSingleRecordKey(entry);
+  assert.notEqual(draftKey, 'record-2');
+  // The Generated Multi-Record Canvas drew both records as record-1 and record-2.
+  const catalog = new Map([['record-1', [{ featureId: 'f1', label: 'dnaA' }]], ['record-2', [{ featureId: 'f2', label: 'recA' }]]]);
+  const records = regionSourceRecords([{ recordKey: draftKey, selector: { kind: 'recordIndex', index: 1 } }], sources,
+    (recordKey) => catalog.get(recordKey) ?? null);
+  assert.deepEqual(records, [{ recordKey: draftKey, caption: 'NC_2', length: 900, features: [{ featureId: 'f2', label: 'recA' }] }]);
 });
 
 test('every setting that can return to Auto is named by an English UI text, never its ID', async () => {

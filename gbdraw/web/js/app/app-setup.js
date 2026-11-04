@@ -7756,7 +7756,7 @@ export const createAppSetup = () => {
       omittedAnnotationRecordKeys: getAnnotationRecordCatalog(drawing).omittedRecordKeys || []
     });
   };
-  // A record's features in the shown Result's admitted catalog (identity and name), or null when no Result drew it.
+  // The features (identity and name) the shown Result's admitted catalog holds under a committed record key, or null.
   /** @param {string} recordKey @returns {RegionSourceFeature[] | null} */
   const shownResultFeatures = (recordKey) => {
     const catalog = toRaw(state.featureCatalog.value);
