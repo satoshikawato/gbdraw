@@ -6920,6 +6920,21 @@ export const installPreparedDrawing = (drawing, { install, settle, sourceFiles }
   settleStoredDrawing(drawing, { ...settle, bound: bindLoadedInputs(store, settle.inputs) });
 };
 /**
+ * The drawing list's region port: reads a derived region drawing now
+ * (`prepareRegionDrawing`), and makes it under the ID the list gives
+ * (`installPreparedDrawing`).
+ * @param {RegionDerivation} derivation
+ * @returns {Promise<(drawingId: DrawingId) => DrawingState>}
+ */
+export const makeRegionDrawing = async (derivation) => {
+  const prepared = await prepareRegionDrawing(derivation);
+  return (drawingId) => {
+    const drawing = createDrawingState(drawingId, prepared.mode);
+    installPreparedDrawing(drawing, prepared);
+    return drawing;
+  };
+};
+/**
  * Records the Use custom stack switch beside a committed Session Load installs
  * (`recordLoadedStackSwitch`). Load holds it untyped, as the committed Session
  * variable does; it is read as `getCommittedCanonicalSession` reads it.

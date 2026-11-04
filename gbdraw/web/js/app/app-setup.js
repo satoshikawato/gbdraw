@@ -101,8 +101,7 @@ import {
   importSession as importSessionFromFile,
   serializeActiveRenderFiles,
   projectDraftRequest,
-  prepareRegionDrawing,
-  installPreparedDrawing,
+  makeRegionDrawing,
   heldDepthFiles,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
@@ -4896,14 +4895,7 @@ export const createAppSetup = () => {
       return { drawing, slot: slot ? artifactSlotAs(slot, drawing) : null };
     },
     // A region drawing is read as Load reads a stored drawing, then made under its new ID.
-    regionDrawing: async (derivation) => {
-      const prepared = await prepareRegionDrawing(derivation);
-      return (drawingId) => {
-        const made = createDrawingState(drawingId, prepared.mode);
-        installPreparedDrawing(made, prepared);
-        return made;
-      };
-    },
+    regionDrawing: makeRegionDrawing,
     addDrawing: state.addDrawing,
     // An error that names a drawing leaves with it (R17-29), as it leaves on
     // a switch away (OV-372): every Delete, its Redo, and the Undo of New and

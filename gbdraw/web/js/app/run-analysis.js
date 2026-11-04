@@ -1760,9 +1760,10 @@ export const createRunAnalysis = ({
   let latestOperationId = 0;
   // Each drawing's Circular discovery: its read generation, the read still
   // running, and the generation of a settled read whose Record Order is not
-  // applied yet (D-15-205: the region dialog only reads). The generations
-  // belong to the drawing object (D-15-207): a drawing a Load installs under a
-  // reused ID starts without them, and a removed drawing's go with it.
+  // applied yet (D-15-205: the region dialog only reads). All three belong to
+  // the drawing object (D-15-207): a drawing a Load installs under a reused ID
+  // starts without them and joins no read of the old drawing, and a removed
+  // drawing's go with it.
   /** @type {WeakMap<DrawingState, number>} */
   const circularRecordRefreshGenerations = new WeakMap();
   /**
@@ -1772,8 +1773,8 @@ export const createRunAnalysis = ({
    * null when it read nothing.
    * @typedef {{ fingerprint: unknown[], read: ReturnType<typeof readCircularRecords>, refresh: Promise<any> | null, generation: number | null }} CircularRecordRead
    */
-  /** @type {Map<DrawingId, CircularRecordRead>} */
-  const activeCircularRecordRefreshes = new Map();
+  /** @type {WeakMap<DrawingState, CircularRecordRead>} */
+  const activeCircularRecordRefreshes = new WeakMap();
   /** @type {WeakMap<DrawingState, number>} */
   const unappliedCircularRecordReads = new WeakMap();
   /** @type {AbortController | null} */
@@ -2538,11 +2539,10 @@ export const createRunAnalysis = ({
     const inputType = drawing.inputType.value;
     const fingerprint = [
       Boolean(options.suppress || recordDiscoverySuppressed()),
-      drawing.id,
       inputType,
       ...(({ primaryFile, pairedFile }) => [primaryFile, pairedFile])(inputSourceFiles(inputType, circularInputSlots(drawing.files)))
     ];
-    const inflightRead = activeCircularRecordRefreshes.get(drawing.id);
+    const inflightRead = activeCircularRecordRefreshes.get(drawing);
     if (
       inflightRead &&
       fingerprint.length === inflightRead.fingerprint.length &&
@@ -2555,9 +2555,9 @@ export const createRunAnalysis = ({
     const generation = circularRecordReadGeneration(drawing) !== startedFrom ? circularRecordReadGeneration(drawing) : null;
     /** @type {CircularRecordRead} */
     const entry = { fingerprint, read, refresh: null, generation };
-    activeCircularRecordRefreshes.set(drawing.id, entry);
+    activeCircularRecordRefreshes.set(drawing, entry);
     read.finally(() => {
-      if (activeCircularRecordRefreshes.get(drawing.id) === entry) activeCircularRecordRefreshes.delete(drawing.id);
+      if (activeCircularRecordRefreshes.get(drawing) === entry) activeCircularRecordRefreshes.delete(drawing);
     }).catch(() => {});
     return entry;
   };

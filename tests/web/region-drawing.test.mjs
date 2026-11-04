@@ -34,7 +34,7 @@ const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annot
 const { coordinateTarget } = await import('../../gbdraw/web/js/app/annotations/target-actions.js');
 const { bindDrawingInputFile, createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const {
-  installShownDrawing, installPreparedDrawing, prepareRegionDrawing, prepareStoredDrawing, projectDraftRequest
+  installShownDrawing, installPreparedDrawing, makeRegionDrawing, prepareRegionDrawing, prepareStoredDrawing, projectDraftRequest
 } = await import('../../gbdraw/web/js/services/config.js');
 const { compareCanonicalRenderRequests } = await import('../../gbdraw/web/js/services/session-request.js');
 const { annotationSourceKey, buildAnnotationRecordCatalog } = await import(
@@ -258,8 +258,11 @@ const hashOf = (drawingId) => {
   return createHash('sha256').update(JSON.stringify({ slices, inputType: drawing.inputType.value })).digest('hex');
 };
 
-// The drawing list over the store and the app's History, with the region
-// port as the app builds it; a switch only changes the shown drawing.
+// The drawing list (`drawing-list.js`) over the store and the app's History,
+// with the region port the app passes (`makeRegionDrawing`, which reads with
+// `prepareRegionDrawing` and makes with `installPreparedDrawing`). The other
+// ports are stubs, not the app's wiring: the Playwright case covers that; a
+// switch only changes the shown drawing.
 const drawingList = createDrawingList({
   drawingTabs: () => state.drawingTabs.value,
   shownDrawingId: () => state.activeDrawingId.value,
@@ -271,14 +274,7 @@ const drawingList = createDrawingList({
   createDrawing: (drawingId, mode) => withNewDrawingDefaults(state, createDrawingState(drawingId, mode)),
   styleDrawing: () => { throw new Error('not used'); },
   copyDrawing: () => { throw new Error('not used'); },
-  regionDrawing: async (derivation) => {
-    const prepared = await prepareRegionDrawing(derivation);
-    return (drawingId) => {
-      const made = createDrawingState(drawingId, prepared.mode);
-      installPreparedDrawing(made, prepared);
-      return made;
-    };
-  },
+  regionDrawing: makeRegionDrawing,
   addDrawing: state.addDrawing,
   removeDrawing: (drawingId) => state.removeDrawing(drawingId, { takeSlot: () => null }),
   putSlot: () => {},
@@ -296,7 +292,7 @@ const regionDrawingsOf = () => createRegionDrawing({
   newDrawingFromRegion: drawingList.newDrawingFromRegion
 });
 
-test('(d) Create adds the region drawing as New does; Undo removes it, Redo brings it back', async () => {
+test('(d) the drawing list with makeRegionDrawing: Create adds the region drawing as New does; Undo removes it, Redo brings it back', async () => {
   const source = circularSource([recordA]);
   const sourceHash = hashOf(source.id);
   const before = listView();
@@ -375,7 +371,7 @@ const assertLookCarried = (drawing) => {
 
 // Create pressed twice before the first one adds the drawing (a double click):
 // one drawing, one History step.
-test('(d) a second Create while one runs adds one drawing and one History step', async () => {
+test('(d) the drawing list with makeRegionDrawing: a second Create while one runs adds one drawing and one History step', async () => {
   circularSource([recordA]);
   const before = listView();
   const undoBefore = history.timeline().undo.length;

@@ -419,6 +419,17 @@ def test_the_drawing_derivation_is_the_request_core(materialize) -> None:
     assert drawing.dropped == ("Circular-only settings: canvas.circular.track_type.",)
 
 
+@pytest.mark.parametrize(("start", "end"), [(16000, 16570), (0, 200)])
+def test_a_region_outside_the_record_names_the_record_bounds(materialize, start: int, end: int) -> None:
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    with pytest.raises(ValidationError, match=r"is outside 1\.\.16569") as refusal:
+        derive_region_drawing(materialize(_mito_circular()), [RegionSelection("mito", start, end)])
+    assert refusal.value.diagnostic == {"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"}
+    shown = serialize_web_error(refusal.value, operation="deriveRegionDrawing", stage="helper")
+    assert (shown["code"], shown["context"]) == ("REGION_INVALID", {"field": "region", "reason": "RECORD_BOUNDS"})
+
+
 def test_an_origin_crossing_region_has_its_own_reason(materialize) -> None:
     from gbdraw.api.region_drawing import StartAfterEndRegion
 

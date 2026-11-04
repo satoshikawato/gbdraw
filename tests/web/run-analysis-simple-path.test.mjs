@@ -3675,7 +3675,7 @@ test('Circular Generate gives a Depth series without settings its default color'
 // The Circular record refresh reads into the drawing its caller gives
 // (Generate: the drawing it pinned), not the drawing named by the mode, and
 // shares an in-flight read only with calls for the same drawing.
-test('the Circular record refresh writes the drawing it reads and keys its read by drawing ID', async () => {
+test('the Circular record refresh writes the drawing it reads and keys its read by the drawing', async () => {
   installShownDrawing('circular');
   const named = state.activeDrawing();
   const second = createDrawingState('circular-2', 'circular');
@@ -3709,6 +3709,48 @@ test('the Circular record refresh writes the drawing it reads and keys its read 
   } finally {
     installShownDrawing('circular');
     state.removeDrawing(second.id, { takeSlot: () => null });
+  }
+});
+
+// D-15-207: the read still running belongs to the drawing object too. A
+// drawing added under the ID of a removed drawing whose read still runs (as a
+// Load installs new drawings under reused IDs), with the same file bound,
+// reads its own records: it does not join the old drawing's read, which
+// writes only the old drawing.
+test('a drawing re-added under its ID reads its own records while the old drawing\'s read runs', async () => {
+  const id = 'circular-rejoined';
+  const file = bound(new AuditFile(['LOCUS rejoined 8 bp DNA circular\nORIGIN\n        1 acgtacgt\n//\n'], 'rejoined.gb'));
+  const reply = { ok: true, result: { records: [{ selector: '#1', record_id: 'rejoined', record_length: 8 }] } };
+  const runner = createRunAnalysis({ ...generatedArtifactHandleOptions, state, resetPreviewViewport: () => {} });
+  const idle = { status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null, canonicalRecordIdentities: [] };
+  const old = createDrawingState(id, 'circular');
+  state.addDrawing(old, 'Old', 2);
+  old.inputType.value = 'gb';
+  old.files.c_gb = file;
+  Object.assign(old.circularRecordDiscovery, idle);
+  let release = () => {};
+  workerHelperResponses.splice(0, workerHelperResponses.length,
+    new Promise((resolve) => { release = () => resolve(reply); }), reply);
+  const oldRead = runner.refreshCircularRecordOrder({}, old);
+  state.removeDrawing(id, { takeSlot: () => null });
+  const fresh = createDrawingState(id, 'circular');
+  state.addDrawing(fresh, 'Fresh', 2);
+  try {
+    fresh.inputType.value = 'gb';
+    fresh.files.c_gb = file;
+    Object.assign(fresh.circularRecordDiscovery, idle);
+    const freshRead = runner.refreshCircularRecordOrder({}, fresh);
+    assert.notEqual(freshRead, oldRead, 'the new drawing does not join the old drawing\'s read');
+    release();
+    await Promise.all([oldRead, freshRead]);
+    assert.deepEqual(
+      [fresh.circularRecordDiscovery.status, fresh.circularRecordList.value.map(({ selector }) => selector),
+        fresh.adv.multi_record_positions.map(({ selector }) => selector)],
+      ['ready', ['#1'], ['#1']],
+      'the new drawing shows its records and their Record Order'
+    );
+  } finally {
+    state.removeDrawing(id, { takeSlot: () => null });
   }
 });
 

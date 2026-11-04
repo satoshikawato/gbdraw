@@ -418,7 +418,7 @@ def _resolve_regions(
         if start < 1 or end > length:
             raise ValidationError(
                 f"Region {start}..{end} of {selection.record_key!r} is outside 1..{length}.",
-                diagnostic={"code": "INPUT_INVALID"},
+                diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
             )
         start, end = max(1, start - margin), min(length, end + margin)
         resolved[item.record_key] = (item, start, end, (start, end) == (1, length))
@@ -675,10 +675,12 @@ def _has_any(options: object, names: Sequence[str]) -> bool:
 
 
 __all__ = [
+    "FeatureRegionSelection",
     "NotCarried",
     "NotCarriedKind",
     "StartAfterEndReason",
     "StartAfterEndRegion",
+    "RegionChoice",
     "RegionDrawing",
     "RegionRequest",
     "RegionSelection",
