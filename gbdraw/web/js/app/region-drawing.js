@@ -73,12 +73,13 @@ export const regionSourceRecords = (requestRecords, sources, featuresOf) => draw
 
 /**
  * The dialog's view. `status`: 'idle' (no region yet), 'invalid' (an input
- * is not a region), 'deriving', 'derived', 'refused', or 'error'.
+ * is not a region), 'deriving', 'derived', 'creating' (Create runs; the derived
+ * view stays shown), 'refused', or 'error'.
  * @typedef {object} RegionDialogView
  * @property {boolean} show
  * @property {RegionDialogRow[]} rows
  * @property {boolean} keepValues "Keep my values": derive with `adaptSizes: false`.
- * @property {'idle' | 'invalid' | 'deriving' | 'derived' | 'refused' | 'error'} status
+ * @property {'idle' | 'invalid' | 'deriving' | 'derived' | 'creating' | 'refused' | 'error'} status
  * @property {string} message The reason shown for 'idle', 'invalid', 'refused' and 'error'.
  * @property {{ setting: string, label: string, explicit: string, auto: string }[]} returnedToAuto
  * @property {string[]} notCarried
@@ -282,8 +283,9 @@ export const createRegionDrawing = ({
     Object.assign(dialog, { status, message, returnedToAuto: [], notCarried: [] });
   };
 
-  /** Derives again from the inputs; a reply that a newer request superseded is dropped. */
+  /** Derives again from the inputs; a reply that a newer request superseded is dropped. None while Create runs. */
   const refresh = async () => {
+    if (dialog.status === 'creating') return undefined;
     const mine = ++request;
     const choice = regionsOf(dialog.rows);
     if (!('regions' in choice)) return showStatus(choice.status, choice.reason);
@@ -351,12 +353,24 @@ export const createRegionDrawing = ({
     showStatus('idle', t('Choose at least one record.'));
   };
 
-  /** Create: the derived drawing as one project step; the dialog closes. */
+  /**
+   * Create: the derived drawing as one project step; the dialog closes. While it runs the dialog is 'creating',
+   * so a second Create adds nothing; a failure shows its reason and leaves the dialog open.
+   */
   const confirm = async () => {
     if (dialog.status !== 'derived' || !create) return null;
-    const outcome = await create();
-    close();
-    return outcome;
+    const run = create;
+    create = null;
+    dialog.status = 'creating';
+    try {
+      const outcome = await run();
+      close();
+      return outcome;
+    } catch (error) {
+      const normalized = normalizeUserFacingError(error);
+      showStatus('error', normalized ? errorText(normalized.summaryParts) : String(error));
+      return null;
+    }
   };
 
   return { deriveFromShown, dialog, open, refresh, confirm, close };

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const { createRegionDrawing, regionSourceRecords } = await import('../../gbdraw/web/js/app/region-drawing.js');
+const { diagnosticError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
 
 const RECORDS = [
   { recordKey: 'record-1', caption: 'NC_1', length: 1200, features: [{ featureId: 'f1', label: 'dnaA' }] },
@@ -257,4 +258,39 @@ test('the rows come from the request projected after the records are read', asyn
   await owner.open();
   assert.deepEqual(owner.dialog.rows.map((row) => [row.recordKey, row.caption, row.length]),
     [['record-1', 'NC_1', 1200], ['record-2', 'NC_2', 900]]);
+});
+
+// A second Create while the first one runs adds nothing: the dialog is
+// 'creating' and Create is disabled until the drawing is added.
+test('a second Create while one runs adds one drawing', async () => {
+  const { owner, calls } = harness();
+  await owner.open();
+  owner.dialog.rows[0].checked = true;
+  await owner.refresh();
+  const first = owner.confirm();
+  assert.equal(owner.dialog.status, 'creating', 'Create is disabled while the drawing is added');
+  assert.equal(owner.dialog.returnedToAuto.length, 2, 'the derived view stays shown');
+  const second = owner.confirm();
+  assert.deepEqual(await Promise.all([first, second]), [{ drawingId: 'linear' }, null]);
+  assert.equal(calls.created.length, 1);
+  assert.equal(owner.dialog.show, false);
+});
+
+// A Create whose prepare fails shows the reason in the dialog; the dialog
+// stays open and the failure reaches no unhandled rejection.
+test('a Create that fails shows its reason and stays open', async () => {
+  const owner = createRegionDrawing({
+    shownDrawingId: () => 'circular',
+    deriveRegion: async () => ({ result: derivedReply(true) }),
+    newDrawingFromRegion: async () => { throw diagnosticError('RESULT_INVALID'); },
+    ...recordPorts(RECORDS)
+  });
+  await owner.open();
+  owner.dialog.rows[0].checked = true;
+  await owner.refresh();
+  assert.equal(await owner.confirm(), null);
+  assert.equal(owner.dialog.show, true);
+  assert.equal(owner.dialog.status, 'error');
+  assert.notEqual(owner.dialog.message, '');
+  assert.equal(await owner.confirm(), null, 'Create stays disabled until the region derives again');
 });

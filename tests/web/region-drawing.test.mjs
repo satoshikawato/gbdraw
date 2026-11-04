@@ -354,6 +354,26 @@ const assertLookCarried = (drawing) => {
     [RULE], 'the color rule and its Legend name');
 };
 
+// Create pressed twice before the first one adds the drawing (a double click):
+// one drawing, one History step.
+test('(d) a second Create while one runs adds one drawing and one History step', async () => {
+  circularSource([recordA]);
+  const before = listView();
+  const undoBefore = history.timeline().undo.length;
+  const owner = regionDrawingsOf();
+  owner.dialog.rows = [{ recordKey: 'record-1', caption: 'A', length: 1000, checked: true, kind: 'coordinates',
+    start: '301', end: '700', featureId: '', features: null, featureReason: '' }];
+  await owner.refresh();
+  assert.equal(owner.dialog.status, 'derived');
+  const outcomes = await Promise.all([owner.confirm(), owner.confirm()]);
+  assert.equal(outcomes[1], null, 'the second Create adds nothing');
+  assert.equal(state.drawingTabs.value.length, before.tabs.length + 1, 'one drawing');
+  assert.equal(history.timeline().undo.length, undoBefore + 1, 'one History step');
+  await history.undo();
+  assert.deepEqual(state.drawingTabs.value.map(({ id }) => id), before.tabs.map(({ id }) => id));
+  assert.equal(state.activeDrawingId.value, before.shown);
+});
+
 test('(a) a region of one Circular record is a Linear drawing that carries the look inside the region', async () => {
   const source = await circularSourceWithLook();
   const { value: installed, registered } = await countingRegistrations(() => deriveAndInstall(source, LOOK_REGION));
