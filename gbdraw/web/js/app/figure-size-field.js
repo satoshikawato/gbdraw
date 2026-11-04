@@ -64,10 +64,10 @@ export const createFigureSizeField = ({ state, shownSize, watch }) => {
   const written = { width: null, height: null };
   for (const side of /** @type {const} */ (['width', 'height'])) {
     watch(() => [state.activeDrawing().id, form()[FIGURE_SIZE_FIELDS[side]]], () => {
-      const { id, form: shown } = state.activeDrawing();
-      const value = shown[FIGURE_SIZE_FIELDS[side]];
+      const drawing = state.activeDrawing();
+      const value = drawing.form[FIGURE_SIZE_FIELDS[side]];
       const own = written[side];
-      if (own !== null && own.drawingId === id && own.value === value) return;
+      if (own !== null && own.drawingId === drawing.id && own.value === value) return;
       written[side] = null;
       units[side].value = figureLengthUnitOf(value);
     });
