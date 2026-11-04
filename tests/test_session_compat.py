@@ -2261,6 +2261,24 @@ def test_session_30_replay_draws_the_draft_colors(tmp_path: Path) -> None:
     assert rows[-1] == ["CDS", "hash", "fbc76b20f", "#ff0000", "CDS (1)"]
 
 
+def test_session_30_linear_replay_draws_the_draft_plot_title(tmp_path: Path) -> None:
+    # OV-2521: the replay of a Linear Session 27-30 without an invocation
+    # passed no plot title, which the Circular replay and a Web Generate of
+    # the file draw.
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"
+    source = json.loads(gzip.decompress(fixture.read_bytes()))
+    assert "cliInvocation" not in source
+    source["config"]["form"]["plot_title"] = "Replayed plot title"
+    source["config"]["adv"]["plot_title_position"] = "top"
+    session_path = tmp_path / "titled.v30.gbdraw-session.json"
+    session_path.write_text(json.dumps(source), encoding="utf-8")
+
+    linear_main(["--session", str(session_path), "--output", str(tmp_path / "replay"), "--format", "svg"])
+
+    svg = (tmp_path / "replay.svg").read_text(encoding="utf-8")
+    assert "Replayed plot title" in svg
+
+
 def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path) -> None:
     # A row with an empty label text hides the label, as the Web app draws it.
     # The canonical TSV round trip used to read the empty cell as a missing

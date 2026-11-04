@@ -6697,6 +6697,29 @@ def _append_gui_color_args(
         invocation_args.extend([option, name])
 
 
+_LINEAR_GUI_PLOT_TITLE_POSITIONS = frozenset({"center", "top", "bottom"})
+
+
+def _append_gui_plot_title_args(
+    run_args: list[str],
+    invocation_args: list[str],
+    *,
+    form: Mapping[str, Any],
+    adv: Mapping[str, Any],
+    positions: frozenset[str] | None,
+) -> None:
+    """The draft's plot title, its position (one of ``positions``, if given) and font size."""
+
+    plot_title = _string_or_none(form.get("plot_title"))
+    if plot_title:
+        _append_pair(run_args, invocation_args, "--plot_title", plot_title)
+    position = _string_or_none(adv.get("plot_title_position"))
+    if position and (positions is None or position in positions):
+        _append_pair(run_args, invocation_args, "--plot_title_position", position)
+    if adv.get("plot_title_font_size") not in (None, "", False):
+        _append_pair(run_args, invocation_args, "--plot_title_font_size", str(adv.get("plot_title_font_size")))
+
+
 def _append_circular_gui_args(
     run_args: list[str],
     invocation_args: list[str],
@@ -6713,13 +6736,7 @@ def _append_circular_gui_args(
         _append_pair(run_args, invocation_args, "--track_type", str(form.get("track_type")))
     if _string_or_none(form.get("legend")):
         _append_pair(run_args, invocation_args, "-l", str(form.get("legend")))
-    plot_title = _string_or_none(form.get("plot_title"))
-    if plot_title:
-        _append_pair(run_args, invocation_args, "--plot_title", plot_title)
-    if _string_or_none(adv.get("plot_title_position")):
-        _append_pair(run_args, invocation_args, "--plot_title_position", str(adv.get("plot_title_position")))
-    if adv.get("plot_title_font_size") not in (None, "", False):
-        _append_pair(run_args, invocation_args, "--plot_title_font_size", str(adv.get("plot_title_font_size")))
+    _append_gui_plot_title_args(run_args, invocation_args, form=form, adv=adv, positions=None)
     if adv.get("keep_full_definition_with_plot_title") is True:
         _append_flag(run_args, invocation_args, "--keep_full_definition_with_plot_title")
     if adv.get("center_reserved_radius") not in (None, "", False):
@@ -6874,6 +6891,10 @@ def _append_linear_gui_args(
     wrap_length = _string_or_none(form.get("linear_wrap_length"))
     if wrap_length and wrap_length != "none":
         _append_pair(run_args, invocation_args, "--wrap_length", wrap_length)
+    # OV-2521: a Linear Generate draws the plot title too.
+    _append_gui_plot_title_args(
+        run_args, invocation_args, form=form, adv=adv, positions=_LINEAR_GUI_PLOT_TITLE_POSITIONS
+    )
     _append_linear_definition_line_style_args(run_args, invocation_args, adv)
 
     linear_seqs = files.get("linearSeqs")
