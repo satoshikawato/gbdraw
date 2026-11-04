@@ -79,6 +79,36 @@ assert.equal(transferred.byteLength, 0);
 assert.equal(bytesToText(await readFileBytes(rowA)), 'LOCUS shared');
 assert.equal(bytesToText(await readFileBytes(rowB)), 'LOCUS shared');
 
+// Each take is its caller's buffer to transfer: two helper requests that stage
+// the same input at once (the region dialog derives on every input change,
+// OV-2490) start their takes before either releases the cached bytes, and the
+// second still receives bytes the first transfer leaves attached.
+for (const owner of [rowA, makeCountingFile('LOCUS concurrent')]) {
+  const [first, second] = await Promise.all([takeFileBytesForTransfer(owner), takeFileBytesForTransfer(owner)]);
+  assert.notEqual(first, second, 'two takes never share one buffer');
+  structuredClone(first, { transfer: [first] });
+  assert.equal(first.byteLength, 0);
+  assert.ok(second.byteLength > 0, 'the second take is not detached by the first transfer');
+  structuredClone(second, { transfer: [second] });
+}
+
+// A single take hands out the cached buffer itself, with no copy.
+{
+  const single = makeCountingFile('LOCUS single');
+  const cached = await readFileBytes(single);
+  assert.equal(await takeFileBytesForTransfer(single), cached.buffer, 'the common take copies nothing');
+}
+// The retake is bounded: a FileLike that returns one stored buffer on every
+// read gives the second take a copy instead of reading forever.
+{
+  const stored = encoder.encode('LOCUS stored').buffer;
+  const sameBuffer = { name: 'same.txt', arrayBuffer: async () => stored };
+  const [first, second] = await Promise.all([takeFileBytesForTransfer(sameBuffer), takeFileBytesForTransfer(sameBuffer)]);
+  assert.equal(first, stored);
+  assert.notEqual(second, stored, 'the second take is a copy');
+  assert.equal(bytesToText(new Uint8Array(second)), 'LOCUS stored');
+}
+
 // A gzip input file (NCBI's .gbff.gz, .fna.gz, .gff.gz) reads as the plain
 // file it holds, told by its first two bytes, not its name: every browser
 // reader, the Session and the Worker see the plain bytes.

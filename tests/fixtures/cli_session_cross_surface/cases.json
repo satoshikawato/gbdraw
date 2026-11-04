@@ -85,6 +85,11 @@
       "id": "drawings_linear_pair",
       "session": "tests/fixtures/sessions/drawings-linear-pair-losat.v51.gbdraw-session.json.gz",
       "drawings": ["linear-2"]
+    },
+    {
+      "id": "drawings_circular_region",
+      "session": "tests/fixtures/sessions/web-region-circular-linear.v51.gbdraw-session.json.gz",
+      "drawings": ["linear"]
     }
   ]
 }

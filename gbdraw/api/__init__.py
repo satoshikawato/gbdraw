@@ -178,7 +178,7 @@ from gbdraw.session import (
     with_request_output,
 )
 from gbdraw.auto_sizes import SettingAdaptation, SettingReset
-from .region_drawing import RegionDrawing, RegionSelection, derive_region_drawing
+from .region_drawing import FeatureRegionSelection, RegionDrawing, RegionSelection, derive_region_drawing
 from .tracks import (
     CircularTrackRendererName,
     CircularTrackSide,
@@ -385,6 +385,7 @@ __all__ = [
     # region drawings
     "RegionDrawing",
     "RegionSelection",
+    "FeatureRegionSelection",
     "SettingAdaptation",
     "SettingReset",
     "derive_region_drawing",

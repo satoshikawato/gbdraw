@@ -30,7 +30,8 @@
 /** @import { LinearComparisonEdge, LinearComparisonIssue, LinearComparisonPair, LinearComparisonPlan, LinearComparisonResolvedEdge, LinearComparisonSource } from '../services/linear-comparisons.js' */
 /** @import { LinearComparisonUiIssue } from './comparison-ui.js' */
 /** @import { LinearSourceGroup, LinearSourceRemovalPlan } from '../services/linear-sources.js' */
-/** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
+/** @import { RecordDrawKey, RecordIdentitySources, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
+/** @import { RegionSourceFeature } from './region-drawing.js' */
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @import { CircularRecordsDiscovered } from './run-analysis.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
@@ -45,7 +46,7 @@ import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '.
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { DEFAULT_LINEAR_OUTPUT_PREFIX } from '../utils/download-names.js';
-import { admitFeatureCatalog, biologicalFeatureKey, resultCatalogFeatures } from '../services/feature-catalog.js';
+import { admitFeatureCatalog, biologicalFeatureKey, catalogNameIndex, resultCatalogFeatures } from '../services/feature-catalog.js';
 import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { inputSummaryOf } from '../services/input-summary.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
@@ -66,6 +67,7 @@ import {
 } from './record-display/feature-record-rotation.js';
 import { createDrawingState, drawingHasEdits, state, sessionOperationAvailability } from '../state.js';
 import { createDrawingBar, createDrawingList, createInputReplacement, moveTabFocus } from './drawing-list.js';
+import { createRegionDrawing } from './region-drawing.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -98,6 +100,9 @@ import {
   assertDrawingInputs,
   importSession as importSessionFromFile,
   serializeActiveRenderFiles,
+  projectDraftRequest,
+  prepareRegionDrawing,
+  installPreparedDrawing,
   heldDepthFiles,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
@@ -173,7 +178,7 @@ import { createSvgStyles, paletteColorsEqual } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, buildDefaultMultiRecordPositions, createRunAnalysis } from './run-analysis.js';
-import { createSimilarityAlignmentActions } from './similarity-alignment.js';
+import { createSimilarityAlignmentActions, featureNameParts } from './similarity-alignment.js';
 import { createRecordAutoOrientation } from './record-auto-orientation.js';
 import { createFeatureAnchorAction } from './align-at-feature.js';
 import { createRecordPositionReset } from './record-position-reset.js';
@@ -3742,6 +3747,19 @@ export const createAppSetup = () => {
       });
     }
   });
+  // DESIGN A4: the record discovery owner's lists, by mode; a Linear card
+  // whose list is still deferred after a Load is read here. Callers read them
+  // through the runner's `readDrawingRecordIdentities`, which reads a deferred
+  // Circular list first (OV-2489).
+  /** @param {DrawingState} drawing @returns {Promise<RecordIdentitySources>} */
+  const readRecordIdentitySources = async (drawing) => {
+    if (drawing.mode === 'circular') return { mode: drawing.mode, circular: circularRecordEntries(drawing) };
+    await awaitLinearRecordDiscovery(drawing);
+    return {
+      mode: drawing.mode,
+      linear: new Map(drawing.linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(drawing, seq))]))
+    };
+  };
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
     runCommittedCanonicalCandidate,
@@ -3753,6 +3771,7 @@ export const createAppSetup = () => {
     requestLiveSettingApply,
     discardLiveSettingRequests,
     refreshCircularRecordOrder: refreshRecordOrderOfDrawing,
+    readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,
@@ -3778,17 +3797,7 @@ export const createAppSetup = () => {
       })
     ),
     prepareLinearRecordCatalog,
-    // DESIGN A4: Generate reads its requests' record identities from the
-    // discovered record lists, awaited here (a Linear card whose list is still
-    // deferred after a Load); the Circular list is the one Generate awaited.
-    readRecordIdentitySources: async (drawing) => {
-      if (drawing.mode === 'circular') return { mode: drawing.mode, circular: circularRecordEntries(drawing) };
-      await awaitLinearRecordDiscovery(drawing);
-      return {
-        mode: drawing.mode,
-        linear: new Map(drawing.linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(drawing, seq))]))
-      };
-    },
+    readRecordIdentitySources,
     recordDisplayRows: recordDisplayControls.allRows,
     assertDrawingInputs,
     readDraftSignature: () => history.getCurrentIntentSignature(),
@@ -4885,6 +4894,15 @@ export const createAppSetup = () => {
       const slot = artifactSlots.readOfDrawing(sourceId, state.activeDrawingId.value,
         () => historySnapshots.captureArtifactSlot(), (kept) => kept);
       return { drawing, slot: slot ? artifactSlotAs(slot, drawing) : null };
+    },
+    // A region drawing is read as Load reads a stored drawing, then made under its new ID.
+    regionDrawing: async (derivation) => {
+      const prepared = await prepareRegionDrawing(derivation);
+      return (drawingId) => {
+        const made = createDrawingState(drawingId, prepared.mode);
+        installPreparedDrawing(made, prepared);
+        return made;
+      };
     },
     addDrawing: state.addDrawing,
     // An error that names a drawing leaves with it (R17-29), as it leaves on
@@ -7718,6 +7736,43 @@ export const createAppSetup = () => {
     return { primary, more: keys.filter((key) => !drawn.has(key) && key !== 'default') };
   });
 
+  // New drawing from a region: the shown drawing's draft request, as Save stores it, goes to Python.
+  const projectShownRequest = async () => {
+    const drawing = state.activeDrawing();
+    const { catalog, error } = drawing.mode === 'linear'
+      ? await prepareLinearRecordCatalog({ privateCandidate: true })
+      : { catalog: null, error: '' };
+    if (error) throw error;
+    return projectDraftRequest(state, drawing, {
+      linearRecordCatalog: catalog,
+      recordDisplayRows: recordDisplayControls.allRows.value || [],
+      omittedAnnotationRecordKeys: getAnnotationRecordCatalog(drawing).omittedRecordKeys || []
+    });
+  };
+  // The features (identity and name) the shown Result's admitted catalog holds under a committed record key, or null.
+  /** @param {string} recordKey @returns {RegionSourceFeature[] | null} */
+  const shownResultFeatures = (recordKey) => {
+    const catalog = toRaw(state.featureCatalog.value);
+    const rows = catalog ? catalogNameIndex(catalog).rowsByRecord.get(recordKey) : undefined;
+    if (!rows) return null;
+    const seen = new Set();
+    return rows.flatMap((row) => {
+      const featureId = String(row.biologicalFeatureId ?? '');
+      if (!featureId || seen.has(featureId)) return [];
+      seen.add(featureId);
+      return [{ featureId, label: featureNameParts({ biologicalFeatureId: featureId }, row).label }];
+    });
+  };
+  const regionDrawings = createRegionDrawing({
+    shownDrawingId: () => state.activeDrawingId.value,
+    projectShownRequest,
+    // The projection's resource table holds the descriptors Save would write.
+    deriveRegion: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING, { ...payload,
+      resources: /** @type {GenerationPayload['resources']} */ (payload.resources) }),
+    newDrawingFromRegion: drawingList.newDrawingFromRegion,
+    readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
+    resultFeatures: shownResultFeatures
+  });
   return {
     hostedBuild: readHostedBuild(document),
     fontSettings,
@@ -7770,6 +7825,7 @@ export const createAppSetup = () => {
     reloadAfterOperationError,
     selectDrawing,
     drawingList,
+    regionDrawings,
     drawingBar,
     drawingBarTabs,
     moveTabFocus,

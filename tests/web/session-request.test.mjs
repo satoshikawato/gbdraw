@@ -100,7 +100,7 @@ const characterizedRequests = [];
 const buildCanonicalRenderRequest = (args) => {
   const result = buildCanonicalRenderRequestRaw({
   ...args,
-  ...(args.state?.mode?.value === 'linear' && !args.comparisonPlanSnapshot
+  ...(args.state?.mode === 'linear' && !args.comparisonPlanSnapshot
     ? { comparisonPlanSnapshot: comparisonSnapshotForState(args.state, args.filesData) }
     : {})
   });
@@ -390,7 +390,7 @@ assert.throws(
 
 const ref = (value) => ({ value });
 const state = {
-  mode: ref('circular'),
+  mode: 'circular',
   inputType: ref('gb'),
   circularRecordList: ref([]),
   form: {
@@ -452,7 +452,7 @@ const stateForCanonicalProjection = (projection) => {
   const palette = String(config.palette || 'default');
   return {
     ...state,
-    mode: ref(projection.mode),
+    mode: projection.mode,
     inputType: ref(projection.inputType),
     form: { ...state.form, ...structuredClone(config.form || {}) },
     adv: { ...state.adv, ...structuredClone(config.adv || {}) },
@@ -897,7 +897,7 @@ assert.equal(
 const { LABEL_STYLE_CHOICES, labelStyleForMode } = await import(pathToFileURL(join(tempRoot, 'js', 'mode-profiles.js')));
 /** @param {() => { renderRequest: { diagramOptions: { configOverrides: Record<string, unknown> } } }} build */
 const assertLabelStyleRoundTrip = (build) => {
-  const mode = state.mode.value;
+  const mode = state.mode;
   const defaults = labelStyleForMode(mode);
   const paths = { label_line: `labels.${mode}.line`, label_protection: `labels.${mode}.protection` };
   Object.assign(state.adv, defaults);
@@ -921,7 +921,7 @@ const assertLabelStyleRoundTrip = (build) => {
   delete state.adv.label_line;
   delete state.adv.label_protection;
 };
-assert.equal(state.mode.value, 'circular');
+assert.equal(state.mode, 'circular');
 assertLabelStyleRoundTrip(() => buildCanonicalRenderRequestRaw({ state, filesData }));
 assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
 assert.equal(canonical.renderRequest.diagramOptions.evalue, 1e-5);
@@ -2015,7 +2015,7 @@ assert.deepEqual(
   const fastaText = '>alpha\nACGTACGT\n';
   const fasta = { name: 'input.fasta', type: 'text/plain', size: fastaText.length, lastModified: 0, data: btoa(fastaText) };
   for (const mode of ['circular', 'linear']) {
-    const fastaState = { ...state, mode: ref(mode), inputType: ref('fasta') };
+    const fastaState = { ...state, mode, inputType: ref('fasta') };
     const files = mode === 'circular'
       ? { c_fasta: fasta, linearSeqs: [] }
       : { linearSeqs: [{ uid: 'alpha', fasta, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null,
@@ -2307,7 +2307,7 @@ assert.equal(combinedCircularGenbank.match(/^LOCUS/gm)?.length, 2);
 assert.match(combinedCircularGenbank, /WEBTEST/);
 assert.match(combinedCircularGenbank, /WEBTWO/);
 
-state.mode.value = 'linear';
+state.mode = 'linear';
 state.inputType.value = 'gb';
 state.linearComparisonPlan = {
   mode: 'adjacent',
@@ -4026,7 +4026,7 @@ const combinedGenbank = {
   size: new TextEncoder().encode(combinedGenbankText).byteLength,
   data: btoa(combinedGenbankText)
 };
-state.mode.value = 'circular';
+state.mode = 'circular';
 state.form.multi_record_canvas = true;
 state.circularRecordList.value = [
   { selector: '#1' },
@@ -4132,7 +4132,7 @@ assert.throws(
   { code: 'DEPTH_INVALID', stage: 'request-validation', context: { seriesIndex: 1, reason: 'DEPTH_SERIES_SOURCE' } }
 );
 
-state.mode.value = 'linear';
+state.mode = 'linear';
 state.adv.plot_title_position = 'bottom';
 state.form.multi_record_canvas = false;
 state.circularRecordList.value = [];
@@ -4426,7 +4426,7 @@ const linearCombinationRegressionState = ({
   layoutRows = []
 } = {}) => ({
   ...state,
-  mode: ref('linear'),
+  mode: 'linear',
   form: {
     ...state.form,
     normalize_length: normalizeLength,
@@ -4540,7 +4540,7 @@ const circularRequestState = ({
   annotationSets: nextAnnotationSets = []
 } = {}) => ({
   ...state,
-  mode: ref('circular'),
+  mode: 'circular',
   inputType: ref('gb'),
   form: {
     ...state.form,
@@ -4935,7 +4935,7 @@ assert.deepEqual(
 
 const linearP3State = {
   ...state,
-  mode: ref('linear'),
+  mode: 'linear',
   inputType: ref('gb'),
   form: {
     ...state.form,
@@ -5223,7 +5223,7 @@ assert.equal(
 
 const comparisonContractState = {
   ...state,
-  mode: ref('linear'),
+  mode: 'linear',
   inputType: ref('gb'),
   form: { ...state.form, prefix: 'comparison-contract', show_depth: false },
   adv: {
@@ -6066,7 +6066,7 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
 // A helper-produced typed resource uses the Python codec bytes without serializing its graph again.
 {
   state.adv.linear_track_slots_enabled = false;
-  state.mode.value = 'linear';
+  state.mode = 'linear';
   state.losat.blastp.mode = 'collinear';
   state.linearComparisonPlan = { ...createDefaultLinearComparisonPlan(), mode: 'adjacent' };
   const typed = { schema: 3, kind: 'result', value: { type: 'CollinearityResult', fields: {} } };

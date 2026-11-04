@@ -20,11 +20,18 @@ const isSafeRecordId = (value) => {
   return !isUnspecifiedRecordSelectorValue(recordId) && !recordId.startsWith('#');
 };
 
+/**
+ * A number as the UI shows lengths and sizes: grouped by thousands
+ * (`280,452`), every fraction digit kept.
+ * @param {number} value
+ */
+export const formatGroupedNumber = (value) => value.toLocaleString('en-US', { maximumFractionDigits: 20 });
+
 /** @param {unknown} value */
 export const formatRecordLength = (value) => {
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || numeric <= 0) return 'length unavailable';
-  return `${numeric.toLocaleString('en-US')} bp`;
+  return `${formatGroupedNumber(numeric)} bp`;
 };
 
 /**

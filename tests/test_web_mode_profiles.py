@@ -77,7 +77,7 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert "resolveComparisonThresholds(drawing.adv, 'circular')" in run_source
     assert "resolveComparisonThresholds(drawing.adv, 'linear')" in run_source
     assert "normalizeBlastThreshold" not in run_source
-    assert "resolveComparisonThresholds(drawing.adv, state.mode.value)" in request_source
+    assert "resolveComparisonThresholds(drawing.adv, mode)" in request_source
     assert "comparisonFiltersForMode('linear')" in run_source
     assert not (WEB_ROOT / "js" / "app" / "cli-args.js").exists()
     assert "effectiveLinearAxisColor({" in request_source
@@ -92,3 +92,16 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert "shouldSuppressPairwiseIdentityLegend" not in run_source
     assert "suppressPairwiseIdentityLegend" not in candidate_source
     assert "PAIRWISE_LEGEND_SELECTOR" not in candidate_source
+
+
+def test_mode_profiles_carry_the_region_drawing_vocabularies() -> None:
+    from typing import get_args
+
+    from gbdraw.api.region_drawing import NotCarriedKind, StartAfterEndReason
+    from gbdraw.mode_profiles import mode_profiles_payload
+
+    region = mode_profiles_payload()["regionDrawing"]  # type: ignore[index]
+    assert region == {
+        "notCarriedKinds": list(get_args(NotCarriedKind)),
+        "refusalReasons": list(get_args(StartAfterEndReason)),
+    }

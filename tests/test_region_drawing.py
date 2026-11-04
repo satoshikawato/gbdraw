@@ -22,6 +22,7 @@ from gbdraw.api import (
     GenBankInputSource,
     LinearDiagramOptions,
     LinearDiagramRequest,
+    LinearMultiRecordOptions,
     MaterializedSession,
     RecordCardinality,
     RecordInput,
@@ -37,6 +38,7 @@ from gbdraw.api import (
     render_request,
 )
 from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.region_drawing import derive_region_request
 from gbdraw.api.request_render import resolve_request_records
 from gbdraw.api.requests import DiagramRequest
 from gbdraw.auto_sizes import DrawnExtent, adapt_explicit_settings, auto_setting_values
@@ -256,8 +258,10 @@ def test_regions_of_several_records_follow_source_order(materialize, tmp_path: P
     )
     records = region.drawing.request.records
     assert [record.record_key for record in records] == ["pair:1", "pair:2"]
-    # The source rows' own selectors (the Session stores each record by its ID).
-    assert [record.selector.record_id for record in records] == ["TESTA", "TESTB"]
+    # The source rows' own selectors (the Session stores each record by its ID),
+    # each in its crop, as the Web writes a crop.
+    assert [record.selector for record in records] == [None, None]
+    assert [record.region.record_id for record in records] == ["TESTA", "TESTB"]
     assert all(record.cardinality is RecordCardinality.EXACTLY_ONE for record in records)
     [track] = region.drawing.request.options.depth_tracks
     assert track.source[0] is None and str(track.source[1]).endswith("depth.tsv")
@@ -275,7 +279,26 @@ def test_a_row_of_every_record_of_a_file_is_pinned_by_index(tmp_path: Path) -> N
     with materialize_session(document, output_directory=tmp_path / "out") as materialized:
         region = derive_region_drawing(materialized, [RegionSelection("pair:2", 1, 20)])
     [record] = region.drawing.request.records
-    assert (record.record_key, record.selector.record_index) == ("pair:2", 1)
+    assert (record.record_key, record.selector, record.region.record_index) == ("pair:2", None, 1)
+
+
+def test_a_crop_of_a_record_of_a_file_is_stated_as_the_web_writes_it() -> None:
+    # A card of a file of two records, with a record gap: each crop names its
+    # record in the region, and the drawing, whose records take a row each,
+    # states no layout (OV-2464).
+    source = LinearDiagramRequest(
+        records=[RecordInput(GenBankInputSource(TWO_RECORDS), record_key="pair", cardinality=RecordCardinality.ALL)],
+        layout=LinearMultiRecordOptions(record_gap_px=40),
+    )
+    request = derive_region_request(source, [RegionSelection("pair:1", 2, 30), RegionSelection("pair:2", 5, 40)]).request
+    assert request.layout is None
+    assert [(record.selector, record.region.record_index) for record in request.records] == [(None, 0), (None, 1)]
+    stated = build_session_document(request).to_dict()["drawings"][0]["renderRequest"]
+    assert stated["layout"] == {}
+    assert [(record["selector"], record["region"]["selector"] is not None) for record in stated["records"]] == [
+        (None, True),
+        (None, True),
+    ]
 
 
 def test_feature_edits_and_annotations_inside_the_region_are_carried(materialize) -> None:
@@ -376,3 +399,192 @@ def test_circular_track_widths_follow_the_rule(materialize) -> None:
         slots[0],
         replace(slots[1], renderer="dinucleotide_content"),
     ]
+
+
+# The request-level core and the Worker helper of New drawing from a region.
+
+
+def test_the_drawing_derivation_is_the_request_core(materialize) -> None:
+    from gbdraw.session import session_to_request
+
+    source = _mito_circular(config_overrides={"canvas.circular.track_type": "middle"})
+    materialized = materialize(source)
+    selection = [RegionSelection("mito", 100, 900)]
+    drawing = derive_region_drawing(materialized, selection)
+    core = derive_region_request(session_to_request(materialized), selection)
+    assert (core.request, core.mode, core.adaptation) == (drawing.drawing.request, "linear", drawing.adaptation)
+    assert [(item.kind, item.items) for item in core.not_carried] == [
+        ("OTHER_MODE_SETTINGS", ("canvas.circular.track_type",))
+    ]
+    assert drawing.dropped == ("Circular-only settings: canvas.circular.track_type.",)
+
+
+def test_an_origin_crossing_region_has_its_own_reason(materialize) -> None:
+    from gbdraw.api.region_drawing import StartAfterEndRegion
+
+    with pytest.raises(StartAfterEndRegion) as refusal:
+        derive_region_drawing(materialize(_mito_circular()), [RegionSelection("mito", 16000, 200)])
+    assert refusal.value.diagnostic == {"code": "REGION_INVALID", "field": "region", "reason": "ORIGIN_CROSSING"}
+    assert (refusal.value.record_key, refusal.value.start, refusal.value.end) == ("mito", 16000, 200)
+
+
+def test_a_start_after_the_end_of_a_linear_record_is_worded_without_the_origin(tmp_path: Path) -> None:
+    """A linear record has no origin to cross: its refusal names the order only."""
+    from gbdraw.api import RecordDisplayOptions
+    from gbdraw.api.region_drawing import StartAfterEndRegion
+
+    linear = _mito_circular(record={"display": RecordDisplayOptions(is_circular=False)})
+    with pytest.raises(StartAfterEndRegion) as refusal:
+        derive_region_request(linear, [RegionSelection("mito", 16000, 200)])
+    assert refusal.value.diagnostic == {"code": "REGION_INVALID", "field": "region", "reason": "START_AFTER_END"}
+    assert "origin" not in str(refusal.value)
+    reply = _web_region(linear, [{"recordKey": "mito", "start": 16000, "end": 200}], tmp_path)[2]
+    assert reply == {"status": "refused", "reason": "START_AFTER_END", "recordKey": "mito", "start": 16000, "end": 200}
+
+
+def _web_source(request: DiagramRequest) -> tuple[dict[str, Any], dict[str, str]]:
+    from gbdraw.session_request_codec import encode_canonical_request
+
+    encoded = encode_canonical_request(request)
+    return encoded.payload, {resource.resource_id: str(resource.source_path) for resource in encoded.resources}
+
+
+def _web_region(request: DiagramRequest, regions: list[dict[str, Any]], tmp_path: Path, *, adapt_sizes: bool = True):
+    from gbdraw.web_support.region_drawing import derive_web_region_drawing_json
+
+    payload, paths = _web_source(request)
+    reply = json.loads(derive_web_region_drawing_json(
+        json.dumps(payload), json.dumps(paths), str(tmp_path / "out"), json.dumps(regions), json.dumps(adapt_sizes)
+    ))
+    return payload, paths, reply
+
+
+def test_the_web_helper_derives_one_record_of_a_circular_drawing(tmp_path: Path) -> None:
+    from gbdraw.session_request_codec import decode_canonical_request
+
+    source = _mito_circular(config_overrides={"labels.font_size.short": 16, "labels.font_size.long": 16})
+    payload, paths, reply = _web_region(source, [{"recordKey": "mito", "start": 100, "end": 900}], tmp_path)
+    assert (reply["status"], reply["mode"]) == ("derived", "linear")
+    request = reply["renderRequest"]
+    # The new drawing names the source's resource: the same file, no new upload.
+    assert request["records"][0]["source"] == payload["records"][0]["source"]
+    assert request["records"][0]["region"]["start"] == 100
+    assert [item["setting"] for item in reply["returnedToAuto"]] == ["labels.font_size"]
+    assert reply["returnedToAuto"][0]["explicit"] == 16
+    decoded = decode_canonical_request(request, resource_paths=paths, output_directory=tmp_path / "out")
+    assert isinstance(decoded, LinearDiagramRequest)
+    kept = _web_region(
+        source, [{"recordKey": "mito", "start": 100, "end": 900}], tmp_path, adapt_sizes=False
+    )[2]
+    assert kept["returnedToAuto"] == []
+
+
+def test_the_web_helper_keeps_a_whole_circular_record_circular(tmp_path: Path) -> None:
+    reply = _web_region(_mito_circular(), [{"recordKey": "mito", "start": 1, "end": 16569}], tmp_path)[2]
+    assert (reply["status"], reply["mode"], reply["renderRequest"]["mode"]) == ("derived", "circular", "circular")
+
+
+def test_the_web_helper_draws_two_records_in_one_linear_drawing(tmp_path: Path) -> None:
+    source = LinearDiagramRequest(
+        records=[RecordInput(GenBankInputSource(TWO_RECORDS), record_key="pair", cardinality=RecordCardinality.ALL)],
+    )
+    payload, _paths, reply = _web_region(
+        source, [{"recordKey": "pair:1", "start": 1, "end": 40}, {"recordKey": "pair:2", "start": 1, "end": 40}], tmp_path
+    )
+    assert (reply["status"], reply["mode"]) == ("derived", "linear")
+    records = reply["renderRequest"]["records"]
+    assert [record["recordKey"] for record in records] == ["pair:1", "pair:2"]
+    # Each input keeps a resource of its own (the codec's rule); each reads the source's file.
+    source_id = payload["records"][0]["source"]["resourceId"]
+    assert {reply["resourceSources"][record["source"]["resourceId"]] for record in records} == {source_id}
+
+
+def test_the_web_helper_names_only_the_resources_the_derived_request_reads(tmp_path: Path) -> None:
+    examples = REPO / "examples"
+    source = LinearDiagramRequest(
+        records=[
+            RecordInput(GenBankInputSource(examples / "MjeNMV.gb"), record_key="a"),
+            RecordInput(GenBankInputSource(examples / "MelaMJNV.gb"), record_key="b"),
+        ],
+        options=LinearDiagramOptions(blast_files=[str(examples / "MjeNMV.MelaMJNV.tblastx.out")]),
+    )
+    payload, paths, reply = _web_region(
+        source, [{"recordKey": "a", "start": 1, "end": 30000}, {"recordKey": "b", "start": 1, "end": 30000}], tmp_path
+    )
+    assert reply["status"] == "derived"
+    # The comparison table is not carried, so the one-drawing document holds no copy of it.
+    [table_id] = [resource_id for resource_id, path in paths.items() if path.endswith(".tblastx.out")]
+    named = {record["source"]["resourceId"] for record in reply["renderRequest"]["records"]}
+    assert table_id not in reply["resourceSources"].values()
+    assert set(reply["resourceSources"]) == named
+
+
+def test_the_web_helper_refuses_an_origin_crossing_region(tmp_path: Path) -> None:
+    reply = _web_region(_mito_circular(), [{"recordKey": "mito", "start": 16000, "end": 200}], tmp_path)[2]
+    assert reply == {"status": "refused", "reason": "ORIGIN_CROSSING", "recordKey": "mito", "start": 16000, "end": 200}
+
+
+def _origin_record(tmp_path: Path) -> Path:
+    """A 1000 bp circular record with a CDS at 101..400 and a CDS across the origin."""
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
+    from Bio.SeqRecord import SeqRecord
+
+    record = SeqRecord(Seq("ACGT" * 250), id="orig", name="orig", description="origin test")
+    record.annotations.update({"molecule_type": "DNA", "topology": "circular"})
+    record.features = [
+        SeqFeature(FeatureLocation(100, 400, strand=1), type="CDS", qualifiers={"locus_tag": ["inside"]}),
+        SeqFeature(
+            CompoundLocation([FeatureLocation(900, 1000, strand=1), FeatureLocation(0, 50, strand=1)]),
+            type="CDS", qualifiers={"locus_tag": ["across"]},
+        ),
+    ]
+    path = tmp_path / "origin.gb"
+    SeqIO.write(record, path, "genbank")
+    return path
+
+
+def _feature_id(request: DiagramRequest, locus_tag: str) -> str:
+    catalog = resolve_request_records(request).provenance[0].source_feature_catalog
+    return next(
+        feature.biological_feature_id for feature in catalog
+        if dict(feature.qualifiers).get("locus_tag") == (locus_tag,)
+    )
+
+
+def test_a_feature_region_is_the_span_of_its_location(tmp_path: Path) -> None:
+    from gbdraw.api.region_drawing import FeatureRegionSelection
+
+    source = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_origin_record(tmp_path)), record_key="o")])
+    by_feature = derive_region_request(source, [FeatureRegionSelection("o", _feature_id(source, "inside"))])
+    by_coordinates = derive_region_request(source, [RegionSelection("o", 101, 400)])
+    assert by_feature == by_coordinates
+    assert by_feature.mode == "linear"
+
+
+def test_a_feature_across_the_origin_is_refused(tmp_path: Path) -> None:
+    from gbdraw.api.region_drawing import FeatureRegionSelection, StartAfterEndRegion
+
+    source = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_origin_record(tmp_path)), record_key="o")])
+    with pytest.raises(StartAfterEndRegion) as refusal:
+        derive_region_request(source, [FeatureRegionSelection("o", _feature_id(source, "across"))])
+    assert (refusal.value.record_key, refusal.value.start, refusal.value.end) == ("o", 901, 50)
+
+
+def test_an_unknown_feature_is_refused(tmp_path: Path) -> None:
+    from gbdraw.api.region_drawing import FeatureRegionSelection
+
+    source = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_origin_record(tmp_path)), record_key="o")])
+    with pytest.raises(ValidationError, match="no feature 'missing'"):
+        derive_region_request(source, [FeatureRegionSelection("o", "missing")])
+
+
+def test_the_web_helper_takes_a_feature_region(tmp_path: Path) -> None:
+    source = CircularDiagramRequest(records=[RecordInput(GenBankInputSource(_origin_record(tmp_path)), record_key="o")])
+    inside, across = _feature_id(source, "inside"), _feature_id(source, "across")
+    reply = _web_region(source, [{"recordKey": "o", "featureId": inside}], tmp_path)[2]
+    assert reply["status"] == "derived"
+    assert reply["renderRequest"]["records"][0]["region"]["start"] == 101
+    refused = _web_region(source, [{"recordKey": "o", "featureId": across}], tmp_path)[2]
+    assert refused == {"status": "refused", "reason": "ORIGIN_CROSSING", "recordKey": "o", "start": 901, "end": 50}

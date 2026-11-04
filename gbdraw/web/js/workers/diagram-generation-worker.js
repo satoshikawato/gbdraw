@@ -1062,6 +1062,22 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // New drawing from a region: Python derives the drawing from the source
+  // drawing's draft projection and returns it with its resource sources.
+  [DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING]: {
+    keys: ['canonicalRequest', 'regions', 'adaptSizes'],
+    fileRoles: [],
+    run: async (pyodide, payload, _paths, _operation, workspace) => callJsonHelper(
+      pyodide, 'derive_web_region_drawing_json', [
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`,
+        jsonArgument(payload.regions, []),
+        jsonArgument(payload.adaptSizes, true),
+        jsonArgument(buildPreparedResourceIdentityMap(payload.resourceManifest), {})
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV]: {
     keys: ['entry', 'identityManifest'],
     fileRoles: [],

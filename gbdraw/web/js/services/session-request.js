@@ -261,9 +261,24 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
-// Session's (`buildCanonicalRequestState`). Project inputs, the mode and the
+// Session's (`buildCanonicalRequestState`). Its mode is its own (`requestDrawingMode`); project inputs and the
 // generated artifacts still come from `state`.
 /** @typedef {Record<string, any>} RequestDrawing */
+
+/**
+ * The diagram mode of the drawing a projection reads: that drawing's own mode,
+ * never the shown drawing's (`state.mode`), so a drawing that is not shown is
+ * projected in its own mode.
+ * @param {RequestDrawing} drawing
+ * @returns {ModeProfileName}
+ */
+const requestDrawingMode = (drawing) => {
+  const { mode } = drawing;
+  if (mode !== 'circular' && mode !== 'linear') {
+    throw new Error('The projected drawing states no diagram mode.');
+  }
+  return mode;
+};
 
 /**
  * A file slot's value as `addFile` reads it: a `File` or a Session resource
@@ -1491,10 +1506,11 @@ export const linearRecordSourceResources = (linearSeqs, inputType) => {
 };
 
 /**
- * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData, resources: ResourceBuilder }} input
+ * @param {{ drawing: RequestDrawing, filesData: RequestFilesData, resources: ResourceBuilder }} input
  */
-const buildRecords = ({ state, drawing, filesData, resources }) => {
-  if (state.mode.value === 'linear') {
+const buildRecords = ({ drawing, filesData, resources }) => {
+  const mode = requestDrawingMode(drawing);
+  if (mode === 'linear') {
     const resolvedRows = /** @type {Record<string, any>[]} */ (resolveEffectiveLinearRecordRows(
       filesData.linearSeqs,
       drawing.linearRecordRows,
@@ -1653,12 +1669,12 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
  * ALL card of several records keeps its one record here; the request may
  * split it into its `<uid>:<k>` records, whose features have those keys either
  * way. Null when the drafts name no complete request (Generate then reports why).
- * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData }} input
+ * @param {{ drawing: RequestDrawing, filesData: RequestFilesData }} input
  * @returns {RequestDraftRecord[] | null}
  */
-export const requestRecordPlan = ({ state, drawing, filesData }) => {
+export const requestRecordPlan = ({ drawing, filesData }) => {
   try {
-    return buildRecords({ state, drawing, filesData, resources: createResourceBuilder({ encode: false }) }).records;
+    return buildRecords({ drawing, filesData, resources: createResourceBuilder({ encode: false }) }).records;
   } catch {
     return null;
   }
@@ -2683,12 +2699,10 @@ const trackFlagOverrides = (form, circular, depthRequested) => ({
 });
 
 /**
- * @param {RequestState} state
  * @param {RequestDrawing} drawing
  * @param {{ depthRequested?: boolean, hasComparisonIntent?: boolean, linearHasSharedRow?: boolean }} [options]
  */
 const buildConfigOverrides = (
-  state,
   drawing,
   {
     depthRequested = Boolean(drawing.form.show_depth),
@@ -2696,8 +2710,9 @@ const buildConfigOverrides = (
     linearHasSharedRow = false
   } = {}
 ) => {
+  const mode = requestDrawingMode(drawing);
   const { form, adv } = drawing;
-  const circular = state.mode.value === 'circular';
+  const circular = mode === 'circular';
   const leaf = configLeaf;
   const linearLabelPlacement = circular
     ? null
@@ -2725,17 +2740,17 @@ const buildConfigOverrides = (
     [CONFIG_OVERRIDE_PATHS.fontFamily]: adv.font_family || null,
     [CONFIG_OVERRIDE_PATHS.labelRendering]: effectiveLabelRendering(form, adv, circular, linearLabelPlacement),
     ...trackFlagOverrides(form, circular, depthRequested),
-    [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: labelScopeOverride(form, circular),
+    [MODE_LABEL_SCOPE_PATHS[mode]]: labelScopeOverride(form, circular),
     // The mode's packaged style is left unstated, as a request that predates the setting leaves it.
-    [MODE_ADV_CONFIG_PATHS[state.mode.value].label_line]:
-      adv.label_line === labelStyleForMode(state.mode.value).label_line ? null : adv.label_line,
-    [MODE_ADV_CONFIG_PATHS[state.mode.value].label_protection]:
-      adv.label_protection === labelStyleForMode(state.mode.value).label_protection ? null : adv.label_protection,
-    [MODE_ADV_CONFIG_PATHS[state.mode.value].italic_gene_labels]:
-      Boolean(adv.italic_gene_labels) === labelStyleForMode(state.mode.value).italic_gene_labels ? null : Boolean(adv.italic_gene_labels),
+    [MODE_ADV_CONFIG_PATHS[mode].label_line]:
+      adv.label_line === labelStyleForMode(mode).label_line ? null : adv.label_line,
+    [MODE_ADV_CONFIG_PATHS[mode].label_protection]:
+      adv.label_protection === labelStyleForMode(mode).label_protection ? null : adv.label_protection,
+    [MODE_ADV_CONFIG_PATHS[mode].italic_gene_labels]:
+      Boolean(adv.italic_gene_labels) === labelStyleForMode(mode).italic_gene_labels ? null : Boolean(adv.italic_gene_labels),
     // Without a fixed scale the colours run from the threshold to 100%, as before the setting.
-    [MODE_ADV_CONFIG_PATHS[state.mode.value].identity_scale]:
-      identityScaleLeaf(MODE_ADV_CONFIG_PATHS[state.mode.value].identity_scale, adv.identity_scale),
+    [MODE_ADV_CONFIG_PATHS[mode].identity_scale]:
+      identityScaleLeaf(MODE_ADV_CONFIG_PATHS[mode].identity_scale, adv.identity_scale),
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
     [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: leaf(CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp, adv.feature_overlap_tolerance_bp),
@@ -3043,30 +3058,31 @@ const addLabelOverrideResource = (state, drawing, resources, diagramOptions, lab
   }
 };
 
-/** @param {{ state: RequestState, filesData: RequestFilesData, recordCount: number }} input */
-const depthSourceRowsForRequest = ({ state, filesData, recordCount }) => (
-  state.mode.value === 'linear'
+/** @param {{ mode: ModeProfileName, filesData: RequestFilesData, recordCount: number }} input */
+const depthSourceRowsForRequest = ({ mode, filesData, recordCount }) => (
+  mode === 'linear'
     ? (filesData.linearSeqs || []).map((seq) => (
         Array.isArray(seq.depth) ? seq.depth : (seq.depth ? [seq.depth] : [])
       ))
     : normalizeRecordMajorDepthFileRows(filesData.c_depth, recordCount)
 );
 
-/** @param {{ state: RequestState, filesData: RequestFilesData, recordCount: number }} input */
-const logicalDepthTrackCountForRequest = ({ state, filesData, recordCount }) => {
-  const rows = depthSourceRowsForRequest({ state, filesData, recordCount });
+/** @param {{ mode: ModeProfileName, filesData: RequestFilesData, recordCount: number }} input */
+const logicalDepthTrackCountForRequest = ({ mode, filesData, recordCount }) => {
+  const rows = depthSourceRowsForRequest({ mode, filesData, recordCount });
   return rows.reduce((maximum, row) => (
     Math.max(maximum, Array.isArray(row) ? row.length : 0)
   ), 0);
 };
 
 /**
- * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData,
+ * @param {{ drawing: RequestDrawing, filesData: RequestFilesData,
  *   resources: ResourceBuilder, diagramOptions: Record<string, any>, recordCount: number }} input
  */
-const buildDepthResources = ({ state, drawing, filesData, resources, diagramOptions, recordCount }) => {
+const buildDepthResources = ({ drawing, filesData, resources, diagramOptions, recordCount }) => {
+  const mode = requestDrawingMode(drawing);
   if (
-    state.mode.value === 'circular' &&
+    mode === 'circular' &&
     isRecordMajorDepthFileMatrix(filesData.c_depth) &&
     filesData.c_depth.length !== recordCount
   ) {
@@ -3074,11 +3090,11 @@ const buildDepthResources = ({ state, drawing, filesData, resources, diagramOpti
       `Circular Depth matrix has ${filesData.c_depth.length} record rows; expected ${recordCount}.`
     );
   }
-  const rows = depthSourceRowsForRequest({ state, filesData, recordCount });
+  const rows = depthSourceRowsForRequest({ mode, filesData, recordCount });
   if (!rows.some((row) => row.some(Boolean))) return;
   if (rows.length !== recordCount || rows.some((row) => !Array.isArray(row))) {
     throw new Error(
-      `${state.mode.value === 'circular' ? 'Circular' : 'Linear'} Depth sources must contain one row per record (${recordCount}).`
+      `${mode === 'circular' ? 'Circular' : 'Linear'} Depth sources must contain one row per record (${recordCount}).`
     );
   }
   const tracks = Array.isArray(drawing.adv.depth_tracks) ? drawing.adv.depth_tracks : [];
@@ -3107,7 +3123,7 @@ const buildDepthResources = ({ state, drawing, filesData, resources, diagramOpti
       source,
       label: String(track.label || defaultDepthSeriesLabel(trackIndex, logicalTrackCount)),
       color: String(track.color || depthSeriesDefaultColor(trackIndex, drawing.adv)),
-      height: state.mode.value === 'linear'
+      height: mode === 'linear'
         ? projectOptionalNumber(track.height, { field: 'height', seriesIndex: trackIndex })
         : null,
       largeTickInterval: projectOptionalNumber(track.large_tick_interval, { field: 'large_tick_interval', seriesIndex: trackIndex }),
@@ -3268,25 +3284,25 @@ const assertedCustomTrackPlan = (input, { omitUnsourcedDepth, depthRows }) => {
 };
 
 /**
- * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData,
+ * @param {{ drawing: RequestDrawing, filesData: RequestFilesData,
  *   recordCount: number, resolvedCircularConservation: ResolvedConservationEntry[] | undefined,
  *   omitUnsourcedDepth: boolean }} input
  */
 const buildTrackPlan = ({
-  state,
   drawing,
   filesData,
   recordCount,
   resolvedCircularConservation,
   omitUnsourcedDepth
 }) => {
-  const circular = state.mode.value === 'circular';
+  const mode = requestDrawingMode(drawing);
+  const circular = mode === 'circular';
   const depthTrackCount = logicalDepthTrackCountForRequest({
-    state,
+    mode,
     filesData,
     recordCount
   });
-  const depth = { omitUnsourcedDepth, depthRows: depthSourceRowsForRequest({ state, filesData, recordCount }) };
+  const depth = { omitUnsourcedDepth, depthRows: depthSourceRowsForRequest({ mode, filesData, recordCount }) };
   const annotationSetIds = annotationSetIdsForState(drawing);
 
   if (circular && drawing.adv.circular_track_slots_enabled) {
@@ -3633,7 +3649,8 @@ const buildComparisons = ({
   comparisonPlanSnapshot,
   resolvedComparisons = []
 }) => {
-  if (state.mode.value !== 'linear') return [];
+  const mode = requestDrawingMode(drawing);
+  if (mode !== 'linear') return [];
   const snapshot = requireLinearComparisonPlanSnapshot(comparisonPlanSnapshot);
   const edges = orderedComparisonPlanEdges(snapshot);
   // The plan is the permission boundary. Do not inspect dormant uploads,
@@ -3905,7 +3922,8 @@ const buildComparisons = ({
  * @returns {CanonicalRenderRequest['layout']}
  */
 const buildLayout = (state, drawing, records = []) => {
-  if (state.mode.value === 'linear') {
+  const mode = requestDrawingMode(drawing);
+  if (mode === 'linear') {
     const recordKeys = records.map((record) => requireCanonicalText(
       record.recordKey,
       'renderRequest.records[].recordKey'
@@ -4026,7 +4044,6 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     // A row is unvalidated: one without a label, null included, gives an empty label (OV-963).
     conservation.labels = conservation.series.map((/** @type {UnvalidatedFields<'label'>} */ row) => String(row?.label || '').trim()).join(',');
   const stateRefs = {
-    mode: projection.mode,
     paletteDefinitions: { [palette]: {} }, editableLabels: [],
     similarityAlignmentPlan: canonicalLayout.similarityAlignment || null,
     linearRecordTranslations: publicationClone(canonicalLayout.recordTranslations || [])
@@ -4052,6 +4069,8 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     .map(([field, value]) => [field, Object.hasOwn(savedLosat, field) ? savedLosat[field] : value]));
   return { features, state: { ...refsOf(stateRefs), canonicalPublicationFiles, losatExecution }, drawing: {
     ...refsOf(drawingRefs),
+    // The drawing's mode, a constant as a `DrawingState`'s (`requestDrawingMode`).
+    mode: projection.mode,
     form: config.form || {}, adv: config.adv || {},
     manualSpecificRules: publicationClone(config.rules || []), manualWhitelist: publicationClone(config.whitelist || []), manualPriorityRules: publicationClone(config.qualifierPriorityRules || []),
     featureOverrides: publicationClone(features.featureOverrides || {}),
@@ -4220,14 +4239,15 @@ const committedPlanOf = (request) => {
  * its request, from the same draft and files, so an edit made while Python
  * runs never enters. A plan that cannot be built (no Depth file, an invalid
  * other stack) is null and never fails the Generate.
- * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData, recordCount: number,
+ * @param {{ drawing: RequestDrawing, filesData: RequestFilesData, recordCount: number,
  *   resolvedCircularConservation: ResolvedConservationEntry[] | undefined, drawnTracks: Parameters<typeof builtPlanOf>[0],
  *   depthRequested: boolean, diagramOptions: Readonly<Record<string, unknown>>, resources: ResourceBuilder }} input
  * @returns {KeptTrackParts}
  */
-const buildKeptTrackParts = ({ state, drawing, filesData, recordCount, resolvedCircularConservation, drawnTracks,
+const buildKeptTrackParts = ({ drawing, filesData, recordCount, resolvedCircularConservation, drawnTracks,
   depthRequested, diagramOptions, resources }) => {
-  const circular = state.mode.value === 'circular';
+  const mode = requestDrawingMode(drawing);
+  const circular = mode === 'circular';
   const [stackKey, slotsKey, axisKey] = circular
     ? ['circular_track_slots_enabled', 'circular_track_slots', 'circular_track_slots_axis_index']
     : ['linear_track_slots_enabled', 'linear_track_slots', 'linear_track_slots_axis_index'];
@@ -4237,7 +4257,7 @@ const buildKeptTrackParts = ({ state, drawing, filesData, recordCount, resolvedC
   const files = !hidden ? filesData : 'circular' in hidden
     ? { ...filesData, c_depth: hidden.circular }
     : { ...filesData, linearSeqs: (filesData.linearSeqs || []).map((seq, index) => ({ ...seq, depth: hidden.linear[index] ?? null })) };
-  const depthSeriesCount = logicalDepthTrackCountForRequest({ state, filesData: files, recordCount });
+  const depthSeriesCount = logicalDepthTrackCountForRequest({ mode, filesData: files, recordCount });
   /** @param {boolean} stackOn @returns {KeptPlan | null} */
   const plan = (stackOn) => {
     try {
@@ -4257,7 +4277,7 @@ const buildKeptTrackParts = ({ state, drawing, filesData, recordCount, resolvedC
         adv = { ...adv, [slotsKey]: rows, [axisKey]: placed.axisIndex };
       }
       const forced = { ...drawing, form: { ...drawing.form, show_depth: true }, adv };
-      return builtPlanOf(buildTrackPlan({ state, drawing: forced, filesData: files, recordCount, resolvedCircularConservation,
+      return builtPlanOf(buildTrackPlan({ drawing: forced, filesData: files, recordCount, resolvedCircularConservation,
         omitUnsourcedDepth: true }).tracks, circular);
     } catch {
       return null;
@@ -4278,7 +4298,7 @@ const buildKeptTrackParts = ({ state, drawing, filesData, recordCount, resolvedC
       const builder = createResourceBuilder();
       /** @type {{ depthTracks?: unknown }} */
       const options = {};
-      buildDepthResources({ state, drawing, filesData: files, resources: builder, diagramOptions: options, recordCount });
+      buildDepthResources({ drawing, filesData: files, resources: builder, diagramOptions: options, recordCount });
       return Array.isArray(options.depthTracks)
         ? { depthTracks: /** @type {Record<string, unknown>[]} */ (options.depthTracks), resources: builder.resources, originalNames: builder.resourceOriginalNames }
         : null;
@@ -4318,13 +4338,14 @@ const projectCanonicalRenderInput = ({
   keepTrackParts = false,
   resources = createResourceBuilder()
 }) => {
+  const mode = requestDrawingMode(drawing);
   recordStructuralMetric('canonicalRequestProjectionCount');
   requireCurrentWebStateFieldNames(drawing);
   requireCurrentCircularMultiRecordSizeMode(drawing.adv.multi_record_size_mode);
   requireCurrentLinearTrackLayout(drawing.form.linear_track_layout);
   requireCurrentLinearLabelPlacement(drawing.adv.label_placement);
   if (
-    state.mode.value === 'linear' &&
+    mode === 'linear' &&
     Boolean(drawing.form.normalize_length) &&
     Boolean(drawing.linearRecordLayoutEnabled?.value) &&
     linearRecordLayoutHasSharedRow(filesData?.linearSeqs, drawing.linearRecordRows)
@@ -4335,22 +4356,22 @@ const projectCanonicalRenderInput = ({
     );
   }
   const hasLinearComparisonIntent = (
-    state.mode.value === 'linear' &&
+    mode === 'linear' &&
     comparisonPlanSnapshot?.hasComparisonIntent === true
   );
   const comparisonOptionsRequested = (
-    state.mode.value === 'circular' || hasLinearComparisonIntent
+    mode === 'circular' || hasLinearComparisonIntent
   );
   /** @type {Record<string, any>} */
   const webFiles = {};
-  const recordPlan = buildRecords({ state, drawing, filesData, resources });
+  const recordPlan = buildRecords({ drawing, filesData, resources });
   const drafts = bindRecordDisplayDrafts(drawing.recordDisplayDrafts || [], recordDisplayRows);
   /** @type {number[]} */
   const sourceInputIndexes = [];
   const records = recordPlan.records.flatMap((record, index) => {
-    const sourceUid = state.mode.value === 'linear'
+    const sourceUid = mode === 'linear'
       ? String(filesData.linearSeqs?.[index]?.uid || record.recordKey) : 'circular';
-    const sourceRows = recordDisplayRows.filter((/** @type {RecordDisplayRow} */ row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
+    const sourceRows = recordDisplayRows.filter((/** @type {RecordDisplayRow} */ row) => row.scope === mode && row.sourceUid === sourceUid);
     const selector = requestRecordSelector(record);
     const selectedRows = sourceRows.filter((/** @type {RecordDisplayRow} */ row) => !selector
       || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
@@ -4387,12 +4408,12 @@ const projectCanonicalRenderInput = ({
         reverseComplement: record.region ? false : transform.reverseComplement },
       display: transform.display }];
   });
-  if (state.mode.value === 'linear' && records.length !== recordPlan.records.length) {
+  if (mode === 'linear' && records.length !== recordPlan.records.length) {
     records.forEach((record, index) => { record.presentation.gridRow ??= sourceInputIndexes[index] + 1; });
   }
   if (records.length === 0) throw new Error('A canonical request requires at least one record.');
   const selectedCircularFilesData = (
-    state.mode.value === 'circular' &&
+    mode === 'circular' &&
     isRecordMajorDepthFileMatrix(filesData.c_depth) &&
     Array.isArray(recordPlan.circularSourceIndexes) &&
     // `circularSourceCount` is set with `circularSourceIndexes` (both are null for Linear).
@@ -4407,9 +4428,8 @@ const projectCanonicalRenderInput = ({
       }
     : filesData;
   const trackPlan = buildTrackPlan({
-    state,
     drawing,
-    filesData: state.mode.value === 'linear'
+    filesData: mode === 'linear'
       ? { ...filesData, linearSeqs: sourceInputIndexes.map((index) => filesData.linearSeqs[index]) }
       : selectedCircularFilesData,
     recordCount: records.length,
@@ -4421,7 +4441,7 @@ const projectCanonicalRenderInput = ({
   )
     ? drawing.adv.circular_grouping_intent
     : null;
-  const grouping = state.mode.value === 'linear'
+  const grouping = mode === 'linear'
     ? 'single'
     : (
         drawing.form.multi_record_canvas
@@ -4436,7 +4456,7 @@ const projectCanonicalRenderInput = ({
             )
       );
   const explicitPrefix = explicitOutputPrefix(drawing.form.prefix);
-  if (state.mode.value === 'circular') {
+  if (mode === 'circular') {
     webFiles.circularOutputPrefixExplicit = explicitPrefix !== null;
   }
   const knownCircularRecords = Array.isArray(drawing.circularRecordList.value)
@@ -4463,22 +4483,22 @@ const projectCanonicalRenderInput = ({
     ? resolveCircularBatchPrefixes(circularOutputRecords, explicitPrefix)
         .map(renderOutputPayload)
     : renderOutputPayload(
-        explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : DEFAULT_LINEAR_OUTPUT_PREFIX)
+        explicitPrefix ?? (mode === 'circular' ? defaultCircularPrefix : DEFAULT_LINEAR_OUTPUT_PREFIX)
       );
   const labelProjection = generatedLabelProjection || requestLabelProjection(state, drawing);
   // The option keys are not checked yet; the two keys every request has are.
   /** @type {Record<string, any> & RequestTableOptions & Pick<CanonicalRenderRequest['diagramOptions'], 'featurePlacements' | 'featureOverrides'>} */
   const diagramOptions = {
-    featurePlacements: requestFeaturePlacements(drawing.featurePlacementOverrides, state.mode.value, records),
+    featurePlacements: requestFeaturePlacements(drawing.featurePlacementOverrides, mode, records),
     // Per-feature edits by source identity (design Q4); the rows of other
     // records stay in the drawing's draft (R2).
     featureOverrides: requestFeatureOverrides(drawing.featureOverrides, records, {
       bulkLabelText: labelProjection.bulkLabelText
     }),
-    configOverrides: buildConfigOverrides(state, drawing, {
+    configOverrides: buildConfigOverrides(drawing, {
       depthRequested: trackPlan.depthRequested,
       hasComparisonIntent: hasLinearComparisonIntent,
-      linearHasSharedRow: state.mode.value === 'linear' && linearRecordLayoutHasSharedRow(
+      linearHasSharedRow: mode === 'linear' && linearRecordLayoutHasSharedRow(
         filesData.linearSeqs,
         drawing.linearRecordRows,
         { enabled: Boolean(drawing.linearRecordLayoutEnabled?.value) }
@@ -4486,8 +4506,8 @@ const projectCanonicalRenderInput = ({
     }),
     tracks: trackPlan.tracks,
     output: {
-      legend: requestLegendPosition(drawing.form, state.mode.value),
-      plotTitlePosition: requestPlotTitlePosition(drawing.adv, state.mode.value)
+      legend: requestLegendPosition(drawing.form, mode),
+      plotTitlePosition: requestPlotTitlePosition(drawing.adv, mode)
     },
     selectedFeaturesSet: Array.from(drawing.adv.features || []).map((value) => String(value)),
     featureShapes: {
@@ -4502,13 +4522,13 @@ const projectCanonicalRenderInput = ({
     plotTitle: requestPlotTitle(drawing.form),
     plotTitleFontSize: requestPlotTitleFontSize(drawing.adv),
     ...(comparisonOptionsRequested
-      ? projectComparisonThresholds(resolveComparisonThresholds(drawing.adv, state.mode.value))
+      ? projectComparisonThresholds(resolveComparisonThresholds(drawing.adv, mode))
       : {})
   };
   if (Array.isArray(drawing.annotationSets) && drawing.annotationSets.length > 0) {
     diagramOptions.annotations = annotationOptionsPayload(drawing.annotationSets, records, omittedAnnotationRecordKeys);
   }
-  if (state.mode.value === 'circular') {
+  if (mode === 'circular') {
     diagramOptions.keepFullDefinitionWithPlotTitle = Boolean(drawing.adv.keep_full_definition_with_plot_title);
     diagramOptions.species = requestSpecies(drawing.form);
     diagramOptions.strain = String(drawing.form.strain || '').trim() || null;
@@ -4616,9 +4636,8 @@ const projectCanonicalRenderInput = ({
   addGeneratedTableResources(state, drawing, resources, diagramOptions, ALL_GENERATED_TABLES, labelProjection);
   if (trackPlan.depthRequested) {
     buildDepthResources({
-      state,
       drawing,
-      filesData: state.mode.value === 'linear'
+      filesData: mode === 'linear'
       ? { ...filesData, linearSeqs: sourceInputIndexes.map((index) => filesData.linearSeqs[index]) }
       : selectedCircularFilesData,
       resources,
@@ -4641,11 +4660,11 @@ const projectCanonicalRenderInput = ({
   if (Object.keys(resources.resourceOriginalNames).length > 0) {
     webFiles.resourceOriginalNames = { ...resources.resourceOriginalNames };
   }
-  if (state.mode.value === 'circular' && drawing.inputType.value === 'gb') {
+  if (mode === 'circular' && drawing.inputType.value === 'gb') {
     const circularInputOriginalName = normalizeOriginalResourceName(filesData.c_gb?.name);
     if (circularInputOriginalName) webFiles.circularInputOriginalName = circularInputOriginalName;
   }
-  if (state.mode.value === 'linear') {
+  if (mode === 'linear') {
     webFiles.linearRecordMetadata = sourceInputIndexes.map((sourceIndex, index) => {
       const seq = filesData.linearSeqs[sourceIndex];
       return linearRecordMetadataEntry({
@@ -4662,7 +4681,7 @@ const projectCanonicalRenderInput = ({
     // together; tsc cannot see that the builders above agree on it.
     renderRequest: /** @type {CanonicalRenderRequest} */ ({
       schema: CANONICAL_REQUEST_SCHEMA,
-      mode: state.mode.value,
+      mode: mode,
       grouping,
       records,
       diagramOptions,
@@ -4683,9 +4702,8 @@ const projectCanonicalRenderInput = ({
   if (keepTrackParts) {
     const hidden = filesData.hiddenDepth;
     keptTrackParts.set(envelope.renderRequest, buildKeptTrackParts({
-      state,
       drawing,
-      filesData: state.mode.value === 'linear'
+      filesData: mode === 'linear'
         ? { ...filesData, linearSeqs: sourceInputIndexes.map((index) => /** @type {RequestLinearSeq[]} */ (filesData.linearSeqs)[index]),
             hiddenDepth: hidden && 'linear' in hidden ? { linear: sourceInputIndexes.map((index) => hidden.linear[index]) } : hidden }
         : selectedCircularFilesData,

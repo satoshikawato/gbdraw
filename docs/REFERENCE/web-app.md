@@ -146,6 +146,19 @@ so it adds no track row; see [Custom Track Slots](#custom-track-slots).
 4. Select **Generate Diagram**.
 5. Inspect **Result Preview**, then export a file or select **Save Session**.
 
+**New drawing from a region…** in the drawing menu (the menu of a drawing tab,
+beside **New Circular drawing** and **New Linear drawing**) draws chosen regions
+of the shown drawing as a new drawing. The dialog lists the drawing's records.
+For each, **Region** is **Whole record**, **Coordinates** (**Start** and **End**,
+1-based and inclusive, in the source's coordinates), or **A feature** (choose it
+under **Feature**). **A feature** is disabled with a reason until the drawing
+has a Result, and for a record without features. One whole record keeps the
+drawing's mode; any other choice makes a Linear drawing. A start after the end
+is refused. The dialog lists the sizes that return to Auto for the new length
+and what is not carried; **Keep my values** keeps the sizes you set. **Create**
+adds the drawing as a new tab, and one Undo removes it. Python offers the same
+through `derive_region_drawing()`; see [Typed requests](./typed-requests.md).
+
 The table below states when each kind of edit reaches the Result. A clock
 icon beside a setting's heading or label marks a change that applies on
 Generate, wholly or in part. Its tooltip, which opens on hover, keyboard focus,

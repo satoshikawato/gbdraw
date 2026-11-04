@@ -186,16 +186,34 @@ export const releaseFileContentCache = (file) => {
   return releaseSessionResourceContent(file) || deleted;
 };
 
+// The buffers a take handed out whole. Each is its caller's to transfer: a take
+// that read the same cached bytes (it started before an earlier take released
+// them, as two helper requests staging one input at once do, OV-2490) reads
+// the file again instead of sharing a buffer that the first transfer detaches.
+// A read again that returns a taken buffer too (a FileLike that keeps one
+// buffer) gives a copy, so the retake ends.
+/** @type {WeakSet<ArrayBufferLike>} */
+const takenBuffers = new WeakSet();
+
 /** @param {FileLike} file */
-export const takeFileBytesForTransfer = async (file) => {
+const readAndRelease = async (file) => {
   const bytes = await readFileBytes(file);
-  const buffer = (
-    bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
-      ? bytes.buffer
-      : bytes.slice().buffer
-  );
   releaseFileContentCache(file);
-  return buffer;
+  return bytes;
+};
+
+/**
+ * @param {FileLike} file
+ * @returns {Promise<ArrayBuffer>} A buffer no other take holds.
+ */
+export const takeFileBytesForTransfer = async (file) => {
+  let bytes = await readAndRelease(file);
+  if (takenBuffers.has(bytes.buffer)) bytes = await readAndRelease(file);
+  if (takenBuffers.has(bytes.buffer) || bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength) {
+    return bytes.slice().buffer;
+  }
+  takenBuffers.add(bytes.buffer);
+  return /** @type {ArrayBuffer} */ (bytes.buffer);
 };
 
 /** @param {FileLike} file */

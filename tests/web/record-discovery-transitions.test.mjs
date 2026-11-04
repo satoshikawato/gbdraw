@@ -118,3 +118,66 @@ test('no discovery starts while a Load rolls back', async () => {
     state.sessionImportRollbackInProgress.value = false;
   }
 });
+
+// OV-2489: a Load leaves a Circular record list deferred until Generate reads
+// it; the drawing's record identities read it now, as they read a deferred
+// Linear card, so New drawing from a region offers the record before a Generate.
+test('the record identities read a Circular list still deferred after a Load', async () => {
+  app.selectDrawing('circular');
+  app.setCircularSourceFile('c_gb', genbank('d.gb', ['D1', 60]));
+  await settle();
+  assert.equal(circular.circularRecordDiscovery.status, 'ready');
+  // The state a Session Load leaves: the list deferred for the current file.
+  circular.circularRecordDiscovery.status = 'deferred';
+  circular.circularRecordList.value = [];
+  await app.regionDrawings.open();
+  assert.deepEqual(app.regionDrawings.dialog.rows.map((row) => [row.caption, row.length]), [['D1', 60]]);
+  assert.equal(circular.circularRecordDiscovery.status, 'ready', 'the list was read once, through its owner');
+  app.regionDrawings.close();
+});
+
+// OV-2492 (D-15-205 A): the region dialog's read of a deferred list writes no
+// setting. Record Order (`adv.multi_record_positions`, the request's
+// `layout.multiRecordPositions`) stays as the Load left it until Generate or
+// Reload Records, which apply the read.
+test('the region dialog reads a deferred Circular list without writing Record Order', async () => {
+  const { projectDraftRequest } = await import('../../gbdraw/web/js/services/config.js');
+  const requestPositions = async () => (await projectDraftRequest(state, circular, {
+    linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: []
+  })).envelope.renderRequest.layout.multiRecordPositions;
+  app.selectDrawing('circular');
+  app.setCircularSourceFile('c_gb', genbank('p.gb', ['P1', 70]));
+  await settle();
+  assert.equal(circular.circularRecordDiscovery.status, 'ready');
+  // The state a Session Load without stored Record Order leaves.
+  circular.circularRecordDiscovery.status = 'deferred';
+  circular.circularRecordList.value = [];
+  circular.adv.multi_record_positions.splice(0, circular.adv.multi_record_positions.length);
+  const before = await requestPositions();
+  await app.regionDrawings.open();
+  assert.deepEqual(app.regionDrawings.dialog.rows.map((row) => row.caption), ['P1'], 'the dialog offers the record');
+  app.regionDrawings.close();
+  assert.deepEqual(circular.adv.multi_record_positions, [], 'the read writes no Record Order');
+  assert.deepEqual(await requestPositions(), before, 'the request carries the Record Order the Load left');
+  await app.refreshCircularRecordOrder();
+  assert.deepEqual(circular.adv.multi_record_positions, [{ selector: '#1', row: 1 }], 'Reload Records applies the read');
+});
+
+// The region dialog's rows come from the record list the deferred read
+// writes: the read finishes before the shown request is projected, so a
+// Multi-Record Canvas projected after a Load offers every record, not only
+// the ones of the empty list the read starts from.
+test('the region dialog offers every record of a deferred Multi-Record Canvas', async () => {
+  app.selectDrawing('circular');
+  app.setCircularSourceFile('c_gb', genbank('m.gb', ['M1', 80], ['M2', 90]));
+  await settle();
+  assert.equal(circular.circularRecordDiscovery.status, 'ready');
+  circular.form.multi_record_canvas = true;
+  // The state a Session Load leaves: the list deferred for the current file.
+  circular.circularRecordDiscovery.status = 'deferred';
+  circular.circularRecordList.value = [];
+  await app.regionDrawings.open();
+  assert.deepEqual(app.regionDrawings.dialog.rows.map((row) => [row.caption, row.length]), [['M1', 80], ['M2', 90]]);
+  app.regionDrawings.close();
+  circular.form.multi_record_canvas = false;
+});

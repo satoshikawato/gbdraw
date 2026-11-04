@@ -1,0 +1,24 @@
+{
+  "purpose": "A Session the Web saved with a Linear drawing made from a region of a Circular record (New drawing from a region…), for the CLI/Session cross-surface cases",
+  "source": "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+  "edits": "Web: Load, Generate, New drawing from a region… with Coordinates 1001..2000 of NC_012920.1, Create, Generate, Save (title drawings-circular-region); the new Linear drawing is active",
+  "writer": "the Web app's Save, in tests/web/session-cli-compatibility.playwright.spec.js 'Session Linear region drawing of a Circular record draws the Web figure on the CLI'",
+  "writerCommit": "the commit that adds this file, on 9e356fca7c960caf85ed6a36dad06d8d930ec860 (branch feat/web-region-drawing)",
+  "command": "GBDRAW_WEB_TEST_PORT=5211 playwright test tests/web/session-cli-compatibility.playwright.spec.js -g 'Linear region drawing of a Circular' --workers=1; the test's web-region.gbdraw-session.json.gz decompressed and compressed again",
+  "drawings": [
+    {
+      "id": "circular",
+      "name": "Circular",
+      "mode": "circular"
+    },
+    {
+      "id": "linear",
+      "name": "Linear",
+      "mode": "linear"
+    }
+  ],
+  "activeDrawingId": "linear",
+  "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
+  "decompressedSha256": "25a6bcceda489c893bbd9be53997fda944827c2ca50ca609d0d1dbcb9a969080",
+  "sessionVersion": 51
+}

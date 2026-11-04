@@ -14,8 +14,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from numbers import Real
-from typing import Any, cast
+from typing import Any, Literal, cast
 
+from gbdraw.analysis.origin_arcs import location_origin_arc
 from gbdraw.annotations.models import (
     AnnotationOptions,
     CoordinateSpan,
@@ -27,7 +28,6 @@ from gbdraw.api.options import (
     CircularDiagramOptions,
     CircularRequestTrackOptions,
     LinearDiagramOptions,
-    LinearMultiRecordOptions,
     _ModeDiagramOptions,
     config_override_mode,
 )
@@ -95,12 +95,120 @@ class RegionSelection:
 
 
 @dataclass(frozen=True)
+class FeatureRegionSelection:
+    """The span of one feature of a record of the source drawing.
+
+    ``feature_id`` is the feature's biological feature ID in the source
+    drawing's feature catalog; the region runs from the first to the last base
+    of its location, in source coordinates. A feature across the origin is
+    refused as an origin-crossing region.
+    """
+
+    record_key: str
+    feature_id: str
+
+
+RegionChoice = RegionSelection | FeatureRegionSelection
+
+
+NotCarriedKind = Literal[
+    "OTHER_MODE_SETTINGS",
+    "FEATURE_PLACEMENTS",
+    "FEATURE_PLACEMENT_TABLE",
+    "SIMILARITY_ALIGNMENT",
+    "CONSERVATION_RINGS",
+    "CONSERVATION_RING_TABLES",
+    "LINEAR_COMPARISONS",
+    "COMPARISON_TABLES",
+    "LOSAT_NO_PAIR",
+    "ANNOTATION_TABLE",
+    "ANNOTATION_CROSSES_ORIGIN",
+    "ANNOTATION_DRAWN_COORDINATES",
+    "ANNOTATIONS_OUTSIDE",
+]
+
+
+@dataclass(frozen=True)
+class NotCarried:
+    """One part of the source drawing that the region drawing does not carry.
+
+    ``kind`` names the part; ``count`` and ``items`` (setting paths, an
+    annotation ID) are its locators. The CLI and API text is ``message``; the
+    Web words the kind in its own wording owner.
+    """
+
+    kind: NotCarriedKind
+    source_mode: DrawingMode
+    count: int = 0
+    items: tuple[str, ...] = ()
+
+    @property
+    def message(self) -> str:
+        mode = self.source_mode.title()
+        return {
+            "OTHER_MODE_SETTINGS": lambda: f"{mode}-only settings: {', '.join(self.items)}.",
+            "FEATURE_PLACEMENTS": lambda: f"{self.count} feature placement(s) of the {mode} drawing.",
+            "FEATURE_PLACEMENT_TABLE": lambda: "The feature placement table.",
+            "SIMILARITY_ALIGNMENT": lambda: "The similarity alignment of the source records.",
+            "CONSERVATION_RINGS": lambda: "The conservation rings of the Circular drawing.",
+            "CONSERVATION_RING_TABLES": lambda: (
+                "The conservation ring tables (they use the coordinates of the records of the source drawing)."
+            ),
+            "LINEAR_COMPARISONS": lambda: "The comparisons of the Linear drawing.",
+            "COMPARISON_TABLES": lambda: "The comparison tables (they use the coordinates of the whole records).",
+            "LOSAT_NO_PAIR": lambda: "The LOSAT comparison (no pair of drawn records to compare).",
+            "ANNOTATION_TABLE": lambda: "The annotation table.",
+            "ANNOTATION_CROSSES_ORIGIN": lambda: f"Annotation {self.items[0]!r} (crosses the origin).",
+            "ANNOTATION_DRAWN_COORDINATES": lambda: f"Annotation {self.items[0]!r} (uses drawn coordinates).",
+            "ANNOTATIONS_OUTSIDE": lambda: f"{self.count} annotation(s) outside the regions.",
+        }[self.kind]()
+
+
+StartAfterEndReason = Literal["ORIGIN_CROSSING", "START_AFTER_END"]
+
+
+class StartAfterEndRegion(ValidationError):
+    """A region whose start is after its end, worded for the record's topology.
+
+    On a circular record it would cross the origin (``ORIGIN_CROSSING``); a
+    linear record has no origin to cross (``START_AFTER_END``).
+    """
+
+    def __init__(self, record_key: str, start: int, end: int, *, circular: bool) -> None:
+        reason: StartAfterEndReason = "ORIGIN_CROSSING" if circular else "START_AFTER_END"
+        why = "regions that cross the origin of a circular record are not supported" if circular else "choose a start before the end"
+        super().__init__(
+            f"Region {start}..{end} of {record_key!r} ends before it starts; {why}.",
+            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": reason},
+        )
+        self.record_key = record_key
+        self.start = start
+        self.end = end
+        self.reason = reason
+
+
+@dataclass(frozen=True)
+class RegionRequest:
+    """A derived region request, its mode, the sizes that returned to Auto, and what was not carried."""
+
+    request: DiagramRequest
+    mode: DrawingMode
+    adaptation: SettingAdaptation
+    not_carried: tuple[NotCarried, ...]
+
+
+@dataclass(frozen=True)
 class RegionDrawing:
     """A derived region drawing, the sizes that returned to Auto, and what was not carried."""
 
     drawing: SessionDrawingSpec
     adaptation: SettingAdaptation
-    dropped: tuple[str, ...]
+    not_carried: tuple[NotCarried, ...]
+
+    @property
+    def dropped(self) -> tuple[str, ...]:
+        """What was not carried, as the CLI and API word it."""
+        return tuple(item.message for item in self.not_carried)
 
 
 @dataclass(frozen=True)
@@ -118,7 +226,7 @@ class _Region:
 
 def derive_region_drawing(
     materialized: MaterializedSession,
-    regions: Sequence[RegionSelection],
+    regions: Sequence[RegionChoice],
     *,
     drawing: str | None = None,
     mode: DrawingMode | None = None,
@@ -141,7 +249,35 @@ def derive_region_drawing(
     active: its request reads the materialized files.
     """
     # The one read of the source drawing's settings and edits.
-    source = session_to_request(materialized, drawing=drawing)
+    derived = derive_region_request(
+        session_to_request(materialized, drawing=drawing),
+        regions,
+        mode=mode,
+        margin=margin,
+        reverse_complement=reverse_complement,
+        adapt_sizes=adapt_sizes,
+    )
+    return RegionDrawing(
+        drawing=SessionDrawingSpec(request=derived.request, mode=derived.mode, name=name),
+        adaptation=derived.adaptation,
+        not_carried=derived.not_carried,
+    )
+
+
+def derive_region_request(
+    source: DiagramRequest,
+    regions: Sequence[RegionChoice],
+    *,
+    mode: DrawingMode | None = None,
+    margin: int = 0,
+    reverse_complement: bool | None = None,
+    adapt_sizes: bool = True,
+) -> RegionRequest:
+    """Derive the request of a drawing of ``regions`` from the request of its source drawing.
+
+    The one derivation behind :func:`derive_region_drawing` and the Web's New
+    drawing from a region; the arguments are as there.
+    """
     collection = resolve_request_records(source)
     selected = _resolve_regions(collection, regions, margin=margin)
     source_mode: DrawingMode = "linear" if isinstance(source, LinearDiagramRequest) else "circular"
@@ -168,7 +304,7 @@ def derive_region_drawing(
         adaptation = SettingAdaptation(kept=kept, reset=())
     returned = {reset.setting for reset in adaptation.reset}
 
-    dropped: list[str] = []
+    dropped: list[NotCarried] = []
     config_overrides: dict[str, object] = {}
     other_mode_paths: list[str] = []
     for path, value in (options.config_overrides or {}).items():
@@ -179,7 +315,7 @@ def derive_region_drawing(
             continue
         config_overrides[path] = value
     if other_mode_paths:
-        dropped.append(f"{source_mode.title()}-only settings: {', '.join(other_mode_paths)}.")
+        dropped.append(NotCarried("OTHER_MODE_SETTINGS", source_mode, items=tuple(other_mode_paths)))
     by_key = {region.item.record_key: region for region in selected}
     values: dict[str, Any] = {name: getattr(options, name) for name in _SHARED_FIELDS}
     values.update(
@@ -195,7 +331,7 @@ def derive_region_drawing(
             for row in options.feature_placements
             if target_mode == source_mode and _keeps_feature(by_key, row.record_key, row.biological_feature_id)
         ),
-        annotations=_region_annotations(options.annotations, collection, selected, dropped),
+        annotations=_region_annotations(options.annotations, collection, selected, dropped, source_mode),
         depth_tracks=_region_depth_tracks(options, selected, target_mode),
     )
     if target_mode != source_mode:
@@ -203,30 +339,30 @@ def derive_region_drawing(
         # the new mode starts from its own defaults.
         values.update(dict.fromkeys(_COMPARISON_THRESHOLDS))
         if options.feature_placements:
-            dropped.append(f"{len(options.feature_placements)} feature placement(s) of the {source_mode.title()} drawing.")
+            dropped.append(NotCarried("FEATURE_PLACEMENTS", source_mode, count=len(options.feature_placements)))
     if options.feature_placement_table is not None or options.feature_placement_table_file is not None:
-        dropped.append("The feature placement table.")
+        dropped.append(NotCarried("FEATURE_PLACEMENT_TABLE", source_mode))
         values.update(feature_placement_table=None, feature_placement_table_file=None)
 
     records = tuple(_record_input(source, region, reverse_complement) for region in selected)
     output = getattr(source, "output", None) or RenderOutputRequest()
     request: DiagramRequest
     if target_mode == "linear":
-        layout = None
+        # Each derived record takes a row of its own (no grid row), so the
+        # record gap, which spaces the records of one row, draws nothing: the
+        # drawing states no layout, as the Web writes it.
         if isinstance(source, LinearDiagramRequest):
             assert isinstance(options, LinearDiagramOptions)
             values.update(
                 {name: getattr(options, name) for name in _LINEAR_ONLY_FIELDS},
-                **_linear_comparisons(options, selected, dropped),
+                **_linear_comparisons(options, selected, dropped, source_mode),
             )
-            if source.layout is not None:
-                layout = LinearMultiRecordOptions(record_gap_px=source.layout.record_gap_px)
             if source.similarity_alignment is not None:
-                dropped.append("The similarity alignment of the source records.")
+                dropped.append(NotCarried("SIMILARITY_ALIGNMENT", source_mode))
         elif _has_any(options, _RING_RESULTS + _RING_PLAN):
-            dropped.append("The conservation rings of the Circular drawing.")
+            dropped.append(NotCarried("CONSERVATION_RINGS", source_mode))
         request = LinearDiagramRequest(
-            records=records, options=LinearDiagramOptions(**values), layout=layout, output=output
+            records=records, options=LinearDiagramOptions(**values), output=output
         )
     else:
         if isinstance(options, CircularDiagramOptions):
@@ -237,22 +373,18 @@ def derive_region_drawing(
                 values.update(dict.fromkeys(_RING_RESULTS))
                 if options.losat_search is None:
                     values.update(dict.fromkeys(_RING_PLAN))
-                    dropped.append("The conservation ring tables (they use the coordinates of the records of the source drawing).")
+                    dropped.append(NotCarried("CONSERVATION_RING_TABLES", source_mode))
         elif _has_any(options, _LINEAR_COMPARISON_INPUTS) or getattr(options, "losat_search", None) is not None:
-            dropped.append("The comparisons of the Linear drawing.")
+            dropped.append(NotCarried("LINEAR_COMPARISONS", source_mode))
         request = CircularDiagramRequest(
             records=records, options=CircularDiagramOptions(**values), output=output, grouping="single"
         )
-    return RegionDrawing(
-        drawing=SessionDrawingSpec(request=request, mode=target_mode, name=name),
-        adaptation=adaptation,
-        dropped=tuple(dropped),
-    )
+    return RegionRequest(request=request, mode=target_mode, adaptation=adaptation, not_carried=tuple(dropped))
 
 
 def _resolve_regions(
     collection: ResolvedRecordCollection,
-    selections: Sequence[RegionSelection],
+    selections: Sequence[RegionChoice],
     *,
     margin: int,
 ) -> tuple[_Region, ...]:
@@ -278,13 +410,11 @@ def _resolve_regions(
                 f"Record {selection.record_key!r} has more than one region.", diagnostic={"code": "INPUT_INVALID"}
             )
         length = int(item.source_length or len(collection.records[item.resolved_index]))
-        start, end = selection.start, selection.end
+        start, end = _selected_span(selection, item, length)
         if start > end:
-            raise ValidationError(
-                f"Region {start}..{end} of {selection.record_key!r} ends before it starts; "
-                "regions that cross the origin of a circular record are not supported.",
-                diagnostic={"code": "INPUT_INVALID"},
-            )
+            display = item.resolved_display
+            circular = display.is_circular if display is not None else item.detected_topology == "circular"
+            raise StartAfterEndRegion(selection.record_key, start, end, circular=circular)
         if start < 1 or end > length:
             raise ValidationError(
                 f"Region {start}..{end} of {selection.record_key!r} is outside 1..{length}.",
@@ -294,6 +424,23 @@ def _resolve_regions(
         resolved[item.record_key] = (item, start, end, (start, end) == (1, length))
     ordered = sorted(resolved.values(), key=lambda value: value[0].resolved_index)
     return tuple(_Region(item, index, start, end, whole) for index, (item, start, end, whole) in enumerate(ordered))
+
+
+def _selected_span(selection: RegionChoice, item: ResolvedRecordProvenance, length: int) -> tuple[int, int]:
+    """A selection's 1-based inclusive span; an origin-crossing feature spans its arc (start after end)."""
+    if isinstance(selection, RegionSelection):
+        return selection.start, selection.end
+    for feature in item.source_feature_catalog:
+        if feature.biological_feature_id == selection.feature_id:
+            parts = feature.location_parts
+            arc = location_origin_arc(parts, length)
+            if arc is not None:
+                return arc[0] + 1, arc[1]
+            return min(part[0] for part in parts) + 1, max(part[1] for part in parts)
+    raise ValidationError(
+        f"Record {selection.record_key!r} has no feature {selection.feature_id!r}.",
+        diagnostic={"code": "INPUT_INVALID"},
+    )
 
 
 def _record_input(
@@ -313,18 +460,19 @@ def _record_input(
     )
     crop = None
     if not region.whole:
+        # A crop names its record in the region, as the Web writes it.
         crop = RegionSpec(
             raw=f"{region.start}-{region.end}" + (":rc" if reverse else ""),
             file_selector=None,
-            record_id=None,
-            record_index=None,
+            record_id=None if selector is None else selector.record_id,
+            record_index=None if selector is None else selector.record_index,
             start=region.start,
             end=region.end,
             reverse_complement=reverse,
         )
     return RecordInput(
         source=source.records[item.input_index].source,
-        selector=selector,
+        selector=selector if crop is None else None,
         region=crop,
         presentation=replace(
             item.presentation,
@@ -382,13 +530,14 @@ def _region_annotations(
     annotations: AnnotationOptions | None,
     collection: ResolvedRecordCollection,
     regions: Sequence[_Region],
-    dropped: list[str],
+    dropped: list[NotCarried],
+    source_mode: DrawingMode,
 ) -> AnnotationOptions | None:
     """Annotation items inside or overlapping the regions, retargeted to the new records."""
     if annotations is None:
         return None
     if annotations.table is not None or annotations.table_file is not None:
-        dropped.append("The annotation table.")
+        dropped.append(NotCarried("ANNOTATION_TABLE", source_mode))
         return None
     by_source = {region.item.resolved_index: region for region in regions}
     by_key = {region.item.record_key: region for region in regions}
@@ -410,8 +559,10 @@ def _region_annotations(
             return None
         if isinstance(target, CoordinateSpan):
             if target.wraps_origin or target.coordinate_space == "local":
-                reason = "crosses the origin" if target.wraps_origin else "uses drawn coordinates"
-                dropped.append(f"Annotation {annotation.id!r} ({reason}).")
+                kind: NotCarriedKind = (
+                    "ANNOTATION_CROSSES_ORIGIN" if target.wraps_origin else "ANNOTATION_DRAWN_COORDINATES"
+                )
+                dropped.append(NotCarried(kind, source_mode, items=(annotation.id,)))
                 return None
             inside = region.start <= target.start and target.end <= region.end
             if target.end < region.start or target.start > region.end or (target.out_of_bounds == "error" and not inside):
@@ -436,7 +587,7 @@ def _region_annotations(
         for annotation_set in annotations.sets
     )
     if outside:
-        dropped.append(f"{outside} annotation(s) outside the regions.")
+        dropped.append(NotCarried("ANNOTATIONS_OUTSIDE", source_mode, count=outside))
     return AnnotationOptions(sets=sets)
 
 
@@ -470,14 +621,15 @@ def _region_depth_tracks(
 def _linear_comparisons(
     options: LinearDiagramOptions,
     regions: Sequence[_Region],
-    dropped: list[str],
+    dropped: list[NotCarried],
+    source_mode: DrawingMode,
 ) -> dict[str, Any]:
     """Comparison results are dropped; a LOSAT search runs again on the drawn records."""
     changes: dict[str, Any] = dict.fromkeys(_LINEAR_COMPARISON_INPUTS)
     search = options.losat_search
     if search is None:
         if _has_any(options, _LINEAR_COMPARISON_INPUTS):
-            dropped.append("The comparison tables (they use the coordinates of the whole records).")
+            dropped.append(NotCarried("COMPARISON_TABLES", source_mode))
         return changes
     new_index = {region.item.resolved_index: region.index for region in regions}
     pairs = None
@@ -492,7 +644,7 @@ def _linear_comparisons(
         gencodes = tuple(gencodes[region.item.input_index] for region in regions)
     if len(regions) < 2 or pairs == []:
         changes["losat_search"] = None
-        dropped.append("The LOSAT comparison (no pair of drawn records to compare).")
+        dropped.append(NotCarried("LOSAT_NO_PAIR", source_mode))
     else:
         changes["losat_search"] = replace(search, pairs=pairs, record_gencodes=gencodes)
     return changes
@@ -522,4 +674,14 @@ def _has_any(options: object, names: Sequence[str]) -> bool:
     return False
 
 
-__all__ = ["RegionDrawing", "RegionSelection", "derive_region_drawing"]
+__all__ = [
+    "NotCarried",
+    "NotCarriedKind",
+    "StartAfterEndReason",
+    "StartAfterEndRegion",
+    "RegionDrawing",
+    "RegionRequest",
+    "RegionSelection",
+    "derive_region_drawing",
+    "derive_region_request",
+]

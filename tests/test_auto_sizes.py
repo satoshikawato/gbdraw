@@ -13,6 +13,7 @@ import pytest
 import gbdraw.api.diagram as diagram_api
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.auto_sizes import (
+    ADAPTABLE_SETTINGS,
     DrawnExtent,
     auto_setting_values,
     circular_tick_intervals,
@@ -408,6 +409,14 @@ def test_auto_values_list_only_the_settings_drawn_in_the_mode(cfg: GbdrawConfig)
     assert "labels.font_size" not in linear
     assert "objects.axis.circular.stroke_width" not in linear
     assert "objects.axis.linear.stroke_width" not in circular
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("length", [3_000, 2_000_000])
+def test_adaptable_settings_name_every_auto_value(cfg: GbdrawConfig, mode: DiagramMode, length: int) -> None:
+    extent = DrawnExtent(mode, (length,))
+    assert extent.size_class(cfg) == ("short" if length == 3_000 else "long")
+    assert list(auto_setting_values(extent, cfg)) == list(ADAPTABLE_SETTINGS[mode])
 
 
 @pytest.mark.parametrize("case", VECTORS["autoHints"], ids=lambda case: f"{case['mode']}-{case['length']}")

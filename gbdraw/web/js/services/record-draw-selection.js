@@ -215,7 +215,8 @@ export const offRecordRequestRecords = (mode, recordsOff) => [...offSet(recordsO
 
 /**
  * A record of a source file as a record list names it.
- * @typedef {{ sourceIndex?: unknown, selector?: unknown, recordId?: unknown, record_id?: unknown }} RecordSourceEntry
+ * @typedef {{ sourceIndex?: unknown, selector?: unknown, recordId?: unknown, record_id?: unknown,
+ *   recordLength?: unknown }} RecordSourceEntry
  * The record lists the identities of a request's records are read from: a
  * Linear card's records by card uid, the Circular input's records; each list
  * in file order, as `buildDisambiguatedRecordEntries` (services/record-options.js)
@@ -229,8 +230,9 @@ export const offRecordRequestRecords = (mode, recordsOff) => [...offSet(recordsO
  *   region?: { selector?: RequestRecordSelector } | null }} IdentityRequestRecord
  * One drawn record of a request: the record key its features have in that
  * request, its identity, and (Circular) the other keys a 0.14.2 view switch
- * may have left its rows under.
- * @typedef {{ requestKey: string, identity: string, aliases: readonly string[] }} DrawnRecordIdentity
+ * may have left its rows under, and the entry of its source list it is.
+ * @typedef {{ requestKey: string, identity: string, aliases: readonly string[],
+ *   entry: RecordSourceEntry }} DrawnRecordIdentity
  */
 
 /**
@@ -285,7 +287,8 @@ export const drawnRecordIdentities = (records, sources) => records.flatMap((reco
       identity: recordIdentity({ mode: 'circular', uid: '', sourceIndex: position, recordCount: entries.length }),
       aliases: circularRecordRequestKeys({
         sourceIndex: position, recordId: entry.recordId ?? entry.record_id, selector: entry.selector
-      })
+      }),
+      entry
     }];
   }
   const linear = sources.linear || new Map();
@@ -297,16 +300,16 @@ export const drawnRecordIdentities = (records, sources) => records.flatMap((reco
     mode: 'linear', uid: base, sourceIndex, recordCount: entries.length
   });
   if (record.cardinality === 'all' && !record.selector && !record.region) {
-    return entries.map((/** @type {RecordSourceEntry} */ _entry, /** @type {number} */ sourceIndex) => {
+    return entries.map((/** @type {RecordSourceEntry} */ entry, /** @type {number} */ sourceIndex) => {
       const identity = identityOf(sourceIndex);
-      return { requestKey: identity, identity, aliases: [identity] };
+      return { requestKey: identity, identity, aliases: [identity], entry };
     });
   }
   const expansion = recordKeyExpansion(recordKey, base);
   const position = expansion !== null ? expansion - 1 : selectedPosition(record, entries);
   if (position === null || position >= entries.length) return [];
   const identity = identityOf(position);
-  return [{ requestKey: recordKey, identity, aliases: [identity] }];
+  return [{ requestKey: recordKey, identity, aliases: [identity], entry: entries[position] }];
 });
 
 /**

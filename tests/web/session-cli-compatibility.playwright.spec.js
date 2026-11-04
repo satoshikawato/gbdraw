@@ -7,6 +7,8 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, generateAndWaitForResult, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { drawingIds, shownDrawing } = require('./helpers/drawing-bar.cjs');
+const { chooseCoordinates, openRegionDialog } = require('./helpers/region-drawing.cjs');
 
 const root = process.cwd();
 const mito = path.join(root, 'tests/fixtures/sessions/cli-web-mito.gb');
@@ -54,8 +56,10 @@ const svgSemantics = content => {
   const records = new Map([...svg.querySelectorAll('[data-gbdraw-record-index]')]
     .map(element => [Number(element.getAttribute('data-gbdraw-record-index')), element.getAttribute('data-gbdraw-record-id')]));
   // The CLI's Python and Pyodide differ in the last digits of path numbers;
-  // compare them at the 4 decimals of tests/utils/svg_compare.py.
-  const path = d => d && d.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, number => String(Math.round(Number(number) * 1e4) / 1e4));
+  // compare them at the 4 decimals of tests/utils/svg_compare.py. The Web's
+  // Result drops the trailing space of an open outline path (`L 2,-8 `), which
+  // the path grammar ignores.
+  const path = d => d && d.trim().replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, number => String(Math.round(Number(number) * 1e4) / 1e4));
   return {
     records: [...records.entries()].sort((a, b) => a[0] - b[0]),
     features: [...svg.querySelectorAll('[data-gbdraw-feature-id]')].map(element =>
@@ -221,6 +225,71 @@ for (const entry of cases) {
     }
   });
 }
+
+// Where a figure places its legend and title: the size, each composition
+// role's transform, and which legend layout it shows (at 2 decimals).
+const placement = content => {
+  const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+  const round = value => value && value.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, number => String(Math.round(Number(number) * 100) / 100));
+  return {
+    size: ['width', 'height', 'viewBox'].map(name => round(svg.getAttribute(name))),
+    roles: [...svg.querySelectorAll('[data-gbdraw-composition-role]')]
+      .map(element => [element.getAttribute('data-gbdraw-composition-role'), round(element.getAttribute('transform'))]),
+    legend: [...svg.querySelectorAll('#legend_horizontal, #legend_vertical')].map(element => [element.id, element.getAttribute('display')])
+  };
+};
+
+// A Linear drawing made from a region of a Circular record ("New drawing from
+// a region…"): `gbdraw render --drawing ID` draws the Web's Save of it as the
+// Web's Generate drew it, with the legend and the title in the same place.
+// tests/fixtures/sessions/web-region-circular-linear.v51 is this test's Save.
+test('Session Linear region drawing of a Circular record draws the Web figure on the CLI', async ({ browser }, testInfo) => {
+  test.setTimeout(900_000);
+  const run = await load(browser, path.join(root, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'),
+    { width: 1600, height: 1000 });
+  try {
+    await generateAndWaitForResult(run.page);
+    const [source] = await drawingIds(run.page);
+    const dialog = await openRegionDialog(run.page);
+    await chooseCoordinates(dialog, 1001, 2000);
+    await expect.poll(() => run.page.evaluate(() => window.__GBDRAW_APP__.regionDrawings.dialog.status), { timeout: 60_000 })
+      .toBe('derived');
+    await dialog.locator('[data-region-drawing-create]').click();
+    await expect(dialog).toHaveCount(0);
+    const [drawing] = (await drawingIds(run.page)).filter(id => id !== source);
+    expect(await shownDrawing(run.page)).toEqual({ id: drawing, kind: 'linear' });
+    await generateAndWaitForResult(run.page);
+    const web = await run.page.evaluate(() => window.__GBDRAW_APP__.currentResults().map(result => String(result.content || '')));
+    expect(web).toHaveLength(1);
+
+    const saved = run.page.waitForEvent('download');
+    const outcome = await evaluateWithRetainedPromise(run.page, async () => {
+      window.__GBDRAW_APP__.sessionTitle = 'drawings-circular-region';
+      return await window.__GBDRAW_APP__.saveSessionWithTitle();
+    });
+    expect(outcome.status).toBe('saved');
+    const webFile = testInfo.outputPath('web-region.gbdraw-session.json.gz');
+    await (await saved).saveAs(webFile);
+    const session = await readSession(webFile);
+    // The Web writes the legend and title placement of the new Linear drawing into its request.
+    const request = session.drawings.find(item => item.id === drawing).renderRequest;
+    expect(request.mode).toBe('linear');
+    expect(request.diagramOptions.output).toEqual({ legend: 'bottom', plotTitlePosition: 'bottom' });
+
+    const prefix = testInfo.outputPath('cli-region');
+    await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'render', '--session', webFile, '--drawing', drawing,
+      '-o', prefix, '-f', 'svg'], {
+      cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000
+    });
+    const cliSvg = await fs.readFile(`${prefix}.svg`, 'utf8');
+    expect(await run.page.evaluate(placement, cliSvg)).toEqual(await run.page.evaluate(placement, web[0]));
+    expect(await run.page.evaluate(svgSemantics, cliSvg)).toEqual(await run.page.evaluate(svgSemantics, web[0]));
+    expect(run.external).toEqual([]);
+    expect(run.errors).toEqual([]);
+  } finally {
+    await run.context.close();
+  }
+});
 
 // OV-269, OV-273: a Session 40 the CLI of main 8228ffab wrote (no composition
 // metadata in its Result) loads with its tables, and Generate draws the

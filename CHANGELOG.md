@@ -39,6 +39,20 @@ write-up of a release.
   Sessions are saved as Session version 51, which gbdraw 0.14.x cannot open;
   Sessions saved by 0.14.x (46 to 50) open as before.
 - Changed: the drawing bar replaces the Circular and Linear mode buttons.
+- Added: Web app: **New drawing from a region…** in the drawing menu makes a
+  new drawing of chosen regions of a drawing. It takes each record whole, by
+  coordinates, or by a feature, and shows the sizes that return to Auto, as
+  `gbdraw.api.derive_region_drawing()` does.
+- Added: `gbdraw.api.FeatureRegionSelection(record_key, feature_id)` selects
+  the span of one feature for `derive_region_drawing()`.
+- Changed: `RegionDrawing.not_carried` lists what was not carried as typed
+  entries, each with a `kind` and a `message`. `RegionDrawing.dropped` is now
+  a read-only property that returns those messages, so
+  `RegionDrawing(dropped=...)` and `replace(..., dropped=...)` no longer work.
+- Changed: `derive_region_drawing()` refuses a region whose start is after its
+  end with diagnostic code `REGION_INVALID` and a `reason` (`ORIGIN_CROSSING`
+  on a circular record, `START_AFTER_END` on a linear record) instead of
+  `INPUT_INVALID`.
 - Added: Web app: **Wrap Rows** in the Linear Layout card draws long records
   over several rows (Auto, or a length in bp, kbp, or Mbp), with the same rules
   as `--wrap_length`. A PNG over 32,767 px per side, or a wrapped figure's PDF
