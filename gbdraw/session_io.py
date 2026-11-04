@@ -6697,9 +6697,6 @@ def _append_gui_color_args(
         invocation_args.extend([option, name])
 
 
-_LINEAR_GUI_PLOT_TITLE_POSITIONS = frozenset({"center", "top", "bottom"})
-
-
 def _append_gui_plot_title_args(
     run_args: list[str],
     invocation_args: list[str],
@@ -6892,8 +6889,10 @@ def _append_linear_gui_args(
     if wrap_length and wrap_length != "none":
         _append_pair(run_args, invocation_args, "--wrap_length", wrap_length)
     # OV-2521: a Linear Generate draws the plot title too.
+    from gbdraw.api.options import LINEAR_PLOT_TITLE_POSITIONS
+
     _append_gui_plot_title_args(
-        run_args, invocation_args, form=form, adv=adv, positions=_LINEAR_GUI_PLOT_TITLE_POSITIONS
+        run_args, invocation_args, form=form, adv=adv, positions=LINEAR_PLOT_TITLE_POSITIONS
     )
     _append_linear_definition_line_style_args(run_args, invocation_args, adv)
 

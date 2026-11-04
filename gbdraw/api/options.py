@@ -501,6 +501,8 @@ class CircularOutputOptions:
 # The title side a Linear drawing takes when its output states none
 # (``LinearOutputOptions.plot_title_position`` None, or no output at all).
 LINEAR_DEFAULT_PLOT_TITLE_POSITION: Literal["center", "top", "bottom"] = "bottom"
+# The title sides a Linear drawing can take.
+LINEAR_PLOT_TITLE_POSITIONS: frozenset[str] = frozenset({"center", "top", "bottom"})
 
 
 @dataclass(frozen=True)
@@ -512,7 +514,7 @@ class LinearOutputOptions:
 
     def __post_init__(self) -> None:
         _validate_legend_position(self.legend, "linear")
-        if self.plot_title_position not in {None, "center", "top", "bottom"}:
+        if self.plot_title_position is not None and self.plot_title_position not in LINEAR_PLOT_TITLE_POSITIONS:
             raise ValidationError(
                 "Linear plot_title_position must be one of: center, top, bottom."
             )
