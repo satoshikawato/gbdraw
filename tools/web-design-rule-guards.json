@@ -400,6 +400,12 @@
       "heading": "R11: History transaction boundaries",
       "guards": [
         {
+          "path": "tests/web/drawing-list.test.mjs",
+          "rootCause": "P7",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
           "path": "tests/web/feature-label-visual-unit.test.mjs",
           "rootCause": "P7",
           "job": "web-contracts-pr",
@@ -612,6 +618,12 @@
           "retireWhen": "never"
         },
         {
+          "path": "tests/test_session_drawings_vectors.py",
+          "rootCause": "P3",
+          "job": "core-pr",
+          "retireWhen": "a Session 46-50 is no longer read"
+        },
+        {
           "path": "tests/web/drawing-context.test.mjs",
           "rootCause": "P2",
           "job": "web-contracts-pr",
@@ -650,6 +662,18 @@
         {
           "path": "tests/web/per-mode-drawings.test.mjs",
           "rootCause": "P2",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/session-drawings-upgrade.test.mjs",
+          "rootCause": "P3",
+          "job": "web-contracts-pr",
+          "retireWhen": "a Session 46-50 is no longer read"
+        },
+        {
+          "path": "tests/web/session-drawings.test.mjs",
+          "rootCause": "P8",
           "job": "web-contracts-pr",
           "retireWhen": "never"
         }

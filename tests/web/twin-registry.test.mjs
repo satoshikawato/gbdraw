@@ -62,6 +62,16 @@ test('every owner and vector a twin row that is not pending names exists', () =>
     .filter((path) => !existsSync(join(REPOSITORY_ROOT, path)))
     .map((path) => `${id}: ${path}`));
   assert.deepEqual(missing, []);
+  // An owner `path:name` names a function its file still holds: a move of the
+  // function leaves the row naming the old module (OV-2505).
+  const unnamed = rows.flatMap(({ id, pythonOwner, jsOwner }) => [...pythonOwner, ...jsOwner]
+    .flatMap((owner) => {
+      const [, path, name] = /^(.*?)(?::([^/]*))?$/.exec(owner) ?? [];
+      if (!name || !existsSync(join(REPOSITORY_ROOT, path))) return [];
+      const word = name.split('.').pop()?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') ?? '';
+      return new RegExp(`\\b${word}\\b`).test(readFileSync(join(REPOSITORY_ROOT, path), 'utf8')) ? [] : [`${id}: ${owner}`];
+    }));
+  assert.deepEqual(unnamed, []);
 });
 
 test('a twin the registry does not list fails, and so does a row without its twin', () => {
