@@ -248,7 +248,8 @@
       "tests/web/right-drawer.playwright.spec.js",
       "tests/web/session-loading-feedback.playwright.spec.js",
       "tests/web/session-operation-consistency.playwright.spec.js",
-      "tests/web/settings-section-index.playwright.spec.js"
+      "tests/web/settings-section-index.playwright.spec.js",
+      "tests/web/region-drawing.playwright.spec.js"
     ]
   ]
 }
