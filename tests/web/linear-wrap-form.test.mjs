@@ -171,9 +171,8 @@ test('each blocker keeps Wrap Rows from turning on, in its Generate refusal\'s w
   assert.deepEqual(linearWrapBlockers({ ...none, sharedRecordRow: true }), ['WRAP_GRID_ROW']);
   assert.deepEqual(linearWrapBlockers({ ...none, movedRecords: true }), ['WRAP_RECORD_POSITION']);
   assert.deepEqual(linearWrapBlockers({ ...none, featureTrackOnAxis: true }), ['WRAP_TRACK_LAYOUT']);
-  // Q5 A (1): Align at feature counts only through the records its Apply moved; an Apply that moved none (its
-  // applied state, which the inputs no longer read) blocks nothing.
-  assert.deepEqual(linearWrapBlockers({ ...none, featureAlignment: true }), []);
+  // Q5 A (1): Align at feature counts only through the records its Apply moved (`movedRecords`); the browser case in
+  // tests/web/linear-wrap.playwright.spec.js checks that an Apply that moved none leaves Wrap Rows enabled.
   // Q5 A (2): a Similarity alignment plan counts as moved records, also when its comparison inputs were removed, and
   // a moved record keeps its hint under a comparison, so the button its hint names shows.
   assert.deepEqual(linearWrapBlockers({ ...none, alignmentPlan: true }), ['WRAP_RECORD_POSITION']);

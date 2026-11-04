@@ -66,7 +66,8 @@ def _context(error: BaseException, operation: str = "generate") -> dict:
          "INPUT_INVALID", "WRAP_RECORD_POSITION"),
         # Q5 A: a Similarity alignment whose comparison inputs were removed moves records; the Web names Reset record
         # positions for it, not the comparison inputs it no longer has.
-        (lambda: refuse_undrawable_wrap(_config(), [0], ("similarity_alignment",), row_length=10_000),
+        (lambda: refuse_undrawable_wrap(_config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler"}), [0],
+                                        ("similarity_alignment",), row_length=10_000),
          "INPUT_INVALID", "WRAP_RECORD_POSITION"),
         (lambda: refuse_undrawable_wrap(_config(), [0], ("blast_files", "similarity_alignment"), row_length=10_000),
          "COMPARISON_INPUT", "WRAP"),
@@ -75,6 +76,18 @@ def _context(error: BaseException, operation: str = "generate") -> dict:
 )
 def test_each_wrap_refusal_keeps_its_reason_on_the_web(refuse, code: str, reason: str) -> None:
     assert _context(_caught(refuse)) == {"code": code, "field": "wrap_length", "reason": reason}
+
+
+# A Similarity alignment refuses as a moved record does, at the same precedence: a cut record under the middle
+# layout is refused for its layout first, whichever moved it.
+def test_an_alignment_and_a_moved_record_refuse_at_one_precedence() -> None:
+    middle = _config(**{"canvas.linear.track_layout": "middle", WRAP: 10_000})
+    by_alignment = _caught(lambda: refuse_undrawable_wrap(middle, [0], ("similarity_alignment",), row_length=10_000))
+    by_translation = _caught(lambda: refuse_undrawable_wrap(
+        middle, [0], (), row_length=10_000, records=[SeqIO.read(LAMBDA, "genbank")],
+        translations=[LinearRecordTranslation(record_key="record-1", x=40.0)]))
+    assert _context(by_alignment) == _context(by_translation) == {
+        "code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_TRACK_LAYOUT"}
 
 
 def _export_refusal(fmt: str, size: tuple[float, float], wrap: LinearWrapSummary | None, dpi: float | None = None):

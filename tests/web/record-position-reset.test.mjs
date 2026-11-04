@@ -1,7 +1,9 @@
 // Reset record positions (gbdraw/web/js/app/record-position-reset.js) with fake ports: one press asks for one
-// placement run (one History step under its own label, the channel Align at feature's Apply uses) that writes x 0
-// for every record of the committed request and keeps each y and record direction. The Undo of that step is the
-// run's (`runCommittedCanonicalCandidate`), checked in the browser by tests/web/linear-wrap.playwright.spec.js.
+// placement run under its own label (the channel Align at feature's Apply uses) whose candidate writes x 0 for every
+// record of the committed request, keeps each y and record direction, and carries no alignment plan; a press under a
+// plan also says that it ended the alignment. That the run is one History step, and that its Undo restores the
+// positions and the plan, is the run's (`runCommittedCanonicalCandidate`), checked in the browser by
+// tests/web/linear-wrap.playwright.spec.js.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -25,10 +27,8 @@ const fixture = ({ plan = false, committed = committedSession(MOVED) } = {}) => 
     hasAlignmentPlan: () => page.plan,
     notePlanReplaced: (reason) => page.replaced.push(reason),
     runPlacement: async (run) => {
-      // As the candidate run's History step does: the candidate is committed, with no plan; Undo puts both back.
-      page.steps.push({ label: run.label, before: { committed: page.committed, plan: page.plan } });
+      page.steps.push({ label: run.label, before: page.committed });
       page.committed = run.canonical;
-      page.plan = run.canonical.renderRequest.layout.similarityAlignment !== null;
       return { status: 'ok' };
     },
     projectPlacement: (input) => {
@@ -53,7 +53,7 @@ test('one press asks for one placement run under its own label with every record
   assert.deepEqual(await action.reset(), { status: 'ok' });
   assert.equal(page.steps.length, 1);
   assert.equal(page.steps[0].label, 'Reset record positions');
-  assert.equal(page.steps[0].before.committed, before, 'the run starts from the committed Session, which its Undo restores');
+  assert.equal(page.steps[0].before, before, 'the run starts from the committed Session, which its Undo restores');
   assert.deepEqual(page.committed.renderRequest.layout.recordTranslations.map(({ x }) => x), [0, 0, 0]);
   assert.deepEqual(page.committed.renderRequest.layout.recordTranslations.map(({ y }) => y), [0, 7, 0]);
   assert.deepEqual(page.projections[0].orientations, [
@@ -69,9 +69,9 @@ test('a press under a Similarity alignment drops the plan in the same step and s
   const { page, action } = fixture({ plan: true });
   assert.deepEqual(await action.reset(), { status: 'ok' });
   assert.equal(page.steps.length, 1);
-  assert.equal(page.steps[0].before.plan, true, 'the step that its Undo reverts held the plan');
-  assert.equal(page.plan, false);
-  assert.deepEqual(page.committed.renderRequest.layout.recordTranslations.map(({ x }) => x), [0, 0, 0]);
+  assert.equal(page.projections.length, 1);
+  assert.equal(page.projections[0].plan, null, 'the one candidate carries no plan');
+  assert.deepEqual(page.projections[0].translations.map(({ x }) => x), [0, 0, 0]);
   assert.deepEqual(page.replaced, ['record positions reset.']);
 });
 

@@ -162,6 +162,74 @@ test('comparisons and a record moved by Align at feature keep Wrap Rows from bei
   await expect(page.locator('#linear-wrap-blocked')).toContainText(COMPARISONS_TEXT);
 });
 
+// Q5 A (1): Align at feature counts only through the records its Apply moved. The same record twice has its
+// feature at one place in both, so Apply moves neither and Wrap Rows stays enabled.
+test('an Align at feature Apply that moves no record leaves Wrap Rows enabled', async ({ page }) => {
+  test.setTimeout(480_000);
+  await openLinear(page, [MITOGENOMES[1], MITOGENOMES[1]]);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const selector = page.getByLabel('Align at feature', { exact: true });
+  await selector.evaluate((element) => {
+    for (let details = element.closest('details'); details; details = details.parentElement?.closest('details')) details.open = true;
+  });
+  await selector.fill('gene=COX1');
+  await page.getByTestId('linear-anchor-feature-resolve').click();
+  await expect(page.getByTestId('linear-anchor-feature-preview')).toBeVisible({ timeout: 120_000 });
+  await page.getByTestId('linear-anchor-feature-apply').click();
+  await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveText('Records aligned at gene=COX1.', { timeout: 180_000 });
+  await settle(page);
+  expect((await translations(page)).map(({ x }) => x)).toEqual([0, 0]);
+  await expect(wrapBox(page)).toBeEnabled();
+  await expect(page.locator('#linear-wrap-blocked')).toHaveCount(0);
+});
+
+// Q5 A (2): a Similarity alignment counts as moved records, also beside comparisons, so its hint names Reset record
+// positions and the button shows. One press puts every record at x 0 and ends the alignment in one History step,
+// and one Undo brings back the plan and the positions.
+test('a Similarity alignment blocks Wrap Rows beside comparisons, and Reset record positions ends it in one step', async ({ page }) => {
+  test.setTimeout(480_000);
+  await openFresh(page);
+  await loadSessionFile(page, path.join(root, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
+  await settle(page);
+  const placement = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    return {
+      plan: JSON.stringify(state.similarityAlignmentPlan.value),
+      translations: state.linearRecordTranslations.value.map(({ recordKey, x, y }) => ({ recordKey, x, y })),
+      drawn: [...svg.querySelectorAll('[data-record-translation-x]')].map((group) => Number(group.getAttribute('data-record-translation-x')))
+    };
+  });
+  const before = await placement();
+  expect(before.plan).not.toBe('null');
+  expect(before.drawn.some((x) => x !== 0), 'the alignment draws records moved sideways').toBe(true);
+  await expect(wrapBox(page)).toBeDisabled();
+  await expect(page.locator('#linear-wrap-blocked')).toContainText(COMPARISONS_TEXT);
+  await expect(page.locator('#linear-wrap-blocked')).toContainText(MOVED_TEXT);
+  const reset = page.getByTestId('linear-wrap-reset-positions');
+  await expect(reset).toBeVisible();
+
+  const steps = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await reset.click();
+  await expect(page.locator('[data-similarity-alignment-notice]')).toHaveText('Alignment cleared: record positions reset.', { timeout: 180_000 });
+  await settle(page);
+  const after = await placement();
+  expect(after.plan).toBe('null');
+  expect(after.translations.map(({ x }) => x)).toEqual(before.drawn.map(() => 0));
+  expect(after.drawn).toEqual(before.drawn.map(() => 0));
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(steps + 1);
+  // The comparisons still block; the moved-record reason and its button are gone.
+  await expect(page.locator('#linear-wrap-blocked')).toContainText(COMPARISONS_TEXT);
+  await expect(page.locator('#linear-wrap-blocked')).not.toContainText(MOVED_TEXT);
+  await expect(reset).toHaveCount(0);
+
+  await undo(page);
+  expect(await placement()).toEqual(before);
+  await expect(page.locator('#linear-wrap-blocked')).toContainText(MOVED_TEXT);
+  await expect(reset).toBeVisible();
+});
+
 // PD-OI-113 scenario revision 2: a record's place is read alike whatever wrote it. A Session holding a wrap length
 // and a record moved sideways (as a Python API Session can; made here from a CLI Session with one translation
 // written in) keeps its figure on Load. The field cannot be changed but can be turned off, and a Generate that would

@@ -222,14 +222,9 @@ def refuse_undrawable_wrap(
     caller cannot leave the moved-record refusal out.
     """
 
-    if tuple(blocking) == ("similarity_alignment",):
-        # A Similarity alignment left without its comparison inputs moves records: it is refused as a moved record.
-        raise ValidationError(
-            "wrap_length cannot cut a record of a figure with a similarity alignment: the alignment moves records "
-            "sideways and a cut record's rows share one x. Remove the alignment, or do not wrap.",
-            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_RECORD_POSITION"},
-        )
-    if blocking:
+    # A Similarity alignment left without its comparison inputs moves records: it is refused as a moved record, below.
+    alignment_only = tuple(blocking) == ("similarity_alignment",)
+    if blocking and not alignment_only:
         raise ValidationError(
             "wrap_length cannot cut a record of a figure with comparison inputs "
             f"({', '.join(blocking)}): a wrapped figure draws no comparisons.",
@@ -262,6 +257,12 @@ def refuse_undrawable_wrap(
         raise ValidationError(
             "anchor_feature cannot align a record cut by wrap_length: the record's rows share one place.",
             diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_ANCHOR_FEATURE"},
+        )
+    if alignment_only:
+        raise ValidationError(
+            "wrap_length cannot cut a record of a figure with a similarity alignment: the alignment moves records "
+            "sideways and a cut record's rows share one x. Remove the alignment, or do not wrap.",
+            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_RECORD_POSITION"},
         )
     moved_keys = {translation.record_key for translation in translations if translation.x != 0}
     if not moved_keys:
