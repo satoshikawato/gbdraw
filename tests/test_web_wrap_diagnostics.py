@@ -46,18 +46,18 @@ def _context(error: BaseException, operation: str = "generate") -> dict:
 @pytest.mark.parametrize(
     ("refuse", "code", "reason"),
     [
-        (lambda: refuse_undrawable_wrap(_config(), [0], ("blast_files",)), "COMPARISON_INPUT", "WRAP"),
-        (lambda: refuse_undrawable_wrap(_config(**{"canvas.linear.track_layout": "middle"}), [0], ()),
+        (lambda: refuse_undrawable_wrap(_config(), [0], ("blast_files",), row_length=10_000), "COMPARISON_INPUT", "WRAP"),
+        (lambda: refuse_undrawable_wrap(_config(**{"canvas.linear.track_layout": "middle"}), [0], (), row_length=10_000),
          "INPUT_INVALID", "WRAP_TRACK_LAYOUT"),
-        (lambda: refuse_undrawable_wrap(_config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "bar"}), [0], ()),
+        (lambda: refuse_undrawable_wrap(_config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "bar"}), [0], (), row_length=10_000),
          "INPUT_INVALID", "WRAP_SCALE_STYLE"),
         (lambda: refuse_undrawable_wrap(
             _config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler", "canvas.linear.normalize_length": True}),
-            [0], ()), "INPUT_INVALID", "WRAP_NORMALIZE_LENGTH"),
-        (lambda: refuse_undrawable_wrap(_config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler"}), [0, 0], ()),
+            [0], (), row_length=10_000), "INPUT_INVALID", "WRAP_NORMALIZE_LENGTH"),
+        (lambda: refuse_undrawable_wrap(_config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler"}), [0, 0], (), row_length=10_000),
          "INPUT_INVALID", "WRAP_GRID_ROW"),
         (lambda: refuse_undrawable_wrap(
-            _config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler"}), [0], (), anchor_feature=True),
+            _config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler"}), [0], (), row_length=10_000, anchor_feature=True),
          "INPUT_INVALID", "WRAP_ANCHOR_FEATURE"),
         (lambda: refuse_undrawable_wrap(
             _config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler", WRAP: 10_000}), [0], (),

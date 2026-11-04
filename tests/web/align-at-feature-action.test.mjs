@@ -24,7 +24,7 @@ const reply = () => ({
 
 // A fixture page: one committed Session, the drawn translations, and the calls the owner makes.
 const fixture = ({ plan = false, helper = async () => ({ result: reply() }) } = {}) => {
-  const page = { committed: committedSession(), plan, drawn: [], runs: [], replaced: [], helperCalls: [], sessions: ref(0) };
+  const page = { committed: committedSession(), plan, drawn: [], runs: [], replaced: [], helperCalls: [], sessions: ref(0), steps: [] };
   const action = createFeatureAnchorAction({
     materializedSession: () => {
       if (!page.committed) throw new Error('Generate a Linear diagram before aligning.');
@@ -35,10 +35,20 @@ const fixture = ({ plan = false, helper = async () => ({ result: reply() }) } = 
     resolveOperation: 'resolveFeatureAnchor',
     runPlacement: async (run) => {
       page.runs.push(run);
-      // As the History step does: the candidate is committed, the plan is gone, its translations are drawn.
+      // As `runCommittedCanonicalCandidate` and its History step do: capture the intent before, commit the candidate
+      // (the plan is gone, its translations are drawn), commit the intent, capture it after. Undo puts both back.
+      const before = { committed: page.committed, plan: page.plan, drawn: page.drawn, intent: run.intent?.capture() };
       page.committed = run.canonical;
       page.plan = false;
       page.drawn = run.canonical.renderRequest.layout.recordTranslations.map((entry) => ({ ...entry }));
+      run.intent?.commit();
+      const after = { committed: page.committed, plan: page.plan, drawn: page.drawn, intent: run.intent?.capture() };
+      /** @param {typeof before} side */
+      const install = (side) => {
+        Object.assign(page, { committed: side.committed, plan: side.plan, drawn: side.drawn });
+        if (run.intent) run.intent.restore(side.intent);
+      };
+      page.steps.push({ undo: () => install(before), redo: () => install(after) });
       return { status: 'ok' };
     },
     notePlanReplaced: (reason) => page.replaced.push(reason),
@@ -133,15 +143,40 @@ test('a Session Load retires Align at feature even when the loaded positions are
   assert.equal(action.applied.value, true);
 });
 
-test('retire ends Align at feature while the drawn positions are still the ones Apply wrote', async () => {
-  const { action } = fixture();
+// Review 2 M1 (D-74, OV-2471): the hold is a value of Apply's History step. Its Undo ends it also when Apply moved
+// no record (the positions Undo puts back are the ones Apply wrote), and its Redo brings it back.
+test('the Undo of an Apply that moved no record ends Align at feature, and its Redo brings it back', async () => {
+  const { page, action } = fixture({ helper: async () => ({ result: { ...reply(),
+    records: reply().records.map((record) => ({ ...record, status: 'unmatched', afterX: record.beforeX })),
+    recordTranslations: [{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 0, y: 0 }] } }) });
+  page.drawn = [{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 0, y: 0 }];
+  action.selector.value = 'gene=COX1';
+  await action.resolve();
+  assert.deepEqual(await action.apply(), { status: 'ok' });
+  assert.equal(action.applied.value, true);
+  assert.equal(page.steps.length, 1);
+  page.steps[0].undo();
+  assert.deepEqual(page.drawn, [{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 0, y: 0 }]);
+  assert.equal(action.applied.value, false, 'the same positions, but Align at feature no longer holds');
+  assert.equal(action.notice.value, '');
+  page.steps[0].redo();
+  assert.equal(action.applied.value, true);
+  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
+});
+
+test('a later move of the records retires the hold, and putting the positions back restores it with its notice', async () => {
+  const { page, action } = fixture();
   action.selector.value = 'gene=COX1';
   await action.resolve();
   await action.apply();
-  assert.equal(action.applied.value, true);
-  action.retire();
+  const written = page.drawn;
+  // Reset record positions writes x 0 and keeps the hold value; the positions alone retire it.
+  page.drawn = written.map((entry) => ({ ...entry, x: 0 }));
   assert.equal(action.applied.value, false);
-  assert.equal(action.notice.value, '');
+  // Its Undo puts Apply's positions back: the notice is back too.
+  page.drawn = written;
+  assert.equal(action.applied.value, true);
+  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
 });
 
 test('Apply without an active plan clears nothing', async () => {

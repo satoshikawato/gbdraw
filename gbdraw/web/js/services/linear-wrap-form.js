@@ -111,14 +111,27 @@ export const linearWrapFormPatch = (form, value) => (value === null
  */
 /**
  * Python's refusal reason for each (gbdraw/layout/linear_wrap.py), so the field's hint and the Generate refusal
- * show one text (`reasonText`).
- * @typedef {'WRAP' | 'WRAP_GRID_ROW' | 'WRAP_RECORD_POSITION' | 'WRAP_TRACK_LAYOUT'} LinearWrapBlocker
+ * show one text (`reasonText`); `WRAP_FEATURE_ALIGNMENT` is the field's own (Align at feature with no record moved,
+ * which Python draws).
+ * @typedef {'WRAP' | 'WRAP_GRID_ROW' | 'WRAP_RECORD_POSITION' | 'WRAP_FEATURE_ALIGNMENT' | 'WRAP_TRACK_LAYOUT'} LinearWrapBlocker
  */
-/** @type {ReadonlyArray<[keyof LinearWrapBlockerInputs, LinearWrapBlocker]>} */
-// Align at feature and a moved record share one reason and one hint (D-65).
+/**
+ * Whether the field offers Reset record positions: a drawn record is moved sideways and no comparison blocks, so a
+ * press can unblock the field without ending a comparison (PD-OI-113 scenario revision 2, D-74).
+ * @param {LinearWrapBlockerInputs} inputs
+ */
+export const offersRecordPositionReset = (inputs) => inputs.movedRecords && !inputs.comparisons;
+/**
+ * Each reason and when it shows. A moved record names the button its hint offers, so under a comparison, where the
+ * button is not offered, only the comparison is named; Align at feature with no record moved names its Undo (D-75).
+ * @type {ReadonlyArray<[LinearWrapBlocker, (inputs: LinearWrapBlockerInputs) => boolean]>}
+ */
 const BLOCKERS = Object.freeze([
-  ['comparisons', 'WRAP'], ['sharedRecordRow', 'WRAP_GRID_ROW'], ['featureAlignment', 'WRAP_RECORD_POSITION'],
-  ['movedRecords', 'WRAP_RECORD_POSITION'], ['featureTrackOnAxis', 'WRAP_TRACK_LAYOUT']
+  ['WRAP', (inputs) => inputs.comparisons],
+  ['WRAP_GRID_ROW', (inputs) => inputs.sharedRecordRow],
+  ['WRAP_RECORD_POSITION', offersRecordPositionReset],
+  ['WRAP_FEATURE_ALIGNMENT', (inputs) => inputs.featureAlignment && !inputs.movedRecords],
+  ['WRAP_TRACK_LAYOUT', (inputs) => inputs.featureTrackOnAxis]
 ]);
 /**
  * What keeps Wrap Rows from being turned on or its length changed. Turning it off is never blocked, so a Session
@@ -126,7 +139,7 @@ const BLOCKERS = Object.freeze([
  * @param {LinearWrapBlockerInputs} inputs
  * @returns {LinearWrapBlocker[]}
  */
-export const linearWrapBlockers = (inputs) => [...new Set(BLOCKERS.filter(([input]) => inputs[input]).map(([, blocker]) => blocker))];
+export const linearWrapBlockers = (inputs) => BLOCKERS.filter(([, holds]) => holds(inputs)).map(([blocker]) => blocker);
 
 // The length's unit is view state (D-27): the form and the Session hold bp, and the Web never sends unit text,
 // so these factors are the field's own, not a copy of Python's length parser (D-57). Each is 10 to its exponent.

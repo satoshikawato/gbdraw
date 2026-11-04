@@ -208,8 +208,8 @@ def refuse_undrawable_wrap(
     rows_by_record: Sequence[int],
     blocking: Sequence[str],
     *,
+    row_length: int,
     anchor_feature: bool = False,
-    row_length: int | None = None,
     records: Sequence[SeqRecord] = (),
     translations: Sequence[RecordTranslation] = (),
 ) -> None:
@@ -218,7 +218,8 @@ def refuse_undrawable_wrap(
     ``anchor_feature`` says the records are aligned at a feature, and ``translations`` are the stored translations
     of ``records``, whatever wrote them (Align at feature, a Similarity alignment, an anchored figure's Session, the
     Python API). One x per record cannot place a record that spans several rows, so a cut record must keep x 0.
-    ``row_length`` is the length the caller resolved (``resolve_wrap_length``) and cuts at.
+    ``row_length`` is the length the caller resolved (``resolve_wrap_length``) and cuts at; it is required, so a
+    caller cannot leave the moved-record refusal out.
     """
 
     if blocking:
@@ -256,7 +257,7 @@ def refuse_undrawable_wrap(
             diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_ANCHOR_FEATURE"},
         )
     moved_keys = {translation.record_key for translation in translations if translation.x != 0}
-    if not moved_keys or row_length is None:
+    if not moved_keys:
         return
     moved = [
         str(record.id)

@@ -1,10 +1,10 @@
 // @ts-check
-// Reset record positions (Linear, PD-OI-113 scenario revision 2): one button beside a Wrap Rows field that a record
-// moved sideways, or Align at feature, blocks. It writes every record's sideways position (x) as 0 through the channel
-// Align at feature's Apply writes them through: a candidate of the committed Session with those record translations
-// and no alignment plan, drawn and committed as one History step (`runPlacement`), so one Undo restores the positions.
-// A vertical position (y) and the record directions stay. The records then no longer keep Align at feature's places,
-// so it retires Align at feature (`retireFeatureAlignment`), also when its Apply moved no record (D-68).
+// Reset record positions (Linear, PD-OI-113 scenario revision 2): one button under a Wrap Rows field that a drawn
+// record moved sideways blocks, offered only while no comparison blocks it (`offersRecordPositionReset`, D-74). It
+// writes every record's sideways position (x) as 0 through the channel Align at feature's Apply writes them through:
+// a candidate of the committed Session with those record translations, drawn and committed as one History step
+// (`runPlacement`), so one Undo restores the positions. A vertical position (y) and the record directions stay.
+// Align at feature's hold follows the positions: the press retires it and its Undo brings it back.
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
@@ -12,21 +12,16 @@ import { recordTranslationsFor } from '../services/linear-record-layout.js';
 import { ref } from '../utils/reactivity.js';
 
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
-/** @import { RecordPlacementRun } from './align-at-feature.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
-/** @import { FeatureAnchorTranslation } from './align-at-feature.js' */
+/** @import { FeatureAnchorTranslation, RecordPlacementRun } from './align-at-feature.js' */
 
 /**
  * @typedef {object} RecordPositionResetPorts
- * @property {() => CommittedCanonicalSession} materializedSession The committed Session with the active alignment
- *   plan materialized into its record translations, and no plan (Align at feature's port).
- * @property {() => boolean} hasAlignmentPlan
+ * @property {() => CommittedCanonicalSession} materializedSession The committed Session (Align at feature's port).
  * @property {RecordPlacementRun} runPlacement Draws `canonical` and commits it as one History step under `label`
  *   (Align at feature's port).
- * @property {(reason: string) => void} notePlanReplaced
  * @property {(input: { committed: CommittedCanonicalSession, plan: null, translations: FeatureAnchorTranslation[],
  *   orientations: { recordKey: string, reverseComplement: boolean }[] }) => CommittedCanonicalSession} projectPlacement
- * @property {() => void} retireFeatureAlignment Ends Align at feature's hold on the records (its `retire`).
  * @property {(error: Record<string, unknown>) => void} onError Shows why the positions were not reset.
  */
 
@@ -45,21 +40,17 @@ export const recordTranslationsAtX0 = (request) => {
 };
 
 /** @param {RecordPositionResetPorts} ports */
-export const createRecordPositionReset = ({
-  materializedSession, hasAlignmentPlan, runPlacement, notePlanReplaced, projectPlacement, retireFeatureAlignment, onError
-}) => {
+export const createRecordPositionReset = ({ materializedSession, runPlacement, projectPlacement, onError }) => {
+  const busy = ref(false);
   /** @param {unknown} cause */
   const publishError = (cause) => onError(/** @type {Record<string, unknown>} */ (
     normalizeUserFacingError(cause || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'helper' })));
-  const busy = ref(false);
   const reset = async () => {
     if (busy.value) return { status: 'busy' };
     /** @type {CommittedCanonicalSession} */
     let canonical;
-    let clearsAlignment = false;
     try {
       const committed = materializedSession();
-      clearsAlignment = hasAlignmentPlan();
       canonical = projectPlacement({ committed, plan: null,
         translations: recordTranslationsAtX0(committed.renderRequest),
         orientations: committed.renderRequest.records.map((record) => ({ recordKey: record.recordKey,
@@ -74,10 +65,7 @@ export const createRecordPositionReset = ({
       let outcome;
       try { outcome = await runPlacement({ canonical, label: msg('Reset record positions') }); }
       catch (cause) { outcome = { status: 'error', error: cause }; }
-      if (outcome?.status === 'ok') {
-        retireFeatureAlignment();
-        if (clearsAlignment) notePlanReplaced(msg('record positions reset.'));
-      } else if (outcome?.status === 'error') publishError(outcome.error);
+      if (outcome?.status === 'error') publishError(outcome.error);
       return { status: String(outcome?.status || 'error') };
     } finally {
       busy.value = false;

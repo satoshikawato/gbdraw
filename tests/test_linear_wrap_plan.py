@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import inspect
 import json
 from pathlib import Path
 import subprocess
@@ -35,6 +36,7 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear_wrap import (
     auto_wrap_length,
+    refuse_undrawable_wrap,
     resolve_wrap_length,
     wrap_blocking_inputs,
 )
@@ -395,6 +397,14 @@ def test_the_builder_refuses_a_cut_record_moved_sideways() -> None:
             [record], options=LinearDiagramOptions(config_overrides={WRAP: 10_000}), layout=_moved(("record-1", -62.8, 0.0))
         )
     assert caught.value.diagnostic["reason"] == "WRAP_RECORD_POSITION"
+
+
+def test_the_refusal_needs_the_row_length_the_caller_cuts_at() -> None:
+    # A caller that leaves the row length out cannot turn the moved-record refusal off.
+    parameter = inspect.signature(refuse_undrawable_wrap).parameters["row_length"]
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default is inspect.Parameter.empty
+    assert parameter.annotation in (int, "int")
 
 
 def test_a_moved_record_is_drawn_when_nothing_is_cut(tmp_path: Path) -> None:

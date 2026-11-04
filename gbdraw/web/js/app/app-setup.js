@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { RecordPlacementRun } from './align-at-feature.js' */
 /** @import { GenerationPayload } from '../services/diagram-generation.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { SvgMutationOperations } from '../services/svg-result-ingestion.js' */
@@ -248,7 +249,6 @@ import {
   linearRecordLayoutHasSharedRow,
   linearRecordPositionTokens,
   moveLinearRecordInRow,
-  movesARecordSideways,
   planLinearSourceRowMove,
   reconcileLinearRecordLayout,
   setLinearRecordRow as updateLinearRecordRow
@@ -279,6 +279,7 @@ import {
   circularRecordRequestKeys,
   circularRecordsToDraw,
   linearCardHasSettings,
+  movesARecordSideways,
   pruneRecordsOff,
   recordsWithEdits,
   removeRecordEdits
@@ -5491,14 +5492,19 @@ export const createAppSetup = () => {
   });
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
-  // Align at feature writes the record translations as one step without the
-  // alignment plan, as a manual record movement does (PD-OI-028).
+  // Align at feature and Reset record positions write the record translations as one step without the
+  // alignment plan, as a manual record movement does (PD-OI-028); a value they write with them (Align at
+  // feature's hold) is captured and restored with that step.
+  /** @type {RecordPlacementRun} */
+  const runRecordPlacement = ({ canonical, label, intent }) => runCommittedCanonicalCandidate({ canonical, label,
+    alignmentResetReceipt: null,
+    ...(intent ? { captureIntentCheckpoint: intent.capture, restoreIntentCheckpoint: intent.restore, commitIntent: intent.commit } : {}) });
   const featureAnchor = createFeatureAnchorAction({
     materializedSession: similarityAlignmentActions.materializedSession,
     hasAlignmentPlan: () => Boolean(state.similarityAlignmentPlan.value),
     runHelperOperation: runDiagramHelperOperation,
     resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_FEATURE_ANCHOR,
-    runPlacement: ({ canonical, label }) => runCommittedCanonicalCandidate({ canonical, label, alignmentResetReceipt: null }),
+    runPlacement: runRecordPlacement,
     notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
     projectPlacement: projectCommittedSimilarityAlignment,
     recordTranslations: () => state.linearRecordTranslations.value,
@@ -5507,11 +5513,8 @@ export const createAppSetup = () => {
   // Reset record positions writes x 0 for every record through the channel Align at feature's Apply writes through.
   const recordPositionReset = createRecordPositionReset({
     materializedSession: similarityAlignmentActions.materializedSession,
-    hasAlignmentPlan: () => Boolean(state.similarityAlignmentPlan.value),
-    runPlacement: ({ canonical, label }) => runCommittedCanonicalCandidate({ canonical, label, alignmentResetReceipt: null }),
-    notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
+    runPlacement: runRecordPlacement,
     projectPlacement: projectCommittedSimilarityAlignment,
-    retireFeatureAlignment: featureAnchor.retire,
     onError: (error) => { errorLog.value = error; }
   });
   // Wrap Rows (PD-OI-113): its blockers read the owners the request reads. A Similarity alignment is a

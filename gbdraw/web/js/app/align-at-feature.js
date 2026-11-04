@@ -52,9 +52,20 @@ import { computed, ref } from '../utils/reactivity.js';
  * @property {boolean} clearsAlignment Whether Apply clears the active Similarity alignment.
  */
 /**
- * Draws a candidate of the committed Session and commits it as one History step under `label`
- * (`runCommittedCanonicalCandidate` in app/run-analysis.js, wired by the composition root).
- * @typedef {(run: { canonical: CommittedCanonicalSession, label: string }) => Promise<{ status?: string, error?: unknown } | null | undefined>} RecordPlacementRun
+ * Align at feature's hold: the records Apply placed (`written`), in the Session it placed them in (`session`, a
+ * count of `sessionReplacements`), and its notice. Empty (`written` []) when it holds nothing.
+ * @typedef {{ text: string, written: FeatureAnchorTranslation[], session: number }} FeatureAnchorHold
+ */
+/**
+ * A value a placement run writes in its History step besides the record translations (`captureIntentCheckpoint`,
+ * `restoreIntentCheckpoint`, `commitIntent` of `runCommittedCanonicalCandidate`): `commit` writes it when the
+ * candidate is drawn, before the step captures its after state; Undo and Redo `restore` what `capture` read.
+ * @typedef {{ capture: () => FeatureAnchorHold, restore: (hold: FeatureAnchorHold) => void, commit: () => void }} RecordPlacementIntent
+ */
+/**
+ * Draws a candidate of the committed Session and commits it as one History step under `label`, with `intent` in
+ * the same step (`runCommittedCanonicalCandidate` in app/run-analysis.js, wired by the composition root).
+ * @typedef {(run: { canonical: CommittedCanonicalSession, label: string, intent?: RecordPlacementIntent }) => Promise<{ status?: string, error?: unknown } | null | undefined>} RecordPlacementRun
  */
 /**
  * @typedef {object} FeatureAnchorPorts
@@ -69,7 +80,7 @@ import { computed, ref } from '../utils/reactivity.js';
  *   orientations: { recordKey: string, reverseComplement: boolean }[] }) => CommittedCanonicalSession} projectPlacement
  *   The candidate Session: `committed` with these record translations and orientations, and no alignment plan.
  * @property {() => readonly unknown[]} recordTranslations The record translations drawn now (reactive):
- *   the notice after Apply holds only while they are the ones Apply wrote, so Undo retires it.
+ *   the hold holds only while they are the ones Apply wrote, so a later move of a record retires it.
  * @property {() => number} sessionReplacements The Sessions the page has installed (reactive): a Load replaces the
  *   document, so it retires what Apply did, also when the loaded positions are the ones Apply wrote.
  */
@@ -133,12 +144,16 @@ export const createFeatureAnchorAction = ({
   const preview = ref(null);
   /** @type {Ref<Record<string, unknown> | null>} */
   const error = ref(null);
-  /** @type {Ref<{ text: string, written: FeatureAnchorTranslation[], session: number }>} */
-  const noticeState = ref({ text: '', written: [], session: -1 });
-  // Align at feature holds while the records are where Apply put them, in the Session Apply wrote them to. Undo, a
-  // drag that moves the translations (one under a Similarity alignment plan), or a Session Load retires it; a drag
-  // with no plan edits the composition, not the translations, so it does not. Its notice shows while it holds, and
-  // Wrap Rows reads it as Align at feature being present, also when Apply moved no record (PD-OI-113, D-65).
+  /** @type {FeatureAnchorHold} */
+  const NO_HOLD = Object.freeze({ text: '', written: [], session: -1 });
+  /** @type {Ref<FeatureAnchorHold>} */
+  const noticeState = ref(NO_HOLD);
+  // Align at feature holds while the records are where Apply put them, in the Session Apply wrote them to. The hold
+  // is a value of Apply's History step, so its Undo ends it and its Redo brings it back, also when Apply moved no
+  // record (D-74). A later move of the translations (Reset record positions, a drag under a Similarity alignment
+  // plan) or a Session Load retires it, and their Undo brings it back; a drag with no plan edits the composition,
+  // not the translations, so it does not. Its notice shows while it holds, and Wrap Rows reads it as Align at feature
+  // being present (PD-OI-113, D-65).
   const applied = computed(() => {
     const { written, session } = noticeState.value;
     const drawn = recordTranslations();
@@ -148,9 +163,6 @@ export const createFeatureAnchorAction = ({
     });
   });
   const notice = computed(() => (applied.value ? noticeState.value.text : ''));
-  // Reset record positions moves the records off the places Apply gave them, also when those were their places
-  // already, so Align at feature no longer holds (D-68).
-  const retire = () => { noticeState.value = { text: '', written: [], session: -1 }; };
   let actionId = 0;
   const busy = computed(() => status.value === 'resolving' || status.value === 'applying');
   const previewLines = computed(() => (preview.value ? preview.value.reply.records.map(previewLine) : []));
@@ -173,7 +185,7 @@ export const createFeatureAnchorAction = ({
     const expected = ++actionId;
     preview.value = null;
     error.value = null;
-    noticeState.value = { text: '', written: [], session: -1 };
+    noticeState.value = NO_HOLD;
     status.value = 'resolving';
     try {
       const canonical = materializedSession();
@@ -226,13 +238,20 @@ export const createFeatureAnchorAction = ({
     status.value = 'applying';
     /** @type {{ status?: string, error?: unknown } | null | undefined} */
     let outcome;
-    try { outcome = await runPlacement({ canonical, label: msg('Align at feature') }); }
+    /** @type {FeatureAnchorHold} */
+    const hold = { text: t('Records aligned at {selector}.', { selector: current.reply.selector }),
+      written: current.reply.recordTranslations, session: sessionReplacements() };
+    try {
+      outcome = await runPlacement({ canonical, label: msg('Align at feature'), intent: {
+        capture: () => noticeState.value,
+        restore: (restored) => { noticeState.value = restored; },
+        commit: () => { noticeState.value = hold; }
+      } });
+    }
     catch (cause) { outcome = { status: 'error', error: cause }; }
     if (expected !== actionId) return { status: 'stale' };
     if (outcome?.status === 'ok') {
       if (clearsAlignment) notePlanReplaced(msg('records aligned at a feature.'));
-      noticeState.value = { text: t('Records aligned at {selector}.', { selector: current.reply.selector }),
-        written: current.reply.recordTranslations, session: sessionReplacements() };
       preview.value = null;
       status.value = 'idle';
       return { status: 'ok' };
@@ -242,5 +261,5 @@ export const createFeatureAnchorAction = ({
     return { status: String(outcome?.status || 'error') };
   };
 
-  return { selector, status, busy, preview, previewLines, error, notice, applied, resolve, apply, cancel, retire };
+  return { selector, status, busy, preview, previewLines, error, notice, applied, resolve, apply, cancel };
 };

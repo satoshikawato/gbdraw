@@ -84,7 +84,7 @@ import {
   isSingleCircularJourney,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
-import { circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey, recordKeyExpansion } from './record-draw-selection.js';
+import { cardHoldsRecordKey, circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey } from './record-draw-selection.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -1930,9 +1930,7 @@ const cardDrawsRecord = (seq, cardKey, record, resources, fileOf) => {
  */
 export const linearRecordCardIndexes = (request, inputs, resources) => {
   const cards = inputs.linearSeqs.map((seq, index) => linearSeqRecordKey(seq, index));
-  const indexes = request.records.map(({ recordKey }) => cards.findIndex(
-    (key) => key === recordKey || recordKeyExpansion(recordKey, key) !== null
-  ));
+  const indexes = request.records.map(({ recordKey }) => cards.findIndex((key) => cardHoldsRecordKey(key, recordKey)));
   return indexes.every((index, position) => index >= 0 && (position === 0 || index >= indexes[position - 1])
     && cardDrawsRecord(inputs.linearSeqs[index], cards[index], request.records[position], resources, inputs.fileOf))
     ? indexes : null;

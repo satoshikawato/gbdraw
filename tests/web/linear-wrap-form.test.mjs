@@ -10,13 +10,13 @@ import { normalizeUserFacingError, reasonText } from '../../gbdraw/web/js/utils/
 import { createDefaultAdv, createDefaultForm } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import {
   LINEAR_WRAP_FORM_FIELDS, exportLinearWrap, linearWrapAmountText, linearWrapBlockers, linearWrapFormPatch, linearWrapInputValue,
-  linearWrapUnitOf, requestLinearWrapLeaf, requestLinearWrapLength, shownLinearWrap
+  linearWrapUnitOf, offersRecordPositionReset, requestLinearWrapLeaf, requestLinearWrapLength, shownLinearWrap
 } from '../../gbdraw/web/js/services/linear-wrap-form.js';
 import {
   createFeaturePlacementActions, draftFeatureSlot, draftPlacementTargets
 } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createLinearWrapField } from '../../gbdraw/web/js/app/linear-wrap-field.js';
-import { movesARecordSideways } from '../../gbdraw/web/js/services/linear-record-layout.js';
+import { movesARecordSideways } from '../../gbdraw/web/js/services/record-draw-selection.js';
 import { createAutoValueDisplay } from '../../gbdraw/web/js/app/auto-value-display.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
@@ -157,6 +157,11 @@ test('a drawn record moved sideways is a translation the request carries with an
   // request leaves it out (`recordTranslationsFor`), so it blocks nothing Python would draw.
   assert.equal(movesARecordSideways([{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: -62.8, y: 0 }],
     [{ uid: 'record-1' }]), false);
+  // Review 2 M2: a card that draws every record of a multi-record file draws its members as `<card key>:<k>`, and
+  // the request keeps their entries, matched as `linearRecordCardIndexes` matches them (`cardHoldsRecordKey`).
+  assert.equal(movesARecordSideways([{ recordKey: 'record-1:2', x: 25, y: 0 }], [{ uid: 'record-1' }]), true, 'a split member');
+  assert.equal(movesARecordSideways([{ recordKey: 'record-10', x: 25, y: 0 }], [{ uid: 'record-1' }]), false,
+    'another card whose key starts the same');
 });
 
 test('each blocker keeps Wrap Rows from turning on, in its Generate refusal\'s words; Simple-mode Middle is none (case 3)', () => {
@@ -165,12 +170,20 @@ test('each blocker keeps Wrap Rows from turning on, in its Generate refusal\'s w
   assert.deepEqual(linearWrapBlockers({ ...none, comparisons: true }), ['WRAP']);
   assert.deepEqual(linearWrapBlockers({ ...none, sharedRecordRow: true }), ['WRAP_GRID_ROW']);
   assert.deepEqual(linearWrapBlockers({ ...none, movedRecords: true }), ['WRAP_RECORD_POSITION']);
-  // Review 1 M1 (D-65): Align at feature blocks also when its Apply moved no record; with a move, one hint.
-  assert.deepEqual(linearWrapBlockers({ ...none, featureAlignment: true }), ['WRAP_RECORD_POSITION']);
+  // Review 1 M1 (D-65): Align at feature blocks also when its Apply moved no record; with a move, one hint. With no
+  // move there is no position to reset, so its hint names Undo, not the button (D-75).
+  assert.deepEqual(linearWrapBlockers({ ...none, featureAlignment: true }), ['WRAP_FEATURE_ALIGNMENT']);
   assert.deepEqual(linearWrapBlockers({ ...none, featureAlignment: true, movedRecords: true }), ['WRAP_RECORD_POSITION']);
   assert.deepEqual(linearWrapBlockers({ ...none, featureTrackOnAxis: true }), ['WRAP_TRACK_LAYOUT']);
+  // Under a comparison the button could not unblock the field, so the comparison is named first (D-74, D-75).
+  assert.deepEqual(linearWrapBlockers({ ...none, comparisons: true, movedRecords: true }), ['WRAP']);
   assert.deepEqual(linearWrapBlockers({ comparisons: true, sharedRecordRow: true, featureAlignment: true, movedRecords: true, featureTrackOnAxis: true }),
-    ['WRAP', 'WRAP_GRID_ROW', 'WRAP_RECORD_POSITION', 'WRAP_TRACK_LAYOUT']);
+    ['WRAP', 'WRAP_GRID_ROW', 'WRAP_TRACK_LAYOUT']);
+  // D-74: the button is offered only while a drawn record is moved and no comparison blocks.
+  assert.equal(offersRecordPositionReset({ ...none, movedRecords: true }), true);
+  assert.equal(offersRecordPositionReset({ ...none, movedRecords: true, sharedRecordRow: true }), true);
+  assert.equal(offersRecordPositionReset({ ...none, featureAlignment: true }), false, 'Align at feature that moved nothing');
+  assert.equal(offersRecordPositionReset({ ...none, comparisons: true, movedRecords: true }), false, 'a Similarity alignment or BLAST');
   // The feature slot the blocker reads is the one the placement targets read: in simple mode, Middle puts the
   // features on the axis, which turning wrap on switches (no blocker); a custom stack's overlay slot is one.
   const drawing = linearDrawing();
@@ -186,12 +199,18 @@ test('each blocker keeps Wrap Rows from turning on, in its Generate refusal\'s w
   inputs = { ...none, sharedRecordRow: true, featureTrackOnAxis: true };
   assert.equal(field.linearWrapBlockedText.value, `${reasonText('WRAP_GRID_ROW')} ${reasonText('WRAP_TRACK_LAYOUT')}`);
   assert.equal(field.linearWrapResetsPositions.value, false, 'only a sideways move offers Reset record positions');
-  // PD-OI-113 scenario revision 2 (Q4): a move, or Align at feature, shows the button its hint names.
-  for (const moved of [{ movedRecords: true }, { featureAlignment: true }]) {
-    inputs = { ...none, ...moved };
-    assert.equal(field.linearWrapResetsPositions.value, true, JSON.stringify(moved));
-    assert.match(field.linearWrapBlockedText.value, /Click Reset record positions under Wrap Rows/);
+  // PD-OI-113 scenario revision 2 (Q4, D-74): a drawn record moved sideways shows the button its hint names.
+  inputs = { ...none, movedRecords: true, featureAlignment: true };
+  assert.equal(field.linearWrapResetsPositions.value, true);
+  assert.match(field.linearWrapBlockedText.value, /Click Reset record positions under Wrap Rows/);
+  // No button, and no hint that names it, for Align at feature alone or under a comparison.
+  for (const held of [{ featureAlignment: true }, { comparisons: true, movedRecords: true }]) {
+    inputs = { ...none, ...held };
+    assert.equal(field.linearWrapResetsPositions.value, false, JSON.stringify(held));
+    assert.doesNotMatch(field.linearWrapBlockedText.value, /Reset record positions/, JSON.stringify(held));
   }
+  inputs = { ...none, featureAlignment: true };
+  assert.equal(field.linearWrapBlockedText.value, reasonText('WRAP_FEATURE_ALIGNMENT'));
   // Turning it off is never blocked: the checkbox writes Off.
   field.changeLinearWrap(checkbox(false), 'on');
   assert.deepEqual(writes, [['linear_wrap_length', null]]);

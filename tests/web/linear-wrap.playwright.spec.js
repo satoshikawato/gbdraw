@@ -137,9 +137,23 @@ test('comparisons and a record moved by Align at feature keep Wrap Rows from bei
   await settle(page);
   await expect(wrapBox(page)).toBeDisabled();
   await expect(page.locator('#linear-wrap-blocked')).toHaveText(MOVED_TEXT);
+  // Reset record positions moves the records off Align at feature's places, so it no longer holds; one Undo puts the
+  // positions back and, with them, Align at feature and its notice (D-74).
+  const reset = page.getByTestId('linear-wrap-reset-positions');
+  await reset.click();
+  await expect(page.locator('#linear-wrap-blocked')).toHaveCount(0, { timeout: 180_000 });
+  await settle(page);
+  await expect(wrapBox(page)).toBeEnabled();
+  await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveCount(0);
+  await undo(page);
+  await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveText('Records aligned at gene=COX1.');
+  await expect(wrapBox(page)).toBeDisabled();
+  await expect(page.locator('#linear-wrap-blocked')).toHaveText(MOVED_TEXT);
+  // The Undo of Apply ends Align at feature.
   await undo(page);
   await expect(wrapBox(page)).toBeEnabled();
   await expect(page.locator('#linear-wrap-blocked')).toHaveCount(0);
+  await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveCount(0);
 
   // A comparison of the two records.
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setLinearComparisonGlobalAction('losat'));
