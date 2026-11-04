@@ -20,7 +20,6 @@ import { drawnRecordIdentities } from '../services/record-draw-selection.js';
  * @property {(sourceId: DrawingId, derivation: RegionDerivation) => Promise<DrawingListOutcome>} newDrawingFromRegion
  * @property {() => Promise<readonly RegionSourceRecord[]>} shownRecords The shown drawing's records, in drawing
  *   order (`regionSourceRecords`).
- * @property {(setting: string) => string} settingLabel A setting's label in the settings catalog.
  */
 
 /**
@@ -80,6 +79,58 @@ export const regionSourceRecords = (requestRecords, sources, featuresOf) => draw
  * @property {{ setting: string, label: string, explicit: string, auto: string }[]} returnedToAuto
  * @property {string[]} notCarried
  */
+
+/**
+ * The English name of each setting that can return to Auto, by setting ID
+ * (`autoSizes.adaptableSettings` of `mode-profiles.generated.js`, from
+ * `ADAPTABLE_SETTINGS` in `gbdraw/auto_sizes.py`): the text of the settings
+ * pane's control for it, or a name of its own where no control sets it. A
+ * setting that each mode names differently has one text per mode.
+ * @type {Readonly<Record<string, string | Readonly<Record<DerivedRegionDrawing['mode'], string>>>>}
+ */
+const ADAPTABLE_SETTING_TEXT = Object.freeze({
+  'objects.features.block_stroke_width': msg('Block Stroke Width'),
+  'objects.features.line_stroke_width': msg('Line Stroke Width'),
+  'objects.legends.color_rect_size': msg('Legend swatch size'),
+  'objects.legends.font_size': msg('Legend font size'),
+  'labels.font_size': msg('Label Font Size'),
+  'labels.font_size.linear': msg('Label Font Size'),
+  'objects.axis.circular.stroke_width': msg('Axis Stroke Width'),
+  'objects.axis.linear.stroke_width': msg('Axis Stroke Width'),
+  'canvas.linear.arrow_length_parameter': msg('Linear arrow length'),
+  'canvas.linear.default_cds_height': msg('Feature Height'),
+  'objects.definition.linear.font_size': msg('Default font size'),
+  'objects.scale.font_size': msg('Scale Font Size'),
+  'objects.scale.ruler_label_font_size': msg('Ruler Label Font Size'),
+  window: msg('Window'),
+  step: msg('Step'),
+  depth_window: msg('Depth Window'),
+  depth_step: msg('Depth Step'),
+  'circularSlot.features.width': msg('Feature Track Width'),
+  'circularSlot.gc_content.width': msg('GC Content Width'),
+  'circularSlot.gc_skew.width': msg('GC Skew Width'),
+  'circularSlot.depth.width': msg('Depth Width'),
+  'objects.scale.interval': Object.freeze({
+    circular: msg('Circular scale interval'), linear: msg('Linear ruler interval')
+  }),
+  'canvas.linear.default_gc_height': msg('GC Height'),
+  'canvas.linear.depth_height': msg('Default Depth Height'),
+  'objects.gc_content.tick_font_size': msg('Tick Font Size'),
+  'objects.depth.tick_font_size': msg('Depth tick font size')
+});
+
+/**
+ * A setting's name in the UI language, as a drawing of `mode` names it; an
+ * unknown setting shows its ID.
+ * @param {DerivedRegionDrawing['mode']} mode
+ * @param {string} setting A setting ID of `autoSizes.adaptableSettings`.
+ * @returns {string}
+ */
+export const adaptableSettingLabel = (mode, setting) => {
+  const text = Object.hasOwn(ADAPTABLE_SETTING_TEXT, setting) ? ADAPTABLE_SETTING_TEXT[setting] : null;
+  if (text === null) return setting;
+  return tm(typeof text === 'string' ? text : text[mode]);
+};
 
 /** @type {Readonly<Record<RegionNotCarriedItem['kind'], string>>} One English line per kind (wording owner). */
 const NOT_CARRIED_TEXT = Object.freeze({
@@ -169,7 +220,7 @@ const readRegionDrawingReply = (result) => {
  * @param {RegionDrawingPorts} ports
  */
 export const createRegionDrawing = ({
-  shownDrawingId, projectShownRequest, deriveRegion, newDrawingFromRegion, shownRecords, settingLabel
+  shownDrawingId, projectShownRequest, deriveRegion, newDrawingFromRegion, shownRecords
 }) => {
   /**
    * @param {readonly RegionDrawingRegion[]} regions Source coordinates, 1-based and inclusive.
@@ -222,7 +273,7 @@ export const createRegionDrawing = ({
         status: 'derived',
         message: '',
         returnedToAuto: offer.returnedToAuto.map((item) => ({
-          setting: item.setting, label: settingLabel(item.setting), explicit: shownValue(item.explicit), auto: shownValue(item.auto)
+          setting: item.setting, label: adaptableSettingLabel(offer.mode, item.setting), explicit: shownValue(item.explicit), auto: shownValue(item.auto)
         })),
         notCarried: offer.notCarried.map((item) => tm(NOT_CARRIED_TEXT[item.kind]))
       });

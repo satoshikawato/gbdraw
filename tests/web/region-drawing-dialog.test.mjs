@@ -36,8 +36,7 @@ const harness = ({ reply = null } = {}) => {
       calls.created.push({ sourceId, derivation });
       return { drawingId: 'linear' };
     },
-    shownRecords: async () => RECORDS,
-    settingLabel: (setting) => (setting === 'objects.scale.interval' ? 'Tick interval' : setting)
+    shownRecords: async () => RECORDS
   });
   return { owner, calls, pending };
 };
@@ -61,7 +60,7 @@ test('a derived reply shows the returned sizes and the not-carried lines; Keep m
   assert.deepEqual(calls.derive.at(-1).regions, [{ recordKey: 'record-1', start: 101, end: 400 }]);
   assert.equal(calls.derive.at(-1).adaptSizes, true);
   assert.equal(owner.dialog.status, 'derived');
-  assert.deepEqual(owner.dialog.returnedToAuto, [{ setting: 'objects.scale.interval', label: 'Tick interval', explicit: '500', auto: '100' }]);
+  assert.deepEqual(owner.dialog.returnedToAuto, [{ setting: 'objects.scale.interval', label: 'Linear ruler interval', explicit: '500', auto: '100' }]);
   assert.deepEqual(owner.dialog.notCarried, ['The uploaded comparison tables']);
   owner.dialog.keepValues = true;
   await owner.refresh();
@@ -136,8 +135,7 @@ test('a close while the records are read keeps the dialog closed', async () => {
     projectShownRequest: async () => sent,
     deriveRegion: async () => ({ result: null }),
     newDrawingFromRegion: async () => ({ drawingId: 'linear' }),
-    shownRecords: () => new Promise((resolve) => { release = () => resolve(RECORDS); }),
-    settingLabel: (setting) => setting
+    shownRecords: () => new Promise((resolve) => { release = () => resolve(RECORDS); })
   });
   const opening = owner.open();
   assert.equal(owner.dialog.show, true);
@@ -166,4 +164,19 @@ test('without a Result the records come from the request and discovery, with no 
   const records = regionSourceRecords(requestRecords, sources, (recordKey) => { asked.push(recordKey); return null; });
   assert.deepEqual(records, [{ recordKey: 'record-1', caption: 'NC_1', length: 1200, features: null }]);
   assert.deepEqual(asked, ['record-1']);
+});
+
+test('every setting that can return to Auto is named by an English UI text, never its ID', async () => {
+  const { adaptableSettingLabel } = await import('../../gbdraw/web/js/app/region-drawing.js');
+  const { MODE_PROFILE_DATA } = await import('../../gbdraw/web/js/mode-profiles.generated.js');
+  const { sourceCalls } = await import('../../tools/i18n/source-keys.mjs');
+  const english = new Set(sourceCalls().map((call) => call.key));
+  for (const [mode, settings] of Object.entries(MODE_PROFILE_DATA.autoSizes.adaptableSettings)) {
+    for (const setting of settings) {
+      const label = adaptableSettingLabel(/** @type {'circular' | 'linear'} */ (mode), setting);
+      assert.ok(english.has(label), `${mode} ${setting}: "${label}" is no English UI text`);
+      assert.notEqual(label, setting, `${mode} ${setting} is shown by its ID`);
+    }
+  }
+  assert.equal(adaptableSettingLabel('linear', 'objects.unknown.size'), 'objects.unknown.size');
 });

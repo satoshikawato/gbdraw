@@ -7746,9 +7746,7 @@ export const createAppSetup = () => {
       const drawing = state.activeDrawing();
       const [sent, sources] = await Promise.all([projectShownRequest(), readRecordIdentitySources(drawing)]);
       return regionSourceRecords(sent.envelope.renderRequest.records, sources, shownResultFeatures);
-    },
-    // No settings catalog names a request path yet: the dialog shows the path (remaining work).
-    settingLabel: (setting) => setting
+    }
   });
   return {
     hostedBuild: readHostedBuild(document),
