@@ -11,10 +11,11 @@ from typing import Sequence
 
 from svgwrite import Drawing
 
+from gbdraw.core.figure_length import CSS_PX_PER_INCH
 from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render import export as _export
 from gbdraw.render.document import write_svg_document, write_text
-from gbdraw.render.export_limits import check_drawing_export_limits
+from gbdraw.render.export_limits import check_drawing_export_limits, checked_png_dpi
 from gbdraw.render.formats import (
     INTERACTIVE_SVG_FORMAT,
     SVG_FORMAT,
@@ -72,6 +73,14 @@ def _resolve_base_prefix(canvas: Drawing, output_prefix: str | None, output_dir:
     return base_prefix
 
 
+def _png_options(fmt: str, dpi: float | None) -> dict[str, float]:
+    """CairoSVG options of one format: a PNG with a ``dpi`` draws ``dpi / 96`` pixels per SVG pixel."""
+
+    if dpi is None or fmt != "png":
+        return {}
+    return {"scale": dpi / CSS_PX_PER_INCH}
+
+
 def _cairosvg_module(formats: Sequence[str]) -> ModuleType | None:
     """The CairoSVG module for ``formats``, checked before anything is written."""
     if not formats:
@@ -93,6 +102,7 @@ def save_figure_to(
     overwrite: bool = False,
     interactive_context: InteractiveSvgContext | None = None,
     embed_fonts: bool = True,
+    dpi: float | None = None,
 ) -> list[str]:
     """Save a figure to an explicit output directory/prefix.
 
@@ -108,14 +118,17 @@ def save_figure_to(
     the registered and installed fonts whatever ``embed_fonts``; PDF, EPS and
     PS draw a font whose license forbids embedding it in the nearest
     Liberation font (``gbdraw.render.font_embedding``).
+    ``dpi`` scales the PNG to ``dpi / 96`` pixels per SVG pixel (``None``: one);
+    a figure drawn to a requested size states it in the SVG and PDF.
     """
 
+    dpi = checked_png_dpi(dpi)
     fmt_list = _normalize_formats(formats)
     base_prefix = _resolve_base_prefix(canvas, output_prefix, output_dir)
     svg_filename = resolve_format_output_path(base_prefix, SVG_FORMAT)
     output_paths = resolve_output_paths(base_prefix, fmt_list, include_base_svg=True)
     preflight_output_paths(output_paths, overwrite=overwrite)
-    check_drawing_export_limits(canvas, fmt_list)
+    check_drawing_export_limits(canvas, fmt_list, dpi=dpi)
     classification = classify_formats(fmt_list)
     cairosvg_module = _cairosvg_module(classification.cairosvg)
     try:
@@ -177,6 +190,7 @@ def save_figure_to(
                             fmt,
                             write_to=output_file,
                             cairosvg_module=cairosvg_module,
+                            **_png_options(fmt, dpi),
                         )
                 except Exception as exc:
                     raise ExportError(f"Failed to generate {fmt.upper()}: {exc}") from exc
@@ -193,15 +207,17 @@ def render_to_bytes(
     *,
     interactive_context: InteractiveSvgContext | None = None,
     embed_fonts: bool = True,
+    dpi: float | None = None,
 ) -> bytes:
     """Render a canvas to bytes (SVG always; PNG/PDF/PS/EPS require CairoSVG).
 
-    ``embed_fonts`` as in :func:`save_figure_to`: SVG and interactive SVG carry
-    the custom fonts they use.
+    ``embed_fonts`` and ``dpi`` as in :func:`save_figure_to`: SVG and
+    interactive SVG carry the custom fonts they use, and a PNG scales by ``dpi``.
     """
 
+    dpi = checked_png_dpi(dpi)
     fmt_norm = parse_output_formats((fmt,))[0]
-    check_drawing_export_limits(canvas, (fmt_norm,))
+    check_drawing_export_limits(canvas, (fmt_norm,), dpi=dpi)
     if fmt_norm in {SVG_FORMAT, INTERACTIVE_SVG_FORMAT}:
         svg_source = write_svg_document(canvas).body
         embedding = _font_embedding(svg_source, embed_fonts)
@@ -219,6 +235,7 @@ def render_to_bytes(
             svg_string,
             fmt_norm,
             cairosvg_module=cairosvg_module,
+            **_png_options(fmt_norm, dpi),
         )
     except GbdrawError:
         raise

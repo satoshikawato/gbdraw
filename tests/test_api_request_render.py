@@ -1533,6 +1533,7 @@ def test_render_request_passes_output_policy_and_returns_existing_paths(
         "overwrite": True,
         "interactive_context": context,
         "embed_fonts": False,
+        "dpi": None,
     }
 
 

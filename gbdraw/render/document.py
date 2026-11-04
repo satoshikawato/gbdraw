@@ -8,6 +8,7 @@ from typing import Iterator, TextIO, TypeAlias
 from svgwrite import Drawing
 from svgwrite.base import BaseElement
 
+from gbdraw.core.figure_length import FigureLength, RequestedFigureSize
 from gbdraw.render.group_content import (
     GroupContent,
     element_text,
@@ -36,6 +37,51 @@ def drawing_size(drawing: Drawing) -> tuple[float, float]:
         parse_svg_number(drawing.attribs.get("width")),
         parse_svg_number(drawing.attribs.get("height")),
     )
+
+
+# What a drawing drawn to a requested size was asked for, so its written file states the size in that unit.
+_EXPORT_SIZE_ATTR = "_gbdraw_export_size"
+# The decimals a side converted to the other side's unit is written with.
+_CONVERTED_DECIMALS = 4
+
+
+def bind_export_size(drawing: Drawing, size: RequestedFigureSize) -> None:
+    """Keep the size a drawing was fitted to, for ``write_svg_document``; the drawing itself stays in px."""
+
+    setattr(drawing, _EXPORT_SIZE_ATTR, size if size.requested else None)
+
+
+def _export_root_size(drawing: Drawing) -> dict[str, str] | None:
+    """The root ``width`` and ``height`` of a written file: each side in its requested unit, else in the other's.
+
+    The ``viewBox`` stays in px, so a viewer scales the px drawing to the physical size.
+    """
+
+    size = getattr(drawing, _EXPORT_SIZE_ATTR, None)
+    if not isinstance(size, RequestedFigureSize) or not size.requested:
+        return None
+    unit = size.width if size.width is not None else size.height
+    assert unit is not None
+    width_px, height_px = drawing_size(drawing)
+
+    def side(requested: FigureLength | None, px: float) -> str:
+        if requested is not None:
+            return requested.text
+        converted = unit.of_px(px)
+        return FigureLength(round(converted.value, _CONVERTED_DECIMALS), converted.unit).text
+
+    return {"width": side(size.width, width_px), "height": side(size.height, height_px)}
+
+
+def _root_with(drawing: Drawing, attribs: dict[str, str] | None) -> Drawing:
+    """``drawing`` itself, or a shallow copy whose root carries ``attribs``; the drawing is not changed."""
+
+    if not attribs:
+        return drawing
+    root = object.__new__(type(drawing))
+    root.__dict__.update(drawing.__dict__)
+    root.attribs = {**drawing.attribs, **attribs}
+    return root
 
 
 @dataclass(frozen=True)
@@ -150,8 +196,10 @@ def _piece(element: BaseElement) -> Piece:
     return RawPiece(require_element_markup(element_text(element)))
 
 
-def document_parts(drawing: Drawing) -> DocumentParts:
+def document_parts(drawing: Drawing, *, root_attribs: dict[str, str] | None = None) -> DocumentParts:
     """Serialize ``drawing`` once, as ordered pieces (the one order of serialization).
+
+    ``root_attribs`` replace root attributes in the text only (the written size of ``write_svg_document``).
 
     The prolog is svgwrite's: the XML declaration and the stylesheet
     instructions. A placed content group with children is a ``ContentPiece``
@@ -163,22 +211,26 @@ def document_parts(drawing: Drawing) -> DocumentParts:
     prolog = _DECLARATION + "".join(
         _STYLESHEET % stylesheet for stylesheet in drawing._stylesheets
     )
+    root = _root_with(drawing, root_attribs)
     if not drawing.elements:
         return DocumentParts(
-            prolog=prolog, head=require_element_markup(drawing.tostring()), pieces=(), tail=""
+            prolog=prolog, head=require_element_markup(root.tostring()), pieces=(), tail=""
         )
     return DocumentParts(
         prolog=prolog,
-        head=require_element_markup(start_tag(drawing)),
+        head=require_element_markup(start_tag(root)),
         pieces=tuple(_piece(element) for element in drawing.elements),
         tail=f"</{drawing.elementname}>",
     )
 
 
 def write_svg_document(drawing: Drawing) -> SvgDocument:
-    """Serialize ``drawing`` once, as ``Drawing.write`` would write it (``document_parts``)."""
+    """Serialize ``drawing`` once, as ``Drawing.write`` would write it (``document_parts``).
 
-    parts = document_parts(drawing)
+    A drawing fitted to a requested size (``bind_export_size``) states it in the requested unit.
+    """
+
+    parts = document_parts(drawing, root_attribs=_export_root_size(drawing))
     return SvgDocument(prolog=parts.prolog, body=parts.body())
 
 
@@ -188,6 +240,7 @@ __all__ = [
     "Piece",
     "RawPiece",
     "SvgDocument",
+    "bind_export_size",
     "document_parts",
     "write_svg_document",
     "write_text",

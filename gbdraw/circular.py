@@ -79,6 +79,7 @@ from .cli_utils.common import (
     _add_depth_track_label_color_args,
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
+    _add_figure_size_args,
     _add_format_arg,
     _add_overwrite_arg,
     _add_retired_option_args,
@@ -97,7 +98,9 @@ from .cli_utils.common import (
     validate_input_args,
     validate_label_args,
     validate_output_choice_args,
+    figure_size_overrides,
     handle_output_formats,
+    png_dpi,
 )
 from .cli_utils.session import (
     DiagramRunResult,
@@ -167,6 +170,7 @@ def _render_output_request(
     *,
     overwrite: bool,
     embed_fonts: bool,
+    dpi: int | None,
 ) -> RenderOutputRequest:
     """Split a CLI path prefix into the typed output directory and basename."""
 
@@ -182,6 +186,7 @@ def _render_output_request(
         formats=tuple(formats),
         overwrite=overwrite,
         embed_fonts=embed_fonts,
+        dpi=dpi,
     )
 
 
@@ -325,6 +330,7 @@ def _get_args(
         help='Label font size (optional; default: 14 (pt) for genomes < 75 kb, 8 for genomes >= 75 kb)',
         type=argparse_float)
     _add_format_arg(parser)
+    _add_figure_size_args(parser)
     _add_gc_skew_toggle_args(
         parser,
         show_gc_default=CIRCULAR_MODE_PROFILE.show_gc,
@@ -1201,6 +1207,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         else gc_content_tick_interval
     )
     override_candidates: dict[str, object | None] = {
+        **figure_size_overrides(args),
         "objects.text.font_family": cli_font_family(args),
         "objects.features.block_stroke_color": block_stroke_color,
         "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
@@ -1300,6 +1307,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
 
     out_formats: list[str] = parse_formats(args.format)
     out_formats = handle_output_formats(out_formats)
+    dpi = png_dpi(args, out_formats)
     shortcut_geometry_requested = any(
         value is not None
         for value in (
@@ -1469,6 +1477,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 out_formats,
                 overwrite=args.overwrite,
                 embed_fonts=args.embed_fonts,
+                dpi=dpi,
             )
             if output_prefix is not None
             else replace(
@@ -1477,6 +1486,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                     out_formats,
                     overwrite=args.overwrite,
                     embed_fonts=args.embed_fonts,
+                    dpi=dpi,
                 ),
                 resolve_prefix_from_first_record=True,
             ),
@@ -1492,6 +1502,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 formats=tuple(out_formats),
                 overwrite=args.overwrite,
                 embed_fonts=args.embed_fonts,
+                dpi=dpi,
             ),
             record_options=record_manifest.record_options,
         )

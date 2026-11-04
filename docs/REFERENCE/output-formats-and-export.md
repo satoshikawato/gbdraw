@@ -44,12 +44,44 @@ command: the command line prints it and exits with status 1, and Python
 `save_figure_to()`, `render_to_bytes()`, `Diagram.save()`, and typed requests
 raise it as `ValidationError`.
 
+## Figure size and PNG DPI
+
+A Linear figure can be drawn to a requested size: `--figure_width` and
+`--figure_height` on the command line, `figure_width` and `figure_height` on
+`LinearOptions`, or the config keys `canvas.figure_width` and
+`canvas.figure_height`. Each takes `auto` (the default) or a length with a
+unit, `mm`, `cm`, `in`, or `px`, such as `180mm`, `18 cm`, or `7in`; a bare
+number is refused. A px is a CSS px, 96 per inch. The size is the whole figure,
+legend and title included.
+
+gbdraw lays the figure out again to fit: the sequence width
+(`canvas.linear.width`) changes, while fonts, line widths, the legend, record
+names, and padding keep their size. A requested height adds room above and
+below; it does not stretch the figure. A figure that cannot fit is refused with
+the sizes of its parts and the smallest size that works: a width narrower than
+the record names, labels past the sequence ends, a legend beside the records,
+and padding, or a height shorter than the figure drawn at that width. The
+message offers placing a side legend at the top or bottom when that would help.
+Circular maps refuse a requested size for now.
+
+The SVG, PDF, EPS, and PS files that the command line, `save_figure_to()`,
+`render_to_bytes()`, and `Diagram.save()` write state the requested size in its
+unit (`width="180mm"`; a side left auto is written in the other side's unit),
+with the `viewBox` in px, so a PDF page is 180 mm wide. The Web app and the
+in-memory drawing keep px.
+
+`--dpi` on the command line and `dpi` on `save_figure_to()`,
+`render_to_bytes()`, `Diagram.to_bytes()`, `Diagram.save()`, and
+`RenderOutputRequest` scale a PNG to `dpi / 96` pixels per SVG pixel (default
+96: one pixel per SVG pixel). Other formats ignore it, and the command line
+warns when `--dpi` is given without PNG output. The PNG carries no DPI metadata.
+
 ## PNG and PDF size limits
 
 On the command line and in Python, a PNG side cannot exceed 32,767 px, and a
-wrapped figure's PDF page side cannot exceed 14,400 pt. A PNG there has one pixel
-per SVG pixel and a PDF page has 0.75 pt per SVG pixel, so 14,400 pt is 19,200
-SVG px. A figure over a limit stops before anything is written, as a failed
+wrapped figure's PDF page side cannot exceed 14,400 pt. A PNG there has
+`dpi / 96` pixels per SVG pixel (one at the default 96 DPI) and a PDF page has
+0.75 pt per SVG pixel, so 14,400 pt is 19,200 SVG px. A figure over a limit stops before anything is written, as a failed
 conversion does. For a [wrapped figure](command-line.md#wrap-one-record-over-several-rows)
 the error names the next longer 1-2-5 row length that should fit, or says that
 none would. That length is estimated from the drawn height and the row count,
@@ -87,7 +119,8 @@ optimizers and vector editors can remove the IDs, data attributes, metadata,
 or script needed for interaction while leaving the visible drawing intact.
 Keep the original generated file and edit a copy.
 
-DPI changes raster pixel dimensions, not SVG or PDF geometry. In the web app,
+DPI changes raster pixel dimensions, not SVG or PDF geometry. On the command
+line, in Python, and in the web app,
 PNG dimensions scale from the SVG canvas by `DPI / 96`; **96 (Screen)** keeps
 the canvas pixel dimensions and **300 (Print)** produces a larger raster.
 Check the downloaded dimensions and file signature instead of trusting the

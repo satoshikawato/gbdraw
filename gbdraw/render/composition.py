@@ -29,6 +29,8 @@ COMPOSITION_SCHEMA_ATTRIBUTE = "data-gbdraw-composition-schema"
 COMPOSITION_METADATA_ATTRIBUTE = "data-gbdraw-composition"
 COMPOSITION_ROLE_ATTRIBUTE = "data-gbdraw-composition-role"
 
+# The plan a drawing was composed by, kept on the drawing for the figure-size check (``applied_composition_plan``).
+_APPLIED_PLAN_ATTR = "_gbdraw_composition_plan"
 _PRIMARY_ROLE = "primary"
 _LEGEND_ROLE = "legend"
 _TITLE_ROLE = "title"
@@ -469,6 +471,16 @@ def apply_composition_plan(
     )
     drawing.attribs[COMPOSITION_SCHEMA_ATTRIBUTE] = str(COMPOSITION_SCHEMA_VERSION)
     drawing.attribs[COMPOSITION_METADATA_ATTRIBUTE] = metadata
+    setattr(drawing, _APPLIED_PLAN_ATTR, plan)
+
+
+def applied_composition_plan(drawing: Drawing) -> CompositionPlan:
+    """The plan ``apply_composition_plan`` composed ``drawing`` by."""
+
+    plan = getattr(drawing, _APPLIED_PLAN_ATTR, None)
+    if not isinstance(plan, CompositionPlan):
+        raise ValueError("the drawing has no applied composition plan")
+    return plan
 
 
 __all__ = [
@@ -477,5 +489,6 @@ __all__ = [
     "COMPOSITION_SCHEMA_ATTRIBUTE",
     "COMPOSITION_SCHEMA_VERSION",
     "apply_composition_plan",
+    "applied_composition_plan",
     "painted_title_content",
 ]

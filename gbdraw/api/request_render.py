@@ -3559,6 +3559,7 @@ def _render_prepared_request(
             overwrite=output.overwrite,
             interactive_context=export_interactive_context,
             embed_fonts=output.embed_fonts,
+            dpi=output.dpi,
         )
     return RequestRenderResult(
         mode=prepared.mode,

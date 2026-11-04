@@ -79,6 +79,7 @@ from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentReference,
 )
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.canvas import FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH
 from gbdraw.config.models.objects import CONSERVATION_COLOR_SCHEME_PATH, ConservationColorScheme
 from gbdraw.comparisons.identity_scale import (
     CIRCULAR_IDENTITY_SCALE_PATH,
@@ -483,6 +484,21 @@ class _CommonOptions:
     depth_step: int | None = None
     depth_tracks: Sequence[DepthTrackOptions] = ()
     thresholds: Thresholds = field(default_factory=Thresholds)
+    # The whole figure's size with a unit ("180mm", "7in"); None is auto (canvas.figure_width/height). Keyword-only,
+    # so the positional order of every options class stays as released.
+    figure_width: str | None = field(default=None, kw_only=True)
+    figure_height: str | None = field(default=None, kw_only=True)
+
+
+def _common_config_overrides(options: _CommonOptions) -> Mapping[str, object] | None:
+    """``config_overrides`` with the figure size fields written as their config leaves."""
+
+    sizes = {
+        path: value
+        for path, value in ((FIGURE_WIDTH_PATH, options.figure_width), (FIGURE_HEIGHT_PATH, options.figure_height))
+        if value is not None
+    }
+    return {**(options.config_overrides or {}), **sizes} if sizes else options.config_overrides
 
 
 def _validate_common_options(options: _CommonOptions) -> None:
@@ -684,11 +700,12 @@ class Diagram:
             )
         return self._interactive_context
 
-    def to_bytes(self, format: str = "svg", *, embed_fonts: bool = True) -> bytes:
+    def to_bytes(self, format: str = "svg", *, embed_fonts: bool = True, dpi: float | None = None) -> bytes:
         """Return the diagram in SVG or a supported binary format.
 
         With ``embed_fonts``, SVG carries a subset of each font it uses that
-        gbdraw does not bundle.
+        gbdraw does not bundle. ``dpi`` scales a PNG to ``dpi / 96`` pixels
+        per SVG pixel (default: one).
         """
 
         return render_to_bytes(
@@ -700,6 +717,7 @@ class Diagram:
                 else None
             ),
             embed_fonts=embed_fonts,
+            dpi=dpi,
         )
 
     def to_svg(self, *, interactive: bool = False, embed_fonts: bool = True) -> str:
@@ -715,8 +733,9 @@ class Diagram:
         format: str | None = None,
         overwrite: bool = False,
         embed_fonts: bool = True,
+        dpi: float | None = None,
     ) -> Path:
-        """Write exactly one output file and return its path."""
+        """Write exactly one output file and return its path (``dpi`` as in :meth:`to_bytes`)."""
 
         output_path = Path(path)
         resolved_format = format or _format_from_path(output_path)
@@ -729,7 +748,7 @@ class Diagram:
             raise ExportError(
                 f"Could not prepare output directory: {output_path.parent}"
             ) from exc
-        payload = self.to_bytes(resolved_format, embed_fonts=embed_fonts)
+        payload = self.to_bytes(resolved_format, embed_fonts=embed_fonts, dpi=dpi)
         with staged_output_files((output_path,)) as staged:
             try:
                 staged[output_path].write_bytes(payload)
@@ -892,7 +911,7 @@ def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["
     override_table, override_file = _source(labels.overrides, name="label overrides")
     values: dict[str, object] = {
         "config": options.config,
-        "config_overrides": options.config_overrides,
+        "config_overrides": _common_config_overrides(options),
         "colors": _ColorOptions(
             color_table=color_table,
             color_table_file=color_table_file,
@@ -990,7 +1009,7 @@ def _circular_options(
         if value is not None
     }
     if ring_overrides:
-        values["config_overrides"] = {**(options.config_overrides or {}), **ring_overrides}
+        values["config_overrides"] = {**(_common_config_overrides(options) or {}), **ring_overrides}
     values.update(
         conservation_reference=comparison_rings.reference,
         conservation_ring_width=comparison_rings.ring_width,
@@ -1134,7 +1153,7 @@ def _linear_options(
     comparisons = options.comparisons
     if comparisons.identity_scale is not None:
         values["config_overrides"] = {
-            **(options.config_overrides or {}),
+            **(_common_config_overrides(options) or {}),
             LINEAR_IDENTITY_SCALE_PATH: list(comparisons.identity_scale),
         }
     values.update(

@@ -22,6 +22,7 @@ from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentReference,
     SimilarityAlignmentReferenceError,
 )
+from gbdraw.render.export_limits import checked_png_dpi
 from gbdraw.render.formats import parse_output_formats
 from gbdraw.render.output_paths import is_windows_reserved_filename_component
 
@@ -363,6 +364,8 @@ class RenderOutputRequest:
     interactive_metadata_policy: Literal["auto", "required", "omit"] = "auto"
     resolve_prefix_from_first_record: bool = False
     embed_fonts: bool = True
+    # PNG pixels per inch (dpi / 96 per SVG pixel); None is one per SVG pixel. A Session does not store it.
+    dpi: float | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.output_prefix, str):
@@ -424,6 +427,7 @@ class RenderOutputRequest:
             raise ValidationError(
                 "resolve_prefix_from_first_record must be a boolean."
             )
+        checked_png_dpi(self.dpi)
         _validate_interactive_metadata_policy(
             self.interactive_metadata_policy,
             normalized_formats,
@@ -439,8 +443,10 @@ class CircularBatchOutputPolicy:
     overwrite: bool = False
     interactive_metadata_policy: Literal["auto", "required", "omit"] = "auto"
     embed_fonts: bool = True
+    dpi: float | None = None
 
     def __post_init__(self) -> None:
+        checked_png_dpi(self.dpi)
         if self.output_prefix is not None:
             if not isinstance(self.output_prefix, (str, Path)):
                 raise ValidationError(

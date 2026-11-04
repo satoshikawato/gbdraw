@@ -12,6 +12,17 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Added: a Linear figure can be drawn to a requested size with a unit
+  (`--figure_width 180mm`, `--figure_height 12cm`; `figure_width` and
+  `figure_height` on `LinearOptions`; `canvas.figure_width` and
+  `canvas.figure_height`). The sequence width changes to fit; fonts, line
+  widths, the legend and padding keep their size, and extra height is centred.
+  A size the figure cannot fit is refused with the size of each part and the
+  smallest size that works. Written SVG and PDF state the size in its unit.
+  Circular maps refuse a requested size for now (#1427).
+- Added: `--dpi` and a `dpi` argument on `save_figure_to()`,
+  `render_to_bytes()`, `Diagram.to_bytes()`, `Diagram.save()`, and
+  `RenderOutputRequest` scale PNG pixels by `dpi / 96`.
 - Added: gzip-compressed input files (`.gbff.gz`, `.fna.gz`, `.gff.gz`, gzip
   TSV tables and depth files) are read as the plain files they hold, in the
   CLI, the Python API, and the Web app; a saved Session keeps the plain file.

@@ -10,6 +10,10 @@ show_depth = false
 strandedness = false
 resolve_overlaps = false
 feature_overlap_tolerance_bp = 0
+# The whole figure's size, legend and title included: "auto", or a length with a unit (mm, cm, in, px), such as
+# "180mm". The figure is laid out again to fit; fonts and line widths keep their size.
+figure_width = "auto"
+figure_height = "auto"
 [canvas.circular]
 # Basicaly you shouldn't modify these values.
 # If you wish to modify width and height, I strongly recommend changing the radius accordingly (=0.4*weight/height).
