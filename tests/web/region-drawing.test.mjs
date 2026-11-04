@@ -36,9 +36,11 @@ const { bindDrawingInputFile } = await import('../../gbdraw/web/js/services/draw
 const {
   installShownDrawing, installPreparedDrawing, prepareRegionDrawing, prepareStoredDrawing, projectDraftRequest
 } = await import('../../gbdraw/web/js/services/config.js');
-const { buildCanonicalRenderRequest, compareCanonicalRenderRequests } = await import(
-  '../../gbdraw/web/js/services/session-request.js'
+const { compareCanonicalRenderRequests } = await import('../../gbdraw/web/js/services/session-request.js');
+const { annotationSourceKey, buildAnnotationRecordCatalog } = await import(
+  '../../gbdraw/web/js/app/annotations/record-catalog.js'
 );
+const { discoverSequenceRecords } = await import('../../gbdraw/web/js/services/record-discovery.js');
 
 /** A GenBank record of `length` bp with one CDS per `[start, end, tag]`. */
 const genbankRecord = (name, length, cds, topology = 'circular') => {
@@ -93,7 +95,47 @@ result = derive_web_region_drawing_json(
     json.dumps(payload['regions']), json.dumps(payload['adaptSizes']))
 `, payload)) });
 
-const facts = { linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: [] };
+const noWorker = () => { throw new Error('the records are read by the fast path'); };
+/**
+ * The facts the app's projection of a drawing reads. A Linear drawing's record
+ * catalog is built as `prepareLinearRecordCatalog({ privateCandidate: true })`
+ * builds it: the records each card's file holds (read here by the fast path,
+ * without the Worker), selected by the card's record selector.
+ */
+const factsOf = async (drawing) => {
+  if (drawing.mode !== 'linear') return { linearRecordCatalog: null, recordDisplayRows: [], omittedAnnotationRecordKeys: [] };
+  const inputType = drawing.inputType.value;
+  const recordsOff = new Set(drawing.recordsOff);
+  const linearSources = await Promise.all(drawing.linearSeqs.map(async (seq) => ({
+    sourceKey: annotationSourceKey({ scope: 'linear', uid: seq.uid, inputType, primaryFile: seq.gb, pairedFile: null }),
+    selector: seq.region_record_id, drawn: !recordsOff.has(seq.uid), hasInput: Boolean(seq.gb), status: 'ready',
+    records: await discoverSequenceRecords({
+      file: state.inputFiles.fileOf(seq.gb), format: 'genbank', runHelperOperation: noWorker
+    })
+  })));
+  const catalog = buildAnnotationRecordCatalog({ mode: 'linear', linearSources });
+  assert.equal(catalog.status, 'ready', JSON.stringify(catalog.issues));
+  return {
+    linearRecordCatalog: catalog, recordDisplayRows: [], omittedAnnotationRecordKeys: catalog.omittedRecordKeys || []
+  };
+};
+/**
+ * The draft request of `drawing` shown, as the app projects the shown drawing
+ * (the request's mode is the shown drawing's); the drawing shown before is
+ * shown again, and a drawing the store did not hold is removed again.
+ */
+const projectShown = async (drawing) => {
+  const shownBefore = state.activeDrawingId.value;
+  const added = !state.drawingTabs.value.some(({ id }) => id === drawing.id);
+  if (added) state.addDrawing(drawing, drawing.id);
+  installShownDrawing(drawing.id);
+  try {
+    return await projectDraftRequest(state, drawing, await factsOf(drawing));
+  } finally {
+    installShownDrawing(shownBefore);
+    if (added) state.removeDrawing(drawing.id, { takeSlot: () => null });
+  }
+};
 
 const circularSource = (records, form = {}) => {
   const drawing = installShownDrawing('circular');
@@ -106,7 +148,7 @@ const circularSource = (records, form = {}) => {
 
 /** The source's request, derived for `regions`, read and installed under `drawingId`. */
 const deriveAndInstall = async (source, regions, adaptSizes = true, drawingId = 'region-test') => {
-  const sent = await projectDraftRequest(state, source, facts);
+  const sent = await projectShown(source);
   const { renderRequest, resources } = sent.envelope;
   const { result: derived } = await deriveInPython({ canonicalRequest: renderRequest, resources, regions, adaptSizes });
   assert.equal(derived.status, 'derived', JSON.stringify(derived));
@@ -120,13 +162,49 @@ const deriveAndInstall = async (source, regions, adaptSizes = true, drawingId = 
 const derivedResources = ({ derived, sent }) => Object.fromEntries(Object.entries(derived.resourceSources)
   .map(([resourceId, sourceId]) => [resourceId, sent.envelope.resources[sourceId]]));
 
-/** The installed drawing's draft request, as Save projects it, equals the derived request. */
-const assertRoundTrip = async (installed) => {
-  const { envelope } = await projectDraftRequest(state, installed.made, facts);
-  const comparison = await compareCanonicalRenderRequests({
-    expectedRequest: installed.derived.renderRequest, expectedResources: derivedResources(installed),
+// A config override's key is a dotted path of its own.
+const CONFIG_OVERRIDES = '$.diagramOptions.configOverrides.';
+const keysOf = (path) => (path.startsWith(CONFIG_OVERRIDES)
+  ? ['diagramOptions', 'configOverrides', path.slice(CONFIG_OVERRIDES.length)] : path.slice(2).split('.'));
+/** The value at `path` (`$.a.b`) of `request`, and whether it is there. */
+const at = (request, path) => keysOf(path).reduce(
+  ({ value }, key) => (value && typeof value === 'object' && Object.hasOwn(value, key)
+    ? { value: value[key], found: true } : { value: undefined, found: false }),
+  { value: request, found: true });
+/** `request` with `value` put at `path`, a copy. */
+const putAt = (request, path, value) => {
+  const copy = structuredClone(request);
+  const keys = keysOf(path);
+  keys.slice(0, -1).reduce((parent, key) => (parent[key] ??= {}), copy)[keys.at(-1)] = value;
+  return copy;
+};
+
+/**
+ * The installed drawing's draft request, as Save projects it, writes every
+ * value the derived request states. A cross-mode derivation leaves the new
+ * mode's settings out (Python carries no Linear setting of a Circular
+ * source); the drawing installs them as Load installs a request that leaves
+ * them out, and writes them. `leftToLoad` lists the paths the derived request
+ * leaves out and the drawing writes with an effect on the request; any other
+ * difference fails.
+ */
+const assertRoundTrip = async (installed, leftToLoad = []) => {
+  const { envelope } = await projectShown(installed.made);
+  const compare = (expectedRequest) => compareCanonicalRenderRequests({
+    expectedRequest, expectedResources: derivedResources(installed),
     actualRequest: envelope.renderRequest, actualResources: envelope.resources
   });
+  let expected = installed.derived.renderRequest;
+  const taken = [];
+  let comparison = await compare(expected);
+  while (comparison.differences.length && taken.length <= leftToLoad.length) {
+    const { path } = comparison.differences[0];
+    assert.equal(at(installed.derived.renderRequest, path).found, false, `the derived request states ${path}`);
+    taken.push(path);
+    expected = putAt(expected, path, at(envelope.renderRequest, path).value);
+    comparison = await compare(expected);
+  }
+  assert.deepEqual(taken.sort(), [...leftToLoad].sort(), 'the paths the derived request leaves to Load');
   assert.deepEqual(comparison.differences, [], 'the installed drawing writes the derived request');
   assert.equal(comparison.equivalent, true);
 };
@@ -157,7 +235,7 @@ test('(c) a region that crosses the origin is refused: no drawing, the tabs and 
   const created = [];
   const regions = createRegionDrawing({
     shownDrawingId: () => state.activeDrawingId.value,
-    projectShownRequest: () => projectDraftRequest(state, state.activeDrawing(), facts),
+    projectShownRequest: () => projectShown(state.activeDrawing()),
     deriveRegion: deriveInPython,
     newDrawingFromRegion: async (...args) => { created.push(args); return { status: 'ok', drawingId: 'never' }; }
   });
@@ -209,7 +287,7 @@ const drawingList = createDrawingList({
 });
 const regionDrawingsOf = () => createRegionDrawing({
   shownDrawingId: () => state.activeDrawingId.value,
-  projectShownRequest: () => projectDraftRequest(state, state.activeDrawing(), facts),
+  projectShownRequest: () => projectShown(state.activeDrawing()),
   deriveRegion: deriveInPython,
   newDrawingFromRegion: drawingList.newDrawingFromRegion
 });
@@ -269,7 +347,7 @@ const circularSourceWithLook = async () => {
   for (const key of Object.keys(source.featureOverrides)) delete source.featureOverrides[key];
   source.annotationSets.splice(0);
   source.manualSpecificRules.splice(0);
-  const ids = await featureIdsInPython((await projectDraftRequest(state, source, facts)).envelope);
+  const ids = await featureIdsInPython((await projectShown(source)).envelope);
   for (const [start, labelText] of [['400', 'kept'], ['900', 'dropped']]) {
     source.featureOverrides[JSON.stringify(['record-1', ids[start]])] = {
       recordKey: 'record-1', biologicalFeatureId: ids[start], featureVisibility: null, labelVisibility: null,
@@ -305,7 +383,7 @@ test('(a) a region of one Circular record is a Linear drawing that carries the l
 });
 
 test('(f) the same region of a drawing loaded from a Session, without a Result', async () => {
-  const sent = await projectDraftRequest(state, await circularSourceWithLook(), facts);
+  const sent = await projectShown(await circularSourceWithLook());
   const prepared = await prepareStoredDrawing({
     mode: 'circular', renderRequest: sent.envelope.renderRequest, resources: sent.envelope.resources, sourceFiles: new Map()
   });
@@ -324,9 +402,18 @@ test('(f) the same region of a drawing loaded from a Session, without a Result',
   assertLookCarried(installed.made);
 });
 
-// The round trip of a Linear region drawing needs the Linear record catalog
-// (`prepareLinearRecordCatalog`, which reads the records in the Worker); this
-// file does not build it yet, so the draft projection misses the GenBank file.
-test('(a) round trip of the Linear region drawing of a Circular source', { todo: 'B5-6: build the Linear record catalog in node' }, async () => {
-  await assertRoundTrip(await deriveAndInstall(await circularSourceWithLook(), LOOK_REGION));
+// The Linear settings a Circular source does not have, which the Web writes
+// as Load installs a Linear request that leaves them out (the config defaults
+// and the Linear legend and title positions of New Linear drawing).
+const LINEAR_SETTINGS_LEFT_TO_LOAD = [
+  ...['labels.linear.scope', 'objects.definition.linear.show_replicon', 'objects.definition.linear.show_accession',
+    'objects.definition.linear.show_length', 'labels.linear.placement', 'canvas.linear.align_center',
+    'canvas.linear.keep_definition_left_aligned', 'canvas.linear.track_layout', 'canvas.linear.ruler_on_axis',
+    'objects.scale.style', 'canvas.linear.normalize_length'].map((key) => `$.diagramOptions.configOverrides.${key}`),
+  '$.diagramOptions.output', '$.diagramOptions.tracks'
+];
+// The installed Linear drawing writes the derived request when it is shown,
+// as the app projects it (the request's mode is the shown drawing's).
+test('(a) round trip of the Linear region drawing of a Circular source', async () => {
+  await assertRoundTrip(await deriveAndInstall(await circularSourceWithLook(), LOOK_REGION), LINEAR_SETTINGS_LEFT_TO_LOAD);
 });
