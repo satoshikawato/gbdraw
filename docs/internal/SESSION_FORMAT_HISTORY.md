@@ -71,7 +71,8 @@ The Web's Figure size field (Layout, both modes) writes each drawing's `config.f
 typed (`"180mm"`). A set side is the request leaf; Auto writes none, so an Auto drawing's request is unchanged, and
 its saved form holds the two keys as `null`. A Session without the form keys reads as Auto. Load reads a stored leaf
 the form cannot hold as stored (`"180 MM"`) with Python's configuration check and drops one Python refuses with a
-Load repair row. A Web re-plan (a legend drag) does not keep a requested canvas yet.
+Load repair row. A sized figure's composition metadata carries `requestedCanvas` (`widthPx`, `heightPx`), so a Web
+re-plan (a legend drag) keeps the requested canvas; an Auto figure's metadata has no such key.
 
 A Linear request that states no `diagramOptions.output`, or a null `plotTitlePosition`, draws with Python's
 `LinearOutputOptions()` sides: legend `right`, title `bottom` (OV-2491, Owner decision R17-38). The generated
