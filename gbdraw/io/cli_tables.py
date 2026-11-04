@@ -22,7 +22,9 @@ from ..tracks.circular import _LEGACY_SPACING_PARAM
 from ..tracks.parsing import split_kv_list
 
 
-InputKind = Literal["gbk", "gff_fasta"]
+InputKind = Literal["gbk", "gff_fasta", "fasta"]
+# How a records table names each input kind in its errors.
+_INPUT_KIND_ROWS: dict[InputKind, str] = {"gbk": "GenBank rows", "gff_fasta": "GFF3/FASTA rows", "fasta": "FASTA rows"}
 
 
 @dataclass(frozen=True)
@@ -520,35 +522,30 @@ def read_records_table(path: str) -> RecordsTable:
 
     parsed_rows: list[RecordsTableRow] = []
     dependencies: list[TablePathDependency] = []
-    has_gbk_rows = False
-    has_gff_rows = False
+    row_kinds: dict[InputKind, None] = {}
     seen_grid_cells: set[tuple[int, int]] = set()
     for row in rows:
         values = row.values
         gbk_raw = values.get("gbk", "").strip()
         gff_raw = values.get("gff", "").strip()
         fasta_raw = values.get("fasta", "").strip()
-        row_has_gbk = bool(gbk_raw)
-        row_has_gff = bool(gff_raw or fasta_raw)
-        if row_has_gbk and row_has_gff:
+        if gbk_raw and (gff_raw or fasta_raw):
             raise ValidationError(
                 f"{table_path}: row {row.row_number} cannot mix gbk with gff/fasta."
             )
-        if not row_has_gbk and not row_has_gff:
+        if not (gbk_raw or gff_raw or fasta_raw):
             raise ValidationError(
-                f"{table_path}: row {row.row_number} must provide either gbk or both gff and fasta."
+                f"{table_path}: row {row.row_number} must provide gbk, fasta, or both gff and fasta."
             )
-        if row_has_gff and not (gff_raw and fasta_raw):
-            missing = "gff" if not gff_raw else "fasta"
+        if gff_raw and not fasta_raw:
             raise ValidationError(
-                _cell_error(table_path, row.row_number, missing, "value is required for GFF3/FASTA rows")
+                _cell_error(table_path, row.row_number, "fasta", "value is required for GFF3/FASTA rows")
             )
+        row_kinds.setdefault("gbk" if gbk_raw else "gff_fasta" if gff_raw else "fasta")
 
         gbk_path = _resolve_table_path(table_path, gbk_raw) if gbk_raw else ""
         gff_path = _resolve_table_path(table_path, gff_raw) if gff_raw else ""
         fasta_path = _resolve_table_path(table_path, fasta_raw) if fasta_raw else ""
-        has_gbk_rows = has_gbk_rows or bool(gbk_path)
-        has_gff_rows = has_gff_rows or bool(gff_path)
         for dependency_column, resolved_path in (
             ("gbk", gbk_path),
             ("gff", gff_path),
@@ -608,9 +605,10 @@ def read_records_table(path: str) -> RecordsTable:
             )
         )
 
-    if has_gbk_rows and has_gff_rows:
+    if len(row_kinds) > 1:
         raise ValidationError(
-            f"{table_path}: records table cannot mix GenBank rows with GFF3/FASTA rows."
+            f"{table_path}: records table cannot mix "
+            + " with ".join(rows for kind, rows in _INPUT_KIND_ROWS.items() if kind in row_kinds) + "."
         )
     _validate_records_table_placement(table_path, parsed_rows)
     ordered_rows = tuple(
@@ -625,7 +623,7 @@ def read_records_table(path: str) -> RecordsTable:
     )
     return RecordsTable(
         table_path=str(table_path),
-        input_kind="gbk" if has_gbk_rows else "gff_fasta",
+        input_kind=next(iter(row_kinds)),
         rows=ordered_rows,
         path_dependencies=tuple(dependencies),
     )

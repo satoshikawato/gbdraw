@@ -23,9 +23,6 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import RecordInputManifest
 from gbdraw.api.requests import RecordCardinality, RecordDisplayOptions
 from gbdraw.features.shapes import parse_feature_shape_assignment
-from gbdraw.features.visibility import resolve_candidate_feature_types
-from gbdraw.io.cli_tables import RecordsTable
-from gbdraw.io.genome import load_gbks, load_gff_fasta
 from gbdraw.mode_profiles import CIRCULAR_MODE_PROFILE, DEFAULT_FEATURE_TYPES
 from gbdraw.render.export import require_cairosvg
 from gbdraw.io.colors import BUILTIN_COLOR_TABLE_PREFIX, BUILTIN_COLOR_TABLES, require_palette_name
@@ -103,13 +100,16 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--gff",
         metavar="GFF3_FILE",
-        help="GFF3 file, plain or gzip-compressed (instead of --gbk; --fasta is required)",
+        help="GFF3 file, plain or gzip-compressed (instead of --gbk; requires --fasta)",
         type=str,
         nargs='*')
     parser.add_argument(
         "--fasta",
         metavar="FASTA_FILE",
-        help="FASTA file, plain or gzip-compressed (required with --gff)",
+        help=(
+            "FASTA file, plain or gzip-compressed: with --gff, its sequences; alone (instead of --gbk), "
+            "each nucleotide entry is a record without features"
+        ),
         type=str,
         nargs='*')
 
@@ -697,10 +697,8 @@ def validate_input_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         parser.error("Error: --gbk cannot be used with --gff or --fasta.")
     if args.gff and not args.fasta:
         parser.error("Error: --gff requires --fasta.")
-    if args.fasta and not args.gff:
-        parser.error("Error: --fasta requires --gff.")
-    if not records_table and not args.gbk and not (args.gff and args.fasta):
-        parser.error("Error: Either --records_table, --gbk, or both --gff and --fasta must be provided.")
+    if not records_table and not args.gbk and not args.fasta:
+        parser.error("Error: Either --records_table, --gbk, or --fasta (with or without --gff) must be provided.")
 
 
 def apply_record_display_cli_options(
@@ -785,58 +783,6 @@ def handle_output_formats(out_formats: list[str]) -> list[str]:
         return out_formats
     require_cairosvg(out_formats)
     return out_formats
-
-
-def load_records_table_records(
-    records_table: RecordsTable,
-    *,
-    selected_features_set,
-    color_table,
-    feature_table,
-    gbk_loader=load_gbks,
-    gff_loader=load_gff_fasta,
-) -> list:
-    records: list = []
-    if records_table.input_kind == "gbk":
-        for row in records_table.rows:
-            loaded = gbk_loader(
-                [row.gbk],
-                record_selectors=[row.record_id],
-                reverse_flags=[row.reverse_complement],
-            )
-            records.append(_require_one_records_table_record(records_table, row, loaded))
-        return records
-
-    candidate_feature_types, keep_all_features = resolve_candidate_feature_types(
-        selected_features_set,
-        color_table=color_table,
-        feature_visibility_table=feature_table,
-    )
-    for row in records_table.rows:
-        loaded = gff_loader(
-            [row.gff],
-            [row.fasta],
-            selected_features_set=candidate_feature_types,
-            keep_all_features=keep_all_features,
-            record_selectors=[row.record_id],
-            reverse_flags=[row.reverse_complement],
-        )
-        records.append(_require_one_records_table_record(records_table, row, loaded))
-    return records
-
-
-def _require_one_records_table_record(records_table: RecordsTable, row, loaded):
-    if len(loaded) == 1:
-        return loaded[0]
-    if len(loaded) > 1 and not row.record_id:
-        raise ValidationError(
-            f"{records_table.table_path}: row {row.row_number} loaded {len(loaded)} records; "
-            "add record_id so the row selects exactly one displayed record."
-        )
-    raise ValidationError(
-        f"{records_table.table_path}: row {row.row_number} must load exactly one displayed record; "
-        f"loaded {len(loaded)}."
-    )
 
 
 __all__ = [

@@ -70,11 +70,21 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       optional: Object.freeze([]),
       open: false
     }),
+    CanonicalFastaRecordSource: Object.freeze({
+      kind: "object",
+      fields: Object.freeze({
+        kind: Object.freeze({kind: "literal", values: Object.freeze(["fasta"])}),
+        fastaResourceId: Object.freeze({kind: "string"})
+      }),
+      optional: Object.freeze([]),
+      open: false
+    }),
     CanonicalRecordSource: Object.freeze({
       kind: "union",
       options: Object.freeze([
         Object.freeze({kind: "ref", name: "CanonicalGenbankRecordSource"}),
-        Object.freeze({kind: "ref", name: "CanonicalGffFastaRecordSource"})
+        Object.freeze({kind: "ref", name: "CanonicalGffFastaRecordSource"}),
+        Object.freeze({kind: "ref", name: "CanonicalFastaRecordSource"})
       ])
     }),
     CanonicalRecordDisplayOptions: Object.freeze({

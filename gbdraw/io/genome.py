@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from itertools import chain
 from collections import Counter
 from collections.abc import Set as AbstractSet
-from typing import List, Dict
+from typing import Callable, List, Dict
 
 from Bio import SeqIO
 from Bio.SeqFeature import CompoundLocation, SeqFeature
@@ -44,13 +44,16 @@ _DUPLICATE_FASTA_IDS = {"code": "INPUT_INVALID", "field": "fasta", "reason": "UN
 _GFF_WITHOUT_FEATURES = {"code": "NO_RECORDS", "reason": "GFF_NO_FEATURES"}
 _FASTA_WITHOUT_ENTRIES = {"code": "NO_RECORDS", "reason": "FASTA_NO_ENTRIES"}
 _SEQUENCE_UNDEFINED = {"code": "INPUT_UNREADABLE", "reason": "SEQUENCE_UNDEFINED"}
+# A FASTA given without GFF3 is drawn as nucleotide records (D-17): each record has
+# a sequence, and the sequence holds only IUPAC nucleotide codes, in either case.
+_IUPAC_NUCLEOTIDE_CODES = frozenset("ACGTURYSWKMBDHVNacgturyswkmbdhvn")
 _FLAT_FILE_KINDS = "GenBank, DDBJ or EMBL flat file"
 # What a file without a record is, by the reason of its NO_RECORDS diagnostic.
 _ABSENCE_MESSAGES = {
     "EMPTY_FILE": "{path} is empty: it has no " + _FLAT_FILE_KINDS + " record.",
     "FASTA_IN_GENBANK": (
         "{path} is a FASTA file, not a " + _FLAT_FILE_KINDS + ". "
-        "Give a FASTA file together with its GFF3 file (--gff with --fasta)."
+        "Give it as FASTA (--fasta), with its GFF3 file (--gff) when it has one."
     ),
     "NOT_GENBANK": (
         "{path} is not a " + _FLAT_FILE_KINDS + ": no line starts a record, which is "
@@ -144,22 +147,29 @@ def _attach_source_annotations(record: SeqRecord, source_file: str) -> None:
         record.annotations["gbdraw_coord_step"] = 1
 
 
-def load_gbks(
-    gbk_list: List[str],
-    record_selectors: list[str] | None = None,
-    reverse_flags: list[bool] | None = None,
+def _load_record_files(
+    paths: List[str],
+    read: Callable[[str], list[SeqRecord]],
+    record_selectors: list[str] | None,
+    reverse_flags: list[bool] | None,
+    *,
+    kind: str,
 ) -> list[SeqRecord]:
-    """Parse GenBank files without applying diagram-mode policy."""
+    """Read each file with ``read``, then apply its record selector and reverse flag, in file order.
+
+    The one per-file loop of the inputs whose files hold whole records (GenBank,
+    a FASTA given without GFF3). A repeated record ID is warned about, not refused.
+    """
 
     record_list: list[SeqRecord] = []
     id_list: list[str] = []
-    logger.info("INFO: Loading GenBank file(s)...")
-    for file_idx, gbk_file in enumerate(gbk_list):
-        if not os.path.isfile(gbk_file):
-            raise InputFileError(f"File does not exist or is not accessible: {gbk_file}")
+    logger.info(f"INFO: Loading {kind} file(s)...")
+    for file_idx, path in enumerate(paths):
+        if not os.path.isfile(path):
+            raise InputFileError(f"File does not exist or is not accessible: {path}")
         try:
-            logger.info("INFO: Loading GenBank file {}".format(gbk_file))
-            records_list = read_flat_file_records(gbk_file)
+            logger.info(f"INFO: Loading {kind} file {path}")
+            records_list = read(path)
             selector_raw = (
                 record_selectors[file_idx]
                 if record_selectors and file_idx < len(record_selectors)
@@ -180,7 +190,7 @@ def load_gbks(
                     logger.warning(
                         f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!"
                     )
-                _attach_source_annotations(record, gbk_file)
+                _attach_source_annotations(record, path)
                 record_list.append(record)
                 id_list.append(record.id)
         except GbdrawError:
@@ -191,15 +201,94 @@ def load_gbks(
             raise
         except Exception as e:  # A more generic catch-all for other unexpected issues
             raise ParseError(
-                f"Unexpected error while processing {gbk_file}: {e}"
+                f"Unexpected error while processing {path}: {e}"
             ) from e
-    logger.info("INFO:              ... finished loading GenBank file(s)")
+    logger.info(f"INFO:              ... finished loading {kind} file(s)")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(id_list)}")
     if len(id_list) < 1:
         raise ValidationError(
-            "No valid GenBank records were loaded. Please check your input files."
+            f"No valid {kind} records were loaded. Please check your input files."
         )
     return record_list
+
+
+def load_gbks(
+    gbk_list: List[str],
+    record_selectors: list[str] | None = None,
+    reverse_flags: list[bool] | None = None,
+) -> list[SeqRecord]:
+    """Parse GenBank files without applying diagram-mode policy."""
+
+    return _load_record_files(
+        gbk_list, read_flat_file_records, record_selectors, reverse_flags, kind="GenBank"
+    )
+
+
+def _fasta_record_diagnostic(reason: str, record: SeqRecord, letter: str | None = None) -> dict[str, object]:
+    """The diagnostic of a FASTA-only record gbdraw cannot draw: the Web names the record and the letter."""
+    diagnostic: dict[str, object] = {"code": "INPUT_INVALID", "reason": reason, "recordName": str(record.id)}
+    if letter is not None:
+        diagnostic["codepoint"] = ord(letter)
+    return diagnostic
+
+
+def require_nucleotide_records(records: list[SeqRecord], path: str) -> list[SeqRecord]:
+    """Stop at the first record of a FASTA given without GFF3 that gbdraw cannot draw (D-17).
+
+    A record needs a sequence, and its sequence may hold only IUPAC nucleotide
+    codes (A C G T U R Y S W K M B D H V N, either case). The diagnostic names the
+    record and, for a letter that is not a nucleotide code, that letter.
+    """
+
+    name = os.path.basename(path)
+    for record in records:
+        sequence = str(record.seq)
+        if not sequence:
+            raise ValidationError(
+                f"FASTA record {record.id} in {name} has no sequence. Give each FASTA record its sequence.",
+                diagnostic=_fasta_record_diagnostic("EMPTY_SEQUENCE", record),
+            )
+        letter = next((char for char in sequence if char not in _IUPAC_NUCLEOTIDE_CODES), None)
+        if letter is not None:
+            raise ValidationError(
+                f"FASTA record {record.id} in {name} holds {letter!r}, which is not a nucleotide code: "
+                "gbdraw draws nucleotide records (IUPAC codes A C G T U R Y S W K M B D H V N).",
+                diagnostic=_fasta_record_diagnostic("NOT_NUCLEOTIDE", record, letter),
+            )
+    return records
+
+
+def _read_nucleotide_fasta(path: str) -> list[SeqRecord]:
+    """The records of one FASTA file given without GFF3, refused unless each is a nucleotide record."""
+
+    try:
+        records = _read_fasta_records(path)
+    except GbdrawError:
+        raise
+    except (ValueError, *GZIP_ERRORS) as e:
+        raise ParseError(
+            f"Error parsing FASTA file {path}: {_parser_reason(e)}.", diagnostic=_UNREADABLE_INPUT
+        ) from e
+    return require_nucleotide_records(records, path)
+
+
+def load_fasta(
+    fasta_list: List[str],
+    record_selectors: list[str] | None = None,
+    reverse_flags: list[bool] | None = None,
+) -> list[SeqRecord]:
+    """Parse FASTA files given without GFF3: each entry is a record with its sequence and no features.
+
+    The one loader of a FASTA-only input (CLI, Python API, the Web's Worker
+    helper). A FASTA file in a GFF3 + FASTA pair is read by
+    :func:`parse_gff_fasta` instead, where only the entries the GFF3 names are
+    records. A FASTA record makes no topology claim (``_detected_topology`` gives
+    ``"unknown"``).
+    """
+
+    return _load_record_files(
+        fasta_list, _read_nucleotide_fasta, record_selectors, reverse_flags, kind="FASTA"
+    )
 
 
 def merge_gff_fasta_records(
@@ -591,6 +680,8 @@ def load_gff_fasta(
 
 __all__ = [
     "load_gbks",
+    "load_fasta",
+    "require_nucleotide_records",
     "read_flat_file_records",
     "require_record_sequence",
     "parse_gff_fasta",

@@ -826,9 +826,21 @@ test('an outfmt 7 Fields line that cannot be read names the line (CI-07d)', () =
 
 test('a GenBank slot file without records says what it looks like (UJ-07)', () => {
   assert.equal(producerSummary('NO_RECORDS', { reason: 'FASTA_IN_GENBANK' }),
-    'No records were found. Choose input containing records. This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.');
+    'No records were found. Choose input containing records. This file looks like FASTA. Choose FASTA (or GFF3 + FASTA when it has a GFF3 file) as the input type, or use a GenBank/DDBJ flat file.');
   assert.match(producerSummary('NO_RECORDS', { reason: 'EMPTY_FILE' }), / The file is empty\.$/);
   assert.match(producerSummary('NO_RECORDS', { reason: 'NOT_GENBANK' }), / The file is not a GenBank\/DDBJ flat file: it has no record header line\.$/);
+});
+
+test('a FASTA-only refusal names the record and the letter Python found (PD-OI-068 rev 2)', () => {
+  assert.equal(producerSummary('INPUT_INVALID', { reason: 'NOT_NUCLEOTIDE', recordName: 'LvMJNV_ORF1', codepoint: 0x4c }),
+    'An input value is invalid. Record: LvMJNV_ORF1. This FASTA file holds a sequence that is not nucleotide, such as a protein; '
+    + 'gbdraw draws nucleotide records. Use a FASTA file of DNA or RNA sequences (IUPAC codes A C G T U R Y S W K M B D H V N). '
+    + 'First letter that is not a nucleotide code: "L".');
+  assert.match(producerSummary('INPUT_INVALID', { reason: 'NOT_NUCLEOTIDE', recordName: 'r', codepoint: 9 }), /code: U\+0009\.$/);
+  assert.equal(producerSummary('INPUT_INVALID', { reason: 'EMPTY_SEQUENCE', recordName: 'r 2' }),
+    'An input value is invalid. Record: r 2. A record of this FASTA file has no sequence. Give each FASTA record its sequence.');
+  // A name that is not one line of printable text is left out.
+  assert.doesNotMatch(producerSummary('INPUT_INVALID', { reason: 'EMPTY_SEQUENCE', recordName: 'a\nb' }), /Record:/);
 });
 
 // TK-06: a Depth series with no file in any record names the series and offers

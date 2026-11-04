@@ -31,7 +31,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.conservation import ConservationSearchResult
 from gbdraw.api.options import CircularDiagramOptions
-from gbdraw.api.requests import GenBankInputSource, GffFastaInputSource, RecordInputSource
+from gbdraw.api.requests import FastaInputSource, GenBankInputSource, GffFastaInputSource, RecordInputSource
 from gbdraw.comparisons.losat_jobs import (
     LOSAT_OUTFMT,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -131,7 +131,7 @@ def ring_subject_records(
     (``genbank_records``: the planner's parse, so no source is parsed twice). A
     GFF3/FASTA pair gives every entry of its FASTA file, also one the GFF3 file
     does not name: the GFF3 parse keeps only named entries, so the FASTA file is
-    read again. An in-memory record (Python API) is its own source, as given.
+    read again. A FASTA given without GFF3 gives every entry of its file too. An in-memory record (Python API) is its own source, as given.
     """
 
     seen: set[Hashable] = set()
@@ -139,7 +139,7 @@ def ring_subject_records(
     for source in sources:
         key: Hashable = (
             ("genbank", str(source.path)) if isinstance(source, GenBankInputSource)
-            else ("fasta", str(source.fasta_path)) if isinstance(source, GffFastaInputSource)
+            else ("fasta", str(source.fasta_path)) if isinstance(source, (GffFastaInputSource, FastaInputSource))
             else ("memory", id(source.record))
         )
         if key in seen:
@@ -147,7 +147,7 @@ def ring_subject_records(
         seen.add(key)
         if isinstance(source, GenBankInputSource):
             records.extend(genbank_records(source))
-        elif isinstance(source, GffFastaInputSource):
+        elif isinstance(source, (GffFastaInputSource, FastaInputSource)):
             records.extend(read_sequence_file_records(str(source.fasta_path), "fasta"))
         else:
             records.append(source.record)
