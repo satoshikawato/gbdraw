@@ -6878,11 +6878,12 @@ export const projectDraftRequest = async (sourceState, drawing, { linearRecordCa
  * Reads a derived region drawing (`deriveRegionDrawing`) as Load reads a
  * stored drawing: each resource ID it names holds the bytes of the sent
  * request's resource it reads (`resourceSources`), and binds that resource's
- * Web file.
+ * Web file. A read that repairs anything refuses (`RESULT_INVALID`): the
+ * region drawing has no Load dialog to list a loss in.
  * @param {RegionDerivation} derivation
  * @returns {Promise<PreparedStoredDrawing>}
  */
-export const prepareRegionDrawing = ({ derived, sent }) => {
+export const prepareRegionDrawing = async ({ derived, sent }) => {
   /** @type {Record<string, unknown>} */
   const resources = {};
   /** @type {Map<string, InputFileRef>} */
@@ -6895,7 +6896,13 @@ export const prepareRegionDrawing = ({ derived, sent }) => {
     const ref = sent.filesByResource.get(sourceId);
     if (ref) sourceFiles.set(resourceId, ref);
   }
-  return prepareStoredDrawing({ mode: derived.mode, renderRequest: derived.renderRequest, resources, sourceFiles });
+  const prepared = await prepareStoredDrawing({ mode: derived.mode, renderRequest: derived.renderRequest, resources, sourceFiles });
+  // Python derived a request the Load readers can read whole; a repair means
+  // the two disagree, and the drawing would lose a setting with no Load dialog.
+  if (prepared.repairs.length > 0) {
+    throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'deriveRegionDrawing' });
+  }
+  return prepared;
 };
 /**
  * Installs a prepared drawing into its drawing state as Load installs a

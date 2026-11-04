@@ -214,6 +214,25 @@ test('(b) a whole Circular record keeps Circular and binds the source drawing\'s
   await assertRoundTrip(installed);
 });
 
+// The Load readers read what Python derived: a request they would repair
+// means Python and the Web readers disagree, so the region is not made.
+test('(b) a derived request the Load readers would repair is refused, not installed with a loss', async () => {
+  const source = circularSource([recordA]);
+  const sent = await projectOf(source);
+  const { renderRequest, resources } = sent.envelope;
+  const { result: derived } = await deriveInPython({
+    canonicalRequest: renderRequest, resources, regions: [{ recordKey: 'record-1', start: 1, end: 1200 }], adaptSizes: true
+  });
+  assert.equal(derived.status, 'derived', JSON.stringify(derived));
+  // A GC content minimum above its maximum: the Web's config reader replaces the maximum.
+  const disagreeing = putAt(derived.renderRequest, '$.diagramOptions.configOverrides.objects.gc_content.min_percent', 300);
+  // A Load of the same request lists the loss.
+  const loaded = await prepareStoredDrawing({ mode: derived.mode, renderRequest: disagreeing, resources, sourceFiles: new Map() });
+  assert.notDeepEqual(loaded.repairs, []);
+  await assert.rejects(prepareRegionDrawing({ derived: { ...derived, renderRequest: disagreeing }, sent }),
+    (error) => error.code === 'RESULT_INVALID' && error.operation === 'deriveRegionDrawing');
+});
+
 test('(c) a region that crosses the origin is refused: no drawing, the tabs and History unchanged', async () => {
   circularSource([recordA]);
   const before = listView();
