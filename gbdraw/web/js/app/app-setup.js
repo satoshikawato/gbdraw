@@ -7251,8 +7251,9 @@ export const createAppSetup = () => {
         removed: !nextValue, previousRecordCount: group.records.length
       }) ? RETIRED_LINEAR_RECORD_PRESENTATION : RETIRED_LINEAR_RECORD_REFERENCE)
     });
-    // The card stays while it holds a file its input type reads; a file of another type's slot keeps no card.
-    const keepSource = inputSourceFiles(drawing.inputType.value, replacement).holdsFile;
+    // The card stays when it gets a file, or, on Remove, while it still holds a file its input type reads: a file
+    // left in another type's slot keeps no card.
+    const keepSource = Boolean(nextValue) || inputSourceFiles(drawing.inputType.value, replacement).holdsFile;
     const nextSeqs = drawing.linearSeqs.flatMap((entry) => (
       entry.uid === group.uid ? (keepSource ? [replacement] : [])
         : members.has(entry.uid) ? [] : [entry]

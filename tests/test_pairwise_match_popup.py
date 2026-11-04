@@ -127,7 +127,9 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         encoding="utf-8",
     )
     (tmp_path / "input-types.mjs").write_text(
-        (WEB_ROOT / "js" / "services" / "input-types.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "services" / "input-types.js")
+        .read_text(encoding="utf-8")
+        .replace("../contracts/schema.generated.js", "./schema.generated.mjs"),
         encoding="utf-8",
     )
     (tmp_path / "file-content-cache.mjs").write_text(
@@ -161,7 +163,9 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     )
     feature_identity_path = tmp_path / "feature-identity.mjs"
     feature_identity_path.write_text(
-        (WEB_ROOT / "js" / "services" / "feature-identity.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "services" / "feature-identity.js")
+        .read_text(encoding="utf-8")
+        .replace("./input-types.js", "./input-types.mjs"),
         encoding="utf-8",
     )
     (tmp_path / "i18n.mjs").write_text(
