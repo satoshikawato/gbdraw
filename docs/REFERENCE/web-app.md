@@ -159,6 +159,73 @@ and what is not carried; **Keep my values** keeps the sizes you set. **Create**
 adds the drawing as a new tab, and one Undo removes it. Python offers the same
 through `derive_region_drawing()`; see [Typed requests](./typed-requests.md).
 
+### Drawings
+
+One Session holds one or more drawings. The drawing bar under the header has
+one tab per drawing. A new Session starts with one Circular drawing and, after
+its tab, a Linear tab with a plus icon that adds an empty Linear drawing.
+You can keep several drawings of the same mode, for example a whole-genome
+Circular drawing and a Circular drawing of a gene cluster from the same input.
+Selecting a tab shows that drawing. It changes no value, is no Undo step, and
+is unavailable while a diagram is generating or a Session is being saved or
+loaded.
+
+The menu of the shown drawing's tab holds:
+
+- **New Circular drawing** and **New Linear drawing**: an empty drawing with
+  that mode's defaults and no files.
+- **New drawing from a region…**: see above.
+- **Duplicate drawing**: copies the files, settings, legend and feature edits,
+  and Result; the copy starts with an empty History.
+- **New Circular drawing with this style** and **New Linear drawing with this
+  style**: copies the settings and style but no files, legend edits, per-feature
+  edits, **Feature placement**, annotation sets, bulk label edits, or group
+  names. Of the **Default colors**, **Specific rules**, **Blacklist**,
+  **Whitelist**, and **Priority** tables it copies the rows you typed, not rows
+  loaded from a file. Into the other mode it copies only the settings both modes
+  have.
+- **Rename…**, **Move left**, and **Move right**: rename the drawing and change
+  its tab order.
+- **Delete drawing**: the last drawing cannot be deleted. A drawing with a
+  Result or edits asks first (**Delete drawing** or **Keep drawing**), and Undo
+  restores it with its settings, edits, Result, and History. The shown drawing
+  gives way to the next tab, or the previous tab when there is no next one.
+
+A drawing's mode is fixed when you make it. Each drawing keeps its own
+settings, palette and color rules, label tables, legend and feature edits,
+selected records and regions, Depth assignments, Result, and History. A change,
+**Generate Diagram**, a failure, or Undo in one drawing does not change another
+drawing's settings, legend, History, or Result. Drawings share the content of
+the input files, the Session title, and the settings that are not part of a
+drawing: **Auto Reflow**, PNG DPI, palette **Instant Preview**, and the LOSAT
+run method and thread count. Export and **Save Session** use the shown
+drawing's current Result and values.
+
+The same file content is stored once per Session. A drawing can pick a file
+that is already in the Session from the uploaders, without uploading it again.
+When you upload over a file that another drawing also uses, the app asks
+**This drawing only** or **Every drawing that uses this file**. The first
+changes only the card you uploaded over. The second also swaps the file, keeping
+each card's state, in the other cards and drawings that use it. The five
+table files (**Default colors**, **Specific rules**, **Blacklist**,
+**Whitelist**, and **Priority**) always change the shown drawing only and do
+not ask. A file that no drawing uses any more is not saved.
+
+**Undo** and **Redo** walk the shown drawing's steps together with the steps
+that belong to the whole Session, newest first, and never undo another
+drawing's steps. Session steps are adding, duplicating, renaming, moving, and
+deleting a drawing, **Reset all drawings**, replacing a file for **Every drawing
+that uses this file**, and changing a Session-wide value such as the Session
+title or **Auto Reflow**.
+
+**Reset Settings** asks for a choice: **Reset this drawing**, **Reset all
+drawings**, or **Cancel**. **Reset this drawing** returns the shown drawing's
+settings and edits to their defaults and leaves the Session-wide values as they
+are. **Reset all drawings** does that for every drawing and also resets the
+Session-wide values as **Reset Settings** did before drawings existed. Either
+choice keeps the input files, the record selection, file defaults, Depth
+assignments, and Result, and one Undo reverses it. **Cancel** changes nothing.
+
 The table below states when each kind of edit reaches the Result. A clock
 icon beside a setting's heading or label marks a change that applies on
 Generate, wholly or in part. Its tooltip, which opens on hover, keyboard focus,
@@ -301,6 +368,17 @@ reported by its **Sequence** number. A Result loaded from a Session saved before
 Session 40 has no current feature metadata: a notice above the Result says so,
 and **Save Session** reports that one Generate is needed and offers **Generate**.
 After that Generate, Save writes the current Session format.
+
+**Save Session** writes every drawing in one Session file, with the drawing
+you are viewing; a drawing with no file, no changed setting, no edit, and no
+Result is not written (if none would be, the shown drawing is written). Each
+drawing keeps its own settings, edits, and saved Result. **Load Session**
+restores all drawings at once or changes nothing, shows each drawing's saved
+Result without generating it, and opens the drawing that was shown at Save. If
+that drawing was not written, it opens the next tab, or the previous tab when
+there is no next one. Sessions are saved as Session version 51, which gbdraw
+0.14.x cannot open. Sessions saved by 0.14.x (versions 46 to 50) open as before,
+each into its drawings.
 
 A loaded Circular Session shows its saved Result without reading the embedded
 source again. **Source records** shows **Records not inspected**, and **Record**
