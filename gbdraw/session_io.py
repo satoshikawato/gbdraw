@@ -66,7 +66,7 @@ from .config.models.root import read_stored_font_size
 from .io.input_text import GZIP_ERRORS, open_input_text
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
-from .io.colors import is_user_color, named_color_hex, packaged_color_palettes
+from .io.colors import current_palette_name, is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import OutputExistsError, commit_staged_output_file
@@ -4300,16 +4300,19 @@ def migrate_session_flat_draft(
         dropped, narrowed = edits.dropped_count, edits.narrowed_visibility_count
     unmapped = 0
     if version <= DRAWN_HASH_RULE_SESSION_MAX_VERSION:
-        # A Session before 31 has no request: its Linear cards give the records.
+        # The mode of the Session's figure: its request's, else (a Session
+        # before 31) its last Generate's invocation's, else ``ui.mode``. A
+        # Session before 31 has no request: its Linear cards give the records
+        # when that figure is Linear, as the old Web Load read them (OV-2056).
+        generated_mode = session_mode(session)
         rule_records = (
             _promoted_request_records(request)
             if request
-            else _legacy_linear_request_records(session.get("files"))
+            else _legacy_linear_request_records(session.get("files")) if generated_mode == "linear" else None
         )
-        ui = session.get("ui")
         hash_rules = migrate_session_hash_rules(
             config.get("rules") if isinstance(config, Mapping) else None,
-            mode=request.get("mode") or (ui.get("mode") if isinstance(ui, Mapping) else None),
+            mode=generated_mode,
             catalog=catalog if has_catalog else None,
             legacy=None if legacy is None else {**legacy, "records": rule_records},
             records=rule_records,
@@ -6331,6 +6334,7 @@ def _gui_session_to_cli_args(
         _append_pair(run_args, invocation_args, "-o", output_prefix)
     _append_pair(run_args, invocation_args, "-f", format_override or "svg")
     _append_common_gui_args(run_args, invocation_args, form=form, adv=adv)
+    _append_gui_color_args(run_args, invocation_args, session=session, temp_dir=temp_dir)
 
     if mode == "circular":
         _append_circular_gui_args(
@@ -6633,6 +6637,86 @@ def _append_common_gui_args(
             _append_flag(run_args, invocation_args, "--hide_gc_content_ticks")
 
 
+def _gui_color_table_cell(value: object) -> str:
+    """One cell of a replay color table: tabs and line breaks read as a space."""
+
+    return re.sub(r"[\t\r\n]+", " ", _js_string(value)).strip()
+
+
+def _append_gui_color_args(
+    run_args: list[str],
+    invocation_args: list[str],
+    *,
+    session: Mapping[str, Any],
+    temp_dir: Path,
+) -> None:
+    """Pass a Session 27-30's draft colors: ``-p``, ``-d`` and ``-t`` (OV-2055, Owner R17-22).
+
+    The draft is read as Web Load reads it before a Generate: after the
+    Session's draft migrations (:func:`migrate_session_flat_draft`, whose
+    ``hash`` rules take their source hashes, with the sources read again when
+    a rule needs drawn hashes) and with ``colorsAreOverrides`` resolved over
+    the palette (:func:`mode_split_palette_colors`). The palette goes as
+    ``-p``, every draft color as a ``-d`` row (a row equal to the palette's
+    color draws the same), and each specific color rule with its feature
+    type, qualifier, value and color as a ``-t`` row, in the CLI's table
+    formats. The files are named as the Web Generate names them.
+    """
+
+    from .session_migration import read_request_less_source_features
+
+    migrated = migrate_session_flat_draft(session, source_features=read_request_less_source_features(session))
+    config = migrated.session.get("config")
+    if not isinstance(config, Mapping):
+        return
+    config = _with_resolved_override_colors(config, mode_split_palette_colors(config))
+    palette = current_palette_name(_js_text(config.get("palette")))
+    if palette and palette != "default" and palette in packaged_color_palettes():
+        _append_pair(run_args, invocation_args, "-p", palette)
+    colors = config.get("colors")
+    color_rows = [
+        [_gui_color_table_cell(key), _gui_color_table_cell(color)]
+        for key, color in (colors.items() if isinstance(colors, Mapping) else ())
+    ]
+    rules = config.get("rules")
+    rule_rows = [
+        [_gui_color_table_cell(rule.get(field)) for field in ("feat", "qual", "val", "color", "cap")]
+        for rule in (rules if isinstance(rules, list) else ())
+        if isinstance(rule, Mapping)
+    ]
+    for option, name, rows, required in (
+        ("-d", "default-colors.tsv", color_rows, 2),
+        ("-t", "specific-colors.tsv", rule_rows, 4),
+    ):
+        rows = [row for row in rows if all(row[:required])]
+        if not rows:
+            continue
+        path = temp_dir / f"session-{name}"
+        path.write_text("".join("\t".join(row) + "\n" for row in rows), encoding="utf-8")
+        run_args.extend([option, str(path)])
+        invocation_args.extend([option, name])
+
+
+def _append_gui_plot_title_args(
+    run_args: list[str],
+    invocation_args: list[str],
+    *,
+    form: Mapping[str, Any],
+    adv: Mapping[str, Any],
+    positions: frozenset[str] | None,
+) -> None:
+    """The draft's plot title, its position (one of ``positions``, if given) and font size."""
+
+    plot_title = _string_or_none(form.get("plot_title"))
+    if plot_title:
+        _append_pair(run_args, invocation_args, "--plot_title", plot_title)
+    position = _string_or_none(adv.get("plot_title_position"))
+    if position and (positions is None or position in positions):
+        _append_pair(run_args, invocation_args, "--plot_title_position", position)
+    if adv.get("plot_title_font_size") not in (None, "", False):
+        _append_pair(run_args, invocation_args, "--plot_title_font_size", str(adv.get("plot_title_font_size")))
+
+
 def _append_circular_gui_args(
     run_args: list[str],
     invocation_args: list[str],
@@ -6649,13 +6733,7 @@ def _append_circular_gui_args(
         _append_pair(run_args, invocation_args, "--track_type", str(form.get("track_type")))
     if _string_or_none(form.get("legend")):
         _append_pair(run_args, invocation_args, "-l", str(form.get("legend")))
-    plot_title = _string_or_none(form.get("plot_title"))
-    if plot_title:
-        _append_pair(run_args, invocation_args, "--plot_title", plot_title)
-    if _string_or_none(adv.get("plot_title_position")):
-        _append_pair(run_args, invocation_args, "--plot_title_position", str(adv.get("plot_title_position")))
-    if adv.get("plot_title_font_size") not in (None, "", False):
-        _append_pair(run_args, invocation_args, "--plot_title_font_size", str(adv.get("plot_title_font_size")))
+    _append_gui_plot_title_args(run_args, invocation_args, form=form, adv=adv, positions=None)
     if adv.get("keep_full_definition_with_plot_title") is True:
         _append_flag(run_args, invocation_args, "--keep_full_definition_with_plot_title")
     if adv.get("center_reserved_radius") not in (None, "", False):
@@ -6810,6 +6888,12 @@ def _append_linear_gui_args(
     wrap_length = _string_or_none(form.get("linear_wrap_length"))
     if wrap_length and wrap_length != "none":
         _append_pair(run_args, invocation_args, "--wrap_length", wrap_length)
+    # OV-2521: a Linear Generate draws the plot title too.
+    from gbdraw.api.options import LINEAR_PLOT_TITLE_POSITIONS
+
+    _append_gui_plot_title_args(
+        run_args, invocation_args, form=form, adv=adv, positions=LINEAR_PLOT_TITLE_POSITIONS
+    )
     _append_linear_definition_line_style_args(run_args, invocation_args, adv)
 
     linear_seqs = files.get("linearSeqs")

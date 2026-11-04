@@ -296,7 +296,8 @@ def read_request_less_source_features(
     with the reads of :func:`legacy_source_reads`, in a temporary directory
     under ``temporary_directory``, only when a rule needs a drawn hash
     (:func:`gbdraw.session_io.request_less_hash_rules_need_drawn_hashes`), the
-    Session shows Linear and every card is a GenBank one, as the Web read them. None otherwise, or when
+    Session's figure is Linear (``session_mode``: its invocation's mode, else
+    the shown mode, whose cards then give the rule's records) and every card is a GenBank one, as the Web read them. None otherwise, or when
     a source cannot be read; the migration then uses the saved feature
     metadata.
     """
@@ -307,7 +308,7 @@ def read_request_less_source_features(
     if not (
         isinstance(version, int)
         and version < CANONICAL_SESSION_MIN_VERSION
-        and ui.get("mode") == "linear"
+        and session_mode(session) == "linear"
         and (ui.get("lInputType") or "gb") == "gb"
         and request_less_hash_rules_need_drawn_hashes(session)
     ):

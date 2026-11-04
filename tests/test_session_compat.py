@@ -2235,6 +2235,50 @@ def test_session_30_rendered_id_color_rule_is_named_in_the_cli_sidecar(
     assert _UNMAPPED_HASH_WARNING.format(count=1, version=30) not in caplog.messages
 
 
+def test_session_30_replay_draws_the_draft_colors(tmp_path: Path) -> None:
+    # OV-2055 (Owner R17-22): the replay of a Session 27-30 passes the draft's
+    # palette, colors and specific color rules, so it draws what a Web
+    # Generate of the file draws: TESTB_0006 in the rule's #ff0000, and the
+    # written Session's request carries that rule and the palette.
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+
+    linear_main(
+        [
+            "--session", str(fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    assert "#ff0000" in (tmp_path / "replay.svg").read_text(encoding="utf-8").lower()
+    saved = load_session_document(sidecar).to_dict()
+    colors = drawing_view(saved, mode="linear")["renderRequest"]["diagramOptions"]["colors"]
+    assert colors["defaultColorsPalette"] == "default"
+    table = saved["resources"][colors["colorTable"]["resourceId"]]
+    rows = [line.split("\t") for line in base64.b64decode(table["data"]).decode("utf-8").splitlines()]
+    assert rows[-1] == ["CDS", "hash", "fbc76b20f", "#ff0000", "CDS (1)"]
+
+
+def test_session_30_linear_replay_draws_the_draft_plot_title(tmp_path: Path) -> None:
+    # OV-2521: the replay of a Linear Session 27-30 without an invocation
+    # passed no plot title, which the Circular replay and a Web Generate of
+    # the file draw.
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"
+    source = json.loads(gzip.decompress(fixture.read_bytes()))
+    assert "cliInvocation" not in source
+    source["config"]["form"]["plot_title"] = "Replayed plot title"
+    source["config"]["adv"]["plot_title_position"] = "top"
+    session_path = tmp_path / "titled.v30.gbdraw-session.json"
+    session_path.write_text(json.dumps(source), encoding="utf-8")
+
+    linear_main(["--session", str(session_path), "--output", str(tmp_path / "replay"), "--format", "svg"])
+
+    svg = (tmp_path / "replay.svg").read_text(encoding="utf-8")
+    assert "Replayed plot title" in svg
+
+
 def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path) -> None:
     # A row with an empty label text hides the label, as the Web app draws it.
     # The canonical TSV round trip used to read the empty cell as a missing
