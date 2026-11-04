@@ -425,3 +425,28 @@ test('(a) regions of two records of one file are one Linear drawing bound to tha
   assert.deepEqual(installed.derived.renderRequest.records.map((record) => record.presentation.gridRow), [null, null]);
   await assertRoundTrip(installed);
 });
+
+// (e) A Linear record of 3 kb with a hand-set tick interval: Auto is 1 kb at
+// 3 kb and 100 bp at 1.5 kb (`gbdraw/auto_sizes.py` `linear_tick_interval`),
+// so the region drawing draws the interval at Auto and lists it as returned to
+// Auto; with "Adapt sizes" off it keeps the hand-set interval.
+const sizedRecord = genbankRecord('recS', 3000, [[101, 400, 'S1'], [1601, 2400, 'S2']], 'linear');
+const sizedSource = (fileRef) => {
+  const source = withNewDrawingDefaults(state, createDrawingState('sized', 'linear'));
+  source.inputType.value = 'gb';
+  source.linearSeqs.splice(0, Infinity, createLinearSeq({ uid: 'sized', gb: fileRef }));
+  Object.assign(source.form, { labels_mode: 'none' });
+  source.adv.scale_interval = 500;
+  return source;
+};
+test('(e) a hand-set size whose Auto differs at the region\'s length returns to Auto; Adapt sizes off keeps it', async () => {
+  const fileRef = state.inputFiles.registerFile(genbankFile('sized.gb', [sizedRecord]));
+  const region = [{ recordKey: 'sized', start: 1, end: 1500 }];
+  const adapted = await deriveAndInstall(sizedSource(fileRef), region, true, 'sized-adapted');
+  assert.deepEqual(adapted.derived.returnedToAuto, [{ setting: 'objects.scale.interval', explicit: 500, auto: 100 }]);
+  assert.equal(adapted.made.adv.scale_interval, null, 'the new drawing draws the interval at Auto');
+  assert.equal(at(adapted.derived.renderRequest, '$.diagramOptions.configOverrides.objects.scale.interval').found, false);
+  const kept = await deriveAndInstall(sizedSource(fileRef), region, false, 'sized-kept');
+  assert.deepEqual(kept.derived.returnedToAuto, []);
+  assert.equal(kept.made.adv.scale_interval, 500, 'Adapt sizes off keeps the hand-set interval');
+});
