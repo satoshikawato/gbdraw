@@ -141,7 +141,9 @@ Materialized paths expire when the materialization context closes. `session_to_r
 source is the session's only drawing, or the drawing that `drawing=` names by
 ID or name, as in `session_to_request()`. Each
 `RegionSelection(record_key, start, end)` names a record of the source drawing
-and a region in source coordinates (1-based, inclusive); give at most one
+and a region in source coordinates (1-based, inclusive);
+`FeatureRegionSelection(record_key, feature_id)` instead takes the span of one
+feature, by its biological feature ID in the source drawing. Give at most one
 region per record. `drawing` in the result is a `SessionDrawingSpec` for
 `build_session_document(drawings=...)`, and `drawing.request` draws the same
 files cut to those regions, in source order. The current Session version names
@@ -155,8 +157,10 @@ inside the regions:
   choose Circular for one record; a Circular region is drawn as a closed
   circle numbered from 1.
 - Each record keeps its orientation unless `reverse_complement` is given.
-- A region whose start is after its end (one that crosses the origin of a
-  circular record) is refused.
+- A region whose start is after its end is refused with a `ValidationError`
+  whose diagnostic code is `REGION_INVALID`: reason `ORIGIN_CROSSING` on a
+  circular record (a region cannot cross the origin, nor can a feature that
+  does), `START_AFTER_END` on a linear record.
 - A size you set (label font, stroke and axis widths, feature height, track
   widths, windows, tick interval, tick fonts) is kept only when its Auto value
   is the same at the new length and mode. Otherwise it returns to Auto and is
@@ -165,6 +169,10 @@ inside the regions:
 - Comparison tables and ring tables are not carried, because they use the
   coordinates of the whole records. A LOSAT search runs again on the new
   records. `dropped` lists every setting or item that was not carried.
+
+`RegionDrawing` holds `drawing`, `adaptation` (the sizes that returned to
+Auto), `not_carried` (typed entries, each with a `kind` and a `message`), and
+`dropped` (those messages).
 
 The request reads the materialized files, so build or render it before the
 materialization context closes.
