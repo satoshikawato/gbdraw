@@ -206,6 +206,28 @@ def test_bases_too_small_to_draw_are_not_searched_below_the_floor() -> None:
     assert len(set(bases)) == len(bases)
 
 
+def test_a_base_too_small_to_draw_above_a_pass_under_bounds_the_search() -> None:
+    """A base that cannot be drawn above the widest pass under is a bound like a pass over: the search halves the
+    way to it instead of measuring it again, and ends."""
+
+    def size(base: int) -> float | None:
+        if base == 299:
+            return 630.0
+        return None if 310 <= base <= 330 else 2.0 * base + 80.0
+
+    fit, bases = _fit(size, 680.0, first_base=390, slope=2.0)
+    assert fit.fits and -3.0 <= fit.excess_px <= 0.0 and fit.base == 300
+    assert len(set(bases)) == len(bases)
+
+
+def test_bases_too_small_to_draw_end_the_search_after_their_bound() -> None:
+    """Every base below the first cannot be drawn: the refusal keeps the first pass after at most 12 such passes."""
+
+    fit, bases = _fit(lambda base: None if base < 390 else 2.0 * base + 180.0, 680.0, first_base=390, slope=2.0)
+    assert not fit.fits and fit.base == 390
+    assert 1 < len(bases) <= 13 and len(set(bases)) == len(bases)
+
+
 def test_a_size_that_jumps_returns_the_widest_pass_under() -> None:
     """Labels not placed (CAPACITY-STOP) make a pass much narrower than its neighbour with labels: the measure jumps
     over the target, and the fit keeps the widest pass under it."""

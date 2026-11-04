@@ -26,7 +26,8 @@ _AIM_UNDER_PX = 2.0
 _ACCEPT_UNDER_PX = 3.0
 _MAX_PASSES = 8
 # A base too small to draw fails early (a Circular map's track layout, about 0.05 s), so such passes have their own
-# bound: halving the distance between the largest of them and the smallest drawn base reaches 1 from a few thousand.
+# bound, after which the search stops: halving the distance between the largest of them below the smallest drawn base
+# and that base reaches 1 from a few thousand.
 _MAX_UNDRAWABLE_PASSES = 12
 # The composed size grows with the base length, but labels past the ends can make a stretch nearly flat; a slope
 # measured there is raised to this so one step cannot jump far.
@@ -81,11 +82,11 @@ def _slope(a: BaseLengthFit[Built], b: BaseLengthFit[Built]) -> float:
 
 
 def _next_base(
-    drawn: dict[int, _Pass[Built]], order: list[int], floor: int, undrawable: int, first_slope: float
+    drawn: dict[int, _Pass[Built]], order: list[int], undrawable: set[int], first_slope: float
 ) -> int | None:
     """The next base to measure, or None when no unmeasured base can come closer to the target."""
 
-    if len(drawn) >= _MAX_PASSES:
+    if len(drawn) >= _MAX_PASSES or len(undrawable) >= _MAX_UNDRAWABLE_PASSES:
         return None
     passes = [drawn_pass.fit for drawn_pass in drawn.values()]
     under = max((fit for fit in passes if fit.fits), key=lambda fit: fit.base, default=None)
@@ -94,6 +95,10 @@ def _next_base(
         key=lambda fit: fit.base,
         default=None,
     )
+    ceiling = min((base for base in undrawable if under is not None and base > under.base), default=None)
+    if under is not None and ceiling is not None and (over is None or ceiling < over.base):
+        # A base above the widest pass under that cannot be drawn bounds the search as a pass over the box would.
+        return None if ceiling - under.base <= 1 else (under.base + ceiling) // 2
     if under is not None and over is not None:
         if over.base - under.base <= 1:
             return None
@@ -105,11 +110,10 @@ def _next_base(
     if under is not None:
         return max(guess, under.base + 1)
     lowest = min(drawn)
+    floor = max((base for base in undrawable if base < lowest), default=0)
     guess = max(1, min(guess, lowest - 1))
     if guess <= floor:
         # Bases at or below the floor cannot be drawn: halve the way down to it instead.
-        if undrawable >= _MAX_UNDRAWABLE_PASSES:
-            return None
         guess = (floor + lowest) // 2
     return None if guess <= floor or guess in drawn else guess
 
@@ -124,8 +128,9 @@ def fit_base_length(
     mode supplies it and ``slope``, the px of content per px of base of the first step. Each step aims 2 px under:
     later ones with the secant of the last two drawn passes. Once one pass is under and one over, the next base is
     the secant between them, kept strictly inside, until no base lies between them; then the widest pass under is
-    kept. A base at or below the largest one too small to draw is not tried: the step halves the way to it instead.
-    After 8 drawn passes the widest pass under is kept.
+    kept. A base too small to draw above the widest pass under bounds the search as a pass over would (its midpoint
+    is tried); below the smallest drawn pass, a base at or below the largest one too small to draw is not tried: the
+    step halves the way to it instead. After 8 drawn passes, or 12 too small to draw, the widest pass under is kept.
 
     With no pass under, the target is refused (``fits`` False) with the smallest drawn pass. Before refusing, the
     middle of that pass and the next drawn pass above it is measured once, if not yet measured, since a measure
@@ -135,8 +140,7 @@ def fit_base_length(
 
     drawn: dict[int, _Pass[Built]] = {}
     order: list[int] = []
-    floor = 0
-    undrawable = 0
+    undrawable: set[int] = set()
     checked_middle = False
     base: int | None = first_base
     while base is not None:
@@ -144,7 +148,7 @@ def fit_base_length(
         if result is None:
             if not drawn:
                 raise ValueError(f"the first base length {base} cannot be drawn")
-            floor, undrawable = max(floor, base), undrawable + 1
+            undrawable.add(base)
         else:
             excess, built = result
             current = _Pass(BaseLengthFit(base, excess, built, fits=excess <= 0.0), caught)
@@ -152,13 +156,20 @@ def fit_base_length(
                 return _kept(current)
             drawn[base] = current
             order.append(base)
-        base = _next_base(drawn, order, floor, undrawable, slope)
+        base = _next_base(drawn, order, undrawable, slope)
         if base is None and not any(drawn_pass.fit.fits for drawn_pass in drawn.values()):
             lowest = min(drawn)
             above = min((other for other in drawn if other > lowest), default=None)
-            if not checked_middle and len(drawn) < _MAX_PASSES and above is not None and above - lowest > 1:
+            middle = None if above is None else (lowest + above) // 2
+            if (
+                not checked_middle
+                and len(drawn) < _MAX_PASSES
+                and middle is not None
+                and lowest < middle
+                and middle not in undrawable
+            ):
                 checked_middle = True
-                base = (lowest + above) // 2
+                base = middle
     fitting = [drawn_pass for drawn_pass in drawn.values() if drawn_pass.fit.fits]
     if fitting:
         return _kept(max(fitting, key=lambda drawn_pass: drawn_pass.fit.excess_px))
