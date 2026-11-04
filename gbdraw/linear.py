@@ -37,6 +37,7 @@ from .api.options import (
     LinearRequestTrackOptions,
     LinearWrapDefaults,
     LinearWrapTrackOrder,
+    LINEAR_DEFAULT_PLOT_TITLE_POSITION,
     LOSATN_TASKS,
     LosatRuntimeOptions,
     LosatSearchOptions,
@@ -1562,7 +1563,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     definition_show_accession: bool = not bool(args.hide_accession)
     definition_show_length: bool = not bool(args.hide_length)
     plot_title: str = str(args.plot_title or "").strip()
-    plot_title_position: str = str(args.plot_title_position or "bottom").strip().lower()
+    plot_title_position: str = str(args.plot_title_position or LINEAR_DEFAULT_PLOT_TITLE_POSITION).strip().lower()
     plot_title_font_size: Optional[float] = args.plot_title_font_size
     label_font_size: Optional[float] = args.label_font_size
     label_rendering: str = args.label_rendering

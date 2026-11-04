@@ -4314,8 +4314,11 @@ Status: active Product authority
     Review is `REQUIRED`.
 - Revision 115 changes: `PD-OI-096` gains scenario revision `3` (concern
   `web.legend.position-of-mode`, the same choice
-  `B / MODE-DEFAULT-LISTED-AT-LOAD`). A Python- or CLI-saved Linear Session
-  that states no `output` (or a null title position) is read as Python and the
+  `B / MODE-DEFAULT-LISTED-AT-LOAD`). A Linear request that states no
+  `output` (or a null title position) is read as Python and the CLI draw it.
+  Only Python writes such a request: `build_session_document` of a default
+  Linear request, and the region derivation of a Circular source. A Session
+  the CLI saves always states `output`. The request is read as Python and the
   CLI draw it: the legend on the right and the title at the bottom. This holds
   for the drawing a Load opens and for a drawing it does not open; the latter
   now reads the legend and title positions of its own request (OV-2493)
@@ -9438,9 +9441,9 @@ Decision date: 2026-10-13
 - Scenario revision: `3`
 - Supersedes: `PD-OI-096`, scenario revision `2` (Revision 115 entry above).
   Scenario revision `3` keeps every field of scenario revision `2` except
-  those its Revision 115 entry names: its Rationale, Must preserve, May
-  retire, and Accepted residual risk, its scenario revision, and its decision
-  date. Scenario revision `2` superseded scenario revision `1`.
+  these: Rationale, Must preserve (the added sentences and the sentence on a
+  value outside the set), May retire, and Accepted residual risk (the added
+  sentences), the scenario revision, and the decision date. Scenario revision `2` superseded scenario revision `1`.
 - Status: `ACCEPTED`
 - Selected outcome: `B / MODE-DEFAULT-LISTED-AT-LOAD`
 - Normative outcome: exactly the complete approved scenario revision `3`

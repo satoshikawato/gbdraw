@@ -280,3 +280,25 @@ test('each drawing of a Session 51 Load takes its request\'s layout, a Linear on
   assert.equal(Object.hasOwn(python.drawings[0].renderRequest.diagramOptions, 'output'), false);
   assert.deepEqual(await linearLayout(python), ABSENT_LINEAR_OUTPUT);
 });
+
+// Owner Q1 (R17-39, A): a Linear legend the mode cannot use (`upper_left`,
+// written by hand) stays `bottom`, and the pre-Load dialog lists the repair,
+// even when the drawing's request states no `output` (which reads `right`).
+test('a stored Linear legend outside its mode reads bottom, not the absent output\'s right, and is listed', async () => {
+  for (const opened of ['circular', 'linear']) {
+    const session = v49Session();
+    session.ui.activeDrawingId = opened;
+    const entry = session.drawings.find((drawing) => drawing.id === 'linear');
+    delete entry.renderRequest.diagramOptions.output;
+    entry.ui.layoutPreferences = { legend: 'upper_left', plotTitlePosition: 'bottom' };
+    let dialog = null;
+    const loaded = await importSession({
+      target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
+    }, { confirmLoadRepairs: async (asked) => { dialog = asked; return true; }, installLoadedArtifactSlots: () => {} });
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual({ ...state.drawingOf('linear').layoutPreferences.linear }, { legend: 'bottom', plotTitlePosition: 'bottom' }, `opened ${opened}`);
+    assert.deepEqual(dialog?.items, [
+      'Legend: the position "upper_left" (drawings[1].ui.layoutPreferences.legend) is not one of its mode\'s positions; bottom is used.'
+    ], `opened ${opened}`);
+  }
+});

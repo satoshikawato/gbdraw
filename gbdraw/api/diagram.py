@@ -2158,7 +2158,7 @@ def assemble_linear_diagram_from_records(
     linear_track_axis_index: int | None = None,
     annotation_options: AnnotationOptions | None = None,
     plot_title: str | None = None,
-    plot_title_position: Literal["center", "top", "bottom"] = "bottom",
+    plot_title_position: Literal["center", "top", "bottom"] = LINEAR_DEFAULT_PLOT_TITLE_POSITION,
     plot_title_font_size: float | None = None,
     evalue: float = LINEAR_MODE_PROFILE.comparison.evalue,
     bitscore: float = LINEAR_MODE_PROFILE.comparison.bitscore,
