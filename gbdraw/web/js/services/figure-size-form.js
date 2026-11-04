@@ -124,11 +124,11 @@ export const figureLengthInputValue = (text, unit) => {
 
 /**
  * The unit a side shows when its value comes from outside the field (Load, Undo, Reset, a drawing switch): the
- * value's unit; Auto and a value the form cannot split keep `current`.
+ * value's unit; Auto (the form holds no other value) shows px, as an empty side starts.
  * @param {unknown} value
- * @param {FigureLengthUnit} current
+ * @returns {FigureLengthUnit}
  */
-export const figureLengthUnitOf = (value, current) => splitFigureLength(value)?.unit ?? current;
+export const figureLengthUnitOf = (value) => splitFigureLength(value)?.unit ?? DEFAULT_FIGURE_LENGTH_UNIT;
 
 /**
  * The amount a side's number field shows: empty for Auto.

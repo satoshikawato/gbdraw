@@ -43,6 +43,8 @@ sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: 
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { getSvgDimensions } = await import('../../gbdraw/web/js/services/svg-dimensions.js');
+const { requestFigureSizeLeaves, shownFigureSize } = await import('../../gbdraw/web/js/services/figure-size-form.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
@@ -1111,6 +1113,31 @@ test('a Session 51 with a 180 x 180 mm figure size loads both sides into the for
     assert.deepEqual({ width: overrides['canvas.figure_width'], height: overrides['canvas.figure_height'] }, { width: '180mm', height: '180mm' });
     assert.deepEqual(loadDialogs.flatMap((dialog) => dialog.items), [], session ? 'the fixture' : 'its Save');
   }
+});
+
+// Issue #1427, review finding 2: a Session the CLI wrote with --figure_width 180mm
+// (tests/fixtures/sessions/HmmtDNA-figure-width-180mm.v51-cli.provenance.json) holds Python's full config, with the
+// height "auto", and a Result whose root states its size in mm. Load reads the width into the field and the height as
+// Auto, with no repair row, and the size line reads the mm root through its px viewBox as 180 mm.
+test('a CLI Session sized 180 mm wide loads the width into the field, and the size line reads its mm root', async () => {
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-figure-width-180mm.v51-cli.gbdraw-session.json.gz', import.meta.url))));
+  const { canvas } = fixture.drawings[0].renderRequest.diagramOptions.config;
+  assert.deepEqual([canvas.figure_width, canvas.figure_height], ['180mm', 'auto']);
+  resetDrawings();
+  loadDialogs.length = 0;
+  const loaded = await load(fixture);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const drawing = state.activeDrawing();
+  assert.deepEqual([drawing.form.figure_width, drawing.form.figure_height], ['180mm', null]);
+  assert.deepEqual(loadDialogs.flatMap((dialog) => dialog.items), []);
+  const [rootTag] = /<svg[^>]*>/.exec(state.results.value[0].content);
+  const attribute = (name) => new RegExp(`\\s${name}="([^"]*)"`).exec(rootTag)?.[1] ?? null;
+  assert.equal(attribute('width'), '180mm');
+  const px = getSvgDimensions({ getAttribute: attribute });
+  const requested = requestFigureSizeLeaves(sessionConfig.getCommittedCanonicalRenderRequest());
+  assert.deepEqual(requested, { width: '180mm', height: null });
+  assert.deepEqual(shownFigureSize({ widthPx: px.width, heightPx: px.height, requested }),
+    { first: '180 × 133.1 mm', second: '680 × 503 px' });
 });
 
 // Italic gene names are one setting per drawing (`config.adv.italic_gene_labels`):

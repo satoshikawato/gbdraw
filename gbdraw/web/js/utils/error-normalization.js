@@ -800,7 +800,7 @@ const contextFor = (value) => {
   // A refused figure size: Python's lengths (`180 mm`), each a bounded number and unit, and its primary item.
   if (value.reason === 'FIGURE_TOO_NARROW' || value.reason === 'FIGURE_TOO_SHORT') {
     for (const key of /** @type {const} */ (['requested', 'minimum', 'atWidth', 'primary', 'legend', 'title', 'padding'])) {
-      if (typeof value[key] === 'string' && FIGURE_LENGTH_TEXT.test(value[key])) context[key] = value[key];
+      if (isFigureLengthText(value[key])) context[key] = value[key];
     }
     if (typeof value.primaryItem === 'string' && Object.hasOwn(FIGURE_PRIMARY_ITEMS, value.primaryItem)) {
       context.primaryItem = /** @type {FigurePrimaryItem} */ (value.primaryItem);
@@ -855,8 +855,16 @@ const FIGURE_PRIMARY_ITEMS = Object.freeze({
   map: 'map at its smallest {length}', maps: 'maps at their smallest {length}'
 });
 const FIGURE_PARTS = Object.freeze({ legend: 'legend {length}', title: 'title {length}', padding: 'padding {length}' });
-// A length as Python's message writes it: a number and a unit name (the units are Python's).
+// A length as Python's message writes it (`180 mm`): a bounded number and a unit name. Python admits only its own
+// units (gbdraw/web_support/error_adapter.py); this module has no imports, so the Web checks the shape. The one check
+// of it in the Web: a refused size here, and the larger-figure estimate in services/label-fit.js.
 const FIGURE_LENGTH_TEXT = /^[0-9]{1,30}(\.[0-9]{1,6})? [a-z]{1,3}$/;
+/**
+ * Whether `value` is a length as Python's messages write it (`180 mm`).
+ * @param {unknown} value
+ * @returns {value is string}
+ */
+export const isFigureLengthText = (value) => typeof value === 'string' && FIGURE_LENGTH_TEXT.test(value);
 /**
  * The sentences of a refused figure size, in Python's numbers: what does not fit and the smallest size, then what to
  * do. None without Python's lengths (the reason's own text then stands).
@@ -953,6 +961,10 @@ export const normalizeUserFacingError = (value, {
   // A Save over the cap: the file would not load again, and saving again fails the same way.
   const saveOverCap = result.code === 'SESSION_SIZE_LIMIT' && result.operation === 'session-save'
     && sessionBytes !== undefined && sessionByteLimit !== undefined;
+  // A refused figure size names its control (Figure width, Figure height) in its own sentence, so it shows no
+  // Setting line with the internal path.
+  const figureSize = reason === 'FIGURE_TOO_NARROW' || reason === 'FIGURE_TOO_SHORT';
+  const figureSizeSentences = figureSizeParts(result.context);
   // One part per sentence, in the order the summary shows them.
   /** @type {(ErrorTextPart | null | false | '' | undefined)[]} */
   const pieces = [
@@ -974,7 +986,7 @@ export const normalizeUserFacingError = (value, {
     column !== undefined && { text: PHRASES.column, params: { column } },
     slotIndex !== undefined && { text: PHRASES.trackRow, params: { row: slotIndex + 1 } },
     seriesIndex !== undefined && { text: PHRASES.depthSeries, params: { series: seriesIndex + 1 } },
-    configPath !== undefined && { text: PHRASES.setting, params: { path: configPath } },
+    configPath !== undefined && !figureSize && { text: PHRASES.setting, params: { path: configPath } },
     featureName && { text: PHRASES.feature, params: { feature: featureName } },
     // `undefined > 1` is false: with no count there is no line.
     /** @type {number} */ (featureCount) > 1 && { text: PHRASES.featuresAffected, params: { count: /** @type {number} */ (featureCount) } },
@@ -982,8 +994,8 @@ export const normalizeUserFacingError = (value, {
     exportSize,
     exportSize && rowLength !== undefined && { text: PHRASES.exportRowLength, params: { length: grouped(rowLength) } },
     exportSize && dpi !== undefined && { text: PHRASES.exportDpi, params: { dpi } },
-    ...figureSizeParts(result.context),
-    sessionVersionGuidance(result.context) || (figureSizeParts(result.context).length > 0 ? null
+    ...figureSizeSentences,
+    sessionVersionGuidance(result.context) || (figureSizeSentences.length > 0 ? null
       : (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null)),
     reason === 'NOT_NUCLEOTIDE' && letter && { text: PHRASES.letter, params: { letter } },
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },

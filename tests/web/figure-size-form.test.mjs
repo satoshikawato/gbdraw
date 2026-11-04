@@ -58,8 +58,8 @@ test('a side writes its amount as typed and its unit; Python reads and checks it
   assert.equal(figureLengthInputValue('  ', 'px'), null);
   assert.equal(figureLengthInputValue(' 180 ', 'mm'), '180mm');
   assert.equal(figureLengthInputValue('0', 'in'), '0in', 'Python refuses it on Generate');
-  assert.equal(figureLengthUnitOf('5in', 'px'), 'in');
-  assert.equal(figureLengthUnitOf(null, 'cm'), 'cm', 'Auto keeps the unit');
+  assert.equal(figureLengthUnitOf(null), 'px', 'an Auto value shows px');
+  assert.equal(figureLengthUnitOf('5in'), 'in');
   assert.equal(figureLengthAmountText('180mm'), '180');
   assert.equal(figureLengthAmountText(null), '');
 });
@@ -129,7 +129,58 @@ test('the field writes each side, keeps its unit as view state, and shows a valu
   // Section 6: a canvas that Web-only additions grew past the requested box says so, naming them.
   shown = { first: '190 × 143.2 mm', second: '718 × 541 px', larger: { sides: [{ side: 'width', length: '180 mm' }], causes: ['legend-edits', 'canvas-padding'] } };
   assert.equal(field.figureSizeLine.value, 'Figure: 190 × 143.2 mm (718 × 541 px)');
-  assert.equal(field.figureSizeLarger.value, 'Larger than the requested 180 mm width: Legend edits and Canvas padding are added after the fit.');
+  assert.equal(field.figureSizeLarger.value, 'Larger than the requested 180 mm width after Legend edits and Canvas padding, which the fit does not include.');
+  // Review finding 4: one sentence for one cause or several, whatever the number of the cause's noun.
+  shown = { ...shown, larger: { sides: [{ side: 'width', length: '180 mm' }], causes: ['canvas-padding'] } };
+  assert.equal(field.figureSizeLarger.value, 'Larger than the requested 180 mm width after Canvas padding, which the fit does not include.');
+  shown = { ...shown, larger: { sides: [{ side: 'height', length: '120 mm' }], causes: ['moved-items'] } };
+  assert.equal(field.figureSizeLarger.value, 'Larger than the requested 120 mm height after moves of the Legend, title, or scale, which the fit does not include.');
+});
+
+// Review finding 1: the unit selects belong to the one field every drawing shares. A value that arrives from outside
+// the field (a drawing switch, Reset Settings, Session Load, Undo) shows in its own unit, and an Auto value in px (the
+// receipt: an empty side starts at px); only a side the field itself cleared keeps the unit the user chose.
+test('a side that becomes Auto from outside the field shows px; a side the field cleared keeps its unit', () => {
+  const a = { id: 'circular', mode: 'circular', form: createDefaultForm() };
+  const b = { id: 'circular-2', mode: 'circular', form: createDefaultForm() };
+  let shownDrawing = a;
+  const watchers = [];
+  const field = createFigureSizeField({ state: { activeDrawing: () => shownDrawing }, watch: (_source, callback) => watchers.push(callback), shownSize: () => null });
+  const changed = () => watchers.forEach((callback) => callback());
+  const shown = () => [field.figureWidthUnit.value, field.figureWidthAmount.value];
+  const type = (value, part = 'amount') => { field.changeFigureSize({ target: { value } }, 'width', part); changed(); };
+  type('mm', 'unit');
+  type('85');
+  assert.equal(a.form.figure_width, '85mm');
+  // A switch to drawing B, whose width is Auto: px, and typing 1200 writes 1200 px.
+  shownDrawing = b;
+  changed();
+  assert.deepEqual(shown(), ['px', ''], 'a drawing switch to an Auto side');
+  type('1200');
+  assert.equal(b.form.figure_width, '1200px');
+  shownDrawing = a;
+  changed();
+  assert.deepEqual(shown(), ['mm', '85'], 'back in A, its own value in its own unit');
+  // Reset Settings (the form back to its defaults), and Undo or Load of an Auto value.
+  Object.assign(a.form, createDefaultForm());
+  changed();
+  assert.deepEqual(shown(), ['px', ''], 'Reset Settings');
+  a.form.figure_width = '20cm';
+  changed();
+  assert.deepEqual(shown(), ['cm', '20'], 'a Load or Undo of a value');
+  a.form.figure_width = null;
+  changed();
+  assert.deepEqual(shown(), ['px', ''], 'a Load or Undo of Auto');
+  // The field clears a side: it keeps the unit chosen, also when the same value comes back by itself.
+  type('in', 'unit');
+  type('7');
+  type('');
+  assert.equal(a.form.figure_width, null);
+  assert.deepEqual(shown(), ['in', ''], 'a side the field cleared keeps its unit');
+  changed();
+  assert.deepEqual(shown(), ['in', '']);
+  type('7');
+  assert.equal(a.form.figure_width, '7in');
 });
 
 test('a shown Result is larger than requested only past the box, by its Web-only causes', () => {
@@ -169,12 +220,12 @@ print(json.dumps(out))
 test('a refused size names the parts that do not shrink and the way out, with Python\'s numbers', () => {
   const [narrow, short, circular] = pythonRefusals().map(normalizeUserFacingError);
   const { minimum, primary, legend, padding } = narrow.context;
-  assert.equal(narrow.summary, 'An input value is invalid. Setting: canvas.figure_width. The figure cannot be 40 mm wide:'
+  assert.equal(narrow.summary, 'An input value is invalid. The figure cannot be 40 mm wide:'
     + ` the parts that do not shrink need ${minimum} (record names and labels past the sequence ends ${primary},`
     + ` legend ${legend}, padding ${padding}). Set Figure width to at least ${minimum}, place the Legend at the top or`
     + ' bottom, or leave it empty (Auto).');
   const { minimum: tall, primary: records } = short.context;
-  assert.ok(short.summary.includes(`Setting: canvas.figure_height. The figure cannot be 10 mm tall at 180 mm wide: it needs ${tall} (records ${records}, `), short.summary);
+  assert.ok(short.summary.startsWith(`An input value is invalid. The figure cannot be 10 mm tall at 180 mm wide: it needs ${tall} (records ${records}, `), short.summary);
   assert.ok(short.summary.endsWith(`Set Figure height to at least ${tall}, or leave it empty (Auto).`), short.summary);
   assert.match(circular.summary, /\(map at its smallest [0-9.]+ mm, legend [0-9.]+ mm, padding [0-9.]+ mm\)/);
   // Without its lengths a refusal says what to change.

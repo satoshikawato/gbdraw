@@ -12,7 +12,7 @@
 // A row's title and the names and option words of its settings are English
 // catalog keys: `tools/generate_web_contracts.py` lists them from Python for
 // the catalogs (`tools/i18n/source-keys.mjs`), and the dialog shows them with `tm()`.
-import { diagnosticError } from '../utils/error-normalization.js';
+import { diagnosticError, isFigureLengthText } from '../utils/error-normalization.js';
 import { msg, tn } from '../utils/i18n.js';
 /** @import { CanonicalCircularTrackOptions } from '../contracts/request.generated.js' */
 
@@ -138,10 +138,8 @@ export const labelCapacityRemedyText = (remedy, largerFigure) => {
   const sides = width !== null && height !== null ? 'both' : width !== null ? 'width' : 'height';
   return { text: LARGER_FIGURE_WORDS[sides], params: { ...(width !== null ? { width } : {}), ...(height !== null ? { height } : {}) } };
 };
-// A length as Python's message writes it: a number and a unit name (the units are Python's).
-const LENGTH_TEXT = /^[0-9]{1,30}(\.[0-9]{1,6})? [a-z]{1,3}$/;
-/** @param {unknown} value @returns {value is string | null} */
-const isSideLength = (value) => value === null || (typeof value === 'string' && LENGTH_TEXT.test(value));
+/** A side of the estimate: null, or a length as Python's message writes it. @param {unknown} value @returns {value is string | null} */
+const isSideLength = (value) => value === null || isFigureLengthText(value);
 /**
  * A report's `largerFigure`, absent (null) unless the `figure_size` remedy is offered.
  * @param {Record<string, unknown>} parsed

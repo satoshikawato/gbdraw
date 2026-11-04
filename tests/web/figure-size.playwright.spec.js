@@ -1,7 +1,8 @@
 // Figure size (Layout, issue #1427): a requested width and height apply on Generate, the line under the field shows
 // the drawn size in the requested unit, the plain SVG states the size as the CLI writes it while the page keeps px,
-// a Legend rename keeps the requested canvas, Save and Load keep the size, Undo restores Auto, and a Linear width the
-// parts that do not shrink cannot fit is refused with the parts named and the previous figure kept.
+// a Legend rename keeps the requested canvas, Save and Load keep the size, Undo restores Auto and undoes a unit
+// change, and a Linear width the parts that do not shrink cannot fit is refused with the parts named and the previous
+// figure kept.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
@@ -54,6 +55,12 @@ test('a Circular 180 x 180 mm figure: Undo, size line, SVG export units, Legend 
   expect(await sizeState(page)).toMatchObject({ width: null, amount: '' });
   await setSide(page, 'width', 180, 'mm');
   await setSide(page, 'height', 180, 'mm');
+  expect(await sizeState(page)).toMatchObject({ width: '180mm', height: '180mm', amount: '180', unit: 'mm' });
+  // A unit change with an amount set is one step too: 180 mm becomes 180 cm, and one Undo gives 180 mm back.
+  await page.locator('#figure-width-unit').selectOption('cm');
+  await settle(page);
+  expect(await sizeState(page)).toMatchObject({ width: '180cm', amount: '180', unit: 'cm' });
+  await undo(page);
   expect(await sizeState(page)).toMatchObject({ width: '180mm', height: '180mm', amount: '180', unit: 'mm' });
   await generateAndWaitForResult(page);
   await settle(page);
@@ -126,5 +133,6 @@ test('a Linear 85 mm width with a wide side Legend is refused, naming the parts,
   const outcome = await generateAndWaitForResult(page, { expectedStatus: 'error' });
   expect(outcome.errorSummary).toContain('The figure cannot be 85 mm wide: the parts that do not shrink need');
   expect(outcome.errorSummary).toContain('place the Legend at the top or bottom');
+  expect(outcome.errorSummary, 'the sentence names Figure width; no Setting line').not.toContain('Setting:');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content), 'the figure is kept').toBe(shown);
 });

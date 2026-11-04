@@ -495,6 +495,26 @@ test('New drawing with this style in the other mode takes that mode\'s profile r
   assert.equal(styled.form.plot_title, linearDefaults.form.plot_title, 'plot_title takes the Linear profile');
 });
 
+// Figure size (issue #1427, PD-OI-114): the size is a `copy` row of both modes, so Duplicate and New drawing with
+// this style, in either mode, carry both sides as typed; Reset Settings returns them to Auto (null).
+test('Duplicate and New drawing with this style copy the Figure size; Reset Settings returns it to Auto', () => {
+  const app = createAppSetup();
+  const { drawingId: source } = app.drawingList.newDrawing('circular');
+  const drawing = state.drawingOf(source);
+  drawing.form.figure_width = '180mm';
+  drawing.form.figure_height = '5in';
+  const sizeOf = (id) => [state.drawingOf(id).form.figure_width, state.drawingOf(id).form.figure_height];
+  const copies = [
+    app.drawingList.duplicateDrawing(source).drawingId,
+    app.drawingList.newDrawingWithStyle(source, 'circular').drawingId,
+    app.drawingList.newDrawingWithStyle(source, 'linear').drawingId
+  ];
+  for (const id of copies) assert.deepEqual(sizeOf(id), ['180mm', '5in'], id);
+  resetSettings(state, drawing);
+  assert.deepEqual(sizeOf(source), [null, null], 'Reset Settings: Auto');
+  assert.deepEqual(sizeOf(copies[0]), ['180mm', '5in'], 'the copies keep theirs');
+});
+
 // OV-2215 (D-15-182, R17-4): the records a drawing draws, its crop, and their
 // display name records of files the copy does not bind, so a style copy in
 // any mode leaves them at the new drawing's defaults.

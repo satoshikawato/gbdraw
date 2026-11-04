@@ -394,3 +394,35 @@ test('a root that states its size in mm grows from its px viewBox', () => {
   assert.equal(applyCanvasToSvg(svg, {}), true);
   assert.deepEqual(root(svg), { viewBox: '-76 0 262 152', width: '262px', height: '152px', base: '0 0 186 152' });
 });
+
+// Review finding 3: when the canvas returns to its recorded base (a drag back, Reset positions, padding removed),
+// such a root gets its own size text back, so the restore is byte for byte (PD-OI-052) for a root in mm too.
+test('a root that states its size in mm gets its mm size back when the canvas returns to its base', () => {
+  const mmRoot = () => {
+    const svg = resultSvg();
+    svg.setAttribute('width', '49.2125mm');
+    svg.setAttribute('height', '40.2167mm');
+    return svg;
+  };
+  const MM = { viewBox: '0 0 186 152', width: '49.2125mm', height: '40.2167mm', base: null };
+  const dragged = mmRoot();
+  const saved = rootMarkup(dragged);
+  applyCompositionUserDeltas(dragged, { legend: [-200, 10] });
+  applyCanvasToSvg(dragged, {});
+  applyCompositionUserDeltas(dragged, { legend: [0, 0] });
+  assert.equal(applyCanvasToSvg(dragged, {}), true);
+  assert.deepEqual(root(dragged), MM, 'a drag back');
+  assert.equal(rootMarkup(dragged), saved);
+  const reset = mmRoot();
+  applyCompositionUserDeltas(reset, { legend: [-200, 10] });
+  applyCanvasToSvg(reset, {});
+  resetCompositionUserDeltas(reset);
+  assert.equal(applyCanvasToSvg(reset, {}), true);
+  assert.deepEqual(root(reset), MM, 'Reset positions');
+  const padded = mmRoot();
+  applyCanvasToSvg(padded, { left: 10 });
+  assert.deepEqual(root(padded), { viewBox: '-10 0 196 152', width: '196px', height: '152px', base: '0 0 186 152' },
+    'padding grows it from its px viewBox');
+  assert.equal(applyCanvasToSvg(padded, {}), true);
+  assert.deepEqual(root(padded), MM, 'padding removed');
+});
