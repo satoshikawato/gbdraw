@@ -427,6 +427,7 @@ def apply_composition_plan(
     legend_role: str = _LEGEND_ROLE,
     legend_side: LegendPlacement | str = LegendPlacement.NONE,
     legend_reflow_metrics: Mapping[str, object] | None = None,
+    legend_local_bounds: Aabb | None = None,
     title_target: Group | None = None,
     title_role: str = _TITLE_ROLE,
     title_side: TitlePlacement | str = TitlePlacement.NONE,
@@ -441,9 +442,10 @@ def apply_composition_plan(
     the canvas with them for a moved scale.
     The role arguments name placements in ``plan``; the SVG bookkeeping roles
     remain the stable internal values ``primary``, ``legend``, and ``title``.
-    A ``legend_target`` that ``plan`` does not place is an empty Legend (every
-    row hidden, D-36), which the planner leaves out: it is bound with no
-    translation and empty bounds, so a replan also gives it no room.
+    ``legend_local_bounds`` are the Legend's measured bounds. A ``legend_target``
+    that ``plan`` does not place is bound only when they are empty (every row
+    hidden, D-36; the planner leaves an empty item out): with no translation and
+    empty bounds, so a replan also gives it no room.
     """
     if not isinstance(plan, CompositionPlan):
         raise TypeError("plan must be a CompositionPlan")
@@ -475,8 +477,16 @@ def apply_composition_plan(
         raise ValueError("primary placement does not match plan.primary_bounds")
     legend_placement = _placement_for_role(plan, legend_role)
     title_placement = _placement_for_role(plan, title_role)
-    if legend_target is None and legend_placement is not None:
-        raise ValueError("legend target and plan placement: a legend placement requires a legend target")
+    empty_legend = (
+        legend_target is not None
+        and legend_placement is None
+        and legend_local_bounds is not None
+        and CompositionItem(_LEGEND_ROLE, legend_local_bounds).is_empty
+    )
+    if (legend_target is None) != (legend_placement is None) and not empty_legend:
+        raise ValueError(
+            "legend target and plan placement must either both exist or be absent"
+        )
     if (title_target is None) != (title_placement is None):
         raise ValueError(
             "title target and plan placement must either both exist or be absent"
@@ -491,7 +501,7 @@ def apply_composition_plan(
         raise ValueError("composition plan contains unbound placement roles")
 
     _ensure_not_applied(drawing, all_targets)
-    if legend_target is not None and legend_placement is None:
+    if empty_legend:
         legend_placement = _EMPTY_LEGEND_PLACEMENT
     metadata = _metadata_payload(
         plan,

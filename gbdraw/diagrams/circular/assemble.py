@@ -3489,6 +3489,7 @@ def _compose_circular_plot(
             if plot.legend_target is not None
             else None
         ),
+        legend_local_bounds=plot.legend_measurement.local_bounds if plot.legend_target is not None else None,
         title_target=title_target,
         title_side=resolved_title_placement,
     )

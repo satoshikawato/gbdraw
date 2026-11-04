@@ -3798,6 +3798,7 @@ def assemble_circular_diagram_from_records(
             if legend_target is not None
             else None
         ),
+        legend_local_bounds=legend_bounds if legend_target is not None else None,
         title_target=plot_title_group,
         title_side=title_placement,
     )

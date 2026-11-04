@@ -3480,6 +3480,11 @@ def assemble_linear_diagram(
             if legend_target is not None and legend_measurement is not None
             else None
         ),
+        legend_local_bounds=(
+            legend_measurement.local_bounds
+            if legend_target is not None and legend_measurement is not None
+            else None
+        ),
         title_target=title_target,
         title_side=title_placement,
         length_bar_local_bounds=length_bar_bounds,

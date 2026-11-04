@@ -364,6 +364,8 @@ HEADER = "key\tname\thidden\tposition\n"
         (HEADER + 'CDS\t"Genes" (all)\t\t\n', ((("CDS", '"Genes" (all)'),), (), ())),
         # A key is trimmed as the executor trims it, for the name, the hidden flag, and the order alike (N1).
         (HEADER + "CDS \tX\ttrue\t2\n tRNA\t\t\t1\n", ((("CDS", "X"),), ("CDS",), ("tRNA", "CDS"))),
+        # Trimmed as JavaScript's trim() trims: U+FEFF and U+3000 too, which str.strip() keeps or not (N1).
+        (HEADER + "CDS\ufeff\tX\t\t\n\u3000tRNA\u2028\t\ttrue\t\n", ((("CDS", "X"),), ("tRNA",), ())),
         # A UTF-8 byte order mark (Excel) is skipped (N2).
         ("\ufeff" + HEADER + "CDS\tX\t\t\n", ((("CDS", "X"),), (), ())),
     ],

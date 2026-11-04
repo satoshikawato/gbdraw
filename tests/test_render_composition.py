@@ -366,6 +366,45 @@ def test_binding_error_is_reported_before_any_svg_mutation() -> None:
     assert drawing.tostring() == before
 
 
+def _plan_without_legend() -> object:
+    return plan_composition(CompositionRequest(
+        primary=CompositionItem("primary", Aabb(0.0, 0.0, 100.0, 100.0)),
+        legend=CompositionItem("legend", Aabb(0.0, 0.0, 0.0, 0.0)),
+        legend_placement=LegendPlacement.RIGHT,
+    ))
+
+
+@pytest.mark.parametrize("local_bounds", [None, Aabb(0.0, -7.0, 40.0, 7.0)])
+def test_an_unplaced_legend_that_is_not_empty_is_refused(local_bounds: Aabb | None) -> None:
+    """A Legend group the plan does not place is bound only when its measured bounds are empty (every row hidden);
+    one with shown rows, or of unstated bounds, is a binding error (D-36)."""
+
+    drawing, first, _second, legend, _title = _drawing_with_targets()
+    before = drawing.tostring()
+    with pytest.raises(ValueError, match="legend target and plan placement must either both exist or be absent"):
+        apply_composition_plan(
+            drawing, _plan_without_legend(), primary_targets=(first,), legend_target=legend,
+            legend_local_bounds=local_bounds, legend_side="right", legend_reflow_metrics=_LEGEND_REFLOW_METRICS,
+        )
+    assert drawing.tostring() == before
+
+
+def test_an_empty_legend_is_bound_with_no_room() -> None:
+    drawing, first, _second, legend, _title = _drawing_with_targets()
+    plan = _plan_without_legend()
+    apply_composition_plan(
+        drawing, plan, primary_targets=(first,), legend_target=legend,
+        legend_local_bounds=Aabb(0.0, -7.0, 0.0, -7.0), legend_side="right",
+        legend_reflow_metrics=_LEGEND_REFLOW_METRICS,
+    )
+    metadata = json.loads(drawing.attribs[COMPOSITION_METADATA_ATTRIBUTE])
+    assert metadata["legend"]["automaticTranslation"] == [0.0, 0.0]
+    assert metadata["legend"]["localBounds"] == {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
+    assert legend.attribs[COMPOSITION_ROLE_ATTRIBUTE] == "legend"
+    assert str(legend.attribs["transform"]).startswith("translate(0.0,0.0)")
+    assert drawing.attribs["width"] == f"{plan.width}px"
+
+
 @pytest.mark.parametrize(
     ("metrics", "message"),
     [

@@ -102,7 +102,8 @@ test('the vectors cover every edit kind in both modes, with a comparison block i
     assert.ok(ids.includes(`circular-${kind}`) && ids.includes(`linear-${kind}`), kind);
   }
   for (const id of ['circular-delete-merged', 'circular-order-move', 'circular-order-partial', 'circular-missing-key',
-    'circular-comparison-ring', 'linear-pairwise-comparison', 'linear-combined-top']) {
+    'circular-comparison-ring', 'linear-pairwise-comparison', 'linear-combined-top', 'circular-delete-all',
+    'linear-delete-all', 'circular-rule-rows', 'linear-rule-rows', 'linear-missing-key']) {
     assert.ok(ids.includes(id), id);
   }
 });

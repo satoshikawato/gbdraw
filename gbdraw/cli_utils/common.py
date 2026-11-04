@@ -30,7 +30,7 @@ from gbdraw.config.models.objects import (
     legend_row_names_from_config,
 )
 from gbdraw.core.figure_length import argparse_figure_length
-from gbdraw.core.numeric import argparse_float, argparse_integer, ascii_int, parse_ascii_finite_float
+from gbdraw.core.numeric import JS_WHITESPACE, argparse_float, argparse_integer, ascii_int, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import RecordInputManifest
@@ -262,7 +262,7 @@ class LegendRowsTable:
 def read_legend_rows_table(path: str) -> LegendRowsTable:
     """argparse ``type=`` of ``--legend_rows FILE``: a TSV with the header ``key name hidden position``.
 
-    ``key`` is the Legend row's key, trimmed as the Web's executor trims a key; ``name`` the name it is given
+    ``key`` is the Legend row's key, trimmed as the Web's executor trims a key (JavaScript's ``trim()``); ``name`` the name it is given
     (blank: Python's); ``hidden`` ``true`` or ``false`` (blank: false); ``position`` its 1-based place in the Legend
     in ASCII digits, on every row or on none (none: Python's order; the rows the table does not list follow the
     listed ones). A cell is read as written: a quote is part of it. A UTF-8 byte order mark is skipped.
@@ -290,7 +290,7 @@ def read_legend_rows_table(path: str) -> LegendRowsTable:
         if len(cells) > len(LEGEND_ROWS_COLUMNS) or not cells[0].strip():
             raise refuse(f"line {number} must have a key and at most four columns")
         raw_key, name, hidden_text, position = (*cells, "", "", "")[:4]
-        key = raw_key.strip()
+        key = raw_key.strip(JS_WHITESPACE)
         keys.append(key)
         if name.strip():
             names.append((key, name))
