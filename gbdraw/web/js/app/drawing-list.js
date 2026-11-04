@@ -31,6 +31,9 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @typedef {(sourceId: DrawingId, drawingId: DrawingId, mode: ModeProfileName) => DrawingState} StyleDrawing
  *   A new drawing of `mode` at its defaults with the style of a drawing the store holds (PD-OI-090 〔作成〕(3)).
  * @typedef {(sourceId: DrawingId, copyId: DrawingId) => { drawing: DrawingState, slot: HeldSlot }} CopyDrawing
+ * @typedef {import('../services/config.js').RegionDerivation} RegionDerivation A derived region drawing and the request it was derived from.
+ * @typedef {(derivation: RegionDerivation) => Promise<(drawingId: DrawingId) => DrawingState>} RegionDrawing
+ *   Reads a derived region drawing; the result makes its state under the new drawing's ID.
  *   A copy of a drawing the store holds, under `copyId`, with its Result slot (null: it has no Result).
  * @typedef {(drawing: DrawingState, name: string, index: number) => void} AddDrawingToStore
  * @typedef {(drawingId: DrawingId) => HeldSlot} RemoveDrawingFromStore
@@ -61,6 +64,7 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @property {CreateDrawing} createDrawing
  * @property {StyleDrawing} styleDrawing
  * @property {CopyDrawing} copyDrawing
+ * @property {RegionDrawing} regionDrawing
  * @property {AddDrawingToStore} addDrawing
  * @property {RemoveDrawingFromStore} removeDrawing
  * @property {PutSlot} putSlot
@@ -103,7 +107,7 @@ const copyNamePhrase = (name, number) => (
 /** @param {DrawingListPorts} ports */
 export const createDrawingList = ({
   drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, styleDrawing, copyDrawing,
-  addDrawing, removeDrawing, putSlot, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
+  regionDrawing,   addDrawing, removeDrawing, putSlot, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
   removeDrawingHistory, runListStep, showDrawingNow
 }) => {
   /** @param {string} operation @param {DrawingId} drawingId @returns {number} */
@@ -216,6 +220,20 @@ export const createDrawingList = ({
   };
 
   /**
+   * A new drawing from a region of a drawing (PD-OI-090 〔作成〕(4)): the
+   * derived drawing read as Load reads a stored one, added as New adds one.
+   * The source drawing does not change.
+   * @param {DrawingId} sourceId The drawing the region was chosen in.
+   * @param {RegionDerivation} derivation
+   * @returns {Promise<DrawingListOutcome>}
+   */
+  const newDrawingFromRegion = async (sourceId, derivation) => {
+    tabIndexOf('newDrawingFromRegion', sourceId);
+    const make = await regionDrawing(derivation);
+    return addNewDrawing('New drawing from a region', derivation.derived.mode, make);
+  };
+
+  /**
    * A drawing's new name: refused when blank or when another drawing has it,
    * whatever its letter case (Python's rule for a Session's drawings).
    * @param {DrawingId} drawingId @param {string} name
@@ -305,7 +323,7 @@ export const createDrawingList = ({
     return drawingHasResult(drawingId) || drawingHasEdits(drawingId);
   };
 
-  return { newDrawing, newDrawingWithStyle, duplicateDrawing, renameDrawing, moveDrawing, deleteDrawing, needsDeleteConfirmation };
+  return { newDrawing, newDrawingWithStyle, newDrawingFromRegion, duplicateDrawing, renameDrawing, moveDrawing, deleteDrawing, needsDeleteConfirmation };
 };
 
 /**

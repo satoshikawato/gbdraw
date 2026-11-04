@@ -130,12 +130,10 @@ import {
   readFileBytes,
   rememberFileDescriptor
 } from './file-content-cache.js';
-import { isInputFileRef } from './history-files.js';
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView,
   isSessionResourceFileView,
-  matchesSessionResourceDescriptor,
   webBindingInputSlot
 } from './session-resource-backing.js';
 import { logicalResultsOf, normalizeLogicalResults, storedLogicalResults } from './result-normalization.js';
@@ -243,7 +241,7 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from './runtime-test-hooks.js';
-import { setResourcePayloadOwner } from './resource-payload-owner.js';
+import { getResourcePayloadIdentity, setResourcePayloadOwner } from './resource-payload-owner.js';
 import { migratePersistedWebStateFieldNames, requireCurrentConfigFields } from './current-option-values.js';
 import {
   readSimilarityAlignmentResetReceipt,
@@ -336,6 +334,8 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { DiagramMode, DrawingState, DrawingTab, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
+/** @import { CanonicalRenderEnvelope } from './session-request.js' */
+/** @import { DerivedRegionDrawing } from './diagram-worker-protocol.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
@@ -6351,35 +6351,9 @@ const exportSessionDocument = async (
     // The shown drawing's inputs without a Generate are saved as its draft
     // request (`exportSession` decides it once).
     if (!committed && draftRequest) {
-      const comparisonPlanSnapshot = saved.mode === 'linear'
-        ? resolveLinearComparisonPlan({
-            plan: saved.linearComparisonPlan,
-            sequences: normalizeLinearSeqList(saved.linearSeqs),
-            recordsOff: saved.recordsOff,
-            layout: saved.linearRecordLayoutEnabled?.value
-              ? saved.linearRecordRows
-              : [],
-            losatProgram: saved.losatProgram?.value,
-            blastpMode: saved.losat?.blastp?.mode
-          })
-        : null;
-      const activeFiles = await serializeActiveRenderFiles(
-        state,
-        saved,
-        {
-          comparisonPlan: comparisonPlanSnapshot,
-          linearRecordCatalog
-        }
-      );
-      committed = buildCanonicalRenderRequest({
-        state,
-        drawing: saved,
-        filesData: activeFiles,
-        recordDisplayRows: recordDisplayRows?.value || [],
-        comparisonPlanSnapshot,
-        omittedAnnotationRecordKeys,
-        omitUnsourcedDepth: true
-      });
+      committed = (await projectDraftRequest(state, saved, {
+        linearRecordCatalog, recordDisplayRows: recordDisplayRows?.value || [], omittedAnnotationRecordKeys
+      })).envelope;
     }
     // The pairs belong to the committed request; a draft request names none (D-15-124).
     const conservationPairs = artifact?.committedCanonicalSession ? artifact.conservationPairs : NO_CONSERVATION_PAIRS;
@@ -6748,7 +6722,6 @@ const installStoredDrawing = (drawing, { inputType, slice, draft, resolveTrackPl
  * file each resource ID reads (a resource of its source drawing's file), so
  * nothing re-uploads.
  * @typedef {object} StoredDrawingSource
- * @property {DrawingId} id
  * @property {'circular' | 'linear'} mode
  * @property {Readonly<Record<string, unknown>>} renderRequest
  * @property {Readonly<Record<string, unknown>>} resources
@@ -6758,7 +6731,6 @@ const installStoredDrawing = (drawing, { inputType, slice, draft, resolveTrackPl
  * A drawing read as Load reads a stored drawing (`prepareStoredDrawing`),
  * ready for `installPreparedDrawing`; `repairs` lists what its read lost.
  * @typedef {object} PreparedStoredDrawing
- * @property {DrawingId} id
  * @property {'circular' | 'linear'} mode
  * @property {StoredDrawingInstall} install
  * @property {Omit<StoredDrawingSettle, 'bound'>} settle
@@ -6772,7 +6744,9 @@ const installStoredDrawing = (drawing, { inputType, slice, draft, resolveTrackPl
  * @param {StoredDrawingSource} source
  * @returns {Promise<PreparedStoredDrawing>}
  */
-export const prepareStoredDrawing = async ({ id, mode, renderRequest, resources, sourceFiles }) => {
+export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sourceFiles }) => {
+  // The document's one entry has the ID of its mode's first drawing; the new drawing gets its own ID.
+  const id = /** @type {DrawingId} */ (mode);
   const entry = /** @type {SessionDrawing51} */ (/** @type {unknown} */ ({ id, mode, renderRequest, resources }));
   const document = /** @type {Session51} */ (/** @type {unknown} */ ({ version: SESSION_VERSION, drawings: [entry] }));
   const inputs = storedDrawingInputsOf(document, entry, adoptCurrentSessionResources(resources),
@@ -6793,7 +6767,7 @@ export const prepareStoredDrawing = async ({ id, mode, renderRequest, resources,
     sourceSessionVersion: SESSION_VERSION
   }, repairs);
   return {
-    id, mode,
+    mode,
     install: {
       inputType: /** @type {InputType} */ (inputs.inputType),
       slice: part.slice,
@@ -6810,6 +6784,98 @@ export const prepareStoredDrawing = async ({ id, mode, renderRequest, resources,
     sourceFiles,
     repairs
   };
+};
+/**
+ * The shown drawing's draft request (the request a Session stores for a
+ * drawing without a Result) and the Web file of each of its resources: the
+ * file whose bytes the resource holds (`getResourcePayloadIdentity`), among
+ * the files the projection read.
+ * @typedef {object} ProjectedDraftRequest
+ * @property {CanonicalRenderEnvelope} envelope
+ * @property {ReadonlyMap<string, InputFileRef>} filesByResource
+ */
+/**
+ * The facts of a drawing's draft request that the app holds: the Linear
+ * record catalog, the record display rows, and the annotation records left out.
+ * @typedef {object} DraftRequestFacts
+ * @property {unknown} linearRecordCatalog
+ * @property {readonly unknown[]} recordDisplayRows
+ * @property {string[]} omittedAnnotationRecordKeys
+ */
+/**
+ * Projects a drawing's inputs and settings to its draft request, as Save
+ * stores it for a drawing without a Result.
+ * @param {typeof state} sourceState The project, whose store holds the files.
+ * @param {DrawingState} drawing
+ * @param {DraftRequestFacts} facts
+ * @returns {Promise<ProjectedDraftRequest>}
+ */
+export const projectDraftRequest = async (sourceState, drawing, { linearRecordCatalog, recordDisplayRows, omittedAnnotationRecordKeys }) => {
+  const comparisonPlanSnapshot = drawing.mode === 'linear'
+    ? resolveLinearComparisonPlan({
+        plan: drawing.linearComparisonPlan,
+        sequences: normalizeLinearSeqList(drawing.linearSeqs),
+        recordsOff: drawing.recordsOff,
+        layout: drawing.linearRecordLayoutEnabled?.value
+          ? drawing.linearRecordRows
+          : [],
+        losatProgram: drawing.losatProgram?.value,
+        blastpMode: drawing.losat?.blastp?.mode
+      })
+    : null;
+  /** @type {Map<object, InputFileRef>} */
+  const refsByPayload = new Map();
+  /** @type {Pick<InputFileStore, 'fileOf'>} */
+  const reading = {
+    fileOf: (ref) => {
+      const file = sourceState.inputFiles.fileOf(ref);
+      if (file && ref) refsByPayload.set(getResourcePayloadIdentity(file), ref);
+      return file;
+    }
+  };
+  const activeFiles = await serializeActiveRenderFiles({ inputFiles: reading }, drawing,
+    { comparisonPlan: comparisonPlanSnapshot, linearRecordCatalog });
+  const envelope = buildCanonicalRenderRequest({
+    state: sourceState, drawing, filesData: activeFiles, recordDisplayRows, comparisonPlanSnapshot,
+    omittedAnnotationRecordKeys, omitUnsourcedDepth: true
+  });
+  /** @type {Map<string, InputFileRef>} */
+  const filesByResource = new Map();
+  for (const [resourceId, descriptor] of Object.entries(envelope.resources)) {
+    const ref = refsByPayload.get(getResourcePayloadIdentity(descriptor));
+    if (ref) filesByResource.set(resourceId, ref);
+  }
+  return { envelope, filesByResource };
+};
+/**
+ * A derived region drawing (`deriveRegionDrawing`) and the request it was
+ * derived from, which names the Web file of each resource it reads.
+ * @typedef {object} RegionDerivation
+ * @property {DerivedRegionDrawing} derived
+ * @property {ProjectedDraftRequest} sent
+ */
+/**
+ * Reads a derived region drawing (`deriveRegionDrawing`) as Load reads a
+ * stored drawing: each resource ID it names holds the bytes of the sent
+ * request's resource it reads (`resourceSources`), and binds that resource's
+ * Web file.
+ * @param {RegionDerivation} derivation
+ * @returns {Promise<PreparedStoredDrawing>}
+ */
+export const prepareRegionDrawing = ({ derived, sent }) => {
+  /** @type {Record<string, unknown>} */
+  const resources = {};
+  /** @type {Map<string, InputFileRef>} */
+  const sourceFiles = new Map();
+  for (const [resourceId, sourceId] of Object.entries(derived.resourceSources)) {
+    if (!Object.hasOwn(sent.envelope.resources, sourceId)) {
+      throw diagnosticError('RESULT_INVALID', {}, { stage: 'helper', operation: 'deriveRegionDrawing' });
+    }
+    resources[resourceId] = sent.envelope.resources[sourceId];
+    const ref = sent.filesByResource.get(sourceId);
+    if (ref) sourceFiles.set(resourceId, ref);
+  }
+  return prepareStoredDrawing({ mode: derived.mode, renderRequest: derived.renderRequest, resources, sourceFiles });
 };
 /**
  * Installs a prepared drawing into its drawing state as Load installs a
@@ -6829,41 +6895,6 @@ export const installPreparedDrawing = (drawing, { install, settle, sourceFiles }
     }
   };
   settleStoredDrawing(drawing, { ...settle, bound: bindLoadedInputs(store, settle.inputs) });
-};
-/**
- * The source drawing's Web file of each resource of its committed Session,
- * found by the binding's place in its inputs: a resource whose bound file
- * is no longer in that place has none.
- * @param {DrawingState} drawing The shown drawing, whose Session is committed (the caller passes it).
- * @returns {Map<string, InputFileRef>}
- */
-export const committedResourceFilesOf = (drawing) => {
-  /** @type {Map<string, InputFileRef>} */
-  const filesByResource = new Map();
-  const session = getCommittedCanonicalSession();
-  if (!session) return filesByResource;
-  const bindings = /** @type {Readonly<Record<string, unknown>>} */ (session.webFiles).bindings;
-  /** @param {unknown} binding @param {unknown} value */
-  const walk = (binding, value) => {
-    if (Array.isArray(binding)) {
-      if (Array.isArray(value)) binding.forEach((part, index) => walk(part, value[index]));
-      return;
-    }
-    if (!isPlainObject(binding) || !isPlainObject(value) && !isInputFileRef(value)) return;
-    const { resourceId } = /** @type {Record<string, unknown>} */ (binding);
-    if (typeof resourceId === 'string') {
-      if (isInputFileRef(value) && matchesSessionResourceDescriptor(state.inputFiles.fileOf(value),
-        /** @type {Parameters<typeof matchesSessionResourceDescriptor>[1]} */ (session.resources[resourceId]))) {
-        filesByResource.set(resourceId, value);
-      }
-      return;
-    }
-    if (isInputFileRef(value)) return;
-    Object.entries(/** @type {Record<string, unknown>} */ (binding))
-      .forEach(([key, part]) => walk(part, /** @type {Record<string, unknown>} */ (value)[key]));
-  };
-  walk(bindings, { ...drawing.files, linearSeqs: drawing.linearSeqs });
-  return filesByResource;
 };
 /**
  * Records the Use custom stack switch beside a committed Session Load installs

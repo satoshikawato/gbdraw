@@ -64,6 +64,7 @@ import {
 } from './record-display/feature-record-rotation.js';
 import { createDrawingState, drawingHasEdits, state, sessionOperationAvailability } from '../state.js';
 import { createDrawingBar, createDrawingList, createInputReplacement, moveTabFocus } from './drawing-list.js';
+import { createRegionDrawing } from './region-drawing.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -95,6 +96,9 @@ import {
   assertDrawingInputs,
   importSession as importSessionFromFile,
   serializeActiveRenderFiles,
+  projectDraftRequest,
+  prepareRegionDrawing,
+  installPreparedDrawing,
   heldDepthFiles,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
@@ -4873,6 +4877,15 @@ export const createAppSetup = () => {
         () => historySnapshots.captureArtifactSlot(), (kept) => kept);
       return { drawing, slot: slot ? artifactSlotAs(slot, drawing) : null };
     },
+    // A region drawing is read as Load reads a stored drawing, then made under its new ID.
+    regionDrawing: async (derivation) => {
+      const prepared = await prepareRegionDrawing(derivation);
+      return (drawingId) => {
+        const made = createDrawingState(drawingId, prepared.mode);
+        installPreparedDrawing(made, prepared);
+        return made;
+      };
+    },
     addDrawing: state.addDrawing,
     // An error that names a drawing leaves with it (R17-29), as it leaves on
     // a switch away (OV-372): every Delete, its Redo, and the Undo of New and
@@ -7692,6 +7705,26 @@ export const createAppSetup = () => {
     return { primary, more: keys.filter((key) => !drawn.has(key) && key !== 'default') };
   });
 
+  // New drawing from a region: the shown drawing's draft request, as Save stores it, goes to Python.
+  const regionDrawings = createRegionDrawing({
+    shownDrawingId: () => state.activeDrawingId.value,
+    projectShownRequest: async () => {
+      const drawing = state.activeDrawing();
+      const { catalog, error } = drawing.mode === 'linear'
+        ? await prepareLinearRecordCatalog({ privateCandidate: true })
+        : { catalog: null, error: '' };
+      if (error) throw error;
+      return projectDraftRequest(state, drawing, {
+        linearRecordCatalog: catalog,
+        recordDisplayRows: recordDisplayControls.allRows.value || [],
+        omittedAnnotationRecordKeys: getAnnotationRecordCatalog(drawing).omittedRecordKeys || []
+      });
+    },
+    // The projection's resource table holds the descriptors Save would write.
+    deriveRegion: (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING, { ...payload,
+      resources: /** @type {GenerationPayload['resources']} */ (payload.resources) }),
+    newDrawingFromRegion: drawingList.newDrawingFromRegion
+  });
   return {
     hostedBuild: readHostedBuild(document),
     fontSettings,
@@ -7744,6 +7777,7 @@ export const createAppSetup = () => {
     reloadAfterOperationError,
     selectDrawing,
     drawingList,
+    regionDrawings,
     drawingBar,
     drawingBarTabs,
     moveTabFocus,
