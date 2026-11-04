@@ -30,7 +30,7 @@ from gbdraw.config.models.objects import (
     legend_row_names_from_config,
 )
 from gbdraw.core.figure_length import argparse_figure_length
-from gbdraw.core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
+from gbdraw.core.numeric import argparse_float, argparse_integer, ascii_int, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import RecordInputManifest
@@ -262,17 +262,22 @@ class LegendRowsTable:
 def read_legend_rows_table(path: str) -> LegendRowsTable:
     """argparse ``type=`` of ``--legend_rows FILE``: a TSV with the header ``key name hidden position``.
 
-    ``key`` is the Legend row's key; ``name`` the name it is given (blank: Python's); ``hidden`` ``true`` or
-    ``false`` (blank: false); ``position`` its 1-based place in the Legend, on every row or on none (none: Python's
-    order; the rows the table does not list follow the listed ones).
+    ``key`` is the Legend row's key, trimmed as the Web's executor trims a key; ``name`` the name it is given
+    (blank: Python's); ``hidden`` ``true`` or ``false`` (blank: false); ``position`` its 1-based place in the Legend
+    in ASCII digits, on every row or on none (none: Python's order; the rows the table does not list follow the
+    listed ones). A cell is read as written: a quote is part of it. A UTF-8 byte order mark is skipped.
     """
 
     def refuse(message: str) -> argparse.ArgumentTypeError:
         return argparse.ArgumentTypeError(f"{path}: {message}")
 
     try:
-        with open(path, encoding="utf-8", newline="") as handle:
-            lines = [line for line in csv.reader(handle, delimiter="\t") if any(cell.strip() for cell in line)]
+        with open(path, encoding="utf-8-sig", newline="") as handle:
+            lines = [
+                line
+                for line in csv.reader(handle, delimiter="\t", quoting=csv.QUOTE_NONE)
+                if any(cell.strip() for cell in line)
+            ]
     except OSError as exc:
         raise refuse(f"cannot read the file ({exc.strerror})") from exc
     if not lines or tuple(cell.strip().lower() for cell in lines[0]) != LEGEND_ROWS_COLUMNS:
@@ -280,10 +285,13 @@ def read_legend_rows_table(path: str) -> LegendRowsTable:
     names: list[tuple[str, str]] = []
     hidden: list[str] = []
     positions: list[tuple[int, str]] = []
+    keys: list[str] = []
     for number, cells in enumerate(lines[1:], start=2):
         if len(cells) > len(LEGEND_ROWS_COLUMNS) or not cells[0].strip():
             raise refuse(f"line {number} must have a key and at most four columns")
-        key, name, hidden_text, position = (*cells, "", "", "")[:4]
+        raw_key, name, hidden_text, position = (*cells, "", "", "")[:4]
+        key = raw_key.strip()
+        keys.append(key)
         if name.strip():
             names.append((key, name))
         flag = hidden_text.strip().lower()
@@ -293,14 +301,14 @@ def read_legend_rows_table(path: str) -> LegendRowsTable:
             hidden.append(key)
         if position.strip():
             try:
-                place = int(position.strip())
+                place = ascii_int(position.strip())
             except ValueError:
                 place = 0
             if place < 1:
                 raise refuse(f"line {number}: position must be a whole number from 1; got {position!r}")
             positions.append((place, key))
     rows = len(lines) - 1
-    if len({cells[0] for cells in lines[1:]}) != rows:
+    if len(set(keys)) != rows:
         raise refuse("each key must be on one row")
     if positions and len(positions) != rows:
         raise refuse("give a position on every row or on none")

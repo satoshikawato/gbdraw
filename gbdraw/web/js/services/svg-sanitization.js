@@ -1,5 +1,6 @@
 // @ts-check
 import { LEGACY_SVG_ATTRIBUTE_RENAMES } from '../contracts/schema.generated.js';
+import { LEGEND_MERGED_ROW } from './result-records.generated.js';
 
 export const SVG_SANITIZE_OPTIONS = Object.freeze({
   USE_PROFILES: { svg: true },
@@ -38,7 +39,7 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'data-legend-key',
     'data-legend-name',
     'data-legend-owner',
-    'data-legend-merged',
+    LEGEND_MERGED_ROW,
     'data-label-key',
     'data-label-feature-id',
     'data-gbdraw-label-binding-schema',

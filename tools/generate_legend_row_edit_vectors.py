@@ -87,11 +87,21 @@ class Case:
     comparison: bool = False
     note: str = ""
     legend: str = "right"
+    rules: bool = False
     extra: dict[str, object] = field(default_factory=dict)
 
 
 CIRCULAR_ROWS = ("CDS", "tRNA", "rRNA", "repeat_region", "misc_feature", "GC content", "GC skew (+)", "GC skew (-)")
 LINEAR_ROWS = ("CDS", "tRNA", "rRNA", "repeat_region", "misc_feature")
+# Color rules on the CDS features (products p0, p1, p6): one caption with two fills, so its rows' keys are
+# ``caption [fill]`` and they carry ``data-legend-name``; and one caption with one fill.
+RULE_CAPTION = "Hypothetical"
+COLOR_RULES = (
+    ("CDS", "product", "p0", "#ff0000", RULE_CAPTION),
+    ("CDS", "product", "p1", "#00aa00", RULE_CAPTION),
+    ("CDS", "product", "p6", "#0000ff", "Kinase"),
+)
+RULE_RED, RULE_GREEN = f"{RULE_CAPTION} [#ff0000]", f"{RULE_CAPTION} [#00aa00]"
 
 CASES: tuple[Case, ...] = (
     Case("circular-rename-plain", "circular", row_names=(("CDS", "Protein-coding genes"),)),
@@ -130,6 +140,13 @@ CASES: tuple[Case, ...] = (
          row_order=tuple(reversed(LINEAR_ROWS)), note="a horizontal Legend"),
     Case("linear-pairwise-comparison", "linear", comparison=True, row_names=(("CDS", "Genes"),),
          hidden_rows=("tRNA",), row_order=("rRNA", "CDS")),
+    Case("circular-rule-rows", "circular", rules=True, row_names=((RULE_RED, "Unknown function"),),
+         hidden_rows=(RULE_GREEN,), row_order=("Kinase", RULE_RED),
+         note="color rule rows: a key with its fill, a row with data-legend-name"),
+    Case("linear-rule-rows", "linear", rules=True, row_names=((RULE_GREEN, "Kinase"),), row_order=(RULE_GREEN,),
+         note="a rule row renamed onto another rule row of another swatch: the names are numbered"),
+    Case("linear-missing-key", "linear", row_names=(("No such row", "Renamed"),), hidden_rows=("No such row",),
+         row_order=("No such row", "rRNA"), note="a key the table lacks is ignored"),
 )
 
 
@@ -166,7 +183,11 @@ def _overrides(case: Case, edited: bool) -> dict[str, object]:
 
 
 def _draw(case: Case, edited: bool, workdir: Path) -> str:
-    features = gbdraw.FeatureOptions(types=list(FEATURE_TYPES))
+    color_table = None
+    if case.rules:
+        color_table = workdir / "rules.tsv"
+        color_table.write_text("".join("\t".join(rule) + "\n" for rule in COLOR_RULES), encoding="utf-8")
+    features = gbdraw.FeatureOptions(types=list(FEATURE_TYPES), color_table=color_table)
     overrides = _overrides(case, edited)
     if case.mode == "circular":
         record = _record("recA")

@@ -150,6 +150,31 @@ def test_auto_canvas_padding_grows_the_canvas_by_the_padding(mode: str) -> None:
         "top": top, "right": right, "bottom": bottom, "left": left}
 
 
+def test_a_multi_record_canvas_is_padded_once_and_draws_the_edits() -> None:
+    """The grid canvas takes the padding; its record cells keep their own size, and the shared Legend has the edits."""
+
+    from gbdraw.api.diagram import assemble_circular_diagram_from_records
+
+    records = _mito() + gbdraw.read_genbank(INPUTS / "MERS-CoV.gbk")
+
+    def draw(overrides: dict[str, object]):
+        return assemble_circular_diagram_from_records(
+            records, legend="right", cfg=apply_config_overrides(None, overrides))
+
+    plain = applied_composition_plan(draw({}))
+    edited_drawing = draw({CANVAS_PADDING_PATH: [30, 60, 30, 90], LEGEND_ROW_NAMES_PATH: [["CDS", "Genes"]],
+                           LEGEND_HIDDEN_ROWS_PATH: ["tRNA"]})
+    edited = applied_composition_plan(edited_drawing)
+    assert edited.canvas_bounds.width == pytest.approx(plain.canvas_bounds.width + 60 + 90)
+    assert edited.canvas_bounds.height == pytest.approx(plain.canvas_bounds.height + 30 + 30)
+    plain_grid, edited_grid = (next(p.final_bounds for p in plan.placements if p.role == "primary")
+                               for plan in (plain, edited))
+    assert (edited_grid.width, edited_grid.height) == pytest.approx((plain_grid.width, plain_grid.height))
+    assert (edited_grid.min_x - plain_grid.min_x, edited_grid.min_y - plain_grid.min_y) == pytest.approx((90, 30))
+    rows = _rows(edited_drawing.tostring())
+    assert ("Genes", None, "Genes") in rows and ("tRNA", "none", "tRNA") in rows
+
+
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_a_sized_figure_fits_a_longer_renamed_row_and_the_padding(mode: str) -> None:
     width = 250 * 96 / 25.4
@@ -253,6 +278,46 @@ def test_the_cli_refuses_a_bad_rows_table(text: str, message: str, tmp_path: Pat
                           "-o", str(tmp_path / "x"))
     assert status == 2
     assert "--legend_rows" in err and message in err
+
+
+HEADER = "key\tname\thidden\tposition\n"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # A quote is part of a cell: a key and a name are read as written (S1).
+        (HEADER + '"5\' leader" region\tLeader\t\t\n', ((('"5\' leader" region', "Leader"),), (), ())),
+        (HEADER + 'CDS\t"Genes" (all)\t\t\n', ((("CDS", '"Genes" (all)'),), (), ())),
+        # A key is trimmed as the executor trims it, for the name, the hidden flag, and the order alike (N1).
+        (HEADER + "CDS \tX\ttrue\t2\n tRNA\t\t\t1\n", ((("CDS", "X"),), ("CDS",), ("tRNA", "CDS"))),
+        # A UTF-8 byte order mark (Excel) is skipped (N2).
+        ("\ufeff" + HEADER + "CDS\tX\t\t\n", ((("CDS", "X"),), (), ())),
+    ],
+)
+def test_the_rows_table_reads_cells_as_written(text: str, expected: tuple, tmp_path: Path) -> None:
+    from gbdraw.cli_utils.common import read_legend_rows_table
+
+    table = read_legend_rows_table(str(_rows_table(tmp_path, text)))
+    assert (table.row_names, table.hidden_rows, table.row_order) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        # Two keys equal after trimming are one key (N1).
+        (HEADER + "CDS\tX\t\t\nCDS \tY\t\t\n", "each key must be on one row"),
+        # A position is written in ASCII digits (N3).
+        (HEADER + "CDS\t\t\t\u0661\n", "position must be a whole number from 1"),
+    ],
+)
+def test_the_rows_table_refuses_a_trimmed_duplicate_and_other_digits(text: str, message: str, tmp_path: Path) -> None:
+    import argparse
+
+    from gbdraw.cli_utils.common import read_legend_rows_table
+
+    with pytest.raises(argparse.ArgumentTypeError, match=message):
+        read_legend_rows_table(str(_rows_table(tmp_path, text)))
 
 
 @pytest.mark.parametrize("value", ["1,2,3", "1,2,3,-4", "a,b,c,d"])

@@ -989,11 +989,12 @@ ref_b.blast.tsv	Reference B	#4E79A7
 ### `--legend_rows`
 
 Use `--legend_rows` in either mode to rename, hide, or order Legend rows. The
-UTF-8 TSV has the header `key	name	hidden	position` and one line per row:
+UTF-8 TSV has the header `key	name	hidden	position` and one line per row. A
+quote is part of the cell it is in:
 
 | Column | Meaning |
 | --- | --- |
-| `key` | The row's key, as the SVG writes it in `data-legend-key`, such as `CDS` or `GC content`. Each key on one line. |
+| `key` | The row's key, as the SVG writes it in `data-legend-key`, such as `CDS` or `GC content`. Spaces around it are ignored. Each key on one line. |
 | `name` | The row's new name; blank keeps its name. |
 | `hidden` | `true` hides the row; `false` or blank shows it. |
 | `position` | The row's place, from 1, on every line or on none. Rows the table does not list follow the listed ones in their order. |
@@ -1001,7 +1002,9 @@ UTF-8 TSV has the header `key	name	hidden	position` and one line per row:
 A key the Legend does not draw is ignored. Two shown rows with one name and
 one swatch are drawn as one row; with different swatches their names are
 numbered, `Genes (1)` and `Genes (2)`. A hidden row stays in the SVG with
-`display="none"` and takes no room. The edits reach the feature rows and the
+`display="none"` and takes no room. Hidden rows and the attributes that record
+the drawn values (`data-gbdraw-base-*`) stay in the SVG so that a Session's
+Result can be edited in the Web app; viewers do not draw them. The edits reach the feature rows and the
 GC rows, not the similarity-ring or identity block. The config keys are
 `objects.legends.row_names` (`[key, name]` pairs), `objects.legends.hidden_rows`,
 and `objects.legends.row_order` (lists of keys); `--save_session` keeps them

@@ -2836,19 +2836,23 @@ _CONFIG_FIELDS_WRITTEN_WHEN_SET: tuple[tuple[str, ...], ...] = (
 )
 
 
-def _without_unset_config_fields(config: GbdrawConfig, value: dict[str, Any]) -> dict[str, Any]:
+def _drop_unset_config_fields(config: GbdrawConfig, written: dict[str, object]) -> None:
+    """Remove from ``written`` (``asdict(config)``) each of ``_CONFIG_FIELDS_WRITTEN_WHEN_SET`` at its default."""
+
     for *sections, name in _CONFIG_FIELDS_WRITTEN_WHEN_SET:
         owner: object = config
-        written = value
+        section_written = written
         for section in sections:
             owner = getattr(owner, section)
-            written = written[section]
+            nested = section_written[section]
+            if not isinstance(nested, dict):
+                raise TypeError(f"config section {'.'.join(sections)} is not written as a mapping")
+            section_written = nested
         if not is_dataclass(owner) or isinstance(owner, type):
             raise TypeError(f"config section {'.'.join(sections)} is not a dataclass")
         default = next(item.default for item in fields(owner) if item.name == name)
         if getattr(owner, name) == default:
-            written.pop(name)
-    return value
+            section_written.pop(name)
 
 
 def _encode_option_value(
@@ -2860,7 +2864,8 @@ def _encode_option_value(
     if name == "config":
         if isinstance(value, GbdrawConfig):
             config = value
-            value = _without_unset_config_fields(config, asdict(config))
+            value = asdict(config)
+            _drop_unset_config_fields(config, value)
             value["labels"]["filtering"] = deepcopy(
                 config.labels.filtering.as_dict()
             )
