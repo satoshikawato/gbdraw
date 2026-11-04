@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 import warnings
@@ -22,6 +23,7 @@ from gbdraw.api import (
 )
 from gbdraw.exceptions import LabelsDoNotFitError, LabelsMayNotFitWarning, ValidationError
 from gbdraw.labels.circular_fit import ROW_KINDS
+from gbdraw.layout.figure_size import LargerFigure
 from gbdraw.labels.fit import (
     DEFINITION_FONT_PATH,
     FONT_SIZE_PATHS,
@@ -110,6 +112,11 @@ def test_labels_over_capacity_carry_their_ratio_the_remedies_and_their_own_reaso
     assert record["capacityRatio"] == 2.5
     assert (record["labelKind"], record["labelCount"], record["fontSize"]) == ("circular_outer", 562, 6.0)
     assert payload["rows"] == [] and payload["remedies"] == ["filter", "label_text", "linear"]
+    # At a requested size the Web gets the remedy id only; the estimate stays out of the payload until the Web can
+    # request a size.
+    sized = label_fit_report_payload(replace(report, larger_figure=LargerFigure("240.3mm", None)), "circular")
+    assert sized["remedies"] == ["filter", "label_text", "figure_size", "linear"]
+    assert "240.3mm" not in json.dumps(sized)
     error = serialize_web_error(LabelsDoNotFitError("PRIVATE", report=report), operation="generate", stage="render")
     assert error["context"] == {"reason": "LABEL_CAPACITY", "labelCapacityOuter": 2.5}
     # Both sides: the largest room of each.
@@ -165,6 +172,9 @@ def test_a_report_with_no_fitting_row_lists_the_ways_to_make_room() -> None:
     assert "To make room:" not in format_label_fit_report(pending)
     # Only the labels the capacity check reads (outer and inner Circular labels) have these ways.
     assert report(6.0, kind="linear").room_remedies == ()
+    # A larger figure is a way only for records not placed (CAPACITY-STOP) at a requested size (D-14).
+    larger = LargerFigure("240.3mm", None)
+    assert replace(at_floor, larger_figure=larger).room_remedies == ("filter", "label_text", "linear")
 
 
 def test_capacity_warnings_reach_the_notice_while_other_warnings_pass_on() -> None:
@@ -723,6 +733,13 @@ def test_web_rows_of_two_circular_records_compute_after_their_input_files_are_go
         assert gone["status"] != "not_computed"
 
 
+def _default_config():
+    from gbdraw.config.models import GbdrawConfig
+    from gbdraw.config.toml import load_config_toml
+
+    return GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+
+
 def test_a_row_assembly_that_fails_for_a_reason_other_than_labels_raises_it() -> None:
     """OV-733: only a label setting the engine cannot draw counts as "does not fit"."""
 
@@ -736,14 +753,14 @@ def test_a_row_assembly_that_fails_for_a_reason_other_than_labels_raises_it() ->
         drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
 
     def failing(error: Exception):
-        def assemble(overrides):
+        def assemble(_cfg, overrides):
             if not overrides:
                 return drawing
             raise error
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            return _checked_circular_drawing(assemble, warn_search_seconds=0.0)
+            return _checked_circular_drawing(assemble, _default_config(), warn_search_seconds=0.0, map_name="map")
 
     with pytest.raises(ValidationError, match="Depth file does not exist"):
         label_fit_row(failing(ValidationError("Depth file does not exist: gone.tsv")), "smaller_font")
@@ -771,14 +788,14 @@ def test_a_row_whose_tracks_do_not_fit_does_not_fit() -> None:
         diagnostic={"code": "TRACK_LAYOUT", "reason": "CENTER_RESERVED"},
     )
 
-    def assemble(overrides):
+    def assemble(_cfg, overrides):
         if not overrides:
             return drawing
         raise error
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        checked = _checked_circular_drawing(assemble, warn_search_seconds=0.0)
+        checked = _checked_circular_drawing(assemble, _default_config(), warn_search_seconds=0.0, map_name="map")
     row = label_fit_row(checked, "smaller_font")
     assert row is not None and row.status == "not_found"
     unfit = _unfit_row_verification(error)

@@ -106,6 +106,7 @@ export const LABEL_CAPACITY_REMEDY_WORDS = Object.freeze({
   filter: msg('Label fewer features: Blacklist or Whitelist under LABEL FILTERING.'),
   label_text: msg('Shorten the label text: a priority rule, for example gene before product.'),
   font: msg('Use a smaller Label Font Size.'),
+  figure_size: msg('Make the figure larger.'),
   linear: msg('Draw a Linear map.')
 });
 /** @typedef {keyof typeof LABEL_CAPACITY_REMEDY_WORDS} LabelCapacityRemedy */

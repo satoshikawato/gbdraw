@@ -18,8 +18,12 @@ write-up of a release.
   `canvas.figure_height`). The sequence width changes to fit; fonts, line
   widths, the legend and padding keep their size, and extra height is centred.
   A size the figure cannot fit is refused with the size of each part and the
-  smallest size that works. Written SVG and PDF state the size in its unit.
-  Circular maps refuse a requested size for now (#1427).
+  smallest size that works. Written SVG and PDF state the size in its unit
+  (#1427).
+- Added: a requested figure size also draws Circular maps, single and
+  multi-record: the radius changes until the map fits both requested sides,
+  with fonts, the legend and padding unchanged. Labels not placed for lack of
+  room at a requested size offer a larger figure with its size (#1427).
 - Added: `--dpi` and a `dpi` argument on `save_figure_to()`,
   `render_to_bytes()`, `Diagram.to_bytes()`, `Diagram.save()`, and
   `RenderOutputRequest` scale PNG pixels by `dpi / 96`.

@@ -1152,7 +1152,7 @@
     },
     {
       "id": "constant:LabelCapacityRemedy",
-      "concern": "Capacity remedy ids (filter, label_text, font, linear) and their order, in a capacity stop's report",
+      "concern": "Capacity remedy ids (filter, label_text, font, figure_size, linear) and their order, in a capacity stop's report",
       "pythonOwner": [
         "gbdraw/labels/fit.py:LabelCapacityRemedy"
       ],

@@ -54,6 +54,7 @@ from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...render_stages import _pre_keyed, render_stage
 from ...config.modify import with_config_overrides, with_fit_row_overrides
+from ...core.figure_length import RequestedFigureSize
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
 from ...features.objects import FeatureObject
@@ -3426,8 +3427,9 @@ def _compose_circular_plot(
     *,
     title_content: GroupContent | None = None,
     title_placement: TitlePlacement | str = TitlePlacement.NONE,
+    requested_size: RequestedFigureSize = RequestedFigureSize(),
 ) -> CircularAssemblyResult:
-    """Compose one fully measured Circular plot exactly once."""
+    """Compose one fully measured Circular plot exactly once, in the ``requested_size`` canvas when one is set."""
     resolved_title_placement = (
         title_placement
         if isinstance(title_placement, TitlePlacement)
@@ -3468,6 +3470,8 @@ def _compose_circular_plot(
             legend_placement=legend_placement,
             title_placement=resolved_title_placement,
             overlay_obstacles=plot.source_overlay_obstacles,
+            requested_width_px=requested_size.width_px,
+            requested_height_px=requested_size.height_px,
         ),
     )
 
@@ -3665,6 +3669,7 @@ def _assemble_circular_diagram_result(
     title_placement: TitlePlacement | str = TitlePlacement.NONE,
     record_transform: RecordDisplayTransform | None = None,
     record_presentation: RecordPresentation | None = None,
+    requested_size: RequestedFigureSize = RequestedFigureSize(),
 ) -> CircularAssemblyResult:
     """
     Assembles a circular diagram for a GenBank record and returns the SVG canvas.
@@ -3776,6 +3781,7 @@ def _assemble_circular_diagram_result(
         plot,
         title_content=title_content,
         title_placement=title_placement,
+        requested_size=requested_size,
     )
 
 

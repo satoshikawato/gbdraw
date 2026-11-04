@@ -336,15 +336,15 @@ options:
   --figure_width LENGTH|auto
                         Width of the whole figure, legend and title included,
                         with a unit: mm, cm, in, or px (for example 180mm).
-                        The figure is laid out again to fit; fonts and line
-                        widths keep their size. Linear figures only for now.
-                        Default: auto.
+                        The figure is laid out again to fit (the Linear
+                        sequence width or the Circular radius changes); fonts
+                        and line widths keep their size. Default: auto.
   --figure_height LENGTH|auto
                         Height of the whole figure, legend and title included,
                         with a unit: mm, cm, in, or px (for example 180mm).
-                        The figure is laid out again to fit; fonts and line
-                        widths keep their size. Linear figures only for now.
-                        Default: auto.
+                        The figure is laid out again to fit (the Linear
+                        sequence width or the Circular radius changes); fonts
+                        and line widths keep their size. Default: auto.
   --dpi DPI             PNG resolution in pixels per inch (positive integer;
                         default: 96, one pixel per SVG pixel). PNG only.
   --gc                  Show the GC content track.
@@ -1633,15 +1633,15 @@ options:
   --figure_width LENGTH|auto
                         Width of the whole figure, legend and title included,
                         with a unit: mm, cm, in, or px (for example 180mm).
-                        The figure is laid out again to fit; fonts and line
-                        widths keep their size. Linear figures only for now.
-                        Default: auto.
+                        The figure is laid out again to fit (the Linear
+                        sequence width or the Circular radius changes); fonts
+                        and line widths keep their size. Default: auto.
   --figure_height LENGTH|auto
                         Height of the whole figure, legend and title included,
                         with a unit: mm, cm, in, or px (for example 180mm).
-                        The figure is laid out again to fit; fonts and line
-                        widths keep their size. Linear figures only for now.
-                        Default: auto.
+                        The figure is laid out again to fit (the Linear
+                        sequence width or the Circular radius changes); fonts
+                        and line widths keep their size. Default: auto.
   --dpi DPI             PNG resolution in pixels per inch (positive integer;
                         default: 96, one pixel per SVG pixel). PNG only.
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left",

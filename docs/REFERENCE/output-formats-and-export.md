@@ -46,26 +46,42 @@ raise it as `ValidationError`.
 
 ## Figure size and PNG DPI
 
-A Linear figure can be drawn to a requested size: `--figure_width` and
+A figure can be drawn to a requested size: `--figure_width` and
 `--figure_height` on the command line, `figure_width` and `figure_height` on
-`LinearOptions`, or the config keys `canvas.figure_width` and
-`canvas.figure_height`. Each takes `auto` (the default) or a length with a
+`LinearOptions` and `CircularOptions`, or the config keys `canvas.figure_width`
+and `canvas.figure_height`. Each takes `auto` (the default) or a length with a
 unit, `mm`, `cm`, `in`, or `px`, such as `180mm`, `18 cm`, or `7in`; a bare
 number is refused. A px is a CSS px, 96 per inch. The size is the whole figure,
 legend and title included.
 
-gbdraw lays the figure out again to fit: the sequence width
-(`canvas.linear.width`) changes, while fonts, line widths, the legend, record
-names, and padding keep their size. The figure fills the requested width to
-within 3 px, and the rest is added evenly to both sides. A requested height
-adds room above and below; it does not stretch the figure. A figure that cannot
-fit is refused with the sizes of its parts and the smallest size that works: a
-width narrower than the figure drawn with a 1 px sequence, or a height shorter
-than the figure drawn at the requested width. The message names the record
-names and labels past the sequence ends, a legend beside the records, and the
-padding, or a title or a legend above or below the records when that is wider.
-It offers placing a side legend at the top or bottom when the records and that
-legend set the width. Circular maps refuse a requested size for now.
+gbdraw lays the figure out again to fit, while fonts, line widths, the legend,
+record names, and padding keep their size. The figure fills the requested size
+to within 3 px, and the rest is added evenly to both sides. A requested size
+takes precedence over the length it sets: `canvas.linear.width` for Linear and
+`canvas.circular.radius` for Circular, where a set value is only the starting
+point.
+
+- **Linear:** the sequence width (`canvas.linear.width`) changes to fill the
+  requested width. A requested height adds room above and below; it does not
+  stretch the figure. A width narrower than the figure drawn with a 1 px
+  sequence, or a height shorter than the figure drawn at the requested width,
+  is refused. The message names the record names and labels past the sequence
+  ends, a legend beside the records, and the padding, or a title or a legend
+  above or below the records when that is wider.
+- **Circular:** the map radius changes, for one map or a multi-record canvas
+  (where it is the largest record's radius), until the map fits both requested
+  sides: the largest radius that fits both, so one side fills the request and
+  the other may have room left, added evenly to both sides. The map stops
+  shrinking where the centre definition keeps the tracks out, or where the
+  tracks no longer fit; a size smaller than the map at its smallest is refused,
+  with the map at its smallest, the legend, the title when wider, and the
+  padding for a width, or the same parts top to bottom for a height.
+
+Each refusal states the smallest size that works and offers placing a side
+legend at the top or bottom when the primary row and that legend set the width.
+When labels that need much more room than the map has are not placed at a
+requested size, the label error also offers a larger figure with the size the
+labels need, for example `make the figure larger: --figure_width about 410.5mm;`.
 
 The SVG, PDF, EPS, and PS files that the command line, `save_figure_to()`,
 `render_to_bytes()`, and `Diagram.save()` write state the requested size in its
