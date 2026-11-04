@@ -231,7 +231,7 @@ def test_output_reference_covers_supported_public_format_tokens() -> None:
 def test_python_reference_core_signatures_match_the_public_api() -> None:
     source = _read("python-api.md")
 
-    for name in ("read_genbank", "read_gff", "draw_circular", "draw_linear"):
+    for name in ("read_genbank", "read_gff", "read_fasta", "draw_circular", "draw_linear"):
         assert name in gbdraw.__all__
         signature = str(inspect.signature(getattr(gbdraw, name))).replace("'", "")
         assert f"{name}{signature}" in source
@@ -239,6 +239,7 @@ def test_python_reference_core_signatures_match_the_public_api() -> None:
         assert f"`{name}`" in source or name in {
             "read_genbank",
             "read_gff",
+            "read_fasta",
             "draw_circular",
             "draw_linear",
         }
