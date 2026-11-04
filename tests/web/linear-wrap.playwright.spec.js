@@ -320,9 +320,10 @@ test('Save then Load keeps the length, a loaded wrapped PDF over its limit and a
   expect(downloads).toEqual([]);
 });
 
-// D-59 residual (D-70): a loaded Result whose record is cropped. The Web sends the card's source length and region,
-// and Python crops them by the drawing's rule: 30 kbp of lambda in 150 bp rows (200 rows, about 20,300 pt) is
-// refused as the CLI refuses it; in 300 bp rows (100 rows, about 10,200 pt) the PDF is written.
+// D-59 residual (D-70, D-73): a loaded Result whose record is cropped. The Web sends the region the Result drew, from
+// its committed request, with the source length of the record the card reads, and Python crops them by the
+// drawing's rule: 30 kbp of lambda in 150 bp rows (200 rows, about 20,300 pt) is refused as the CLI refuses it, also
+// after the card's Region is edited to 100 bp with no Generate; in 300 bp rows (about 10,200 pt) the PDF is written.
 test('a loaded Result with a cropped wrapped record: a PDF over the limit makes no file, one under it downloads', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
   const downloads = [];
@@ -346,6 +347,13 @@ test('a loaded Result with a cropped wrapped record: a PDF over the limit makes 
   await loadSessionFile(page, cliSession(150));
   expect(await wrapState(page)).toMatchObject({ wrap: 150, amount: '150', unit: 'bp' });
   expect(await cardRegion()).toEqual([5001, 35000]);
+  // Review 1 M2: the edited card would cut nothing, but the Result shown drew 5001..35000.
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearRecordCrop(app.linearSeqs[0], 'region_end', 5100);
+  });
+  await settle(page);
+  expect(await cardRegion()).toEqual([5001, 5100]);
   downloads.length = 0;
   await page.getByRole('button', { name: 'PDF', exact: true }).click();
   await expect(page.getByText('PDF is limited to 14,400 pt per side', { exact: false }).first()).toBeVisible({ timeout: 60_000 });

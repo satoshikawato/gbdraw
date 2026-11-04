@@ -1928,7 +1928,7 @@ const cardDrawsRecord = (seq, cardKey, record, resources, fileOf) => {
  * @param {LiveSettingResources} resources
  * @returns {number[] | null}
  */
-const linearRecordCardIndexes = (request, inputs, resources) => {
+export const linearRecordCardIndexes = (request, inputs, resources) => {
   const cards = inputs.linearSeqs.map((seq, index) => linearSeqRecordKey(seq, index));
   const indexes = request.records.map(({ recordKey }) => cards.findIndex(
     (key) => key === recordKey || recordKeyExpansion(recordKey, key) !== null

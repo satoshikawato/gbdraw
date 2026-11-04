@@ -103,6 +103,7 @@ import {
   carryKeptTrackParts,
   recordLoadedStackSwitch,
   liveSettingInputsOf,
+  linearRecordCardIndexes,
   managedConfigOverridePathsForMode,
   projectCanonicalSessionRequest,
   projectSettingsOnlySession,
@@ -4464,6 +4465,24 @@ export const committedSettingNotePredicate = (item = null) => {
   const resources = committedCanonicalSession?.resources;
   const undoneHides = state.undoneTrackHides.value.get(drawing.id);
   return (requestPath) => liveSettingNoteApplies(request, requestPath, drawing, inputs, resources, item, undoneHides);
+};
+
+/**
+ * Each record of the committed Linear request with the card of `drawing`
+ * that still draws it, matched by record key (`linearRecordCardIndexes`): the
+ * record as the request asked for it (its region), and the card whose record
+ * list gives its source length. null without a committed Linear request or
+ * while a record has no such card.
+ * @param {DrawingState} drawing the drawing whose Result is shown
+ * @returns {{ record: CanonicalRenderRequest['records'][number], seq: LinearSeq }[] | null}
+ */
+export const committedLinearRecordCards = (drawing) => {
+  const request = getCommittedCanonicalRenderRequest();
+  if (request?.mode !== 'linear') return null;
+  const indexes = linearRecordCardIndexes(
+    request, liveSettingInputsOf(drawing, state.inputFiles.fileOf), committedCanonicalSession?.resources
+  );
+  return indexes && request.records.map((record, position) => ({ record, seq: drawing.linearSeqs[indexes[position]] }));
 };
 
 /**

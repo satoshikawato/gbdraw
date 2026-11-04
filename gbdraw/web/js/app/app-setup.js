@@ -85,6 +85,7 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  committedLinearRecordCards,
   committedSettingNotePredicate,
   committedTrackHideDrawing,
   commitLiveSettingValues,
@@ -2424,6 +2425,20 @@ export const createAppSetup = () => {
     return records.every((record) => record.region === null) ? records.map((record) => record.sourceLength) : [];
   };
   const drawnLinearRecordLengths = () => linearRecordLengthsOf(state.activeDrawing());
+  // The records a shown Result without an input summary (a loaded one) drew:
+  // each committed record's region as its request asked for it, with the
+  // length of the source record its card reads, matched by record key, so a
+  // card edited since Load changes neither (D-73). [] while a record has no
+  // card that still draws it, or its length is unknown.
+  /** @param {DrawingState} drawing @returns {LinearDraftRecord[]} */
+  const committedLinearRecordsOf = (drawing) => {
+    const records = (committedLinearRecordCards(drawing) ?? []).map(({ record, seq }) => {
+      const sourceLength = Number(linearSeqRecord(drawing, seq)?.recordLength);
+      const { region } = record;
+      return sourceLength > 0 ? { sourceLength, region: region && { start: region.start, end: region.end } } : null;
+    });
+    return records.length && records.every((record) => record !== null) ? /** @type {LinearDraftRecord[]} */ (records) : [];
+  };
   // A Linear card whose record list is still deferred after a Load is read
   // now, through the record selector, as Generate reads it (DESIGN A4).
   /** @param {DrawingState} drawing */
@@ -6410,7 +6425,7 @@ export const createAppSetup = () => {
       // (D-52, D-55): Python reads its stored leaf, and decides from it
       // whether a record is cut, and the row length it advises. A loaded
       // Result has no input summary: its records are discovered first, and
-      // Python crops each by its region as the drawing did (D-70).
+      // Python crops each by the region its request drew (D-70, D-73).
       const exportedDrawing = historySnapshots.displayedArtifactDrawing();
       const exportedSummary = shownInputSummary.value ?? undefined;
       const exportedWrapLeaf = shownLinearWrapLeaf(exportedDrawing);
@@ -6419,7 +6434,7 @@ export const createAppSetup = () => {
         summary: exportedSummary,
         discoverRecords: async () => {
           await awaitLinearRecordDiscovery(exportedDrawing);
-          return linearDraftRecordsOf(exportedDrawing);
+          return committedLinearRecordsOf(exportedDrawing);
         }
       });
       /** @type {import('../services/export.js').ExportPorts} */

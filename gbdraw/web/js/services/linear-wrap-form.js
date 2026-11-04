@@ -234,13 +234,13 @@ export const shownLinearWrap = ({ value, requested, summary, records }) => {
 /**
  * What the size check of a PNG or PDF export reads about the exported Result's wrap (D-52, D-55, D-70): the
  * committed request's wrap leaf as stored, and the records the Result drew, from its input summary, or, for a Result
- * without one (a loaded Session, a Gallery Session before Generate), the records the drawing's discovery reads,
- * awaited as Generate awaits it. Python reads the leaf with its config validator (`"5kb"` and `"Auto"` included),
+ * without one (a loaded Session, a Gallery Session before Generate), the records its committed request drew, each
+ * with the length its card's discovery reads, awaited as Generate awaits it (D-73). Python reads the leaf with its config validator (`"5kb"` and `"Auto"` included),
  * crops each record with the drawing's rule, and decides whether a record is cut and what would fit.
  * @param {{ leaf: unknown, summary: Pick<InputSummary, 'records'> | undefined,
  *   discoverRecords: () => Promise<readonly LinearDraftRecord[]> }} inputs `leaf` as `requestLinearWrapLeaf` reads it,
- *   undefined when no Linear Result of the drawing is shown; `discoverRecords` the records the drawing reads once its
- *   discovery has run, [] while unknown.
+ *   undefined when no Linear Result of the drawing is shown; `discoverRecords` the committed records once the
+ *   drawing's discovery has run, [] while unknown.
  * @returns {Promise<ExportLinearWrap | null>} null with wrap off or the records unknown.
  */
 export const exportLinearWrap = async ({ leaf, summary, discoverRecords }) => {
