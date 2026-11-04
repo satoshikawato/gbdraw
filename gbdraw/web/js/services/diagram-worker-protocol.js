@@ -52,6 +52,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   CONVERT_RING_TABLES_TO_SEARCH_FRAME: 'convertRingTablesToSearchFrame',
   CONVERT_STORED_PROTEIN_RESULT_FRAMES: 'convertStoredProteinResultFrames',
   DECIDE_AUTO_ORIENTATION: 'decideAutoOrientation',
+  DERIVE_REGION_DRAWING: 'deriveRegionDrawing',
   EXTRACT_CDS_PROTEIN_FASTA: 'extractCdsProteinFasta',
   EXTRACT_FIRST_FASTA: 'extractFirstFasta',
   HYDRATE_PROTEIN_LOSAT_TSV: 'hydrateProteinLosatTsv',
@@ -95,6 +96,7 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: (payload) => payload.projection?.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource
 });
@@ -122,6 +124,71 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  * @typedef {object} AutoOrientationReply
  * @property {readonly RecordOrientationDecision[]} records
  */
+
+/**
+ * One region of `deriveRegionDrawing` (`RegionInput` in
+ * gbdraw/web_support/region_drawing.py): the source drawing's record key and
+ * source coordinates, 1-based and inclusive.
+ * @typedef {object} RegionDrawingRegion
+ * @property {string} recordKey
+ * @property {number} start
+ * @property {number} end
+ */
+
+/**
+ * The payload of `deriveRegionDrawing`: the source drawing's committed
+ * request, whose resources the page stages, the regions, and whether hand-set
+ * sizes return to Auto.
+ * @typedef {object} RegionDrawingHelperPayload
+ * @property {CanonicalRenderRequest} canonicalRequest
+ * @property {CommittedCanonicalSession['resources']} resources
+ * @property {readonly RegionDrawingRegion[]} regions
+ * @property {boolean} adaptSizes
+ */
+
+/**
+ * A hand-set size that returned to Auto (`ReturnedSize`).
+ * @typedef {object} RegionReturnedSize
+ * @property {string} setting
+ * @property {number} explicit
+ * @property {number | null} auto
+ */
+
+/**
+ * A part of the source drawing the new drawing does not carry (`NotCarriedItem`).
+ * @typedef {object} RegionNotCarriedItem
+ * @property {'OTHER_MODE_SETTINGS' | 'FEATURE_PLACEMENTS' | 'FEATURE_PLACEMENT_TABLE' | 'SIMILARITY_ALIGNMENT'
+ *   | 'CONSERVATION_RINGS' | 'CONSERVATION_RING_TABLES' | 'LINEAR_COMPARISONS' | 'COMPARISON_TABLES'
+ *   | 'LOSAT_NO_PAIR' | 'ANNOTATION_TABLE' | 'ANNOTATION_CROSSES_ORIGIN' | 'ANNOTATION_DRAWN_COORDINATES'
+ *   | 'ANNOTATIONS_OUTSIDE'} kind
+ * @property {number} count
+ * @property {readonly string[]} items
+ */
+
+/**
+ * The derived drawing (`DerivedRegionDrawing`): its mode, its canonical
+ * request as a Session stores a committed one, and, for each resource ID the
+ * request names, the source drawing's resource whose file it reads.
+ * @typedef {object} DerivedRegionDrawing
+ * @property {'derived'} status
+ * @property {'circular' | 'linear'} mode
+ * @property {CanonicalRenderRequest} renderRequest
+ * @property {Readonly<Record<string, string>>} resourceSources
+ * @property {readonly RegionReturnedSize[]} returnedToAuto
+ * @property {readonly RegionNotCarriedItem[]} notCarried
+ */
+
+/**
+ * A refused region (`RefusedRegionDrawing`): a region that crosses the origin.
+ * @typedef {object} RefusedRegionDrawing
+ * @property {'refused'} status
+ * @property {'ORIGIN_CROSSING'} reason
+ * @property {string} recordKey
+ * @property {number} start
+ * @property {number} end
+ */
+
+/** The `deriveRegionDrawing` reply (`RegionDrawingReply`). @typedef {DerivedRegionDrawing | RefusedRegionDrawing} RegionDrawingReply */
 
 /** @type {readonly string[]} */
 export const DIAGRAM_HELPER_STAGING_OPERATIONS = Object.freeze(Object.keys(STAGED_HELPER_REFERENCES));

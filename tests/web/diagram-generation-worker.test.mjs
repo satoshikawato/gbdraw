@@ -345,6 +345,15 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
   // stored (OV-2052), and stages no file (DESIGN 4.3).
   assert.deepEqual(helperPayloadKeys(DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION), ['document', 'storedRequestSchema']);
   assert.equal(DIAGRAM_HELPER_STAGING_OPERATIONS.includes(DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION), false);
+  // New drawing from a region: Python derives the drawing from the source
+  // drawing's committed request, whose resources the page stages.
+  const { stagedHelperReferences } = await import('../../gbdraw/web/js/services/diagram-worker-protocol.js');
+  const region = DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING;
+  assert.equal(region, 'deriveRegionDrawing');
+  assert.ok(DIAGRAM_HELPER_STAGING_OPERATIONS.includes(region));
+  for (const key of ['canonicalRequest', 'regions', 'adaptSizes']) assert.ok(helperPayloadKeys(region)?.includes(key), key);
+  const canonicalRequest = { records: [] };
+  assert.equal(stagedHelperReferences(region, { canonicalRequest }), canonicalRequest);
 }
 
 // D7: a Cancel drains the queue. The interrupt and then Python's cancel flag
