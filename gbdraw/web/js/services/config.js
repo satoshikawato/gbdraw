@@ -130,10 +130,12 @@ import {
   readFileBytes,
   rememberFileDescriptor
 } from './file-content-cache.js';
+import { isInputFileRef } from './history-files.js';
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView,
   isSessionResourceFileView,
+  matchesSessionResourceDescriptor,
   webBindingInputSlot
 } from './session-resource-backing.js';
 import { logicalResultsOf, normalizeLogicalResults, storedLogicalResults } from './result-normalization.js';
@@ -4854,7 +4856,7 @@ const withStoredComparisonPlan = (config, readFiles) => {
 
 /**
  * The inputs a Load reads into its candidate before the commit installs them
- * (`restoreLiveFileState`): every input field and card file, the Circular
+ * (`installLiveFileState`): every input field and card file, the Circular
  * record catalog, the reorder notice, and the Circular input type it reads.
  * @typedef {{
  *   files: Record<string, unknown>, circularRecordList: { value: CircularRecordEntry[] },
@@ -5117,45 +5119,60 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode, linearRows, ci
  * @typedef {LoadedInputs & { circularRecordList: CircularRecordEntry[], linearRecordRows: LinearRecordRow[] }} LiveFileState
  */
 /**
- * A loaded drawing and the inputs it installs (its Files, which
- * `bindLoadedInputs` registers here), paired so no drawing is without them.
- * @typedef {{ drawing: DrawingState, inputs: LiveFileState }} LoadedDrawingInputs
+ * Installs one loaded drawing's inputs: its Files as `bindLoadedInputs`
+ * registered them (`bound`), its record catalog or record rows.
+ * @param {DrawingState} drawing
+ * @param {LiveFileState} snapshot
+ * @param {ReturnType<typeof bindLoadedInputs>} bound
+ */
+const installLiveFileState = (drawing, snapshot, bound) => {
+  const { files, linearSeqs, linearComparisonPlan, circularRecordDiscovery } = bound;
+  const { linearCanonicalComparisons = [], ...circularFiles } = /** @type {Partial<DrawingInputFiles>} */ (files);
+  /** @type {Partial<DrawingInputFiles>} */
+  const cardFiles = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, circularFiles[key] ?? null]));
+  if (drawing.mode === 'circular') {
+    INPUTS_SLICE.install(drawing.slices.inputs, {
+      files: /** @type {DrawingInputFiles} */ (circularFiles),
+      circularRecordList: snapshot.circularRecordList,
+      circularRecordDiscovery: /** @type {CircularRecordDiscovery} */ (circularRecordDiscovery)
+    });
+    return;
+  }
+  INPUTS_SLICE.install(drawing.slices.inputs, {
+    files: /** @type {DrawingInputFiles} */ ({ linearCanonicalComparisons, ...cardFiles }),
+    linearSeqs
+  });
+  SETTINGS_SLICE.install(drawing.slices.settings, {
+    linearRecordRows: snapshot.linearRecordRows,
+    linearComparisonPlan: normalizeLinearComparisonPlan(linearComparisonPlan)
+  });
+};
+/**
+ * What one drawing installs once its drawing state holds its settings: a
+ * loaded drawing after the Load commits, a New drawing from a region after
+ * its install (`installPreparedDrawing`).
+ * @typedef {object} StoredDrawingSettle
+ * @property {LiveFileState} inputs Its restored inputs.
+ * @property {ReturnType<typeof bindLoadedInputs>} bound Its inputs with their Files registered.
+ * @property {ImportedComparisonIntent | null} comparisonClassification A Linear drawing's comparisons, classified
+ *   from its request; null: none.
+ * @property {Parameters<typeof restoreImportedComparisonIntent>[2]} importedComparisonResolution Its draft's stored
+ *   resolution of them.
+ * @property {boolean} fitDepth False for settings only: its Depth tracks stay as installed.
  */
 /**
- * @param {readonly LoadedDrawingInputs[]} loaded Each loaded drawing with its inputs. A rollback installs none:
- *   the previous drawings come back as they were.
+ * The per-drawing steps after a drawing's settings install, in their one
+ * order: its inputs, a Linear drawing's comparison intent, its Depth fit.
+ * @param {DrawingState} drawing
+ * @param {StoredDrawingSettle} settle
  */
-const restoreLiveFileState = (loaded) => {
-  state.matchSequenceRegistry?.reset?.();
-  /** @type {Map<LiveFileState, ReturnType<typeof bindLoadedInputs>>} One registration per set of inputs. */
-  const bound = new Map();
-  /** @param {LiveFileState} snapshot */
-  const boundOf = (snapshot) => {
-    if (!bound.has(snapshot)) bound.set(snapshot, bindLoadedInputs(state.inputFiles, snapshot));
-    return /** @type {ReturnType<typeof bindLoadedInputs>} */ (bound.get(snapshot));
-  };
-  loaded.forEach(({ drawing, inputs: snapshot }) => {
-    const { files, linearSeqs, linearComparisonPlan, circularRecordDiscovery } = boundOf(snapshot);
-    const { linearCanonicalComparisons = [], ...circularFiles } = /** @type {Partial<DrawingInputFiles>} */ (files);
-    /** @type {Partial<DrawingInputFiles>} */
-    const cardFiles = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, circularFiles[key] ?? null]));
-    if (drawing.mode === 'circular') {
-      INPUTS_SLICE.install(drawing.slices.inputs, {
-        files: /** @type {DrawingInputFiles} */ (circularFiles),
-        circularRecordList: snapshot.circularRecordList,
-        circularRecordDiscovery: /** @type {CircularRecordDiscovery} */ (circularRecordDiscovery)
-      });
-      return;
-    }
-    INPUTS_SLICE.install(drawing.slices.inputs, {
-      files: /** @type {DrawingInputFiles} */ ({ linearCanonicalComparisons, ...cardFiles }),
-      linearSeqs
-    });
-    SETTINGS_SLICE.install(drawing.slices.settings, {
-      linearRecordRows: snapshot.linearRecordRows,
-      linearComparisonPlan: normalizeLinearComparisonPlan(linearComparisonPlan)
-    });
-  });
+const settleStoredDrawing = (drawing, { inputs, bound, comparisonClassification, importedComparisonResolution, fitDepth }) => {
+  installLiveFileState(drawing, inputs, bound);
+  if (drawing.mode === 'linear') {
+    restoreImportedComparisonIntent(drawing.importedComparisonIntent, comparisonClassification, importedComparisonResolution);
+  }
+  // Each drawing's Depth tracks fit its own rows and files (DESIGN §9).
+  if (fitDepth) reconcileDepthTrackStateAfterSessionFiles(drawing, drawing.mode, drawing.linearSeqs, drawing.files.c_depth ?? null);
 };
 
 const captureSessionImportTransientState = () => ({
@@ -6559,6 +6576,61 @@ const drawnResultModes = ({ ui, committedMode, invocationMode, canonical }) => {
 /** @param {string} at @param {string} field The field's place in the file under the part at `at`. */
 const pathIn = (at, field) => (at ? `${at}.${field}` : field);
 /**
+ * How a Load reads its files (`loadFiles`): whether it adopts the payloads a
+ * current Session wrote, whether it resolves record inputs (settings only
+ * does not), and the list its file rows go to.
+ * @typedef {{ adoptCanonicalPayloads: boolean, resolveRecordInputs: boolean, repairs: LoadRepair[] }} LoadFilesReading
+ */
+/**
+ * One drawing's restored files (`loadFiles`): its file slots and record rows
+ * in a target of its own until the Load installs them.
+ * @typedef {ReturnType<typeof loadFiles>} LoadedFiles
+ */
+/**
+ * Restored file slots as a drawing reads them (`applyFiles`), with the
+ * Linear record layout it reconciles, in a settings slice of its own
+ * until the Load commits it. The layout is read as the drawing reads it
+ * (a list of another kind failed the Load).
+ * @param {unknown} restored
+ * @param {{ linearRecordLayout?: { rows?: unknown } | null, linearComparisonPlan?: unknown } | null} draftConfig
+ *   The drawing's draft config: the record layout and comparison plan its files reconcile.
+ * @param {string} cInputType @param {string} at Where the files are in the file.
+ * @param {LoadFilesReading} reading
+ */
+const loadFiles = (restored, draftConfig, cInputType, at, { adoptCanonicalPayloads, resolveRecordInputs, repairs }) => {
+  const layout = SETTINGS_SLICE.create({
+    linearRecordRows: readLinearRecordRows(draftConfig?.linearRecordLayout?.rows).value,
+    linearComparisonPlan: normalizeLinearComparisonPlan(draftConfig?.linearComparisonPlan)
+  });
+  const target = {
+    // `applyFiles` fills the file slots.
+    files: /** @type {Record<string, unknown>} */ ({}), circularRecordList: { value: [] },
+    circularRecordDiscovery: {}, linearReorderNotice: { value: '' },
+    cInputType: { value: cInputType },
+    linearRecordRows: layout.view.linearRecordRows,
+    linearComparisonPlan: layout.view.linearComparisonPlan,
+    slices: { settings: layout.handle }
+  };
+  const { collapsedLinearSeqs, linearSeqs } = applyFiles(/** @type {Parameters<typeof applyFiles>[0]} */ (restored), {
+    adoptCanonicalPayloads, resolveRecordInputs,
+    targetState: target, targetDrawing: target, repairs, at
+  });
+  return { target, linearSeqs, collapsed: collapsedLinearSeqs, at };
+};
+/**
+ * A drawing's restored files as it installs them (`installLiveFileState`).
+ * @param {LoadedFiles} loaded
+ * @returns {LiveFileState}
+ */
+const liveFileStateOf = ({ target, linearSeqs }) => /** @type {LiveFileState} */ ({
+  files: target.files,
+  linearSeqs,
+  circularRecordList: target.circularRecordList.value,
+  circularRecordDiscovery: target.circularRecordDiscovery,
+  linearRecordRows: target.linearRecordRows,
+  linearComparisonPlan: target.linearComparisonPlan
+});
+/**
  * One stored drawing as Load reads its draft (`readStoredDrawingDraft`): its
  * identity, its draft part of the file, its draft config (its restored
  * settings when Load projects it, else its slice over its mode's defaults),
@@ -6669,6 +6741,129 @@ const readStoredDrawingDraft = async (view, repairs) => {
 const installStoredDrawing = (drawing, { inputType, slice, draft, resolveTrackPlacements, applyCanvasPadding }) => {
   INPUTS_SLICE.install(drawing.slices.inputs, { inputType });
   applyModeSliceData(drawing, drawing.mode, { ...slice, ...draft }, { resolveTrackPlacements, applyCanvasPadding });
+};
+/**
+ * One drawing to install outside a whole Load (a New drawing from a region):
+ * a one-drawing Session 51 view of its request and resources, and the Web
+ * file each resource ID reads (a resource of its source drawing's file), so
+ * nothing re-uploads.
+ * @typedef {object} StoredDrawingSource
+ * @property {DrawingId} id
+ * @property {'circular' | 'linear'} mode
+ * @property {Readonly<Record<string, unknown>>} renderRequest
+ * @property {Readonly<Record<string, unknown>>} resources
+ * @property {ReadonlyMap<string, InputFileRef>} sourceFiles The source's file of each resource ID that has one.
+ */
+/**
+ * A drawing read as Load reads a stored drawing (`prepareStoredDrawing`),
+ * ready for `installPreparedDrawing`; `repairs` lists what its read lost.
+ * @typedef {object} PreparedStoredDrawing
+ * @property {DrawingId} id
+ * @property {'circular' | 'linear'} mode
+ * @property {StoredDrawingInstall} install
+ * @property {Omit<StoredDrawingSettle, 'bound'>} settle
+ * @property {ReadonlyMap<string, InputFileRef>} sourceFiles
+ * @property {LoadRepair[]} repairs
+ */
+/**
+ * Reads one drawing as Load reads a Session 51 drawing that holds a request
+ * and no draft: its inputs (`storedDrawingInputsOf`), its files
+ * (`loadFiles`), its draft (`readStoredDrawingDraft`). Nothing live changes.
+ * @param {StoredDrawingSource} source
+ * @returns {Promise<PreparedStoredDrawing>}
+ */
+export const prepareStoredDrawing = async ({ id, mode, renderRequest, resources, sourceFiles }) => {
+  const entry = /** @type {SessionDrawing51} */ (/** @type {unknown} */ ({ id, mode, renderRequest, resources }));
+  const document = /** @type {Session51} */ (/** @type {unknown} */ ({ version: SESSION_VERSION, drawings: [entry] }));
+  const inputs = storedDrawingInputsOf(document, entry, adoptCurrentSessionResources(resources),
+    sessionSourceFactsOf(SESSION_VERSION, false), await readStoredWrapLengths(document));
+  if (inputs.restoredConfig && inputs.requestOverrides) {
+    inputs.restoredConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides(inputs.requestOverrides);
+  }
+  /** @type {LoadRepair[]} */
+  const repairs = [];
+  const config = inputs.restoredConfig ?? overlayModeSliceConfig(null, undefined);
+  const files = loadFiles(inputs.files, config, inputs.inputType, 'webFiles.bindings',
+    { adoptCanonicalPayloads: true, resolveRecordInputs: true, repairs });
+  const part = /** @type {LoadedDraftPart} */ ({ slice: {}, at: '' });
+  const { draft } = await readStoredDrawingDraft({
+    id, mode, part, config,
+    legendRekeys: savedLegendRekeys(config.rules, { originalOrder: [], originalColors: {} }),
+    files, storedConservationBlasts: null, resolveTrackPlacements: true, validatedConfig: null,
+    sourceSessionVersion: SESSION_VERSION
+  }, repairs);
+  return {
+    id, mode,
+    install: {
+      inputType: /** @type {InputType} */ (inputs.inputType),
+      slice: part.slice,
+      draft: { features: inputs.requestFeatureEdits ? featureEditsOverProjection(undefined, inputs.requestFeatureEdits) : {}, ...draft },
+      resolveTrackPlacements: true,
+      applyCanvasPadding: true
+    },
+    settle: {
+      inputs: liveFileStateOf(files),
+      comparisonClassification: inputs.comparisonClassification,
+      importedComparisonResolution: config.importedComparisonResolution,
+      fitDepth: true
+    },
+    sourceFiles,
+    repairs
+  };
+};
+/**
+ * Installs a prepared drawing into its drawing state as Load installs a
+ * loaded one (`installStoredDrawing`, then `settleStoredDrawing`). A
+ * resource its source drawing's file backs binds that file.
+ * @param {DrawingState} drawing A new drawing state of the prepared drawing's ID and mode.
+ * @param {PreparedStoredDrawing} prepared
+ */
+export const installPreparedDrawing = (drawing, { install, settle, sourceFiles }) => {
+  installStoredDrawing(drawing, install);
+  /** @type {Pick<InputFileStore, 'registerFile'>} */
+  const store = {
+    registerFile: (file) => {
+      const source = getSessionResourceSource(file);
+      const resourceId = source && 'resourceId' in source ? source.resourceId : null;
+      return (resourceId === null ? undefined : sourceFiles.get(resourceId)) ?? state.inputFiles.registerFile(file);
+    }
+  };
+  settleStoredDrawing(drawing, { ...settle, bound: bindLoadedInputs(store, settle.inputs) });
+};
+/**
+ * The source drawing's Web file of each resource of its committed Session,
+ * found by the binding's place in its inputs: a resource whose bound file
+ * is no longer in that place has none.
+ * @param {DrawingState} drawing The shown drawing, whose Session is committed (the caller passes it).
+ * @returns {Map<string, InputFileRef>}
+ */
+export const committedResourceFilesOf = (drawing) => {
+  /** @type {Map<string, InputFileRef>} */
+  const filesByResource = new Map();
+  const session = getCommittedCanonicalSession();
+  if (!session) return filesByResource;
+  const bindings = /** @type {Readonly<Record<string, unknown>>} */ (session.webFiles).bindings;
+  /** @param {unknown} binding @param {unknown} value */
+  const walk = (binding, value) => {
+    if (Array.isArray(binding)) {
+      if (Array.isArray(value)) binding.forEach((part, index) => walk(part, value[index]));
+      return;
+    }
+    if (!isPlainObject(binding) || !isPlainObject(value) && !isInputFileRef(value)) return;
+    const { resourceId } = /** @type {Record<string, unknown>} */ (binding);
+    if (typeof resourceId === 'string') {
+      if (isInputFileRef(value) && matchesSessionResourceDescriptor(state.inputFiles.fileOf(value),
+        /** @type {Parameters<typeof matchesSessionResourceDescriptor>[1]} */ (session.resources[resourceId]))) {
+        filesByResource.set(resourceId, value);
+      }
+      return;
+    }
+    if (isInputFileRef(value)) return;
+    Object.entries(/** @type {Record<string, unknown>} */ (binding))
+      .forEach(([key, part]) => walk(part, /** @type {Record<string, unknown>} */ (value)[key]));
+  };
+  walk(bindings, { ...drawing.files, linearSeqs: drawing.linearSeqs });
+  return filesByResource;
 };
 /**
  * Records the Use custom stack switch beside a committed Session Load installs
@@ -7180,41 +7375,15 @@ const importSessionDocument = async (e, options = {}) => {
     // converted them (D-15-139); its Session 51's are read with none.
     /** @type {LoadRepair[]} */
     const fileRows = legacyRead ? [] : repairs;
-    /**
-     * Restored file slots as a drawing reads them (`applyFiles`), with the
-     * Linear record layout it reconciles, in a settings slice of its own
-     * until the Load commits it. The layout is read as the drawing reads it
-     * (a list of another kind failed the Load).
-     * @param {unknown} restored @param {ReturnType<typeof draftConfigOf>} draftConfig
-     * @param {string} cInputType @param {string} at Where the files are in the file.
-     */
-    const loadFiles = (restored, draftConfig, cInputType, at) => {
-      const layout = SETTINGS_SLICE.create({
-        linearRecordRows: readLinearRecordRows(draftConfig?.linearRecordLayout?.rows).value,
-        linearComparisonPlan: normalizeLinearComparisonPlan(draftConfig?.linearComparisonPlan)
-      });
-      const target = {
-        // `applyFiles` fills the file slots.
-        files: /** @type {Record<string, unknown>} */ ({}), circularRecordList: { value: [] },
-        circularRecordDiscovery: {}, linearReorderNotice: { value: '' },
-        cInputType: { value: cInputType },
-        linearRecordRows: layout.view.linearRecordRows,
-        linearComparisonPlan: layout.view.linearComparisonPlan,
-        slices: { settings: layout.handle }
-      };
-      const { collapsedLinearSeqs, linearSeqs } = applyFiles(/** @type {Parameters<typeof applyFiles>[0]} */ (restored), {
-        adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly,
-        targetState: target, targetDrawing: target, repairs: fileRows, at
-      });
-      return { target, linearSeqs, collapsed: collapsedLinearSeqs, at };
-    };
+    /** How this Load's files are read (`loadFiles`). @type {LoadFilesReading} */
+    const fileReading = { adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly, repairs: fileRows };
     recordSessionLifecycleEvent('session-candidate-files-start');
     // The files the Load projects: a Session 51's opened drawing's, else the
     // file's one set of a Session 27-50, whose drawings each take their
-    // mode's part (`restoreLiveFileState`).
+    // mode's part (`installLiveFileState`).
     const filesDrawingId = projectedDrawingId ?? linearPartDrawingId;
     const projectedFiles = loadFiles(canonicalSession ? projectionResult.restoredFiles : data.files,
-      filesDrawingId === null ? null : draftConfigOf(filesDrawingId), inputTypes.cInputType, filesAt);
+      filesDrawingId === null ? null : draftConfigOf(filesDrawingId), inputTypes.cInputType, filesAt, fileReading);
     /**
      * Every other Session 51 drawing's own files, by drawing ID (B2d-3a-2);
      * a drawing the document lacks has none (D-15-105 (5)).
@@ -7223,9 +7392,9 @@ const importSessionDocument = async (e, options = {}) => {
     const storedFiles = new Map((upgraded && projectedDrawingId !== null ? upgraded.drawings : []).flatMap((entry, index) => {
       const inputs = storedDrawingInputs.get(/** @type {DrawingId} */ (entry.id));
       return inputs ? [[/** @type {DrawingId} */ (entry.id), loadFiles(inputs.files, draftConfigOf(/** @type {DrawingId} */ (entry.id)),
-        inputs.inputType, `${drawingSetPath(index)}webFiles.bindings`)]] : [];
+        inputs.inputType, `${drawingSetPath(index)}webFiles.bindings`, fileReading)]] : [];
     }));
-    const noFiles = projectedDrawingId === null ? projectedFiles : loadFiles(null, null, 'gb', filesAt);
+    const noFiles = projectedDrawingId === null ? projectedFiles : loadFiles(null, null, 'gb', filesAt, fileReading);
     /** @param {DrawingId} drawingId @returns {ReturnType<typeof loadFiles>} The drawing's files, by its ID. */
     const filesOf = (drawingId) => (projectedDrawingId === null || drawingId === projectedDrawingId
       ? projectedFiles : storedFiles.get(drawingId) ?? noFiles);
@@ -7827,23 +7996,30 @@ const importSessionDocument = async (e, options = {}) => {
       }) });
     }
 
-    /** @type {Map<ReturnType<typeof loadFiles>, LiveFileState>} One state per set of files, so each binds once. */
+    state.matchSequenceRegistry?.reset?.();
+    /** @type {Map<LoadedFiles, { inputs: LiveFileState, bound: ReturnType<typeof bindLoadedInputs> }>} One state per set of files, so each binds once. */
     const liveFileStates = new Map();
-    /** @param {ReturnType<typeof loadFiles>} loaded @returns {LiveFileState} */
-    const liveFileStateOf = (loaded) => {
-      const { target, linearSeqs } = loaded;
-      if (!liveFileStates.has(loaded)) liveFileStates.set(loaded, {
-        files: target.files,
-        linearSeqs,
-        circularRecordList: target.circularRecordList.value,
-        circularRecordDiscovery: target.circularRecordDiscovery,
-        linearRecordRows: target.linearRecordRows,
-        linearComparisonPlan: target.linearComparisonPlan
-      });
-      return /** @type {LiveFileState} */ (liveFileStates.get(loaded));
+    /** @param {LoadedFiles} loaded */
+    const boundFilesOf = (loaded) => {
+      if (!liveFileStates.has(loaded)) {
+        const inputs = liveFileStateOf(loaded);
+        liveFileStates.set(loaded, { inputs, bound: bindLoadedInputs(state.inputFiles, inputs) });
+      }
+      return /** @type {{ inputs: LiveFileState, bound: ReturnType<typeof bindLoadedInputs> }} */ (liveFileStates.get(loaded));
     };
-    // Each drawing takes its own files, its card files among them (R16-4).
-    restoreLiveFileState(committed.map((drawing) => ({ drawing, inputs: liveFileStateOf(filesOf(drawing.id)) })));
+    // Each drawing takes its own files, its card files among them (R16-4),
+    // then its comparisons, classified from its own request (a Session
+    // 27-50's one Linear part is its Linear drawing's), a Session 27-44's
+    // from the file's stored request, which Python's conversion leaves out
+    // of a Circular request's drawings (C-OD14), and fits its Depth tracks.
+    const fileComparisonClassification = legacyRead ? legacyRead.comparisonClassification : null;
+    committed.forEach((drawing) => settleStoredDrawing(drawing, {
+      ...boundFilesOf(filesOf(drawing.id)),
+      comparisonClassification: fileComparisonClassification ?? (projectedDrawingId === null || drawing.id === projectedDrawingId
+        ? comparisonClassification : storedDrawingInputs.get(drawing.id)?.comparisonClassification ?? null),
+      importedComparisonResolution: draftConfigOf(drawing.id)?.importedComparisonResolution,
+      fitDepth: !settingsOnly
+    }));
     // The Linear drawing the Files card list folds: the shown one, else a
     // Session 27-50's Linear part's (a Session 51's first Linear drawing);
     // without one, no card is folded.
@@ -7854,17 +8030,6 @@ const importSessionDocument = async (e, options = {}) => {
       state.linearFoldedSources, linearDrawing ? groupLinearSourceRecords(linearDrawing.linearSeqs) : [],
       linearDrawing ? linearDrawing.inputType.value : 'gb'
     );
-    // Each Linear drawing's comparisons, classified from its own request
-    // (a Session 27-50's one Linear part is its Linear drawing's), a Session
-    // 27-44's from the file's stored request, which Python's conversion
-    // leaves out of a Circular request's drawings (C-OD14).
-    const fileComparisonClassification = legacyRead ? legacyRead.comparisonClassification : null;
-    committed.filter((drawing) => drawing.mode === 'linear').forEach((drawing) => restoreImportedComparisonIntent(
-      drawing.importedComparisonIntent,
-      fileComparisonClassification ?? (projectedDrawingId === null || drawing.id === projectedDrawingId
-        ? comparisonClassification : storedDrawingInputs.get(drawing.id)?.comparisonClassification ?? null),
-      draftConfigOf(drawing.id)?.importedComparisonResolution
-    ));
     const losatPartDrawingId = linearPartDrawingId ?? shownDrawing.id;
     /**
      * Each drawing's saved raw LOSAT entries as the preflight read them
@@ -7877,12 +8042,6 @@ const importSessionDocument = async (e, options = {}) => {
      */
     const losatSourcesOf = (projectedEntries, field) => fileLosatEntriesOf(projectedEntries, field, losatPartDrawingId)
       .map(({ id, entries }) => ({ drawing: shownDrawing.id === id ? shownDrawing : state.drawingOf(id), entries }));
-    if (!settingsOnly) {
-      // Each drawing's Depth tracks fit its own rows and files (DESIGN §9).
-      committed.forEach((drawing) => reconcileDepthTrackStateAfterSessionFiles(
-        drawing, drawing.mode, drawing.linearSeqs, drawing.files.c_depth ?? null
-      ));
-    }
     if (canonicalSession) {
       applyLosatCache(
         losatSourcesOf(projectionResult.artifactState.losatCache?.entries, 'losatCache'),

@@ -174,7 +174,7 @@ test('a Session 51 Load reads every drawing\'s LOSAT caches, each at its drawing
 // falls back to the shown drawing's inputs when its own are missing.
 test('the Load install of each drawing\'s inputs takes them paired with the drawing, with no fallback', () => {
   const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
-  const start = source.indexOf('const restoreLiveFileState = ');
+  const start = source.indexOf('const installLiveFileState = ');
   assert.ok(start >= 0);
   const body = source.slice(start, source.indexOf('\n};\n', start));
   assert.deepEqual(body.match(/\.get\([^)]*\)\s*\?\?[^;\n]*/g) ?? [], []);
