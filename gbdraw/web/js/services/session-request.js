@@ -84,7 +84,7 @@ import {
   isSingleCircularJourney,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
-import { circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey, recordKeyExpansion } from './record-draw-selection.js';
+import { cardHoldsRecordKey, circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey, linearSeqRecordKey } from './record-draw-selection.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -1362,12 +1362,6 @@ const circularPresentationPayload = (form, { hasRegion = false } = {}) => ({
   ...circularRecordLabels(form)
 });
 
-/**
- * The record key Generate gives a Linear card (`buildRecords`); a card that
- * draws several records splits into its `expandedRecordKey` members.
- * @param {{ uid?: unknown }} seq @param {number} index
- */
-const linearSeqRecordKey = (seq, index) => String(seq.uid || `record-${index + 1}`);
 /** The label a Linear card's records draw. @param {RequestLinearSeq} seq */
 const linearRecordLabel = (seq) => presentationPayload({ label: resolveLinearRecordEffectiveDefinition(seq) }).label;
 /**
@@ -1933,11 +1927,9 @@ const cardDrawsRecord = (seq, cardKey, record, resources, fileOf) => {
  * @param {LiveSettingResources} resources
  * @returns {number[] | null}
  */
-const linearRecordCardIndexes = (request, inputs, resources) => {
+export const linearRecordCardIndexes = (request, inputs, resources) => {
   const cards = inputs.linearSeqs.map((seq, index) => linearSeqRecordKey(seq, index));
-  const indexes = request.records.map(({ recordKey }) => cards.findIndex(
-    (key) => key === recordKey || recordKeyExpansion(recordKey, key) !== null
-  ));
+  const indexes = request.records.map(({ recordKey }) => cards.findIndex((key) => cardHoldsRecordKey(key, recordKey)));
   return indexes.every((index, position) => index >= 0 && (position === 0 || index >= indexes[position - 1])
     && cardDrawsRecord(inputs.linearSeqs[index], cards[index], request.records[position], resources, inputs.fileOf))
     ? indexes : null;

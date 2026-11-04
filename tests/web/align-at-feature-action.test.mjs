@@ -95,17 +95,17 @@ test('Apply over an active Similarity alignment writes the translations without 
   assert.equal(action.notice.value, '');
 });
 
-test('applied holds while the records keep the positions Apply wrote, which Wrap Rows reads as Align at feature', async () => {
+test('the notice holds while the records keep the positions Apply wrote', async () => {
   const { page, action } = fixture();
-  assert.equal(action.applied.value, false, 'nothing applied yet');
+  assert.equal(action.notice.value, '', 'nothing applied yet');
   action.selector.value = 'gene=COX1';
   await action.resolve();
-  assert.equal(action.applied.value, false, 'a preview moves nothing');
+  assert.equal(action.notice.value, '', 'a preview moves nothing');
   await action.apply();
-  assert.equal(action.applied.value, true);
+  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
   // Undo puts other positions back: Align at feature no longer holds.
   page.drawn = [{ recordKey: 'record-1', x: 0, y: 0 }, { recordKey: 'record-2', x: 12, y: 3 }];
-  assert.equal(action.applied.value, false);
+  assert.equal(action.notice.value, '');
   assert.equal(action.notice.value, '');
 });
 
@@ -117,20 +117,20 @@ test('a Session Load retires Align at feature even when the loaded positions are
   action.selector.value = 'gene=COX1';
   await action.resolve();
   await action.apply();
-  assert.equal(action.applied.value, true);
+  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
   const written = page.drawn.map((entry) => ({ ...entry }));
   // Load another Session, then the saved one: the drawn positions are those Apply wrote.
   page.drawn = [];
   page.sessions.value += 1;
   page.drawn = written;
   page.sessions.value += 1;
-  assert.equal(action.applied.value, false);
+  assert.equal(action.notice.value, '');
   assert.equal(action.notice.value, '');
   // A new Apply in the loaded Session holds again.
   page.committed = committedSession();
   await action.resolve();
   await action.apply();
-  assert.equal(action.applied.value, true);
+  assert.equal(action.notice.value, 'Records aligned at gene=COX1.');
 });
 
 test('Apply without an active plan clears nothing', async () => {

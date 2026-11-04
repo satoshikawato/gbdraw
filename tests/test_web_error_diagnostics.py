@@ -523,10 +523,20 @@ def test_region_outside_the_record_names_the_record_and_is_a_region_failure(star
     from gbdraw.crop_genbank import check_start_end_coords
 
     with pytest.raises(ValidationError, match=message) as caught:
-        check_start_end_coords(_record("TINY.1", 60), start, end)
+        check_start_end_coords(60, start, end, "TINY.1")
     payload = _web(caught.value)
     assert payload["code"] == "REGION_INVALID"
     assert payload["context"] == {"field": "region", "reason": reason}
+
+
+def test_the_crop_rule_reads_a_record_length_so_the_drawing_and_the_export_check_share_it():
+    # D-70: the export check of a loaded Result knows each record's length and region, not the record, and the
+    # drawing crops by the same function: the end is clamped to the record, the whole record is one slice.
+    from gbdraw.crop_genbank import check_start_end_coords
+
+    assert check_start_end_coords(48_502, 5_001, 35_000, "NC_001416.1") == (5_000, 35_000)
+    assert check_start_end_coords(48_502, 1, 60_000, "NC_001416.1") == (0, 48_502)
+    assert check_start_end_coords(48_502, 1, 48_502, "NC_001416.1") == (0, 48_502)
 
 
 def test_linear_record_region_beyond_the_record_keeps_its_region_diagnostic():

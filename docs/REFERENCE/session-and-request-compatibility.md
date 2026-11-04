@@ -603,6 +603,14 @@ row in the Load dialog. **Save Session** writes the field's value, in bp or
 When a record is cut, Generate stops with an error and keeps the last Result if
 the request holds a setting that rows cannot draw.
 
+A Session that holds both a wrap length and a record position with an x other
+than 0 (`layout.recordTranslations`; for example one written by the Python API)
+for a record the length cuts is no longer drawn: `--session`,
+`session_to_request()` with `render_request()`, and Generate in the Web refuse
+it and say to set the position to 0 or not to wrap. gbdraw 0.14.5 drew every row
+of that record shifted by the one x. Loading the Session in the Web still shows
+the figure it saved.
+
 ## Fonts
 
 A Session and a render request store the font by name (the CSS font-family

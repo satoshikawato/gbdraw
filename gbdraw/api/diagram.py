@@ -2206,7 +2206,8 @@ def assemble_linear_diagram_from_records(
         )
     wrap_length = cfg.canvas.linear.wrap_length
     wrap_summary = None
-    if resolve_wrap_length(wrap_length, [len(record.seq) for record in records]) is not None:
+    row_length = resolve_wrap_length(wrap_length, [len(record.seq) for record in records])
+    if row_length is not None:
         refuse_undrawable_wrap(
             cfg,
             resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1],
@@ -2222,6 +2223,9 @@ def assemble_linear_diagram_from_records(
             # Anchor positions without a Similarity alignment plan come from anchor_feature.
             anchor_feature=similarity_alignment is None
             and any(center is not None for center in (_alignment_anchor_centers or ())),
+            row_length=row_length,
+            records=records,
+            translations=layout.record_translations if layout is not None else (),
         )
         _record_transforms, wrap_summary = resolve_wrap(wrap_length, records, _record_transforms)
         # Rows carry their ruler on the axis: there is no other place for it.

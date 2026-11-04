@@ -1,5 +1,6 @@
 // @ts-check
 import { downloadSafeName } from '../utils/download-names.js';
+/** @import { StoredRecordTranslation } from './linear-record-layout.js' */
 import { CLI_RECORD_KEY_PREFIX, EXPANDED_RECORD_KEY_SEPARATOR } from '../contracts/schema.generated.js';
 import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from './drawing/feature-edits.js';
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
@@ -122,6 +123,38 @@ export const recordKeyExpansion = (recordKey, baseKey) => {
   const prefix = `${baseKey}${EXPANDED_RECORD_KEY_SEPARATOR}`;
   const k = recordKey.startsWith(prefix) ? recordKey.slice(prefix.length) : '';
   return /^[1-9]\d*$/.test(k) ? Number(k) : null;
+};
+
+/**
+ * The record key Generate gives a Linear card (`buildRecords` in session-request.js); a card that
+ * draws several records splits into its `expandedRecordKey` members.
+ * @param {{ uid?: unknown }} seq @param {number} index
+ */
+export const linearSeqRecordKey = (seq, index) => String(seq.uid || `record-${index + 1}`);
+
+/**
+ * Whether a record key belongs to a Linear card: the card's key, or a split member `<card key>:<k>` of a card that
+ * draws several records (`recordKeyExpansion`). The one matcher of a record key to its card
+ * (`linearRecordCardIndexes` in session-request.js, `movesARecordSideways`).
+ * @param {string} cardKey @param {string} recordKey
+ */
+export const cardHoldsRecordKey = (cardKey, recordKey) => recordKey === cardKey || recordKeyExpansion(recordKey, cardKey) !== null;
+
+/**
+ * Whether a drawn record's stored translation moves it sideways (x other than 0), whatever wrote it: Align at
+ * feature, a Similarity alignment, or a loaded Session (an anchored CLI figure, the Python API). One rule for every
+ * source (PD-OI-113 scenario revision 2); whether Wrap Rows cuts the record is Python's (`refuse_undrawable_wrap`,
+ * whose `x != 0` this repeats: a twin with no generator, held by tests/web/linear-wrap-form.test.mjs). It reads the
+ * entries of the drawn cards' records, a split member `<card key>:<k>` included (`cardHoldsRecordKey`), so an entry
+ * of a record no longer drawn (its File removed, the record turned off) is not read.
+ * @param {readonly StoredRecordTranslation[]} stored
+ * @param {readonly { uid?: unknown }[]} drawnSeqs The drawn Linear cards (`drawnLinearSeqs`).
+ * @returns {boolean}
+ */
+export const movesARecordSideways = (stored, drawnSeqs) => {
+  const cards = drawnSeqs.map(linearSeqRecordKey);
+  return stored.some((entry) => typeof entry?.x === 'number' && entry.x !== 0
+    && cards.some((cardKey) => cardHoldsRecordKey(cardKey, String(entry.recordKey))));
 };
 
 /**
