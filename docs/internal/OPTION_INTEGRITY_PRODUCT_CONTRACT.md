@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `113`
+- Contract revision: `114`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -4222,6 +4222,95 @@ Status: active Product authority
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 114 changes: `PD-OI-113` gains scenario revision `3` (concern
+  `web.linear.wrap-length`, the same outcome `WEB-WRAP-CONTROL`). Align at
+  feature (the Web's Apply, and `--anchor_feature` in the CLI and Python)
+  rotates a circular record instead of moving it sideways, so that the feature
+  is its left end; the point at the left end is the point aligned until now
+  (where the feature begins as drawn). Linear records, records cropped by a
+  Region, and records whose topology is set to linear move sideways as
+  before. In a figure that mixes circular and linear records, the linear
+  records line up with the left end of the rotated records. A rotated
+  record's start shows in Display start and replaces its earlier start; a
+  record without the feature keeps its start and its place. When rotation
+  alone aligned the records, no record moved sideways, so the Wrap field stays
+  selectable and the figure wraps. The Web's Apply makes the rotation and the
+  sideways positions one operation, and one Undo reverts both. A Session whose
+  File card draws every record of its file cannot be aligned until the card
+  splits into one card per record (usually at the next Generate).
+  - The question came from the Owner while the runtime pull request of
+    scenario revision `2` (PR `#1596`, merged) was open:
+    「Align at feature: Circular recordの場合はいいんじゃないの？」
+    Until now Align at feature moved circular records sideways too, so under
+    scenario revision `2` an Apply that moved one stopped wrapping.
+  - Q6 (`2026-11-04`). The Claude Code session `734a3be4` of the campaign
+    `linear-wrap-1428-20261030` offered options A, B, and C. Its first ask
+    said for A that existing tutorial figures would change; its second ask,
+    with before and after figures, corrected that:
+    「まず訂正です。Align at feature を使っている図は、Gallery・チュートリアル・examples のどれにもありません。どの案を選んでも、公開中の図は変わりません。」
+    and showed:
+    「**A（推奨）**: 円形レコードは常に回転で揃える。線状レコードは今と同じく横にずらす。」
+    Reply: 「A（推奨）: 円形レコードは常に回転で揃える。線状レコードは今と同じく横にずらす。」
+  - Q6-1 (`2026-11-04`) came from the plan of the runtime change: where the
+    features line up in a figure that mixes circular and linear records. The
+    session showed:
+    「**A（推奨）**: 回転した円形レコードの左端に揃える。」
+    with
+    「線状レコードは、その位置に合わせて横にずらします。左にはみ出して、図の幅が広がることがあります。」
+    and
+    「円形レコードは横に動かないので、折り返せます。」
+    It showed the changes of draft `r7` from scenario revision `2` in the
+    same message, and asked:
+    「Q6-1 の答えと、r7 の文面でよいかを教えてください。」
+    Reply: 「Q6-1: 　回転した円形レコードの左端に揃える」 and
+    「r7 の案: 文面でよい」
+  - The replies chose option A for Q6 and Q6-1. The message that showed
+    draft `r7` listed its changes from scenario revision `2`, but it left out
+    one sentence that draft `r7` adds to the Rationale, and it showed the
+    additions to May retire and to the Accepted residual risk with commas
+    that draft `r7` does not have. A review of the runtime pull request found
+    this, so the reply is not read as the approval of draft `r7`.
+  - Q8 (`2026-11-04`). The Claude Code session `9ba9c0dc` of the campaign
+    showed draft `r8`: draft `r7` with one more sentence in the Accepted
+    residual risk, for a Session whose File card draws every record of its
+    file, which the runtime does not align (a finding of the same review).
+    It said:
+    「前回「r7 の案: 文面でよい」と承認をいただきました。ところがレビューで、固定した r7 にお見せしていない部分があると分かりました（原因は前のセッションで私がお見せした差分の漏れです）。」
+    and showed every change of draft `r8` from scenario revision `2`
+    verbatim, under
+    「**r6 からの違いは、次で全部です**（文面そのまま）。」
+    with
+    「**A（推奨）**: r8 をこの文面で承認する。」
+    and
+    「**B**: r8 から 3 の Rationale の 1 文を除いて承認する。」
+    Before any reply, the session corrected that added sentence, because the
+    runtime shows a generic validation message for such a Session, not the
+    reason:
+    「Q8 の補足です。先ほどの r8 の 5 にある**最後の文**を、正確な文に直しました。」
+    with the corrected sentence and
+    「それ以外の 1〜4 と、5 の最初の 2 文は、先ほどお見せしたとおりです。返信の仕方も同じで、A なら「Q8:A」、B（3 の Rationale の 1 文を除く）なら「Q8:B」です。」
+    Reply: 「Q8:A」
+  - The reply approved draft `r8`, with the corrected sentence, unchanged.
+    Draft `r8` is the scenario revision `2` receipt with one Choice item
+    added (Align at feature rotates circular records), one sentence added to
+    the Rationale, two items added to May retire, three sentences added to
+    the Accepted residual risk, and the scenario revision changed.
+  - Only the approved draft `r8` is serialized, as scenario revision `3`.
+    Draft `r7` never reached `dev` and is not serialized; no copy of it is
+    kept in this Contract.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-113` scenario revision `3`
+    `26d8c0951a9c72362dded4c46cef4d0e03b8fd42ba3ae0c73ae5fae54d3c1db0`.
+  - `PD-OI-113` scenario revision `3` supersedes scenario revision `2`; its
+    May retire names what is retired. The scenario revision `1` and `2`
+    receipts and JSON are kept as they were approved.
+  - The runtime, tests, and documentation of scenario revision `2` merged in
+    PR `#1596`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
@@ -11000,19 +11089,23 @@ Decision date: 2026-11-02
 ### PD-OI-113: Web control for the Linear wrap length
 
 - Concern key: `web.linear.wrap-length`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-113`, scenario revision `1` (Revision 112 entry above).
-  The scenario revision `2` receipt repeats every term of scenario revision
-  `1`, adds the Choice item on records moved sideways and the exception in
-  Must preserve, and retires what its May retire names. Scenario revision `1`
-  superseded none: no earlier record fixed a Web control for the wrap length,
-  and until then the Web kept it only under Preserved session settings, which
-  `OIPC-C05` covers as `PASS_THROUGH`.
+- Scenario revision: `3`
+- Supersedes: `PD-OI-113`, scenario revision `2` (Revision 114 entry above).
+  The scenario revision `3` receipt repeats every term of scenario revision
+  `2`, adds the Choice item on Align at feature rotating circular records,
+  and retires what its May retire names. Scenario revision `2` superseded
+  scenario revision `1` (Revision 112 entry above): its receipt repeats every
+  term of scenario revision `1`, adds the Choice item on records moved
+  sideways and the exception in Must preserve, and retires what its May
+  retire names. Scenario revision `1` superseded none: no earlier record fixed
+  a Web control for the wrap length, and until then the Web kept it only under
+  Preserved session settings, which `OIPC-C05` covers as `PASS_THROUGH`.
 - Status: `ACCEPTED`
-- Selected outcome: `WEB-WRAP-CONTROL` (scenario revisions `1` and `2`)
-- Normative outcome: exactly the complete approved scenario revision `2`
+- Selected outcome: `WEB-WRAP-CONTROL` (scenario revisions `1`, `2`, and `3`)
+- Normative outcome: exactly the complete approved scenario revision `3`
   `PRODUCT_DECISION` receipt and its nine-field JSON representation below.
-  The scenario revision `1` receipt and JSON are kept as they were approved.
+  The scenario revision `1` and `2` receipts and JSON are kept as they were
+  approved.
 - Decision source (scenario revision `1`): the Owner replies of `2026-11-03`
   quoted in the Revision 111 entry above (W-31 to W-35). The receipt and JSON
   below reproduce all nine fields of the approved receipt without translation
@@ -11024,11 +11117,18 @@ Decision date: 2026-11-02
 - Decision source (scenario revision `2`): the Owner replies of `2026-11-04`
   quoted in the Revision 112 entry above (Q3, Q4, and Q5). The receipt and
   JSON below reproduce all nine fields of the approved receipt without
-  translation or additional terms. The runtime, tests, and documentation that implement it
-  merge with it (static Product Contract co-change); this record supplies no
-  runtime acceptance evidence.
+  translation or additional terms. The runtime, tests, and documentation that
+  implement it merged with it in PR `#1596`.
 - Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `eade4b7b8e6aa27cf3e9a8107c33bf7bef75c638f34bea26d0f20bafa669a0e9`.
+- Decision source (scenario revision `3`): the Owner replies of `2026-11-04`
+  quoted in the Revision 114 entry above (Q6, Q6-1, and Q8). The receipt and
+  JSON below reproduce all nine fields of the approved receipt without
+  translation or additional terms. The runtime, tests, and documentation that
+  implement it merge with it (static Product Contract co-change); this record
+  supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `26d8c0951a9c72362dded4c46cef4d0e03b8fd42ba3ae0c73ae5fae54d3c1db0`.
 
 ```text
 PRODUCT_DECISION
@@ -11099,6 +11199,46 @@ Decision date: 2026-11-04
   "mustPreserve": "折り返しがオフのときの描き方と設定（初めはオフ）。同じ設定なら Web と CLI・Python で同じ図になること、ライブプレビューと Generate で同じ図になること。0.14.5 までに保存した Session の開き方と図（May retire に書いたものを除く）。プレビューの Fit・ズーム・パン。feature とレコードの識別子と、レコード単位の操作",
   "mayRetire": "Web で折り返しの長さを「Preserved session settings」でしか持てず、Web では変えられなかった扱い。エラーメッセージの「Preserved session settings で canvas.linear.wrap_length を戻す」という案内。折り返しの長さと横に動かしたレコードの位置を両方持つ Session（Python API などで作ったもの）で、切れたレコードの全部の行を同じだけ横にずらして描いていた扱い（今後は描かずにメッセージを出す）",
   "acceptedResidualRisk": "行の多い図はプレビューの Fit では小さく、ズームして読む。PDF は縦に長い 1 ページのまま（ページ分けはまだ）。上限のメッセージが示す長さは描いた高さからの推定で、もっと短くても収まる場合がある。比較と組み合わせた折り返しと、1 行に複数のレコードを置く図の折り返しはまだできない。新しい文言は翻訳バッチまで英語",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-04"
+}
+```
+
+Scenario revision `3` receipt (approved by `satoshikawato` on `2026-11-04`;
+Q6, Q6-1, and Q8 of the Revision 114 entry above):
+
+```text
+PRODUCT_DECISION
+Concern: web.linear.wrap-length（Web で Linear の折り返しの長さを設定する）
+Scenario revision: 3
+Choice: WEB-WRAP-CONTROL
+  - Linear の設定の Normalize Record Lengths の近くに「折り返し」の欄を置く。初めはオフ（折り返さない）。オンにすると、Auto か、数値と単位（bp / kbp / Mbp）を選べる。オンにしたときの初めの値は Auto。
+  - 長さと Auto の決め方は CLI・Python（`--wrap_length`、`canvas.linear.wrap_length`）と同じ。Auto は、いちばん長いレコードが 5 行以内に収まる 10 kb・20 kb・50 kb のうちいちばん短い長さで、収まらなければ 50 kb。10 kb 以下のレコードしかなければ折り返さない。Auto で描いた後、欄の横に実際の 1 行の長さと行数を出す。
+  - 折り返しをオンにすると、一緒に使えない設定と折り返しで決まる設定を見える形で切り替え、オンの間は選べなくして理由を出す。Track Layout の Features on axis は Above に、Scale Style の Bar (Simple) は Ruler (Ticks) に、Normalize Record Lengths はオフに、Ruler on Axis はオンにする（各行は目盛りを軸に描くため）。どのレコードも切れない長さでも同じで、フォームに見えている値で描く。
+  - オフに戻すと、それらの設定はまた選べるが、値は自動では戻さない。Undo 1 回で、オンにする前の設定に全部戻る。
+  - 比較（BLAST、comparisons table、similarity groups）、Record Layout で 1 行に複数のレコードを置く配置、Align at feature、軸の上に置いた feature track（side=overlay）のどれかがあるときは、折り返しの欄を選べなくして、何を外せばよいかを出す。折り返しをオンにした後でそれらを足し、Generate でレコードが切れるときは、何が一緒に使えないかと直し方を言うメッセージを出し、前の図を残す。
+  - レコードを横に動かした位置（Align at feature の Apply、similarity groups の整列、CLI の `--anchor_feature`、Python API で書いた位置）は、どこで書かれたかにかかわらず同じに扱う。Web の Align at feature は、Apply でレコードを動かしている間を「Align at feature がある」とし、どのレコードも動かさない Apply は折り返しを止めない。動かしたレコードがある間は折り返しの欄を選べなくし、何を外せばよいかと、全部のレコードの横の位置を 0 に戻すボタンを出す。similarity groups の整列で動かしたレコードでもボタンを出し、押すと整列も終わる。ボタンは 1 回の操作で、Undo 1 回で整列も含めて元に戻る。Generate で動かしたレコードが切れるときは、Web・CLI・Python とも描かずに、何が一緒に使えないかと直し方を言うメッセージを出し、Web では前の図を残す。Session を保存して開き直した後も同じ。
+  - Align at feature（Web の Apply、CLI・Python の `--anchor_feature`）は、circular のレコードを横にずらさず回転させて、その feature を左端に置く。左端に来る点は今揃えている点と同じ（feature を描く向きの始まり）。linear のレコード、Region で一部を切り出したレコード、topology を linear にしたレコードは今と同じく横にずらす。円形と線状が混ざる図では、線状のレコードを回転したレコードの左端（その feature の位置）に揃える。回転したレコードの開始位置は Display start に出て、それまでの開始位置は置き換わる。feature のないレコードは開始位置も位置も変えない。回転だけで揃ったときは横に動いたレコードがないので、折り返しの欄は選べたままで、折り返して描ける。Web の Apply は回転と横の位置を 1 回の操作にし、Undo 1 回で両方戻る。
+  - 折り返した図でも 1 本のレコードは 1 本のまま。行をまたぐ feature は、どの断片にカーソルを置いてもクリックしても 1 つのポップアップが開き、全部の断片が強調される。feature editor、レコードの選択、ラベルの編集、Session はレコード単位のまま。
+  - 長さは Session に保存され、読み込むと欄に戻る。CLI の `--save_session` や Web 0.14.5 で保存した、長さの入った Session も欄に戻る。
+  - PNG・PDF の書き出しが形式の上限（PNG は 1 辺 32,767 px、PDF は 14,400 pt）を超えるときは、ファイルを作らず、上限と、長い 1 行の長さ、または低い DPI を示すメッセージを出す。SVG は常に書き出せる。
+Rationale: 折り返しは 0.14.5 で CLI と Python からは使えるのに、Web には長さを入れる欄がなく、CLI で作った Session を読み込む以外に使えない。エンジンは同じなので、Web にはフォームの欄だけを足し、長さの決め方と断り方は CLI と同じものを使う。（revision 3）Align at feature で揃えた circular のレコードは、回転で揃えれば横に動かさずに済み、折り返しとも両立する（Owner Q6 A）。
+Must preserve: 折り返しがオフのときの描き方と設定（初めはオフ）。同じ設定なら Web と CLI・Python で同じ図になること、ライブプレビューと Generate で同じ図になること。0.14.5 までに保存した Session の開き方と図（May retire に書いたものを除く）。プレビューの Fit・ズーム・パン。feature とレコードの識別子と、レコード単位の操作
+May retire: Web で折り返しの長さを「Preserved session settings」でしか持てず、Web では変えられなかった扱い。エラーメッセージの「Preserved session settings で canvas.linear.wrap_length を戻す」という案内。折り返しの長さと横に動かしたレコードの位置を両方持つ Session（Python API などで作ったもの）で、切れたレコードの全部の行を同じだけ横にずらして描いていた扱い（今後は描かずにメッセージを出す）。Align at feature と `--anchor_feature` が circular のレコードを横にずらして揃えていた扱い（折り返さない図でも、circular のレコードは回転した図になる）。`--anchor_feature` で揃えた図はレコードが切れると折り返せなかった扱い（回転だけで揃ったレコードは折り返す）
+Accepted residual risk: 行の多い図はプレビューの Fit では小さく、ズームして読む。PDF は縦に長い 1 ページのまま（ページ分けはまだ）。上限のメッセージが示す長さは描いた高さからの推定で、もっと短くても収まる場合がある。比較と組み合わせた折り返しと、1 行に複数のレコードを置く図の折り返しはまだできない。円形と線状が混ざる図では、線状のレコードが左にはみ出して図の幅が広がることがある。similarity groups の整列は circular のレコードも今と同じく横にずらす。ファイルの全レコードを 1 枚の File カードで描く Session を開いたときは、そのカードがレコードごとに分かれるまで（ふつうは次の Generate まで）、Align at feature で揃えられない。新しい文言は翻訳バッチまで英語
+Owner: satoshikawato
+Decision date: 2026-11-04
+```
+
+```json
+{
+  "concern": "web.linear.wrap-length（Web で Linear の折り返しの長さを設定する）",
+  "scenarioRevision": 3,
+  "choice": "WEB-WRAP-CONTROL\n  - Linear の設定の Normalize Record Lengths の近くに「折り返し」の欄を置く。初めはオフ（折り返さない）。オンにすると、Auto か、数値と単位（bp / kbp / Mbp）を選べる。オンにしたときの初めの値は Auto。\n  - 長さと Auto の決め方は CLI・Python（`--wrap_length`、`canvas.linear.wrap_length`）と同じ。Auto は、いちばん長いレコードが 5 行以内に収まる 10 kb・20 kb・50 kb のうちいちばん短い長さで、収まらなければ 50 kb。10 kb 以下のレコードしかなければ折り返さない。Auto で描いた後、欄の横に実際の 1 行の長さと行数を出す。\n  - 折り返しをオンにすると、一緒に使えない設定と折り返しで決まる設定を見える形で切り替え、オンの間は選べなくして理由を出す。Track Layout の Features on axis は Above に、Scale Style の Bar (Simple) は Ruler (Ticks) に、Normalize Record Lengths はオフに、Ruler on Axis はオンにする（各行は目盛りを軸に描くため）。どのレコードも切れない長さでも同じで、フォームに見えている値で描く。\n  - オフに戻すと、それらの設定はまた選べるが、値は自動では戻さない。Undo 1 回で、オンにする前の設定に全部戻る。\n  - 比較（BLAST、comparisons table、similarity groups）、Record Layout で 1 行に複数のレコードを置く配置、Align at feature、軸の上に置いた feature track（side=overlay）のどれかがあるときは、折り返しの欄を選べなくして、何を外せばよいかを出す。折り返しをオンにした後でそれらを足し、Generate でレコードが切れるときは、何が一緒に使えないかと直し方を言うメッセージを出し、前の図を残す。\n  - レコードを横に動かした位置（Align at feature の Apply、similarity groups の整列、CLI の `--anchor_feature`、Python API で書いた位置）は、どこで書かれたかにかかわらず同じに扱う。Web の Align at feature は、Apply でレコードを動かしている間を「Align at feature がある」とし、どのレコードも動かさない Apply は折り返しを止めない。動かしたレコードがある間は折り返しの欄を選べなくし、何を外せばよいかと、全部のレコードの横の位置を 0 に戻すボタンを出す。similarity groups の整列で動かしたレコードでもボタンを出し、押すと整列も終わる。ボタンは 1 回の操作で、Undo 1 回で整列も含めて元に戻る。Generate で動かしたレコードが切れるときは、Web・CLI・Python とも描かずに、何が一緒に使えないかと直し方を言うメッセージを出し、Web では前の図を残す。Session を保存して開き直した後も同じ。\n  - Align at feature（Web の Apply、CLI・Python の `--anchor_feature`）は、circular のレコードを横にずらさず回転させて、その feature を左端に置く。左端に来る点は今揃えている点と同じ（feature を描く向きの始まり）。linear のレコード、Region で一部を切り出したレコード、topology を linear にしたレコードは今と同じく横にずらす。円形と線状が混ざる図では、線状のレコードを回転したレコードの左端（その feature の位置）に揃える。回転したレコードの開始位置は Display start に出て、それまでの開始位置は置き換わる。feature のないレコードは開始位置も位置も変えない。回転だけで揃ったときは横に動いたレコードがないので、折り返しの欄は選べたままで、折り返して描ける。Web の Apply は回転と横の位置を 1 回の操作にし、Undo 1 回で両方戻る。\n  - 折り返した図でも 1 本のレコードは 1 本のまま。行をまたぐ feature は、どの断片にカーソルを置いてもクリックしても 1 つのポップアップが開き、全部の断片が強調される。feature editor、レコードの選択、ラベルの編集、Session はレコード単位のまま。\n  - 長さは Session に保存され、読み込むと欄に戻る。CLI の `--save_session` や Web 0.14.5 で保存した、長さの入った Session も欄に戻る。\n  - PNG・PDF の書き出しが形式の上限（PNG は 1 辺 32,767 px、PDF は 14,400 pt）を超えるときは、ファイルを作らず、上限と、長い 1 行の長さ、または低い DPI を示すメッセージを出す。SVG は常に書き出せる。",
+  "rationale": "折り返しは 0.14.5 で CLI と Python からは使えるのに、Web には長さを入れる欄がなく、CLI で作った Session を読み込む以外に使えない。エンジンは同じなので、Web にはフォームの欄だけを足し、長さの決め方と断り方は CLI と同じものを使う。（revision 3）Align at feature で揃えた circular のレコードは、回転で揃えれば横に動かさずに済み、折り返しとも両立する（Owner Q6 A）。",
+  "mustPreserve": "折り返しがオフのときの描き方と設定（初めはオフ）。同じ設定なら Web と CLI・Python で同じ図になること、ライブプレビューと Generate で同じ図になること。0.14.5 までに保存した Session の開き方と図（May retire に書いたものを除く）。プレビューの Fit・ズーム・パン。feature とレコードの識別子と、レコード単位の操作",
+  "mayRetire": "Web で折り返しの長さを「Preserved session settings」でしか持てず、Web では変えられなかった扱い。エラーメッセージの「Preserved session settings で canvas.linear.wrap_length を戻す」という案内。折り返しの長さと横に動かしたレコードの位置を両方持つ Session（Python API などで作ったもの）で、切れたレコードの全部の行を同じだけ横にずらして描いていた扱い（今後は描かずにメッセージを出す）。Align at feature と `--anchor_feature` が circular のレコードを横にずらして揃えていた扱い（折り返さない図でも、circular のレコードは回転した図になる）。`--anchor_feature` で揃えた図はレコードが切れると折り返せなかった扱い（回転だけで揃ったレコードは折り返す）",
+  "acceptedResidualRisk": "行の多い図はプレビューの Fit では小さく、ズームして読む。PDF は縦に長い 1 ページのまま（ページ分けはまだ）。上限のメッセージが示す長さは描いた高さからの推定で、もっと短くても収まる場合がある。比較と組み合わせた折り返しと、1 行に複数のレコードを置く図の折り返しはまだできない。円形と線状が混ざる図では、線状のレコードが左にはみ出して図の幅が広がることがある。similarity groups の整列は circular のレコードも今と同じく横にずらす。ファイルの全レコードを 1 枚の File カードで描く Session を開いたときは、そのカードがレコードごとに分かれるまで（ふつうは次の Generate まで）、Align at feature で揃えられない。新しい文言は翻訳バッチまで英語",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-04"
 }
