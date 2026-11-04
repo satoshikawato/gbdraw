@@ -30,6 +30,8 @@ _MESSAGE_DECIMALS: dict[FigureLengthUnit, int] = {"mm": 1, "cm": 1, "in": 2, "px
 FIGURE_LENGTH_AUTO = "auto"
 _FIGURE_LENGTH_RE = re.compile(r"\s*([0-9]+(?:\.[0-9]*)?|\.[0-9]+)\s*([A-Za-z]+)\s*", re.ASCII)
 _REFUSAL = "must be a length with a unit (mm, cm, in, or px), for example 180mm or 7in, or auto"
+# A caller that knows the config path raises again with it (``figure_length_from_config``).
+_INVALID = {"code": "INPUT_INVALID"}
 
 
 def _plain_number(value: float) -> str:
@@ -47,9 +49,9 @@ class FigureLength:
 
     def __post_init__(self) -> None:
         if self.unit not in _PX_PER_UNIT:
-            raise ValidationError(f"figure length unit {self.unit!r} {_REFUSAL}.")
+            raise ValidationError(f"figure length unit {self.unit!r} {_REFUSAL}.", diagnostic=_INVALID)
         if isinstance(self.value, bool) or not math.isfinite(self.value) or self.value <= 0:
-            raise ValidationError(f"figure length {self.value!r} {_REFUSAL}.")
+            raise ValidationError(f"figure length {self.value!r} {_REFUSAL}.", diagnostic=_INVALID)
 
     @property
     def px(self) -> float:
@@ -87,14 +89,14 @@ def parse_figure_length(value: str | None) -> FigureLength | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValidationError(f"{_REFUSAL}; got {value!r}.")
+        raise ValidationError(f"{_REFUSAL}; got {value!r}.", diagnostic=_INVALID)
     if value.strip().lower() == FIGURE_LENGTH_AUTO:
         return None
     match = _FIGURE_LENGTH_RE.fullmatch(value)
     unit = match[2].lower() if match is not None else ""
     number = float(match[1]) if match is not None and len(match[1]) <= 32 else 0.0
     if unit not in _PX_PER_UNIT or not math.isfinite(number) or number <= 0:
-        raise ValidationError(f"{_REFUSAL}; got {value!r}.")
+        raise ValidationError(f"{_REFUSAL}; got {value!r}.", diagnostic=_INVALID)
     return FigureLength(number, cast(FigureLengthUnit, unit))
 
 
