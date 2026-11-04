@@ -20,6 +20,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import VerticalBand
 from gbdraw.layout.linear_multi_record import stable_record_keys
 from gbdraw.layout.record_coordinates import RecordDisplayTransform, wrapped_row_count
+from gbdraw.layout.record_placement import FeatureAnchorPlacement
 
 
 AUTO_WRAP_CAP_BP = 50_000
@@ -209,15 +210,15 @@ def refuse_undrawable_wrap(
     blocking: Sequence[str],
     *,
     row_length: int,
-    anchor_feature: bool = False,
     records: Sequence[SeqRecord] = (),
     translations: Sequence[RecordTranslation] = (),
 ) -> None:
     """Refuse what rows cannot draw. Called only when a record is cut: with nothing to cut, the option has no effect.
 
-    ``anchor_feature`` says the records are aligned at a feature, and ``translations`` are the stored translations
-    of ``records``, whatever wrote them (Align at feature, a Similarity alignment, an anchored figure's Session, the
-    Python API). One x per record cannot place a record that spans several rows, so a cut record must keep x 0.
+    ``translations`` are the stored translations of ``records``, whatever wrote them (Align at feature, a Similarity
+    alignment, an anchored figure's Session, the Python API), except those of the records an ``anchor_feature``
+    places, whose x the anchor decides (:func:`refuse_wrapped_anchor_moves`). One x per record cannot place a record
+    that spans several rows, so a cut record must keep x 0.
     ``row_length`` is the length the caller resolved (``resolve_wrap_length``) and cuts at; it is required, so a
     caller cannot leave the moved-record refusal out.
     """
@@ -253,11 +254,6 @@ def refuse_undrawable_wrap(
             "wrap_length cannot cut a record in one grid row with others; give each record its own row, or do not wrap.",
             diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_GRID_ROW"},
         )
-    if anchor_feature:
-        raise ValidationError(
-            "anchor_feature cannot align a record cut by wrap_length: the record's rows share one place.",
-            diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_ANCHOR_FEATURE"},
-        )
     if alignment_only:
         raise ValidationError(
             "wrap_length cannot cut a record of a figure with a similarity alignment: the alignment moves records "
@@ -278,6 +274,46 @@ def refuse_undrawable_wrap(
             "Set the record's x translation to 0, or do not wrap.",
             diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_RECORD_POSITION"},
         )
+
+
+def refuse_wrapped_anchor_moves(
+    anchor: FeatureAnchorPlacement,
+    translations_x: Sequence[float],
+    cut: Sequence[bool],
+    record_ids: Sequence[str],
+) -> None:
+    """Refuse an ``anchor_feature`` that would move a record cut by ``wrap_length`` sideways.
+
+    ``translations_x`` are the records' final x as the anchor placed them (``_final_record_translations``) and
+    ``cut`` says which records the wrap cuts. A record the anchor only rotates keeps x 0 and wraps. A cut record the
+    anchor gives another x cannot be drawn: its rows share one x. Nor can records be lined up with a cut reference
+    the anchor does not rotate, whose feature lies on one of its rows.
+    """
+
+    reference = anchor.reference_index
+    toward_cut_reference = (
+        cut[reference]
+        and anchor.statuses[reference] == "reference"
+        and "aligned" in anchor.statuses
+    )
+    moved = [
+        record_ids[index]
+        for index, status in enumerate(anchor.statuses)
+        if status in ("rotated", "aligned") and cut[index] and translations_x[index] != 0.0
+    ]
+    if not toward_cut_reference and not moved:
+        return
+    reason = (
+        f"the records would line up with the feature of {record_ids[reference]}, which wrap_length cuts into rows"
+        if toward_cut_reference
+        else f"it would move a record cut by wrap_length sideways ({', '.join(moved)}), and the record's rows share "
+        "one x"
+    )
+    raise ValidationError(
+        f"anchor_feature cannot align these records: {reason}. Only a complete circular record is aligned by "
+        "rotation and can be wrapped; do not wrap this figure.",
+        diagnostic={"code": "INPUT_INVALID", "field": "wrap_length", "reason": "WRAP_ANCHOR_FEATURE"},
+    )
 
 
 def refuse_feature_track_on_the_axis(feature_track_layout: str) -> None:
@@ -303,6 +339,7 @@ __all__ = [
     "longer_row_lengths",
     "refuse_feature_track_on_the_axis",
     "refuse_undrawable_wrap",
+    "refuse_wrapped_anchor_moves",
     "resolve_wrap",
     "resolve_wrap_length",
     "stack_row_offsets",

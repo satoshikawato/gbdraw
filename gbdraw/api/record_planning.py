@@ -53,7 +53,7 @@ from gbdraw.io.regions import RegionSpec, crop_record_to_region, crop_then_rever
 from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.render_stages import render_stage
-from gbdraw.layout.record_placement import resolve_record_row_positions
+from gbdraw.layout.record_placement import FeatureAnchorPlacement, FeatureAnchorStatus, resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
     AlignmentDecisionStatus,
@@ -912,20 +912,38 @@ def _match_feature_starts(
     return tuple(starts)
 
 
-def project_anchor_feature_starts(
+def _is_cropped(record: SeqRecord, provenance: ResolvedRecordProvenance, transform: RecordDisplayTransform) -> bool:
+    """Whether a record draws part of its source: a region, a collection region or a crop."""
+
+    return (
+        len(record) != transform.length
+        or provenance.is_cropped
+        or provenance.region is not None
+        or provenance.has_collection_region
+    )
+
+
+def _drawn_start_source_base(transform: RecordDisplayTransform, drawn_start: float) -> int:
+    """The 1-based source base a complete circular record starts at so that ``drawn_start`` is its left end."""
+
+    return transform.display_index_to_source_base(int(drawn_start))
+
+
+def resolve_anchor_feature(
     collection: ResolvedRecordCollection,
     selector: FeatureSelector,
     rows_by_record: Sequence[int],
-) -> tuple[float | None, ...]:
-    """Where ``selector``'s feature starts in each record as drawn, in display bp.
+) -> tuple[ResolvedRecordCollection, FeatureAnchorPlacement]:
+    """``collection`` with the records ``anchor_feature`` rotates, and where it puts each record.
 
-    The one owner of the ``anchor_feature`` positions and of what they cannot
-    align. Matching and its ambiguity rule are :func:`_match_feature_starts`;
-    the start is :func:`feature_drawn_start` in the record's drawn transform,
-    so it is read after any crop, reverse complement or display start, and
-    only matches that start inside the drawn region count. Records that share
-    a row (``rows_by_record``), which one x per record cannot align, are
-    refused.
+    The one owner of what ``anchor_feature`` does to each record and of what it cannot align. Matching and its
+    ambiguity rule are :func:`_match_feature_starts`; the start is :func:`feature_drawn_start` in the record's
+    drawn transform, so it is read after any crop, reverse complement or display start, and only matches that start
+    inside the drawn region count. A complete circular record with the feature is rotated: its display start becomes
+    the source base of that start (replacing any start it had), so the feature starts at its left end. Any other
+    record with the feature (linear, or cropped) is aligned: the build moves it sideways. The reference is the first
+    rotated record, else the first record with the feature. Records that share a row (``rows_by_record``), which one
+    x per record cannot align, are refused.
     """
 
     if len(set(rows_by_record)) != len(rows_by_record):
@@ -944,7 +962,47 @@ def project_anchor_feature_starts(
         start = feature_drawn_start(feature, transform)
         return start if 0.0 <= start < float(drawn_length) else None
 
-    return _match_feature_starts(collection, selector, "anchor_feature", "place", drawn_start)
+    matched = _match_feature_starts(collection, selector, "anchor_feature", "place", drawn_start)
+    rotates = tuple(
+        start is not None and transform.is_circular and not _is_cropped(record, provenance, transform)
+        for start, record, provenance, transform in zip(
+            matched, collection.records, collection.provenance, collection.transforms, strict=True,
+        )
+    )
+    reference = next(
+        (index for index, rotated in enumerate(rotates) if rotated),
+        next(index for index, start in enumerate(matched) if start is not None),
+    )
+    statuses: tuple[FeatureAnchorStatus, ...] = tuple(
+        "rotated" if rotated
+        else "unmatched" if start is None
+        else "reference" if index == reference
+        else "aligned"
+        for index, (start, rotated) in enumerate(zip(matched, rotates, strict=True))
+    )
+    placement = FeatureAnchorPlacement(
+        starts=tuple(0.0 if rotated else start for start, rotated in zip(matched, rotates, strict=True)),
+        statuses=statuses,
+        reference_index=reference,
+    )
+    if not placement.rotates:
+        return collection, placement
+    return ResolvedRecordCollection(
+        collection.records,
+        tuple(
+            replace(
+                item,
+                display=replace(
+                    item.display, start_coordinate=_drawn_start_source_base(transform, cast(float, start)),
+                ),
+            )
+            if rotated
+            else item
+            for item, transform, start, rotated in zip(
+                collection.provenance, collection.transforms, matched, rotates, strict=True,
+            )
+        ),
+    ), placement
 
 
 # The features without a start as drawn, by the Web capability code
@@ -1007,7 +1065,7 @@ def resolve_origin_feature_start(
             f"{FEATURE_START_REFUSALS[refusal]}.",
             diagnostic={"code": "INPUT_INVALID"},
         )
-    return transform.display_index_to_source_base(int(feature_drawn_start(feature, transform)))
+    return _drawn_start_source_base(transform, feature_drawn_start(feature, transform))
 
 
 def project_origin_feature_starts(
@@ -1031,8 +1089,7 @@ def project_origin_feature_starts(
         refusal = (
             f"cannot be combined with a display start (the display start of {name})"
             if provenance.display.start_coordinate is not None
-            else f"cannot rotate the cropped {name}" if len(record) != transform.length
-            or provenance.is_cropped or provenance.region is not None or provenance.has_collection_region
+            else f"cannot rotate the cropped {name}" if _is_cropped(record, provenance, transform)
             else f"cannot rotate the linear {name}; give it a circular topology"
             if not transform.is_circular
             else None
@@ -2061,7 +2118,12 @@ def _requested_wrap_length(options: LinearDiagramOptions) -> LinearWrapLength:
 
 
 def _with_wrap_defaults(options: LinearDiagramOptions, defaults: LinearWrapDefaults | None) -> LinearDiagramOptions:
-    """``options`` with the leaves and slots a request left to the wrap defaults."""
+    """``options`` with the leaves and slots a request left to the wrap defaults.
+
+    The defaults apply over what the request carries, a config or overrides alike: they hold only the leaves the
+    request left unset (``linear_wrap_default_overrides``), so they replace only values its mode profile filled in,
+    such as the plain axis colour a cut record's ruler takes the place of (OV-2495).
+    """
 
     if defaults is None:
         return replace(options, wrap_defaults=None)
@@ -2070,7 +2132,7 @@ def _with_wrap_defaults(options: LinearDiagramOptions, defaults: LinearWrapDefau
     if config is None:
         return replace(
             options,
-            config_overrides={**defaults.config_overrides, **(options.config_overrides or {})},
+            config_overrides={**(options.config_overrides or {}), **defaults.config_overrides},
             tracks=tracks,
             wrap_defaults=None,
         )
@@ -2120,10 +2182,11 @@ def decide_linear_wrap(
             losat_search=decided.losat_search,
             similarity_alignment=similarity_alignment,
         ),
-        anchor_feature=decided.anchor_feature is not None,
         row_length=row_length,
         records=records,
-        translations=layout.record_translations if layout is not None else (),
+        # The x of the records an anchor places is decided with the anchor, after the records are known: the
+        # build refuses what it cannot wrap then (``refuse_wrapped_anchor_moves``).
+        translations=layout.record_translations if layout is not None and decided.anchor_feature is None else (),
     )
     return decided
 
@@ -2308,7 +2371,7 @@ __all__ = [
     "parse_cli_bool",
     "prepared_parsed_source",
     "feature_drawn_start",
-    "project_anchor_feature_starts",
+    "resolve_anchor_feature",
     "project_origin_feature_starts",
     "resolve_origin_feature_start",
     "with_origin_feature_starts",

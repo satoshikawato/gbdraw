@@ -2352,7 +2352,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     workerResponses.push(response(alignedResult, validCatalog(alignedResult.name)));
     assert.deepEqual(
       await runner.runCommittedCanonicalCandidate({
-        canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:alignmentPlan,translations:alignmentTranslations,orientations:alignmentOrientations}),
+        canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:alignmentPlan,translations:alignmentTranslations,orientations:alignmentOrientations,starts:[]}),
         label:'Align Similarity Group',
         commitIntent:()=>alignmentOrientations.forEach(({recordKey,reverseComplement})=>{state.activeDrawing().linearSeqs.find(s=>s.uid===recordKey).region_reverse=reverseComplement;})
       }),
@@ -2400,7 +2400,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       validCatalog(rejectedAlignedResult.name)
     ));
     assert.deepEqual(
-      (await runner.runCommittedCanonicalCandidate({canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:{...alignmentPlan,groupId:'og-rejected-candidate'},translations:alignmentTranslations,orientations:alignmentOrientations})})).status,
+      (await runner.runCommittedCanonicalCandidate({canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:{...alignmentPlan,groupId:'og-rejected-candidate'},translations:alignmentTranslations,orientations:alignmentOrientations,starts:[]})})).status,
       'error'
     );
     failLateArtifactAdoption = false;

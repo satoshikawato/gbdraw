@@ -116,7 +116,7 @@ from gbdraw.labels.filtering import (
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
-from gbdraw.layout.record_placement import resolve_record_row_positions
+from gbdraw.layout.record_placement import FeatureAnchorPlacement, resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentCandidate,
     SimilarityAlignmentPlan,
@@ -184,7 +184,7 @@ from .record_planning import (
     _source_details,
     _source_key,
     effective_record_presentation,
-    project_anchor_feature_starts,
+    resolve_anchor_feature,
     project_similarity_alignment_centers,
     comparison_record_bindings,
     record_is_reverse_complemented,
@@ -1093,7 +1093,10 @@ class LinearRequestPlan:
     displays: tuple[ResolvedRecordDisplay, ...] = ()
     transforms: tuple[RecordDisplayTransform, ...] = ()
     resolved_annotations: ResolvedAnnotationBundle | None = None
+    # The Similarity alignment's anchor centres (one per record, or none).
     alignment_anchor_centers: tuple[float | None, ...] = ()
+    # Where ``anchor_feature`` puts each record (the planner's decision), or None without one.
+    feature_anchor: FeatureAnchorPlacement | None = None
     # Raw cache entries of the LOSATN / TLOSATX searches this plan resolved.
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
     # The request keeps its comparison rows in the search frame; the plan
@@ -1152,6 +1155,8 @@ class LinearRequestPlan:
             raise ValidationError(
                 "Linear alignment anchor centers must align with its records."
             )
+        # The planner decides the anchor for the records it plans.
+        assert self.feature_anchor is None or len(self.feature_anchor.statuses) == len(self.records)
         options = self.request.options
         # Rows are checked against their bindings; a typed item moves only on a
         # reversed record (a forward record draws its search frame).
@@ -1204,6 +1209,7 @@ class LinearRequestPlan:
         kwargs["_record_presentations"] = tuple(item.presentation for item in self.provenance)
         kwargs["similarity_alignment"] = self.request.similarity_alignment
         kwargs["_alignment_anchor_centers"] = self.alignment_anchor_centers
+        kwargs["_feature_anchor"] = self.feature_anchor
         built = build_linear_diagram_result(self.records, **kwargs)
         if not isinstance(built, LinearDiagramBuildResult):
             if not isinstance(built, Drawing):
@@ -2105,16 +2111,33 @@ def plan_linear_request(
             # the option, so a Session stores the orientation the figure drew.
             resolved_options = replace(resolved_options, auto_orient=False)
         if reoriented:
-            # The search-frame rows, the layout and the resolved options hold
-            # for either orientation; the records and their features do not.
             collection = oriented
+        # One record-position alignment at most: the request refuses an
+        # anchor_feature beside a similarity alignment. The anchor is read
+        # after auto_orient, and the starts of the records it rotates are
+        # stored in the request's records (a Session stores starts, never the option).
+        anchor_feature = resolved_options.anchor_feature
+        feature_anchor = None
+        if isinstance(anchor_feature, FeatureSelector):
+            collection, feature_anchor = resolve_anchor_feature(
+                collection,
+                anchor_feature,
+                resolve_record_row_positions(
+                    collection.records,
+                    resolved_layout.multi_record_positions if resolved_layout is not None else None,
+                )[1],
+            )
+        records_changed = reoriented or (feature_anchor is not None and feature_anchor.rotates)
+        if records_changed:
+            # The search-frame rows, the layout and the resolved options hold
+            # for either orientation and start; the records and their features do not.
             inputs = _materialize_feature_inputs(unresolved_request, collection, prepared_inputs)
             projected_request = replace(
                 projected_request, records=_materialized_record_inputs(collection)
             )
         materialized_request = (
             unresolved_request
-            if not reoriented
+            if not records_changed
             and _is_materialized_exact_one_request(unresolved_request)
             and resolved_layout == unresolved_request.layout
             and resolved_options is unresolved_request.options
@@ -2124,23 +2147,9 @@ def plan_linear_request(
             )
         )
         # The reference was resolved to a plan at the top of this function.
-        # One record-position alignment at most: the request refuses an
-        # anchor_feature beside a similarity alignment.
-        anchor_feature = materialized_request.options.anchor_feature
-        alignment_anchor_centers = (
-            project_anchor_feature_starts(
-                collection,
-                anchor_feature,
-                resolve_record_row_positions(
-                    collection.records,
-                    resolved_layout.multi_record_positions if resolved_layout is not None else None,
-                )[1],
-            )
-            if isinstance(anchor_feature, FeatureSelector)
-            else project_similarity_alignment_centers(
-                collection,
-                cast("SimilarityAlignmentPlan | None", materialized_request.similarity_alignment),
-            )
+        alignment_anchor_centers = project_similarity_alignment_centers(
+            collection,
+            cast("SimilarityAlignmentPlan | None", materialized_request.similarity_alignment),
         )
         # The plan checks the source bindings of the comparison rows when it is
         # built, so a Session writer rejects them; the request keeps the rows as
@@ -2154,6 +2163,7 @@ def plan_linear_request(
             displays=collection.displays,
             transforms=collection.transforms,
             alignment_anchor_centers=alignment_anchor_centers,
+            feature_anchor=feature_anchor,
             losat_cache_entries=losat_cache_entries,
         )
 

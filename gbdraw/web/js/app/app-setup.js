@@ -5504,9 +5504,21 @@ export const createAppSetup = () => {
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
   // Align at feature and Reset record positions write the record translations as one step without the
-  // alignment plan, as a manual record movement does (PD-OI-028).
+  // alignment plan, as a manual record movement does (PD-OI-028). The display starts Align at feature writes for the
+  // records it rotated go into those records' drafts in the same step (R13: the root runs the candidate with the
+  // record display's draft checkpoint), so Generate draws them and one Undo restores the drafts with the Result. The
+  // records are read first, as the Rotate popup reads them, when a Session Load left them unread.
   /** @type {RecordPlacementRun} */
-  const runRecordPlacement = ({ canonical, label }) => runCommittedCanonicalCandidate({ canonical, label, alignmentResetReceipt: null });
+  const runRecordPlacement = async ({ canonical, label, starts }) => {
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) throw diagnosticError('INPUT_INVALID', { field: 'drawing', reason: 'LINEAR_DRAWING_REQUIRED' }, { stage: 'record-alignment' });
+    if (starts.length) await linearRecordSelector.refresh(drawing);
+    const targets = recordDisplayControls.recordStartTargets(drawing, starts);
+    return runCommittedCanonicalCandidate({ canonical, label, alignmentResetReceipt: null,
+      captureIntentCheckpoint: () => recordDisplayControls.captureRecordStarts(targets),
+      restoreIntentCheckpoint: (/** @type {TargetDraftCheckpoint[]} */ checkpoint) => recordDisplayControls.restoreRecordStarts(checkpoint),
+      commitIntent: () => recordDisplayControls.commitRecordStarts(drawing, targets) });
+  };
   const featureAnchor = createFeatureAnchorAction({
     materializedSession: similarityAlignmentActions.materializedSession,
     hasAlignmentPlan: () => Boolean(state.similarityAlignmentPlan.value),
@@ -5515,7 +5527,7 @@ export const createAppSetup = () => {
     runPlacement: runRecordPlacement,
     notePlanReplaced: similarityAlignmentActions.notePlanReplaced,
     projectPlacement: projectCommittedSimilarityAlignment,
-    recordTranslations: () => state.linearRecordTranslations.value,
+    committedRequest: getCommittedCanonicalRenderRequest,
     sessionReplacements: () => sessionReplacements.value
   });
   // Reset record positions writes x 0 for every record through the channel Align at feature's Apply writes through.

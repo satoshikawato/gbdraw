@@ -1,6 +1,6 @@
 // Reset record positions (gbdraw/web/js/app/record-position-reset.js) with fake ports: one press asks for one
 // placement run under its own label (the channel Align at feature's Apply uses) whose candidate writes x 0 for every
-// record of the committed request, keeps each y and record direction, and carries no alignment plan; a press under a
+// record of the committed request, keeps each y, record direction and display start, and carries no alignment plan; a press under a
 // plan also says that it ended the alignment. That the run is one History step, and that its Undo restores the
 // positions and the plan, is the run's (`runCommittedCanonicalCandidate`), checked in the browser by
 // tests/web/linear-wrap.playwright.spec.js.
@@ -27,7 +27,7 @@ const fixture = ({ plan = false, committed = committedSession(MOVED) } = {}) => 
     hasAlignmentPlan: () => page.plan,
     notePlanReplaced: (reason) => page.replaced.push(reason),
     runPlacement: async (run) => {
-      page.steps.push({ label: run.label, before: page.committed });
+      page.steps.push({ label: run.label, starts: run.starts, before: page.committed });
       page.committed = run.canonical;
       return { status: 'ok' };
     },
@@ -60,6 +60,9 @@ test('one press asks for one placement run under its own label with every record
     { recordKey: 'record-1', reverseComplement: false }, { recordKey: 'record-2', reverseComplement: true },
     { recordKey: 'record-3', reverseComplement: false }]);
   assert.equal(page.projections[0].plan, null);
+  // Sideways only (PD-OI-113 scenario revision 3): no record start is written, so rotations stay.
+  assert.deepEqual(page.projections[0].starts, []);
+  assert.deepEqual(page.steps[0].starts, []);
   assert.deepEqual(page.replaced, [], 'no alignment to end');
   assert.equal(action.busy.value, false);
 });

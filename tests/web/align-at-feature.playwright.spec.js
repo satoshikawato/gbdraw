@@ -3,7 +3,7 @@
 // writes the translations once, as one History step, on Apply.
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
-const { copyFileSync, readFileSync } = require('node:fs');
+const { copyFileSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
@@ -28,7 +28,7 @@ const openTwoMitogenomes = async (page) => {
   await settle(page);
 };
 
-// The committed Linear request's record translations, and each drawn record's translation.
+// The committed Linear request's record translations and display starts, and each drawn record's translation.
 const placement = (page) => page.evaluate(async () => {
   const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
   const { state } = await import('/gbdraw/web/js/state.js');
@@ -36,16 +36,20 @@ const placement = (page) => page.evaluate(async () => {
   const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
   return {
     committed: committed?.layout?.recordTranslations ?? null,
+    records: committed?.records.map(({ recordKey, cardinality, display }) => ({ recordKey, cardinality,
+      startCoordinate: display?.startCoordinate ?? null })) ?? null,
     plan: JSON.stringify(state.similarityAlignmentPlan.value),
     drawn: [...svg.querySelectorAll('[data-record-translation-x]')].map((group) => Number(group.getAttribute('data-record-translation-x')))
   };
 });
+// The drawn figure, for a live = Generate comparison.
+const drawnSvg = (page) => page.evaluate(() => window.__GBDRAW_APP__.svgContainer.querySelector('svg').outerHTML);
 
 // The x each record is drawn at; a record without a stored translation is at 0.
 const xs = (translations, count) => Array.from({ length: count }, (_, index) => translations?.[index]?.x ?? 0);
 
-// The CLI run of the Web's Source recipe with --anchor_feature, and the translations its Session stores.
-const cliTranslations = (recipe, testInfo) => {
+// The CLI run of the Web's Source recipe with --anchor_feature, and the request its Session stores.
+const cliRequest = (recipe, testInfo) => {
   const directory = testInfo.outputPath('cli');
   execFileSync('mkdir', ['-p', directory]);
   for (const file of INPUTS) copyFileSync(file, path.join(directory, path.basename(file)));
@@ -54,7 +58,7 @@ const cliTranslations = (recipe, testInfo) => {
   execFileSync(process.env.PYTHON || 'python', [
     '-m', 'gbdraw.cli', 'linear', ...args, '--anchor_feature', 'gene=COX1', '--save_session', '--session_output', session
   ], { cwd: directory, stdio: 'pipe', env: { ...process.env, PYTHONPATH: root } });
-  return JSON.parse(readFileSync(session, 'utf8')).drawings[0].renderRequest.layout.recordTranslations;
+  return JSON.parse(readFileSync(session, 'utf8')).drawings[0].renderRequest;
 };
 
 // Open the Record Layout controls, type the selector, and resolve it.
@@ -70,18 +74,34 @@ const resolveSelector = async (page, text) => {
   return preview;
 };
 
-test('Align at feature previews the moved record, writes its translation as one step, and Undo restores it', async ({ page }, testInfo) => {
+// The Display start field of a record, its File card's record options opened.
+const displayStart = async (page, name) => {
+  for (const disclosure of await page.locator('[data-linear-source-records], [data-linear-record-options]').all()) {
+    await disclosure.evaluate((element) => {
+      for (let details = element; details; details = details.parentElement?.closest('details')) details.open = true;
+    });
+  }
+  return page.getByRole('spinbutton', { name: `Display start ${name}`, exact: true });
+};
+
+// PD-OI-113 scenario revision 3: Apply rotates complete circular records so that the feature starts at their left
+// end; their Display start shows the new base, nothing moves sideways, and the next Generate draws the same figure.
+test('Align at feature rotates both mitogenomes in one step, Display start shows the new bases, one Undo restores, and Generate draws the same figure', async ({ page }, testInfo) => {
   test.setTimeout(480_000);
   await openTwoMitogenomes(page);
   await generateAndWaitForResult(page);
   const before = await placement(page);
+  const beforeSvg = await drawnSvg(page);
   const recipe = await page.evaluate(() => window.__GBDRAW_APP__.lastRunInfo?.sourceRecipe?.invocation?.args || []);
+  const human = await displayStart(page, 'NC_012920.1 #1');
+  const zebrafish = await displayStart(page, 'NC_002333.2 #1');
+  const startsBefore = [await human.inputValue(), await zebrafish.inputValue()];
 
   const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   const stepsBefore = await undoCount();
   const preview = await resolveSelector(page, 'gene=COX1');
-  await expect(preview).toContainText('#1 NC_012920.1 keeps its place (first record with the feature)');
-  await expect(preview).toContainText(/#2 NC_002333\.2 moves -\d/);
+  await expect(preview).toContainText('#1 NC_012920.1 starts at base 5904 (rotated)');
+  await expect(preview).toContainText('#2 NC_002333.2 starts at base 6425 (rotated)');
   // Nothing changes before Apply.
   expect(await placement(page)).toEqual(before);
   expect(await undoCount()).toBe(stepsBefore);
@@ -89,30 +109,80 @@ test('Align at feature previews the moved record, writes its translation as one 
   await page.getByTestId('linear-anchor-feature-apply').click();
   await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveText('Records aligned at gene=COX1.', { timeout: 180_000 });
   const after = await placement(page);
+  const afterSvg = await drawnSvg(page);
   expect(await undoCount()).toBe(stepsBefore + 1);
-  expect(after.committed.map(({ recordKey }) => recordKey)).toHaveLength(2);
-  const [human, zebrafish] = xs(after.committed, 2);
-  const [humanBefore, zebrafishBefore] = xs(before.committed, 2);
-  expect(human).toBe(humanBefore);
   await expect(preview).toHaveCount(0);
-  expect(zebrafish).toBeLessThan(zebrafishBefore);
-  expect(after.drawn).toEqual(xs(after.committed, 2));
-  // The CLI draws the same recipe with --anchor_feature at the same places.
+  expect(after.records.map(({ startCoordinate }) => startCoordinate)).toEqual([5904, 6425]);
+  // Rotated, no record moves sideways.
+  expect(xs(after.committed, 2)).toEqual([0, 0]);
+  expect(after.drawn).toEqual([0, 0]);
+  await expect(human).toHaveValue('5904');
+  await expect(zebrafish).toHaveValue('6425');
+  // The CLI draws the same recipe with --anchor_feature with the same starts and places.
   expect(recipe.length, 'the Source recipe is available').toBeGreaterThan(0);
-  expect(xs(cliTranslations(recipe, testInfo), 2)).toEqual([human, zebrafish]);
+  const cli = cliRequest(recipe, testInfo);
+  expect(cli.records.map(({ display }) => display.startCoordinate)).toEqual([5904, 6425]);
+  expect(xs(cli.layout.recordTranslations, 2)).toEqual([0, 0]);
 
+  // One Undo puts back the starts, the positions and the Display start fields; the notice goes with them.
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await placement(page)).toEqual(before);
-  // The notice goes with the translations it reported.
+  expect(await drawnSvg(page)).toBe(beforeSvg);
+  await expect(human).toHaveValue(startsBefore[0]);
+  await expect(zebrafish).toHaveValue(startsBefore[1]);
   await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveCount(0);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await settle(page);
   expect(await placement(page)).toEqual(after);
+  await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveText('Records aligned at gene=COX1.');
 
-  // Generate keeps the written translations: the anchor is not applied again.
+  // Generate draws what Apply drew: the starts are in the drafts, and the anchor is not applied again.
   await generateAndWaitForResult(page);
   expect(await placement(page)).toEqual(after);
+  expect(await drawnSvg(page)).toBe(afterSvg);
+});
+
+// OV-2474: a loaded Session of one file with two records holds one File card for both records. Apply rotates each
+// record by itself, one Undo restores, and the next Generate draws what Apply drew.
+test('Align at feature on a loaded Session of a two-record file rotates each record, and Generate draws what Apply drew', async ({ page }, testInfo) => {
+  test.setTimeout(480_000);
+  const directory = testInfo.outputPath('cli');
+  execFileSync('mkdir', ['-p', directory]);
+  const file = path.join(directory, 'two-mitogenomes.gb');
+  writeFileSync(file, INPUTS.map((input) => readFileSync(input, 'utf8')).join(''));
+  const session = path.join(directory, 'two-mitogenomes.gbdraw-session.json');
+  execFileSync(process.env.PYTHON || 'python', ['-m', 'gbdraw.cli', 'linear', '--gbk', file, '-o', 'two',
+    '--save_session', '--session_output', session], { cwd: directory, stdio: 'pipe', env: { ...process.env, PYTHONPATH: root } });
+  await openFresh(page);
+  await loadSessionFile(page, session);
+  const loaded = await placement(page);
+  const loadedSvg = await drawnSvg(page);
+  expect(loaded.records.map(({ startCoordinate }) => startCoordinate)).toEqual([null, null]);
+
+  const preview = await resolveSelector(page, 'gene=COX1');
+  await expect(preview).toContainText('#1 NC_012920.1 starts at base 5904 (rotated)');
+  await expect(preview).toContainText('#2 NC_002333.2 starts at base 6425 (rotated)');
+  await page.getByTestId('linear-anchor-feature-apply').click();
+  await expect(page.getByTestId('linear-anchor-feature-notice')).toHaveText('Records aligned at gene=COX1.', { timeout: 180_000 });
+  const after = await placement(page);
+  const afterSvg = await drawnSvg(page);
+  expect(after.records.map(({ startCoordinate }) => startCoordinate)).toEqual([5904, 6425]);
+  expect(after.drawn).toEqual([0, 0]);
+
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  expect(await placement(page)).toEqual(loaded);
+  expect(await drawnSvg(page)).toBe(loadedSvg);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  expect(await placement(page)).toEqual(after);
+
+  await generateAndWaitForResult(page);
+  const generated = await placement(page);
+  expect(generated.records.map(({ startCoordinate }) => startCoordinate)).toEqual([5904, 6425]);
+  expect(generated.drawn).toEqual(after.drawn);
+  expect(await drawnSvg(page)).toBe(afterSvg);
 });
 
 // A Session with an active Similarity alignment: Apply clears the plan in its own step, keeps the

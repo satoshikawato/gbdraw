@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 import inspect
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -785,3 +786,24 @@ def test_session_form_key_reads_in_the_linear_slice_and_replays() -> None:
     assert replayed(50_000)[-2:] == ["--wrap_length", "50000"]
     for absent in (None, "", "none"):
         assert "--wrap_length" not in replayed(absent)
+
+
+def _ruler_colors(svg: str) -> set[str]:
+    """The fill of the ruler labels and the stroke of the axes and ticks of the rows."""
+
+    return set(re.findall(r'(?:fill|stroke)="((?:dim|light)gray)"', svg))
+
+
+# OV-2495: the typed request drew the wrapped rows' ruler lightgray (the plain axis colour its profile made explicit
+# beat the wrap default) while the CLI drew dimgray. One merge rule now applies the wrap defaults over what the
+# request carries, whichever form it has.
+@pytest.mark.parametrize("extra", [{}, {"objects.axis.linear.stroke_color": "red"}])
+def test_the_cli_and_the_typed_request_draw_a_wrapped_ruler_in_one_colour(tmp_path: Path, extra: dict) -> None:
+    color_args = ["--axis_stroke_color", "red"] if extra else []
+    saved = _cli("--wrap_length", "10kb", "-o", "cli", "-f", "svg", *color_args, cwd=tmp_path)
+    assert saved.returncode == 0, saved.stderr
+    render_request(_request(tmp_path, config_overrides={WRAP: 10_000, **extra}))
+    cli = (tmp_path / "cli.svg").read_text(encoding="utf-8")
+    typed = _rendered_svg(tmp_path)
+    assert _ruler_colors(cli) == _ruler_colors(typed) == ({"dimgray"} if not extra else set())
+    assert ('stroke="red"' in cli) == ('stroke="red"' in typed) == bool(extra)

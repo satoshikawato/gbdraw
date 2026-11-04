@@ -4,7 +4,8 @@
 // record's sideways position (x) as 0 through the channel Align at feature's Apply writes them through: a candidate
 // of the committed Session (the alignment plan's positions materialized) with those record translations and no
 // plan, drawn and committed as one History step (`runPlacement`), so one Undo restores the positions and the plan.
-// A vertical position (y) and the record directions stay.
+// A vertical position (y), the record directions, and the display starts (rotations, PD-OI-113 scenario revision 3)
+// stay.
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
@@ -13,7 +14,7 @@ import { ref } from '../utils/reactivity.js';
 
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
-/** @import { FeatureAnchorTranslation, RecordPlacementRun } from './align-at-feature.js' */
+/** @import { FeatureAnchorTranslation, RecordPlacementProjection, RecordPlacementRun } from './align-at-feature.js' */
 
 /**
  * @typedef {object} RecordPositionResetPorts
@@ -23,8 +24,7 @@ import { ref } from '../utils/reactivity.js';
  * @property {(reason: string) => void} notePlanReplaced Says that the press ended the Similarity alignment.
  * @property {RecordPlacementRun} runPlacement Draws `canonical` and commits it as one History step under `label`
  *   (Align at feature's port).
- * @property {(input: { committed: CommittedCanonicalSession, plan: null, translations: FeatureAnchorTranslation[],
- *   orientations: { recordKey: string, reverseComplement: boolean }[] }) => CommittedCanonicalSession} projectPlacement
+ * @property {RecordPlacementProjection} projectPlacement
  * @property {(error: Record<string, unknown>) => void} onError Shows why the positions were not reset.
  */
 
@@ -61,7 +61,9 @@ export const createRecordPositionReset = ({
       canonical = projectPlacement({ committed, plan: null,
         translations: recordTranslationsAtX0(committed.renderRequest),
         orientations: committed.renderRequest.records.map((record) => ({ recordKey: record.recordKey,
-          reverseComplement: canonicalRecordReverseComplement(record) })) });
+          reverseComplement: canonicalRecordReverseComplement(record) })),
+        // Sideways only: the display starts stay, so a record Align at feature rotated keeps its rotation.
+        starts: [] });
     } catch (cause) {
       publishError(cause);
       return { status: 'refused' };
@@ -70,7 +72,7 @@ export const createRecordPositionReset = ({
     try {
       /** @type {{ status?: string, error?: unknown } | null | undefined} */
       let outcome;
-      try { outcome = await runPlacement({ canonical, label: msg('Reset record positions') }); }
+      try { outcome = await runPlacement({ canonical, label: msg('Reset record positions'), starts: [] }); }
       catch (cause) { outcome = { status: 'error', error: cause }; }
       if (outcome?.status === 'ok' && endsAlignment) notePlanReplaced(msg('record positions reset.'));
       else if (outcome?.status === 'error') publishError(outcome.error);

@@ -8053,13 +8053,21 @@ export const projectCommittedEditorIntent = ({
 };
 
 /**
- * Project only alignment-owned fields of the last committed canonical artifact.
+ * A display start a record placement writes, by record key (Align at feature's rotated records; Python's value).
+ * @typedef {{ recordKey: string, startCoordinate: number }} RecordPlacementStart
+ */
+/**
+ * Project only the placement-owned fields of the last committed canonical artifact: the record orientations, the
+ * alignment plan, the record translations, and the display starts of the records a placement rotates. The one call
+ * shape of Similarity alignment, Align at feature and Reset record positions (`starts` is empty for all but Align at
+ * feature, so a rotation stays).
  * @param {{
  *   committed: CommittedCanonicalSession | null, plan: unknown, translations: unknown,
- *   orientations: readonly { recordKey: string, reverseComplement: boolean }[]
+ *   orientations: readonly { recordKey: string, reverseComplement: boolean }[],
+ *   starts: readonly RecordPlacementStart[]
  * }} input The plan and translations are cloned as they are.
  */
-export const projectCommittedSimilarityAlignment = ({ committed, plan, translations, orientations }) => {
+export const projectCommittedSimilarityAlignment = ({ committed, plan, translations, orientations, starts }) => {
   const committedRequest = committed?.renderRequest;
   if (!committedRequest || committedRequest.mode !== 'linear' || !committed?.resources) {
     throw new Error('Alignment requires a committed canonical Linear artifact.');
@@ -8075,6 +8083,14 @@ export const projectCommittedSimilarityAlignment = ({ committed, plan, translati
   }
   // The test above gave every record key a boolean.
   request.records.forEach(record => writeCanonicalRecordReverseComplement(record, /** @type {boolean} */ (byKey.get(record.recordKey))));
+  for (const { recordKey, startCoordinate } of starts) {
+    const targets = request.records.filter((record) => record.recordKey === recordKey);
+    if (targets.length !== 1 || !Number.isSafeInteger(startCoordinate) || startCoordinate < 1) {
+      // The start names a record the committed request does not draw: it was resolved on another Result.
+      throw diagnosticError('INPUT_INVALID', { field: 'anchor_feature', reason: 'ANCHOR_STALE' });
+    }
+    targets[0].display = { ...targets[0].display, startCoordinate };
+  }
   request.layout = { recordGapPx: DEFAULT_LINEAR_RECORD_GAP_PX, multiRecordPositions: null, ...request.layout,
     similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
     recordTranslations: cloneCanonicalJsonValue(translations) };

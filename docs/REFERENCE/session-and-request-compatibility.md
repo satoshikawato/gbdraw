@@ -812,8 +812,12 @@ and a [feature anchor](command-line.md#record-selection-and-layout) are
 planner-only options: a Session stores their results, not the options.
 `resolve_request()`, and every Session writer, writes the Reverse complement
 flag of each record the orientation rule reversed, and draws an anchor request
-once to write each record's translation into
-`renderRequest.layout.recordTranslations`, replacing the translations it held.
+once to write the display start of each record it rotated into
+`renderRequest.records[].display.startCoordinate` and each record's translation
+into `renderRequest.layout.recordTranslations`, replacing the starts and
+translations it held. A Session saved by 0.14.5 from an anchored figure stores
+sideways translations of its circular records; it draws as it was saved, and
+the anchor rotates them only when it is applied again.
 A Session saved with `--auto_orient` or `--anchor_feature` therefore draws the
 same figure when it is loaded, without the options. A typed Linear request that
 still sets `auto_orient=True` or `anchor_feature` is not encoded

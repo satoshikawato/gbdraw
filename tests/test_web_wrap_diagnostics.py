@@ -15,7 +15,13 @@ from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ExportError, GbdrawError
 from gbdraw.io.regions import parse_region_spec
-from gbdraw.layout.linear_wrap import LinearWrapSummary, refuse_feature_track_on_the_axis, refuse_undrawable_wrap
+from gbdraw.layout.linear_wrap import (
+    LinearWrapSummary,
+    refuse_feature_track_on_the_axis,
+    refuse_undrawable_wrap,
+    refuse_wrapped_anchor_moves,
+)
+from gbdraw.layout.record_placement import FeatureAnchorPlacement
 from gbdraw.render.export_limits import check_export_limit
 from gbdraw.web_support.error_adapter import serialize_web_error
 from gbdraw.web_support.request_render import render_embedded_canonical_web_request
@@ -56,8 +62,9 @@ def _context(error: BaseException, operation: str = "generate") -> dict:
             [0], (), row_length=10_000), "INPUT_INVALID", "WRAP_NORMALIZE_LENGTH"),
         (lambda: refuse_undrawable_wrap(_config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler"}), [0, 0], (), row_length=10_000),
          "INPUT_INVALID", "WRAP_GRID_ROW"),
-        (lambda: refuse_undrawable_wrap(
-            _config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler"}), [0], (), row_length=10_000, anchor_feature=True),
+        (lambda: refuse_wrapped_anchor_moves(
+            FeatureAnchorPlacement(starts=(0.0, 10.0), statuses=("rotated", "aligned"), reference_index=0),
+            [0.0, -5.0], [False, True], ["a", "b"]),
          "INPUT_INVALID", "WRAP_ANCHOR_FEATURE"),
         (lambda: refuse_undrawable_wrap(
             _config(**{"canvas.linear.track_layout": "above", "objects.scale.style": "ruler", WRAP: 10_000}), [0], (),
@@ -273,3 +280,26 @@ def test_a_cropped_record_names_its_source_length_and_the_region_asked_for(tmp_p
     assert cropped["linearWrap"]["recordRows"] == [len(range(0, 30_000, cropped["linearWrap"]["rowLength"]))]
     past_end = summary(1, 60_000)
     assert past_end["records"] == [{"sourceLength": 48_502, "region": {"start": 1, "end": 60_000}}]
+
+
+# PD-OI-113 scenario revision 3: the anchor refuses only the moves a cut record's rows cannot share.
+@pytest.mark.parametrize(
+    ("statuses", "reference", "xs", "cut", "refused"),
+    [
+        (("rotated", "rotated"), 0, [0.0, 0.0], [True, True], False),  # rotation only: rows wrap
+        (("rotated", "aligned"), 0, [0.0, -40.0], [True, False], False),  # the moved record is not cut
+        (("rotated", "aligned"), 0, [0.0, -40.0], [False, True], True),  # a cut record moved sideways
+        (("rotated", "rotated"), 0, [0.0, 12.0], [False, True], True),  # align_center moves a cut rotated record
+        (("reference", "aligned"), 0, [0.0, -40.0], [True, False], True),  # toward a cut reference not rotated
+        (("reference", "unmatched"), 0, [0.0, 0.0], [True, True], False),  # nothing moves
+    ],
+)
+def test_the_anchor_wrap_refusal_reads_each_record(statuses, reference, xs, cut, refused) -> None:
+    starts = tuple(None if status == "unmatched" else 0.0 for status in statuses)
+    anchor = FeatureAnchorPlacement(starts=starts, statuses=statuses, reference_index=reference)
+    if refused:
+        assert _context(_caught(lambda: refuse_wrapped_anchor_moves(anchor, xs, cut, ["a", "b"])))["reason"] == (
+            "WRAP_ANCHOR_FEATURE"
+        )
+    else:
+        refuse_wrapped_anchor_moves(anchor, xs, cut, ["a", "b"])
