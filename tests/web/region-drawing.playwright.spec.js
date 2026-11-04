@@ -5,31 +5,9 @@
 const { test, expect } = require('@playwright/test');
 const { drawingIds, drawingTab, shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { generate, load, seeds } = require('./helpers/mode-transition.cjs');
+const { chooseCoordinates, openRegionDialog } = require('./helpers/region-drawing.cjs');
 
 test.describe.configure({ retries: 0 });
-
-/** @param {import('@playwright/test').Page} page */
-const openRegionDialog = async (page) => {
-  const menu = page.locator('.drawing-bar-menu');
-  await menu.locator('summary').click();
-  await menu.getByRole('button', { name: 'New drawing from a region…', exact: true }).click();
-  const dialog = page.locator('[data-region-drawing-dialog]');
-  // The rows wait for the shown drawing's request, which Python projects (the first call boots it).
-  await expect(dialog.locator('[data-region-drawing-row]')).not.toHaveCount(0, { timeout: 180_000 });
-  return dialog;
-};
-
-/**
- * Check the first record and enter Coordinates `start`..`end`.
- * @param {import('@playwright/test').Locator} dialog @param {number} start @param {number} end
- */
-const chooseCoordinates = async (dialog, start, end) => {
-  const row = dialog.locator('[data-region-drawing-row]').first();
-  await row.locator('[data-region-drawing-check]').check();
-  await row.locator('[data-region-drawing-kind]').selectOption('coordinates');
-  await row.locator('[data-region-drawing-start]').fill(String(start));
-  await row.locator('[data-region-drawing-end]').fill(String(end));
-};
 
 /** @param {import('@playwright/test').Page} page */
 const regionStatus = (page) => page.evaluate(() => window.__GBDRAW_APP__.regionDrawings.dialog.status);
