@@ -192,6 +192,7 @@ import {
   COMPOSITION_SCHEMA_ATTRIBUTE,
   normalizeLegacyComposition,
   normalizeStoredLegendSide,
+  requestedCanvasOf,
   storedLegendSideIsOfMode
 } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
@@ -224,6 +225,11 @@ import { classifyOptionalPositiveNumber } from '../utils/optional-positive-numbe
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearWrapField } from './linear-wrap-field.js';
+import { createFigureSizeField } from './figure-size-field.js';
+import {
+  figureGrowth, requestFigureSizeLeaves, requestedFigureSize, requestedLengthText, shownFigureSize
+} from '../services/figure-size-form.js';
+import { getSvgDimensions } from '../services/svg-dimensions.js';
 import { exportLinearWrap, requestLinearWrapLeaf, shownLinearWrap, wrapFormValue } from '../services/linear-wrap-form.js';
 import { draftFeatureSlot } from './feature-editor/placement-actions.js';
 import { effectiveLinearSlotPlacement } from '../services/linear-track-slot-model.js';
@@ -2447,13 +2453,22 @@ export const createAppSetup = () => {
       if (outcome instanceof Promise) await outcome;
     }
   };
+  // Web-only changes of the shown canvas: a moved diagram, Legend, title, or scale, and Canvas padding.
+  const decorationsMoved = () => [state.diagramOffset, state.legendCurrentOffset, state.plotTitleUserOffset, state.lengthBarUserOffset]
+    .some((offset) => Boolean(Number(offset.x) || Number(offset.y)));
+  /** @param {{ canvasPadding: Record<string, unknown> }} drawing */
+  const canvasPadded = (drawing) => (/** @type {const} */ (['top', 'right', 'bottom', 'left'])).some((side) => Number(drawing.canvasPadding[side]));
+  // The committed request of the Result a drawing shows; null while it shows no Result of its own.
+  /** @param {{ id: string }} drawing */
+  const shownCommittedRequest = (drawing) => (
+    state.generatedDrawingId.value === drawing.id && results.value.length > 0 ? getCommittedCanonicalRenderRequest() : null
+  );
   // Wrap Rows as the shown Result drew it (PD-OI-113), from Python's input
   // summary and the committed request of the drawing whose Result is shown:
   // the field's Auto text and the Auto hints of sizes and ticks read it.
   /** @param {DrawingState} drawing The committed request's stored wrap leaf while this drawing's Result is shown. */
   const shownLinearWrapLeaf = (drawing) => {
-    const request = drawing.mode === 'linear' && state.generatedDrawingId.value === drawing.id && results.value.length > 0
-      ? getCommittedCanonicalRenderRequest() : null;
+    const request = drawing.mode === 'linear' ? shownCommittedRequest(drawing) : null;
     return request?.mode === 'linear' ? requestLinearWrapLeaf(request) : undefined;
   };
   const shownLinearWrapReading = computed(() => {
@@ -5534,6 +5549,38 @@ export const createAppSetup = () => {
   // inputs only; a drawn record moved sideways is read from the translations the request carries, whatever wrote them
   // (Align at feature counts only through the records its Apply moved), and a Similarity alignment plan counts as
   // moved records, also when its comparison inputs were removed (Q5 A).
+  // Figure size (issue #1427): the line under the field reads the shown Result's root (px) after each change of it,
+  // and its committed request's sides; none while the drawing shows no Result of its own.
+  // A root drawn to a requested size also names its requested canvas and the canvas before Web-only additions grew it.
+  /** @type {{ value: { px: { width: number, height: number }, sized: ReturnType<typeof requestedCanvasOf> } | null }} */
+  const shownFigureRoot = shallowRef(null);
+  watch(() => [svgContent.value, resultEditRevision.value, state.activeDrawingId.value], () => {
+    const root = svgContainer.value?.querySelector?.('svg') ?? null;
+    const px = getSvgDimensions(root);
+    shownFigureRoot.value = root && px ? { px, sized: requestedCanvasOf(root) } : null;
+  }, { flush: 'post' });
+  const figureSizeField = createFigureSizeField({
+    state,
+    watch,
+    shownSize: () => {
+      const drawing = state.activeDrawing();
+      const request = shownCommittedRequest(drawing);
+      const root = shownFigureRoot.value;
+      if (!request || !root) return null;
+      const requested = requestFigureSizeLeaves(request);
+      const growth = root.sized && figureGrowth({
+        shown: root.px, base: root.sized.base, requested: root.sized.requested,
+        padded: canvasPadded(drawing), moved: decorationsMoved()
+      });
+      return {
+        ...shownFigureSize({ widthPx: root.px.width, heightPx: root.px.height, requested }),
+        larger: growth ? {
+          sides: growth.sides.map((side) => ({ side, length: requestedLengthText(requested[side]) ?? `${Math.round(root.px[side])} px` })),
+          causes: growth.causes
+        } : null
+      };
+    }
+  });
   const linearWrapField = createLinearWrapField({
     state,
     changeLayoutSetting: featureActions.placementActions.changeLayoutSetting,
@@ -6048,13 +6095,9 @@ export const createAppSetup = () => {
 
   // Reset Layout has something to reset once an element moved, the
   // canvas padding changed, or the view was panned or zoomed.
-  const layoutResetAvailable = computed(() => {
-    const moved = (/** @type {{ x: number, y: number }} */ offset) => Boolean(Number(offset.x) || Number(offset.y));
-    const padding = state.activeDrawing().canvasPadding;
-    return [state.diagramOffset, state.legendCurrentOffset, state.plotTitleUserOffset, state.lengthBarUserOffset, canvasPan].some(moved)
-      || zoom.value !== 1
-      || /** @type {const} */ (['top', 'right', 'bottom', 'left']).some((side) => Number(padding[side]));
-  });
+  const layoutResetAvailable = computed(() => (
+    decorationsMoved() || Boolean(Number(canvasPan.x) || Number(canvasPan.y)) || zoom.value !== 1 || canvasPadded(state.activeDrawing())
+  ));
 
   /** @param {Element | null} target */
   const isInteractiveTarget = (target) => {
@@ -6446,6 +6489,8 @@ export const createAppSetup = () => {
       const exportedDrawing = historySnapshots.displayedArtifactDrawing();
       const exportedSummary = shownInputSummary.value ?? undefined;
       const exportedWrapLeaf = shownLinearWrapLeaf(exportedDrawing);
+      const exportedRequest = shownCommittedRequest(exportedDrawing);
+      const exportedFigureSize = exportedRequest ? requestedFigureSize(exportedRequest) : null;
       const linearWrap = () => exportLinearWrap({
         leaf: exportedWrapLeaf,
         summary: exportedSummary,
@@ -6465,7 +6510,14 @@ export const createAppSetup = () => {
         ).result,
         checkExportLimit: async (request) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT, {
           ...request, linearWrap: await linearWrap()
-        })
+        }),
+        // A Result drawn to a requested size states it in its SVG as the CLI writes it (Python's
+        // `export_root_size`, through the export check); a Result drawn at Auto exports its root as shown.
+        sizedSvgRoot: exportedFigureSize === null ? null : async ({ width, height }) => (
+          await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.CHECK_EXPORT_LIMIT, {
+            format: 'svg', width, height, dpi: null, linearWrap: null, figureSize: exportedFigureSize
+          })
+        ).result.root
       };
       /** @type {import('../services/export.js').ExportOutcome} */
       const result = await exportMethod(snapshot, exportPorts);
@@ -8093,6 +8145,7 @@ export const createAppSetup = () => {
     autoValueVisible: autoValueDisplay.autoValueVisible,
     canUseLinearRulerOnAxis,
     ...linearWrapField,
+    ...figureSizeField,
     canUseCircularScaleStyling,
     circularTrackNewRenderer,
     linearTrackNewRenderer,

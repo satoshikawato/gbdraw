@@ -6302,12 +6302,12 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   assert.ok(managedConfigOverridePathsForMode('linear').includes(WRAP));
   assert.ok(!managedConfigOverridePathsForMode('circular').includes(WRAP));
 
-  const projectedWrap = (value, { full = false, wrapReadings = undefined } = {}) => {
+  const projectedWrap = (value, { full = false, leafReadings = undefined } = {}) => {
     const canonical = structuredClone(full ? pythonConfigCanonical : linearCanonical);
     const options = canonical.renderRequest.diagramOptions;
     if (full) options.config.canvas.linear.wrap_length = value;
     else if (value !== undefined) options.configOverrides[WRAP] = value;
-    const projection = projectCanonicalSessionRequest({ ...canonical, wrapReadings });
+    const projection = projectCanonicalSessionRequest({ ...canonical, leafReadings });
     assert.equal(Object.hasOwn(projection.config.unmanagedConfigOverrides || {}, WRAP), false, 'a managed leaf is never preserved');
     return {
       value: projection.config.form.linear_wrap_length,
@@ -6322,13 +6322,76 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   }
   assert.deepEqual(projectedWrap(undefined), { value: null, repairs: [] });
   // D-36: a length typed with a unit (a Python API Session) takes Python's reading, which Load asks for before it
-  // projects (`readStoredWrapLengths` in services/config.js); a value with no reading (Python refused it) is off,
+  // projects (`readStoredLeaves` in services/config.js); a value with no reading (Python refused it) is off,
   // with one row.
   for (const full of [false, true]) {
-    assert.deepEqual(projectedWrap('50kb', { full, wrapReadings: new Map([['"50kb"', 50000]]) }), { value: 50000, repairs: [] });
+    assert.deepEqual(projectedWrap('50kb', { full, leafReadings: new Map([[JSON.stringify([WRAP, '50kb']), 50000]]) }), { value: 50000, repairs: [] });
   }
   const unreadable = projectedWrap('50kb');
   assert.equal(unreadable.value, null);
   assert.deepEqual(unreadable.repairs.map(({ code, effect, stored }) => ({ code, effect, stored })),
     [{ code: 'setting-replaced', effect: 'dropped', stored: '50kb' }]);
+}
+
+// Figure size (issue #1427): a drawing's `form.figure_width` and `form.figure_height` are the request leaves
+// `canvas.figure_width` and `canvas.figure_height` in both modes, compiled once for the preview, Generate and Save.
+// Auto states nothing, so an Auto request is the one built before the field existed; the projection reads the
+// leaves back into the form.
+{
+  const WIDTH = 'canvas.figure_width';
+  const HEIGHT = 'canvas.figure_height';
+  const linearBase = linearCombinationRegressionState();
+  const drafts = [
+    ['circular', circularRequestState(), filesData],
+    ['linear', linearBase, linearFilesData]
+  ];
+  for (const [mode, draft, files] of drafts) {
+    const { figure_width: _width, figure_height: _height, ...formBeforeTheField } = draft.form;
+    const requestOf = (form) => buildCanonicalRenderRequest({ state: { ...draft, form }, filesData: files });
+    const auto = JSON.stringify(requestOf({ ...draft.form, figure_width: null, figure_height: null }).renderRequest);
+    assert.equal(auto, JSON.stringify(requestOf(formBeforeTheField).renderRequest), `${mode}: Auto writes no leaf`);
+    assert.ok(!auto.includes('figure_'), `${mode}: Auto names no figure leaf`);
+    const sized = requestOf({ ...draft.form, figure_width: '180mm', figure_height: '1.5e2px' }).renderRequest;
+    assert.deepEqual([sized.diagramOptions.configOverrides[WIDTH], sized.diagramOptions.configOverrides[HEIGHT]],
+      ['180mm', '1.5e2px'], `${mode}: each side as the field wrote it, for Python to read`);
+    assert.ok(managedConfigOverridePathsForMode(mode).includes(WIDTH) && managedConfigOverridePathsForMode(mode).includes(HEIGHT));
+  }
+
+  const projectedSize = (width, height, { full = false, leafReadings = undefined } = {}) => {
+    const canonical = structuredClone(full ? pythonConfigCanonical : linearCanonical);
+    const options = canonical.renderRequest.diagramOptions;
+    for (const [path, key, value] of [[WIDTH, 'figure_width', width], [HEIGHT, 'figure_height', height]]) {
+      if (value === undefined) continue;
+      if (full) options.config.canvas[key] = value;
+      else options.configOverrides[path] = value;
+    }
+    const projection = projectCanonicalSessionRequest({ ...canonical, leafReadings });
+    for (const path of [WIDTH, HEIGHT]) {
+      assert.equal(Object.hasOwn(projection.config.unmanagedConfigOverrides || {}, path), false, 'a managed leaf is never preserved');
+    }
+    return {
+      value: [projection.config.form.figure_width, projection.config.form.figure_height],
+      repairs: (projection.legacyTableRepairs || []).filter((repair) => repair.path === WIDTH || repair.path === HEIGHT)
+        .map(({ code, path, effect, stored }) => ({ code, path, effect, stored }))
+    };
+  };
+  // A Web request's leaves, and a CLI Session's full config (`--save_session`).
+  for (const full of [false, true]) {
+    assert.deepEqual(projectedSize('180mm', '5in', { full }), { value: ['180mm', '5in'], repairs: [] });
+    assert.deepEqual(projectedSize('auto', 'AUTO', { full }), { value: [null, null], repairs: [] });
+    assert.deepEqual(projectedSize(null, '1200px', { full }), { value: [null, '1200px'], repairs: [] });
+    // Python's text of a length the form cannot hold (`180 MM`, the Python API) takes Python's reading, which Load
+    // asks for before it projects (`readStoredLeaves` in services/config.js).
+    const readings = new Map([[JSON.stringify([WIDTH, '180 MM']), '180mm']]);
+    assert.deepEqual(projectedSize('180 MM', undefined, { full, leafReadings: readings }), { value: ['180mm', null], repairs: [] });
+  }
+  assert.deepEqual(projectedSize(undefined, undefined), { value: [null, null], repairs: [] });
+  // A value with no reading (Python refused it) is Auto, with one row.
+  assert.deepEqual(projectedSize('180 MM', 'tall'), {
+    value: [null, null],
+    repairs: [
+      { code: 'setting-replaced', path: WIDTH, effect: 'dropped', stored: '180 MM' },
+      { code: 'setting-replaced', path: HEIGHT, effect: 'dropped', stored: 'tall' }
+    ]
+  });
 }

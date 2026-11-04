@@ -200,6 +200,7 @@ from gbdraw.layout.composition import (
     plan_composition,
 )
 from gbdraw.layout.figure_size import (
+    FigurePrimaryItem,
     LargerFigure,
     check_figure_height,
     figure_size_excess,
@@ -3856,8 +3857,6 @@ def _unfit_row_verification(error: ValidationError) -> LabelFitVerification | No
 _CircularAssemble: TypeAlias = Callable[[GbdrawConfig, Mapping[str, LabelFitValue]], Drawing]
 # The padded content of a Circular map grows about 2 px per px of radius (the map's diameter).
 _CIRCULAR_PX_PER_RADIUS = 2.0
-_CIRCULAR_MAP_NAME = "map at its smallest"
-_CIRCULAR_MAPS_NAME = "maps at their smallest"
 
 
 @dataclass(frozen=True)
@@ -3876,7 +3875,7 @@ def _circular_pass(assemble: _CircularAssemble, cfg: GbdrawConfig) -> _CircularP
 
 
 def _fitted_circular_pass(
-    assemble: _CircularAssemble, cfg: GbdrawConfig, size: RequestedFigureSize, *, map_name: str
+    assemble: _CircularAssemble, cfg: GbdrawConfig, size: RequestedFigureSize, *, map_item: FigurePrimaryItem
 ) -> _CircularPass:
     """The Circular figure whose padded content fills the requested box (D-12): the largest radius that fits every
     requested side, applied as a multi-record canvas scales its records (``_scale_circular_cfg``).
@@ -3901,7 +3900,7 @@ def _fitted_circular_pass(
 
     fit = fit_base_length(measure, first_base=first_base, slope=_CIRCULAR_PX_PER_RADIUS)
     if not fit.fits:
-        raise figure_size_refusal(applied_composition_plan(fit.built.drawing), size, primary_name=map_name)
+        raise figure_size_refusal(applied_composition_plan(fit.built.drawing), size, primary=map_item)
     return fit.built
 
 
@@ -3910,7 +3909,7 @@ def _checked_circular_drawing(
     cfg: GbdrawConfig,
     *,
     warn_search_seconds: float,
-    map_name: str,
+    map_item: FigurePrimaryItem,
 ) -> Drawing:
     """Assemble a Circular figure and apply the figure size and label fit checks to it.
 
@@ -3923,7 +3922,7 @@ def _checked_circular_drawing(
 
     size = cfg.canvas.figure_size
     if size.requested:
-        drawn = _fitted_circular_pass(assemble, cfg, size, map_name=map_name)
+        drawn = _fitted_circular_pass(assemble, cfg, size, map_item=map_item)
     else:
         drawn = _circular_pass(assemble, cfg)
     drawing = drawn.drawing
@@ -4126,7 +4125,7 @@ def build_circular_diagram(
         )
 
     return _checked_circular_drawing(
-        assemble, cfg, warn_search_seconds=_label_fit_warn_search_seconds, map_name=_CIRCULAR_MAP_NAME
+        assemble, cfg, warn_search_seconds=_label_fit_warn_search_seconds, map_item="map"
     )
 
 
@@ -4291,7 +4290,6 @@ def _linear_label_fit(drawing: Drawing) -> LinearLabelFit:
 _LinearAssemble: TypeAlias = Callable[
     [Mapping[str, LabelFitValue], FeatureLabelRows | None], Drawing | LinearDiagramBuildResult
 ]
-_LINEAR_FIXED_WIDTH_NAME = "record names and labels past the sequence ends"
 
 
 def _checked_linear_build(
@@ -4336,7 +4334,7 @@ def _checked_linear_build(
             raise figure_too_narrow(
                 applied_composition_plan(_linear_drawing(fit.built)),
                 figure_size.width,
-                fixed_primary_name=_LINEAR_FIXED_WIDTH_NAME,
+                primary="record_ends",
             )
         result = fit.built
         fitted[LINEAR_SEQUENCE_WIDTH_PATH] = fit.base
@@ -4354,7 +4352,7 @@ def _checked_linear_build(
 
     drawing = _linear_drawing(result)
     if figure_size.requested:
-        check_figure_height(applied_composition_plan(drawing), figure_size, primary_name="records")
+        check_figure_height(applied_composition_plan(drawing), figure_size, primary="records")
         bind_export_size(drawing, figure_size)
     report = check_linear_label_fit(_linear_label_fit(drawing), verify, features_separated=features_separated)
     if report is not None:
@@ -4546,7 +4544,7 @@ def build_circular_multi_diagram(
         )
 
     return _checked_circular_drawing(
-        assemble, cfg, warn_search_seconds=_label_fit_warn_search_seconds, map_name=_CIRCULAR_MAPS_NAME
+        assemble, cfg, warn_search_seconds=_label_fit_warn_search_seconds, map_item="maps"
     )
 
 

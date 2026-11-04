@@ -260,6 +260,8 @@ class CompositionPlan:
     given; ``primary_bounds`` is the same box after the automatic translation.
     ``content_bounds`` is the padded content: the canvas itself unless a
     requested canvas side is larger, in which case it is centred in the canvas.
+    ``requested_width_px`` and ``requested_height_px`` are the request's, so the
+    drawing's metadata can carry them to a later replan (``None``: Auto).
     """
 
     canvas_bounds: Aabb
@@ -272,6 +274,8 @@ class CompositionPlan:
     overlay_obstacles: tuple[Aabb, ...] = ()
     overlay_conflict_indices: tuple[int, ...] = ()
     overlay_resolution: OverlayResolution | None = None
+    requested_width_px: float | None = None
+    requested_height_px: float | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.canvas_bounds, Aabb):
@@ -750,6 +754,8 @@ def plan_composition(request: CompositionRequest) -> CompositionPlan:
         ),
         overlay_conflict_indices=overlay_conflict_indices,
         overlay_resolution=overlay_resolution,
+        requested_width_px=request.requested_width_px,
+        requested_height_px=request.requested_height_px,
     )
 
 

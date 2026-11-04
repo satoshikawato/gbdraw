@@ -19,14 +19,14 @@
 // room they need from Python's values (`labelCapacityText`, OV-2179). When every
 // row is known not to fit, it lists the same ways under the rows (NO-ROW-WAYS,
 // OV-2180).
-import { LABEL_CAPACITY_REMEDY_WORDS, labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
+import { labelCapacityRemedyText, labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg } from '../utils/i18n.js';
 
 /**
  * @import {
  *   LabelFitReport, LabelFitRow, LabelFitRowKind, LabelFitRowToken, ConfigPath, LabelFitSetting, LabelFitTrackOptions,
- *   LabelFitValue, LabelCapacity, LabelCapacityRemedy
+ *   LabelFitValue, LabelCapacity, LabelCapacityRemedy, LabelCapacityRemedyText, LargerFigure
  * } from '../services/label-fit.js'
  */
 
@@ -46,7 +46,7 @@ import { msg } from '../utils/i18n.js';
  * @property {boolean} show
  * @property {boolean} drawn True over a drawn figure (crossing leaders or labels over the definition text).
  * @property {boolean} capacity True when a record was not placed for lack of room (CAPACITY-STOP).
- * @property {string[]} remedies The ways to make room, as the Web words them (i18n keys), in Python's order; listed
+ * @property {LabelCapacityRemedyText[]} remedies The ways to make room, as the Web words them, in Python's order; listed
  *   over labels not placed (CAPACITY-STOP) or once every row is known not to fit (NO-ROW-WAYS), else empty.
  * @property {{ recordId: string, recordIndex: number | null, labelKind: string, labelKindTitle: string,
  *   labelCount: number, fontSize: number, counts: string, capacity: LabelCapacity | null }[]} records Python's
@@ -122,13 +122,15 @@ export const createLabelFitDialog = ({
   let runningRow = null;
   /** @type {readonly LabelCapacityRemedy[]} The ways to make room the report names. */
   let reportRemedies = [];
+  /** @type {LargerFigure | null} The size the report's `figure_size` remedy names. */
+  let reportLargerFigure = null;
 
   const close = () => { dialog.show = false; openCount += 1; };
   // Python names the ways for a stop and for a report whose rows have no value; a row still to compute may fit, so
   // they are listed once every row is known not to fit.
   const listRemedies = () => {
     const listed = dialog.capacity || (dialog.rows.length > 0 && dialog.rows.every((row) => row.status === 'not_found'));
-    dialog.remedies = listed ? reportRemedies.map((remedy) => LABEL_CAPACITY_REMEDY_WORDS[remedy]) : [];
+    dialog.remedies = listed ? reportRemedies.map((remedy) => labelCapacityRemedyText(remedy, reportLargerFigure)) : [];
   };
   /** @param {LabelFitRowKind} kind @param {Partial<LabelFitDialogRow>} update */
   const updateRow = (kind, update) => {
@@ -186,6 +188,7 @@ export const createLabelFitDialog = ({
     dialog.drawn = report.drawn;
     dialog.capacity = report.records.some((record) => record.capacity !== null);
     reportRemedies = report.remedies;
+    reportLargerFigure = report.largerFigure;
     dialog.records = report.records.map((record) => ({
       recordId: record.recordId,
       recordIndex: record.recordIndex,

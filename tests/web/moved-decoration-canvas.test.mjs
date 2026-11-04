@@ -383,3 +383,14 @@ test('a diagram drag that carries the Linear scale grows nothing; the scale\'s o
   assert.equal(applyCanvasToSvg(svg, {}), true);
   assert.equal(root(svg).viewBox, '0 0 186 212');
 });
+
+// OV-2513: a Result a CLI Session holds states a requested size in its unit (`49.2125mm`, the written file); a
+// moved item grows the canvas from the px viewBox, not from the number before the unit.
+test('a root that states its size in mm grows from its px viewBox', () => {
+  const svg = resultSvg();
+  svg.setAttribute('width', '49.2125mm');
+  svg.setAttribute('height', '40.2167mm');
+  applyCompositionUserDeltas(svg, { legend: [-200, 10] });
+  assert.equal(applyCanvasToSvg(svg, {}), true);
+  assert.deepEqual(root(svg), { viewBox: '-76 0 262 152', width: '262px', height: '152px', base: '0 0 186 152' });
+});

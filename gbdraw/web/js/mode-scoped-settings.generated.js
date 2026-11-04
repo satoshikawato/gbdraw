@@ -43,6 +43,8 @@ export const MODE_SCOPED_SETTINGS = deepFreeze({
     {"domain": "config.form", "key": null, "migrate": "own", "modes": "circular", "path": "species"},
     {"domain": "config.form", "key": null, "migrate": "own", "modes": "circular", "path": "strain"},
     {"domain": "config.form", "key": null, "migrate": "profile", "modes": "both", "path": "plot_title"},
+    {"domain": "config.form", "key": null, "migrate": "copy", "modes": "both", "path": "figure_width"},
+    {"domain": "config.form", "key": null, "migrate": "copy", "modes": "both", "path": "figure_height"},
     {"domain": "config.form", "key": null, "migrate": "own", "modes": "circular", "path": "track_type"},
     {"domain": "config.form", "key": null, "migrate": "own", "modes": "linear", "path": "linear_track_layout"},
     {"domain": "config.form", "key": null, "migrate": "copy", "modes": "both", "path": "show_scale"},

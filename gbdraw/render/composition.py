@@ -94,13 +94,23 @@ class _CompositionMetadataRequired(TypedDict):
     titleSide: str
 
 
+class RequestedCanvasPayload(TypedDict):
+    """The canvas sides a requested figure size asked for, in px; ``None`` for an Auto side."""
+
+    heightPx: float | None
+    widthPx: float | None
+
+
 class CompositionMetadataPayload(_CompositionMetadataRequired, total=False):
     """The ``data-gbdraw-composition`` JSON (schema 1) that the Web reads.
 
-    ``lengthBar`` exists only for a Linear figure with a drawn scale.
+    ``lengthBar`` exists only for a Linear figure with a drawn scale, and
+    ``requestedCanvas`` only for a figure drawn to a requested size, so the Web
+    replans a Legend edit within the requested canvas as ``plan_composition`` does.
     """
 
     lengthBar: LengthBarPayload
+    requestedCanvas: RequestedCanvasPayload
 
 
 def painted_title_content(content: GroupContent) -> GroupContent | None:
@@ -232,6 +242,12 @@ def _metadata_payload(
     # revision 2 admits the scale's size and nothing else).
     if length_bar_local_bounds is not None:
         payload["lengthBar"] = {"localBounds": _bounds_payload(length_bar_local_bounds)}
+    # Absent at Auto, so an Auto Result keeps its metadata bytes.
+    if plan.requested_width_px is not None or plan.requested_height_px is not None:
+        payload["requestedCanvas"] = {
+            "heightPx": None if plan.requested_height_px is None else _wire_number(plan.requested_height_px),
+            "widthPx": None if plan.requested_width_px is None else _wire_number(plan.requested_width_px),
+        }
     return json.dumps(
         payload,
         allow_nan=False,

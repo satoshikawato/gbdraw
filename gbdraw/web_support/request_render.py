@@ -23,7 +23,7 @@ from gbdraw.api.prepared import (
     PreparedInputRetention,
     PreparedResourceIdentity,
 )
-from gbdraw.exceptions import ExportError, LabelsDoNotFitError, ValidationError
+from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.io.colors import rule_captions_as_written
 from gbdraw.web_support.error_adapter import WebErrorAttributes, web_error_stage
 from gbdraw.legend.row_facts import collect_legend_row_facts
@@ -76,7 +76,7 @@ class WebDocument(TypedDict):
 
 
 class WebRenderResult(TypedDict):
-    """One SVG Result: the written file text, and the same text as pieces for the Worker."""
+    """One SVG Result: the drawing's text in px (for Auto, the written file's), and the same text as pieces."""
 
     name: str
     content: str
@@ -156,15 +156,10 @@ def _base_svg_path(item: RequestRenderResult) -> Path:
     )
 
 
-def _web_document(
-    parts: DocumentParts,
-    file_text: str,
-    held_segments: AbstractSet[str],
-) -> WebDocument:
+def _web_document(parts: DocumentParts, held_segments: AbstractSet[str]) -> WebDocument:
     """The reply form of ``parts``: a held revision is named without its text."""
 
     pieces: list[WebContentPiece | WebRawPiece] = []
-    length = len(parts.prolog) + len(parts.head) + len(parts.tail)
     for piece in parts.pieces:
         if isinstance(piece, ContentPiece):
             content: WebContentPiece = {
@@ -176,12 +171,8 @@ def _web_document(
             if piece.revision not in held_segments:
                 content["children"] = piece.children
             pieces.append(content)
-            length += len(piece.start) + len(piece.children) + len("</g>")
         else:
             pieces.append({"kind": "raw", "text": piece.text})
-            length += len(piece.text)
-    if length != len(file_text):
-        raise ExportError("The Web document pieces do not match the written SVG.")
     return {"head": parts.head, "tail": parts.tail, "pieces": pieces}
 
 
@@ -320,8 +311,11 @@ def _render_canonical_web_request(
         path = _base_svg_path(item)
         result_name = path.name
         with _web_render_diagnostic_phase(diagnostics, "svgReadback"):
-            svg_content = path.read_text(encoding="utf-8")
-            document = _web_document(document_parts(item.drawing), svg_content, held_segments)
+            # The page's text is the px drawing, not the written file: a file fitted to a requested size states
+            # it in the requested unit (``write_svg_document``), which only an exported copy carries (OV-2512).
+            parts = document_parts(item.drawing)
+            svg_content = parts.prolog + parts.body()
+            document = _web_document(parts, held_segments)
         results.append(
             {
                 "name": result_name,

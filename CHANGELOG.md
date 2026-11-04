@@ -24,6 +24,11 @@ write-up of a release.
   multi-record: the radius changes until the map fits both requested sides,
   with fonts, the legend and padding unchanged. Labels not placed for lack of
   room at a requested size offer a larger figure with its size (#1427).
+- Added: **Figure size** in the Web app's Layout card (both modes): Width and
+  Height with a unit, Auto when empty; it applies on Generate, the line under it
+  shows the drawn size, and the SVG export states the size in its unit. A size
+  that cannot fit is refused with its parts, and the previous figure stays
+  (#1427).
 - Added: `--dpi` and a `dpi` argument on `save_figure_to()`,
   `render_to_bytes()`, `Diagram.to_bytes()`, `Diagram.save()`, and
   `RenderOutputRequest` scale PNG pixels by `dpi / 96`.

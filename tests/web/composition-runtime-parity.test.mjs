@@ -57,11 +57,13 @@ for (const parityCase of cases) {
   const metadata = parseCompositionMetadata(svg);
   const replayed = replanCompositionMetadata(metadata);
   assertEquivalent(replayed, parityCase.expected, parityCase.name);
+  assert.equal(Object.hasOwn(parityCase.metadata, 'requestedCanvas'), parityCase.name === 'requested_canvas',
+    `${parityCase.name}: requestedCanvas only for a requested size`);
 }
 
 assert.deepEqual(
   cases.map((parityCase) => parityCase.name),
-  ['dock', 'overlay', 'title_stack', 'no_legend', 'canvas_growth', 'canvas_growth_title']
+  ['dock', 'overlay', 'title_stack', 'no_legend', 'canvas_growth', 'canvas_growth_title', 'requested_canvas']
 );
 
 console.log('Python and JavaScript composition runtime parity tests passed');

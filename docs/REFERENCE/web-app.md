@@ -1256,6 +1256,29 @@ card (a loaded Session can keep a file with several records on one card;
 Generate gives each record its own card) are refused with the reason. See [Record selection and
 layout](command-line.md#record-selection-and-layout) for the matching rules.
 
+### Figure size
+
+**Figure size**, first in the **Layout** card of both modes, draws the figure to
+a requested **Width** and **Height**, as `--figure_width` and
+`--figure_height` do (see [Figure size and PNG
+DPI](output-formats-and-export.md#figure-size-and-png-dpi)). Each side is a
+number and a unit, mm, cm, in, or px; an empty number is Auto, and both start
+Auto, which draws the figure as before. The size is the whole figure, legend and
+title included; fonts and line widths keep their size and the map is fitted.
+It applies on Generate. One edit is one History step, a Session saves the size
+as entered, Duplicate and New drawing with this style copy it, and Reset
+Settings returns it to Auto.
+
+Under the field, the line shows the size of the shown Result: in the requested
+unit and px ("Figure: 180 × 143.2 mm (680 × 541 px)"), or in px and mm for a
+Result drawn at Auto. A size the parts that do not shrink cannot fit is refused
+with each part and the smallest size that works, and the previous figure stays.
+Legend edits, Canvas padding, and moving the Legend, title, or scale are added
+after the fit: the figure keeps the requested box while they fit in it, and
+otherwise grows, and a second line says which of them made it larger. An SVG
+export of a sized Result states the size in its unit (`width="180mm"`), with the
+`viewBox` in px; PDF, PNG, and Interactive SVG export as before.
+
 ### Wrap Rows
 
 **Wrap Rows** in the Linear **Layout** card draws each record over rows of one

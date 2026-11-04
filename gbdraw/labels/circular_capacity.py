@@ -27,7 +27,7 @@ and putting the inner labels outside (inner side). A side stops at once
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 import warnings
@@ -55,6 +55,10 @@ CapacityLevel: TypeAlias = Literal["fits", "near", "over"]
 
 # Off while a fit row's settings are verified with the full assembly, so the rows are computed as before.
 _CHECKED: ContextVar[bool] = ContextVar("gbdraw_circular_label_capacity_checked", default=True)
+# Where each CAPACITY-WARN goes when it is warned (``label_capacity_progress``); none outside a Web render.
+_PROGRESS: ContextVar[Callable[[LabelsMayNotFitWarning], object] | None] = ContextVar(
+    "gbdraw_circular_label_capacity_progress", default=None
+)
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,19 @@ def label_capacity_unchecked() -> Iterator[None]:
         yield
     finally:
         _CHECKED.reset(token)
+
+
+@contextmanager
+def label_capacity_progress(sink: Callable[[LabelsMayNotFitWarning], object]) -> Iterator[None]:
+    """Send each ``LabelsMayNotFitWarning`` to ``sink`` when it is warned, also inside a pass of a figure-size fit,
+    whose warnings reach the caller only from the kept pass, after the fit (D-16). A progress message, not a Result
+    warning (D-17): the warnings the caller gets are unchanged."""
+
+    token = _PROGRESS.set(sink)
+    try:
+        yield
+    finally:
+        _PROGRESS.reset(token)
 
 
 def label_capacity_checked() -> bool:
@@ -203,12 +220,13 @@ def check_label_capacity(record_id: str, capacities: Sequence[CircularLabelCapac
     for capacity in capacities:
         if capacity.level == "near":
             message = label_capacity_sentence(record_id, capacity.label_kind, capacity.record, placed=True)
-            warnings.warn(
-                LabelsMayNotFitWarning(
-                    message, record_id=record_id, label_kind=capacity.label_kind, capacity=capacity.record
-                ),
-                stacklevel=2,
+            warning = LabelsMayNotFitWarning(
+                message, record_id=record_id, label_kind=capacity.label_kind, capacity=capacity.record
             )
+            sink = _PROGRESS.get()
+            if sink is not None:
+                sink(warning)
+            warnings.warn(warning, stacklevel=2)
 
 
 __all__ = [
@@ -223,5 +241,6 @@ __all__ = [
     "check_label_capacity",
     "circular_label_capacity",
     "label_capacity_checked",
+    "label_capacity_progress",
     "label_capacity_unchecked",
 ]

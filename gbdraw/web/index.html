@@ -4303,6 +4303,29 @@
                     <details :open="mode === 'linear'">
                         <summary :aria-label="t('Layout')"><settings-section-title section="layout"></settings-section-title> <setting-note setting="layout"></setting-note> <help-tip :text="t('Control track placement and layout-related options.')"></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
+                            <div class="text-xs space-y-1" data-figure-size-field>
+                                <span class="input-label text-[10px] mb-1">{{ t('Figure size') }} <help-tip id="help-figure-size" :text="t('The size of the whole figure, legend and title included. The map is fitted to it; font sizes and line widths stay as set. Leave a side empty for Auto.')"></help-tip></span>
+                                <div class="flex items-center gap-1">
+                                    <label for="figure-width" class="w-12 shrink-0 text-[11px] text-slate-600">{{ t('Width') }}</label>
+                                    <auto-value-field class="flex-1 min-w-0" :visible="figureWidthAmount === ''" :text="t('Auto')">
+                                        <input type="number" id="figure-width" min="0" step="any" :value="figureWidthAmount" @change="changeFigureSize($event, 'width', 'amount')" :aria-label="t('Figure width')" aria-describedby="help-figure-size" class="form-input form-input-compact auto-value-input w-full" :disabled="!semanticMutationAvailable">
+                                    </auto-value-field>
+                                    <select id="figure-width-unit" :value="figureWidthUnit" @change="changeFigureSize($event, 'width', 'unit')" :aria-label="t('Figure width unit')" class="form-input form-input-compact text-xs py-1 w-auto shrink-0" :disabled="!semanticMutationAvailable">
+                                        <option v-for="unit in figureLengthUnits" :key="unit" :value="unit">{{ unit }}</option>
+                                    </select>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <label for="figure-height" class="w-12 shrink-0 text-[11px] text-slate-600">{{ t('Height') }}</label>
+                                    <auto-value-field class="flex-1 min-w-0" :visible="figureHeightAmount === ''" :text="t('Auto')">
+                                        <input type="number" id="figure-height" min="0" step="any" :value="figureHeightAmount" @change="changeFigureSize($event, 'height', 'amount')" :aria-label="t('Figure height')" aria-describedby="help-figure-size" class="form-input form-input-compact auto-value-input w-full" :disabled="!semanticMutationAvailable">
+                                    </auto-value-field>
+                                    <select id="figure-height-unit" :value="figureHeightUnit" @change="changeFigureSize($event, 'height', 'unit')" :aria-label="t('Figure height unit')" class="form-input form-input-compact text-xs py-1 w-auto shrink-0" :disabled="!semanticMutationAvailable">
+                                        <option v-for="unit in figureLengthUnits" :key="unit" :value="unit">{{ unit }}</option>
+                                    </select>
+                                </div>
+                                <p v-if="figureSizeLine" class="ui-hint" data-figure-size-line>{{ figureSizeLine }}</p>
+                                <p v-if="figureSizeLarger" class="ui-hint" data-figure-size-larger>{{ figureSizeLarger }}</p>
+                            </div>
                             <template v-if="mode === 'linear'">
                                 <div class="text-[11px] text-slate-600 space-y-1" data-linear-label-auto-layout>
                                     <p role="status" aria-live="polite" aria-atomic="true">{{ linearLabelAutoDisclosure }}</p>
@@ -9153,7 +9176,7 @@
             <div v-if="labelFitDialog.remedies.length" class="mt-3 text-sm text-slate-700" data-label-fit-remedies>
                 <p class="font-semibold">{{ t('To make room:') }}</p>
                 <ul class="mt-1 list-disc pl-5 space-y-1">
-                    <li v-for="remedy in labelFitDialog.remedies" :key="remedy">{{ tm(remedy) }}</li>
+                    <li v-for="remedy in labelFitDialog.remedies" :key="remedy.text">{{ tm(remedy.text, remedy.params) }}</li>
                 </ul>
             </div>
             <!-- PD-OI-097: the centre definition's own text; shows the field, applies nothing -->

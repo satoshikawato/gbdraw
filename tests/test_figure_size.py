@@ -694,8 +694,8 @@ def test_the_larger_figure_estimate_adds_the_missing_room_to_each_requested_side
     size = RequestedFigureSize(FigureLength(100.0, "mm"), FigureLength(1000.0, "px"))
     estimate = larger_figure(plan, size, 2.5)
     width_px = content.width + 1.5 * 300.0
-    assert estimate.width == f"{math.ceil(round(width_px * 25.4 / 96 * 10, 6)) / 10:g}mm"
-    assert estimate.height == f"{math.ceil(content.height + 1.5 * 200.0)}px"
+    assert estimate.width == f"{math.ceil(round(width_px * 25.4 / 96 * 10, 6)) / 10:g} mm"
+    assert estimate.height == f"{math.ceil(content.height + 1.5 * 200.0)} px"
     assert larger_figure(plan, RequestedFigureSize(FigureLength(100.0, "mm")), 2.5).height is None
 
 
@@ -714,6 +714,83 @@ def test_saved_svg_carries_the_requested_unit(tmp_path) -> None:
     assert width == "180mm"
     assert height.endswith("mm")
     assert float(height[:-2]) == pytest.approx(view_box[3] * 25.4 / 96, abs=0.001)
+
+
+def test_the_export_root_size_writes_each_requested_side_as_written_and_converts_the_other() -> None:
+    from gbdraw.core.figure_length import RequestedFigureSize
+    from gbdraw.render.document import export_root_size
+
+    width = FigureLength(180.0, "mm")
+    assert export_root_size(RequestedFigureSize(), 700.0, 500.0) is None
+    assert export_root_size(RequestedFigureSize(width=width), width.px, 96 / 25.4 * 100) == {
+        "width": "180mm", "height": "100mm"}
+    assert export_root_size(RequestedFigureSize(height=FigureLength(4.0, "in")), 480.0, 384.0) == {
+        "width": "5in", "height": "4in"}
+    both = RequestedFigureSize(width=width, height=FigureLength(15.0, "cm"))
+    assert export_root_size(both, width.px + 0.005, FigureLength(15.0, "cm").px) == {"width": "180mm", "height": "15cm"}
+
+
+def test_the_export_root_size_converts_a_requested_side_the_canvas_grew_past() -> None:
+    # A Web-only addition after the fit (Legend edits, Canvas padding) can make the canvas larger than the box.
+    from gbdraw.core.figure_length import RequestedFigureSize
+    from gbdraw.render.document import export_root_size
+
+    size = RequestedFigureSize(width=FigureLength(180.0, "mm"))
+    assert export_root_size(size, 200 * 96 / 25.4, 96.0) == {"width": "200mm", "height": "25.4mm"}
+
+
+def test_a_sized_web_render_keeps_the_page_root_in_px(tmp_path) -> None:
+    """OV-2512: the Web reply read the written file, whose root states 300mm, beside px pieces; the page root is px."""
+
+    from tests.test_web_label_fit import _sars_request, _web_render
+
+    reply = _web_render(_sars_request({"canvas.figure_width": "300mm", "labels.circular.scope": "none"}), tmp_path)
+    result = reply["results"][0]
+    width, _height, view_box = _svg_size(result["content"])
+    assert width.endswith("px")
+    assert float(width.removesuffix("px")) == pytest.approx(300 * 96 / 25.4, abs=0.01) == view_box[2]
+    assert result["document"]["head"] in result["content"]
+    # At Auto the page's text is the written file's, byte for byte.
+    auto = _web_render(_sars_request({"labels.circular.scope": "none"}), tmp_path / "auto")["results"][0]
+    assert auto["content"] == (tmp_path / "auto" / "out" / auto["name"]).read_text(encoding="utf-8")
+
+
+def test_the_web_export_check_states_a_sized_svg_root_as_python_writes_it() -> None:
+    import json
+
+    from gbdraw.web_support.export_limit import check_web_export_limit_json
+
+    request = {"format": "svg", "width": MM_180_PX, "height": 96.0, "dpi": None, "linearWrap": None,
+               "figureSize": {"width": "180 MM", "height": None}}
+    assert json.loads(check_web_export_limit_json(json.dumps(request))) == {
+        "ok": True, "root": {"width": "180mm", "height": "25.4mm"}}
+    with pytest.raises(ValueError):
+        check_web_export_limit_json(json.dumps({**request, "figureSize": None}))
+
+
+def _composition_metadata(svg: str) -> dict:
+    import html
+    import json
+
+    head = svg[svg.index("<svg") : svg.index(">", svg.index("<svg"))]
+    found = re.search(r'data-gbdraw-composition="([^"]+)"', head)
+    assert found
+    return json.loads(html.unescape(found[1]))
+
+
+def test_only_a_sized_figure_carries_its_requested_canvas_in_the_composition_metadata() -> None:
+    """Section 6: the Web replans a Legend edit within the requested canvas; Auto metadata keeps its keys and bytes."""
+
+    auto = _composition_metadata(gbdraw.draw_linear(_mito()).to_svg())
+    assert "requestedCanvas" not in auto
+    assert sorted(auto) == ["legend", "legendReflow", "legendSide", "lengthBar", "overlayObstacles", "overlayPolicy",
+                            "primary", "spacing", "title", "titleSide"]
+    sized = _composition_metadata(
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="180mm")).to_svg())
+    assert sized["requestedCanvas"] == {"widthPx": pytest.approx(MM_180_PX), "heightPx": None}
+    circular = _composition_metadata(gbdraw.draw_circular(_mito(), options=gbdraw.CircularOptions(
+        figure_height="150mm")).to_svg())
+    assert circular["requestedCanvas"] == {"widthPx": None, "heightPx": pytest.approx(150 * 96 / 25.4)}
 
 
 def test_png_dpi_scales_the_pixels() -> None:
@@ -785,3 +862,100 @@ def test_cli_circular_figure_width(tmp_path, monkeypatch) -> None:
     width, _height, view_box = _svg_size(output.with_suffix(".svg").read_text(encoding="utf-8"))
     assert width == "180mm"
     assert view_box[2] == pytest.approx(MM_180_PX, abs=0.01)
+
+
+# --- what the Web reads of a refusal, the remedy estimate, and a form's replay (PR-C) ---
+
+
+def _web_context(error: BaseException) -> dict:
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    return serialize_web_error(error, operation="generate", stage="render")["context"]
+
+
+def test_a_refused_width_carries_the_lengths_of_its_message_to_the_web() -> None:
+    with pytest.raises(ValidationError) as caught:
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="40mm"))
+    message = str(caught.value)
+    context = _web_context(caught.value)
+    assert context["reason"] == "FIGURE_TOO_NARROW" and context["configPath"] == FIGURE_WIDTH_PATH
+    assert (context["requested"], context["primaryItem"], context["legendRemedy"]) == ("40 mm", "record_ends", True)
+    # Each length is the one the message writes: the Web words the same numbers.
+    assert f"({context['minimum']} in all)" in message
+    assert f"record names and labels past the sequence ends {context['primary']}, legend {context['legend']}" in message
+    assert f"padding {context['padding']}" in message and "title" not in context
+
+
+def test_a_refused_width_without_a_side_legend_offers_no_legend_remedy_to_the_web() -> None:
+    with pytest.raises(ValidationError) as caught:
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="10mm", legend="top"))
+    context = _web_context(caught.value)
+    assert context["reason"] == "FIGURE_TOO_NARROW" and "legendRemedy" not in context
+
+
+def test_a_refused_height_carries_the_width_it_was_measured_at() -> None:
+    with pytest.raises(ValidationError) as caught:
+        gbdraw.draw_linear(_mito(), options=gbdraw.LinearOptions(figure_width="180mm", figure_height="10mm"))
+    message = str(caught.value)
+    context = _web_context(caught.value)
+    assert (context["reason"], context["requested"], context["atWidth"]) == ("FIGURE_TOO_SHORT", "10 mm", "180 mm")
+    assert context["primaryItem"] == "records" and f"records {context['primary']}" in message
+    assert f"at least {context['minimum']}" in message
+
+
+def test_a_refused_circular_size_names_the_map() -> None:
+    with pytest.raises(ValidationError) as narrow:
+        _draw_mito_circular(figure_width="100mm")
+    with pytest.raises(ValidationError) as short:
+        _draw_mito_circular(figure_height="50mm")
+    assert _web_context(narrow.value)["primaryItem"] == "map"
+    assert (_web_context(short.value)["reason"], _web_context(short.value)["primaryItem"]) == ("FIGURE_TOO_SHORT", "map")
+
+
+def test_the_web_reads_figure_size_lengths_only_from_a_figure_size_refusal() -> None:
+    lengths = {"requested": "40 mm", "minimum": "112.3 mm", "primaryItem": "map", "legendRemedy": True}
+    other = ValidationError("PRIVATE", diagnostic={"code": "INPUT_INVALID", "reason": "WRAP", **lengths})
+    assert not set(lengths) & set(_web_context(other))
+    unbounded = ValidationError(
+        "PRIVATE",
+        diagnostic={
+            "code": "INPUT_INVALID", "reason": "FIGURE_TOO_NARROW", "requested": "40 mm <b>", "minimum": "1e9 mm",
+            "primaryItem": "PRIVATE", "legendRemedy": "yes", "padding": "12.2 mm",
+        },
+    )
+    context = _web_context(unbounded)
+    assert context["reason"] == "FIGURE_TOO_NARROW" and context["padding"] == "12.2 mm"
+    assert not {"requested", "minimum", "primaryItem", "legendRemedy"} & set(context)
+
+
+@pytest.mark.parametrize(
+    ("form", "expected"),
+    [
+        ({"figure_width": "180mm"}, ["--figure_width", "180mm"]),
+        ({"figure_width": "180mm", "figure_height": "5in"}, ["--figure_width", "180mm", "--figure_height", "5in"]),
+        ({"figure_height": "1200px"}, ["--figure_height", "1200px"]),
+        ({"figure_width": None, "figure_height": "auto"}, []),
+        ({"figure_width": "", "figure_height": "AUTO"}, []),
+        ({}, []),
+    ],
+)
+def test_a_drawing_form_size_replays_as_its_cli_options(form: dict, expected: list[str]) -> None:
+    from gbdraw.session_io import _append_common_gui_args
+
+    run_args: list[str] = []
+    _append_common_gui_args(run_args, [], form=form, adv={})
+    assert [arg for index, arg in enumerate(run_args) if arg.startswith("--figure_") or (
+        index > 0 and run_args[index - 1].startswith("--figure_"))] == expected
+
+
+def test_the_web_words_each_primary_item_and_part_python_names() -> None:
+    from gbdraw.layout.figure_size import FIGURE_PRIMARY_ITEMS, FIGURE_SIZE_PARTS
+
+    wording = (Path(__file__).resolve().parents[1] / "gbdraw" / "web" / "js" / "utils" / "error-normalization.js").read_text(
+        encoding="utf-8"
+    )
+    items = wording[wording.index("const FIGURE_PRIMARY_ITEMS") :]
+    parts = wording[wording.index("const FIGURE_PARTS") :]
+    assert set(re.findall(r"\b([a-z_]+): '", items[: items.index("});")])) == set(FIGURE_PRIMARY_ITEMS)
+    assert {*re.findall(r"\b([a-z_]+): '", parts[: parts.index("});")]), "primary"} == set(FIGURE_SIZE_PARTS)
+    assert f"@typedef {{{' | '.join(repr(item) for item in FIGURE_PRIMARY_ITEMS)}}} FigurePrimaryItem" in wording

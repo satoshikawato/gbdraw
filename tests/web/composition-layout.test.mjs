@@ -51,6 +51,10 @@ class FakeElement {
     this.attributes.delete(name);
   }
 
+  hasAttribute(name) {
+    return this.attributes.has(name);
+  }
+
   getBBox() {
     return { ...this.bbox };
   }
@@ -989,4 +993,28 @@ const captureFixture = (fixture, canonical = continuityCanonical(), keys = ['a']
   const next = decorationSvg([0,0]);
   snapshot(continuityCanonical(), {catalog:continuityCatalog(['a'])})[0](next.svg);
   assert.deepEqual(compositionUserDeltas(next.svg).legend, [40,20]);
+}
+
+// Issue #1427: a Legend edit of a figure drawn to a requested size keeps the requested canvas while the content fits
+// (centred), on every later edit as well; content larger than the box grows the canvas as at Auto.
+{
+  const { svg, metadata } = schemaOneSvg();
+  svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify({ ...metadata, requestedCanvas: { widthPx: 400, heightPx: null } }));
+  svg.setAttribute('viewBox', '0 0 400 132');
+  svg.setAttribute('width', '400px');
+  const renamed = { x: -2, y: -5, width: 50, height: 20 };
+  const first = applyCompositionEdit(svg, { legendLocalBounds: renamed });
+  assert.deepEqual(first.metadata.requestedCanvas, { widthPx: 400, heightPx: null });
+  assert.equal(svg.getAttribute('viewBox').split(' ')[2], '400');
+  const second = applyCompositionEdit(svg, { legendLocalBounds: { ...renamed, width: 60 } });
+  assert.equal(svg.getAttribute('viewBox').split(' ')[2], '400');
+  assert.equal(svg.getAttribute('width'), '400px');
+  const auto = replanCompositionMetadata({ ...second.metadata, requestedCanvas: null });
+  const sized = replanCompositionMetadata(second.metadata);
+  assert.equal(sized.width, 400);
+  assert.equal(sized.placements.primary.finalBounds.x - auto.placements.primary.finalBounds.x, (400 - auto.width) / 2,
+    'the content is centred in the requested width');
+  applyCompositionEdit(svg, { legendLocalBounds: { ...renamed, width: 400 } });
+  assert.ok(Number(svg.getAttribute('viewBox').split(' ')[2]) > 400, 'content wider than the box grows the canvas');
+  assert.equal(bindCompositionMetadata(svg).metadata.requestedCanvas?.widthPx, 400);
 }

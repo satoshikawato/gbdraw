@@ -11,6 +11,7 @@ import { downloadBlob } from './text-download.js';
 import { preparePdfFonts } from './pdf-fonts.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { parseMarkupInertly } from '../utils/inert-markup.js';
+import { getSvgDimensions } from './svg-dimensions.js';
 /** @import { ResolvePdfFonts } from './pdf-fonts.js' */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -99,16 +100,27 @@ const loadPdfLibraries = () => {
  */
 
 /**
+ * The root `width` and `height` an exported SVG of a Result drawn to a
+ * requested size states, in the requested unit (`180mm`; the viewBox stays px):
+ * Python's `export_root_size` (gbdraw/render/document.py), which the CLI
+ * writes, asked through the export check with the root's px size.
+ * @typedef {{ width: string, height: string }} ExportRootSize
+ * @typedef {(size: { width: number, height: number }) => Promise<ExportRootSize>} SizedSvgRoot
+ */
+
+/**
  * The Worker's helpers an export uses. `embedFonts` is null when no font
  * is loaded in this page. `embedInSvg` is Embed font in exported SVG: whether
  * SVG and Interactive SVG carry the fonts; a PNG always draws with them.
  * `checkExportLimit` is the size check of a PNG or PDF, which knows what the
- * exported Result drew; SVG and Interactive SVG have no limit.
+ * exported Result drew; SVG and Interactive SVG have no limit. `sizedSvgRoot`
+ * is null for a Result drawn at Auto, whose SVG root stays as it is shown.
  * @typedef {object} ExportPorts
  * @property {EmbedFonts | null} [embedFonts]
  * @property {boolean} [embedInSvg]
  * @property {ResolvePdfFonts} [resolvePdfFonts]
  * @property {CheckExportLimit} [checkExportLimit]
+ * @property {SizedSvgRoot | null} [sizedSvgRoot]
  */
 
 /**
@@ -227,16 +239,36 @@ const getCurrentSvgString = (snapshot) => (
 );
 
 /**
- * The exported SVG text with its embedded fonts.
+ * State the requested size on an export clone's root (`sizedSvgRoot`); the
+ * page's root stays in px.
+ * @param {SVGSVGElement} clone
+ * @param {SizedSvgRoot} sizedSvgRoot
+ */
+const stateRequestedSize = async (clone, sizedSvgRoot) => {
+  const px = getSvgDimensions(clone);
+  if (!px) throw new Error('The SVG export has no root size.');
+  const root = await sizedSvgRoot(px);
+  if (typeof root?.width !== 'string' || typeof root.height !== 'string') {
+    throw diagnosticError('RESULT_INVALID', { field: 'figure_size' }, { stage: 'result-admission', operation: 'checkExportLimit' });
+  }
+  clone.setAttribute('width', root.width);
+  clone.setAttribute('height', root.height);
+};
+
+/**
+ * The exported SVG text with its embedded fonts; a Result drawn to a
+ * requested size states it (`sizedSvgRoot`, plain SVG only).
  * @param {ExportSnapshot} snapshot
  * @param {EmbedFonts | null | undefined} embedFonts
  * @param {FontEmbeddingKind} kind
+ * @param {SizedSvgRoot | null} [sizedSvgRoot]
  * @returns {Promise<{ svgString: string, refusedFamilies: string[] }>}
  */
-const getEmbeddedSvgString = async (snapshot, embedFonts, kind) => {
+const getEmbeddedSvgString = async (snapshot, embedFonts, kind, sizedSvgRoot = null) => {
   const clone = getCurrentSvgClone(snapshot);
   const { block, refusedFamilies } = await fontEmbeddingOf(clone, embedFonts, kind);
   insertEmbeddedFontBlock(clone, block);
+  if (sizedSvgRoot) await stateRequestedSize(clone, sizedSvgRoot);
   return { svgString: new XMLSerializer().serializeToString(clone), refusedFamilies };
 };
 
@@ -264,23 +296,6 @@ const getInteractiveSvgString = async (snapshot, embedFonts) => {
 const getSvgFromString = (svgString) => {
   if (!svgString) return null;
   return parseMarkupInertly(svgString).querySelector('svg');
-};
-
-/** @param {SVGSVGElement | null} svg */
-const getSvgDimensions = (svg) => {
-  if (!svg) return null;
-  let w = parseFloat(svg.getAttribute('width') ?? '');
-  let h = parseFloat(svg.getAttribute('height') ?? '');
-  if (!w || !h) {
-    const viewBox = svg.getAttribute('viewBox');
-    if (!viewBox) return null;
-    const parts = viewBox.trim().split(/[\s,]+/);
-    if (parts.length < 4) return null;
-    w = parseFloat(parts[2]);
-    h = parseFloat(parts[3]);
-  }
-  if (!w || !h) return null;
-  return { width: w, height: h };
 };
 
 /** @param {SVGSVGElement} svg */
@@ -513,7 +528,7 @@ const downloadSvgString = (svgString, filename) => {
  */
 export const downloadSVG = async (snapshot, ports = {}) => {
   const filename = getDownloadName(snapshot, 'svg');
-  const { svgString, refusedFamilies } = await getEmbeddedSvgString(snapshot, svgFontPort(ports), 'svg');
+  const { svgString, refusedFamilies } = await getEmbeddedSvgString(snapshot, svgFontPort(ports), 'svg', ports.sizedSvgRoot ?? null);
   downloadSvgString(svgString, filename);
   return { filename, fontWarnings: refusedFontWarnings(refusedFamilies) };
 };

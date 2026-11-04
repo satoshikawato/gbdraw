@@ -82,6 +82,12 @@ import { msg, tn } from '../utils/i18n.js';
  * @property {readonly LabelCapacityRemedy[]} remedies The ways to make room, in Python's order: for the records not
  *   placed (CAPACITY-STOP), or when no row has a value (NO-ROW-WAYS; the dialog lists them once every row is known
  *   not to fit).
+ * @property {LargerFigure | null} largerFigure The size the `figure_size` remedy names; null unless it is offered.
+ */
+/**
+ * About how large a requested figure must be for the labels not placed (Python's `LargerFigurePayload`): each
+ * requested side as Python's message writes it (`829 mm`), null for a side left Auto; at least one side.
+ * @typedef {{ width: string | null, height: string | null }} LargerFigure
  */
 /**
  * @typedef {object} ResultLabelFit The report of one drawn Result.
@@ -106,10 +112,49 @@ export const LABEL_CAPACITY_REMEDY_WORDS = Object.freeze({
   filter: msg('Label fewer features: Blacklist or Whitelist under LABEL FILTERING.'),
   label_text: msg('Shorten the label text: a priority rule, for example gene before product.'),
   font: msg('Use a smaller Label Font Size.'),
-  figure_size: msg('Make the figure larger.'),
+  figure_size: msg('Make the figure larger (Figure size in Layout).'),
   linear: msg('Draw a Linear map.')
 });
 /** @typedef {keyof typeof LABEL_CAPACITY_REMEDY_WORDS} LabelCapacityRemedy */
+// The `figure_size` remedy with Python's estimate, by the sides it names (D-14).
+const LARGER_FIGURE_WORDS = Object.freeze({
+  width: msg('Make the figure larger: Figure width about {width} (Figure size in Layout).'),
+  height: msg('Make the figure larger: Figure height about {height} (Figure size in Layout).'),
+  both: msg('Make the figure larger: Figure width about {width}, Figure height about {height} (Figure size in Layout).')
+});
+/**
+ * A way to make room as the dialog shows it: a catalog key and its values.
+ * @typedef {{ text: string, params: Readonly<Record<string, string>> }} LabelCapacityRemedyText
+ */
+/**
+ * The words of a way to make room; the `figure_size` remedy names Python's estimate for each requested side.
+ * @param {LabelCapacityRemedy} remedy
+ * @param {LargerFigure | null} largerFigure
+ * @returns {LabelCapacityRemedyText}
+ */
+export const labelCapacityRemedyText = (remedy, largerFigure) => {
+  if (remedy !== 'figure_size' || largerFigure === null) return { text: LABEL_CAPACITY_REMEDY_WORDS[remedy], params: {} };
+  const { width, height } = largerFigure;
+  const sides = width !== null && height !== null ? 'both' : width !== null ? 'width' : 'height';
+  return { text: LARGER_FIGURE_WORDS[sides], params: { ...(width !== null ? { width } : {}), ...(height !== null ? { height } : {}) } };
+};
+// A length as Python's message writes it: a number and a unit name (the units are Python's).
+const LENGTH_TEXT = /^[0-9]{1,30}(\.[0-9]{1,6})? [a-z]{1,3}$/;
+/** @param {unknown} value @returns {value is string | null} */
+const isSideLength = (value) => value === null || (typeof value === 'string' && LENGTH_TEXT.test(value));
+/**
+ * A report's `largerFigure`, absent (null) unless the `figure_size` remedy is offered.
+ * @param {Record<string, unknown>} parsed
+ * @returns {LargerFigure | null}
+ */
+const normalizeLargerFigure = (parsed) => {
+  if (!Object.hasOwn(parsed, 'largerFigure')) return null;
+  const value = parsed.largerFigure;
+  if (!isObject(value) || Object.keys(value).sort().join(',') !== 'height,width' || !isSideLength(value.width)
+    || !isSideLength(value.height) || (value.width === null && value.height === null)
+    || !Array.isArray(parsed.remedies) || !parsed.remedies.includes('figure_size')) throw invalid();
+  return Object.freeze({ width: value.width, height: value.height });
+};
 
 /**
  * The Web's words for the room each kind of label needs (CAPACITY-STOP, CAPACITY-WARN), by Python's label kind id:
@@ -302,7 +347,8 @@ const normalizeLabelFitReport = (parsed) => {
     notice: Object.freeze([...parsed.notice]),
     records: Object.freeze(records),
     rows: Object.freeze(parsed.rows.map(normalizeLabelFitRow)),
-    remedies: Object.freeze([...parsed.remedies])
+    remedies: Object.freeze([...parsed.remedies]),
+    largerFigure: normalizeLargerFigure(parsed)
   });
 };
 

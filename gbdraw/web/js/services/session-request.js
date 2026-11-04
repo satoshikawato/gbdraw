@@ -130,8 +130,12 @@ import { ownEntry } from '../utils/own-entry.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import { liftLegacyRenderRequest } from './legacy-render-request.js';
-/** @import { LinearWrapFormValue, StoredWrapReadings } from './linear-wrap-form.js' */
-import { LINEAR_WRAP_LENGTH_PATH, NO_WRAP_READINGS, wrapFormValue } from './linear-wrap-form.js';
+/** @import { LinearWrapFormValue } from './linear-wrap-form.js' */
+/** @import { FigureLengthFormValue } from './figure-size-form.js' */
+/** @import { StoredLeafReadings } from './stored-leaf-readings.js' */
+import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from './linear-wrap-form.js';
+import { FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH, figureLengthFormValue } from './figure-size-form.js';
+import { NO_STORED_READINGS } from './stored-leaf-readings.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
   CONFIG_UNSET_NUMBER_PATHS,
@@ -699,6 +703,9 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   normalizeLength: 'canvas.linear.normalize_length',
   // Not a CONFIG_UNSET_NUMBER_PATHS path: "auto" is a value here.
   linearWrapLength: LINEAR_WRAP_LENGTH_PATH,
+  // A length with a unit ("180mm"), or Auto (null, no leaf); shared by both modes.
+  figureWidth: FIGURE_WIDTH_PATH,
+  figureHeight: FIGURE_HEIGHT_PATH,
   labelRendering: 'labels.rendering',
   circularLabelSpacing: 'labels.spacing.circular',
   circularLabelPlacement: 'labels.circular.placement',
@@ -976,7 +983,7 @@ export const draftFieldsForConfigValues = (values, mode, adv, trackOptions = {})
  * @property {string} path
  * @property {'adv' | 'form'} container
  * @property {string} field
- * @property {(value: unknown, readings: StoredWrapReadings) => { value: unknown, lost: boolean }} read
+ * @property {(value: unknown, readings: StoredLeafReadings) => { value: unknown, lost: boolean }} read
  */
 /** @type {readonly PromotedPreservedOverride[]} */
 const PROMOTED_PRESERVED_OVERRIDES = Object.freeze([
@@ -1005,10 +1012,10 @@ const isPlainRecord = (value) => Boolean(value) && typeof value === 'object' && 
  * dropped either way.
  * @template T
  * @param {T} config
- * @param {StoredWrapReadings} [readings] Python's readings of the stored wrap lengths (`wrapFormValue`).
+ * @param {StoredLeafReadings} [readings] Python's readings of the stored leaves the form cannot hold as stored.
  * @returns {PromotedPreservedAdoption<T>}
  */
-export const adoptPromotedPreservedOverrides = (config, readings = NO_WRAP_READINGS) => {
+export const adoptPromotedPreservedOverrides = (config, readings = NO_STORED_READINGS) => {
   const preserved = isPlainRecord(config) ? config.unmanagedConfigOverrides : undefined;
   const rows = isPlainRecord(preserved) ? PROMOTED_PRESERVED_OVERRIDES.filter(({ path }) => Object.hasOwn(preserved, path)) : [];
   if (!isPlainRecord(config) || !isPlainRecord(preserved) || rows.length === 0) return { config, containers: [], dropped: [] };
@@ -2739,6 +2746,9 @@ const buildConfigOverrides = (
     [CONFIG_OVERRIDE_PATHS.lineStrokeColor]: adv.line_stroke_color || null,
     [CONFIG_OVERRIDE_PATHS.fontFamily]: adv.font_family || null,
     [CONFIG_OVERRIDE_PATHS.labelRendering]: effectiveLabelRendering(form, adv, circular, linearLabelPlacement),
+    // Auto (null) states nothing, so an Auto request is the one it was before Figure size.
+    [CONFIG_OVERRIDE_PATHS.figureWidth]: /** @type {FigureLengthFormValue} */ (form.figure_width),
+    [CONFIG_OVERRIDE_PATHS.figureHeight]: /** @type {FigureLengthFormValue} */ (form.figure_height),
     ...trackFlagOverrides(form, circular, depthRequested),
     [MODE_LABEL_SCOPE_PATHS[mode]]: labelScopeOverride(form, circular),
     // The mode's packaged style is left unstated, as a request that predates the setting leaves it.
@@ -6009,8 +6019,8 @@ export const projectCanonicalSessionRequest = ({
   adoptCanonicalPayloads = false,
   markCardFileRows = false,
   bindingInputSlot,
-  // Python's readings of the stored wrap lengths the form cannot hold as stored (Load asks for them).
-  wrapReadings = NO_WRAP_READINGS
+  // Python's readings of the stored leaves the form cannot hold as stored (Load asks for them).
+  leafReadings = NO_STORED_READINGS
 }) => {
   // Every request reaches the projection at the current schema: a stored one
   // through its reader (`readStoredRenderRequest`), a new one from the writer.
@@ -6673,13 +6683,26 @@ export const projectCanonicalSessionRequest = ({
     : 'middle';
   // A length Python reads otherwise than stored (`"50kb"`, a Python API Session) takes Python's reading; one
   // Python refuses is off, with a row.
-  const projectedWrapLength = wrapFormValue(renderRequest.mode === 'linear' ? overrides.linear_wrap_length : null, wrapReadings);
+  const projectedWrapLength = wrapFormValue(renderRequest.mode === 'linear' ? overrides.linear_wrap_length : null, leafReadings);
   if (projectedWrapLength.lost) {
     legacyTableRepairs.push(loadRepair({
       code: 'setting-replaced', path: CONFIG_OVERRIDE_PATHS.linearWrapLength, effect: 'dropped',
       stored: typeof overrides.linear_wrap_length === 'string' ? overrides.linear_wrap_length : JSON.stringify(overrides.linear_wrap_length)
     }));
   }
+  // A figure length Python reads otherwise than stored (`"180 MM"`) takes Python's reading; one Python refuses is
+  // Auto, with a row.
+  const projectedFigureSize = Object.fromEntries(/** @type {const} */ (['width', 'height']).map((side) => {
+    const stored = overrides[`figure_${side}`];
+    const reading = figureLengthFormValue(side, stored, leafReadings);
+    if (reading.lost) {
+      legacyTableRepairs.push(loadRepair({
+        code: 'setting-replaced', path: side === 'width' ? FIGURE_WIDTH_PATH : FIGURE_HEIGHT_PATH, effect: 'dropped',
+        stored: typeof stored === 'string' ? stored : JSON.stringify(stored)
+      }));
+    }
+    return [side, reading.value];
+  }));
   const comparisonHeight = classifyOptionalPositiveNumber(overrides.comparison_height);
   if (renderRequest.mode === 'linear' && comparisonHeight.status === 'invalid') {
     throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
@@ -6819,6 +6842,8 @@ export const projectCanonicalSessionRequest = ({
     linear_ruler_on_axis: Boolean(overrides.linear_ruler_on_axis),
     normalize_length: Boolean(overrides.normalize_length),
     linear_wrap_length: projectedWrapLength.value,
+    figure_width: projectedFigureSize.width,
+    figure_height: projectedFigureSize.height,
     species: renderRequest.mode === 'circular' ? (options.species || '') : '',
     strain: renderRequest.mode === 'circular' ? (options.strain || '') : ''
   };

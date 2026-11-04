@@ -295,6 +295,18 @@ def _synthetic(template: dict[str, Any]) -> list[dict[str, Any]]:
             "name": f"synthetic {mode}", "mode": mode, "edit": "empty table", "rows": [],
             "options": {**options, "side": "left"}, "composition": composition,
         })
+        # A figure drawn to a requested size: the canvas is the requested side when the content fits, centred.
+        for label, side, requested in (
+            ("requested width larger than the content", "left", {"widthPx": 3000.0, "heightPx": None}),
+            ("requested height larger than the content", "top", {"widthPx": None, "heightPx": 3000.0}),
+            ("requested width and height larger than the content", "upper_right", {"widthPx": 3000.0, "heightPx": 2800.0}),
+            ("requested sides smaller than the content", "right", {"widthPx": 100.0, "heightPx": 100.0}),
+        ):
+            cases.append({
+                "name": f"synthetic {mode}", "mode": mode, "edit": f"solid rows, {label}", "rows": solid,
+                "options": {**options, "side": side, "wrapWidth": 900.0},
+                "composition": {**composition, "requestedCanvas": requested},
+            })
     cases.extend(_ring_cases(options, composition, solid))
     return cases
 
@@ -470,6 +482,8 @@ def _composition_expected(case: dict[str, Any], legend: Aabb) -> dict[str, Any]:
             title_gap_px=spacing["titleGapPx"], stack_gap_px=spacing["stackGapPx"],
             overlay_clearance_px=spacing["overlayClearancePx"],
         ),
+        requested_width_px=(inputs.get("requestedCanvas") or {}).get("widthPx"),
+        requested_height_px=(inputs.get("requestedCanvas") or {}).get("heightPx"),
     ))
     return {
         "canvas": _box(plan.canvas_bounds),

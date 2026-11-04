@@ -6583,6 +6583,11 @@ def _append_common_gui_args(
         _append_flag(run_args, invocation_args, "--separate_strands")
     if form.get("show_scale") is False:
         _append_flag(run_args, invocation_args, "--hide_scale")
+    # The figure size as the drawing's form holds it ("180mm"); empty and "auto" are Auto, which writes no flag.
+    for key, option in (("figure_width", "--figure_width"), ("figure_height", "--figure_height")):
+        length = _string_or_none(form.get(key))
+        if length and length.strip().lower() != "auto":
+            _append_pair(run_args, invocation_args, option, length)
     features = adv.get("features")
     if isinstance(features, list) and features:
         _append_pair(run_args, invocation_args, "-k", ",".join(str(item) for item in features if item))

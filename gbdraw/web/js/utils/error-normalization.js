@@ -78,6 +78,10 @@ const REASONS = Object.freeze({
   // EXPORT_LIMIT phrases: a row length or DPI is advised only when Python found one that fits (D-46).
   PNG_SIZE: 'Use SVG, which has no size limit.',
   PDF_SIZE: 'Use SVG, which has no size limit.',
+  // A requested figure size the figure cannot fit (gbdraw/layout/figure_size.py). With Python's lengths in the
+  // context, the FIGURE_SIZE phrases word the parts and the smallest size; this is the text without them.
+  FIGURE_TOO_NARROW: 'The figure cannot be this narrow. Set a larger Figure width, or leave it empty (Auto).',
+  FIGURE_TOO_SHORT: 'The figure cannot be this short. Set a larger Figure height, or leave it empty (Auto).',
   SELECTOR_NO_MATCH: 'No record has a feature that this selector names. Check the key and the value, for example gene=COX1.',
   SELECTOR_AMBIGUOUS: 'In one record, this selector names features that start at different bases. Use a selector that names one feature, such as locus_tag=<tag>.',
   // Align at feature reads the drawn request, so new Record Layout rows count after a Generate (OV-2501).
@@ -367,6 +371,14 @@ const PHRASES = Object.freeze({
   exportSizePt: 'PDF is limited to {limit} pt per side, and this figure is {width} x {height} pt.',
   exportRowLength: 'A row length of {length} bp should fit (estimated from the drawn height).',
   exportDpi: 'A DPI of {dpi} or lower would fit.',
+  // FIGURE_TOO_NARROW, FIGURE_TOO_SHORT: Python's lengths as its message writes them (`180 mm`).
+  figureTooNarrow: 'The figure cannot be {requested} wide: the parts that do not shrink need {minimum} ({parts}).',
+  figureTooShort: 'The figure cannot be {requested} tall at {atWidth} wide: it needs {minimum} ({parts}).',
+  figureWidthRemedy: 'Set Figure width to at least {minimum}, or leave it empty (Auto).',
+  figureWidthLegendRemedy: 'Set Figure width to at least {minimum}, place the Legend at the top or bottom, or leave it empty (Auto).',
+  figureHeightRemedy: 'Set Figure height to at least {minimum}, or leave it empty (Auto).',
+  figureParts2: '{first}, {second}', figureParts3: '{first}, {second}, {third}',
+  figureParts4: '{first}, {second}, {third}, {fourth}',
   liveEditFailed: 'Live edit failed: direct edits already applied are kept; geometry may still need updating.',
   liveEditRetry: 'Retry the live edit or use Generate.',
   liveEditChange: 'Change the edit, or change the settings and use Generate.',
@@ -496,6 +508,16 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [height] The figure's height in the export format's unit (EXPORT_LIMIT).
  * @property {number} [rowLength] The longer Wrap Rows length in bp that should fit (EXPORT_LIMIT).
  * @property {number} [dpi] The highest PNG DPI that fits (EXPORT_LIMIT).
+ * @property {string} [requested] A refused figure size (FIGURE_TOO_NARROW, FIGURE_TOO_SHORT): the requested side, as
+ *   Python's message writes a length (`180 mm`); `minimum`, `atWidth` and the parts likewise.
+ * @property {string} [minimum]
+ * @property {string} [atWidth]
+ * @property {string} [primary]
+ * @property {string} [legend]
+ * @property {string} [title]
+ * @property {string} [padding]
+ * @property {FigurePrimaryItem} [primaryItem]
+ * @property {true} [legendRemedy]
  */
 
 /**
@@ -775,6 +797,16 @@ const contextFor = (value) => {
     if (tracks.length) context.keptInsideTracks = tracks.join(',');
   }
   if (typeof value.slotTrack === 'string' && Object.hasOwn(SWITCHED_TRACKS, value.slotTrack)) context.slotTrack = value.slotTrack;
+  // A refused figure size: Python's lengths (`180 mm`), each a bounded number and unit, and its primary item.
+  if (value.reason === 'FIGURE_TOO_NARROW' || value.reason === 'FIGURE_TOO_SHORT') {
+    for (const key of /** @type {const} */ (['requested', 'minimum', 'atWidth', 'primary', 'legend', 'title', 'padding'])) {
+      if (typeof value[key] === 'string' && FIGURE_LENGTH_TEXT.test(value[key])) context[key] = value[key];
+    }
+    if (typeof value.primaryItem === 'string' && Object.hasOwn(FIGURE_PRIMARY_ITEMS, value.primaryItem)) {
+      context.primaryItem = /** @type {FigurePrimaryItem} */ (value.primaryItem);
+    }
+    if (value.legendRemedy === true) context.legendRemedy = true;
+  }
   for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex' | 'limit' | 'width' | 'height' | 'rowLength' | 'dpi' | 'recordPosition'>} */ ([
     'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex',
     'limit', 'width', 'height', 'rowLength', 'dpi', 'recordPosition'
@@ -814,6 +846,46 @@ const SESSION_LOAD_REASONS = new Set(['SESSION_FORMAT', 'SESSION_FIELDS', 'SESSI
  */
 const sessionLoadRejected = ({ code, operation }, field, reason) => code === 'INPUT_INVALID' && field === 'schema'
   && (SESSION_LOAD_REASONS.has(String(reason)) || (reason === 'FIELDS' && operation === 'session-load'));
+
+// A refused figure size (gbdraw/layout/figure_size.py): its primary item by Python's id, each part with its length.
+/** @typedef {'record_ends' | 'records' | 'map' | 'maps'} FigurePrimaryItem */
+/** @type {Readonly<Record<FigurePrimaryItem, string>>} */
+const FIGURE_PRIMARY_ITEMS = Object.freeze({
+  record_ends: 'record names and labels past the sequence ends {length}', records: 'records {length}',
+  map: 'map at its smallest {length}', maps: 'maps at their smallest {length}'
+});
+const FIGURE_PARTS = Object.freeze({ legend: 'legend {length}', title: 'title {length}', padding: 'padding {length}' });
+// A length as Python's message writes it: a number and a unit name (the units are Python's).
+const FIGURE_LENGTH_TEXT = /^[0-9]{1,30}(\.[0-9]{1,6})? [a-z]{1,3}$/;
+/**
+ * The sentences of a refused figure size, in Python's numbers: what does not fit and the smallest size, then what to
+ * do. None without Python's lengths (the reason's own text then stands).
+ * @param {UserFacingContext} context
+ * @returns {ErrorTextPart[]}
+ */
+const figureSizeParts = ({ reason, requested, minimum, atWidth, primary, primaryItem, legend, title, padding, legendRemedy }) => {
+  const narrow = reason === 'FIGURE_TOO_NARROW';
+  if ((!narrow && reason !== 'FIGURE_TOO_SHORT') || requested === undefined || minimum === undefined) return [];
+  if (!narrow && atWidth === undefined) return [];
+  /** @type {ErrorTextPart[]} */
+  const parts = [
+    ...(primary !== undefined && primaryItem !== undefined ? [{ text: FIGURE_PRIMARY_ITEMS[primaryItem], params: { length: primary } }] : []),
+    ...(/** @type {const} */ (['legend', 'title', 'padding'])).flatMap((key) => {
+      const length = { legend, title, padding }[key];
+      return length === undefined ? [] : [{ text: FIGURE_PARTS[key], params: { length } }];
+    })
+  ];
+  const joiner = [null, null, PHRASES.figureParts2, PHRASES.figureParts3, PHRASES.figureParts4][parts.length];
+  if (parts.length === 0 || (parts.length > 1 && !joiner)) return [];
+  const names = /** @type {const} */ (['first', 'second', 'third', 'fourth']);
+  const listed = parts.length === 1 ? parts[0]
+    : { text: /** @type {string} */ (joiner), params: Object.fromEntries(parts.map((part, index) => [names[index], part])) };
+  return [
+    narrow ? { text: PHRASES.figureTooNarrow, params: { requested, minimum, parts: listed } }
+      : { text: PHRASES.figureTooShort, params: { requested, atWidth: /** @type {string} */ (atWidth), minimum, parts: listed } },
+    { text: narrow ? (legendRemedy ? PHRASES.figureWidthLegendRemedy : PHRASES.figureWidthRemedy) : PHRASES.figureHeightRemedy, params: { minimum } }
+  ];
+};
 
 // OV-1274, OV-1276: the room a Circular placement keeps below its band for the
 // inside rows after it (other rows may share it), and the off controls and widths
@@ -910,8 +982,9 @@ export const normalizeUserFacingError = (value, {
     exportSize,
     exportSize && rowLength !== undefined && { text: PHRASES.exportRowLength, params: { length: grouped(rowLength) } },
     exportSize && dpi !== undefined && { text: PHRASES.exportDpi, params: { dpi } },
-    sessionVersionGuidance(result.context)
-      || (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null),
+    ...figureSizeParts(result.context),
+    sessionVersionGuidance(result.context) || (figureSizeParts(result.context).length > 0 ? null
+      : (REASONS[/** @type {string} */ (reason)] || DEFINITIONS[result.code][2] ? { text: REASONS[/** @type {string} */ (reason)] || /** @type {string} */ (DEFINITIONS[result.code][2]) } : null)),
     reason === 'NOT_NUCLEOTIDE' && letter && { text: PHRASES.letter, params: { letter } },
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
     ...trackRoomParts(result.context),
