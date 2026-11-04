@@ -2606,7 +2606,7 @@
          the drawing (a default name in the UI language). Arrow keys, Home and End move the focus; Enter or Space shows
          the focused drawing (manual activation). While the project has no Linear drawing, the Linear offer tab follows the
          tabs; choosing it makes an empty Linear drawing (New Linear). The tab menu holds New Circular, New Linear, and
-         Duplicate (a copy of its tab's drawing, with its Result and an empty History), New Circular and New Linear drawing
+         Duplicate (a copy of its tab's drawing, with its Result and an empty History), New drawing from a region (a dialog), New Circular and New Linear drawing
          with this style (a new drawing of that mode with its tab's settings that the mode has and the user's table rows,
          no files; R17-27), then Rename, Move, and Delete of its tab's drawing; each item is one History step. -->
     <div class="drawing-bar shrink-0 flex items-center gap-1 px-4 py-1 border-b border-slate-200 bg-white/90">
@@ -2635,6 +2635,7 @@
                          :items="[
                              { label: t('New Circular drawing'), icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing('circular') },
                              { label: t('New Linear drawing'), icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing('linear') },
+                             { label: t('New drawing from a region…'), icon: 'ph-crop', disabled: !drawingSwitchAvailable, run: () => regionDrawings.open() },
                              { label: t('Duplicate drawing'), icon: 'ph-copy', disabled: !drawingSwitchAvailable, run: () => drawingBar.duplicateDrawing(tab.id) },
                              { label: t('New Circular drawing with this style'), icon: 'ph-paint-brush', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawingWithStyle(tab.id, 'circular') },
                              { label: t('New Linear drawing with this style'), icon: 'ph-paint-brush', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawingWithStyle(tab.id, 'linear') },
@@ -9281,6 +9282,81 @@
         <!-- The notice banner's live region: always rendered, so a screen reader announces each new notice. -->
         <p class="sr-only" role="status" aria-live="polite" data-app-notice-announcer>{{ notice.announcement }}</p>
         <!-- The app's confirmations (Reset Settings, replacing unsaved work with a Session, a risky color rule pattern, a repeated or large download) and its questions for text (the Session title) -->
+        <!-- New drawing from a region (PD-OI-090 (4)): the view of app/region-drawing.js, which owns open, close and reset -->
+        <choice-dialog v-if="regionDrawings.dialog.show" labelledby="region-drawing-title" describedby="region-drawing-description"
+             data-region-drawing-dialog
+             @cancel="regionDrawings.close()" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="region-drawing-title" class="text-base font-bold text-slate-800">{{ t('New drawing from a region') }} <help-tip id="help-region-drawing" :text="t('Draws the chosen regions of the shown drawing as a new drawing. One whole record keeps the drawing mode; anything else makes a Linear drawing. Coordinates are 1-based and inclusive, in source coordinates.')"></help-tip></h2>
+            <p id="region-drawing-description" class="mt-1 text-sm leading-relaxed text-slate-600">{{ t('Choose the records and the region of each.') }}</p>
+            <ul data-region-drawing-rows class="mt-2 max-h-[40vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
+                <li v-for="row in regionDrawings.dialog.rows" :key="row.recordKey" :data-region-drawing-row="row.recordKey" class="px-2 py-1.5 text-xs">
+                    <label class="flex min-w-0 items-center gap-2">
+                        <input type="checkbox" data-history-ignore data-region-drawing-check class="form-checkbox shrink-0"
+                               :checked="row.checked" @change="row.checked = $event.target.checked; regionDrawings.refresh()">
+                        <span class="min-w-0 truncate font-semibold text-slate-800" :title="row.caption">{{ row.caption }}</span>
+                        <span class="ml-auto shrink-0 tabular-nums text-slate-500">{{ formatRecordLength(row.length) }}</span>
+                    </label>
+                    <div v-if="row.checked" class="mt-1.5 flex flex-wrap items-end gap-2 pl-6">
+                        <label class="text-[11px] font-semibold text-slate-600">{{ t('Region') }}
+                            <select data-history-ignore data-region-drawing-kind class="form-select mt-0.5 px-2 py-1 text-xs font-normal"
+                                    :value="row.kind" @change="row.kind = $event.target.value; regionDrawings.refresh()">
+                                <option value="whole">{{ t('Whole record') }}</option>
+                                <option value="coordinates">{{ t('Coordinates') }}</option>
+                                <option value="feature" :disabled="!row.features">{{ t('A feature') }}</option>
+                            </select>
+                        </label>
+                        <template v-if="row.kind === 'coordinates'">
+                            <label class="text-[11px] font-semibold text-slate-600">{{ t('Start') }}
+                                <input type="text" inputmode="numeric" data-history-ignore data-region-drawing-start class="form-input mt-0.5 w-24 px-2 py-1 text-xs font-normal"
+                                       :value="row.start" @input="row.start = $event.target.value; regionDrawings.refresh()">
+                            </label>
+                            <label class="text-[11px] font-semibold text-slate-600">{{ t('End') }}
+                                <input type="text" inputmode="numeric" data-history-ignore data-region-drawing-end class="form-input mt-0.5 w-24 px-2 py-1 text-xs font-normal"
+                                       :value="row.end" @input="row.end = $event.target.value; regionDrawings.refresh()">
+                            </label>
+                        </template>
+                        <label v-if="row.kind === 'feature'" class="min-w-0 max-w-full text-[11px] font-semibold text-slate-600">{{ t('Feature') }}
+                            <select data-history-ignore data-region-drawing-feature class="form-select mt-0.5 block w-full max-w-xs px-2 py-1 text-xs font-normal"
+                                    :value="row.featureId" @change="row.featureId = $event.target.value; regionDrawings.refresh()">
+                                <option value="">{{ t('Choose a feature') }}</option>
+                                <option v-for="feature in row.features || []" :key="feature.featureId" :value="feature.featureId">{{ feature.label }}</option>
+                            </select>
+                        </label>
+                        <p v-if="!row.features" data-region-drawing-feature-reason class="basis-full text-[11px] text-slate-500">{{ t('Generate the drawing to choose a feature.') }}</p>
+                    </div>
+                </li>
+            </ul>
+            <div data-region-drawing-outcome class="mt-3 text-xs leading-relaxed text-slate-600" aria-live="polite">
+                <p v-if="regionDrawings.dialog.message" data-region-drawing-message :class="regionDrawings.dialog.status === 'refused' || regionDrawings.dialog.status === 'error' ? 'text-red-700' : ''">{{ regionDrawings.dialog.message }}</p>
+                <p v-if="regionDrawings.dialog.status === 'deriving'">{{ t('Preparing the drawing…') }}</p>
+                <template v-if="regionDrawings.dialog.status === 'derived'">
+                    <div v-if="regionDrawings.dialog.returnedToAuto.length" data-region-drawing-returned>
+                        <p class="font-semibold text-slate-700">{{ t('These sizes return to Auto for the new length:') }}</p>
+                        <ul class="mt-0.5 list-disc space-y-0.5 pl-5">
+                            <li v-for="item in regionDrawings.dialog.returnedToAuto" :key="item.setting" class="break-words">{{ t('{setting}: {explicit} → {auto}', { setting: item.label, explicit: item.explicit, auto: item.auto }) }}</li>
+                        </ul>
+                    </div>
+                    <p v-else>{{ t('Every setting is carried over.') }}</p>
+                    <div v-if="regionDrawings.dialog.notCarried.length" data-region-drawing-not-carried class="mt-2">
+                        <p class="font-semibold text-slate-700">{{ t('Not carried to the new drawing:') }}</p>
+                        <ul class="mt-0.5 list-disc space-y-0.5 pl-5">
+                            <li v-for="(line, index) in regionDrawings.dialog.notCarried" :key="index">{{ line }}</li>
+                        </ul>
+                    </div>
+                </template>
+                <label v-if="regionDrawings.dialog.status === 'derived' || regionDrawings.dialog.keepValues" class="mt-2 flex items-center gap-2 font-semibold text-slate-700">
+                    <input type="checkbox" data-history-ignore data-region-drawing-keep class="form-checkbox shrink-0"
+                           :checked="regionDrawings.dialog.keepValues" @change="regionDrawings.dialog.keepValues = $event.target.checked; regionDrawings.refresh()">
+                    <span>{{ t('Keep my values') }}</span>
+                </label>
+            </div>
+            <div class="mt-3 flex flex-wrap justify-end gap-2">
+                <button type="button" data-history-ignore data-region-drawing-cancel @click="regionDrawings.close()" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
+                <button type="button" data-history-managed data-region-drawing-create @click="regionDrawings.confirm()" class="btn btn-primary btn-sm"
+                        :disabled="regionDrawings.dialog.status !== 'derived' || !drawingSwitchAvailable">{{ t('Create') }}</button>
+            </div>
+        </choice-dialog>
         <choice-dialog v-if="choicePrompt.show" labelledby="choice-prompt-title" describedby="choice-prompt-description"
              data-choice-prompt
              @cancel="resolveChoicePrompt('cancel')" @keydown.tab="trapDialogFocus"
