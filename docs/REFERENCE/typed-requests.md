@@ -172,7 +172,7 @@ inside the regions:
 
 `RegionDrawing` holds `drawing`, `adaptation` (the sizes that returned to
 Auto), `not_carried` (typed entries, each with a `kind` and a `message`), and
-`dropped` (those messages).
+`dropped`, a read-only property that returns those messages.
 
 The request reads the materialized files, so build or render it before the
 materialization context closes.
