@@ -319,3 +319,27 @@ test('an edit of an unknown record key changes nothing and derives nothing', asy
   assert.equal(JSON.stringify(owner.dialog), before);
   assert.equal(calls.derive.length, derives);
 });
+
+// The reply's vocabularies come from Python (mode-profiles.generated.js).
+test('every kind of a part not carried that Python names has a text in each mode', async () => {
+  const { notCarriedLine } = await import('../../gbdraw/web/js/app/region-drawing.js');
+  const { MODE_PROFILE_DATA } = await import('../../gbdraw/web/js/mode-profiles.generated.js');
+  const { sourceCalls } = await import('../../tools/i18n/source-keys.mjs');
+  const english = new Set(sourceCalls().map((call) => call.key));
+  assert.ok(MODE_PROFILE_DATA.regionDrawing.notCarriedKinds.length > 0);
+  for (const kind of MODE_PROFILE_DATA.regionDrawing.notCarriedKinds) {
+    for (const mode of ['circular', 'linear']) {
+      const line = notCarriedLine(mode, kind);
+      assert.ok(english.has(line), `${mode} ${kind}: "${line}" is no English UI text`);
+    }
+  }
+});
+
+test('a refusal is read for each reason Python names and for no other', async () => {
+  for (const refusal of [...(await import('../../gbdraw/web/js/mode-profiles.generated.js')).MODE_PROFILE_DATA.regionDrawing.refusalReasons, 'NOT_A_REASON']) {
+    const { owner } = harness({ refusal });
+    await owner.open();
+    await owner.editRow('record-1', { checked: true, kind: 'coordinates', start: '900', end: '100' });
+    assert.equal(owner.dialog.status, refusal === 'NOT_A_REASON' ? 'error' : 'refused', refusal);
+  }
+});

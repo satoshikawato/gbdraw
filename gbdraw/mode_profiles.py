@@ -278,6 +278,7 @@ def mode_profiles_payload() -> dict[str, object]:
     """Return the JSON-compatible profile representation used by the web app."""
 
     # gbdraw.auto_sizes takes DiagramMode from this module.
+    from gbdraw.api.region_drawing import NotCarriedKind, StartAfterEndReason
     from gbdraw.auto_sizes import ADAPTABLE_SETTINGS, linear_label_size_records, tick_and_window_tiers
     from gbdraw.comparisons.identity_scale import IDENTITY_SCALE_PATHS
     from gbdraw.config.models import GbdrawConfig
@@ -323,6 +324,13 @@ def mode_profiles_payload() -> dict[str, object]:
             for name, domain in COMPARISON_THRESHOLD_DOMAINS.items()
         },
         "featureTypes": list(DEFAULT_FEATURE_TYPES),
+        # The vocabularies of a region drawing's reply (gbdraw/api/region_drawing.py):
+        # the kinds of a part the new drawing does not carry and the reasons a
+        # region is refused.
+        "regionDrawing": {
+            "notCarriedKinds": list(get_args(NotCarriedKind)),
+            "refusalReasons": list(get_args(StartAfterEndReason)),
+        },
         # The values of labels.<mode>.line and .protection.
         "labelStyleChoices": {"line": list(LABEL_LINES), "protection": list(LABEL_PROTECTIONS)},
         "modes": {

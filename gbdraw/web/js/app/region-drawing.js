@@ -5,6 +5,7 @@ import { msg, t, tm } from '../utils/i18n.js';
 import { reactive } from '../utils/reactivity.js';
 import { formatGroupedNumber } from '../services/record-options.js';
 import { drawnRecordIdentities } from '../services/record-draw-selection.js';
+import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { ProjectedDraftRequest, RegionDerivation } from '../services/config.js' */
@@ -144,7 +145,8 @@ export const adaptableSettingLabel = (mode, setting) => {
 };
 
 /**
- * One English line per kind (wording owner); a kind worded per mode is keyed,
+ * One English line per kind of `regionDrawing.notCarriedKinds` (from Python's
+ * `NotCarriedKind`; wording owner); a kind worded per mode is keyed,
  * as `ADAPTABLE_SETTING_TEXT` is, by the new drawing's mode. The other mode's
  * settings are those of the mode the new drawing is not.
  * @type {Readonly<Record<RegionNotCarriedItem['kind'], string | Readonly<Record<DerivedRegionDrawing['mode'], string>>>>}
@@ -173,7 +175,7 @@ const NOT_CARRIED_TEXT = Object.freeze({
  * @param {RegionNotCarriedItem['kind']} kind
  * @returns {string}
  */
-const notCarriedLine = (mode, kind) => {
+export const notCarriedLine = (mode, kind) => {
   const text = NOT_CARRIED_TEXT[kind];
   return tm(typeof text === 'string' ? text : text[mode]);
 };
@@ -225,6 +227,9 @@ const REPLY_INVALID = () => diagnosticError('RESULT_INVALID', {}, { stage: 'help
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+/** The reply's vocabularies, from Python's `StartAfterEndReason` and `NotCarriedKind`. */
+const { refusalReasons: REFUSAL_REASONS, notCarriedKinds: NOT_CARRIED_KINDS } = MODE_PROFILE_DATA.regionDrawing;
+
 /**
  * The Worker's reply, checked against `RegionDrawingReply`.
  * @param {unknown} result
@@ -233,7 +238,7 @@ const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Arra
 const readRegionDrawingReply = (result) => {
   if (!isRecord(result)) throw REPLY_INVALID();
   if (result.status === 'refused') {
-    if ((result.reason !== 'ORIGIN_CROSSING' && result.reason !== 'START_AFTER_END') || typeof result.recordKey !== 'string'
+    if (typeof result.reason !== 'string' || !REFUSAL_REASONS.includes(result.reason) || typeof result.recordKey !== 'string'
       || !Number.isSafeInteger(result.start) || !Number.isSafeInteger(result.end)) throw REPLY_INVALID();
     return /** @type {RefusedRegionDrawing} */ (result);
   }
@@ -241,7 +246,10 @@ const readRegionDrawingReply = (result) => {
   if (result.status !== 'derived' || (result.mode !== 'circular' && result.mode !== 'linear')
     || !isRecord(result.renderRequest) || result.renderRequest.mode !== result.mode
     || !isRecord(resourceSources) || !Object.values(resourceSources).every((id) => typeof id === 'string')
-    || !Array.isArray(result.returnedToAuto) || !Array.isArray(result.notCarried)) throw REPLY_INVALID();
+    || !Array.isArray(result.returnedToAuto) || !Array.isArray(result.notCarried)
+    || !result.notCarried.every((item) => isRecord(item) && typeof item.kind === 'string' && NOT_CARRIED_KINDS.includes(item.kind))) {
+    throw REPLY_INVALID();
+  }
   return /** @type {DerivedRegionDrawing} */ (/** @type {unknown} */ (result));
 };
 

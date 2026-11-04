@@ -327,5 +327,26 @@ export const MODE_PROFILE_DATA = deepFreeze({
       }
     }
   },
+  "regionDrawing": {
+    "notCarriedKinds": [
+      "OTHER_MODE_SETTINGS",
+      "FEATURE_PLACEMENTS",
+      "FEATURE_PLACEMENT_TABLE",
+      "SIMILARITY_ALIGNMENT",
+      "CONSERVATION_RINGS",
+      "CONSERVATION_RING_TABLES",
+      "LINEAR_COMPARISONS",
+      "COMPARISON_TABLES",
+      "LOSAT_NO_PAIR",
+      "ANNOTATION_TABLE",
+      "ANNOTATION_CROSSES_ORIGIN",
+      "ANNOTATION_DRAWN_COORDINATES",
+      "ANNOTATIONS_OUTSIDE"
+    ],
+    "refusalReasons": [
+      "ORIGIN_CROSSING",
+      "START_AFTER_END"
+    ]
+  },
   "version": 1
 });
