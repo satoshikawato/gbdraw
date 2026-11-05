@@ -8,6 +8,7 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 
 /**
  * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
+ * @import { UserFacingError } from '../../utils/error-normalization.js'
  */
 
 /**
@@ -51,15 +52,17 @@ const cleanText = (value) => String(value ?? '').trim();
  * @returns {AnnotationCatalogIssue}
  */
 const catalogIssue = (code, context = {}) => ({ code, context });
+// The catalog says what the normalizer says (a refused file read is INPUT_UNREADABLE at
+// its read owner); a missing error is a falsy thrown value, unknown as Circular discovery
+// records it.
 /**
  * @param {unknown} error
  * @param {AnnotationCatalogIssue['context']} [context]
  */
 const discoveryIssue = (error, context = {}) => {
-  const model = normalizeUserFacingError(error || null);
-  return model && model.code !== 'UNKNOWN'
-    ? catalogIssue(model.code, { ...model.context, ...context })
-    : catalogIssue('INPUT_UNREADABLE', context);
+  // The argument is truthy, so the model is not null.
+  const model = /** @type {UserFacingError} */ (normalizeUserFacingError(error || { code: 'UNKNOWN' }));
+  return catalogIssue(model.code, { ...model.context, ...context });
 };
 /** @param {FileFingerprintInput | null | undefined} file */
 const fileFingerprint = (file) => file

@@ -461,6 +461,27 @@ const emptySourceCatalog = buildAnnotationRecordCatalog({
 assert.equal(emptySourceCatalog.status, 'error');
 assert.deepEqual(emptySourceCatalog.issues[0], { code: 'NO_RECORDS', context: { inputOrdinal: 1 } });
 
+// D-37: a discovery failure reads in the catalog as the normalizer reads it. A failure that is not a read (an Error
+// with no code) is the unknown failure, as the Linear card shows it; a refused read is INPUT_UNREADABLE because
+// readFileBytes says so (OV-2563). A missing error is a falsy thrown value: unknown too, as Circular discovery records it.
+{
+  const { normalizeUserFacingError } = await load('utils/error-normalization.js');
+  const { readFileBytes } = await load('services/file-content-cache.js');
+  const refused = await readFileBytes({ async arrayBuffer() { throw new DOMException('gone', 'NotReadableError'); } })
+    .then(() => null, (cause) => cause);
+  const failedSource = (error) => ({ sourceKey: 'failed', hasInput: true, status: 'error', selector: '', error });
+  const issueOf = (error) => buildAnnotationRecordCatalog({ mode: 'linear', linearSources: [failedSource(error)] }).issues[0];
+  const circularIssueOf = (error) => buildAnnotationRecordCatalog({
+    mode: 'circular', circularSource: { hasInput: true, status: 'error', error }
+  }).issues[0];
+  const stored = (cause) => normalizeUserFacingError(cause, { operation: 'input-records', stage: 'helper' });
+  assert.deepEqual(issueOf(stored(new Error('internal'))), { code: 'UNKNOWN', context: { inputOrdinal: 1 } });
+  assert.deepEqual(circularIssueOf(stored(new Error('internal'))), { code: 'UNKNOWN', context: {} });
+  assert.deepEqual(issueOf(stored(refused)), { code: 'INPUT_UNREADABLE', context: { inputOrdinal: 1 } });
+  assert.deepEqual(issueOf(null), { code: 'UNKNOWN', context: { inputOrdinal: 1 } });
+  assert.match(normalizeUserFacingError(issueOf(stored(new Error('internal')))).summary, /without recognized diagnostic information/);
+}
+
 const gbComparisonCatalog = buildAnnotationRecordCatalog({
   mode: 'linear',
   linearSources: [
