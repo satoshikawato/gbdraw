@@ -188,31 +188,107 @@ def test_json_writer_is_sorted_and_newline_terminated(tmp_path: Path) -> None:
     assert output.read_text(encoding="utf-8") == '{\n  "a": 2,\n  "z": 1\n}\n'
 
 
-def test_quick_profile_runs_all_three_real_assemblers(tmp_path: Path) -> None:
-    output = tmp_path / "quick.json"
+def _process_report(time_ms: float, memory: int = 1_000) -> dict:
+    report = _report(label="tree")
+    report["settings"].update(timingSamplesPerCase=1, memorySamplesPerCase=1)
+    report["cases"] = {
+        name: benchmark._summarize_case([time_ms], [memory]) for name in benchmark.CASE_NAMES
+    }
+    return report
 
+
+def test_standard_profile_defaults_to_three_timing_samples() -> None:
+    args = benchmark._build_parser().parse_args(["run"])
+
+    assert benchmark._resolve_settings(args) == benchmark.BenchmarkSettings("standard", 3, 3, 3)
+
+
+def test_process_reports_merge_into_one_sample_per_process() -> None:
+    merged = benchmark.merge_process_reports(
+        [_process_report(t, m) for t, m in ((100.0, 1_000), (104.0, 1_200), (98.0, 1_100))]
+    )
+
+    case = merged["cases"]["singleCircular"]
+    assert case["timingSamplesMs"] == [100.0, 104.0, 98.0]
+    assert (case["medianAssemblyTimeMs"], case["timeNoisePct"], case["peakMemoryBytes"]) == (
+        100.0,
+        2.0,
+        1_200,
+    )
+    settings = merged["settings"]
+    assert settings["timingSamplesPerCase"] == settings["memorySamplesPerCase"] == 3
+    assert settings["processes"] == 3
+    # Samples from one process and samples from separate processes are not compared.
+    with pytest.raises(benchmark.BenchmarkDataError, match="settings differ"):
+        benchmark.compare_reports(_report(label="one process"), merged)
+
+
+def test_merge_refuses_reports_with_several_samples() -> None:
+    reports = [_process_report(100.0) for _ in range(3)]
+    for report in reports:
+        report["settings"]["timingSamplesPerCase"] = 3
+
+    with pytest.raises(benchmark.BenchmarkDataError, match="one sample"):
+        benchmark.merge_process_reports(reports)
+
+
+def test_compare_sources_alternates_trees_in_fresh_processes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+
+    def fake_run(command: list[str], check: bool) -> None:
+        root = command[command.index("--source-root") + 1]
+        output = Path(command[command.index("--output") + 1])
+        calls.append((root, output.name, command[command.index("--samples") + 1]))
+        output.write_text(json.dumps(_process_report(100.0 if root == "base" else 110.0)))
+
+    monkeypatch.setattr(benchmark.subprocess, "run", fake_run)
+
+    assert benchmark.main([
+        "compare-sources", "--baseline-root", "base", "--current-root", "head",
+        "--output-dir", str(tmp_path),
+    ]) == 1
+    assert calls == [
+        (root, f"{side}-{index}.json", "1")
+        for index in (1, 2, 3)
+        for root, side in (("base", "baseline"), ("head", "current"))
+    ]
+    comparison = json.loads((tmp_path / "comparison.json").read_text(encoding="utf-8"))
+    assert comparison["outcome"] == "fail"
+    assert json.loads((tmp_path / "current.json").read_text(encoding="utf-8"))["cases"][
+        "multiLinear"
+    ]["timingSamplesMs"] == [110.0] * 3
+
+
+def test_quick_compare_sources_runs_all_three_real_assemblers(tmp_path: Path) -> None:
     completed = subprocess.run(
         [
             sys.executable,
             "tools/benchmark_diagram_layout.py",
-            "run",
-            "--source-root",
+            "compare-sources",
+            "--baseline-root",
+            str(REPO_ROOT),
+            "--current-root",
             str(REPO_ROOT),
             "--quick",
-            "--label",
-            "pytest",
-            "--output",
-            str(output),
+            "--samples",
+            "1",
+            # One quick sample per tree measures wiring, not speed.
+            "--threshold-pct",
+            "1000",
+            "--output-dir",
+            str(tmp_path),
         ],
         cwd=REPO_ROOT,
         check=False,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=60,
     )
 
     assert completed.returncode == 0, completed.stderr
-    report = json.loads(output.read_text(encoding="utf-8"))
+    report = json.loads((tmp_path / "processes" / "baseline-1.json").read_text(encoding="utf-8"))
     assert set(report["cases"]) == set(benchmark.CASE_NAMES)
     assert report["settings"] == {
         "profile": "quick",
@@ -226,3 +302,8 @@ def test_quick_profile_runs_all_three_real_assemblers(tmp_path: Path) -> None:
     for case in report["cases"].values():
         assert case["medianAssemblyTimeMs"] > 0.0
         assert case["peakMemoryBytes"] > 0
+    assert json.loads((tmp_path / "current.json").read_text(encoding="utf-8"))["settings"][
+        "processes"
+    ] == 1
+    comparison = json.loads((tmp_path / "comparison.json").read_text(encoding="utf-8"))
+    assert comparison["outcome"] == "pass"

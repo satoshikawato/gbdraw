@@ -5,6 +5,11 @@ Run each source tree in a fresh process. Timing (one warmup, three samples),
 profiling/counters, and tracemalloc are separate invocations. Inputs and complete
 ordered stage results are hashed; --artifacts also saves the semantic oracles.
 The benchmark records current behavior, including errors, not Product authority.
+
+compare-sources times a baseline and a current tree for a base/head decision:
+each of the three samples per tree comes from its own fresh process, and the
+trees take turns (baseline, current, baseline, ...). Samples from one process
+share its state, so more of them do not reduce the spread between processes.
 """
 from __future__ import annotations
 
@@ -915,14 +920,74 @@ def measure_stage(pc, cc, fn, args, artifact):
     if output_bytes is not None:
         report["outputBytes"] = output_bytes
     if samples:
-        median = statistics.median(samples)
-        mad = statistics.median(abs(x-median) for x in samples)
-        report.update({"median": median, "mad": mad, "noisePct": 100 * mad/median if median else 0})
+        report.update(spread(samples))
     if args.measure == "memory":
         report["retainedBytes"] = retained
     if counts is not None:
         report.update({"operations": counts, "profile": profile})
     return report
+
+
+def spread(samples):
+    median = statistics.median(samples)
+    mad = statistics.median(abs(x-median) for x in samples)
+    return {"median": median, "mad": mad, "noisePct": 100 * mad/median if median else 0}
+
+
+def merge_process_reports(reports):
+    """One timing report of a tree from one-sample reports of fresh processes."""
+    first = reports[0]
+    for report in reports:
+        if report.get("measurement") != "timing" or report["settings"]["samples"] != 1:
+            raise ValueError("each process report must hold one timing sample")
+        for key in ("benchmark", "schema", "source", "settings", "dependencies"):
+            if report[key] != first[key]:
+                raise ValueError(f"process reports differ: {key}")
+        if report["cases"].keys() != first["cases"].keys() or any(
+                case["fixture"] != first["cases"][name]["fixture"]
+                or case["stages"].keys() != first["cases"][name]["stages"].keys()
+                for name, case in report["cases"].items()):
+            raise ValueError("process reports differ: cases")
+    merged = {**first, "settings": {**first["settings"], "samples": len(reports), "processes": len(reports)},
+              "processMaxRssKiB": max(report["processMaxRssKiB"] for report in reports), "cases": {}}
+    for name, case in first["cases"].items():
+        stages = {}
+        for stage, row in case["stages"].items():
+            rows = [report["cases"][name]["stages"][stage] for report in reports]
+            hashes = [x["semanticSha256"] for x in rows]
+            if len(set(hashes)) != 1:
+                raise ValueError(f"semantic results changed between processes: {name}/{stage}")
+            samples = [x["samples"][0] for x in rows]
+            stages[stage] = {**row, "samples": samples, "sampleSemanticSha256": hashes, **spread(samples)}
+        merged["cases"][name] = {**case, "stages": stages}
+    return merged
+
+
+def alternate(sides, count, directory):
+    """Run each side's command once per round, in turn, each in a fresh process."""
+    directory.mkdir(parents=True, exist_ok=True)
+    paths = {name: [] for name, _ in sides}
+    for index in range(1, count + 1):
+        for name, command in sides:
+            output = directory / f"{name}-{index}.json"
+            subprocess.run(command(output), check=True)
+            paths[name].append(output)
+    return paths
+
+
+def compare_sources(args):
+    def command(root):
+        stages = ["--stages", *args.stages] if args.stages else []
+        return lambda output: [sys.executable, str(Path(__file__).resolve()), "run", "--source-root", str(root),
+                               "--cases", *args.cases, *stages, "--seed", str(args.seed),
+                               "--warmups", str(args.warmups), "--samples", "1", "--output", str(output)]
+    paths = alternate((("baseline", command(args.baseline_root)), ("current", command(args.current_root))),
+                      args.samples, args.output_dir / "processes")
+    merged = {}
+    for side, side_paths in paths.items():
+        merged[side] = merge_process_reports([read_report(path) for path in side_paths])
+        (args.output_dir / f"{side}.json").write_bytes(json_bytes(merged[side]))
+    return compare_reports(merged["baseline"], merged["current"])
 
 
 def compare_reports(base, current, *, semantic_only=False):
@@ -996,6 +1061,16 @@ def main(argv=None):
     comp.add_argument("--current", type=Path, required=True)
     comp.add_argument("--output", type=Path, required=True)
     comp.add_argument("--semantics-only", action="store_true", help="compare scientific output across timing/profile/memory runs")
+    pair = sub.add_parser("compare-sources", help="time two source trees in alternating fresh processes and compare")
+    pair.add_argument("--baseline-root", type=Path, required=True)
+    pair.add_argument("--current-root", type=Path, required=True)
+    pair.add_argument("--cases", nargs="+", choices=CASES, default=list(CASES))
+    pair.add_argument("--stages", nargs="+", help="Measure only named stages")
+    pair.add_argument("--seed", type=int, default=SEED)
+    pair.add_argument("--warmups", type=int, default=POLICY["warmups"], help="warmups in each process")
+    pair.add_argument("--samples", type=int, default=POLICY["samples"], help="fresh processes per tree, one sample each")
+    pair.add_argument("--output-dir", type=Path, required=True,
+                      help="receives processes/, baseline.json, current.json and comparison.json")
     browser = sub.add_parser("browser", help="measure the production diagram Worker helper with Python Playwright")
     browser.add_argument("--source-root", type=Path, required=True)
     browser.add_argument("--samples", type=int, default=POLICY["samples"])
@@ -1008,6 +1083,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == "compare":
         report, code = compare_reports(read_report(args.baseline), read_report(args.current), semantic_only=args.semantics_only)
+    elif args.command == "compare-sources":
+        if args.samples < 1 or args.warmups < 0:
+            parser.error("samples must be positive and warmups nonnegative")
+        report, code = compare_sources(args)
+        args.output = args.output_dir / "comparison.json"
     elif args.command == "path-browser":
         from protein_comparison_browser import run_path_browser
         root = args.source_root.resolve()
