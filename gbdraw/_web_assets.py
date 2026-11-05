@@ -1,3 +1,5 @@
+"""The vendored Web assets: their files, source URLs, versions and notices."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

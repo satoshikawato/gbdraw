@@ -1,4 +1,4 @@
-"""Canvas configuration helpers (internal).
+"""Canvas sizes and offsets of Circular and Linear diagrams (internal).
 
 These classes encapsulate canvas sizing/offset logic for circular and linear diagrams.
 """
