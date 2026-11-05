@@ -7,8 +7,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
-  axisPosition, circularDragSpan, displayIndexOfRecordOffset, linearDragSpan, linearRowPosition, partsInsideSpan,
-  readRegionAxisRecords, regionBandPath, sourceBaseAt, sourceSpanOf
+  axisPosition, circularDragSpan, displayIndexOfRecordOffset, featureParts, linearDragSpan, linearRowPosition, onTheWay,
+  partsInsideSpan, partsMidpoint, readRegionAxisRecords, regionBandPath, sourceBaseAt, sourceSpanOf
 } from '../../gbdraw/web/js/services/region-axis.js';
 
 const VECTORS = JSON.parse(readFileSync(new URL('../fixtures/region_axis_geometry_vectors.json', import.meta.url), 'utf8')).cases;
@@ -100,3 +100,25 @@ test('the band covers the span on the feature tracks', () => {
   const [mito] = caseRecords('circular-display-start');
   assert.match(regionBandPath(mito.axis, { start: 0, length: 100 }), /^M .* A .* L .* A .* Z$/);
 });
+
+test('a Shift+click range runs clockwise on a Circular record and between the two features on a Linear one (OV-2481)', () => {
+  const [mito] = caseRecords('circular-display-start');
+  const { axis } = mito;
+  const middle = (feature) => partsMidpoint(axis.source, featureParts(feature));
+  // Four features on one arc, the second on the other strand: the range from the first to the third holds the second.
+  const [f1, f2, f3, f4] = [[100, 300], [400, 600], [700, 900], [1_000, 1_200]].map(([start, end]) => middle({ start, end }));
+  assert.deepEqual([f1, f2, f3, f4].map((position) => onTheWay(axis, f1, f3, position)), [true, true, true, false]);
+  // Clockwise past the display origin, and the way back the other way round.
+  const late = middle({ start: 16_400, end: 16_500 });
+  assert.equal(onTheWay(axis, late, f2, f1), true);
+  assert.equal(onTheWay(axis, late, f2, f4), false);
+  assert.equal(onTheWay(axis, f2, late, f4), true);
+  assert.equal(onTheWay(axis, f2, late, f1), false);
+  // A joined feature's middle lies between its first and its last part along the axis.
+  assert.equal(middle({ location_parts: [{ start: 16_560, end: 16_569 }, { start: 0, end: 9 }] }), mod(displayIndexOfRecordOffset(axis.source, 16_560) + 9, 16_569));
+  const [lambda] = caseRecords('linear-single');
+  assert.deepEqual([10, 50, 90].map((position) => onTheWay(lambda.axis, 80, 20, position)), [false, true, false]);
+});
+
+/** @param {number} value @param {number} modulus */
+const mod = (value, modulus) => ((value % modulus) + modulus) % modulus;

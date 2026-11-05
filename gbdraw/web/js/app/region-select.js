@@ -6,10 +6,10 @@
 // (the one Result popup, PD-OI-105), so it is no History step, is not saved,
 // and is not exported.
 /**
- * @import { DisplaySpan, RegionAxis, RegionAxisRecord, RegionSelection, RecordPart } from '../services/region-axis.js'
+ * @import { DisplaySpan, RegionAxis, RegionAxisRecord, RegionFeatureRow, RegionSelection } from '../services/region-axis.js'
  */
 import {
-  axisPosition, circularDragSpan, linearDragSpan, linearRowPosition, partsInsideSpan, regionAxisFrame,
+  axisPosition, circularDragSpan, featureParts, linearDragSpan, linearRowPosition, partsInsideSpan, regionAxisFrame,
   regionBandPath, regionSpanText, sourceSpanOf
 } from '../services/region-axis.js';
 import { holdTextSelection } from '../utils/gesture-text-selection.js';
@@ -19,16 +19,6 @@ import { t, tn } from '../utils/i18n.js';
 
 /** How far beside the feature tracks, in screen pixels, a press still starts a drag. */
 const BAND_SLACK_PX = 6;
-
-/**
- * A drawn feature of the shown Result as Select region reads it (a catalog row of `extractedFeatures`).
- * @typedef {object} RegionFeatureRow
- * @property {unknown} [svg_id]
- * @property {unknown} [record_key]
- * @property {unknown} [start]
- * @property {unknown} [end]
- * @property {unknown} [location_parts]
- */
 
 /**
  * The region an action works on, in source coordinates (1-based, both ends included).
@@ -54,20 +44,6 @@ const BAND_SLACK_PX = 6;
  * @property {(region: RegionTarget) => unknown} addRegionAnnotation The annotation owner's "Region N" row.
  * @property {(region: RegionTarget) => Promise<unknown>} newDrawingFromRegion The region drawing owner's derivation.
  */
-
-/**
- * The parts of a feature in its record's own bases.
- * @param {RegionFeatureRow} feature
- * @returns {RecordPart[]}
- */
-const featureParts = (feature) => {
-  const listed = Array.isArray(feature.location_parts) && feature.location_parts.length ? feature.location_parts : [feature];
-  return listed.flatMap((/** @type {{ start?: unknown, end?: unknown }} */ part) => {
-    const start = Number(part?.start);
-    const end = Number(part?.end);
-    return Number.isSafeInteger(start) && Number.isSafeInteger(end) && end > start ? [{ start, end }] : [];
-  });
-};
 
 /** @param {RegionSelection} selection @returns {RegionTarget} */
 const targetOf = (selection) => ({

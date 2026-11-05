@@ -2119,7 +2119,12 @@ export const createAppSetup = () => {
   setHeldPreviewViewportReader(() => (similarityAlignmentHoldShown() ? heldPreviewViewport() : null));
   const previewPopupsHeldNow = computed(() => similarityAlignmentTakeover.value !== null);
   const previewPopupsHeld = () => previewPopupsHeldNow.value;
-  const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted, previewPopupsHeld });
+  // The records of the shown Result whose axis Python wrote: Select region and Shift+click range selection read them.
+  const shownAxisRecords = () => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, Number(selectedResultIndex.value) || 0);
+  const featureSelection = createFeatureSelection({
+    state, onMounted, onUnmounted, previewPopupsHeld,
+    axisRecordOf: (recordKey) => shownAxisRecords().find((record) => record.recordKey === recordKey) ?? null
+  });
   // The palette owner comes before the feature editor, whose popup sets a
   // type's default color through it (D-15).
   const resultsManager = createResultsManager({
@@ -7833,7 +7838,7 @@ export const createAppSetup = () => {
   // Select region reads the axis of the shown Result from its track-slot geometry (Python's), and its popup is the
   // match frame's (the one Result popup).
   const regionSelect = createRegionSelect({
-    readAxisRecords: () => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, Number(selectedResultIndex.value) || 0),
+    readAxisRecords: shownAxisRecords,
     shownRoot: () => svgContainer.value?.querySelector('svg') ?? null,
     layoutEdit: layoutRepositionMode,
     openSelection: () => {

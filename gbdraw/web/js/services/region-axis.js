@@ -87,6 +87,17 @@ import { t } from '../utils/i18n.js';
 /** @typedef {{ x: number, y: number }} FramePoint */
 /** @typedef {{ start: number, end: number }} RecordPart A feature part in its record's own bases, 0-based, end excluded. */
 
+/**
+ * A drawn feature of the feature catalog as the converter reads it: its record key and its parts in its record's own
+ * bases (the catalog rows of `extractedFeatures` have no typedef of their own).
+ * @typedef {object} RegionFeatureRow
+ * @property {unknown} [svg_id]
+ * @property {unknown} [record_key]
+ * @property {unknown} [start]
+ * @property {unknown} [end]
+ * @property {unknown} [location_parts]
+ */
+
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 /** @param {unknown} value @returns {value is number} */
@@ -315,6 +326,32 @@ export const partsMidpoint = (source, parts) => {
   const reach = Math.max(...parts.map(({ start, end }, index) => mod(starts[index] - first, source.sourceLength) + (end - start)));
   return mod(first + reach / 2, source.sourceLength);
 };
+
+/**
+ * The parts of a feature in its record's own bases.
+ * @param {RegionFeatureRow} feature
+ * @returns {RecordPart[]}
+ */
+export const featureParts = (feature) => {
+  const listed = Array.isArray(feature.location_parts) && feature.location_parts.length ? feature.location_parts : [feature];
+  return listed.flatMap((/** @type {{ start?: unknown, end?: unknown }} */ part) => {
+    const start = Number(part?.start);
+    const end = Number(part?.end);
+    return Number.isSafeInteger(start) && Number.isSafeInteger(end) && end > start ? [{ start, end }] : [];
+  });
+};
+
+/**
+ * Whether display position `position` lies on the way from `from` to `to`: clockwise on a Circular record, as its
+ * bases are drawn, and between the two on a Linear one.
+ * @param {RegionAxis} axis
+ * @param {number} from
+ * @param {number} to
+ * @param {number} position
+ */
+export const onTheWay = (axis, from, to, position) => (axis.kind === 'circular'
+  ? mod(position - from, axis.source.sourceLength) <= mod(to - from, axis.source.sourceLength)
+  : position >= Math.min(from, to) && position <= Math.max(from, to));
 
 /** @param {number} value */
 const fixed = (value) => Number(value.toFixed(3));

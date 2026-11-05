@@ -5,7 +5,7 @@
 const { test, expect } = require('@playwright/test');
 const { gunzipSync } = require('node:zlib');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
-const { HMMT, loadSessionFile, openWithGenBank } = require('./helpers/audit-browser.cjs');
+const { HMMT, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { download, generate, load, seeds } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -205,4 +205,54 @@ test('Save Session keeps the axis of the Result, and its Load enables Select reg
   expect(record).toMatchObject({ recordKey: expect.any(String), axis: { kind: 'circular', source: { drawnLength: 16_569 } } });
   await loadSessionFile(page, saved);
   await expect(page.locator('[data-region-select-toggle]')).toBeEnabled();
+});
+
+/** A 10 kb circular record whose four CDS lie in its first 1,200 bases, on both strands. */
+const arcGenbank = () => {
+  const sequence = 'ACGTTGCA'.repeat(1250);
+  const origin = sequence.match(/.{1,60}/g).map((chunk, index) => (
+    `${String(index * 60 + 1).padStart(9)} ${chunk.match(/.{1,10}/g).join(' ')}`
+  )).join('\n');
+  const cds = [['f1', '101..300'], ['f2', 'complement(401..600)'], ['f3', '701..900'], ['f4', 'complement(1001..1200)']]
+    .map(([gene, location]) => `     CDS             ${location}\n                     /gene="${gene}"\n                     /product="${gene} protein"`).join('\n');
+  return `LOCUS       ARC1                   10000 bp    DNA     circular UNA 01-JAN-2000
+DEFINITION  Four CDS on one arc.
+ACCESSION   ARC1
+VERSION     ARC1
+KEYWORDS    .
+SOURCE      synthetic construct
+  ORGANISM  synthetic construct
+            .
+FEATURES             Location/Qualifiers
+${cds}
+ORIGIN
+${origin}
+//
+`;
+};
+
+test('Circular: Shift+click selects the features between two features along the record, also when they cover one arc', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({ name: 'ARC1.gbk', mimeType: 'text/plain', buffer: Buffer.from(arcGenbank()) });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(1);
+  await generateAndWaitForResult(page);
+  await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
+  // A feature by its record start (0-based): f1 100, f2 400, f3 700, f4 1,000.
+  const centre = (start) => page.evaluate((from) => {
+    const feature = window.__GBDRAW_APP__.extractedFeatures.find((entry) => Number(entry.start) === from);
+    const element = document.querySelector('.preview-canvas svg').querySelector(`[id="${feature.svg_id}"]`);
+    const box = element.getBoundingClientRect();
+    return { id: feature.svg_id, x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  }, start);
+  const [f1, f2, f3, f4] = [await centre(100), await centre(400), await centre(700), await centre(1000)];
+  await page.keyboard.down('Control');
+  await page.mouse.click(f1.x, f1.y);
+  await page.keyboard.up('Control');
+  await page.keyboard.down('Shift');
+  await page.mouse.click(f3.x, f3.y);
+  await page.keyboard.up('Shift');
+  const selected = await page.evaluate(() => [...window.__GBDRAW_APP__.selectedFeatureIds].sort());
+  expect(selected).toEqual([f1.id, f2.id, f3.id].sort());
+  expect(selected).not.toContain(f4.id);
 });
