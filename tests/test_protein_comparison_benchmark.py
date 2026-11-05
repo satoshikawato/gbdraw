@@ -99,6 +99,32 @@ def test_process_reports_merge_into_one_sample_per_process():
         benchmark.compare_reports(report(), merged)
 
 
+def test_process_comparison_does_not_time_stages_under_two_milliseconds():
+    def merged(*samples):
+        return benchmark.merge_process_reports([process_report(x) for x in samples])
+
+    def decision(base, current):
+        result, code = benchmark.compare_reports(base, current)
+        return result["comparisons"]["case/stage"]["decision"], code
+
+    short = merged(0.18, 0.18, 0.18)
+    assert short["settings"]["policy"]["minJudgedMs"] == 2.
+    # 50% slower, or noisy, below 2 ms on both sides: not judged on time.
+    assert decision(short, merged(0.27, 0.27, 0.27)) == ("pass_below_floor", 0)
+    assert decision(short, merged(0.18, 0.25, 0.12)) == ("pass_below_floor", 0)
+    # A stage that grows past 2 ms is judged, so a large slowdown still fails.
+    assert decision(short, merged(2.5, 2.5, 2.5)) == ("regression", 1)
+    # The semantic check does not depend on the stage's time.
+    other = benchmark.merge_process_reports([process_report(0.18, sha="other") for _ in range(3)])
+    assert decision(short, other) == ("semantic_mismatch", 1)
+    # One-process reports keep judging every stage on time.
+    base = report()
+    base["cases"]["case"]["stages"]["stage"].update(samples=[0.18] * 3, median=0.18)
+    slower = copy.deepcopy(base)
+    slower["cases"]["case"]["stages"]["stage"].update(samples=[0.27] * 3, median=0.27)
+    assert benchmark.compare_reports(base, slower)[1] == 1
+
+
 @pytest.mark.parametrize("change", ["semantic", "samples"])
 def test_merge_refuses_changed_results_and_multi_sample_reports(change):
     reports = [process_report(100.) for _ in range(3)]
