@@ -375,13 +375,18 @@ test.describe('touch', () => {
     await expect(page.locator('[data-region-span]')).toHaveText('4,001-6,001 (2,001 bp)');
 
     await page.keyboard.press('Escape');
-    // A touch outside the tracks (the circle's centre) pans the preview through the pan owner, as a mouse drag does.
+    // A touch outside the tracks pans the preview through the pan owner, as a mouse drag does. The point lies inside
+    // the circle, halfway to the feature band, clear of the centre's record definition (a control, which no drag pans).
     const centre = await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      const { regionAxisFrame } = await import('./js/services/region-axis.js');
-      const matrix = regionAxisFrame(state.svgContainer.value.querySelector('svg'), 0).getScreenCTM();
-      return { x: matrix.e, y: matrix.f };
+      const { readRegionAxisRecords, regionAxisFrame } = await import('./js/services/region-axis.js');
+      const { axis } = readRegionAxisRecords(state.trackSlotResolvedGeometry.value, state.selectedResultIndex.value)[0];
+      const frame = regionAxisFrame(state.svgContainer.value.querySelector('svg'), 0);
+      const point = new DOMPoint(0, -axis.bandInnerPx / 2).matrixTransform(frame.getScreenCTM());
+      const target = document.elementFromPoint(point.x, point.y);
+      return { x: point.x, y: point.y, control: Boolean(target?.closest('button, input, textarea, select, a, [role="button"]')) };
     });
+    expect(centre.control).toBe(false);
     const surface = () => page.evaluate(() => {
       const { left, top } = document.querySelector('.gbdraw-preview-surface').getBoundingClientRect();
       return { left, top };

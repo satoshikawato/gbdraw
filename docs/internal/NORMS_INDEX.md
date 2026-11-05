@@ -265,6 +265,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-112](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-112-history-step-list) | History step list | ACCEPTED | web.history.step-list | 1 | — | 4 |
 | [PD-OI-113](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-113-web-control-for-the-linear-wrap-length) | Web control for the Linear wrap length | ACCEPTED | web.linear.wrap-length | 3 | scenario revision 2 | 14 |
 | [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size) | Web control for the figure size | ACCEPTED | web.layout.figure-size | 1 | — | 1 |
+| [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing) | Select region on the drawing | ACCEPTED | web.result.region-select | 1 | — | 6 |
 
 ### Test files that cite each record
 
@@ -676,6 +677,13 @@ are listed under "Cited ids without a record".
   - `tests/web/session50-load-resave.test.mjs`
 - [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size)
   - `tests/web/drawing-list.test.mjs`
+- [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing)
+  - `tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.provenance.json`
+  - `tests/test_web_record_spans.py`
+  - `tests/web/annotations.test.mjs`
+  - `tests/web/mode-scoped-session.test.mjs`
+  - `tests/web/region-select.playwright.spec.js`
+  - `tests/web/region-select.test.mjs`
 
 ### Cited ids without a record
 
