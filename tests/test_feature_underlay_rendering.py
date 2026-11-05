@@ -25,6 +25,7 @@ from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.io.colors import load_default_colors
 from gbdraw.web_support.error_adapter import serialize_web_error
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 
 
 SVG_NS = {"svg": "http://www.w3.org/2000/svg"}
@@ -134,12 +135,14 @@ def test_linear_underlay_preserves_public_axis_sides(
     record = _record(include_cds=False)
     drawing = assemble_linear_diagram_from_records(
         [record],
-        cfg=_LINEAR_CFG,
-        selected_features_set=["repeat_region"],
-        depth_track_tables=[[_depth_table(record.id, len(record.seq))]],
-        linear_track_slots=slot_specs,
-        linear_track_axis_index=axis_index,
-        legend="none",
+        LinearAssemblyInputs(
+            cfg=_LINEAR_CFG,
+            selected_features_set=["repeat_region"],
+            depth_track_tables=[[_depth_table(record.id, len(record.seq))]],
+            linear_track_slots=slot_specs,
+            linear_track_axis_index=axis_index,
+            legend="none",
+        ),
     )
     svg = drawing.tostring()
     slots = drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
@@ -166,14 +169,16 @@ def test_linear_underlay_with_axis_omitted_keeps_explicit_sides() -> None:
     record = _record(include_cds=False)
     drawing = assemble_linear_diagram_from_records(
         [record],
-        cfg=_LINEAR_CFG,
-        selected_features_set=["repeat_region"],
-        depth_track_tables=[[_depth_table(record.id, len(record.seq))]],
-        linear_track_slots=[
-            "depth_3:depth@side=above,track_index=0",
-            "features:features@side=overlay",
-        ],
-        legend="none",
+        LinearAssemblyInputs(
+            cfg=_LINEAR_CFG,
+            selected_features_set=["repeat_region"],
+            depth_track_tables=[[_depth_table(record.id, len(record.seq))]],
+            linear_track_slots=[
+                "depth_3:depth@side=above,track_index=0",
+                "features:features@side=overlay",
+            ],
+            legend="none",
+        ),
     )
     slots = drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
 
@@ -195,20 +200,22 @@ def test_linear_multi_record_underlay_keeps_axis_during_final_relayout() -> None
     ]
     drawing = assemble_linear_diagram_from_records(
         records,
-        cfg=_LINEAR_CFG,
+        LinearAssemblyInputs(
+            cfg=_LINEAR_CFG,
+            selected_features_set=["repeat_region"],
+            depth_track_tables=[
+                [_depth_table(record.id, len(record.seq))] for record in records
+            ],
+            linear_track_slots=[
+                "depth_3:depth@side=above,track_index=0",
+                "features:features@side=overlay",
+            ],
+            linear_track_axis_index=1,
+            legend="none",
+        ),
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1"),
         ),
-        selected_features_set=["repeat_region"],
-        depth_track_tables=[
-            [_depth_table(record.id, len(record.seq))] for record in records
-        ],
-        linear_track_slots=[
-            "depth_3:depth@side=above,track_index=0",
-            "features:features@side=overlay",
-        ],
-        linear_track_axis_index=1,
-        legend="none",
     )
     resolved_records = drawing._gbdraw_track_slot_geometry["records"]
 
@@ -241,18 +248,22 @@ def test_default_repeat_underlay_has_feature_identity_and_paints_first(mode: str
     drawing = (
         assemble_circular_diagram_from_record(
             record,
-            cfg=_DEFAULT_CFG,
-            default_colors=default_colors,
-            selected_features_set=["repeat_region", "CDS"],
-            legend="none",
+            CircularAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                default_colors=default_colors,
+                selected_features_set=["repeat_region", "CDS"],
+                legend="none",
+            ),
         )
         if mode == "circular"
         else assemble_linear_diagram_from_records(
             [record],
-            cfg=_DEFAULT_CFG,
-            default_colors=default_colors,
-            selected_features_set=["repeat_region", "CDS"],
-            legend="none",
+            LinearAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                default_colors=default_colors,
+                selected_features_set=["repeat_region", "CDS"],
+                legend="none",
+            ),
         )
     )
     svg = drawing.tostring()
@@ -306,18 +317,22 @@ def test_underlays_keep_each_specific_color_rule_fill(mode: str) -> None:
     drawing = (
         assemble_circular_diagram_from_record(
             record,
-            cfg=_DEFAULT_CFG,
-            color_table=color_table,
-            selected_features_set=["repeat_region"],
-            legend="none",
+            CircularAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                color_table=color_table,
+                selected_features_set=["repeat_region"],
+                legend="none",
+            ),
         )
         if mode == "circular"
         else assemble_linear_diagram_from_records(
             [record],
-            cfg=_DEFAULT_CFG,
-            color_table=color_table,
-            selected_features_set=["repeat_region"],
-            legend="none",
+            LinearAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                color_table=color_table,
+                selected_features_set=["repeat_region"],
+                legend="none",
+            ),
         )
     )
     fills_by_feature_id = {
@@ -366,16 +381,20 @@ def test_compound_underlay_preserves_blocks_without_connector(mode: str) -> None
     drawing = (
         assemble_circular_diagram_from_record(
             record,
-            cfg=_DEFAULT_CFG,
-            selected_features_set=["repeat_region"],
-            legend="none",
+            CircularAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                selected_features_set=["repeat_region"],
+                legend="none",
+            ),
         )
         if mode == "circular"
         else assemble_linear_diagram_from_records(
             [record],
-            cfg=_DEFAULT_CFG,
-            selected_features_set=["repeat_region"],
-            legend="none",
+            LinearAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                selected_features_set=["repeat_region"],
+                legend="none",
+            ),
         )
     )
     shapes = _underlay_shapes(drawing.tostring())
@@ -398,18 +417,22 @@ def test_underlay_uses_actual_custom_feature_slot(mode: str) -> None:
     drawing = (
         assemble_circular_diagram_from_record(
             record,
-            cfg=_DEFAULT_CFG,
-            selected_features_set=["repeat_region"],
-            circular_track_slots=["genes:features@side=overlay,z=5"],
-            legend="none",
+            CircularAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                selected_features_set=["repeat_region"],
+                circular_track_slots=["genes:features@side=overlay,z=5"],
+                legend="none",
+            ),
         )
         if mode == "circular"
         else assemble_linear_diagram_from_records(
             [record],
-            cfg=_DEFAULT_CFG,
-            selected_features_set=["repeat_region"],
-            linear_track_slots=["genes:features@side=overlay,z=5"],
-            legend="none",
+            LinearAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                selected_features_set=["repeat_region"],
+                linear_track_slots=["genes:features@side=overlay,z=5"],
+                legend="none",
+            ),
         )
     )
     geometry = drawing._gbdraw_track_slot_geometry
@@ -425,17 +448,21 @@ def _assemble_without_feature_slot(mode: str, record: SeqRecord):
     if mode == "circular":
         return assemble_circular_diagram_from_record(
             record,
-            cfg=_DEFAULT_CFG,
-            selected_features_set=["CDS", "repeat_region"],
-            circular_track_slots=["axis:ticks"],
-            legend="none",
+            CircularAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                selected_features_set=["CDS", "repeat_region"],
+                circular_track_slots=["axis:ticks"],
+                legend="none",
+            ),
         )
     return assemble_linear_diagram_from_records(
         [record],
-        cfg=_DEFAULT_CFG,
-        selected_features_set=["CDS", "repeat_region"],
-        linear_track_slots=["gap:spacer@side=above"],
-        legend="none",
+        LinearAssemblyInputs(
+            cfg=_DEFAULT_CFG,
+            selected_features_set=["CDS", "repeat_region"],
+            linear_track_slots=["gap:spacer@side=above"],
+            legend="none",
+        ),
     )
 
 
@@ -467,18 +494,22 @@ def test_explicit_repeat_rectangle_disables_private_underlay(mode: str) -> None:
     drawing = (
         assemble_circular_diagram_from_record(
             record,
-            cfg=_DEFAULT_CFG,
-            selected_features_set=["repeat_region"],
-            feature_shapes={"repeat_region": "rectangle"},
-            legend="none",
+            CircularAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                selected_features_set=["repeat_region"],
+                feature_shapes={"repeat_region": "rectangle"},
+                legend="none",
+            ),
         )
         if mode == "circular"
         else assemble_linear_diagram_from_records(
             [record],
-            cfg=_DEFAULT_CFG,
-            selected_features_set=["repeat_region"],
-            feature_shapes={"repeat_region": "rectangle"},
-            legend="none",
+            LinearAssemblyInputs(
+                cfg=_DEFAULT_CFG,
+                selected_features_set=["repeat_region"],
+                feature_shapes={"repeat_region": "rectangle"},
+                legend="none",
+            ),
         )
     )
     svg = drawing.tostring()
@@ -506,12 +537,14 @@ def test_linear_underlay_lays_each_annotation_track_out_once(monkeypatch: pytest
     monkeypatch.setattr(assemble_module, "layout_annotation_track", counting)
     drawing = assemble_linear_diagram_from_records(
         [_record()],
-        cfg=_LINEAR_CFG,
-        selected_features_set=["repeat_region", "CDS"],
-        annotation_options=AnnotationOptions(
-            sets=(AnnotationSet("regions", (RegionAnnotation("r1", CoordinateSpan(None, 10, 90), label="R"),)),)
+        LinearAssemblyInputs(
+            cfg=_LINEAR_CFG,
+            selected_features_set=["repeat_region", "CDS"],
+            annotation_options=AnnotationOptions(
+                sets=(AnnotationSet("regions", (RegionAnnotation("r1", CoordinateSpan(None, 10, 90), label="R"),)),)
+            ),
+            legend="none",
         ),
-        legend="none",
     )
 
     assert _underlay_shapes(drawing.tostring())
@@ -537,12 +570,14 @@ def test_circular_underlay_lays_each_annotation_track_out_once(monkeypatch: pyte
     monkeypatch.setattr(assemble_module, "layout_annotation_track", counting)
     drawing = assemble_circular_diagram_from_record(
         _record(),
-        cfg=_DEFAULT_CFG,
-        selected_features_set=["repeat_region", "CDS"],
-        annotation_options=AnnotationOptions(
-            sets=(AnnotationSet("regions", (RegionAnnotation("r1", CoordinateSpan(None, 10, 90), label="R"),)),)
+        CircularAssemblyInputs(
+            cfg=_DEFAULT_CFG,
+            selected_features_set=["repeat_region", "CDS"],
+            annotation_options=AnnotationOptions(
+                sets=(AnnotationSet("regions", (RegionAnnotation("r1", CoordinateSpan(None, 10, 90), label="R"),)),)
+            ),
+            legend="none",
         ),
-        legend="none",
     )
 
     assert _underlay_shapes(drawing.tostring())
@@ -559,13 +594,23 @@ def test_annotation_slot_without_sets_draws_the_same_with_underlays(mode: str) -
     for features in (["CDS"], ["repeat_region", "CDS"]):
         drawing = (
             assemble_circular_diagram_from_record(
-                _record(), cfg=_DEFAULT_CFG, selected_features_set=features, legend="none",
-                circular_track_slots=slots,
+                _record(),
+                CircularAssemblyInputs(
+                    cfg=_DEFAULT_CFG,
+                    selected_features_set=features,
+                    legend="none",
+                    circular_track_slots=slots,
+                ),
             )
             if mode == "circular"
             else assemble_linear_diagram_from_records(
-                [_record()], cfg=_LINEAR_CFG, selected_features_set=features, legend="none",
-                linear_track_slots=slots,
+                [_record()],
+                LinearAssemblyInputs(
+                    cfg=_LINEAR_CFG,
+                    selected_features_set=features,
+                    legend="none",
+                    linear_track_slots=slots,
+                ),
             )
         )
         assert 'data-gbdraw-slot-id="a"' not in drawing.tostring()

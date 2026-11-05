@@ -43,6 +43,7 @@ from gbdraw.linear import (
 )
 from gbdraw.render.groups.linear.length_bar import LengthBarGroup, RULER_TICK_LENGTH
 from tests.utils.linear_render_context import alone_sequence_widths, make_linear_record_render_context
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
@@ -810,24 +811,26 @@ def test_linear_custom_overlay_features_do_not_overlap_depth() -> None:
     )
     canvas = assemble_linear_diagram_from_records(
         [record],
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-                "canvas.strandedness": True,
-                "canvas.resolve_overlaps": True,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "canvas.strandedness": True,
+                    "canvas.resolve_overlaps": True,
+                },
+            ),
+            legend="none",
+            depth_table=depth_table,
+            linear_track_slots=[
+                "features:features@side=overlay",
+                "depth:depth@track_index=0,side=below,h=10px",
+            ],
+            depth_window=100,
+            depth_step=100,
         ),
-        legend="none",
-        depth_table=depth_table,
-        linear_track_slots=[
-            "features:features@side=overlay",
-            "depth:depth@track_index=0,side=below,h=10px",
-        ],
-        depth_window=100,
-        depth_step=100,
     )
     svg_content = canvas.tostring()
     _feature_top, feature_bottom = _extract_group_path_absolute_y_bounds(
@@ -902,16 +905,18 @@ def test_linear_assembly_resolves_feature_lane_once_for_labels_and_renderer(
 
     svg_content = assemble_linear_diagram_from_records(
         [record],
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "all",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "all",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                },
+            ),
+            selected_features_set=["CDS"],
+            legend="none",
         ),
-        selected_features_set=["CDS"],
-        legend="none",
     ).tostring()
 
     assert factor_calls == 1
@@ -1552,10 +1557,12 @@ def test_linear_bottom_ruler_uses_shared_legend_and_title_gaps() -> None:
     cfg = GbdrawConfig.from_dict(config_dict)
     svg_content = assemble_linear_diagram_from_records(
         [record],
-        cfg=cfg,
-        selected_features_set=["CDS"],
-        legend="bottom",
-        plot_title="Synthetic title",
+        LinearAssemblyInputs(
+            cfg=cfg,
+            selected_features_set=["CDS"],
+            legend="bottom",
+            plot_title="Synthetic title",
+        ),
     ).tostring()
     metadata = _composition_metadata(svg_content)
     primary = metadata["primary"]["finalBounds"]
@@ -1585,11 +1592,13 @@ def test_linear_multi_record_bottom_uses_shared_title_stack_gap() -> None:
     cfg = GbdrawConfig.from_dict(config_dict)
     svg_content = assemble_linear_diagram_from_records(
         records,
+        LinearAssemblyInputs(
+            cfg=cfg,
+            selected_features_set=["CDS"],
+            legend="bottom",
+            plot_title="Synthetic title",
+        ),
         layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1")),
-        cfg=cfg,
-        selected_features_set=["CDS"],
-        legend="bottom",
-        plot_title="Synthetic title",
     ).tostring()
     metadata = _composition_metadata(svg_content)
     legend = metadata["legend"]

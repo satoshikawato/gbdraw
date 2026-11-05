@@ -74,6 +74,7 @@ from gbdraw.legend.table import (
 from gbdraw.render.groups.linear.legend import LegendGroup
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 from gbdraw.exceptions import ValidationError
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 
 def _linear_legend_measurement(
@@ -3708,16 +3709,18 @@ def test_blast_file_collinearity_metadata_drives_orientation_identity_legend(mon
 
     svg_text = assemble_linear_diagram_from_records(
         [_record("record_a", []), _record("record_b", [])],
-        cfg=apply_config_overrides(
-            None,
-            {"canvas.show_gc": False, "canvas.show_skew": False},
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {"canvas.show_gc": False, "canvas.show_skew": False},
+            ),
+            blast_files=["/virtual/blast_0.txt"],
+            legend="bottom",
+            bitscore=0,
+            identity=0,
+            evalue=1,
+            alignment_length=0,
         ),
-        blast_files=["/virtual/blast_0.txt"],
-        legend="bottom",
-        bitscore=0,
-        identity=0,
-        evalue=1,
-        alignment_length=0,
     ).tostring()
 
     assert 'data-legend-key="Collinear"' in svg_text

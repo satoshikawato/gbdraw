@@ -37,6 +37,7 @@ from gbdraw.session_request_codec import (
     decode_canonical_request,
 )
 from gbdraw.web_support.error_adapter import serialize_web_error
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 _VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "comparison_outfmt6_table_cases.json").read_text(
@@ -350,16 +351,18 @@ def _hits(query: str, subject: str) -> pd.DataFrame:
 def _render_svg(records: list[SeqRecord], comparisons: list[LinearComparison]) -> str:
     return assemble_linear_diagram_from_records(
         records,
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                },
+            ),
+            linear_comparisons=comparisons,
+            legend="none",
         ),
-        linear_comparisons=comparisons,
-        legend="none",
     ).tostring()
 
 
@@ -428,16 +431,18 @@ def test_unknown_table_ids_are_returned_as_structured_warnings() -> None:
     def build(*tables: pd.DataFrame):
         return assemble_linear_diagram_from_records(
             _pair_records("R2", "R3"),
-            cfg=apply_config_overrides(
-                None,
-                {
-                    "labels.linear.scope": "none",
-                    "canvas.show_gc": False,
-                    "canvas.show_skew": False,
-                },
+            LinearAssemblyInputs(
+                cfg=apply_config_overrides(
+                    None,
+                    {
+                        "labels.linear.scope": "none",
+                        "canvas.show_gc": False,
+                        "canvas.show_skew": False,
+                    },
+                ),
+                linear_comparisons=[LinearComparison(0, 1, table) for table in tables],
+                legend="none",
             ),
-            linear_comparisons=[LinearComparison(0, 1, table) for table in tables],
-            legend="none",
             _return_build_result=True,
         )
 

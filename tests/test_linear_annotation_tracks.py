@@ -31,6 +31,7 @@ from gbdraw.tracks import (
     normalize_linear_track_slots,
     parse_linear_track_slot,
 )
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 
 def test_linear_annotation_renderer_parses_typed_params() -> None:
@@ -220,19 +221,21 @@ def test_linear_annotation_cover_anchor_expands_overlay_to_feature_band() -> Non
     def band_height(cover_anchor: bool) -> float:
         drawing = assemble_linear_diagram_from_records(
             [record],
-            cfg=apply_config_overrides(None, None),
-            legend="none",
-            selected_features_set=["CDS"],
-            linear_track_slots=[
-                "features:features@side=overlay",
-                (
-                    "regions:annotations@side=overlay,h=14px,set_id=regions,"
-                    "anchor_slot=features,layer=foreground,padding_px=0,z=1,"
-                    f"cover_anchor={'true' if cover_anchor else 'false'}"
-                ),
-            ],
-            linear_track_axis_index=0,
-            annotation_options=annotation_options,
+            LinearAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                legend="none",
+                selected_features_set=["CDS"],
+                linear_track_slots=[
+                    "features:features@side=overlay",
+                    (
+                        "regions:annotations@side=overlay,h=14px,set_id=regions,"
+                        "anchor_slot=features,layer=foreground,padding_px=0,z=1,"
+                        f"cover_anchor={'true' if cover_anchor else 'false'}"
+                    ),
+                ],
+                linear_track_axis_index=0,
+                annotation_options=annotation_options,
+            ),
         )
         root = ElementTree.fromstring(drawing.tostring())
         group = next(
@@ -267,22 +270,20 @@ def _cover_anchor_drawing(
     )
     return assemble_linear_diagram_from_records(
         [record],
-        cfg=apply_config_overrides(
-            None,
-            {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout},
-        ),
-        legend="none",
-        selected_features_set=["CDS"],
-        annotation_options=(
-            AnnotationOptions(sets=(AnnotationSet("regions", (tint,)),)) if highlight else None
-        ),
-        **(
-            {
-                "linear_track_slots": list(slots),
-                "linear_track_axis_index": sum("@side=above" in slot for slot in slots),
-            }
-            if slots
-            else {}
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout},
+            ),
+            legend="none",
+            selected_features_set=["CDS"],
+            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (tint,)),)) if highlight else None,
+            **{
+                    "linear_track_slots": list(slots),
+                    "linear_track_axis_index": sum("@side=above" in slot for slot in slots),
+                }
+                if slots
+                else {},
         ),
     )
 
@@ -418,13 +419,13 @@ def test_linear_cover_anchor_on_a_record_without_lane_features_stays_off_the_axi
     )
     drawing = assemble_linear_diagram_from_records(
         records,
-        cfg=apply_config_overrides(
-            None, {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout}
-        ),
-        legend="none",
-        selected_features_set=["CDS", "repeat_region"],
-        annotation_options=(
-            AnnotationOptions(sets=(AnnotationSet("regions", regions),)) if tint == "highlight" else None
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None, {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout}
+            ),
+            legend="none",
+            selected_features_set=["CDS", "repeat_region"],
+            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", regions),)) if tint == "highlight" else None,
         ),
     )
     bands = [
@@ -474,12 +475,14 @@ def test_linear_to_slot_span_covers_the_nominal_lanes_of_an_underlay_only_record
     )
     drawing = assemble_linear_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, {"labels.linear.scope": "none"}),
-        legend="none",
-        selected_features_set=["CDS", "repeat_region"],
-        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
-        linear_track_slots=["features:features@side=below", "gc:dinucleotide_content@side=below", _span_slot()],
-        linear_track_axis_index=0,
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, {"labels.linear.scope": "none"}),
+            legend="none",
+            selected_features_set=["CDS", "repeat_region"],
+            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+            linear_track_slots=["features:features@side=below", "gc:dinucleotide_content@side=below", _span_slot()],
+            linear_track_axis_index=0,
+        ),
     )
     spans = [
         next((slot["paintBand"]["topPx"], slot["paintBand"]["bottomPx"]) for slot in record["slots"] if slot["slotId"] == "regions")
@@ -738,6 +741,7 @@ def _build_linear_span(
     mark: str = "highlight",
     style: RegionAnnotationStyle | None = None,
     axis_index: int = 0,
+    layout: LinearMultiRecordOptions | None = None,
     **kwargs: object,
 ):
     records = []
@@ -767,13 +771,16 @@ def _build_linear_span(
     )
     return assemble_linear_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, {"labels.linear.scope": "none", **(overrides or {})}),
-        legend="none",
-        selected_features_set=["CDS"],
-        linear_track_slots=list(slots),
-        linear_track_axis_index=axis_index,
-        annotation_options=annotations,
-        **kwargs,
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, {"labels.linear.scope": "none", **(overrides or {})}),
+            legend="none",
+            selected_features_set=["CDS"],
+            linear_track_slots=list(slots),
+            linear_track_axis_index=axis_index,
+            annotation_options=annotations,
+            **kwargs,
+        ),
+        layout=layout,
     )
 
 
@@ -1091,12 +1098,14 @@ def test_linear_highlight_labels_keep_off_the_axis_in_the_below_layout() -> None
         crispr = RegionAnnotation("crispr", CoordinateSpan(None, 20000, 40000), label=label, mark="highlight")
         return assemble_linear_diagram_from_records(
             [record],
-            cfg=apply_config_overrides(
-                None, {"labels.linear.scope": "none", "canvas.linear.track_layout": "below"}
+            LinearAssemblyInputs(
+                cfg=apply_config_overrides(
+                    None, {"labels.linear.scope": "none", "canvas.linear.track_layout": "below"}
+                ),
+                legend="none",
+                selected_features_set=["CDS", "rRNA", "tRNA"],
+                annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (crispr,)),)),
             ),
-            legend="none",
-            selected_features_set=["CDS", "rRNA", "tRNA"],
-            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (crispr,)),)),
         )
 
     # Without label text nothing lies above the axis line, so the record body starts at the line.
@@ -1288,13 +1297,15 @@ def test_linear_span_label_ink_keeps_label_offset_clear_of_its_mark(
     tint = RegionAnnotation("tint", CoordinateSpan(None, 100, 1300), label=text, mark="highlight", style=style)
     drawing = assemble_linear_diagram_from_records(
         [record],
-        cfg=apply_config_overrides(
-            None, {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout}
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None, {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout}
+            ),
+            legend="none",
+            selected_features_set=["CDS"],
+            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (tint,)),)),
+            **{"linear_track_slots": list(slots), "linear_track_axis_index": 0} if slots else {},
         ),
-        legend="none",
-        selected_features_set=["CDS"],
-        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (tint,)),)),
-        **({"linear_track_slots": list(slots), "linear_track_axis_index": 0} if slots else {}),
     )
 
     (label,) = _span_label_marks(drawing)
@@ -1397,12 +1408,14 @@ def test_linear_annotation_label_keeps_label_offset_from_the_painted_mark(
     region = RegionAnnotation("region", CoordinateSpan(None, 100, 1300), label="rRNA genes", mark=mark, style=style)
     drawing = assemble_linear_diagram_from_records(
         [record],
-        cfg=apply_config_overrides(
-            None, {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout}
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None, {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout}
+            ),
+            legend="none",
+            selected_features_set=["CDS"],
+            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (region,)),)),
         ),
-        legend="none",
-        selected_features_set=["CDS"],
-        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (region,)),)),
     )
 
     (label,) = _span_label_marks(drawing)
@@ -1423,12 +1436,14 @@ def _real_record_tint(file_name: str, start: int, end: int, label: str | None, t
     tint = RegionAnnotation("tint", CoordinateSpan(None, start, end), label=label, mark="highlight")
     return assemble_linear_diagram_from_records(
         [record],
-        cfg=apply_config_overrides(
-            None, {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout}
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None, {"labels.linear.scope": "none", "canvas.linear.track_layout": track_layout}
+            ),
+            legend="none",
+            selected_features_set=["CDS", "rRNA", "tRNA"],
+            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (tint,)),)),
         ),
-        legend="none",
-        selected_features_set=["CDS", "rRNA", "tRNA"],
-        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (tint,)),)),
     )
 
 
@@ -1575,15 +1590,17 @@ def test_linear_hmmtdna_highlight_span_labels_keep_label_offset_from_the_covered
     )
     drawing = assemble_linear_diagram_from_records(
         [record],
-        cfg=apply_config_overrides(None, {"labels.linear.scope": "all"}),
-        legend="none",
-        selected_features_set=["CDS", "rRNA", "tRNA"],
-        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
-        linear_track_slots=[
-            *_SPAN_STACK,
-            _span_slot("anchor_slot=features,to_slot=gc,layer=foreground,z=5", labels=True, padding_px=None),
-        ],
-        linear_track_axis_index=0,
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, {"labels.linear.scope": "all"}),
+            legend="none",
+            selected_features_set=["CDS", "rRNA", "tRNA"],
+            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
+            linear_track_slots=[
+                *_SPAN_STACK,
+                _span_slot("anchor_slot=features,to_slot=gc,layer=foreground,z=5", labels=True, padding_px=None),
+            ],
+            linear_track_axis_index=0,
+        ),
     )
     gc_bottom = _linear_bands(drawing)["gc"][1]
     axis_y = float(drawing._gbdraw_track_slot_geometry["records"][0]["axisYpx"])
@@ -2516,19 +2533,21 @@ def test_multi_record_annotation_lanes_use_final_sequence_width() -> None:
 
     drawing = assemble_linear_diagram_from_records(
         records,
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                },
+            ),
+            annotation_options=annotations,
+            legend="none",
         ),
-        annotation_options=annotations,
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1"),
         ),
-        legend="none",
     )
     slots = {
         slot["slotId"]: slot

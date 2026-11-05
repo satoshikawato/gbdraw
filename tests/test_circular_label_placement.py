@@ -46,6 +46,7 @@ from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
 from gbdraw.render.drawers.circular.labels import LabelDrawer as CircularLabelDrawer
 from gbdraw.svg.arrows import calculate_circular_arrow_length
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 
 def _angle_of_label(label: dict) -> float:
@@ -3767,10 +3768,12 @@ def test_circular_assembly_reuses_precalculated_labels_once() -> None:
     try:
         _ = assemble_circular_diagram_from_record(
             record,
-            cfg=GbdrawConfig.from_dict(config_dict),
-            selected_features_set=selected_features,
-            output_prefix="tmp",
-            legend="left",
+            CircularAssemblyInputs(
+                cfg=GbdrawConfig.from_dict(config_dict),
+                selected_features_set=selected_features,
+                output_prefix="tmp",
+                legend="left",
+            ),
         )
     finally:
         circular_assemble_module.prepare_label_list = original_assemble_prepare
@@ -4139,7 +4142,13 @@ def test_dense_outer_label_rows_follow_circular_label_spacing(monkeypatch: pytes
                 "labels.spacing.circular": spacing,
             },
         )
-        assemble_circular_diagram_from_record(record, cfg=GbdrawConfig.from_dict(config_dict), legend="none")
+        assemble_circular_diagram_from_record(
+            record,
+            CircularAssemblyInputs(
+                cfg=GbdrawConfig.from_dict(config_dict),
+                legend="none",
+            ),
+        )
         assert len(drawn[-1]) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
         gaps[spacing] = _smallest_row_gap_px(drawn[-1], total_length)
 
