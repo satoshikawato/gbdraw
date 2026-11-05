@@ -12,8 +12,9 @@ import {
   axisPosition, circularDragSpan, linearDragSpan, linearRowPosition, partsInsideSpan, regionAxisFrame,
   regionBandPath, regionSpanText, sourceSpanOf
 } from '../services/region-axis.js';
+import { holdTextSelection } from '../utils/gesture-text-selection.js';
 import { isClickAtPress } from '../utils/popup-bounds.js';
-import { computed, reactive, ref } from '../utils/reactivity.js';
+import { computed, reactive, ref, shallowRef } from '../utils/reactivity.js';
 import { t, tn } from '../utils/i18n.js';
 
 /** How far beside the feature tracks, in screen pixels, a press still starts a drag. */
@@ -142,8 +143,8 @@ export const createRegionSelect = ({
     return null;
   };
 
-  /** @param {Event} event */
-  const blockTextSelection = (event) => { if (pending) event.preventDefault(); };
+  /** Ends the hold on text selection that a drag takes. */
+  let releaseTextSelection = () => {};
 
   /**
    * A press with Select region on: on a record's feature tracks it starts a drag (and no pan); anywhere else, or
@@ -163,7 +164,7 @@ export const createRegionSelect = ({
       row: hit.position.row, span: { start: Math.floor(hit.position.position), length: 1 },
       clientX: event.clientX, clientY: event.clientY
     };
-    document.addEventListener('selectstart', blockTextSelection, true);
+    releaseTextSelection = holdTextSelection();
   };
 
   /** @param {PointerEvent} event */
@@ -200,7 +201,8 @@ export const createRegionSelect = ({
   const endDrag = () => {
     pending = null;
     drag.active = false;
-    document.removeEventListener('selectstart', blockTextSelection, true);
+    releaseTextSelection();
+    releaseTextSelection = () => {};
   };
 
   /** The band element the popup opens beside; bound by the template. @type {Element | null} */
@@ -238,8 +240,11 @@ export const createRegionSelect = ({
 
   const pointerCancel = () => { if (pending) endDrag(); };
 
-  /** The selection whose band shows between the release and the popup's open. @type {{ value: RegionSelection | null }} */
-  const shownSelection = ref(null);
+  /**
+   * The selection whose band shows between the release and the popup's open (shallow: the release compares it).
+   * @type {{ value: RegionSelection | null }}
+   */
+  const shownSelection = shallowRef(null);
   /** The selection the band shows: the open popup's, or the one being opened. */
   const selection = computed(() => openSelection() ?? shownSelection.value);
 

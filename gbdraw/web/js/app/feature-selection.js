@@ -1,5 +1,6 @@
 // @ts-check
 import { setClassToken } from '../services/svg-serialization.js';
+import { holdTextSelection } from '../utils/gesture-text-selection.js';
 
 const { computed, reactive } = window.Vue;
 
@@ -299,6 +300,8 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
   let statusTimeoutId = null;
   /** @type {{ svg: Element, pointerId: number, startX: number, startY: number, additive: boolean } | null} */
   let pendingDrag = null;
+  /** Ends the marquee's hold on text selection (OV-2478). */
+  let releaseTextSelection = () => {};
   /** @type {{ startX: number, startY: number, originX: number, originY: number, minX?: number, maxX?: number, minY?: number, maxY?: number } | null} */
   let activeToolbarDrag = null;
   const toolbarOffset = reactive({ x: 0, y: 0 });
@@ -634,6 +637,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     featureSelectionDrag.currentX = event.clientX;
     featureSelectionDrag.currentY = event.clientY;
     featureSelectionDrag.additive = pendingDrag.additive;
+    releaseTextSelection = holdTextSelection();
     if (typeof svg.setPointerCapture === 'function' && Number.isFinite(event.pointerId)) {
       try {
         svg.setPointerCapture(event.pointerId);
@@ -686,6 +690,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     }
     featureSelectionDrag.active = false;
     pendingDrag = null;
+    releaseTextSelection();
     return wasActive;
   };
 
@@ -698,6 +703,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
       }
     }
     pendingDrag = null;
+    releaseTextSelection();
     featureSelectionDrag.active = false;
     featureSelectionDrag.committed = false;
   };

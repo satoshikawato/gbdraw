@@ -1445,3 +1445,25 @@ test('a one-mode Session 51 Load lists only its own drawings (D-15-120)', () => 
   assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['linear', 'linear-2']);
   assert.deepEqual(state.drawingTabs.value.map((tab) => tab.id), ['linear', 'linear-2']);
 }));
+
+// PD-OI-115: a Web Save of a generated Circular HmmtDNA drawing
+// (tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.provenance.json) keeps each record's recordKey and axis in its
+// track-slot geometry. Load reads them back with no repair row, so Select region reads the axis without Generate,
+// and its Save keeps them.
+test('a Session 51 whose track-slot geometry has the axis loads it back for Select region, and its Save keeps it', async () => {
+  const { readRegionAxisRecords } = await import('../../gbdraw/web/js/services/region-axis.js');
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-region-axis.v51-web.gbdraw-session.json.gz', import.meta.url))));
+  const [stored] = fixture.drawings[0].runMetadata.trackSlotGeometry.records;
+  for (const session of [fixture, null]) {
+    const document = session ?? await save('region-axis');
+    resetDrawings();
+    loadDialogs.length = 0;
+    const loaded = await load(document);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    const records = readRegionAxisRecords(state.trackSlotResolvedGeometry.value, 0);
+    assert.deepEqual(records.map(({ recordKey, recordId, axis }) => ({ recordKey, recordId, axis })),
+      [{ recordKey: 'record-1', recordId: 'NC_012920.1', axis: stored.axis }], session ? 'the fixture' : 'its Save');
+    assert.equal(records[0].axis.source.drawnLength, 16_569);
+    assert.deepEqual(loadDialogs.flatMap((dialog) => dialog.items), []);
+  }
+});

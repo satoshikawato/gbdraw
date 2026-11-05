@@ -541,13 +541,13 @@ def _sync_legend_table_for_linear_slots(
     return out
 
 
-def _feature_track_band(plan: LinearRecordVerticalPlan) -> VerticalBand:
-    """Where a row's feature tracks are painted (record-axis local), the axis without features."""
+def _feature_track_band(plan: LinearRecordVerticalPlan, lanes: LinearFeatureLaneGeometry) -> VerticalBand:
+    """Where a row's feature lanes lie (record-axis local, without their labels); the axis without them."""
 
-    return next(
-        (slot.paint_band for slot in plan.slots if slot.renderer == "features" and slot.paint_band is not None),
-        plan.axis_band,
-    )
+    slot = next((slot for slot in plan.slots if slot.renderer == "features"), None)
+    if slot is None or lanes.occupied_band.height <= 0.0:
+        return plan.axis_band
+    return lanes.occupied_band.translate(slot.origin_y)
 
 
 def _serialize_linear_track_slot_geometry(
@@ -563,6 +563,7 @@ def _serialize_linear_track_slot_geometry(
     boundary_gap_resolutions: list[AxisGapResolution],
     record_keys: Sequence[str],
     record_transforms: Sequence[RecordDisplayTransform] | None,
+    feature_lane_geometries: Sequence[LinearFeatureLaneGeometry],
 ) -> dict[str, Any]:
     def band_payload(band: VerticalBand | None, *, axis_y: float) -> dict[str, float] | None:
         if band is None:
@@ -620,7 +621,11 @@ def _serialize_linear_track_slot_geometry(
             record, record_transforms[record_index] if record_transforms is not None else None
         )
         row_bands = [
-            (row.axis_offset_y, _feature_track_band(row.plan).translate(row.axis_offset_y)) for row in plan.rows
+            (
+                row.axis_offset_y,
+                _feature_track_band(row.plan, feature_lane_geometries[record_index]).translate(row.axis_offset_y),
+            )
+            for row in plan.rows
         ]
         records_payload.append(
             {
@@ -3538,6 +3543,7 @@ def assemble_linear_diagram(
                 boundary_gap_resolutions=boundary_gap_resolutions,
                 record_keys=record_keys,
                 record_transforms=record_transforms,
+                feature_lane_geometries=record_feature_lane_geometries,
             ),
         )
     if resolved_feature_slot is not None:

@@ -33,6 +33,7 @@ await writeFile(
   'utf8'
 );
 await cp(join(sourceDir, 'services', 'preview-affordances.js'), join(tempDir, 'services', 'preview-affordances.js'));
+await cp(join(sourceDir, 'utils', 'gesture-text-selection.js'), join(tempDir, 'utils', 'gesture-text-selection.js'));
 const featureSelectionUrl = pathToFileURL(join(tempDir, 'app', 'feature-selection.js'));
 const serializationUrl = pathToFileURL(join(tempDir, 'services', 'svg-serialization.js'));
 
