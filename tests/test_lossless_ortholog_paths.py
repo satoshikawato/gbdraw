@@ -207,7 +207,8 @@ def test_alias_keys_and_equal_protein_order_keys_preserve_legacy_order(tmp_path)
 
 # The post_search science of each Gallery Session. gallery-orthogroup is the science of
 # the s04 archive (docs/internal/collinear_similarity_performance_plan_2026-09-15/results/
-# data/s04-current-timing-cursor-<case>.json.gz), with its e-values read exactly. The archive
+# data/s04-current-timing-cursor-<case>.json.gz, in history: git show 8b8afec97:<path>),
+# with its e-values read exactly. The archive
 # read them with pandas' default float parser, which can miss by one unit in the last
 # place; since OV-1534 every pandas version reads them exactly. The two differ only in
 # those e-values: no ortholog, orthogroup, block, or order changes.

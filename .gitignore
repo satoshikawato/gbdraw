@@ -81,3 +81,12 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Raw evidence under docs/internal (logs, archives, results data) stays out of the tree;
+# written reports (*.md) stay. Evidence removed on 2026-11-05 is in history:
+# git show 8b8afec97:<path>
+docs/internal/**/*.log
+docs/internal/**/*.gz
+docs/internal/**/results/**
+!docs/internal/**/results/**/
+!docs/internal/**/results/**/*.md
