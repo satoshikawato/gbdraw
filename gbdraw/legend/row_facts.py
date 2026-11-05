@@ -47,7 +47,8 @@ class LegendRowFacts:
     ) -> None:
         self._records = tuple(records)
         self._sources = sources
-        self.drawn: tuple[LegendRowKey, ...] = tuple(legend_table)
+        # A row a Legend row edit hides is drawn too: the Result holds it, hidden.
+        self.drawn: tuple[LegendRowKey, ...] = legend_table.drawn_keys()
         self._shared = legend_table.shared_keys
 
     @cached_property

@@ -90,8 +90,11 @@ from ...legend.sources import (
     legend_slot_sources,
 )
 from ...legend.table import (
+    LegendRowEdits,
     LegendTable,
     PairwiseIdentityLegend,
+    apply_legend_row_edits,
+    draws_legend,
     pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
 )
@@ -111,6 +114,7 @@ from ...layout.linear import (
 from ...layout.composition import (
     CompositionItem,
     CompositionRequest,
+    CompositionSpacing,
     LegendPlacement,
     TitlePlacement,
     plan_composition,
@@ -2125,10 +2129,12 @@ def build_linear_legend_table(
     slots: tuple[LegendSlotSource, ...] | None,
     depth_tracks: tuple[DepthLegendSource, ...] | None,
     annotations: ResolvedAnnotationBundle,
+    edits: LegendRowEdits = LegendRowEdits(),
 ) -> LegendTable:
     """Build the Linear legend table (render stage ``legend_table``).
 
-    ``depth`` is given only when one depth track has a singleton row.
+    ``depth`` is given only when one depth track has a singleton row. The
+    request's Legend row edits are applied last.
     """
 
     features_present, used_color_rules, default_used_features = feature_legend_presence(
@@ -2155,7 +2161,7 @@ def build_linear_legend_table(
         skew=sources.skew,
         depth_tracks=depth_tracks,
     )
-    return sync_annotation_legend_entries(legend_table, annotations, slots)
+    return apply_legend_row_edits(sync_annotation_legend_entries(legend_table, annotations, slots), edits)
 
 
 def assemble_linear_diagram(
@@ -2691,6 +2697,7 @@ def assemble_linear_diagram(
                 depth_legend_sources(representative_depth_data) if render_context.depth_enabled else None
             ),
             annotations=resolved_annotations,
+            edits=LegendRowEdits.of_config(cfg.objects.legends),
         )
     definition_reserve_width = (
         row_definition_width
@@ -3413,10 +3420,8 @@ def assemble_linear_diagram(
             placement=canvas_config.legend_position,
             wrap_width=source_primary_bounds.width,
         )
-        if (
-            legend_measurement.local_bounds.width > 0.0
-            and legend_measurement.local_bounds.height > 0.0
-        ):
+        # A Legend whose rows are all hidden is drawn too; its empty bounds take no room.
+        if draws_legend(legend_table):
             legend_target = place_content(
                 canvas,
                 render_stage(
@@ -3459,6 +3464,7 @@ def assemble_linear_diagram(
             ),
             legend_placement=legend_placement,
             title_placement=title_placement,
+            spacing=CompositionSpacing(canvas_padding_px=cfg.canvas.padding),
             requested_width_px=cfg.canvas.figure_size.width_px,
             requested_height_px=cfg.canvas.figure_size.height_px,
         ),
@@ -3471,6 +3477,11 @@ def assemble_linear_diagram(
         legend_side=legend_placement,
         legend_reflow_metrics=(
             legend_measurement.reflow_metrics
+            if legend_target is not None and legend_measurement is not None
+            else None
+        ),
+        legend_local_bounds=(
+            legend_measurement.local_bounds
             if legend_target is not None and legend_measurement is not None
             else None
         ),

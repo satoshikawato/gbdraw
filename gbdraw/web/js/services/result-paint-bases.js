@@ -6,11 +6,13 @@
 // Python's `display` when it is deleted (hidden), and a feature Legend group
 // keeps Python's row order when it is reordered (`LEGEND_ORDER_RECORD`). The
 // records travel with the Result through History and Sessions; exports strip
-// them and the hidden rows.
-const RESULT_BASE_ATTRIBUTES = Object.freeze(['fill', 'stroke', 'stroke-width', 'display', 'data-legend-key']);
+// them and the hidden rows. The names are Python's (gbdraw/svg/result_records.py),
+// which writes the Legend records when it draws a request's Legend row edits.
+import { LEGEND_ORDER_RECORD, RESULT_BASE_ATTRIBUTES, RESULT_BASE_ATTRIBUTE_PREFIX } from './result-records.generated.js';
+
+export { LEGEND_ORDER_RECORD };
 /** @param {string} attribute */
-export const resultBaseAttribute = (attribute) => `data-gbdraw-base-${attribute}`;
-export const LEGEND_ORDER_RECORD = 'data-gbdraw-base-legend-order';
+export const resultBaseAttribute = (attribute) => `${RESULT_BASE_ATTRIBUTE_PREFIX}${attribute}`;
 export const RESULT_BASE_SELECTOR = RESULT_BASE_ATTRIBUTES
   .map((attribute) => `[${resultBaseAttribute(attribute)}]`).join(', ');
 

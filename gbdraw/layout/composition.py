@@ -17,15 +17,25 @@ from typing import cast
 from .spatial import Aabb, _validate_padding, union_aabbs
 
 
+# A request's canvas padding, px per side: top, right, bottom, left (``canvas.padding``).
+CanvasPaddingSides = tuple[float, float, float, float]
+NO_CANVAS_PADDING_SIDES: CanvasPaddingSides = (0.0, 0.0, 0.0, 0.0)
+
+
 @dataclass(frozen=True, slots=True)
 class CompositionSpacing:
-    """Shared spacing policy for final diagram composition."""
+    """Shared spacing policy for final diagram composition.
+
+    ``canvas_padding_px`` is a request's room outside the edge padding, per side (top, right, bottom, left): the
+    padded content is the painted items, the edge padding, and the canvas padding.
+    """
 
     edge_padding_px: float = 16.0
     dock_gap_px: float = 24.0
     title_gap_px: float = 20.0
     stack_gap_px: float = 20.0
     overlay_clearance_px: float = 8.0
+    canvas_padding_px: CanvasPaddingSides = NO_CANVAS_PADDING_SIDES
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -39,6 +49,10 @@ class CompositionSpacing:
             if not math.isfinite(value) or value < 0.0:
                 raise ValueError(f"{field_name} must be a finite non-negative value")
             object.__setattr__(self, field_name, value)
+        sides = tuple(float(side) for side in self.canvas_padding_px)
+        if len(sides) != 4 or not all(math.isfinite(side) and side >= 0.0 for side in sides):
+            raise ValueError("canvas_padding_px must be four finite non-negative values")
+        object.__setattr__(self, "canvas_padding_px", sides)
 
 
 DEFAULT_COMPOSITION_SPACING = CompositionSpacing()
@@ -721,7 +735,11 @@ def plan_composition(request: CompositionRequest) -> CompositionPlan:
     painted_union = union_aabbs(placement.bounds for placement in working)
     if painted_union is None:  # pragma: no cover - validated primary is always present
         raise RuntimeError("composition has no painted bounds")
-    padded_union = painted_union.expanded(request.spacing.edge_padding_px)
+    top, right, bottom, left = request.spacing.canvas_padding_px
+    edge_padded = painted_union.expanded(request.spacing.edge_padding_px)
+    padded_union = Aabb(
+        edge_padded.min_x - left, edge_padded.min_y - top, edge_padded.max_x + right, edge_padded.max_y + bottom
+    )
     canvas_width = max(padded_union.width, request.requested_width_px or 0.0)
     canvas_height = max(padded_union.height, request.requested_height_px or 0.0)
     # Room a requested canvas leaves around the padded content is shared equally by both sides.
@@ -764,8 +782,10 @@ __all__ = [
     "CompositionPlacement",
     "CompositionPlan",
     "CompositionRequest",
+    "CanvasPaddingSides",
     "CompositionSpacing",
     "DEFAULT_COMPOSITION_SPACING",
+    "NO_CANVAS_PADDING_SIDES",
     "LegendPlacement",
     "OVERLAY_CANDIDATE_SCORE_ORDER",
     "OVERLAY_CANVAS_GROWTH_CANDIDATE_ORDER",

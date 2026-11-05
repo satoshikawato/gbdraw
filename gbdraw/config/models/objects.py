@@ -414,6 +414,57 @@ class ObjectsFeaturesConfig:
         )
 
 
+LEGEND_ROW_NAMES_PATH = "objects.legends.row_names"
+LEGEND_HIDDEN_ROWS_PATH = "objects.legends.hidden_rows"
+LEGEND_ROW_ORDER_PATH = "objects.legends.row_order"
+
+
+def _legend_row_text(value: object, *, path: str, what: str) -> str:
+    """A Legend row key or name: text that is not blank, kept as written."""
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValidationError(
+            f"{path} must list Legend rows by {what}, each a text that is not blank; got {value!r}.",
+            diagnostic={"code": "INPUT_INVALID", "configPath": path},
+        )
+    return value
+
+
+def _legend_row_list(value: object, *, path: str) -> list[object]:
+    if value is None:
+        return []
+    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
+        raise ValidationError(
+            f"{path} must be a list; got {value!r}.", diagnostic={"code": "INPUT_INVALID", "configPath": path}
+        )
+    return list(value)
+
+
+def legend_row_keys_from_config(value: object, *, path: str) -> tuple[str, ...]:
+    """The one validator of ``objects.legends.hidden_rows`` and ``objects.legends.row_order``: a list of Legend row
+    keys (``data-legend-key``), for a config and an override alike. ``None`` is the empty list."""
+
+    return tuple(_legend_row_text(key, path=path, what="their keys") for key in _legend_row_list(value, path=path))
+
+
+def legend_row_names_from_config(value: object) -> tuple[tuple[str, str], ...]:
+    """The one validator of ``objects.legends.row_names``: a list of ``[key, name]`` pairs, each the key of a Legend
+    row and the name the row is given, for a config and an override alike. ``None`` is the empty list."""
+
+    path = LEGEND_ROW_NAMES_PATH
+    pairs: list[tuple[str, str]] = []
+    for pair in _legend_row_list(value, path=path):
+        if isinstance(pair, (str, bytes)) or not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            raise ValidationError(
+                f"{path} must list [key, name] pairs; got {pair!r}.",
+                diagnostic={"code": "INPUT_INVALID", "configPath": path},
+            )
+        pairs.append(
+            (_legend_row_text(pair[0], path=path, what="their keys"), _legend_row_text(pair[1], path=path, what="names"))
+        )
+    return tuple(pairs)
+
+
 @dataclass(frozen=True)
 class ObjectsLegendsConfig:
     font_size: ShortLongFloatConfig
@@ -423,6 +474,20 @@ class ObjectsLegendsConfig:
     dominant_baseline: str
     stroke: str
     fill: str
+    # The Legend row edits by row key (``gbdraw.legend.table.apply_legend_row_edits``): the name a row is given, the
+    # rows hidden, and the rows' order (empty: Python's). Empty by default; a request carries a leaf only when set.
+    row_names: tuple[tuple[str, str], ...] = field(default=(), metadata={LEAF_VALIDATOR: legend_row_names_from_config})
+    hidden_rows: tuple[str, ...] = field(
+        default=(), metadata={LEAF_VALIDATOR: partial(legend_row_keys_from_config, path=LEGEND_HIDDEN_ROWS_PATH)}
+    )
+    row_order: tuple[str, ...] = field(
+        default=(), metadata={LEAF_VALIDATOR: partial(legend_row_keys_from_config, path=LEGEND_ROW_ORDER_PATH)}
+    )
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "row_names", legend_row_names_from_config(self.row_names))
+        object.__setattr__(self, "hidden_rows", legend_row_keys_from_config(self.hidden_rows, path=LEGEND_HIDDEN_ROWS_PATH))
+        object.__setattr__(self, "row_order", legend_row_keys_from_config(self.row_order, path=LEGEND_ROW_ORDER_PATH))
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsLegendsConfig":
@@ -434,6 +499,9 @@ class ObjectsLegendsConfig:
             dominant_baseline=str(d["dominant_baseline"]),
             stroke=str(d.get("stroke", "none")),
             fill=str(d.get("fill", "black")),
+            row_names=d.get("row_names", ()),
+            hidden_rows=d.get("hidden_rows", ()),
+            row_order=d.get("row_order", ()),
         )
 
 
@@ -697,9 +765,14 @@ class ObjectsConfig:
 
 
 __all__ = [
+    "LEGEND_HIDDEN_ROWS_PATH",
+    "LEGEND_ROW_NAMES_PATH",
+    "LEGEND_ROW_ORDER_PATH",
     "UNSET_NUMBER_SPELLINGS",
     "ArrowHeadLengthRatio",
     "ObjectsConfig",
     "ObjectsFeaturesArrowGeometryConfig",
+    "legend_row_keys_from_config",
+    "legend_row_names_from_config",
     "normalize_pairwise_match_style",
 ]

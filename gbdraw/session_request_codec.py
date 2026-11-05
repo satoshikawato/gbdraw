@@ -2826,6 +2826,35 @@ def _without_unwritten_feature_tolerance(name: str, value: object, error_type):
     return result
 
 
+# Config fields a request writes only when they are set (figure-size D-29): without them, a full config is the one
+# written before they existed, and a reader takes their defaults.
+_CONFIG_FIELDS_WRITTEN_WHEN_SET: tuple[tuple[str, ...], ...] = (
+    ("canvas", "padding"),
+    ("objects", "legends", "row_names"),
+    ("objects", "legends", "hidden_rows"),
+    ("objects", "legends", "row_order"),
+)
+
+
+def _drop_unset_config_fields(config: GbdrawConfig, written: dict[str, object]) -> None:
+    """Remove from ``written`` (``asdict(config)``) each of ``_CONFIG_FIELDS_WRITTEN_WHEN_SET`` at its default."""
+
+    for *sections, name in _CONFIG_FIELDS_WRITTEN_WHEN_SET:
+        owner: object = config
+        section_written = written
+        for section in sections:
+            owner = getattr(owner, section)
+            nested = section_written[section]
+            if not isinstance(nested, dict):
+                raise TypeError(f"config section {'.'.join(sections)} is not written as a mapping")
+            section_written = nested
+        if not is_dataclass(owner) or isinstance(owner, type):
+            raise TypeError(f"config section {'.'.join(sections)} is not a dataclass")
+        default = next(item.default for item in fields(owner) if item.name == name)
+        if getattr(owner, name) == default:
+            section_written.pop(name)
+
+
 def _encode_option_value(
     name: str,
     value: object,
@@ -2836,6 +2865,7 @@ def _encode_option_value(
         if isinstance(value, GbdrawConfig):
             config = value
             value = asdict(config)
+            _drop_unset_config_fields(config, value)
             value["labels"]["filtering"] = deepcopy(
                 config.labels.filtering.as_dict()
             )

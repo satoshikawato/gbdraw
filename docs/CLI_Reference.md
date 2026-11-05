@@ -126,8 +126,8 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--track_narrowing_min_px TRACK_NARROWING_MIN_PX]
               [--label_font_size LABEL_FONT_SIZE] [-f FORMAT]
               [--figure_width LENGTH|auto] [--figure_height LENGTH|auto]
-              [--dpi DPI] [--gc | --no-gc] [--skew | --no-skew]
-              [--depth_track DEPTH [DEPTH ...]]
+              [--dpi DPI] [--canvas_padding TOP,RIGHT,BOTTOM,LEFT] [--gc |
+              --no-gc] [--skew | --no-skew] [--depth_track DEPTH [DEPTH ...]]
               [--depth_track_label LABEL [LABEL ...]]
               [--depth_track_color COLOR [COLOR ...]]
               [--depth_track_large_tick_interval VALUE [VALUE ...]]
@@ -200,7 +200,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--show_gc_content_axis] [--hide_gc_content_axis]
               [--show_gc_content_ticks] [--hide_gc_content_ticks]
               [--gc_skew_width GC_SKEW_WIDTH]
-              [--gc_skew_radius GC_SKEW_RADIUS]
+              [--gc_skew_radius GC_SKEW_RADIUS] [--legend_rows FILE]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE]
               [--font_family FONT_FAMILY] [--font_file PATH]
@@ -347,6 +347,12 @@ options:
                         and line widths keep their size. Default: auto.
   --dpi DPI             PNG resolution in pixels per inch (positive integer;
                         default: 96, one pixel per SVG pixel). PNG only.
+  --canvas_padding TOP,RIGHT,BOTTOM,LEFT
+                        Room around the figure, outside its edge padding, in
+                        px: TOP,RIGHT,BOTTOM,LEFT (for example 0,40,0,0). With
+                        --figure_width or --figure_height the figure fits
+                        inside the requested size with the padding. Default:
+                        0,0,0,0.
   --gc                  Show the GC content track.
   --no-gc               Hide the GC content track.
   --skew                Show the GC skew track.
@@ -651,6 +657,12 @@ options:
   --gc_skew_radius GC_SKEW_RADIUS
                         GC skew track center radius for circular mode (as a
                         ratio of base radius; must be > 0).
+  --legend_rows FILE    Legend row edits: a TSV with the header "key name
+                        hidden position", one line per Legend row by its key;
+                        name renames the row (blank: keep its name), hidden
+                        true hides it, position (1, 2, ...) on every row or on
+                        none orders the rows. A key the Legend does not draw
+                        is ignored.
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes shorter than the short/long
@@ -974,6 +986,41 @@ ref_a.blast.tsv	Reference A	#E15759
 ref_b.blast.tsv	Reference B	#4E79A7
 ```
 
+### `--legend_rows`
+
+Use `--legend_rows` in either mode to rename, hide, or order Legend rows. The
+UTF-8 TSV has the header `key	name	hidden	position` and one line per row. A
+quote is part of the cell it is in:
+
+| Column | Meaning |
+| --- | --- |
+| `key` | The row's key, as the SVG writes it in `data-legend-key`, such as `CDS` or `GC content`. Spaces around it are ignored. Each key on one line. |
+| `name` | The row's new name; blank keeps its name. |
+| `hidden` | `true` hides the row; `false` or blank shows it. |
+| `position` | The row's place, from 1, on every line or on none. Rows the table does not list follow the listed ones in their order. |
+
+A key the Legend does not draw is ignored. Two shown rows with one name and
+one swatch are drawn as one row; with different swatches their names are
+numbered, `Genes (1)` and `Genes (2)`. A hidden row stays in the SVG with
+`display="none"` and takes no room, even when every row is hidden. Hidden rows and the attributes that record
+the drawn values (`data-gbdraw-base-*`) stay in the SVG so that a Session's
+Result can be edited in the Web app; viewers do not draw them. The edits reach the feature rows and the
+GC rows, not the similarity-ring or identity block. The config keys are
+`objects.legends.row_names` (`[key, name]` pairs), `objects.legends.hidden_rows`,
+and `objects.legends.row_order` (lists of keys); `--save_session` keeps them
+and `gbdraw render --session` draws them.
+
+```tsv
+key	name	hidden	position
+rRNA			1
+CDS	Protein-coding genes		2
+tRNA		true	3
+```
+
+`--canvas_padding TOP,RIGHT,BOTTOM,LEFT` adds room in px around the figure
+(config key `canvas.padding`); see
+[Figure size and PNG DPI](REFERENCE/output-formats-and-export.md#figure-size-and-png-dpi).
+
 ### Similarity-ring colors and legend
 
 `--conservation_color_scheme` colors every ring without a color of its own,
@@ -1168,7 +1215,8 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--linear_track_slot SLOT]
               [--linear_track_axis_index LINEAR_TRACK_AXIS_INDEX]
               [--ruler_on_axis] [-f FORMAT] [--figure_width LENGTH|auto]
-              [--figure_height LENGTH|auto] [--dpi DPI] [-l LEGEND]
+              [--figure_height LENGTH|auto] [--dpi DPI]
+              [--canvas_padding TOP,RIGHT,BOTTOM,LEFT] [-l LEGEND]
               [--show_labels [{all,first,orthogroup_top,none}]]
               [--resolve_overlaps] [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
@@ -1184,7 +1232,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--scale_font_size SCALE_FONT_SIZE]
               [--ruler_label_font_size RULER_LABEL_FONT_SIZE]
               [--ruler_label_color RULER_LABEL_COLOR]
-              [--scale_interval SCALE_INTERVAL]
+              [--scale_interval SCALE_INTERVAL] [--legend_rows FILE]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE]
               [--font_family FONT_FAMILY] [--font_file PATH]
@@ -1644,6 +1692,12 @@ options:
                         and line widths keep their size. Default: auto.
   --dpi DPI             PNG resolution in pixels per inch (positive integer;
                         default: 96, one pixel per SVG pixel). PNG only.
+  --canvas_padding TOP,RIGHT,BOTTOM,LEFT
+                        Room around the figure, outside its edge padding, in
+                        px: TOP,RIGHT,BOTTOM,LEFT (for example 0,40,0,0). With
+                        --figure_width or --figure_height the figure fits
+                        inside the requested size with the padding. Default:
+                        0,0,0,0.
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left",
                         "top", "bottom", "none")
   --show_labels [{all,first,orthogroup_top,none}]
@@ -1711,6 +1765,12 @@ options:
                         in bp with an optional unit, for example 5000 or 5kb;
                         must be > 0). Overrides automatic calculation;
                         optional
+  --legend_rows FILE    Legend row edits: a TSV with the header "key name
+                        hidden position", one line per Legend row by its key;
+                        name renames the row (blank: keep its name), hidden
+                        true hides it, position (1, 2, ...) on every row or on
+                        none orders the rows. A key the Legend does not draw
+                        is ignored.
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes shorter than the short/long

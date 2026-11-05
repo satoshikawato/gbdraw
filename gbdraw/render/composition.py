@@ -74,12 +74,28 @@ class OverlayPolicyPayload(TypedDict):
     quadrantBoundaryRatio: float
 
 
-class SpacingPayload(TypedDict):
+class CanvasPaddingPayload(TypedDict):
+    """A request's canvas padding, px per side (``canvas.padding``)."""
+
+    bottom: float
+    left: float
+    right: float
+    top: float
+
+
+class _SpacingPayloadRequired(TypedDict):
     dockGapPx: float
     edgePaddingPx: float
     overlayClearancePx: float
     stackGapPx: float
     titleGapPx: float
+
+
+class SpacingPayload(_SpacingPayloadRequired, total=False):
+    """``canvasPadding`` exists only for a figure drawn with canvas padding, so a Result without it keeps its
+    metadata bytes; the Web replans with it as ``plan_composition`` does."""
+
+    canvasPadding: CanvasPaddingPayload
 
 
 class _CompositionMetadataRequired(TypedDict):
@@ -192,6 +208,21 @@ def _metadata_payload(
     length_bar_local_bounds: Aabb | None,
 ) -> str:
     spacing = plan.spacing
+    spacing_payload: SpacingPayload = {
+        "dockGapPx": _wire_number(spacing.dock_gap_px),
+        "edgePaddingPx": _wire_number(spacing.edge_padding_px),
+        "overlayClearancePx": _wire_number(spacing.overlay_clearance_px),
+        "stackGapPx": _wire_number(spacing.stack_gap_px),
+        "titleGapPx": _wire_number(spacing.title_gap_px),
+    }
+    if any(spacing.canvas_padding_px):
+        top, right, bottom, left = spacing.canvas_padding_px
+        spacing_payload["canvasPadding"] = {
+            "bottom": _wire_number(bottom),
+            "left": _wire_number(left),
+            "right": _wire_number(right),
+            "top": _wire_number(top),
+        }
     payload: CompositionMetadataPayload = {
         "legend": (
             _local_target_payload(legend_placement, composition_role=_LEGEND_ROLE)
@@ -223,13 +254,7 @@ def _metadata_payload(
             ),
         },
         "primary": _primary_target_payload(primary_placement),
-        "spacing": {
-            "dockGapPx": _wire_number(spacing.dock_gap_px),
-            "edgePaddingPx": _wire_number(spacing.edge_padding_px),
-            "overlayClearancePx": _wire_number(spacing.overlay_clearance_px),
-            "stackGapPx": _wire_number(spacing.stack_gap_px),
-            "titleGapPx": _wire_number(spacing.title_gap_px),
-        },
+        "spacing": spacing_payload,
         "title": (
             _local_target_payload(title_placement, composition_role=_TITLE_ROLE)
             if title_placement is not None
@@ -254,6 +279,10 @@ def _metadata_payload(
         separators=(",", ":"),
         sort_keys=True,
     )
+
+
+# The placement an empty Legend is bound with (``apply_composition_plan``): the planner gives it no room.
+_EMPTY_LEGEND_PLACEMENT = CompositionPlacement(_LEGEND_ROLE, (0.0, 0.0), Aabb(0.0, 0.0, 0.0, 0.0))
 
 
 def _placement_for_role(
@@ -398,6 +427,7 @@ def apply_composition_plan(
     legend_role: str = _LEGEND_ROLE,
     legend_side: LegendPlacement | str = LegendPlacement.NONE,
     legend_reflow_metrics: Mapping[str, object] | None = None,
+    legend_local_bounds: Aabb | None = None,
     title_target: Group | None = None,
     title_role: str = _TITLE_ROLE,
     title_side: TitlePlacement | str = TitlePlacement.NONE,
@@ -412,6 +442,10 @@ def apply_composition_plan(
     the canvas with them for a moved scale.
     The role arguments name placements in ``plan``; the SVG bookkeeping roles
     remain the stable internal values ``primary``, ``legend``, and ``title``.
+    ``legend_local_bounds`` are the Legend's measured bounds. A ``legend_target``
+    that ``plan`` does not place is bound only when they are empty (every row
+    hidden, D-36; the planner leaves an empty item out): with no translation and
+    empty bounds, so a replan also gives it no room.
     """
     if not isinstance(plan, CompositionPlan):
         raise TypeError("plan must be a CompositionPlan")
@@ -443,7 +477,13 @@ def apply_composition_plan(
         raise ValueError("primary placement does not match plan.primary_bounds")
     legend_placement = _placement_for_role(plan, legend_role)
     title_placement = _placement_for_role(plan, title_role)
-    if (legend_target is None) != (legend_placement is None):
+    empty_legend = (
+        legend_target is not None
+        and legend_placement is None
+        and legend_local_bounds is not None
+        and CompositionItem(_LEGEND_ROLE, legend_local_bounds).is_empty
+    )
+    if (legend_target is None) != (legend_placement is None) and not empty_legend:
         raise ValueError(
             "legend target and plan placement must either both exist or be absent"
         )
@@ -461,6 +501,8 @@ def apply_composition_plan(
         raise ValueError("composition plan contains unbound placement roles")
 
     _ensure_not_applied(drawing, all_targets)
+    if empty_legend:
+        legend_placement = _EMPTY_LEGEND_PLACEMENT
     metadata = _metadata_payload(
         plan,
         primary_placement=primary_placement,

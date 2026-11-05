@@ -16,11 +16,28 @@ from xml.etree.ElementTree import Element
 
 from svgwrite import container, gradients, masking, path, shapes, text
 
+from gbdraw.svg.result_records import RESULT_BASE_ATTRIBUTE_PREFIX
+
 
 class Group(container.Group):
     def __init__(self, *args: Any, **extra: Any) -> None:
         extra.setdefault("debug", False)
         super().__init__(*args, **extra)
+
+    def get_xml(self) -> Element:
+        """svgwrite's element, with an empty Result record kept: svgwrite leaves out an empty attribute, but an empty
+        ``data-gbdraw-base-<attribute>`` says that Python drew no value (``gbdraw.svg.result_records``)."""
+
+        xml = super().get_xml()
+        kept = {
+            name: "" for name, value in self.attribs.items() if value == "" and name.startswith(RESULT_BASE_ATTRIBUTE_PREFIX)
+        }
+        if kept:
+            # svgwrite writes the attributes sorted by name.
+            attributes = sorted({**xml.attrib, **kept}.items())
+            xml.attrib.clear()
+            xml.attrib.update(attributes)
+        return xml
 
 
 class Use(container.Use):

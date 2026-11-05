@@ -8,16 +8,29 @@ used by both circular and linear diagram commands.
 """
 
 import argparse
+import csv
 import logging
 import sys
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Sequence
 
 from gbdraw.cli_utils.losat_output import parse_positive_int
 from gbdraw.comparisons.identity_scale import IDENTITY_SCALE_RULE, identity_scale_from_config
-from gbdraw.config.models.canvas import FIGURE_HEIGHT_PATH, FIGURE_WIDTH_PATH
+from gbdraw.config.models.canvas import (
+    CANVAS_PADDING_PATH,
+    FIGURE_HEIGHT_PATH,
+    FIGURE_WIDTH_PATH,
+    canvas_padding_from_config,
+)
+from gbdraw.config.models.objects import (
+    LEGEND_HIDDEN_ROWS_PATH,
+    LEGEND_ROW_NAMES_PATH,
+    LEGEND_ROW_ORDER_PATH,
+    legend_row_keys_from_config,
+    legend_row_names_from_config,
+)
 from gbdraw.core.figure_length import argparse_figure_length
-from gbdraw.core.numeric import argparse_float, argparse_integer, parse_ascii_finite_float
+from gbdraw.core.numeric import JS_WHITESPACE, argparse_float, argparse_integer, ascii_int, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import RecordInputManifest
@@ -199,12 +212,129 @@ def _add_figure_size_args(parser: argparse.ArgumentParser) -> None:
         help='PNG resolution in pixels per inch (positive integer; default: 96, one pixel per SVG pixel). PNG only.',
         type=parse_positive_int,
     )
+    parser.add_argument(
+        '--canvas_padding',
+        help=(
+            'Room around the figure, outside its edge padding, in px: TOP,RIGHT,BOTTOM,LEFT (for example 0,40,0,0). '
+            'With --figure_width or --figure_height the figure fits inside the requested size with the padding. '
+            'Default: 0,0,0,0.'
+        ),
+        type=argparse_canvas_padding,
+        metavar='TOP,RIGHT,BOTTOM,LEFT',
+    )
 
 
-def figure_size_overrides(args: argparse.Namespace) -> dict[str, str | None]:
-    """The config overrides of ``--figure_width`` and ``--figure_height`` (``None``: not given)."""
+def argparse_canvas_padding(text: str) -> list[float]:
+    """argparse ``type=`` of ``--canvas_padding TOP,RIGHT,BOTTOM,LEFT`` (px), read by the ``canvas.padding`` leaf's
+    validator."""
 
-    return {FIGURE_WIDTH_PATH: args.figure_width, FIGURE_HEIGHT_PATH: args.figure_height}
+    parts = [part.strip() for part in str(text).split(",")]
+    try:
+        sides = [parse_ascii_finite_float(part) for part in parts]
+        return list(canvas_padding_from_config(sides))
+    except (TypeError, ValueError, ValidationError) as exc:
+        raise argparse.ArgumentTypeError(
+            f"expected four px numbers TOP,RIGHT,BOTTOM,LEFT, each 0 or more (for example 0,40,0,0); got {text!r}"
+        ) from exc
+
+
+def figure_size_overrides(args: argparse.Namespace) -> dict[str, object]:
+    """The config overrides of ``--figure_width``, ``--figure_height`` and ``--canvas_padding`` (``None``: not
+    given; a padding of zeros is no override, so the request is the one without it)."""
+
+    padding = args.canvas_padding if args.canvas_padding is not None and any(args.canvas_padding) else None
+    return {FIGURE_WIDTH_PATH: args.figure_width, FIGURE_HEIGHT_PATH: args.figure_height, CANVAS_PADDING_PATH: padding}
+
+
+# The columns of a ``--legend_rows`` table, in order.
+LEGEND_ROWS_COLUMNS = ("key", "name", "hidden", "position")
+
+
+@dataclass(frozen=True)
+class LegendRowsTable:
+    """A ``--legend_rows`` table read as the three Legend row edit leaves (``objects.legends.*``)."""
+
+    row_names: tuple[tuple[str, str], ...]
+    hidden_rows: tuple[str, ...]
+    row_order: tuple[str, ...]
+
+
+def read_legend_rows_table(path: str) -> LegendRowsTable:
+    """argparse ``type=`` of ``--legend_rows FILE``: a TSV with the header ``key name hidden position``.
+
+    ``key`` is the Legend row's key, trimmed as the Web's executor trims a key (JavaScript's ``trim()``); ``name`` the name it is given
+    (blank: Python's); ``hidden`` ``true`` or ``false`` (blank: false); ``position`` its 1-based place in the Legend
+    in ASCII digits, on every row or on none (none: Python's order; the rows the table does not list follow the
+    listed ones). A cell is read as written: a quote is part of it. A UTF-8 byte order mark is skipped.
+    """
+
+    def refuse(message: str) -> argparse.ArgumentTypeError:
+        return argparse.ArgumentTypeError(f"{path}: {message}")
+
+    try:
+        with open(path, encoding="utf-8-sig", newline="") as handle:
+            lines = [
+                line
+                for line in csv.reader(handle, delimiter="\t", quoting=csv.QUOTE_NONE)
+                if any(cell.strip() for cell in line)
+            ]
+    except OSError as exc:
+        raise refuse(f"cannot read the file ({exc.strerror})") from exc
+    if not lines or tuple(cell.strip().lower() for cell in lines[0]) != LEGEND_ROWS_COLUMNS:
+        raise refuse("the first line must be the header " + "\t".join(LEGEND_ROWS_COLUMNS))
+    names: list[tuple[str, str]] = []
+    hidden: list[str] = []
+    positions: list[tuple[int, str]] = []
+    keys: list[str] = []
+    for number, cells in enumerate(lines[1:], start=2):
+        if len(cells) > len(LEGEND_ROWS_COLUMNS) or not cells[0].strip():
+            raise refuse(f"line {number} must have a key and at most four columns")
+        raw_key, name, hidden_text, position = (*cells, "", "", "")[:4]
+        key = raw_key.strip(JS_WHITESPACE)
+        keys.append(key)
+        if name.strip():
+            names.append((key, name))
+        flag = hidden_text.strip().lower()
+        if flag not in ("", "true", "false"):
+            raise refuse(f"line {number}: hidden must be true or false; got {hidden_text!r}")
+        if flag == "true":
+            hidden.append(key)
+        if position.strip():
+            try:
+                place = ascii_int(position.strip())
+            except ValueError:
+                place = 0
+            if place < 1:
+                raise refuse(f"line {number}: position must be a whole number from 1; got {position!r}")
+            positions.append((place, key))
+    rows = len(lines) - 1
+    if len(set(keys)) != rows:
+        raise refuse("each key must be on one row")
+    if positions and len(positions) != rows:
+        raise refuse("give a position on every row or on none")
+    if len({place for place, _ in positions}) != len(positions):
+        raise refuse("each position must be on one row")
+    try:
+        return LegendRowsTable(
+            row_names=legend_row_names_from_config(names),
+            hidden_rows=legend_row_keys_from_config(hidden, path=LEGEND_HIDDEN_ROWS_PATH),
+            row_order=legend_row_keys_from_config([key for _, key in sorted(positions)], path=LEGEND_ROW_ORDER_PATH),
+        )
+    except ValidationError as exc:
+        raise refuse(str(exc)) from exc
+
+
+def legend_row_overrides(args: argparse.Namespace) -> dict[str, object]:
+    """The config overrides of ``--legend_rows`` (``None``: not given or empty), each leaf only when it is set."""
+
+    table: LegendRowsTable | None = args.legend_rows
+    if table is None:
+        return {}
+    return {
+        LEGEND_ROW_NAMES_PATH: [list(pair) for pair in table.row_names] or None,
+        LEGEND_HIDDEN_ROWS_PATH: list(table.hidden_rows) or None,
+        LEGEND_ROW_ORDER_PATH: list(table.row_order) or None,
+    }
 
 
 def png_dpi(args: argparse.Namespace, formats: Sequence[str]) -> int | None:
@@ -509,6 +639,16 @@ def _add_gc_content_axis_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_legend_size_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        '--legend_rows',
+        help=(
+            'Legend row edits: a TSV with the header "key\tname\thidden\tposition", one line per Legend row by '
+            'its key; name renames the row (blank: keep its name), hidden true hides it, position (1, 2, ...) on '
+            'every row or on none orders the rows. A key the Legend does not draw is ignored.'
+        ),
+        type=read_legend_rows_table,
+        metavar='FILE',
+    )
     parser.add_argument(
         '--legend_box_size',
         help='Legend box size (optional; float; default: 24 (pixels, 96 dpi) for genomes shorter than the short/long boundary (75 kb circular, 100 kb linear), 20 otherwise).',

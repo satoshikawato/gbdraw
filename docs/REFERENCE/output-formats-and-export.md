@@ -77,6 +77,14 @@ point.
   with the map at its smallest, the legend, the title when wider, and the
   padding for a width, or the same parts top to bottom for a height.
 
+`--canvas_padding TOP,RIGHT,BOTTOM,LEFT` (px; config key `canvas.padding`,
+default `[0, 0, 0, 0]`) adds room on each side outside the edge padding. At
+Auto the canvas grows by the padding; at a requested size the figure fits
+inside that size with the padding, and a refusal counts it with the padding.
+Legend row edits (`--legend_rows`, see
+[`--legend_rows`](../CLI_Reference.md#--legend_rows)) are measured as drawn:
+a renamed row takes the width of its new name, and a hidden row takes no room.
+
 Each refusal states the smallest size that works and offers placing a side
 legend at the top or bottom when the primary row and that legend set the width.
 When labels that need much more room than the map has are not placed at a

@@ -987,12 +987,22 @@ export const circularLegendLocalBounds = (layout, colorRectSize) => {
 // ---- composition (gbdraw/layout/composition.py) ----
 
 /**
+ * A request's canvas padding, px per side (`canvas.padding`; metadata `spacing.canvasPadding`).
+ * @typedef {object} CompositionCanvasPaddingPx
+ * @property {number} top
+ * @property {number} right
+ * @property {number} bottom
+ * @property {number} left
+ */
+
+/**
  * @typedef {object} CompositionSpacingPx
  * @property {number} edgePaddingPx
  * @property {number} dockGapPx
  * @property {number} titleGapPx
  * @property {number} stackGapPx
  * @property {number} overlayClearancePx
+ * @property {CompositionCanvasPaddingPx} [canvasPadding] Room outside the edge padding; absent: none.
  */
 
 /**
@@ -1209,9 +1219,9 @@ const isEmptyBox = (box) => !box || boxWidth(box) <= 0.0 || boxHeight(box) <= 0.
 
 /**
  * Python's `plan_composition`: dock or overlay the Legend, place the title,
- * pad the union, and move everything to start at (0, 0). A requested canvas
- * side larger than the padded content is the canvas side, with the content
- * centred in it.
+ * pad the union (the edge padding, then the canvas padding of each side), and
+ * move everything to start at (0, 0). A requested canvas side larger than the
+ * padded content is the canvas side, with the content centred in it.
  * @param {CompositionPlanRequest} request
  * @returns {CompositionPlanResult}
  */
@@ -1265,7 +1275,9 @@ export const planLegendComposition = ({
   if (title && !isEmptyBox(title) && titleSide !== 'none') {
     working.push(placeTitle(working[0].bounds, title, titleSide, spacing, legendPlacement));
   }
-  const padded = expandedBox(unionBoxes(working.map((placement) => placement.bounds)), spacing.edgePaddingPx);
+  const edgePadded = expandedBox(unionBoxes(working.map((placement) => placement.bounds)), spacing.edgePaddingPx);
+  const { top, right, bottom, left } = spacing.canvasPadding ?? { top: 0.0, right: 0.0, bottom: 0.0, left: 0.0 };
+  const padded = layoutBox(edgePadded.minX - left, edgePadded.minY - top, edgePadded.maxX + right, edgePadded.maxY + bottom);
   const canvasWidth = Math.max(boxWidth(padded), requestedCanvas?.widthPx ?? 0.0);
   const canvasHeight = Math.max(boxHeight(padded), requestedCanvas?.heightPx ?? 0.0);
   // Room a requested canvas leaves around the padded content is shared equally by both sides.

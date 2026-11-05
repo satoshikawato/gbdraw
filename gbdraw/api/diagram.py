@@ -193,8 +193,10 @@ from gbdraw.labels.linear import (
     keeps_feature_label_rows,
 )
 from gbdraw.layout.composition import (
+    NO_CANVAS_PADDING_SIDES,
     CompositionItem,
     CompositionRequest,
+    CompositionSpacing,
     LegendPlacement,
     TitlePlacement,
     plan_composition,
@@ -226,6 +228,7 @@ from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from gbdraw.legend.sources import LegendSources
 from gbdraw.legend.table import (
     LegendTable,
+    draws_legend,
     pairwise_identity_legend_from_comparisons,
 )
 from gbdraw.linear_comparison import (
@@ -3101,6 +3104,7 @@ def assemble_circular_diagram_from_record(
         title_placement=title_placement,
         # A record of a multi-record canvas is composed at its own size; the canvas takes the requested one.
         requested_size=cfg.canvas.figure_size if _requested_canvas else RequestedFigureSize(),
+        canvas_padding=cfg.canvas.padding if _requested_canvas else NO_CANVAS_PADDING_SIDES,
     )
     _attach_circular_label_layouts(result.drawing, [result.label_layout])
     return result.drawing
@@ -3642,7 +3646,7 @@ def assemble_circular_diagram_from_records(
             conservation_legend=first_record_conservation_legend,
             conservation_min_identity=float(identity),
         )
-        if legend_table:
+        if draws_legend(legend_table):
             legend_config = LegendDrawingConfigurator(
                 profile=profile,
                 canvas_config=legend_canvas_config,
@@ -3778,6 +3782,7 @@ def assemble_circular_diagram_from_records(
             title_placement=title_placement,
             overlay_obstacles=tuple(grid_overlay_obstacles),
             # The grid is the outermost composition; its records keep their own canvas.
+            spacing=CompositionSpacing(canvas_padding_px=cfg.canvas.padding),
             requested_width_px=cfg.canvas.figure_size.width_px,
             requested_height_px=cfg.canvas.figure_size.height_px,
         ),
@@ -3793,6 +3798,7 @@ def assemble_circular_diagram_from_records(
             if legend_target is not None
             else None
         ),
+        legend_local_bounds=legend_bounds if legend_target is not None else None,
         title_target=plot_title_group,
         title_side=title_placement,
     )

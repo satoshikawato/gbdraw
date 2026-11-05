@@ -99,6 +99,7 @@ from .cli_utils.common import (
     validate_label_args,
     validate_output_choice_args,
     figure_size_overrides,
+    legend_row_overrides,
     handle_output_formats,
     png_dpi,
 )
@@ -1208,6 +1209,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
     override_candidates: dict[str, object | None] = {
         **figure_size_overrides(args),
+        **legend_row_overrides(args),
         "objects.text.font_family": cli_font_family(args),
         "objects.features.block_stroke_color": block_stroke_color,
         "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
