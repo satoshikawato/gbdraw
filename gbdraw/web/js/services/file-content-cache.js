@@ -16,6 +16,7 @@ import {
   textToBase64,
   textToBytes
 } from './byte-utils.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 export {
   base64ToBytes,
@@ -54,11 +55,23 @@ const asCacheKey = (file) => (
   file && (typeof file === 'object' || typeof file === 'function') ? file : null
 );
 
+// The DOMException names a browser gives when it refuses to read a File (File
+// API, "file read errors"): the file was moved, deleted, or changed on disk
+// after it was picked, or the browser deems it unsafe to read.
+const REFUSED_FILE_READS = new Set(['NotFoundError', 'NotReadableError', 'SecurityError']);
+/** @param {unknown} error */
+const refusedReadError = (error) => (
+  error instanceof DOMException && REFUSED_FILE_READS.has(error.name)
+    ? diagnosticError('INPUT_UNREADABLE', {}, { stage: 'read' })
+    : error
+);
+
 /**
  * The bytes of an uploaded File, the one place they are read: a gzip file
  * (NCBI's `.gbff.gz`, `.fna.gz`, `.gff.gz`) reads as the plain file it holds,
  * told by its first two bytes, so every browser reader, the Worker and the
- * Session see the plain bytes.
+ * Session see the plain bytes. A read the browser refuses rejects with
+ * `INPUT_UNREADABLE`.
  * @param {unknown} file A `File`, a Session resource view, or any value (rejected unless it has `arrayBuffer()`).
  * @returns {Promise<Uint8Array>}
  */
@@ -81,7 +94,7 @@ export const readFileBytes = (file) => {
       pending = Promise.resolve()
         // The `typeof` check above holds here; narrowing does not reach the closure.
         .then(() => /** @type {{ arrayBuffer: () => Promise<ArrayBuffer> }} */ (file).arrayBuffer())
-        .then(asBytes)
+        .then(asBytes, (error) => { throw refusedReadError(error); })
         .then(expandGzipBytes);
       fileByteCache.set(key, pending);
       pending.catch(() => {

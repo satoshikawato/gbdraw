@@ -580,7 +580,8 @@ test('Linear: Add to annotation set whose record read fails adds nothing, takes 
     const status = popup.locator('[data-region-add-status]');
     await expect(status).toBeVisible();
     const { error: listed } = await card();
-    expect(listed).not.toBe('');
+    // A read the browser refuses is the input-unreadable failure, not the unknown one (OV-2563).
+    expect(listed).toContain('An input could not be read. Replace or reselect it.');
     await expect(status).toHaveText(listed);
     await expect(popup.locator('[data-region-add-annotation]')).toBeEnabled();
     expect(await regionRows(page)).toEqual([]);
