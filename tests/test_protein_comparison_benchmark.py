@@ -69,6 +69,78 @@ def test_oracle_preserves_types_order_and_nonfinite_values():
     json.loads(encode(df))
 
 
+def process_report(sample, sha="same"):
+    current = report()
+    current["settings"] = {"policy": benchmark.POLICY, "seed": 1, "warmups": 1, "samples": 1}
+    current["processMaxRssKiB"] = 1
+    current["cases"]["case"]["stages"]["stage"] = {"semanticSha256": sha, "samples": [sample],
+                                                   **benchmark.spread([sample])}
+    return current
+
+
+def test_process_reports_merge_into_one_sample_per_process():
+    merged = benchmark.merge_process_reports([process_report(x) for x in (100., 104., 98.)])
+    stage = merged["cases"]["case"]["stages"]["stage"]
+    assert stage["samples"] == [100., 104., 98.]
+    assert (stage["median"], stage["mad"], stage["noisePct"]) == (100., 2., 2.)
+    assert merged["settings"]["samples"] == merged["settings"]["processes"] == 3
+    assert merged["settings"]["policy"]["maxNoisePct"] == 10.
+    assert benchmark.compare_reports(merged, merged)[1] == 0
+    # Spread between processes up to 10% still decides; above it the stage is inconclusive.
+    noisy = benchmark.merge_process_reports([process_report(x) for x in (100., 108., 92.)])
+    assert noisy["cases"]["case"]["stages"]["stage"]["noisePct"] == 8.
+    assert benchmark.compare_reports(merged, noisy)[1] == 0
+    noisier = benchmark.merge_process_reports([process_report(x) for x in (100., 112., 88.)])
+    assert benchmark.compare_reports(merged, noisier)[1] == 2
+    slower = benchmark.merge_process_reports([process_report(x) for x in (112., 111., 113.)])
+    assert benchmark.compare_reports(merged, slower)[1] == 1
+    # Samples from one process and samples from separate processes are not compared.
+    with pytest.raises(ValueError, match="incomparable reports: settings"):
+        benchmark.compare_reports(report(), merged)
+
+
+@pytest.mark.parametrize("change", ["semantic", "samples"])
+def test_merge_refuses_changed_results_and_multi_sample_reports(change):
+    reports = [process_report(100.) for _ in range(3)]
+    if change == "semantic":
+        reports[2]["cases"]["case"]["stages"]["stage"]["semanticSha256"] = "other"
+    else:
+        for each in reports:
+            each["settings"]["samples"] = 3
+    with pytest.raises(ValueError, match="semantic results changed|one timing sample"):
+        benchmark.merge_process_reports(reports)
+
+
+def test_compare_sources_alternates_trees_in_fresh_processes(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(command, check):
+        root = command[command.index("--source-root") + 1]
+        output = Path(command[command.index("--output") + 1])
+        calls.append((root, output.name, command[command.index("--samples") + 1]))
+        output.write_text(json.dumps(process_report(100. if root == "base" else 120.)))
+
+    monkeypatch.setattr(benchmark.subprocess, "run", fake_run)
+    assert benchmark.main(["compare-sources", "--baseline-root", "base", "--current-root", "head",
+                           "--cases", "hsp-edges", "--output-dir", str(tmp_path)]) == 1
+    assert calls == [(root, f"{side}-{index}.json", "1") for index in (1, 2, 3)
+                     for root, side in (("base", "baseline"), ("head", "current"))]
+    assert json.loads((tmp_path / "comparison.json").read_text())["exitCode"] == 1
+    assert json.loads((tmp_path / "current.json").read_text())["cases"]["case"]["stages"]["stage"]["samples"] == [120.] * 3
+
+
+def test_compare_sources_runs_real_processes(tmp_path):
+    result = subprocess.run([sys.executable, str(ROOT / "tools/benchmark_protein_comparison.py"),
+                             "compare-sources", "--baseline-root", str(ROOT), "--current-root", str(ROOT),
+                             "--cases", "hsp-edges", "--warmups", "0", "--samples", "1",
+                             "--output-dir", str(tmp_path)], capture_output=True, text=True)
+    # One sample per tree is fewer than the policy's three, so the comparison is inconclusive.
+    assert result.returncode == 2, result.stderr
+    assert sorted(path.name for path in (tmp_path / "processes").iterdir()) == ["baseline-1.json", "current-1.json"]
+    comparison = json.loads((tmp_path / "comparison.json").read_text())
+    assert comparison["comparisons"] and all(row["semanticEqual"] for row in comparison["comparisons"].values())
+
+
 def test_cli_compares_archived_reports(tmp_path):
     source = tmp_path / "baseline.json.gz"
     output = tmp_path / "comparison.json.gz"

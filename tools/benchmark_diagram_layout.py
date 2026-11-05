@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """Benchmark diagram assembly time and memory for the layout performance gate.
 
-The standard profile uses three warmups, 21 timing samples, and three separate
-``tracemalloc`` samples per case.  ``--quick`` uses no warmup and one sample of
-each kind with smaller fixtures; it exists for contract tests, not release
-decisions.  Timing noise is the median absolute deviation divided by the median.
+The standard profile uses three warmups, three timing samples, and three
+separate ``tracemalloc`` samples per case.  ``--quick`` uses no warmup and one
+sample of each kind with smaller fixtures; it exists for contract tests, not
+release decisions.  Timing noise is the median absolute deviation divided by the
+median.
+
+``compare-sources`` times a baseline and a current tree for a base/head
+decision: each of the three samples per tree comes from its own fresh process,
+and the trees take turns (baseline, current, baseline, ...).  Samples from one
+process share its state, so more of them do not reduce the spread between
+processes.
 """
 
 from __future__ import annotations
@@ -14,6 +21,7 @@ import gc
 import json
 import math
 import statistics
+import subprocess
 import sys
 import time
 import tracemalloc
@@ -460,6 +468,76 @@ def compare_reports(
     return comparison, has_regression
 
 
+def merge_process_reports(reports: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """One report of a tree from one-sample reports of fresh processes."""
+    first = reports[0]
+    for report in reports:
+        _validate_comparable(first, report)
+        settings = report["settings"]
+        if settings.get("timingSamplesPerCase") != 1 or settings.get("memorySamplesPerCase") != 1:
+            raise BenchmarkDataError("each process report must hold one sample of each kind")
+    cases = {
+        case_name: _summarize_case(
+            [sample for report in reports for sample in report["cases"][case_name]["timingSamplesMs"]],
+            [sample for report in reports for sample in report["cases"][case_name]["peakMemorySamplesBytes"]],
+        )
+        for case_name in CASE_NAMES
+    }
+    count = len(reports)
+    settings = {
+        **first["settings"],
+        "timingSamplesPerCase": count,
+        "memorySamplesPerCase": count,
+        "processes": count,
+    }
+    return {**first, "settings": settings, "cases": cases}
+
+
+def _alternate(
+    sides: Sequence[tuple[str, Callable[[Path], list[str]]]],
+    count: int,
+    directory: Path,
+) -> dict[str, list[Path]]:
+    """Run each side's command once per round, in turn, each in a fresh process."""
+    directory.mkdir(parents=True, exist_ok=True)
+    paths: dict[str, list[Path]] = {name: [] for name, _ in sides}
+    for index in range(1, count + 1):
+        for name, command in sides:
+            output = directory / f"{name}-{index}.json"
+            subprocess.run(command(output), check=True)
+            paths[name].append(output)
+    return paths
+
+
+def compare_sources(args: argparse.Namespace) -> bool:
+    def command(root: Path) -> Callable[[Path], list[str]]:
+        options = ["--quick"] if args.quick else []
+        if args.warmups is not None:
+            options += ["--warmups", str(args.warmups)]
+        return lambda output: [
+            sys.executable, str(Path(__file__).resolve()), "run",
+            "--source-root", str(root), "--label", str(root), *options,
+            "--samples", "1", "--memory-samples", "1", "--output", str(output),
+        ]
+
+    paths = _alternate(
+        (("baseline", command(args.baseline_root)), ("current", command(args.current_root))),
+        args.samples,
+        args.output_dir / "processes",
+    )
+    merged = {
+        side: merge_process_reports([_read_json(path) for path in side_paths])
+        for side, side_paths in paths.items()
+    }
+    for side, report in merged.items():
+        _write_json(report, args.output_dir / f"{side}.json")
+    comparison, has_regression = compare_reports(
+        merged["baseline"], merged["current"], threshold_pct=args.threshold_pct
+    )
+    _write_json(comparison, args.output_dir / "comparison.json")
+    return has_regression
+
+
 def _write_json(payload: Mapping[str, Any], output: Path | None) -> None:
     rendered = json.dumps(payload, allow_nan=False, indent=2, sort_keys=True) + "\n"
     if output is None:
@@ -511,6 +589,24 @@ def _build_parser() -> argparse.ArgumentParser:
     compare_parser.add_argument("--current", type=Path, required=True)
     compare_parser.add_argument("--threshold-pct", type=float, default=DEFAULT_THRESHOLD_PCT)
     compare_parser.add_argument("--output", type=Path)
+
+    sources_parser = subparsers.add_parser(
+        "compare-sources",
+        help="time two source trees in alternating fresh processes and enforce the time gate",
+    )
+    sources_parser.add_argument("--baseline-root", type=Path, required=True)
+    sources_parser.add_argument("--current-root", type=Path, required=True)
+    sources_parser.add_argument("--quick", action="store_true")
+    sources_parser.add_argument("--warmups", type=_non_negative_int, help="warmups in each process")
+    sources_parser.add_argument(
+        "--samples", type=_positive_int, default=3,
+        help="fresh processes per tree, one timing and one memory sample each",
+    )
+    sources_parser.add_argument("--threshold-pct", type=float, default=DEFAULT_THRESHOLD_PCT)
+    sources_parser.add_argument(
+        "--output-dir", type=Path, required=True,
+        help="receives processes/, baseline.json, current.json and comparison.json",
+    )
     return parser
 
 
@@ -519,7 +615,7 @@ def _resolve_settings(args: argparse.Namespace) -> BenchmarkSettings:
     return BenchmarkSettings(
         profile=profile,
         warmups=args.warmups if args.warmups is not None else (0 if args.quick else 3),
-        timing_samples=args.samples if args.samples is not None else (1 if args.quick else 21),
+        timing_samples=args.samples if args.samples is not None else (1 if args.quick else 3),
         memory_samples=(
             args.memory_samples
             if args.memory_samples is not None
@@ -539,6 +635,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             _write_json(report, args.output)
             return 0
+        if args.command == "compare-sources":
+            return 1 if compare_sources(args) else 0
         comparison, has_regression = compare_reports(
             _read_json(args.baseline),
             _read_json(args.current),
