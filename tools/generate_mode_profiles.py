@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET = REPO_ROOT / "gbdraw" / "web" / "js" / "mode-profiles.generated.js"
 sys.path.insert(0, str(REPO_ROOT))
 
-from gbdraw.mode_profiles import mode_profiles_payload  # noqa: E402
+from gbdraw.web_support.mode_profile_data import mode_profiles_payload  # noqa: E402
 
 
 def render_mode_profiles_module() -> str:

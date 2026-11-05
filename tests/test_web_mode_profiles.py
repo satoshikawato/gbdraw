@@ -98,7 +98,7 @@ def test_mode_profiles_carry_the_region_drawing_vocabularies() -> None:
     from typing import get_args
 
     from gbdraw.api.region_drawing import NotCarriedKind, StartAfterEndReason
-    from gbdraw.mode_profiles import mode_profiles_payload
+    from gbdraw.web_support.mode_profile_data import mode_profiles_payload
 
     region = mode_profiles_payload()["regionDrawing"]  # type: ignore[index]
     assert region == {
