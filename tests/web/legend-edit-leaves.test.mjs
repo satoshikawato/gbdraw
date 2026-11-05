@@ -15,6 +15,7 @@ const { legendEditConfigLeaves, readLegendEditLeaves } = await import('../../gbd
 const { managedConfigOverridePathsForMode } = await import('../../gbdraw/web/js/services/session-request.js');
 const { applyCanvasToSvg } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 const { createLegendLayoutActions } = await import('../../gbdraw/web/js/app/legend/layout-actions.js');
+const { CANVAS_SLICE, setCanvasPaddingSide } = await import('../../gbdraw/web/js/services/drawing/canvas.js');
 
 const row = (key, caption = key) => ({ caption, originalCaption: key, color: '#cccccc', xPos: 0, yPos: 0, featureIds: [] });
 const NO_PADDING = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -63,8 +64,29 @@ test('an edited order is a row_order leaf of Python keys; the default order writ
 test('canvas padding is a canvas.padding leaf (top, right, bottom, left) only when a side is not 0', () => {
   assert.deepEqual(leavesOf({ canvasPadding: { top: 10, right: 0, bottom: 30, left: 40 } }),
     { 'canvas.padding': [10, 0, 30, 40] });
-  // The padding the Web draws: a side that holds no number of 0 or more is 0.
-  assert.deepEqual(leavesOf({ canvasPadding: { top: -5, right: Number.NaN, bottom: 0, left: 0 } }), {});
+  // R7 (review S2, D-59): the projection never converts; the slice's writer keeps only drawable sides.
+  assert.deepEqual(leavesOf({ canvasPadding: { top: -5, right: 12.5, bottom: 0, left: 0 } }),
+    { 'canvas.padding': [-5, 12.5, 0, 0] });
+});
+
+// Review S2 (D-59): the Canvas padding writer stores a side the canvas can draw (a negative or non-finite side is
+// 0), Load installs through the same writer, and the request carries the slice as it is.
+test('D-59: a negative padding side is stored and drawn as 0; Load installs a saved negative side as 0', () => {
+  const { handle, view } = CANVAS_SLICE.create();
+  setCanvasPaddingSide(handle, 'left', '-5');
+  assert.deepEqual({ ...view.canvasPadding }, NO_PADDING, 'typing -5 stores 0');
+  setCanvasPaddingSide(handle, 'left', 12.5);
+  setCanvasPaddingSide(handle, 'top', '');
+  assert.deepEqual({ ...view.canvasPadding }, { ...NO_PADDING, left: 12.5 }, 'a field without a number leaves the side');
+  setCanvasPaddingSide(handle, 'left', -5);
+  assert.equal(view.canvasPadding.left, 0);
+  CANVAS_SLICE.install(handle, { canvasPadding: { top: -5, right: Number.POSITIVE_INFINITY, bottom: 7, left: 40 } });
+  assert.deepEqual({ ...view.canvasPadding }, { top: 0, right: 0, bottom: 7, left: 40 }, 'Load and History install drawable sides');
+  assert.deepEqual(leavesOf({ canvasPadding: view.canvasPadding }), { 'canvas.padding': [0, 0, 7, 40] });
+  const index = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  for (const side of ['top', 'right', 'bottom', 'left']) {
+    assert.match(index, new RegExp(`<input id="canvas-padding-${side}" type="number" min="0"`), `the ${side} field offers no negative side`);
+  }
 });
 
 test('the four leaves are GUI-managed paths, so a loaded request never keeps them as preserved overrides', () => {

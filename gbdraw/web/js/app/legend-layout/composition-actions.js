@@ -4,7 +4,8 @@ import {
   readLeadingTranslate,
   replaceLeadingTranslate
 } from '../../services/svg-transform.js';
-import { normalizeCanvasPadding, planLegendComposition } from '../../services/legend-layout.js';
+import { planLegendComposition } from '../../services/legend-layout.js';
+import { normalizeCanvasPadding } from '../../services/canvas-padding.js';
 import { legendPositionOfMode, readLegendPositionOfMode } from '../../services/layout-preferences.js';
 import { LEGEND_POSITIONS } from '../../contracts/schema.generated.js';
 import { LEGEND_GROUP_SELECTOR, LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
@@ -1192,8 +1193,8 @@ const CANVAS_RECORD_ATTRIBUTES = ['data-original-view-box', 'data-original-width
 export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = {}) => {
   const bound = binding
     || (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === String(COMPOSITION_SCHEMA_VERSION) ? bindCompositionMetadata(svg) : null);
-  const padding = addedCanvasPadding(bound?.metadata ?? null, value);
-  const padded = Object.values(padding).some((number) => number !== 0);
+  const metadata = bound?.metadata ?? null;
+  const padded = Object.values(addedCanvasPadding(metadata, value)).some((number) => number !== 0);
   let moved = movedDecorationBounds(bound);
   const recordedBase = svg.getAttribute('data-original-view-box');
   if (!recordedBase && !padded && !moved.length) return false;
@@ -1201,6 +1202,14 @@ export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = 
   const base = /** @type {string} */ (recordedBase || svg.getAttribute('viewBox'));
   const automatic = viewBoxBounds(base);
   if (!automatic) throw new Error('The SVG base viewBox is invalid. Regenerate the diagram.');
+  // Review M1: the canvas holds each moved item, then the padding (Owner, 2026-10-23). Moved items grow the
+  // unpadded frame (the automatic canvas less the padding Python drew), and the whole drawing padding goes around it.
+  const recorded = recordedCanvasPadding(metadata);
+  const frame = {
+    x: automatic.x + recorded.left, y: automatic.y + recorded.top,
+    width: automatic.width - recorded.left - recorded.right, height: automatic.height - recorded.top - recorded.bottom
+  };
+  const padding = normalizeCanvasPadding(value);
   /** @param {CompositionBounds} canvas */
   const outerViewBox = (canvas) => [
     canvas.x - padding.left, canvas.y - padding.top,
@@ -1216,9 +1225,10 @@ export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = 
       && maxX(bounds) <= maxX(shown) + EPSILON && maxY(bounds) <= maxY(shown) + EPSILON
     )) : [];
   }
-  const { x, y, width, height } = automatic;
+  const { width, height } = automatic;
+  const { x, y } = frame;
   const grows = moved.some((bounds) => (
-    bounds.x < x || bounds.y < y || maxX(bounds) > x + width || maxY(bounds) > y + height
+    bounds.x < x || bounds.y < y || maxX(bounds) > x + frame.width || maxY(bounds) > y + frame.height
   ));
   if (!recordedBase && !padded && !grows) return false;
   const baseWidth = svg.getAttribute('data-original-width') || sizeRecord(svg.getAttribute('width'), width);
@@ -1242,7 +1252,7 @@ export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = 
     changed = setRootAttribute(svg, 'data-original-height', baseHeight) || changed;
   }
   // `grows` holds only when a moved item exists, so the union has it.
-  const canvas = grows ? /** @type {CompositionBounds} */ (unionBounds([automatic, ...moved])) : automatic;
+  const canvas = grows ? /** @type {CompositionBounds} */ (unionBounds([frame, ...moved])) : frame;
   const outerWidth = canvas.width + padding.left + padding.right;
   const outerHeight = canvas.height + padding.top + padding.bottom;
   /** @param {string} record @param {number} extent @param {number} outerExtent */

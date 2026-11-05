@@ -5,7 +5,7 @@ import {
   bindCompositionMetadata,
   compositionUserDeltas
 } from './composition-actions.js';
-import { hasCanvasPadding, normalizeCanvasPadding } from '../../services/legend-layout.js';
+import { hasCanvasPadding, normalizeCanvasPadding } from '../../services/canvas-padding.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { LENGTH_BAR_ID } from '../../services/drawn-groups.js';
 import { diagnosticError } from '../../utils/error-normalization.js';

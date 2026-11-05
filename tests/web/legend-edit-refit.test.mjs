@@ -109,8 +109,7 @@ test('an Undo or a Redo of such a step fits again; the Undo reads the drawing as
 test('a Canvas padding change fits again when it changes the padding Python draws', () => {
   const side = (before, after) => [{ path: ['ui', 'canvasPadding', 'top'], before, after, beforeHas: true, afterHas: true }];
   assert.equal(stepRefitsDrawnLegend(side(0, 10), undefined, drawing({ canvasPadding: { ...NO_PADDING, top: 10 } })), true);
-  // A negative side draws as 0, as before it.
-  assert.equal(stepRefitsDrawnLegend(side(0, -5), undefined, drawing({ canvasPadding: { ...NO_PADDING, top: -5 } })), false);
+  // A typed negative side is stored as 0 (D-59), so it makes no padding change.
   // A change of the whole padding object (Reset) holds every side.
   assert.equal(stepRefitsDrawnLegend([{ path: ['ui', 'canvasPadding'], before: { ...NO_PADDING, left: 20 }, after: NO_PADDING, beforeHas: true, afterHas: true }],
     undefined, drawing()), true);

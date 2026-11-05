@@ -43,27 +43,32 @@ const target = (role, automaticTranslation, boundsKey, bounds) => ({
 // A Linear scale (`scale`) is a second primary group, drawn at its own
 // translate (10,70) after the leading one: its painted box 16..76 x 106..116.
 const SCALE_BOUNDS = { x: 10, y: 70, width: 60, height: 10 };
-const resultSvg = ({ legendSide = 'right', titleSide = 'top', scale = false, scaleBounds = true } = {}) => {
+// `pythonPadding`: a Result Python drew with Canvas padding (`canvas.padding`): the canvas is larger by it, the
+// content moves right and down by its left and top sides, and the metadata records it (`spacing.canvasPadding`).
+const resultSvg = ({ legendSide = 'right', titleSide = 'top', scale = false, scaleBounds = true, pythonPadding = null } = {}) => {
+  const pad = { top: 0, right: 0, bottom: 0, left: 0, ...(pythonPadding || {}) };
+  const at = (x, y) => [x + pad.left, y + pad.top];
+  const [canvasWidth, canvasHeight] = [186 + pad.left + pad.right, 152 + pad.top + pad.bottom];
   const svg = new DOMParser().parseFromString([
-    '<svg viewBox="0 0 186 152" width="186px" height="152px">',
-    '<g data-gbdraw-composition-role="primary" id="record_a" transform="translate(6,36)"></g>',
-    scale ? '<g data-gbdraw-composition-role="primary" id="length_bar" transform="translate(6,36) translate(10,70)"></g>' : '',
-    '<g data-gbdraw-composition-role="legend" id="legend" transform="translate(142,91)"></g>',
-    '<g data-gbdraw-composition-role="title" id="plot_title" transform="translate(41,26) scale(1)"></g>',
+    `<svg viewBox="0 0 ${canvasWidth} ${canvasHeight}" width="${canvasWidth}px" height="${canvasHeight}px">`,
+    `<g data-gbdraw-composition-role="primary" id="record_a" transform="translate(${at(6, 36)})"></g>`,
+    scale ? `<g data-gbdraw-composition-role="primary" id="length_bar" transform="translate(${at(6, 36)}) translate(10,70)"></g>` : '',
+    `<g data-gbdraw-composition-role="legend" id="legend" transform="translate(${at(142, 91)})"></g>`,
+    `<g data-gbdraw-composition-role="title" id="plot_title" transform="translate(${at(41, 26)}) scale(1)"></g>`,
     '</svg>'
   ].join(''), 'image/svg+xml').documentElement;
   svg.setAttribute(COMPOSITION_SCHEMA_ATTRIBUTE, '1');
   svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify({
-    legend: target('legend', [142, 91], 'localBounds', { x: -2, y: -5, width: 30, height: 20 }),
+    legend: target('legend', at(142, 91), 'localBounds', { x: -2, y: -5, width: 30, height: 20 }),
     legendReflow: { colorRectSize: 14, lineHeight: 24, textXOffset: 22 },
     legendSide,
     // A Result written before the scale's bounds were recorded has none.
     ...(scale && scaleBounds ? { lengthBar: { localBounds: SCALE_BOUNDS } } : {}),
     overlayObstacles: [],
     overlayPolicy,
-    primary: target('primary', [6, 36], 'finalBounds', { x: 16, y: 56, width: 100, height: 80 }),
-    spacing,
-    title: target('title', [41, 26], 'localBounds', { x: -5, y: -10, width: 60, height: 20 }),
+    primary: target('primary', at(6, 36), 'finalBounds', { x: 16 + pad.left, y: 56 + pad.top, width: 100, height: 80 }),
+    spacing: pythonPadding ? { ...spacing, canvasPadding: pad } : spacing,
+    title: target('title', at(41, 26), 'localBounds', { x: -5, y: -10, width: 60, height: 20 }),
     titleSide
   }));
   return svg;
@@ -105,6 +110,58 @@ test('a title moved below the canvas grows its height, and the canvas padding go
   // Title box y 166..186; + 16 px edge padding ends at 202.
   applyCanvasToSvg(svg, { top: 0, right: 10, bottom: 20, left: 0 });
   assert.deepEqual(root(svg), { viewBox: '0 0 196 222', width: '196px', height: '222px', base: '0 0 186 152' });
+});
+
+// Review M1 (PR-D2): Python draws the Canvas padding into the root, and the canvas still holds each moved decoration
+// and then the padding (Owner, 2026-10-23): a Legend moved into the padding Python drew grows the canvas as on a
+// Result the Web pads. Rule: the Legend box 140..170 (x) moved 30 px right ends at 200, with the 16 px edge padding
+// at 216, past the automatic 186; the canvas is 216 wide, then 40 px padding right: 256.
+test('a Legend moved into the Canvas padding Python drew grows the canvas, then the padding goes around it', () => {
+  const webPadded = resultSvg();
+  applyCompositionUserDeltas(webPadded, { legend: [30, 0] });
+  applyCanvasToSvg(webPadded, { right: 40 });
+  assert.deepEqual(root(webPadded), { viewBox: '0 0 256 152', width: '256px', height: '152px', base: '0 0 186 152' });
+
+  const pythonPadded = resultSvg({ pythonPadding: { right: 40 } });
+  assert.equal(applyCanvasToSvg(pythonPadded, { top: 0, right: 40, bottom: 0, left: 0 }), false,
+    'the padding Python drew is not added again');
+  applyCompositionUserDeltas(pythonPadded, { legend: [30, 0] });
+  assert.equal(applyCanvasToSvg(pythonPadded, { top: 0, right: 40, bottom: 0, left: 0 }), true);
+  assert.deepEqual(root(pythonPadded), { viewBox: '0 0 256 152', width: '256px', height: '152px', base: '0 0 226 152' });
+  applyCompositionUserDeltas(pythonPadded, { legend: [0, 0] });
+  assert.equal(applyCanvasToSvg(pythonPadded, { top: 0, right: 40, bottom: 0, left: 0 }), true);
+  assert.deepEqual(root(pythonPadded), { viewBox: '0 0 226 152', width: '226px', height: '152px', base: null },
+    'a drag back returns the root Python drew');
+
+  // Left: Python moved the content 40 px right; a Legend moved 200 px left grows the canvas to x -76 + 40 = -36,
+  // then the 40 px padding: the same 302 px wide canvas as the Web-padded Result.
+  const leftWeb = resultSvg();
+  applyCompositionUserDeltas(leftWeb, { legend: [-200, 10] });
+  applyCanvasToSvg(leftWeb, { left: 40 });
+  const leftPython = resultSvg({ pythonPadding: { left: 40 } });
+  applyCompositionUserDeltas(leftPython, { legend: [-200, 10] });
+  applyCanvasToSvg(leftPython, { top: 0, right: 0, bottom: 0, left: 40 });
+  assert.deepEqual(root(leftWeb), { viewBox: '-116 0 302 152', width: '302px', height: '152px', base: '0 0 186 152' });
+  assert.deepEqual(root(leftPython), { viewBox: '-76 0 302 152', width: '302px', height: '152px', base: '0 0 226 152' });
+});
+
+test('Generate keeps a moved Legend inside the canvas and the Canvas padding Python drew outside it', () => {
+  const padding = { top: 0, right: 40, bottom: 0, left: 0 };
+  const live = resultSvg({ pythonPadding: padding });
+  applyCompositionUserDeltas(live, { legend: [30, 0] });
+  applyCanvasToSvg(live, padding);
+  const plan = captureDecorationContinuity({
+    canonical: null,
+    results: [{ content: '' }],
+    catalog: { items: [{ recordKeys: ['a'] }] },
+    mountedSvg: live,
+    projectRecordIdentity: () => ({ record: 'a' }),
+    canvasPadding: padding
+  });
+  const candidate = resultSvg({ pythonPadding: padding });
+  plan(null, { catalog: { items: [{ recordKeys: ['a'] }] } }).forEach((transform) => transform?.(candidate));
+  assert.deepEqual(root(candidate), { viewBox: '0 0 256 152', width: '256px', height: '152px', base: '0 0 226 152' });
+  assert.equal(legendAt(candidate), legendAt(live));
 });
 
 test('a hidden Legend does not grow the canvas', () => {

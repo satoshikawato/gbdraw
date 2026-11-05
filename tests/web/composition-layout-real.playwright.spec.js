@@ -917,6 +917,52 @@ test('real Circular render grows the canvas to hold a Legend dragged off the edg
   expect(externalRequests).toEqual([]);
 });
 
+// Review M1 (PR-D2): Python draws the Canvas padding into the root. On an Auto figure a Legend dragged into that
+// padding still grows the canvas, and the padding goes outside it (Owner 2026-10-23: the canvas holds each moved
+// decoration, then the padding), live and through the decoration offsets the next Generate carries.
+test('real Circular render with Canvas padding: a Legend dragged into the padding keeps the padding outside it', async ({ page, baseURL }) => {
+  test.setTimeout(600000);
+  const externalRequests = await blockExternalHttpRequests(page, baseURL);
+  await openApp(page);
+  await renderRealDiagram(page, 'circular', readFileSync(genbankPath, 'utf8'), { legendSide: 'right' });
+  const PADDING = 40;
+  await page.evaluate(() => { window.__GBDRAW_APP__.showCanvasControls = true; });
+  const right = page.locator('#canvas-padding-right');
+  // D-59: the field stores a side the canvas draws; a typed -5 shows and draws 0.
+  await right.fill('-5');
+  await right.press('Tab');
+  await expect(right).toHaveValue('0');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.canvasPadding.right)).toBe(0);
+  await right.fill(String(PADDING));
+  await right.press('Tab');
+  expect(await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const padded = await canvasState(page);
+  const rightGap = (state) => {
+    const [x, , width] = state.root.viewBox.split(' ').map(Number);
+    return x + width - (state.legendBox.x + state.legendBox.width);
+  };
+  expect(padded.base, 'Python drew the padding: the Web adds none').toBeNull();
+  // Drag the Legend 30 user units right: past the canvas without padding, inside the padding Python drew.
+  const scale = await page.evaluate(() => {
+    const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    return svg.getBoundingClientRect().width / Number(svg.getAttribute('viewBox').split(' ')[2]);
+  });
+  await dragCompositionRole(page, 'legend', 30 * scale, 0);
+  const dropped = await canvasState(page);
+  expect(dropped.delta[0], 'the Legend moved right').toBeGreaterThan(20);
+  expect(rightGap(padded) - dropped.delta[0], 'the drag ends inside the padding Python drew').toBeGreaterThan(dropped.edge);
+  expect(rightGap(dropped), 'the canvas holds the moved Legend with its edge padding, then the Canvas padding')
+    .toBeCloseTo(dropped.edge + PADDING, 6);
+  expectHoldsLegend(dropped);
+
+  expect(await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const generated = await canvasState(page);
+  expect(rightGap(generated), 'Generate keeps the Canvas padding outside the moved Legend').toBeCloseTo(generated.edge + PADDING, 6);
+  const extent = (state) => state.root.viewBox.split(' ').slice(2).map(Number);
+  extent(generated).forEach((value, index) => expect(value, 'Generate draws the canvas the drop showed').toBeCloseTo(extent(dropped)[index], 6));
+  expect(externalRequests).toEqual([]);
+});
+
 // R3: a Legend edit on the live Result (the in-place JS replan, no render)
 // with a Legend dragged off the edge grows the canvas exactly as Generate of
 // the same draft does.

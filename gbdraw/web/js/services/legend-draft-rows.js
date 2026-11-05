@@ -10,7 +10,6 @@ import {
   getVisibleFeatureLegendGroup, isLegendOrderEdited, pythonLegendKey, pythonOrderedLegendRows, resultLegendRows
 } from './legend-svg.js';
 import { ruleLegendCaptions } from './specific-color-rules.js';
-import { normalizeCanvasPadding } from './legend-layout.js';
 import { refitFieldsBeforeStep } from './setting-application.js';
 /** @import { PythonLegendKey } from './legend-svg.js' */
 /** @import { SpecificColorRule } from './specific-color-rules.js' */
@@ -120,7 +119,7 @@ export const LEGEND_EDIT_CONFIG_PATHS = Object.freeze(/** @type {const} */ ({
 
 /**
  * The draft a request projects into `LegendEditConfigLeaves`.
- * @typedef {DraftLegendLists & { rules: readonly Partial<SpecificColorRule>[], canvasPadding: Readonly<Partial<Record<keyof CanvasPadding, unknown>>> }} LegendEditDraft
+ * @typedef {DraftLegendLists & { rules: readonly Partial<SpecificColorRule>[], canvasPadding: Readonly<CanvasPadding> }} LegendEditDraft
  */
 
 /**
@@ -128,7 +127,7 @@ export const LEGEND_EDIT_CONFIG_PATHS = Object.freeze(/** @type {const} */ ({
  * from (Generate's request and the automatic rerender's). A row is named by its Python key (`originalCaption`),
  * never by its caption. Only rows the shown Result's inventory holds are Python's: an editor row stays the Web's.
  * A rule's row is renamed through its rule's caption, which the color table carries, so its name is not sent. The
- * canvas padding is the padding the Web draws (`normalizeCanvasPadding`).
+ * canvas padding is sent as the slice holds it (R7): its writer keeps only sides the canvas draws (D-59).
  * @param {LegendEditDraft} draft
  * @returns {LegendEditConfigLeaves}
  */
@@ -145,8 +144,7 @@ export const legendEditConfigLeaves = ({ rules, canvasPadding, ...legend }) => {
     .map((entry) => /** @type {[PythonLegendKey, string]} */ ([key(entry), entry.caption]));
   const hidden = /** @type {PythonLegendKey[]} */ ([...rows.deletedCaptions]);
   const order = isLegendOrderEdited(rows.currentEntries, legend.originalLegendOrder) ? pythonRows.map(key) : [];
-  const padding = normalizeCanvasPadding(canvasPadding);
-  const sides = /** @type {[number, number, number, number]} */ ([padding.top, padding.right, padding.bottom, padding.left]);
+  const sides = /** @type {[number, number, number, number]} */ ([canvasPadding.top, canvasPadding.right, canvasPadding.bottom, canvasPadding.left]);
   /** @type {LegendEditConfigLeaves} */
   const leaves = {};
   if (names.length) leaves[LEGEND_EDIT_CONFIG_PATHS.rowNames] = names;
@@ -172,8 +170,9 @@ const drawnLegendKey = ({ legendEntries, deletedLegendEntries, rules, originalLe
   const listed = Array.isArray(legendEntries) ? legendEntries : [];
   /** @type {readonly (LegendEntryInput | null | undefined)[]} */
   const deleted = Array.isArray(deletedLegendEntries) ? deletedLegendEntries : [];
-  const padding = /** @type {Readonly<Partial<Record<keyof CanvasPadding, unknown>>>} */ (
-    canvasPadding && typeof canvasPadding === 'object' ? canvasPadding : {});
+  // History captures the canvas slice (`CANVAS_SLICE.capture`), four numbers; a step without it holds none.
+  const padding = /** @type {Readonly<CanvasPadding>} */ (
+    canvasPadding && typeof canvasPadding === 'object' ? canvasPadding : { top: 0, right: 0, bottom: 0, left: 0 });
   /** @type {readonly (Partial<SpecificColorRule> | null | undefined)[]} */
   const ruleRows = Array.isArray(rules) ? rules : [];
   return JSON.stringify([legendEditConfigLeaves({
