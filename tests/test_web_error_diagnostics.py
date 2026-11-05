@@ -23,10 +23,10 @@ from gbdraw.exceptions import GbdrawError, ParseError, ValidationError
 from gbdraw.mode_profiles import (
     COMPARISON_THRESHOLD_DOMAINS,
     ComparisonThresholds,
-    mode_profiles_payload,
 )
 from gbdraw.tracks import CircularTrackSlot, ScalarSpec
 from gbdraw.web_support.error_adapter import serialize_web_error
+from gbdraw.web_support.mode_profile_data import mode_profiles_payload
 
 
 def _web(error: BaseException) -> dict:

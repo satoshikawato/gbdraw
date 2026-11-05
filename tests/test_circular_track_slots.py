@@ -1097,7 +1097,7 @@ def test_web_auto_slot_sizes_are_the_sizes_generate_draws(
     # narrowed around the centre definition stays at or above the floor
     # (canvas.circular.track_narrowing_min_px, rule L).
     from gbdraw.circular import _get_args, run_circular_from_namespace
-    from gbdraw.mode_profiles import mode_profiles_payload
+    from gbdraw.web_support.mode_profile_data import mode_profiles_payload
 
     sizes = mode_profiles_payload()["autoSizes"]["circularSlots"]  # type: ignore[index]
     record_path = Path(__file__).parent / "test_inputs" / input_name

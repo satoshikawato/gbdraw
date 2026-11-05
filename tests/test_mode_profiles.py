@@ -596,7 +596,7 @@ def test_web_circular_track_presets_follow_the_python_lane_owner() -> None:
         CircularTrackPreset,
         circular_feature_lane_direction_for_preset,
     )
-    from gbdraw.mode_profiles import mode_profiles_payload
+    from gbdraw.web_support.mode_profile_data import mode_profiles_payload
 
     table = mode_profiles_payload()["circularTrackPresets"]  # type: ignore[index]
     assert table["presets"] == list(get_args(CircularTrackPreset))

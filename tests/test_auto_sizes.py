@@ -34,8 +34,9 @@ from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_tra
 from gbdraw.diagrams.linear.precalc import _resolve_linear_diagram_label_font_size
 from gbdraw.layout.circular_depth_axis import depth_axis_tick_font_size_px
 from gbdraw.layout.scalar_axis import linear_scalar_axis_tick_font_size_px
-from gbdraw.mode_profiles import DiagramMode, mode_profiles_payload
+from gbdraw.mode_profiles import DiagramMode
 from gbdraw.svg.circular_ticks import get_circular_tick_intervals
+from gbdraw.web_support.mode_profile_data import mode_profiles_payload
 
 
 VECTORS = json.loads(
