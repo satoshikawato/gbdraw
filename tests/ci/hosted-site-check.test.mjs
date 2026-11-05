@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import {
@@ -10,13 +12,17 @@ import {
 const SHA = '033a3aa899a6966925df6f413bd29e4a2d342777';
 const LATER = 'b22e4b6cc0000000000000000000000000000000';
 const workflow = readFileSync(new URL('../../.github/workflows/deploy_web.yml', import.meta.url), 'utf8');
+// The version label as its owner, tools/stamp_web_build.py, renders it.
+const renderedLabel = (commit) => execFileSync('python3', ['-c', [
+  'import runpy, sys',
+  "render = runpy.run_path(sys.argv[1])['render_build_label']",
+  "print(render(project_version='0.14.5', commit_sha=sys.argv[2]))"
+].join('\n'), fileURLToPath(new URL('../../tools/stamp_web_build.py', import.meta.url)), commit], { encoding: 'utf8' });
 const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
 
-test('the build stamp names the full commit that tools/stamp_web_build.py wrote', () => {
-  const html = '<footer><span class="hosted-build-label" '
-    + `title="Commit ${SHA}">Version: v0.14.5+033a3aa</span></footer>`;
-  assert.equal(parseBuildStamp(html), SHA);
-  assert.equal(parseBuildStamp('<span class="hosted-build-label" title="Commit unknown">'), null);
+test('the build stamp names the full commit that tools/stamp_web_build.py writes', () => {
+  assert.equal(parseBuildStamp(`<footer>${renderedLabel(SHA)}</footer>`), SHA);
+  assert.equal(parseBuildStamp(renderedLabel('unknown')), null);
   assert.equal(parseBuildStamp('<html></html>'), null);
 });
 
