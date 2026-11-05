@@ -77,8 +77,8 @@ test('a whole turn selects the whole record, 1 to its length, not a span across 
   assert.ok(partsInsideSpan(axis.source, whole, [{ start: 16_560, end: 16_569 }, { start: 0, end: 9 }]));
 });
 
-test('a Circular drag on a record that is not circular stops at its ends and never crosses its origin', () => {
-  for (const name of ['circular-linear-topology', 'circular-fasta-only']) {
+test('a Circular drag on a record that is not circular, or on a crop of every base of one, stops at its ends', () => {
+  for (const name of ['circular-linear-topology', 'circular-fasta-only', 'circular-whole-crop']) {
     const [record] = caseRecords(name);
     const { axis } = record;
     const length = axis.source.drawnLength;

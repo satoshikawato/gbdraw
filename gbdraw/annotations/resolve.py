@@ -20,7 +20,7 @@ from gbdraw.features.selector_values import (
     matches_feature_selector,
 )
 from gbdraw.io.record_select import RecordSelector
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_coordinates import RecordDisplayTransform, spans_may_cross_origin
 
 from .io import annotation_sets_from_dataframe, read_annotation_table
 from .models import (
@@ -301,10 +301,7 @@ def resolve_annotation_set(
         )
         record = records[record_index]
         transform = record_transforms[record_index] if record_transforms is not None else None
-        is_circular = (
-            transform.is_circular if transform is not None
-            else str(record.annotations.get("topology", "")).strip().lower() == "circular"
-        ) and not bool(record.annotations.get("gbdraw_region_applied"))
+        is_circular = spans_may_cross_origin(record, transform)
         clipped = False
         if isinstance(target, CoordinateSpan):
             segments, clipped = _coordinate_segments(target, record, is_circular=is_circular)

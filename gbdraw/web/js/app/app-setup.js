@@ -7603,6 +7603,15 @@ export const createAppSetup = () => {
       ? askLinearFileRemoval(drawing, plan.retainedSequences, label, (turnOffReaching) => removeLinearSource(drawing, plan, intent, turnOffReaching))
       : null;
   };
+  // After a Session load the records of the shown drawing's inputs are read on demand, as Generate reads them: the
+  // record list and Select region's Add to annotation set ask for them.
+  /** @param {RecordSelectionMode} listMode */
+  const readShownRecords = async (listMode) => {
+    if (listMode === 'linear') return linearRecordSelector.refresh(state.activeDrawing());
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return null;
+    return getCircularRecordDiscoveryState(drawing).status === 'ready' ? null : inspectCircularSourceRecords();
+  };
   const recordSelection = createRecordSelection({
     reactive,
     computed,
@@ -7627,13 +7636,7 @@ export const createAppSetup = () => {
     removeSource: removeRecordSource,
     askRemoveSource: askRecordFileRemoval,
     deleteRecordSettings,
-    // After a Session load the records are read on demand, as Generate reads them.
-    prepareRecords: async (listMode) => {
-      if (listMode === 'linear') return linearRecordSelector.refresh(state.activeDrawing());
-      const drawing = shownDrawingOfMode('circular');
-      if (!drawing) return null;
-      return getCircularRecordDiscoveryState(drawing).status === 'ready' ? null : inspectCircularSourceRecords();
-    },
+    prepareRecords: readShownRecords,
     autoOpenRequests: () => pendingDiscoveryOf(state.activeDrawing()).listRequests
   });
 
@@ -7853,22 +7856,33 @@ export const createAppSetup = () => {
     },
     drawnFeatures: () => toRaw(extractedFeatures.value) ?? [],
     selectFeatures: (featureIds) => featureSelection.replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
-    // The row binds its record by the catalog key the record select writes, found from the Result's record key. The
-    // popup is teleported out of the app root, where the History adapter listens, so the action is its own step.
-    addRegionAnnotation: ({ recordKey, start, end }) => history.runUndoable(msg('Add to annotation set'), () => {
+    // The row binds its record by the catalog key the record select writes, found from the Result's record key. A
+    // catalog a Load left unread is read first (OV-373); one that cannot be read adds nothing and says why. The popup
+    // is teleported out of the app root, where the History adapter listens, so the action is its own step.
+    addRegionAnnotation: async ({ recordKey, start, end }) => {
       const drawing = state.activeDrawing();
-      const owners = drawing.mode === 'circular'
-        ? circularRecordSettingsOwners(drawing)
-        : drawing.linearSeqs.map((seq) => linearRecordSettingsOwner(drawing, seq));
-      return annotationEditor.addRegionAnnotation({ bindingKey: bindingKeyOfRequestRecord(owners, recordKey), start, end });
-    }),
+      if (getAnnotationRecordCatalog(drawing).status !== 'ready') await readShownRecords(drawing.mode);
+      const catalog = getAnnotationRecordCatalog(drawing);
+      if (catalog.status !== 'ready') throw catalogIssueError(catalog);
+      if (drawing !== state.activeDrawing()) return null;
+      return history.runUndoable(msg('Add to annotation set'), () => {
+        const owners = drawing.mode === 'circular'
+          ? circularRecordSettingsOwners(drawing)
+          : drawing.linearSeqs.map((seq) => linearRecordSettingsOwner(drawing, seq));
+        return annotationEditor.addRegionAnnotation({ bindingKey: bindingKeyOfRequestRecord(owners, recordKey), start, end });
+      });
+    },
     newDrawingFromRegion: regionDrawings.openWithRegion,
     // Python reads the bases from the committed request, the one the shown Result was made from.
     readRegionFasta: async ({ recordKey, start, end }) => (await requestRecordSpanSequences(
       getCommittedCanonicalSession(), [{ recordKey, start, end }],
       (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
         resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
-    )).fasta
+    )).fasta,
+    // While the tool is on, a touch that misses the tracks pans as a mouse drag does.
+    panStart: startPan,
+    panMove: doPan,
+    panEnd: endPan
   });
   return {
     hostedBuild: readHostedBuild(document),

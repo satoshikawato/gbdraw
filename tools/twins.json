@@ -417,7 +417,7 @@
       "id": "vector:tests/fixtures/region_axis_geometry_vectors.json",
       "concern": "Record axis: display index, source base and record offset of a drawn base, and a point's base",
       "pythonOwner": [
-        "gbdraw/render/track_slot_metadata.py:axis_source_map",
+        "gbdraw/render/track_slot_metadata.py:RecordAxisInput.source",
         "gbdraw/render/track_slot_metadata.py:circular_axis_geometry",
         "gbdraw/render/track_slot_metadata.py:linear_axis_geometry"
       ],

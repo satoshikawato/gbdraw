@@ -626,6 +626,17 @@ def bound_record_transform(record: SeqRecord, transform: RecordDisplayTransform 
     return transform if transform is not None else unset_record_transform(record)
 
 
+def spans_may_cross_origin(record: SeqRecord, transform: RecordDisplayTransform | None) -> bool:
+    """Whether a span of the record may cross its origin: the record is drawn as circular (its transform, else its
+    file's topology) and no region was applied to it (a crop has no origin, even one that keeps every base)."""
+
+    is_circular = (
+        transform.is_circular if transform is not None
+        else str(record.annotations.get("topology", "")).strip().lower() == "circular"
+    )
+    return is_circular and not bool(record.annotations.get("gbdraw_region_applied"))
+
+
 def alignment_cut_breakpoints(
     *spans: tuple[RecordDisplayTransform, SourceInterval],
 ) -> tuple[float, ...]:

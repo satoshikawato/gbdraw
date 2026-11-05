@@ -35,6 +35,7 @@ const BAND_SLACK_PX = 6;
  */
 
 /**
+ * @typedef {'copy' | 'add'} RegionAction An action of the Region popup that waits on Python.
  * @typedef {object} RegionSelectPorts
  * @property {() => RegionAxisRecord[]} readAxisRecords The records of the shown Result whose axis Python wrote.
  * @property {() => SVGSVGElement | null} shownRoot The mounted root of the shown Result.
@@ -46,10 +47,20 @@ const BAND_SLACK_PX = 6;
  * @property {() => void} closeRegionPopup
  * @property {() => readonly RegionFeatureRow[]} drawnFeatures The features the shown Result draws.
  * @property {(featureIds: readonly string[]) => void} selectFeatures The feature selection owner's selection by id.
- * @property {(region: RegionTarget) => unknown} addRegionAnnotation The annotation owner's "Region N" row.
+ * @property {(region: RegionTarget) => Promise<unknown>} addRegionAnnotation The annotation owner's "Region N" row,
+ *   bound by the record catalog's key; it reads the drawing's records first when a Load left them unread, and adds
+ *   nothing (it rejects) when they cannot be read.
  * @property {(region: RegionTarget) => Promise<unknown>} newDrawingFromRegion The region drawing owner's derivation.
  * @property {(region: RegionTarget) => Promise<string>} readRegionFasta The FASTA text of the region, which Python
  *   reads from the request the shown Result was made from (a Worker helper, started by Copy FASTA only).
+ * @property {PanPort} panStart The preview's pan starts at a press (the pan owner's, which pans on mouse events).
+ * @property {PanPort} panMove The pan follows the pointer.
+ * @property {PanPort} panEnd The pan ends.
+ */
+
+/**
+ * The preview pan owner's handler of one pan event; a pointer event is a mouse event with the same position.
+ * @typedef {(event: MouseEvent & { target: Element }) => void} PanPort
  */
 
 /**
@@ -101,7 +112,7 @@ const dragSpan = (axis, start, current, sweep) => (axis.kind === 'circular'
  */
 export const createRegionSelect = ({
   readAxisRecords, shownRoot, layoutEdit, openSelection, openRegionPopup, closeRegionPopup, drawnFeatures,
-  selectFeatures, addRegionAnnotation, newDrawingFromRegion, readRegionFasta
+  selectFeatures, addRegionAnnotation, newDrawingFromRegion, readRegionFasta, panStart, panMove, panEnd
 }) => {
   const on = ref(false);
   /** Whether the shown Result has an axis to select on (one predicate for the toggle and the gesture). */
@@ -110,20 +121,24 @@ export const createRegionSelect = ({
   /** Why the toggle is unavailable: a shown Result without the axis (saved before Python wrote it, Q-A1). */
   const unavailableReason = computed(() => (available.value ? '' : t('Generate to enable region selection')));
 
-  /** Turning Select region on turns Layout edit off. */
+  /** Turning Select region on turns Layout edit off; turning it off cancels a drag and closes the popup. */
   const toggle = () => {
     if (!on.value && !available.value) return;
     on.value = !on.value;
     if (on.value) layoutEdit.value = false;
-    else closeRegionPopup();
+    else turnOff();
   };
   /** Turning Layout edit on turns Select region off. */
   const toggleLayoutEdit = () => {
     layoutEdit.value = !layoutEdit.value;
     if (layoutEdit.value && on.value) {
       on.value = false;
-      closeRegionPopup();
+      turnOff();
     }
+  };
+  const turnOff = () => {
+    cancelDrag();
+    closeRegionPopup();
   };
 
   /**
@@ -164,17 +179,26 @@ export const createRegionSelect = ({
   /** Ends the hold a drag takes on the pointer: on text selection from the press, and its capture once it moves. */
   let releaseGesture = () => {};
 
+  /** The touch that pans the preview while the tool is on, by its pointer id; -1 when none does. */
+  let panningTouch = -1;
+
   /**
    * A press with Select region on: on a record's feature tracks it starts a drag (and no pan); anywhere else, or
-   * with Shift, Ctrl, or Meta held, it keeps its meaning. A touch drags the same way (the canvas takes no touch pan
-   * while the tool is on, `.region-select-on`).
+   * with Shift, Ctrl, or Meta held, it keeps its meaning. A touch drags the same way: the canvas takes no native touch
+   * scroll while the tool is on (`.region-select-on`), so a touch elsewhere pans through the pan owner.
    * @param {PointerEvent} event
    */
   const pointerDown = (event) => {
     if (!active.value || event.button !== 0 || event.isPrimary === false || !(event.currentTarget instanceof Element)) return;
     if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
     const hit = recordAt(event.clientX, event.clientY);
-    if (!hit) return;
+    if (!hit) {
+      if (event.pointerType === 'touch' && event.target instanceof Element) {
+        panningTouch = event.pointerId;
+        panStart(/** @type {PointerEvent & { target: Element }} */ (event));
+      }
+      return;
+    }
     // A press on the tracks is the drag's: no pan starts and no text is selected.
     event.preventDefault();
     pending = {
@@ -184,11 +208,26 @@ export const createRegionSelect = ({
       clientX: event.clientX, clientY: event.clientY, owner: event.currentTarget
     };
     releaseGesture = holdTextSelection();
+    // Esc and leaving the window cancel the drag, as they cancel the marquee; held only while a press is held.
+    window.addEventListener('keydown', cancelOnEscape, true);
+    window.addEventListener('blur', cancelDrag);
   };
+
+  /**
+   * Whether the drag can still select: the tool is on and the record it started on is still drawn (a drawing switch,
+   * a Result switch, a Generate, or a Load mounts another Result, and the frame leaves the page).
+   * @param {{ frame: Element }} drag
+   */
+  const dragLives = (drag) => active.value && drag.frame.isConnected;
 
   /** @param {PointerEvent} event */
   const pointerMove = (event) => {
+    if (event.pointerId === panningTouch) panMove(/** @type {PointerEvent & { target: Element }} */ (event));
     if (!pending || event.pointerId !== pending.pointerId) return;
+    if (!dragLives(pending)) {
+      cancelDrag();
+      return;
+    }
     // A press that stays within the click's slop is the click's (a feature popup), not a drag.
     if (!pending.moved && isClickAtPress({ clientX: pending.startX, clientY: pending.startY }, event)) return;
     const mapped = framePoint(pending.frame, event.clientX, event.clientY);
@@ -228,9 +267,32 @@ export const createRegionSelect = ({
   const endDrag = () => {
     pending = null;
     drag.active = false;
+    window.removeEventListener('keydown', cancelOnEscape, true);
+    window.removeEventListener('blur', cancelDrag);
     const release = releaseGesture;
     releaseGesture = () => {};
     release();
+  };
+  /** Ends a drag in progress with no selection and no popup. */
+  const cancelDrag = () => {
+    if (pending) endDrag();
+  };
+  /**
+   * Esc during a drag cancels it, and is the drag's alone (the marquee's Esc does not also clear the selection).
+   * @param {KeyboardEvent} event
+   */
+  const cancelOnEscape = (event) => {
+    if (event.key !== 'Escape' || !pending) return;
+    cancelDrag();
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  /** @param {PointerEvent} event The release or cancel of the touch that pans ends its pan. */
+  const endTouchPan = (event) => {
+    if (event.pointerId !== panningTouch) return;
+    panningTouch = -1;
+    panEnd(/** @type {PointerEvent & { target: Element }} */ (event));
   };
 
   /** The band element the popup opens beside; bound by the template. @type {Element | null} */
@@ -244,10 +306,11 @@ export const createRegionSelect = ({
    * @param {PointerEvent} event
    */
   const pointerUp = (event) => {
+    endTouchPan(event);
     if (!pending || event.pointerId !== pending.pointerId) return;
     const finished = pending;
     endDrag();
-    if (!finished.moved) return;
+    if (!finished.moved || !dragLives(finished)) return;
     event.preventDefault();
     event.stopPropagation();
     const { record } = finished;
@@ -274,6 +337,8 @@ export const createRegionSelect = ({
    * @param {PointerEvent} event
    */
   const pointerCancel = (event) => {
+    // The canvas's own cancel and capture-loss handlers end a pan (the pan owner's `endPan`).
+    if (event.pointerId === panningTouch) panningTouch = -1;
     if (!pending || event.pointerId !== pending.pointerId) return;
     if (event.type === 'lostpointercapture' && event.target !== pending.owner) return;
     endDrag();
@@ -352,10 +417,17 @@ export const createRegionSelect = ({
     });
   };
 
-  /** Copy FASTA of the open selection: busy while Python reads the bases, then copied or the failure's text. */
-  const copy = reactive({
-    /** @type {RegionSelection | null} */ selection: null, busy: false, status: '', failed: false
-  });
+  /**
+   * The open selection's action that waits on Python (Copy FASTA, Add to annotation set): busy while it runs, then its
+   * outcome text or the failure's.
+   * @type {{ selection: RegionSelection | null, name: RegionAction | '', busy: boolean, status: string, failed: boolean }}
+   */
+  const action = reactive({ selection: null, name: '', busy: false, status: '', failed: false });
+  /** @param {RegionSelection} chosen @param {RegionAction} name The state of one action of this selection. */
+  const actionView = (chosen, name) => {
+    const own = action.selection === chosen && action.name === name;
+    return { busy: own && action.busy, status: own ? action.status : '', failed: own && action.failed };
+  };
 
   /** The Region popup's body: the feature count and the actions. */
   const popup = computed(() => {
@@ -368,10 +440,9 @@ export const createRegionSelect = ({
       featureText: chosen.source.wrapsOrigin ? t('{features} · crosses the origin', { features: featureText }) : featureText,
       selectFeaturesText: tn(featureIds.length, 'Select {count} feature', 'Select {count} features'),
       newDrawingReason: chosen.source.wrapsOrigin ? t('A region that crosses the origin cannot be drawn on its own.') : '',
-      // The Copy FASTA state of this selection only.
-      copying: copy.selection === chosen && copy.busy,
-      copyStatus: copy.selection === chosen ? copy.status : '',
-      copyFailed: copy.selection === chosen && copy.failed
+      // The state of this selection's actions only.
+      copy: actionView(chosen, 'copy'),
+      add: actionView(chosen, 'add')
     };
   });
 
@@ -380,11 +451,31 @@ export const createRegionSelect = ({
     const chosen = openSelection();
     if (chosen) selectFeatures(featuresInside(chosen));
   };
-  /** Add to annotation set: the annotation owner adds one "Region N" row. */
-  const addToAnnotationSet = () => {
+  /**
+   * Runs one action of the open selection; another action of it waits until this one ends.
+   * @param {RegionAction} name
+   * @param {(chosen: RegionSelection) => Promise<unknown>} run
+   * @param {string} doneText
+   * @param {string} operation The operation a failure names.
+   */
+  const runAction = async (name, run, doneText, operation) => {
     const chosen = openSelection();
-    return chosen ? addRegionAnnotation(targetOf(chosen)) : null;
+    if (!chosen || (action.selection === chosen && action.busy)) return false;
+    Object.assign(action, { selection: chosen, name, busy: true, status: '', failed: false });
+    try {
+      await run(chosen);
+      if (action.selection === chosen) Object.assign(action, { busy: false, status: doneText, failed: false });
+      return true;
+    } catch (error) {
+      if (action.selection === chosen) {
+        const failure = normalizeCaughtError(error, { operation, stage: 'helper' });
+        Object.assign(action, { busy: false, status: errorText(failure.summaryParts), failed: true });
+      }
+      return false;
+    }
   };
+  /** Add to annotation set: the annotation owner adds one "Region N" row (after reading the records, when needed). */
+  const addToAnnotationSet = () => runAction('add', (chosen) => addRegionAnnotation(targetOf(chosen)), '', 'addRegionAnnotation');
   /** New drawing from region; refused by Python, and disabled here, for a span across the origin. */
   const newDrawing = async () => {
     const chosen = openSelection();
@@ -393,27 +484,13 @@ export const createRegionSelect = ({
     closeRegionPopup();
     return outcome;
   };
-
   /**
    * Copy FASTA: Python reads the region's bases on the source strand; the clipboard write starts with the click, so it
    * is allowed when the bases arrive.
    */
-  const copyFasta = async () => {
-    const chosen = openSelection();
-    if (!chosen || (copy.selection === chosen && copy.busy)) return false;
-    Object.assign(copy, { selection: chosen, busy: true, status: '', failed: false });
-    try {
-      await copyPendingTextToClipboard(readRegionFasta(targetOf(chosen)));
-      if (copy.selection === chosen) Object.assign(copy, { busy: false, status: t('Copied FASTA'), failed: false });
-      return true;
-    } catch (error) {
-      if (copy.selection === chosen) {
-        const failure = normalizeCaughtError(error, { operation: 'readRecordSpanSequences', stage: 'helper' });
-        Object.assign(copy, { busy: false, status: errorText(failure.summaryParts), failed: true });
-      }
-      return false;
-    }
-  };
+  const copyFasta = () => runAction(
+    'copy', (chosen) => copyPendingTextToClipboard(readRegionFasta(targetOf(chosen))), t('Copied FASTA'), 'readRecordSpanSequences'
+  );
 
   return {
     on, available, active, unavailableReason, toggle, toggleLayoutEdit,

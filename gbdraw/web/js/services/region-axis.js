@@ -11,8 +11,9 @@ import { t } from '../utils/i18n.js';
 /**
  * Which source base a drawn base shows. Display index `i` (0 to `drawnLength - 1` along the axis) shows source base
  * `(anchorBase - 1 + step * i) mod sourceLength + 1`; the record's own base `k` (its feature coordinates, 0-based)
- * is source base `(recordBase - 1 + step * k) mod sourceLength + 1`. `isCircular` is the record's circularity (Python's
- * `ResolvedRecordProvenance.is_circular`): only a circular record drawn whole has an origin a span may cross.
+ * is source base `(recordBase - 1 + step * k) mod sourceLength + 1`. `isCircular` says whether a span may cross the
+ * record's origin (Python's `spans_may_cross_origin`: a circular record with no region applied, the annotation
+ * resolver's rule); a drag crosses display index 0 only there and only when the record is drawn whole.
  * @typedef {object} AxisSourceMap
  * @property {number} anchorBase
  * @property {number} recordBase

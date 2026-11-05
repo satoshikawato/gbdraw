@@ -17,7 +17,7 @@ from typing import Any, Literal, Mapping, Sequence, TypedDict
 
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.layout.record_coordinates import RecordDisplayTransform, bound_record_transform
+from gbdraw.layout.record_coordinates import RecordDisplayTransform, bound_record_transform, spans_may_cross_origin
 from gbdraw.svg.circular_arcs import position_angle
 
 
@@ -31,9 +31,10 @@ class AxisSourceMap(TypedDict):
     ``recordBase`` is the source base of the drawn record's first base (its
     feature coordinates count from it): record base ``k`` (0-based) is source
     base ``(recordBase - 1 + step * k) mod sourceLength + 1``.
-    ``isCircular`` says whether the record is circular (``RecordDisplayTransform.is_circular``,
-    which the record planner sets from ``ResolvedRecordProvenance.is_circular``): only then may
-    a span cross its origin.
+    ``isCircular`` says whether a span may cross the record's origin (``spans_may_cross_origin``,
+    the annotation resolver's rule): the record is drawn as circular (``RecordDisplayTransform.is_circular``,
+    which the record planner sets from ``ResolvedRecordProvenance.is_circular``) and no region was
+    applied to it.
     """
 
     anchorBase: int
@@ -125,7 +126,7 @@ class RecordAxisInput:
             "step": transform.source_step,
             "sourceLength": int(transform.length),
             "drawnLength": len(self.record.seq),
-            "isCircular": bool(transform.is_circular),
+            "isCircular": spans_may_cross_origin(self.record, self.transform),
         }
 
 

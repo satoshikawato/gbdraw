@@ -3,6 +3,7 @@
 // placed from the axis Python wrote (services/region-axis.js), so a drag
 // lands where Python says a base is drawn.
 const { test, expect } = require('@playwright/test');
+const { writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { HMMT, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
@@ -352,7 +353,7 @@ test('Circular at phone width: the Region popup stays above the preview toolbar'
 test.describe('touch', () => {
   test.use({ hasTouch: true });
 
-  test('Circular: a touch drag selects a span; the canvas takes no touch scroll while the tool is on', async ({ page }) => {
+  test('Circular: a touch drag on the tracks selects a span, one elsewhere pans; the canvas takes no touch scroll while the tool is on', async ({ page }) => {
     test.setTimeout(300_000);
     await openWithGenBank(page, HMMT);
     await generateAndWaitForResult(page);
@@ -374,6 +375,26 @@ test.describe('touch', () => {
     await expect(page.locator('[data-region-span]')).toHaveText('4,001-6,001 (2,001 bp)');
 
     await page.keyboard.press('Escape');
+    // A touch outside the tracks (the circle's centre) pans the preview through the pan owner, as a mouse drag does.
+    const centre = await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const { regionAxisFrame } = await import('./js/services/region-axis.js');
+      const matrix = regionAxisFrame(state.svgContainer.value.querySelector('svg'), 0).getScreenCTM();
+      return { x: matrix.e, y: matrix.f };
+    });
+    const surface = () => page.evaluate(() => {
+      const { left, top } = document.querySelector('.gbdraw-preview-surface').getBoundingClientRect();
+      return { left, top };
+    });
+    const before = await surface();
+    await touch('touchStart', centre);
+    for (const step of [1, 2, 3]) await touch('touchMove', { x: centre.x + 20 * step, y: centre.y + 10 * step });
+    await touch('touchEnd', { x: centre.x + 60, y: centre.y + 30 });
+    await expect.poll(async () => {
+      const now = await surface();
+      return [Math.round(now.left - before.left), Math.round(now.top - before.top)];
+    }).toEqual([60, 30]);
+    await expect(regionPopup(page)).toHaveCount(0);
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(await touchAction(), 'the canvas scrolls again once the tool is off').not.toBe('none');
@@ -446,17 +467,17 @@ test('Save Session keeps the axis of the Result, and its Load enables Select reg
 });
 
 /** A 10 kb circular record whose four CDS lie in its first 1,200 bases, on both strands. */
-const arcGenbank = () => {
+const arcGenbank = (id = 'ARC1') => {
   const sequence = 'ACGTTGCA'.repeat(1250);
   const origin = sequence.match(/.{1,60}/g).map((chunk, index) => (
     `${String(index * 60 + 1).padStart(9)} ${chunk.match(/.{1,10}/g).join(' ')}`
   )).join('\n');
   const cds = [['f1', '101..300'], ['f2', 'complement(401..600)'], ['f3', '701..900'], ['f4', 'complement(1001..1200)']]
     .map(([gene, location]) => `     CDS             ${location}\n                     /gene="${gene}"\n                     /product="${gene} protein"`).join('\n');
-  return `LOCUS       ARC1                   10000 bp    DNA     circular UNA 01-JAN-2000
+  return `LOCUS       ${id}                   10000 bp    DNA     circular UNA 01-JAN-2000
 DEFINITION  Four CDS on one arc.
-ACCESSION   ARC1
-VERSION     ARC1
+ACCESSION   ${id}
+VERSION     ${id}
 KEYWORDS    .
 SOURCE      synthetic construct
   ORGANISM  synthetic construct
@@ -493,4 +514,30 @@ test('Circular: Shift+click selects the features between two features along the 
   const selected = await page.evaluate(() => [...window.__GBDRAW_APP__.selectedFeatureIds].sort());
   expect(selected).toEqual([f1.id, f2.id, f3.id].sort());
   expect(selected).not.toContain(f4.id);
+});
+
+test('Add to annotation set right after a Load reads the records first and binds the row to its record', async ({ page }, testInfo) => {
+  test.setTimeout(420_000);
+  // Two records on one canvas: a row needs its record to be drawn. A Load starts no Python, so the record catalog
+  // is not read when the Region popup opens (OV-373).
+  const input = testInfo.outputPath('two-arcs.gbk');
+  writeFileSync(input, arcGenbank('ARC1') + arcGenbank('ARC2'));
+  await openWithGenBank(page, input, () => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+  await generateAndWaitForResult(page);
+  const saved = testInfo.outputPath('two-arcs.gbdraw-session.json.gz');
+  await download(page, 'Save Session', saved, { title: '' });
+  await loadSessionFile(page, saved);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.circularRecordDiscoveryState.status)).not.toBe('ready');
+  await turnOn(page);
+  await dragAlong(page, 1, [100.5, 600.5, 1_200.5]);
+  const popup = regionPopup(page);
+  await expectHeading(page, 'ARC2', '101-1,201 (1,101 bp)');
+  await popup.locator('[data-region-add-annotation]').click();
+  await expect.poll(() => regionRows(page)).toHaveLength(1);
+  await expect(popup.locator('[data-region-add-status]')).toHaveCount(0);
+  const [row] = await regionRows(page);
+  expect(JSON.stringify(row.target.record)).toContain('ARC2');
+  await generateAndWaitForResult(page);
+  const drawn = await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => String(result.content || '')).join(''));
+  expect(drawn).toContain(`data-gbdraw-annotation-id="${row.id}"`);
 });

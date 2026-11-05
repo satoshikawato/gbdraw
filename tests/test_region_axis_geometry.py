@@ -57,12 +57,17 @@ def _circular(*records: RecordInput, grid: bool = False) -> Any:
 
 
 # Circular mode draws every record as a circle; only a circular record (its
-# display option, else its file's topology) has an origin a span may cross.
+# display option, else its file's topology) with no region applied has an
+# origin a span may cross (the annotation resolver's rule).
 NOT_CIRCULAR = {
     # lambda's LOCUS line says linear.
     "circular-linear-topology": (RecordInput(GenBankInputSource(str(LAMBDA)), record_key="lambda"),),
     # A FASTA record has no topology, and "Circular record" is off by default.
     "circular-fasta-only": (RecordInput(FastaInputSource(str(FASTA)), record_key="fasta"),),
+    # A crop that keeps every base of a circular record still has no origin (OV-2486).
+    "circular-whole-crop": (
+        RecordInput(GenBankInputSource(str(MITO)), record_key="crop", region=parse_region_spec("NC_012920.1:1-16569")),
+    ),
 }
 
 
@@ -214,9 +219,13 @@ def test_the_axis_says_whether_the_record_is_circular() -> None:
         "circular-multi-record-canvas": [True, True],
         "circular-linear-topology": [False],
         "circular-fasta-only": [False],
+        "circular-whole-crop": [False],
     }
+    whole_crop = _case("circular-whole-crop")[0]["axis"]["source"]
+    assert whole_crop["drawnLength"] == whole_crop["sourceLength"] == 16_569
     for name, records in NOT_CIRCULAR.items():
-        assert [item.is_circular for item in _circular_plan(*records).provenance] == circular[name]
+        if name != "circular-whole-crop":
+            assert [item.is_circular for item in _circular_plan(*records).provenance] == circular[name]
     # A crop draws part of the record: its drawn axis has no origin to cross.
     assert [record["axis"]["source"]["isCircular"] for record in _case("linear-two-records-crop-reverse")] == [False, False]
 

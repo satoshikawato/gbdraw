@@ -7534,14 +7534,18 @@
                                 <div v-else-if="previewItemView && previewItemView.kind === 'region' && regionPopup" :key="`region-popup-${previewItemView.identity}`" v-dialog-focus class="flex flex-col gap-1.5" data-preview-item-popup="region">
                                     <div>
                                         <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-copy-fasta data-dialog-initial-focus
-                                                :disabled="regionPopup.copying" :aria-busy="regionPopup.copying ? 'true' : 'false'"
-                                                @click="regionSelect.copyFasta()"><i class="ph ph-copy" aria-hidden="true"></i><span>{{ regionPopup.copying ? t('Copying FASTA…') : t('Copy FASTA') }}</span></button>
-                                        <p v-if="regionPopup.copyStatus" :class="regionPopup.copyFailed ? 'text-xs text-red-700' : 'text-xs text-slate-500'" class="mt-0.5 px-1" role="status" data-region-copy-status>{{ regionPopup.copyStatus }}</p>
+                                                :disabled="regionPopup.copy.busy" :aria-busy="regionPopup.copy.busy ? 'true' : 'false'"
+                                                @click="regionSelect.copyFasta()"><i class="ph ph-copy" aria-hidden="true"></i><span>{{ regionPopup.copy.busy ? t('Copying FASTA…') : t('Copy FASTA') }}</span></button>
+                                        <p v-if="regionPopup.copy.status" :class="regionPopup.copy.failed ? 'text-xs text-red-700' : 'text-xs text-slate-500'" class="mt-0.5 px-1" role="status" data-region-copy-status>{{ regionPopup.copy.status }}</p>
                                     </div>
                                     <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-select-features
                                             :disabled="regionPopup.featureCount === 0" @click="regionSelect.selectFeaturesInside()"><i class="ph ph-selection-plus" aria-hidden="true"></i><span>{{ regionPopup.selectFeaturesText }}</span></button>
-                                    <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-region-add-annotation
-                                            :disabled="!semanticMutationAvailable" @click="regionSelect.addToAnnotationSet()"><i class="ph ph-note-pencil" aria-hidden="true"></i><span>{{ t('Add to annotation set') }}</span></button>
+                                    <div>
+                                        <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-region-add-annotation
+                                                :disabled="!semanticMutationAvailable || regionPopup.add.busy" :aria-busy="regionPopup.add.busy ? 'true' : 'false'"
+                                                @click="regionSelect.addToAnnotationSet()"><i class="ph ph-note-pencil" aria-hidden="true"></i><span>{{ t('Add to annotation set') }}</span></button>
+                                        <p v-if="regionPopup.add.status" class="text-xs text-red-700 mt-0.5 px-1" role="status" data-region-add-status>{{ regionPopup.add.status }}</p>
+                                    </div>
                                     <div>
                                         <button type="button" class="btn btn-secondary w-full text-xs flex items-center justify-start gap-2 py-1.5" data-history-ignore data-region-new-drawing
                                                 :disabled="!drawingSwitchAvailable || !!regionPopup.newDrawingReason"

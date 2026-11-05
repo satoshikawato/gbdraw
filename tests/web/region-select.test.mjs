@@ -8,7 +8,8 @@ import test from 'node:test';
 const VECTORS = JSON.parse(readFileSync(new URL('../fixtures/region_axis_geometry_vectors.json', import.meta.url), 'utf8')).cases;
 const axisOf = (name) => VECTORS.find((entry) => entry.name === name).records[0].axis;
 
-// The page the owner reads: an identity screen matrix for the record's frame, frames at once.
+// The page the owner reads: an identity screen matrix for the record's frame, frames at once, and the window's
+// listeners (Esc and blur during a drag).
 class FakeElement {
   constructor() {
     this.captured = [];
@@ -27,19 +28,27 @@ Object.assign(globalThis, {
 
     matrixTransform(m) { return { x: m.a * this.x + m.c * this.y + m.e, y: m.b * this.x + m.d * this.y + m.f }; }
   },
-  window: { innerHeight: 1000, requestAnimationFrame: (callback) => { callback(); return 0; } },
+  window: {
+    innerHeight: 1000,
+    requestAnimationFrame: (callback) => { callback(); return 0; },
+    listeners: new Map(),
+    addEventListener(type, listener) { this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]); },
+    removeEventListener(type, listener) { this.listeners.set(type, (this.listeners.get(type) ?? []).filter((l) => l !== listener)); },
+    dispatch(type, event = {}) { for (const listener of this.listeners.get(type) ?? []) listener(event); }
+  },
   document: { querySelector: () => null, querySelectorAll: () => [], addEventListener: () => {}, removeEventListener: () => {} }
 });
 
 const { createRegionSelect } = await import('../../gbdraw/web/js/app/region-select.js');
 
-const frame = { contains: () => false, getScreenCTM: () => identity };
+const frame = { contains: () => false, getScreenCTM: () => identity, isConnected: true };
 const root = { querySelectorAll: (selector) => (selector.startsWith('g[data-gbdraw-record-index') ? [frame] : []) };
 
 /** An owner over one record of `axis`; `records` empties when the shown Result has no axis. */
 const setup = ({ axis = axisOf('circular-display-start'), withAxis = true } = {}) => {
   const layoutEdit = { value: false };
   const opened = [];
+  const pans = [];
   let open = null;
   const owner = createRegionSelect({
     readAxisRecords: () => (withAxis ? [{ resultIndex: 0, recordIndex: 0, recordKey: 'rec', recordId: 'REC1', axis }] : []),
@@ -56,10 +65,13 @@ const setup = ({ axis = axisOf('circular-display-start'), withAxis = true } = {}
     selectFeatures: () => {},
     addRegionAnnotation: () => null,
     newDrawingFromRegion: async () => null,
-    readRegionFasta: async () => ''
+    readRegionFasta: async () => '',
+    panStart: (event) => pans.push(['start', event.pointerId]),
+    panMove: (event) => pans.push(['move', event.pointerId]),
+    panEnd: (event) => pans.push(['end', event.pointerId])
   });
   owner.bindBand({});
-  return { owner, layoutEdit, opened, canvas: new FakeElement() };
+  return { owner, layoutEdit, opened, pans, canvas: new FakeElement() };
 };
 
 /** The point on the middle of the feature band of display position `position`. */
@@ -161,4 +173,60 @@ test('a span across the origin of a circular record says so and disables New dra
   assert.equal(opened[0].selection.source.wrapsOrigin, true);
   assert.equal(owner.popup.value.featureText, '0 features · crosses the origin');
   assert.equal(owner.popup.value.newDrawingReason, 'A region that crosses the origin cannot be drawn on its own.');
+});
+
+test('Esc, leaving the window, turning the tool off, and another Result shown cancel a drag: no popup, capture released', () => {
+  const axis = axisOf('circular-display-start');
+  const cancels = {
+    escape: () => {
+      let stopped = false;
+      window.dispatch('keydown', { key: 'Escape', preventDefault() {}, stopPropagation() { stopped = true; } });
+      assert.ok(stopped, 'the Esc of a drag reaches no other handler');
+    },
+    blur: () => window.dispatch('blur'),
+    'tool off': (owner) => owner.toggle(),
+    'Layout edit on': (owner) => owner.toggleLayoutEdit(),
+    // A drawing switch (or a Result switch, Generate, Load) mounts another Result: the record's frame leaves the page.
+    'Result replaced': () => { frame.isConnected = false; }
+  };
+  for (const [name, cancel] of Object.entries(cancels)) {
+    const { owner, opened, canvas } = setup({ axis });
+    owner.toggle();
+    owner.pointerDown(press(canvas, pointAt(axis, 100.5)));
+    owner.pointerMove(press(canvas, pointAt(axis, 900.5)));
+    assert.ok(owner.overlay.value, `${name}: the band shows while dragging`);
+    cancel(owner);
+    owner.pointerMove(press(canvas, pointAt(axis, 1_200.5)));
+    owner.pointerUp(press(canvas, pointAt(axis, 1_200.5)));
+    frame.isConnected = true;
+    assert.equal(opened.length, 0, `${name}: no popup`);
+    assert.equal(owner.overlay.value, null, `${name}: the band goes`);
+    assert.deepEqual(canvas.released, [7], `${name}: the capture is released`);
+    assert.deepEqual([window.listeners.get('keydown'), window.listeners.get('blur')], [[], []], `${name}: no listener stays`);
+  }
+});
+
+test('with the tool on, a touch outside the tracks pans through the pan owner; a mouse press there and a touch on them do not', () => {
+  const axis = axisOf('circular-display-start');
+  const { owner, opened, pans, canvas } = setup({ axis });
+  owner.toggle();
+  const outside = { clientX: 0, clientY: 0 };
+  const touch = { pointerType: 'touch', target: canvas };
+  owner.pointerDown(press(canvas, outside, touch));
+  owner.pointerMove(press(canvas, { clientX: 40, clientY: 30 }, touch));
+  owner.pointerUp(press(canvas, { clientX: 40, clientY: 30 }, touch));
+  assert.deepEqual(pans, [['start', 7], ['move', 7], ['end', 7]]);
+  assert.equal(opened.length, 0);
+
+  pans.length = 0;
+  owner.pointerDown(press(canvas, outside, { pointerType: 'mouse', target: canvas }));
+  owner.pointerMove(press(canvas, { clientX: 40, clientY: 30 }, { pointerType: 'mouse', target: canvas }));
+  owner.pointerUp(press(canvas, { clientX: 40, clientY: 30 }, { pointerType: 'mouse', target: canvas }));
+  assert.deepEqual(pans, [], 'a mouse press pans by its own mouse events');
+
+  owner.pointerDown(press(canvas, pointAt(axis, 100.5), touch));
+  owner.pointerMove(press(canvas, pointAt(axis, 900.5), touch));
+  owner.pointerUp(press(canvas, pointAt(axis, 900.5), touch));
+  assert.deepEqual(pans, [], 'a touch on the tracks selects');
+  assert.equal(opened.length, 1);
 });

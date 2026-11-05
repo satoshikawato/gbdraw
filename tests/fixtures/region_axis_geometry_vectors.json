@@ -679,6 +679,78 @@
      ]
     }
    ]
+  },
+  {
+   "name": "circular-whole-crop",
+   "records": [
+    {
+     "recordIndex": 0,
+     "recordKey": "crop",
+     "axis": {
+      "kind": "circular",
+      "radiusPx": 390.0,
+      "bandInnerPx": 349.05000000000007,
+      "bandOuterPx": 386.1,
+      "startAngleDeg": -90.0,
+      "degreesPerBp": 0.021727322107551572,
+      "source": {
+       "anchorBase": 1,
+       "recordBase": 1,
+       "step": 1,
+       "sourceLength": 16569,
+       "drawnLength": 16569,
+       "isCircular": false
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.069695,
+        -367.574993
+       ],
+       "displayIndex": 0,
+       "sourceBase": 1,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.209084,
+        -367.574941
+       ],
+       "displayIndex": 1,
+       "sourceBase": 2,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        318.294435,
+        183.847854
+       ],
+       "displayIndex": 5523,
+       "sourceBase": 5524,
+       "recordOffset": 5523
+      },
+      {
+       "point": [
+        -0.0,
+        367.575
+       ],
+       "displayIndex": 8284,
+       "sourceBase": 8285,
+       "recordOffset": 8284
+      },
+      {
+       "point": [
+        -0.069695,
+        -367.574993
+       ],
+       "displayIndex": 16568,
+       "sourceBase": 16569,
+       "recordOffset": 16568
+      }
+     ]
+    }
+   ]
   }
  ]
 }

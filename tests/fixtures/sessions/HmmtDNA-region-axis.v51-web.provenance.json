@@ -1,6 +1,6 @@
 {
   "purpose": "Positive fixture of Session 51 whose saved track-slot geometry carries each record's recordKey and axis (PD-OI-115): a Web Save Session of a generated Circular HmmtDNA drawing with default settings. Load reads the axis back, so Select region is available without Generate.",
-  "sourceCommit": "45ce5f956 plus the uncommitted round-3 changes of branch feat/region-select (PR-A)",
+  "sourceCommit": "a30e3dfb6b387e4accf13d264403ef0f61365128",
   "history": "branch feat/region-select; Session 51 is not on main yet (docs/internal/SESSION_FORMAT_HISTORY.md)",
   "route": "tests/web/region-select.playwright.spec.js, test 'Save Session keeps the axis of the Result ...': open the Web app, upload HmmtDNA.gbk, Generate, Save Session with an empty title; the downloaded file was decompressed and written again with gzip -n -9",
   "inputs": {
