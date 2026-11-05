@@ -228,7 +228,7 @@ jobs:
 
       - name: Report line coverage
         if: ${{ !cancelled() && matrix.coverage }}
-        run: echo "Line coverage of gbdraw/ is $(python -m coverage report --format=total)% (floor is fail_under in pyproject.toml)" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "Line coverage of gbdraw/ is $(python -m coverage report --format=total --fail-under=0)% (floor is fail_under in pyproject.toml; the test step checks it)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage report
         if: ${{ !cancelled() && matrix.coverage }}

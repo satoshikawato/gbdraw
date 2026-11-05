@@ -118,7 +118,8 @@ source = ["gbdraw"]
 patch = ["subprocess"]
 omit = [
     "tests/*",
-    "gbdraw/web/*",
+    # The leading */ also matches in CLI subprocesses that run in a temporary directory.
+    "*/gbdraw/web/*",
 ]
 
 [tool.coverage.report]

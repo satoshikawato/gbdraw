@@ -39,7 +39,7 @@ measure coverage.
 
 ### Python-version coverage
 
-The inexpensive core matrix remains on 3.10/3.11/3.12 because language support,
+The inexpensive core matrix remains on 3.10 to 3.14 because language support,
 TOML loading (`tomli` on 3.10), dependency resolution, and package/Python APIs can
 differ by host interpreter. Browser rendering itself uses the packaged Pyodide
 interpreter, not the runner's Python version. Host-version repetition still tests
