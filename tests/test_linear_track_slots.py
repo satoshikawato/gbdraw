@@ -34,6 +34,7 @@ from gbdraw.tracks import (
     parse_linear_track_slot,
     parse_linear_track_slots,
 )
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 
 def _record(record_id: str = "rec1") -> SeqRecord:
@@ -241,13 +242,15 @@ def test_linear_track_spacing_falls_back_to_zero() -> None:
 def test_linear_track_slot_geometry_metadata_keeps_duplicate_record_instances() -> None:
     canvas = assemble_linear_diagram_from_records(
         [_record("duplicate"), _record("duplicate")],
-        cfg=apply_config_overrides(None, None),
-        legend="none",
-        linear_track_slots=[
-            "features:features@side=overlay",
-            "gc_content:dinucleotide_content@h=20px,spacing=8px",
-        ],
-        linear_track_axis_index=0,
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            legend="none",
+            linear_track_slots=[
+                "features:features@side=overlay",
+                "gc_content:dinucleotide_content@h=20px,spacing=8px",
+            ],
+            linear_track_axis_index=0,
+        ),
     )
 
     geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
@@ -283,22 +286,24 @@ def test_linear_record_plans_expand_only_records_with_extra_feature_lanes() -> N
     ]
     canvas = assemble_linear_diagram_from_records(
         [shallow, deep],
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-                "canvas.strandedness": True,
-                "canvas.resolve_overlaps": True,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "canvas.strandedness": True,
+                    "canvas.resolve_overlaps": True,
+                },
+            ),
+            legend="none",
+            depth_track_tables=[[_depth_table("shallow")], [_depth_table("deep")]],
+            linear_track_slots=[
+                "features:features@side=overlay",
+                "depth:depth@track_index=0,side=below,h=10px",
+            ],
         ),
-        legend="none",
-        depth_track_tables=[[_depth_table("shallow")], [_depth_table("deep")]],
-        linear_track_slots=[
-            "features:features@side=overlay",
-            "depth:depth@track_index=0,side=below,h=10px",
-        ],
     )
     records = canvas._gbdraw_track_slot_geometry["records"]
     features = [
@@ -325,18 +330,22 @@ def test_default_middle_slots_match_explicit_geometry_and_shared_spacing() -> No
     cfg = apply_config_overrides(None, overrides)
     default_canvas = assemble_linear_diagram_from_records(
         [_record()],
-        cfg=cfg,
-        legend="none",
+        LinearAssemblyInputs(
+            cfg=cfg,
+            legend="none",
+        ),
     )
     explicit_canvas = assemble_linear_diagram_from_records(
         [_record()],
-        cfg=cfg,
-        legend="none",
-        linear_track_slots=[
-            "features:features@side=overlay",
-            "gc_content:dinucleotide_content@side=below,nt=GC",
-            "gc_skew:dinucleotide_skew@side=below,nt=GC",
-        ],
+        LinearAssemblyInputs(
+            cfg=cfg,
+            legend="none",
+            linear_track_slots=[
+                "features:features@side=overlay",
+                "gc_content:dinucleotide_content@side=below,nt=GC",
+                "gc_skew:dinucleotide_skew@side=below,nt=GC",
+            ],
+        ),
     )
     default_features = _resolved_slot_geometry(default_canvas, "features")
     default_gc = _resolved_slot_geometry(default_canvas, "gc_content")
@@ -621,16 +630,18 @@ def test_resolve_linear_track_layout_clears_numeric_track_below_axis() -> None:
 def test_assemble_linear_custom_slots_places_tracks_above_and_below_axis() -> None:
     svg = assemble_linear_diagram_from_records(
         [_record()],
-        cfg=apply_config_overrides(
-            None,
-            {"canvas.show_gc": True, "canvas.show_skew": True},
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {"canvas.show_gc": True, "canvas.show_skew": True},
+            ),
+            legend="none",
+            linear_track_slots=[
+                "gc_skew:gc_skew@side=above,h=28px",
+                "features:features@side=overlay",
+                "gc_content:gc_content@side=below,h=30px",
+            ],
         ),
-        legend="none",
-        linear_track_slots=[
-            "gc_skew:gc_skew@side=above,h=28px",
-            "features:features@side=overlay",
-            "gc_content:gc_content@side=below,h=30px",
-        ],
     ).tostring()
 
     axis_y = _extract_group_y(svg, "rec1")
@@ -645,17 +656,19 @@ def test_assemble_linear_dinucleotide_skew_slot_uses_custom_colors_and_legend() 
     default_colors = load_default_colors("", palette="default")
     svg = assemble_linear_diagram_from_records(
         [_record()],
-        cfg=apply_config_overrides(
-            None,
-            {"canvas.show_gc": True, "canvas.show_skew": True},
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {"canvas.show_gc": True, "canvas.show_skew": True},
+            ),
+            legend="right",
+            default_colors=default_colors,
+            linear_track_slots=[
+                "features:features@side=overlay",
+                "gc_skew:dinucleotide_skew@nt=GC,h=20px",
+                "at_skew:dinucleotide_skew@nt=AT,h=20px,positive_color=tomato,negative_color=#2a9d8f,legend_label=AT skew",
+            ],
         ),
-        legend="right",
-        default_colors=default_colors,
-        linear_track_slots=[
-            "features:features@side=overlay",
-            "gc_skew:dinucleotide_skew@nt=GC,h=20px",
-            "at_skew:dinucleotide_skew@nt=AT,h=20px,positive_color=tomato,negative_color=#2a9d8f,legend_label=AT skew",
-        ],
     ).tostring()
     at_skew = _extract_group_fragment(svg, "at_skew")
     gc_skew = _extract_group_fragment(svg, "gc_skew")
@@ -676,28 +689,32 @@ def test_assemble_linear_dinucleotide_skew_slot_rejects_invalid_custom_color() -
     with pytest.raises(ValidationError, match="Unknown color name"):
         assemble_linear_diagram_from_records(
             [_record()],
-            cfg=apply_config_overrides(
-                None,
-                {"canvas.show_gc": True, "canvas.show_skew": True},
+            LinearAssemblyInputs(
+                cfg=apply_config_overrides(
+                    None,
+                    {"canvas.show_gc": True, "canvas.show_skew": True},
+                ),
+                legend="none",
+                linear_track_slots=[
+                    "features:features@side=overlay",
+                    "at_skew:dinucleotide_skew@nt=AT,positive_color=not-a-color",
+                ],
             ),
-            legend="none",
-            linear_track_slots=[
-                "features:features@side=overlay",
-                "at_skew:dinucleotide_skew@nt=AT,positive_color=not-a-color",
-            ],
         )
 
 
 def test_assemble_linear_custom_depth_above_axis_keeps_depth_axis_clear() -> None:
     svg = assemble_linear_diagram_from_records(
         [_record()],
-        cfg=apply_config_overrides(None, None),
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        linear_track_slots=[
-            "depth:depth@side=above,h=10px",
-            "features:features@side=below",
-        ],
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            linear_track_slots=[
+                "depth:depth@side=above,h=10px",
+                "features:features@side=below",
+            ],
+        ),
     ).tostring()
     cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
 

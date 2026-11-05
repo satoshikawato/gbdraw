@@ -84,9 +84,11 @@ def _load_api(source_root: Path) -> tuple[Any, Any, Any, Any]:
                 "benchmark each tree in a fresh process"
             )
     sys.path.insert(0, str(root))
-    # These three functions are the narrowest common assembly boundary in HEAD
-    # and the working tree.  Package-root draw_* also measures request compilation
-    # and Diagram wrapping, which are outside this layout assembly gate.
+    # These three functions are the narrowest assembly boundary; the measured
+    # tree must take gbdraw.api.assembly_inputs objects, so a tree from before
+    # that module is measured with its own copy of this tool.  Package-root
+    # draw_* also measures request compilation and Diagram wrapping, which are
+    # outside this layout assembly gate.
     from gbdraw.api.config import apply_config_overrides
     from gbdraw.api.diagram import (
         assemble_circular_diagram_from_record,
@@ -149,6 +151,9 @@ def _build_cases(source_root: Path, profile: str) -> list[BenchmarkCase]:
         assemble_multi_circular,
         assemble_multi_linear,
     ) = _load_api(source_root)
+    # Imported after _load_api, which puts the measured tree first on sys.path.
+    from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
+
     specs = _record_specs(profile)
     records = {
         case_name: [
@@ -192,33 +197,39 @@ def _build_cases(source_root: Path, profile: str) -> list[BenchmarkCase]:
             "singleCircular",
             lambda: assemble_single_circular(
                 records["singleCircular"][0],
-                cfg=config,
-                default_colors=default_colors,
-                legend="right",
-                plot_title="Single Circular layout benchmark",
-                plot_title_position="top",
+                CircularAssemblyInputs(
+                    cfg=config,
+                    default_colors=default_colors,
+                    legend="right",
+                    plot_title="Single Circular layout benchmark",
+                    plot_title_position="top",
+                ),
             ),
         ),
         BenchmarkCase(
             "multiCircular",
             lambda: assemble_multi_circular(
                 records["multiCircular"],
-                cfg=config,
-                default_colors=default_colors,
-                legend="right",
-                plot_title="Multi-record Circular layout benchmark",
-                plot_title_position="top",
+                CircularAssemblyInputs(
+                    cfg=config,
+                    default_colors=default_colors,
+                    legend="right",
+                    plot_title="Multi-record Circular layout benchmark",
+                    plot_title_position="top",
+                ),
             ),
         ),
         BenchmarkCase(
             "multiLinear",
             lambda: assemble_multi_linear(
                 records["multiLinear"],
-                cfg=config,
-                default_colors=default_colors,
-                legend="right",
-                plot_title="Multi-record Linear layout benchmark",
-                plot_title_position="top",
+                LinearAssemblyInputs(
+                    cfg=config,
+                    default_colors=default_colors,
+                    legend="right",
+                    plot_title="Multi-record Linear layout benchmark",
+                    plot_title_position="top",
+                ),
             ),
         ),
     ]

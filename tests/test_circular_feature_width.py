@@ -32,6 +32,7 @@ from gbdraw.svg.circular_ticks import (
 from gbdraw.tracks import default_circular_track_slots, parse_circular_track_slot
 from tests.utils.circular_drawer_fakes import make_feature_draw_ratio_capture, make_numeric_track_capture
 from svgwrite import Drawing
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 
 SELECTED_FEATURES = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
@@ -229,10 +230,12 @@ def test_feature_width_override_reaches_feature_drawer(monkeypatch: pytest.Monke
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=_feature_width_slots("96px"),
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=_feature_width_slots("96px"),
+        ),
     )
 
     expected_ratio_factor = 96.0 / (cfg.canvas.circular.radius * cfg.canvas.circular.track_ratio)
@@ -259,13 +262,15 @@ def test_default_custom_feature_slot_preserves_separate_strand_feature_width(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=default_circular_track_slots(
-            show_depth=False,
-            show_gc=False,
-            show_skew=False,
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=default_circular_track_slots(
+                show_depth=False,
+                show_gc=False,
+                show_skew=False,
+            ),
         ),
     )
 
@@ -408,10 +413,12 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=_feature_width_slots("96px"),
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=_feature_width_slots("96px"),
+        ),
     )
 
     assert captured["record_feature_ratio"] is not None
@@ -474,15 +481,17 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=[
-            "features:features@w=30px,side=overlay,lane_direction=split",
-            "ticks:ticks@r=1.25,side=outside,tick_label_layout=tick_only",
-            "gc_content:dinucleotide_content@r=0.56,w=22px",
-            "gc_skew:dinucleotide_skew@r=0.48,w=18px",
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[
+                "features:features@w=30px,side=overlay,lane_direction=split",
+                "ticks:ticks@r=1.25,side=outside,tick_label_layout=tick_only",
+                "gc_content:dinucleotide_content@r=0.56,w=22px",
+                "gc_skew:dinucleotide_skew@r=0.48,w=18px",
+            ],
+        ),
     )
 
     assert math.isclose(float(captured["ticks_radius"]), 1.25 * base_radius, rel_tol=1e-6, abs_tol=1e-6)
@@ -894,10 +903,12 @@ def test_feature_width_expand_canvas_when_labels_hidden_with_resolve_overlaps() 
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=SELECTED_FEATURES,
-        legend="left",
-        circular_track_slots=_feature_width_slots("75px"),
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=SELECTED_FEATURES,
+            legend="left",
+            circular_track_slots=_feature_width_slots("75px"),
+        ),
     )
 
     rendered_height = float(str(canvas.attribs["height"]).rstrip("px"))
@@ -1060,10 +1071,12 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=_feature_width_slots("75px"),
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=_feature_width_slots("75px"),
+        ),
     )
 
     ticks_center = float(captured.get("ticks") if captured.get("ticks") is not None else base_radius)
@@ -1157,9 +1170,11 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+        ),
     )
 
     tick_layout = captured["radial_layout"].ticks
@@ -1274,9 +1289,11 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+        ),
     )
 
     tick_layout = captured["radial_layout"].ticks
@@ -1389,9 +1406,11 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+        ),
     )
 
     tick_layout = captured["radial_layout"].ticks
@@ -1499,15 +1518,17 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=[
-            "features:features@r=0.5,w=10px",
-            "ticks:ticks@r=0.94,side=outside,tick_label_layout=tick_only",
-            "gc_content:dinucleotide_content@r=0.74,w=22px",
-            "gc_skew:dinucleotide_skew@r=0.68,w=18px",
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[
+                "features:features@r=0.5,w=10px",
+                "ticks:ticks@r=0.94,side=outside,tick_label_layout=tick_only",
+                "gc_content:dinucleotide_content@r=0.74,w=22px",
+                "gc_skew:dinucleotide_skew@r=0.68,w=18px",
+            ],
+        ),
     )
 
     assert math.isclose(float(captured["ticks"]), 0.94 * base_radius, rel_tol=1e-6, abs_tol=1e-6)
@@ -1576,10 +1597,12 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
         try:
             assemble_circular_diagram_from_record(
                 record,
-                cfg=GbdrawConfig.from_dict(config_dict),
-                selected_features_set=SELECTED_FEATURES,
-                legend="left",
-                circular_track_slots=_feature_width_slots("75px"),
+                CircularAssemblyInputs(
+                    cfg=GbdrawConfig.from_dict(config_dict),
+                    selected_features_set=SELECTED_FEATURES,
+                    legend="left",
+                    circular_track_slots=_feature_width_slots("75px"),
+                ),
             )
         finally:
             circular_assemble_module.add_axis_group_on_canvas = original_axis
@@ -1617,10 +1640,12 @@ def test_feature_width_keeps_axis_concentric_with_rendered_tracks(track_type: st
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=SELECTED_FEATURES,
-        legend="left",
-        circular_track_slots=_feature_width_slots("75px"),
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=SELECTED_FEATURES,
+            legend="left",
+            circular_track_slots=_feature_width_slots("75px"),
+        ),
     )
     svg_text = canvas.tostring()
 

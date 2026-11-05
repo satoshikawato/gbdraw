@@ -39,6 +39,8 @@ from gbdraw.render.group_content import GroupContent, GroupKey, GroupKind, place
 from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
 from gbdraw.tracks import CircularTrackSlot
 from tests.utils.svg_compare import PATH_ROUNDING
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
+from gbdraw.api.options import CircularMultiRecordOptions, LinearMultiRecordOptions
 
 
 def _build_record(record_id: str, feature_start: int, length: int = 1200) -> SeqRecord:
@@ -698,9 +700,11 @@ def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        selected_features_set=["CDS"],
-        legend="right",
-        cfg=apply_config_overrides(None, {"labels.circular.scope": "outer"}),
+        CircularAssemblyInputs(
+            selected_features_set=["CDS"],
+            legend="right",
+            cfg=apply_config_overrides(None, {"labels.circular.scope": "outer"}),
+        ),
     )
 
     root = ET.fromstring(canvas.tostring())
@@ -788,8 +792,8 @@ def test_assemble_circular_diagram_from_records_default_auto_scaling(
     ]
     captured_radii: list[float] = []
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
-        cfg = kwargs["cfg"]
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
+        cfg = inputs.cfg
         radius = float(cfg.canvas.circular.radius)
         width = float(cfg.canvas.circular.width.without_labels)
         height = float(cfg.canvas.circular.height)
@@ -811,9 +815,11 @@ def test_assemble_circular_diagram_from_records_default_auto_scaling(
 
     assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
 
     assert len(captured_radii) == 2
@@ -832,8 +838,8 @@ def test_multi_record_mixed_lengths_harmonize_short_feature_axis_style_to_long(
     config_dict = _build_distinct_circular_style_config_dict()
     captured_styles: dict[str, dict[str, float]] = {}
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
-        cfg = kwargs["cfg"]
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
+        cfg = inputs.cfg
         threshold = int(cfg.labels.length_threshold.circular)
         length_param = "short" if len(gb_record.seq) < threshold else "long"
         track_type = str(cfg.canvas.circular.track_type)
@@ -867,9 +873,11 @@ def test_multi_record_mixed_lengths_harmonize_short_feature_axis_style_to_long(
 
     assemble_circular_diagram_from_records(
         records,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
 
     assert captured_styles["short_len"] == pytest.approx(captured_styles["long_len"], rel=1e-9)
@@ -895,9 +903,11 @@ def test_multi_record_canvas_draws_a_short_record_beside_a_long_one_as_long() ->
     def render(records: list[SeqRecord], extra_overrides: dict[str, Any]) -> str:
         return assemble_circular_diagram_from_records(
             records,
-            selected_features_set=["CDS"],
-            legend="right",
-            cfg=apply_config_overrides(None, {"labels.circular.scope": "outer", **extra_overrides}),
+            CircularAssemblyInputs(
+                selected_features_set=["CDS"],
+                legend="right",
+                cfg=apply_config_overrides(None, {"labels.circular.scope": "outer", **extra_overrides}),
+            ),
         ).tostring()
 
     # With the boundary at 1 bp every record is long, whatever the canvas does with mixed classes.
@@ -919,7 +929,12 @@ def test_multi_record_canvas_legend_does_not_depend_on_record_order() -> None:
     def legend_elements(ordered: list[SeqRecord]) -> list[tuple[str, tuple[tuple[str, str], ...]]]:
         root = ET.fromstring(
             assemble_circular_diagram_from_records(
-                ordered, selected_features_set=["CDS"], legend="right", cfg=cfg
+                ordered,
+                CircularAssemblyInputs(
+                    selected_features_set=["CDS"],
+                    legend="right",
+                    cfg=cfg,
+                ),
             ).tostring()
         )
         legend = next(element for element in root.iter() if element.attrib.get("id") == "legend")
@@ -940,13 +955,15 @@ def test_multi_record_mixed_lengths_unify_feature_label_font_sizes() -> None:
     root = ET.fromstring(
         assemble_circular_diagram_from_records(
             records,
-            selected_features_set=["CDS"],
-            legend="none",
-            cfg=apply_config_overrides(None, {
-                "labels.circular.scope": "outer",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-            }),
+            CircularAssemblyInputs(
+                selected_features_set=["CDS"],
+                legend="none",
+                cfg=apply_config_overrides(None, {
+                    "labels.circular.scope": "outer",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                }),
+            ),
         ).tostring()
     )
     font_sizes = _extract_label_font_sizes_by_text(
@@ -973,8 +990,8 @@ def test_multi_record_all_short_keeps_short_feature_axis_style(
     config_dict = _build_distinct_circular_style_config_dict()
     captured_styles: dict[str, dict[str, float]] = {}
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
-        cfg = kwargs["cfg"]
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
+        cfg = inputs.cfg
         threshold = int(cfg.labels.length_threshold.circular)
         length_param = "short" if len(gb_record.seq) < threshold else "long"
         track_type = str(cfg.canvas.circular.track_type)
@@ -1008,9 +1025,11 @@ def test_multi_record_all_short_keeps_short_feature_axis_style(
 
     assemble_circular_diagram_from_records(
         records,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
 
     for style in captured_styles.values():
@@ -1085,9 +1104,11 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
 
     assemble_circular_diagram_from_records(
         records,
-        selected_features_set=["CDS"],
-        legend="none",
-        cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
+        CircularAssemblyInputs(
+            selected_features_set=["CDS"],
+            legend="none",
+            cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
+        ),
     )
 
     assert captured_tick_path_channels[20_000] == "long"
@@ -1136,13 +1157,15 @@ def test_circular_tick_label_font_size_reaches_tick_label_generator(
 
     assemble_circular_diagram_from_records(
         records,
-        selected_features_set=["CDS"],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-            "objects.ticks.tick_labels.font_size": 19.0,
-        }),
+        CircularAssemblyInputs(
+            selected_features_set=["CDS"],
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.ticks.tick_labels.font_size": 19.0,
+            }),
+        ),
     )
 
     assert captured_font_sizes[20_000] == pytest.approx(19.0)
@@ -1183,9 +1206,11 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
 
     assemble_circular_diagram_from_records(
         records,
-        selected_features_set=["CDS"],
-        legend="none",
-        cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
+        CircularAssemblyInputs(
+            selected_features_set=["CDS"],
+            legend="none",
+            cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
+        ),
     )
 
     assert captured_gc_window_steps["short_len"] == expected_short
@@ -1213,8 +1238,8 @@ def test_assemble_circular_diagram_from_records_scaling_mode_selection(
     ]
     captured_radii: list[float] = []
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
-        cfg = kwargs["cfg"]
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
+        cfg = inputs.cfg
         radius = float(cfg.canvas.circular.radius)
         width = float(cfg.canvas.circular.width.without_labels)
         height = float(cfg.canvas.circular.height)
@@ -1236,11 +1261,15 @@ def test_assemble_circular_diagram_from_records_scaling_mode_selection(
 
     assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_size_mode=size_mode,
-        multi_record_min_radius_ratio=min_ratio,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
+        layout=CircularMultiRecordOptions(
+            multi_record_size_mode=size_mode,
+            multi_record_min_radius_ratio=min_ratio,
+        ),
     )
 
     assert len(captured_radii) == 2
@@ -1259,8 +1288,8 @@ def test_assemble_circular_diagram_from_records_auto_renormalizes_when_multiple_
     ]
     captured_radii_by_id: dict[str, float] = {}
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
-        cfg = kwargs["cfg"]
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
+        cfg = inputs.cfg
         radius = float(cfg.canvas.circular.radius)
         width = float(cfg.canvas.circular.width.without_labels)
         height = float(cfg.canvas.circular.height)
@@ -1282,11 +1311,15 @@ def test_assemble_circular_diagram_from_records_auto_renormalizes_when_multiple_
 
     assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_size_mode="auto",
-        multi_record_min_radius_ratio=0.55,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
+        layout=CircularMultiRecordOptions(
+            multi_record_size_mode="auto",
+            multi_record_min_radius_ratio=0.55,
+        ),
     )
 
     assert len(captured_radii_by_id) == 4
@@ -1311,8 +1344,8 @@ def test_assemble_circular_diagram_from_records_auto_keeps_single_clamp_behavior
     ]
     captured_radii: list[float] = []
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
-        cfg = kwargs["cfg"]
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
+        cfg = inputs.cfg
         radius = float(cfg.canvas.circular.radius)
         width = float(cfg.canvas.circular.width.without_labels)
         height = float(cfg.canvas.circular.height)
@@ -1334,11 +1367,15 @@ def test_assemble_circular_diagram_from_records_auto_keeps_single_clamp_behavior
 
     assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_size_mode="auto",
-        multi_record_min_radius_ratio=0.55,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
+        layout=CircularMultiRecordOptions(
+            multi_record_size_mode="auto",
+            multi_record_min_radius_ratio=0.55,
+        ),
     )
 
     assert len(captured_radii) == 3
@@ -1347,21 +1384,19 @@ def test_assemble_circular_diagram_from_records_auto_keeps_single_clamp_behavior
 
 
 @pytest.mark.circular
-def test_assemble_circular_diagram_from_records_rejects_removed_sqrt_alias() -> None:
-    records = [
-        _build_record("max_len", 30, length=1000),
-        _build_record("mid_len", 60, length=300),
-        _build_record("small_len", 90, length=200),
-        _build_record("tiny_len", 120, length=100),
-    ]
+def test_circular_multi_record_layout_rejects_removed_sqrt_alias() -> None:
     with pytest.raises(ValidationError, match="auto, linear, equal"):
+        CircularMultiRecordOptions(multi_record_size_mode="sqrt")  # type: ignore[arg-type]
+
+
+@pytest.mark.circular
+def test_assemble_circular_diagram_from_records_requires_circular_layout() -> None:
+    records = [_build_record("a", 30, length=1000), _build_record("b", 60, length=300)]
+    with pytest.raises(ValidationError, match="layout must be CircularMultiRecordOptions or None"):
         assemble_circular_diagram_from_records(
             records,
-            cfg=apply_config_overrides(None, None),
-            selected_features_set=["CDS"],
-            legend="none",
-            multi_record_size_mode="sqrt",
-            multi_record_min_radius_ratio=0.55,
+            CircularAssemblyInputs(cfg=apply_config_overrides(None, None), selected_features_set=["CDS"]),
+            layout=LinearMultiRecordOptions(),  # type: ignore[arg-type]
         )
 
 
@@ -1381,10 +1416,10 @@ def test_multi_record_variable_grid_width_is_tighter_than_fixed_cell_layout(
     ]
     captured_radii: list[float] = []
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
         index_map = {record.id: idx for idx, record in enumerate(records)}
         width, height = planned_sizes[index_map[gb_record.id]]
-        captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        captured_radii.append(float(inputs.cfg.canvas.circular.radius))
         return _with_mock_circular_result(
             Drawing(
                 filename=f"{gb_record.id}.svg",
@@ -1402,9 +1437,11 @@ def test_multi_record_variable_grid_width_is_tighter_than_fixed_cell_layout(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
 
     root = ET.fromstring(canvas.tostring())
@@ -1439,10 +1476,10 @@ def test_multi_record_default_column_and_row_gap_ratios_are_ten_and_five_percent
     ]
     captured_radii: list[float] = []
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
         index_map = {record.id: idx for idx, record in enumerate(records)}
         width, height = planned_sizes[index_map[gb_record.id]]
-        captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        captured_radii.append(float(inputs.cfg.canvas.circular.radius))
         return _with_mock_circular_result(
             Drawing(
                 filename=f"{gb_record.id}.svg",
@@ -1460,9 +1497,11 @@ def test_multi_record_default_column_and_row_gap_ratios_are_ten_and_five_percent
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -1508,11 +1547,11 @@ def test_multi_record_column_gap_ratio_override_controls_horizontal_spacing(
     planned_insets = [120.0, 85.0, 60.0, 70.0]
     captured_radii: list[float] = []
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
         index_map = {record.id: idx for idx, record in enumerate(records)}
         index = index_map[gb_record.id]
         width, height = planned_sizes[index]
-        captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        captured_radii.append(float(inputs.cfg.canvas.circular.radius))
         return _build_mock_circular_subcanvas(width, height, planned_insets[index])
 
     monkeypatch.setattr(
@@ -1523,10 +1562,14 @@ def test_multi_record_column_gap_ratio_override_controls_horizontal_spacing(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_column_gap_ratio=0.2,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
+        layout=CircularMultiRecordOptions(
+            multi_record_column_gap_ratio=0.2,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -1556,7 +1599,7 @@ def test_multi_record_column_gap_ratio_zero_removes_gap_between_records_in_same_
     ]
     planned_insets = [120.0, 85.0, 60.0, 70.0]
 
-    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, _inputs: CircularAssemblyInputs, **_kwargs: Any) -> Drawing:
         index_map = {record.id: idx for idx, record in enumerate(records)}
         index = index_map[gb_record.id]
         width, height = planned_sizes[index]
@@ -1570,10 +1613,14 @@ def test_multi_record_column_gap_ratio_zero_removes_gap_between_records_in_same_
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_column_gap_ratio=0.0,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
+        layout=CircularMultiRecordOptions(
+            multi_record_column_gap_ratio=0.0,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -1602,10 +1649,10 @@ def test_multi_record_row_gap_ratio_override_accepts_legacy_ten_percent(
     ]
     captured_radii: list[float] = []
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
         index_map = {record.id: idx for idx, record in enumerate(records)}
         width, height = planned_sizes[index_map[gb_record.id]]
-        captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        captured_radii.append(float(inputs.cfg.canvas.circular.radius))
         return _with_mock_circular_result(
             Drawing(
                 filename=f"{gb_record.id}.svg",
@@ -1623,10 +1670,14 @@ def test_multi_record_row_gap_ratio_override_accepts_legacy_ten_percent(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_row_gap_ratio=0.1,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
+        layout=CircularMultiRecordOptions(
+            multi_record_row_gap_ratio=0.1,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -1650,7 +1701,7 @@ def test_multi_record_row_gap_ratio_zero_removes_visible_gap_between_row_content
         _build_record("visible_gap_d", 620, length=700),
     ]
 
-    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, _inputs: CircularAssemblyInputs, **_kwargs: Any) -> Drawing:
         _ = gb_record
         return _build_mock_circular_subcanvas(600.0, 1000.0, 0.0)
 
@@ -1662,10 +1713,14 @@ def test_multi_record_row_gap_ratio_zero_removes_visible_gap_between_row_content
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_row_gap_ratio=0.0,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
+        layout=CircularMultiRecordOptions(
+            multi_record_row_gap_ratio=0.0,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -1693,9 +1748,9 @@ def test_multi_record_row_gap_ratio_adds_visible_gap_between_row_content(
     ]
     captured_radii: list[float] = []
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
         _ = gb_record
-        captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        captured_radii.append(float(inputs.cfg.canvas.circular.radius))
         return _build_mock_circular_subcanvas(600.0, 1000.0, 0.0)
 
     monkeypatch.setattr(
@@ -1706,10 +1761,14 @@ def test_multi_record_row_gap_ratio_adds_visible_gap_between_row_content(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_row_gap_ratio=0.1,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
+        layout=CircularMultiRecordOptions(
+            multi_record_row_gap_ratio=0.1,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -1739,7 +1798,7 @@ def test_multi_record_positions_group_rows_and_preserve_within_row_order(
         _build_record("row_pattern_f", 1020, length=500),
     ]
 
-    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, _inputs: CircularAssemblyInputs, **_kwargs: Any) -> Drawing:
         canvas = Drawing(
             filename=f"{gb_record.id}.svg",
             size=("400px", "300px"),
@@ -1759,10 +1818,14 @@ def test_multi_record_positions_group_rows_and_preserve_within_row_order(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_positions=["#2@2", "#5@1", "#1@1", "#6@2", "#3@1", "#4@2"],
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
+        layout=CircularMultiRecordOptions(
+            multi_record_positions=["#2@2", "#5@1", "#1@1", "#6@2", "#3@1", "#4@2"],
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
@@ -1803,7 +1866,7 @@ def test_multi_record_positions_compress_row_gaps(
         _build_record("row_gap_e", 820, length=600),
     ]
 
-    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, _inputs: CircularAssemblyInputs, **_kwargs: Any) -> Drawing:
         _ = gb_record
         return _with_mock_circular_result(
             Drawing(
@@ -1822,10 +1885,14 @@ def test_multi_record_positions_compress_row_gaps(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_positions=["#1@1", "#2@1", "#3@3", "#4@3", "#5@3"],
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
+        layout=CircularMultiRecordOptions(
+            multi_record_positions=["#1@1", "#2@1", "#3@3", "#4@3", "#5@3"],
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     record_y = [
@@ -1851,7 +1918,7 @@ def test_multi_record_positions_default_layout_keeps_auto_square_when_unspecifie
         _build_record("row_auto_e", 820, length=600),
     ]
 
-    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, _inputs: CircularAssemblyInputs, **_kwargs: Any) -> Drawing:
         _ = gb_record
         return _with_mock_circular_result(
             Drawing(
@@ -1870,9 +1937,11 @@ def test_multi_record_positions_default_layout_keeps_auto_square_when_unspecifie
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     record_y = [
@@ -1897,7 +1966,7 @@ def test_multi_record_positions_accept_record_id_selectors(
         _build_record("order_d", 620, length=700),
     ]
 
-    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, _inputs: CircularAssemblyInputs, **_kwargs: Any) -> Drawing:
         canvas = Drawing(
             filename=f"{gb_record.id}.svg",
             size=("400px", "300px"),
@@ -1917,10 +1986,14 @@ def test_multi_record_positions_accept_record_id_selectors(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_positions=["order_c@1", "order_a@2", "order_b@2", "order_d@1"],
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
+        layout=CircularMultiRecordOptions(
+            multi_record_positions=["order_c@1", "order_a@2", "order_b@2", "order_d@1"],
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
@@ -1958,11 +2031,11 @@ def test_multi_record_rows_center_visible_bounds_for_none_top_bottom(
     planned_insets = [120.0, 85.0, 60.0, 70.0, 58.0, 45.0]
     captured_radii: list[float] = []
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
         index_map = {record.id: idx for idx, record in enumerate(records)}
         index = index_map[gb_record.id]
         width, height = planned_sizes[index]
-        captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        captured_radii.append(float(inputs.cfg.canvas.circular.radius))
         return _build_mock_circular_subcanvas(width, height, planned_insets[index])
 
     monkeypatch.setattr(
@@ -1973,9 +2046,11 @@ def test_multi_record_rows_center_visible_bounds_for_none_top_bottom(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend=legend_position,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend=legend_position,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -2045,11 +2120,11 @@ def test_multi_record_visible_row_packing_is_independent_of_right_legend(
     planned_insets = [120.0, 85.0, 60.0, 70.0, 58.0, 45.0]
     captured_radii: list[float] = []
 
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
         index_map = {record.id: idx for idx, record in enumerate(records)}
         index = index_map[gb_record.id]
         width, height = planned_sizes[index]
-        captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        captured_radii.append(float(inputs.cfg.canvas.circular.radius))
         return _build_mock_circular_subcanvas(width, height, planned_insets[index])
 
     monkeypatch.setattr(
@@ -2060,9 +2135,11 @@ def test_multi_record_visible_row_packing_is_independent_of_right_legend(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="right",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="right",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -2635,7 +2712,7 @@ def test_multi_record_positions_invalid_selector_raises_validation_error(
 ) -> None:
     records = [_build_record("order_err_a", 20, length=1000), _build_record("order_err_b", 220, length=900)]
 
-    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, _inputs: CircularAssemblyInputs, **_kwargs: Any) -> Drawing:
         _ = gb_record
         return _with_mock_circular_result(
             Drawing(
@@ -2655,10 +2732,14 @@ def test_multi_record_positions_invalid_selector_raises_validation_error(
     with pytest.raises(ValidationError):
         assemble_circular_diagram_from_records(
             records,
-            cfg=apply_config_overrides(None, None),
-            selected_features_set=["CDS"],
-            legend="none",
-            multi_record_positions=["none@1", "#2@2"],
+            CircularAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                selected_features_set=["CDS"],
+                legend="none",
+            ),
+            layout=CircularMultiRecordOptions(
+                multi_record_positions=["none@1", "#2@2"],
+            ),
         )
 
 
@@ -2672,7 +2753,7 @@ def test_multi_record_positions_with_duplicate_selector_raises_validation_error(
         _build_record("row_err_c", 420, length=800),
     ]
 
-    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, _inputs: CircularAssemblyInputs, **_kwargs: Any) -> Drawing:
         _ = gb_record
         return _with_mock_circular_result(
             Drawing(
@@ -2692,10 +2773,14 @@ def test_multi_record_positions_with_duplicate_selector_raises_validation_error(
     with pytest.raises(ValidationError, match="specified more than once"):
         assemble_circular_diagram_from_records(
             records,
-            cfg=apply_config_overrides(None, None),
-            selected_features_set=["CDS"],
-            legend="none",
-            multi_record_positions=["#1@1", "#1@2", "#3@2"],
+            CircularAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                selected_features_set=["CDS"],
+                legend="none",
+            ),
+            layout=CircularMultiRecordOptions(
+                multi_record_positions=["#1@1", "#1@2", "#3@2"],
+            ),
         )
 
 
@@ -2709,7 +2794,7 @@ def test_multi_record_positions_with_missing_record_raises_validation_error(
         _build_record("missing_row_c", 420, length=800),
     ]
 
-    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, _inputs: CircularAssemblyInputs, **_kwargs: Any) -> Drawing:
         _ = gb_record
         return _with_mock_circular_result(
             Drawing(
@@ -2729,10 +2814,14 @@ def test_multi_record_positions_with_missing_record_raises_validation_error(
     with pytest.raises(ValidationError, match="must include each loaded record exactly once"):
         assemble_circular_diagram_from_records(
             records,
-            cfg=apply_config_overrides(None, None),
-            selected_features_set=["CDS"],
-            legend="none",
-            multi_record_positions=["#1@1", "#2@2"],
+            CircularAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                selected_features_set=["CDS"],
+                legend="none",
+            ),
+            layout=CircularMultiRecordOptions(
+                multi_record_positions=["#1@1", "#2@2"],
+            ),
         )
 
 
@@ -2745,7 +2834,7 @@ def test_multi_record_positions_with_non_positive_row_raises_validation_error(
         _build_record("row_err_b", 220, length=900),
     ]
 
-    def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
+    def fake_single(gb_record: SeqRecord, _inputs: CircularAssemblyInputs, **_kwargs: Any) -> Drawing:
         _ = gb_record
         return _with_mock_circular_result(
             Drawing(
@@ -2765,10 +2854,14 @@ def test_multi_record_positions_with_non_positive_row_raises_validation_error(
     with pytest.raises(ValidationError, match="positive integer row"):
         assemble_circular_diagram_from_records(
             records,
-            cfg=apply_config_overrides(None, None),
-            selected_features_set=["CDS"],
-            legend="none",
-            multi_record_positions=["#1@0", "#2@1"],
+            CircularAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                selected_features_set=["CDS"],
+                legend="none",
+            ),
+            layout=CircularMultiRecordOptions(
+                multi_record_positions=["#1@0", "#2@1"],
+            ),
         )
 
 
@@ -3017,9 +3110,11 @@ def test_multi_record_default_hides_plot_title_and_keeps_record_summary_content(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
@@ -3070,9 +3165,11 @@ def test_multi_record_shared_record_summary_includes_replicon_when_available() -
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -3119,10 +3216,12 @@ def test_plot_title_font_size_override_only_changes_plot_title() -> None:
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title_position="top",
-        cfg=apply_config_overrides(None, {"objects.definition.circular.plot_title_font_size": 30}),
+        CircularAssemblyInputs(
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title_position="top",
+            cfg=apply_config_overrides(None, {"objects.definition.circular.plot_title_font_size": 30}),
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -3166,10 +3265,12 @@ def test_plot_title_single_line_with_missing_species_or_strain(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title_position="top",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title_position="top",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -3196,24 +3297,30 @@ def test_plot_title_position_moves_shared_group_vertically() -> None:
 
     none_canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title_position="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title_position="none",
+        ),
     )
     top_canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title_position="top",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title_position="top",
+        ),
     )
     bottom_canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title_position="bottom",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title_position="bottom",
+        ),
     )
 
     none_root = ET.fromstring(none_canvas.tostring())
@@ -3241,10 +3348,12 @@ def test_single_record_bottom_plot_title_uses_summary_center_definition() -> Non
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title_position="bottom",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title_position="bottom",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -3271,19 +3380,21 @@ def test_single_record_plot_title_clears_external_labels(
     record = next(SeqIO.parse(Path("tests/test_inputs/HmmtDNA.gbk"), "genbank"))
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(
-            None,
-            {
-                "canvas.strandedness": False,
-                "canvas.circular.track_type": "middle",
-                "labels.circular.scope": "outer",
-                "objects.definition.circular.font_size": 18,
-            },
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "canvas.strandedness": False,
+                    "canvas.circular.track_type": "middle",
+                    "labels.circular.scope": "outer",
+                    "objects.definition.circular.font_size": 18,
+                },
+            ),
+            selected_features_set=["CDS", "tRNA", "rRNA"],
+            legend="right",
+            plot_title="Precomputed TLOSATX rings around Homo sapiens mtDNA",
+            plot_title_position=plot_title_position,
         ),
-        selected_features_set=["CDS", "tRNA", "rRNA"],
-        legend="right",
-        plot_title="Precomputed TLOSATX rings around Homo sapiens mtDNA",
-        plot_title_position=plot_title_position,
     )
     root = ET.fromstring(canvas.tostring())
     metadata = _composition_metadata(root)
@@ -3312,11 +3423,13 @@ def test_single_record_plot_title_can_keep_full_center_definition() -> None:
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title_position="top",
-        keep_full_definition_with_plot_title=True,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title_position="top",
+            keep_full_definition_with_plot_title=True,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -3345,11 +3458,13 @@ def test_single_record_custom_plot_title_overrides_default_when_visible() -> Non
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title="Custom Circular Title",
-        plot_title_position="top",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title="Custom Circular Title",
+            plot_title_position="top",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -3377,11 +3492,13 @@ def test_single_record_plot_title_keeps_plain_text_around_inline_italics() -> No
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title=plot_title,
-        plot_title_position="top",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title=plot_title,
+            plot_title_position="top",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -3402,10 +3519,12 @@ def test_single_record_hidden_plot_title_ignores_custom_title_and_keeps_full_def
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title="Hidden Circular Title",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title="Hidden Circular Title",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
@@ -3454,11 +3573,13 @@ def test_multi_record_center_definition_aligns_with_record_axis(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title_position=plot_title_position,
-        keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title_position=plot_title_position,
+            keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -3482,27 +3603,35 @@ def test_single_record_legend_top_bottom_positions_expand_and_move() -> None:
 
     top_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="top",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="top",
+        ),
     )
     left_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="left",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="left",
+        ),
     )
     bottom_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="bottom",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="bottom",
+        ),
     )
     none_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
 
     top_root = ET.fromstring(top_canvas.tostring())
@@ -3548,12 +3677,14 @@ def test_single_record_top_bottom_legend_centers_between_edge_and_content(
     )
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        selected_features_set=["CDS", "rRNA", "tRNA"],
-        legend=legend_position,
-        cfg=apply_config_overrides(None, {
-            "labels.circular.scope": "outer" if show_labels else "none",
-            "canvas.circular.track_type": track_type,
-        }),
+        CircularAssemblyInputs(
+            selected_features_set=["CDS", "rRNA", "tRNA"],
+            legend=legend_position,
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "outer" if show_labels else "none",
+                "canvas.circular.track_type": track_type,
+            }),
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     metadata = _composition_metadata(root)
@@ -3588,27 +3719,35 @@ def test_multi_record_legend_top_bottom_positions_expand_and_move() -> None:
 
     top_canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="top",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="top",
+        ),
     )
     left_canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="left",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="left",
+        ),
     )
     bottom_canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="bottom",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="bottom",
+        ),
     )
     none_canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
 
     top_root = ET.fromstring(top_canvas.tostring())
@@ -3647,9 +3786,11 @@ def test_multi_record_top_legend_keeps_minimum_top_padding() -> None:
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="top",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="top",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     metadata = _composition_metadata(root)
@@ -3678,11 +3819,13 @@ def test_multi_record_bottom_plot_title_stays_below_legend() -> None:
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="bottom",
-        plot_title_position="bottom",
-        keep_full_definition_with_plot_title=True,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="bottom",
+            plot_title_position="bottom",
+            keep_full_definition_with_plot_title=True,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     metadata = _composition_metadata(root)
@@ -3706,10 +3849,12 @@ def test_single_record_bottom_plot_title_stays_below_legend() -> None:
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="bottom",
-        plot_title_position="bottom",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="bottom",
+            plot_title_position="bottom",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     metadata = _composition_metadata(root)
@@ -3741,11 +3886,13 @@ def test_multi_record_custom_plot_title_overrides_default_shared_title() -> None
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title="Custom Shared Plot Title",
-        plot_title_position="top",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title="Custom Shared Plot Title",
+            plot_title_position="top",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -3774,19 +3921,23 @@ def test_multi_record_left_right_plot_title_bottom_keeps_margins(
 
     baseline_canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend=legend_position,
-        plot_title_position="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend=legend_position,
+            plot_title_position="none",
+        ),
     )
     baseline_root = ET.fromstring(baseline_canvas.tostring())
 
     bottom_canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend=legend_position,
-        plot_title_position="bottom",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend=legend_position,
+            plot_title_position="bottom",
+        ),
     )
     bottom_root = ET.fromstring(bottom_canvas.tostring())
     bottom_height = _extract_viewbox_height(bottom_root)
@@ -3822,15 +3973,19 @@ def test_single_record_side_legend_matches_upper_corner_edge_margin(
 
     side_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=selected_features,
-        legend=side_position,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=selected_features,
+            legend=side_position,
+        ),
     )
     corner_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=selected_features,
-        legend=corner_position,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=selected_features,
+            legend=corner_position,
+        ),
     )
 
     side_root = ET.fromstring(side_canvas.tostring())
@@ -3874,15 +4029,19 @@ def test_multi_record_side_legend_matches_upper_corner_edge_margin(
 
     side_canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=selected_features,
-        legend=side_position,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=selected_features,
+            legend=side_position,
+        ),
     )
     corner_canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=selected_features,
-        legend=corner_position,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=selected_features,
+            legend=corner_position,
+        ),
     )
 
     side_root = ET.fromstring(side_canvas.tostring())
@@ -3938,9 +4097,9 @@ def _legend_canvas_root(position: str, record_count: int | None) -> ET.Element:
         "legend": position,
     }
     canvas = (
-        diagram_api_module.assemble_circular_diagram_from_record(records[0], **options)
+        diagram_api_module.assemble_circular_diagram_from_record(records[0], CircularAssemblyInputs(**options))
         if record_count is None
-        else assemble_circular_diagram_from_records(records, **options)
+        else assemble_circular_diagram_from_records(records, CircularAssemblyInputs(**options))
     )
     return ET.fromstring(canvas.tostring())
 
@@ -4023,10 +4182,16 @@ def test_title_clears_a_corner_legend_grown_onto_its_side(
     }
     canvas = (
         assemble_circular_diagram_from_records(
-            records, multi_record_positions=["#1@1", "#2@2", "#3@3"], **options
+            records,
+            CircularAssemblyInputs(
+                **options,
+            ),
+            layout=CircularMultiRecordOptions(
+                multi_record_positions=["#1@1", "#2@2", "#3@3"],
+            ),
         )
         if grid
-        else diagram_api_module.assemble_circular_diagram_from_record(records[0], **options)
+        else diagram_api_module.assemble_circular_diagram_from_record(records[0], CircularAssemblyInputs(**options))
     )
     metadata = _composition_metadata(ET.fromstring(canvas.tostring()))
     primary = _composition_item_bounds(metadata, "primary")
@@ -4068,15 +4233,19 @@ def test_circular_top_legend_uses_horizontal_entry_layout() -> None:
 
     top_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS", "tRNA", "rRNA"],
-        legend="top",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS", "tRNA", "rRNA"],
+            legend="top",
+        ),
     )
     right_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS", "tRNA", "rRNA"],
-        legend="right",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS", "tRNA", "rRNA"],
+            legend="right",
+        ),
     )
 
     top_texts = _extract_legend_text_transforms(ET.fromstring(top_canvas.tostring()))
@@ -4105,9 +4274,11 @@ def test_single_record_top_bottom_legend_centers_each_wrapped_row(
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=selected_features,
-        legend=legend_position,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=selected_features,
+            legend=legend_position,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     row_centers = _extract_horizontal_legend_row_centers(root)
@@ -4141,9 +4312,11 @@ def test_multi_record_top_bottom_legend_centers_each_wrapped_row(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=selected_features,
-        legend=legend_position,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=selected_features,
+            legend=legend_position,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     row_centers = _extract_horizontal_legend_row_centers(root)
@@ -4173,10 +4346,12 @@ def test_multi_record_visible_plot_title_uses_default_shared_title_when_blank() 
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title_position="top",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title_position="top",
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     assert _extract_group_texts(root, "plot_title") == ["Legacy organism A Legacy strain A"]
@@ -4206,11 +4381,13 @@ def test_multi_record_plot_title_can_keep_full_definitions() -> None:
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title_position="top",
-        keep_full_definition_with_plot_title=True,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title_position="top",
+            keep_full_definition_with_plot_title=True,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -4240,11 +4417,13 @@ def test_multi_record_hidden_plot_title_keeps_summary_when_keep_full_enabled() -
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
-        plot_title_position="none",
-        keep_full_definition_with_plot_title=True,
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            plot_title_position="none",
+            keep_full_definition_with_plot_title=True,
+        ),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -4261,8 +4440,8 @@ def test_build_circular_diagram_passes_plot_title_position_option(
     record = _build_record("build_options_record", 30)
     captured_kwargs: dict[str, Any] = {}
 
-    def fake_single(_record: SeqRecord, **kwargs: Any) -> Drawing:
-        captured_kwargs.update(kwargs)
+    def fake_single(_record: SeqRecord, inputs: CircularAssemblyInputs, **kwargs: Any) -> Drawing:
+        captured_kwargs.update(vars(inputs), **kwargs)
         return Drawing(filename="dummy.svg")
 
     monkeypatch.setattr(
@@ -4359,15 +4538,19 @@ def test_one_record_grid_preserves_single_record_local_bounds_and_content() -> N
 
     single = diagram_api_module.assemble_circular_diagram_from_record(
         record,
-        cfg=cfg,
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=cfg,
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
     grid = assemble_circular_diagram_from_records(
         [record],
-        cfg=cfg,
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=cfg,
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
 
     single_result = diagram_api_module._require_circular_assembly_result(single)
@@ -4415,16 +4598,18 @@ def test_multi_record_shared_composer_supports_every_legend_position(
     records = [_build_record("legend_a", 30), _build_record("legend_b", 240)]
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(
-            None,
-            {
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-                "labels.circular.scope": "none",
-            },
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "labels.circular.scope": "none",
+                },
+            ),
+            selected_features_set=["CDS"],
+            legend=legend_position,
         ),
-        selected_features_set=["CDS"],
-        legend=legend_position,
     )
     root = ET.fromstring(canvas.tostring())
     metadata = _composition_metadata(root)
@@ -4444,18 +4629,20 @@ def test_multi_record_composition_marks_only_global_targets_and_centers_title() 
     records = [_build_record("roles_a", 30), _build_record("roles_b", 240)]
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(
-            None,
-            {
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-                "labels.circular.scope": "none",
-            },
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "labels.circular.scope": "none",
+                },
+            ),
+            selected_features_set=["CDS"],
+            legend="right",
+            plot_title="Shared composition title",
+            plot_title_position="top",
         ),
-        selected_features_set=["CDS"],
-        legend="right",
-        plot_title="Shared composition title",
-        plot_title_position="top",
     )
     root = ET.fromstring(canvas.tostring())
     metadata = _composition_metadata(root)
@@ -4481,16 +4668,18 @@ def test_multi_record_grid_layout_never_serializes_subcanvases(
     monkeypatch.setattr(Drawing, "tostring", forbidden_tostring)
     canvas = assemble_circular_diagram_from_records(
         [_build_record("no_reparse_a", 30), _build_record("no_reparse_b", 240)],
-        cfg=apply_config_overrides(
-            None,
-            {
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-                "labels.circular.scope": "none",
-            },
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "labels.circular.scope": "none",
+                },
+            ),
+            selected_features_set=["CDS"],
+            legend="none",
         ),
-        selected_features_set=["CDS"],
-        legend="none",
     )
     assert isinstance(canvas, Drawing)
 
@@ -4754,8 +4943,10 @@ def _assemble_lambda_twice_radial() -> Drawing:
     record = next(SeqIO.parse(Path("tests/test_inputs") / "NC_001416.gb", "genbank"))
     return assemble_circular_diagram_from_records(
         [record, record],
-        cfg=apply_config_overrides(
-            None, {"labels.circular.scope": "both", "labels.circular.placement": "radial"}
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(
+                None, {"labels.circular.scope": "both", "labels.circular.placement": "radial"}
+            ),
         ),
     )
 

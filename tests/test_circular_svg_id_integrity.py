@@ -24,6 +24,7 @@ from gbdraw.api.diagram import (
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.render.interactive_svg import enrich_svg
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 _URL_REFERENCE_RE = re.compile(r"url\(#([^)]+)\)")
 
@@ -76,15 +77,17 @@ def test_conservation_group_ids_distinguish_lossy_labels_and_fixed_groups() -> N
     def render() -> str:
         return assemble_circular_diagram_from_record(
             record,
-            conservation_dataframes=[comparison, comparison, comparison],
-            conservation_reference="query",
-            conservation_labels=labels,
-            legend="right",
-            cfg=apply_config_overrides(None, {
-                "labels.circular.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-            }),
+            CircularAssemblyInputs(
+                conservation_dataframes=[comparison, comparison, comparison],
+                conservation_reference="query",
+                conservation_labels=labels,
+                legend="right",
+                cfg=apply_config_overrides(None, {
+                    "labels.circular.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                }),
+            ),
         ).tostring()
 
     first = render()
@@ -131,20 +134,22 @@ def test_circular_multi_merge_preserves_and_namespaces_defs_references() -> None
     )
     svg = assemble_circular_diagram_from_records(
         records,
-        annotation_options=AnnotationOptions(
-            sets=(AnnotationSet("regions", annotations),)
+        CircularAssemblyInputs(
+            annotation_options=AnnotationOptions(
+                sets=(AnnotationSet("regions", annotations),)
+            ),
+            circular_track_slots=[
+                "regions:annotations@set_id=regions,w=8px,overflow=clip",
+                "features:features",
+                "ticks:ticks",
+            ],
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
         ),
-        circular_track_slots=[
-            "regions:annotations@set_id=regions,w=8px,overflow=clip",
-            "features:features",
-            "ticks:ticks",
-        ],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.circular.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
     ).tostring()
 
     _assert_unique_ids_and_resolved_local_references(svg)

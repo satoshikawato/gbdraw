@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import inspect
-from dataclasses import fields
+from dataclasses import MISSING, fields
 from pathlib import Path
 
 import pytest
@@ -34,6 +34,7 @@ from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.render.interactive_context import build_interactive_svg_context
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs, CircularRecordContext, LinearAssemblyInputs
 
 
 @pytest.mark.parametrize(
@@ -180,10 +181,16 @@ def test_feature_table_aliases_are_removed_from_fresh_python_api() -> None:
     )
     for function in assemblers:
         parameters = inspect.signature(function).parameters
-        assert {"feature_table", "feature_table_file"}.isdisjoint(parameters)
-        assert {"config_dict", "config_overrides"}.isdisjoint(parameters)
-        assert parameters["cfg"].annotation == "GbdrawConfig"
-        assert parameters["cfg"].default is inspect.Parameter.empty
+        assert {"feature_table", "feature_table_file", "config_dict", "config_overrides"}.isdisjoint(parameters)
+    # The assemblers take their inputs as one typed object, whose cfg is required.
+    for inputs_type in (CircularAssemblyInputs, LinearAssemblyInputs, CircularRecordContext):
+        input_fields = {item.name: item for item in fields(inputs_type)}
+        assert {"feature_table", "feature_table_file"}.isdisjoint(input_fields)
+        assert {"config_dict", "config_overrides"}.isdisjoint(input_fields)
+    for inputs_type in (CircularAssemblyInputs, LinearAssemblyInputs):
+        cfg_field = next(item for item in fields(inputs_type) if item.name == "cfg")
+        assert cfg_field.type == "GbdrawConfig"
+        assert cfg_field.default is MISSING
 
     context_parameters = inspect.signature(build_interactive_svg_context).parameters
     assert {"feature_table", "feature_table_file"}.isdisjoint(context_parameters)
@@ -244,12 +251,16 @@ def test_removed_default_keys_remain_tolerated_in_legacy_config() -> None:
     )
     current_svg = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(copy.deepcopy(current)),
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(copy.deepcopy(current)),
+            legend="none",
+        ),
     ).tostring()
     legacy_svg = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(legacy),
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(legacy),
+            legend="none",
+        ),
     ).tostring()
     assert legacy_svg == current_svg

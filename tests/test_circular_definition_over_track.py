@@ -34,6 +34,7 @@ from gbdraw.labels.fit import (
     format_label_fit_report,
     label_fit_notice,
 )
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
 MERS_COV = TEST_INPUTS / "MERS-CoV.gbk"
@@ -505,7 +506,14 @@ def _assemble(**kwargs):
     overrides = kwargs.pop("overrides", {})
     record = SeqIO.read(str(HMMTDNA), "genbank")
     cfg = GbdrawConfig.from_dict(modify_config_dict(load_config_toml("gbdraw.data", "config.toml"), overrides))
-    return lambda: assemble_circular_diagram_from_record(record, cfg=cfg, legend="none", **kwargs)
+    return lambda: assemble_circular_diagram_from_record(
+        record,
+        CircularAssemblyInputs(
+            cfg=cfg,
+            legend="none",
+            **kwargs,
+        ),
+    )
 
 
 @pytest.mark.circular

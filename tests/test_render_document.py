@@ -62,6 +62,7 @@ from gbdraw.svg.elements import ClipPath, Group, Rect, Text
 from gbdraw.svg.elements import Path as SvgPath
 from gbdraw.render.export import has_cairosvg
 from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 INPUTS = Path(__file__).parent / "test_inputs"
 HATCHED = RegionAnnotationStyle(fill="#88aaff", hatch=HatchStyle(cross=True))
@@ -103,18 +104,20 @@ def _multi_record_circular_with_clip_and_hatch() -> Drawing:
     )
     return assemble_circular_diagram_from_records(
         records,
-        annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", annotations),)),
-        circular_track_slots=[
-            "regions:annotations@set_id=regions,w=8px,overflow=clip",
-            "features:features",
-            "ticks:ticks",
-        ],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.circular.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
+        CircularAssemblyInputs(
+            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", annotations),)),
+            circular_track_slots=[
+                "regions:annotations@set_id=regions,w=8px,overflow=clip",
+                "features:features",
+                "ticks:ticks",
+            ],
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+        ),
     )
 
 
@@ -502,8 +505,10 @@ def test_a_record_added_before_another_changes_a_revision_only_with_its_text() -
         ]
         drawing = assemble_circular_diagram_from_records(
             records,
-            legend="none",
-            cfg=apply_config_overrides(None, {"labels.circular.scope": "none"}),
+            CircularAssemblyInputs(
+                legend="none",
+                cfg=apply_config_overrides(None, {"labels.circular.scope": "none"}),
+            ),
         )
         parts = _assert_pieces_are_the_document(drawing)
         return [piece for piece in parts.pieces if isinstance(piece, ContentPiece)]

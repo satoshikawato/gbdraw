@@ -26,6 +26,7 @@ from gbdraw.diagrams.linear import precalc as linear_precalc
 from gbdraw.diagrams.linear import assemble as linear_assemble
 from gbdraw.diagrams.linear.builders import add_record_definition_group
 from gbdraw.render.groups.linear import DefinitionGroup, LinearDefinitionStyle
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 
 def _record(record_id: str = "record_a") -> SeqRecord:
@@ -176,11 +177,13 @@ def _linear_definition_canvas(
     )
     return assemble_linear_diagram_from_records(
         [record],
-        cfg=cfg,
-        selected_features_set=[],
+        LinearAssemblyInputs(
+            cfg=cfg,
+            selected_features_set=[],
+            output_prefix=output_prefix,
+            legend="none",
+        ),
         _record_presentations=[_label(label)],
-        output_prefix=output_prefix,
-        legend="none",
     )
 
 
@@ -244,7 +247,12 @@ def _definition_row_canvas(
         show_replicon=show_replicon, text_anchor=text_anchor,
     )
     return assemble_linear_diagram_from_records(
-        records, cfg=GbdrawConfig.from_dict(config), selected_features_set=[],
+        records,
+        LinearAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config),
+            selected_features_set=[],
+            legend="none",
+        ),
         _record_presentations=presentations,
         layout=LinearMultiRecordOptions(
             multi_record_positions=tuple(positions),
@@ -253,7 +261,6 @@ def _definition_row_canvas(
                 for index, x in enumerate(translations or ())
             ),
         ),
-        legend="none",
     )
 
 
@@ -662,10 +669,12 @@ def test_linear_definition_band_matches_resolved_feature_center(
 
     drawing = assemble_linear_diagram_from_records(
         [record],
-        cfg=cfg,
-        selected_features_set=["CDS"],
+        LinearAssemblyInputs(
+            cfg=cfg,
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
         _record_presentations=[presentation],
-        legend="none",
     )
     elements = {
         element.attribs.get("id"): element
@@ -943,7 +952,13 @@ def test_linear_figure_bound_is_the_drawn_scalar_axis_tick_labels() -> None:
     )
     # Large tick labels lie further left than anything else the record draws.
     drawing = assemble_linear_diagram_from_records(
-        [record], cfg=cfg, legend="none", depth_track_tables=[[depth]], depth_track_tick_font_sizes=[30.0]
+        [record],
+        LinearAssemblyInputs(
+            cfg=cfg,
+            legend="none",
+            depth_track_tables=[[depth]],
+            depth_track_tick_font_sizes=[30.0],
+        ),
     )
     _definition_right, axis_label_left = _drawn_text_edges(drawing.tostring(), cfg, composed=False)
 

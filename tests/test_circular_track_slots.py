@@ -35,6 +35,7 @@ from tests.utils.circular_drawer_fakes import (
     make_numeric_slot_capture,
     make_numeric_slot_geometry_capture,
 )
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 
 SELECTED_FEATURES = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
@@ -89,15 +90,17 @@ def test_circular_track_slot_geometry_metadata_preserves_factor_width_and_gaps()
     record = _load_record()
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(_base_config(track_type="tuckin")),
-        default_colors=load_default_colors("", palette="default"),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=[
-            "features:features",
-            "gc_content:dinucleotide_content@w=0.15,r=0.75,inner_gap_px=4,outer_gap_px=6",
-        ],
-        circular_track_axis_index=1,
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(_base_config(track_type="tuckin")),
+            default_colors=load_default_colors("", palette="default"),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[
+                "features:features",
+                "gc_content:dinucleotide_content@w=0.15,r=0.75,inner_gap_px=4,outer_gap_px=6",
+            ],
+            circular_track_axis_index=1,
+        ),
     )
 
     geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
@@ -118,14 +121,16 @@ def test_circular_spacer_reserves_resolved_geometry_without_rendering_a_group() 
     record = _load_record()
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(_base_config(track_type="tuckin")),
-        default_colors=load_default_colors("", palette="default"),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=[
-            "features:features@side=inside,lane_direction=inside,r=0.8",
-            "space:spacer@side=inside,w=12px,r=0.55,inner_gap_px=3,outer_gap_px=4",
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(_base_config(track_type="tuckin")),
+            default_colors=load_default_colors("", palette="default"),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[
+                "features:features@side=inside,lane_direction=inside,r=0.8",
+                "space:spacer@side=inside,w=12px,r=0.55,inner_gap_px=3,outer_gap_px=4",
+            ],
+        ),
     )
 
     geometry = canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
@@ -311,11 +316,13 @@ def _capture_circular_core_geometry(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        **kwargs,
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            **kwargs,
+        ),
     )
     return captured
 
@@ -384,11 +391,13 @@ def _capture_circular_radial_layout(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        **kwargs,
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            **kwargs,
+        ),
     )
     return captured["radial_layout"]
 
@@ -705,14 +714,16 @@ def test_custom_slot_order_places_ticks_axis_side_of_features_when_ordered_befor
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=[
-            CircularTrackSlot(id="ticks", renderer="ticks"),
-            CircularTrackSlot(id="features", renderer="features"),
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[
+                CircularTrackSlot(id="ticks", renderer="ticks"),
+                CircularTrackSlot(id="features", renderer="features"),
+            ],
+        ),
     )
 
     layout = captured["radial_layout"]
@@ -1252,10 +1263,12 @@ def test_default_preset_tick_draw_uses_resolved_tick_options(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+        ),
     )
 
     assert captured["label_side"] != "legacy"
@@ -1295,11 +1308,13 @@ def test_default_custom_slots_tuckin_inherit_preset_when_inside_numeric_tracks_a
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+        ),
     )
 
     assert {"gc_content", "gc_skew"} <= set(captured)
@@ -1334,29 +1349,31 @@ def test_explicit_pure_auto_slots_tuckin_raise_when_inside_numeric_tracks_cannot
     with pytest.raises(Exception, match="cannot fit inside"):
         assemble_circular_diagram_from_record(
             record,
-            cfg=GbdrawConfig.from_dict(config_dict),
-            default_colors=default_colors,
-            selected_features_set=SELECTED_FEATURES,
-            legend="none",
-            center_reserved_radius=150.0,
-            circular_track_slots=[
-                CircularTrackSlot(id="features", renderer="features"),
-                CircularTrackSlot(id="ticks", renderer="ticks"),
-                CircularTrackSlot(
-                    id="gc_content",
-                    renderer="dinucleotide_content",
-                    side="inside",
-                    width=ScalarSpec(240.0, "px"),
-                    params={"nt": "GC"},
-                ),
-                CircularTrackSlot(
-                    id="gc_skew",
-                    renderer="dinucleotide_skew",
-                    side="inside",
-                    width=ScalarSpec(240.0, "px"),
-                    params={"nt": "GC"},
-                ),
-            ],
+            CircularAssemblyInputs(
+                cfg=GbdrawConfig.from_dict(config_dict),
+                default_colors=default_colors,
+                selected_features_set=SELECTED_FEATURES,
+                legend="none",
+                center_reserved_radius=150.0,
+                circular_track_slots=[
+                    CircularTrackSlot(id="features", renderer="features"),
+                    CircularTrackSlot(id="ticks", renderer="ticks"),
+                    CircularTrackSlot(
+                        id="gc_content",
+                        renderer="dinucleotide_content",
+                        side="inside",
+                        width=ScalarSpec(240.0, "px"),
+                        params={"nt": "GC"},
+                    ),
+                    CircularTrackSlot(
+                        id="gc_skew",
+                        renderer="dinucleotide_skew",
+                        side="inside",
+                        width=ScalarSpec(240.0, "px"),
+                        params={"nt": "GC"},
+                    ),
+                ],
+            ),
         )
 
 
@@ -1384,11 +1401,13 @@ def test_default_custom_slots_use_ordered_legacy_numeric_lanes(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=default_circular_track_slots(show_depth=False, show_gc=True, show_skew=True),
+        ),
     )
 
     assert captured["gc_content"][0] > captured["gc_skew"][0]
@@ -1417,20 +1436,22 @@ def test_reordered_builtin_numeric_slots_follow_slot_order(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=[
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(
-                id="ticks",
-                renderer="ticks",
-                params={"tick_label_layout": "label_out_tick_in"},
-            ),
-            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(
+                    id="ticks",
+                    renderer="ticks",
+                    params={"tick_label_layout": "label_out_tick_in"},
+                ),
+                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+            ],
+        ),
     )
 
     assert captured["gc_skew"][0] > captured["gc_content"][0]
@@ -1533,20 +1554,22 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=[
-            CircularTrackSlot(
-                id="ticks",
-                renderer="ticks",
-                params={"tick_label_layout": "tick_only"},
-            ),
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
-            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[
+                CircularTrackSlot(
+                    id="ticks",
+                    renderer="ticks",
+                    params={"tick_label_layout": "tick_only"},
+                ),
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
+                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
+            ],
+        ),
     )
 
     gc_center, gc_width = captured["gc_content"]  # type: ignore[misc]
@@ -1592,16 +1615,18 @@ def test_inside_order_places_axis_side_tracks_before_features(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=[
-            CircularTrackSlot(id="ticks", renderer="ticks"),
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[
+                CircularTrackSlot(id="ticks", renderer="ticks"),
+                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
+            ],
+        ),
     )
 
     layout = captured["radial_layout"]
@@ -1644,16 +1669,18 @@ def test_order_only_gc_content_moves_feature_inward_instead_of_falling_back_outs
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=[
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
-            CircularTrackSlot(id="ticks", renderer="ticks"),
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[
+                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
+                CircularTrackSlot(id="ticks", renderer="ticks"),
+            ],
+        ),
     )
 
     layout = captured["radial_layout"]
@@ -1697,16 +1724,18 @@ def test_order_only_numeric_before_ticks_reserves_inner_numeric_space(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=[
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
-            CircularTrackSlot(id="ticks", renderer="ticks"),
-            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
+                CircularTrackSlot(id="ticks", renderer="ticks"),
+                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
+            ],
+        ),
     )
 
     layout = captured["radial_layout"]
@@ -1807,14 +1836,16 @@ def test_default_custom_slots_with_depth_use_outer_to_inner_numeric_lanes(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        depth_table=depth_table,
-        window=100,
-        step=100,
-        circular_track_slots=default_circular_track_slots(show_depth=True, show_gc=True, show_skew=True),
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            depth_table=depth_table,
+            window=100,
+            step=100,
+            circular_track_slots=default_circular_track_slots(show_depth=True, show_gc=True, show_skew=True),
+        ),
     )
 
     assert captured["depth"][0] > captured["gc_content"][0] > captured["gc_skew"][0]
@@ -1876,17 +1907,19 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        depth_table=depth_table,
-        window=100,
-        step=100,
-        circular_track_slots=[
-            *default_circular_track_slots(show_depth=True, show_gc=True, show_skew=True),
-            "at_skew:dinucleotide_skew@nt=AT,w=20px,side=outside",
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            depth_table=depth_table,
+            window=100,
+            step=100,
+            circular_track_slots=[
+                *default_circular_track_slots(show_depth=True, show_gc=True, show_skew=True),
+                "at_skew:dinucleotide_skew@nt=AT,w=20px,side=outside",
+            ],
+        ),
     )
 
     definition_reserved = float(captured["definition_reserved"])
@@ -1910,16 +1943,18 @@ def test_api_circular_track_slots_render_duplicate_dinucleotide_skew_slots() -> 
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="right",
-        circular_track_slots=[
-            CircularTrackSlot(id="features", renderer="features"),
-            "ticks:ticks",
-            "gc_skew:dinucleotide_skew@nt=GC,w=20px",
-            "at_skew:dinucleotide_skew@nt=AT,w=20px",
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="right",
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                "ticks:ticks",
+                "gc_skew:dinucleotide_skew@nt=GC,w=20px",
+                "at_skew:dinucleotide_skew@nt=AT,w=20px",
+            ],
+        ),
     )
     svg_text = canvas.tostring()
 
@@ -1944,16 +1979,18 @@ def test_api_circular_dinucleotide_skew_slot_uses_custom_colors_and_legend() -> 
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="right",
-        circular_track_slots=[
-            CircularTrackSlot(id="features", renderer="features"),
-            "ticks:ticks",
-            "gc_skew:dinucleotide_skew@nt=GC,w=20px",
-            "at_skew:dinucleotide_skew@nt=AT,w=20px,positive_color=tomato,negative_color=#2a9d8f,legend_label=AT skew",
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="right",
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                "ticks:ticks",
+                "gc_skew:dinucleotide_skew@nt=GC,w=20px",
+                "at_skew:dinucleotide_skew@nt=AT,w=20px,positive_color=tomato,negative_color=#2a9d8f,legend_label=AT skew",
+            ],
+        ),
     )
     svg_text = canvas.tostring()
     at_skew = _svg_group_fragment(svg_text, "at_skew")
@@ -1986,14 +2023,16 @@ def test_api_circular_dinucleotide_skew_slot_rejects_invalid_custom_color() -> N
     with pytest.raises(ValidationError, match="Unknown color name"):
         assemble_circular_diagram_from_record(
             record,
-            cfg=GbdrawConfig.from_dict(config_dict),
-            default_colors=default_colors,
-            selected_features_set=SELECTED_FEATURES,
-            legend="none",
-            circular_track_slots=[
-                CircularTrackSlot(id="features", renderer="features"),
-                "at_skew:dinucleotide_skew@nt=AT,positive_color=not-a-color",
-            ],
+            CircularAssemblyInputs(
+                cfg=GbdrawConfig.from_dict(config_dict),
+                default_colors=default_colors,
+                selected_features_set=SELECTED_FEATURES,
+                legend="none",
+                circular_track_slots=[
+                    CircularTrackSlot(id="features", renderer="features"),
+                    "at_skew:dinucleotide_skew@nt=AT,positive_color=not-a-color",
+                ],
+            ),
         )
 
 
@@ -2028,23 +2067,25 @@ def test_api_circular_track_slots_distribute_extra_dinucleotide_slots_evenly(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        window=1000,
-        step=1000,
-        circular_track_slots=[
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(
-                id="ticks",
-                renderer="ticks",
-                params={"tick_label_layout": "label_out_tick_in"},
-            ),
-            "gc_content:dinucleotide_content@nt=GC,side=outside",
-            "gc_skew:dinucleotide_skew@nt=GC,side=outside",
-            "gc_skew_2:dinucleotide_skew@nt=AT,side=outside",
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            window=1000,
+            step=1000,
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(
+                    id="ticks",
+                    renderer="ticks",
+                    params={"tick_label_layout": "label_out_tick_in"},
+                ),
+                "gc_content:dinucleotide_content@nt=GC,side=outside",
+                "gc_skew:dinucleotide_skew@nt=GC,side=outside",
+                "gc_skew_2:dinucleotide_skew@nt=AT,side=outside",
+            ],
+        ),
     )
 
     assert set(captured) == {"gc_content", "gc_skew", "gc_skew_2"}
@@ -2111,24 +2152,26 @@ def test_api_explicit_inside_duplicate_dinucleotide_skew_places_when_space_is_re
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        window=1000,
-        step=1000,
-        circular_track_slots=[
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(
-                id="ticks",
-                renderer="ticks",
-                side="outside",
-                params={"tick_label_layout": "tick_only"},
-            ),
-            CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
-            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
-            "gc_skew_2:dinucleotide_skew@nt=AT,side=inside",
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            window=1000,
+            step=1000,
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(
+                    id="ticks",
+                    renderer="ticks",
+                    side="outside",
+                    params={"tick_label_layout": "tick_only"},
+                ),
+                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
+                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", params={"nt": "GC"}),
+                "gc_skew_2:dinucleotide_skew@nt=AT,side=inside",
+            ],
+        ),
     )
 
     assert {"gc_content", "gc_skew", "gc_skew_2"} <= set(captured)
@@ -2183,18 +2226,20 @@ def test_api_circular_track_slots_distribute_repeated_depth_slots_evenly(
 
     assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        depth_table=depth_table,
-        window=1000,
-        step=1000,
-        circular_track_slots=[
-            "depth:depth",
-            "depth_2:depth",
-            "depth_3:depth",
-        ],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            depth_table=depth_table,
+            window=1000,
+            step=1000,
+            circular_track_slots=[
+                "depth:depth",
+                "depth_2:depth",
+                "depth_3:depth",
+            ],
+        ),
     )
 
     assert set(captured) == {"depth", "depth_2", "depth_3"}
@@ -2229,11 +2274,13 @@ def test_slot_mode_draws_axis_when_ticks_are_disabled() -> None:
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=[CircularTrackSlot(id="ticks", renderer="ticks", enabled=False)],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=[CircularTrackSlot(id="ticks", renderer="ticks", enabled=False)],
+        ),
     )
 
     assert 'id="Axis"' in canvas.tostring()
@@ -2252,10 +2299,12 @@ def test_hidden_implicit_scale_omits_tick_slot_but_keeps_axis_and_numeric_tracks
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=load_default_colors("", palette="default"),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=load_default_colors("", palette="default"),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+        ),
     )
     svg = canvas.tostring()
     renderers = {
@@ -2297,11 +2346,13 @@ def test_hidden_scale_defers_to_explicit_tick_slots(
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=load_default_colors("", palette="default"),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=slots,
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=load_default_colors("", palette="default"),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=slots,
+        ),
     )
     svg = canvas.tostring()
     renderers = [
@@ -2349,11 +2400,13 @@ def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatc
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-        circular_track_slots=["ticks:ticks@r=250px,w=12px,tick_label_layout=tick_only"],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+            circular_track_slots=["ticks:ticks@r=250px,w=12px,tick_label_layout=tick_only"],
+        ),
     )
 
     assert captured["tick_radius"] == pytest.approx(250.0)

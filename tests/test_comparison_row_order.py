@@ -21,6 +21,7 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.render.groups.linear import pairwise_match
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 # Distinct spans, both orientations, overlapping matches with different identities.
 _ROWS = [
@@ -47,12 +48,14 @@ def _render(rows: list[tuple]) -> str:
     table = pd.DataFrame(rows, columns=COMPARISON_COLUMNS)
     return assemble_linear_diagram_from_records(
         _records(),
-        cfg=apply_config_overrides(
-            None,
-            {"labels.linear.scope": "none", "canvas.show_gc": False, "canvas.show_skew": False},
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {"labels.linear.scope": "none", "canvas.show_gc": False, "canvas.show_skew": False},
+            ),
+            linear_comparisons=[LinearComparison(0, 1, table)],
+            legend="none",
         ),
-        linear_comparisons=[LinearComparison(0, 1, table)],
-        legend="none",
     ).tostring()
 
 

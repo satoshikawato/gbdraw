@@ -27,6 +27,7 @@ from gbdraw.io.colors import load_default_colors
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import enrich_svg
 from tests.utils.linear_render_context import alone_sequence_widths, make_linear_record_render_context
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 
 SVG_NS = "{http://www.w3.org/2000/svg}"
@@ -161,20 +162,22 @@ def test_duplicate_record_id_linear_svg_ids_are_instance_safe() -> None:
 
     svg = assemble_linear_diagram_from_records(
         records,
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "all",
-                "canvas.show_gc": True,
-                "canvas.show_skew": True,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "all",
+                    "canvas.show_gc": True,
+                    "canvas.show_skew": True,
+                },
+            ),
+            legend="none",
+            depth_tables=[_depth_table(), _depth_table()],
+            window=60,
+            step=60,
+            depth_window=60,
+            depth_step=60,
         ),
-        legend="none",
-        depth_tables=[_depth_table(), _depth_table()],
-        window=60,
-        step=60,
-        depth_window=60,
-        depth_step=60,
     ).tostring()
     root = ET.fromstring(svg)
     ids = [element.attrib["id"] for element in root.iter() if "id" in element.attrib]
@@ -221,11 +224,13 @@ def test_duplicate_rendered_feature_payload_entries_do_not_collapse() -> None:
 
     canvas = assemble_linear_diagram_from_records(
         records,
-        cfg=apply_config_overrides(
-            None,
-            {"labels.linear.scope": "all"},
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {"labels.linear.scope": "all"},
+            ),
+            legend="none",
         ),
-        legend="none",
     )
     enriched = enrich_svg(
         canvas.tostring(),
