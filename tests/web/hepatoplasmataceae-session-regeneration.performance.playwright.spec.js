@@ -23,6 +23,9 @@ const fixturePath = join(
   'hepatoplasmataceae_collinear.2afba711.gbdraw-session.json.gz'
 );
 const EXPECTED_FIXTURE_SHA = '2afba7111520b9dd7b00dffd351a1f4a21d4e0d9bfbaebc25ba7b5a937288577';
+// The fixture is a Session 40: Python converts it once at Load
+// (PD-OI-044 scenario revision 4; `pythonConvertsAtLoad` in the contract).
+const PYTHON_CONVERTS_AT_LOAD = true;
 const EXPECTED_RECORD_IDS = [
   'AP027078.1',
   'AP027131.1',
@@ -555,6 +558,7 @@ const generateThroughUi = async ({
     profile,
     metrics,
     events: snapshot.lifecycle,
+    pythonConvertsAtLoad: PYTHON_CONVERTS_AT_LOAD,
     resultCount: semantic.resultCount,
     state: { terminalOutcome: 'success', interactiveProbePassed: true }
   });
@@ -640,8 +644,11 @@ test('exact saved Session regenerates twice with bounded work and fresh readines
       metrics: {
         ...savedProbe.metrics,
         workerConstructionCount: savedWorker.constructions,
-        workerInitializationCount: savedWorker.initializations
+        workerInitializationCount: savedWorker.initializations,
+        workerHelperCount: savedWorker.helpers
       },
+      events: savedProbe.lifecycle,
+      pythonConvertsAtLoad: PYTHON_CONVERTS_AT_LOAD,
       state: {
         selectedResultCount: saved.resultCount,
         currentCatalog: saved.catalogSchema === CURRENT_FEATURE_CATALOG_SCHEMA && saved.catalogResultIndex === 0,
