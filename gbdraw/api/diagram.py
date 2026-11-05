@@ -132,6 +132,7 @@ from gbdraw.configurators import (
     GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
+from gbdraw.configurators.bundle import DiagramConfigurators
 from gbdraw.configurators.legend import measure_legend
 from gbdraw.core.color import normalize_hex_color
 from gbdraw.core.figure_length import RequestedFigureSize
@@ -143,6 +144,11 @@ from gbdraw.diagrams.circular.assemble import (
     _assemble_circular_diagram_result,
     circular_legend_table,
     plan_circular_annotation_slots,
+)
+from gbdraw.diagrams.circular.parts import (
+    CircularPresentationInputs,
+    CircularRecordData,
+    CircularTrackInputs,
 )
 from gbdraw.diagrams.circular.radial_layout import track_layout_reason
 from gbdraw.diagrams.linear import assemble_linear_diagram
@@ -192,6 +198,7 @@ from gbdraw.labels.linear import (
 )
 from gbdraw.layout.composition import (
     NO_CANVAS_PADDING_SIDES,
+    CompositionInputs,
     CompositionItem,
     CompositionRequest,
     CompositionSpacing,
@@ -1557,6 +1564,28 @@ def _circular_plot_title_content(
     ))
 
 
+def _composition_inputs(
+    cfg: GbdrawConfig,
+    title_content: GroupContent | None,
+    title_position: str,
+    *,
+    requested_canvas: bool = True,
+) -> CompositionInputs:
+    """The plot title, figure size and canvas padding one drawing is composed with, in either mode.
+
+    The title is placed at ``title_position`` when there is one to draw. A
+    drawing composed inside a larger canvas (``requested_canvas`` false) takes
+    neither the requested size nor the canvas padding: that canvas does.
+    """
+
+    return CompositionInputs(
+        title_content=title_content,
+        title_placement=TitlePlacement(title_position) if title_content is not None else TitlePlacement.NONE,
+        requested_size=cfg.canvas.figure_size if requested_canvas else RequestedFigureSize(),
+        canvas_padding=cfg.canvas.padding if requested_canvas else NO_CANVAS_PADDING_SIDES,
+    )
+
+
 def _resolve_multi_record_scales(
     record_lengths: Sequence[int],
     *,
@@ -2884,10 +2913,8 @@ def assemble_circular_diagram_from_record(
         canvas_config=canvas_config,
     )
 
-    title_content: GroupContent | None = None
-    title_placement = TitlePlacement.NONE
-    if show_plot_title:
-        title_content = _circular_plot_title_content(
+    title_content = (
+        _circular_plot_title_content(
             gb_record=gb_record,
             output_prefix=inputs.output_prefix,
             cfg=cfg,
@@ -2897,51 +2924,51 @@ def assemble_circular_diagram_from_record(
             plot_title=normalized_plot_title or None,
             record_presentation=context.record_presentation,
         )
-        if title_content is not None:
-            title_placement = TitlePlacement(normalized_plot_title_position)
+        if show_plot_title
+        else None
+    )
 
     result = _assemble_circular_diagram_result(
-        record_transform=context.record_transform,
-        record_presentation=context.record_presentation,
-        gb_record=gb_record,
-        canvas_config=canvas_config,
-        gc_df=gc_df,
-        gc_config=gc_config,
-        skew_config=skew_config,
-        feature_config=feature_config,
-        species=inputs.species,
-        strain=inputs.strain,
-        plot_title=(
-            normalized_plot_title or None
-            if effective_definition_profile == "shared_common"
-            else None
+        canvas_config,
+        DiagramConfigurators(
+            feature=feature_config, gc=gc_config, skew=skew_config, legend=legend_config, depth=depth_config
         ),
-        legend_config=legend_config,
-        depth_df=resolved_depth_df,
-        depth_config=depth_config,
-        depth_tracks=resolved_depth_tracks,
-        depth_track_count_value=available_depth_track_count,
-        conservation_tracks=conservation_tracks,
-        conservation_min_identity=float(identity),
-        circular_track_slots=parsed_circular_track_slots,
-        circular_track_axis_index=circular_track_axis_index,
-        annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
-        annotation_record_index=context.annotation_record_index,
-        dinucleotide_content_dataframes=dinucleotide_content_dataframes,
-        dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
-        definition_position="center",
-        definition_profile=effective_definition_profile,
-        # The tracks are placed around the definition drawn without the plot title (OV-1710).
-        layout_definition_profile=(
-            context.definition_profile if context.layout_definition_profile is None else context.layout_definition_profile
+        CircularRecordData(
+            gb_record=gb_record,
+            gc_df=gc_df,
+            depth_df=resolved_depth_df,
+            depth_tracks=resolved_depth_tracks,
+            depth_track_count_value=available_depth_track_count,
+            conservation_tracks=conservation_tracks,
+            conservation_min_identity=float(identity),
+            dinucleotide_content_dataframes=dinucleotide_content_dataframes,
+            dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         ),
-        definition_group_id=context.definition_group_id,
-        center_reserved_radius=inputs.center_reserved_radius,
-        title_content=title_content,
-        title_placement=title_placement,
+        CircularTrackInputs(
+            circular_track_slots=parsed_circular_track_slots,
+            circular_track_axis_index=circular_track_axis_index,
+            annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
+            annotation_record_index=context.annotation_record_index,
+        ),
+        CircularPresentationInputs(
+            species=inputs.species,
+            strain=inputs.strain,
+            plot_title=normalized_plot_title or None if effective_definition_profile == "shared_common" else None,
+            definition_position="center",
+            definition_profile=effective_definition_profile,
+            # The tracks are placed around the definition drawn without the plot title (OV-1710).
+            layout_definition_profile=(
+                context.definition_profile if context.layout_definition_profile is None else context.layout_definition_profile
+            ),
+            definition_group_id=context.definition_group_id,
+            center_reserved_radius=inputs.center_reserved_radius,
+            record_transform=context.record_transform,
+            record_presentation=context.record_presentation,
+        ),
         # A record of a multi-record canvas is composed at its own size; the canvas takes the requested one.
-        requested_size=cfg.canvas.figure_size if context.requested_canvas else RequestedFigureSize(),
-        canvas_padding=cfg.canvas.padding if context.requested_canvas else NO_CANVAS_PADDING_SIDES,
+        _composition_inputs(
+            cfg, title_content, normalized_plot_title_position, requested_canvas=context.requested_canvas
+        ),
     )
     _attach_circular_label_layouts(result.drawing, [result.label_layout])
     return result.drawing

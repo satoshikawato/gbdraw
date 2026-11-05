@@ -24,9 +24,11 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.api.options import CircularDiagramOptions, CircularOutputOptions
 from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest
 from gbdraw.auto_sizes import determine_length_parameter
+from gbdraw.configurators.bundle import DiagramConfigurators
 from gbdraw.configurators.legend import LegendMeasurement
 from gbdraw.core.text import drawn_text_box
 from gbdraw.diagrams.circular.assemble import CircularAssemblyResult
+from gbdraw.diagrams.circular.parts import CircularRecordData
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
 from gbdraw.layout.composition import (
@@ -1183,14 +1185,14 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
 
     original_assemble = diagram_api_module._assemble_circular_diagram_result
 
-    def capture_assemble(**kwargs: Any) -> Any:
-        gb_record = kwargs["gb_record"]
-        gc_config = kwargs["gc_config"]
-        captured_gc_window_steps[gb_record.id] = (
-            int(gc_config.window),
-            int(gc_config.step),
+    def capture_assemble(
+        canvas_config: Any, configurators: DiagramConfigurators, record: CircularRecordData, *parts: Any
+    ) -> Any:
+        captured_gc_window_steps[record.gb_record.id] = (
+            int(configurators.gc.window),
+            int(configurators.gc.step),
         )
-        return original_assemble(**kwargs)
+        return original_assemble(canvas_config, configurators, record, *parts)
 
     monkeypatch.setattr(
         diagram_api_module,
