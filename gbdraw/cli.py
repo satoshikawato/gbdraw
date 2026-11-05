@@ -2,7 +2,7 @@
 # coding: utf-8
 
 """
-Command-line Interface for Genome Diagram Generation (gbdraw)
+The gbdraw command: it dispatches to the circular, linear, render, setup-losat and gui subcommands.
 
 This script provides the command-line interface for `gbdraw`, a tool for generating
 genome diagrams in circular or linear formats from GenBank/EMBL/DDBJ-format annotated

@@ -1,3 +1,3 @@
-"""Core utilities and domain helpers (internal)."""
+"""Low-level helpers: colors, fonts, text metrics, numbers, figure lengths, sequences (internal)."""
 
 

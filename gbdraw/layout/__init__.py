@@ -1,4 +1,4 @@
-"""Layout helpers (internal)."""
+"""Geometry before drawing: record coordinates and rows, Linear wrap, figure size, composition (internal)."""
 
 
 from .linear import (

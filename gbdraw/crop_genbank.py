@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
+"""Crop a GenBank record to a region and shift its features; also runs as a script."""
 
 import argparse
 from io import StringIO

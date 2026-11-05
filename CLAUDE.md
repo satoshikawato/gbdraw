@@ -90,34 +90,71 @@ output, and passing test logs that can be read again.
 
 ## Project Structure
 
-```
+- `gbdraw/`: the package. Its units are listed below by layer, from the
+  bottom; a module imports from its own layer and the layers below it ("Python
+  structure" in the architecture ratchet). The architecture description is
+  `docs/internal/ARCHITECTURE.md`.
+- `gbdraw/web/`: the Web app, a single-page app with no build step
+  (`index.html`, ES modules under `js/`); see `gbdraw/web/CLAUDE.md`.
+- `tests/` (pytest; `reference_outputs/` holds the reference SVGs, `web/` the
+  Web tests), `docs/`, `examples/`, `tools/`, and `pyproject.toml`.
+
+<!-- BEGIN GENERATED units: python tools/generate_architecture_docs.py -->
+```text
 gbdraw/
-├── gbdraw/                    # Main package
-│   ├── cli.py                 # CLI entry point (gbdraw command)
-│   ├── circular.py            # Circular diagram CLI handler
-│   ├── linear.py              # Linear diagram CLI handler
-│   ├── api/                   # Public programmatic API
-│   ├── canvas/                # Canvas configuration (dimensions, layout)
-│   ├── config/                # Configuration loading (TOML parsing)
-│   ├── configurators/         # Feature/GC/Legend/BLAST configurators
-│   ├── core/                  # Core utilities (sequences, colors, text)
-│   ├── diagrams/              # Diagram assembly (circular/, linear/)
-│   ├── features/              # Feature objects, coordinates, colors, tracks
-│   ├── io/                    # Input/output (genome loading, color tables)
-│   ├── labels/                # Label handling & filtering
-│   ├── legend/                # Legend generation
-│   ├── render/                # SVG rendering (drawers/, groups/, export)
-│   ├── data/                  # Built-in data (config.toml, color_palettes.toml, fonts)
-│   └── web/                   # Web app (SPA, no build step)
-│       ├── index.html         # Entry point, templates, CSP, CSS
-│       └── js/                # ES modules (app.js entry, app/ with feature subfolders, services/, utils/)
-├── tests/                     # Test suite (pytest)
-│   ├── reference_outputs/     # Reference SVG files for comparison
-│   └── utils/                 # Test utilities
-├── docs/                      # Documentation
-├── examples/                  # Example files (GenBank, FASTA, BLAST)
-└── pyproject.toml             # Package configuration
+  foundation
+    contract_shapes.py         Neutral descriptions of persisted JSON contracts.
+    core/                      Low-level helpers: colors, fonts, text metrics, numbers, figure lengths, sequences (internal).
+    data/                      Built-in data: config.toml, color palettes, color tables and fonts.
+    exceptions.py              Custom exceptions for gbdraw.
+    version.py                 The gbdraw version string.
+  model and geometry
+    analysis/                  Sequence analyses: GC content and skew, depth coverage, conservation, collinearity (internal).
+    annotations/               Region annotations for circular and linear diagrams.
+    auto_sizes.py              Length- and mode-dependent Auto sizes.
+    canvas/                    Canvas sizes and offsets of Circular and Linear diagrams (internal).
+    comparisons/               Comparison searches: LOSAT and BLAST+ runtimes, job plans, the identity scale (internal).
+    config/                    The typed configuration: config.toml loading, dataclass models, overrides (internal).
+    definition_line_styles.py  Parsing and normalization helpers for linear definition line styles.
+    features/                  Feature objects from records: identities, colors, shapes, visibility, lane placement (internal).
+    io/                        Input readers for records (GenBank, GFF3, FASTA), BLAST results and TSV tables.
+    layout/                    Geometry before drawing: record coordinates and rows, Linear wrap, figure size, composition (internal).
+    linear_comparison.py       Normalized comparison contracts for Linear diagrams.
+    losat_setup.py             Explicit installation and offline resolution of a pinned LOSAT release.
+    mode_profiles.py           Versioned defaults and shared validation for Circular and Linear modes.
+    svg/                       SVG path data and elements for features, tracks, arcs and ticks (internal).
+    tracks/                    Circular track-slot input helpers.
+  placement
+    configurators/             Drawing parameters derived from the configuration, per track and for the legend (internal).
+    labels/                    Feature label placement, fit and filtering for Circular and Linear diagrams (internal).
+    legend/                    Legend tables, entry metrics and layout for both modes (internal).
+  drawing
+    diagrams/                  Diagram assembly internals.
+    render/                    SVG groups and drawers, interactive SVG metadata, and export to other formats (internal).
+    render_stages.py           Render stages: function calls whose results a Worker transaction may reuse.
+  API and Session
+    api/                       Typed library contracts for gbdraw requests, sessions, tables, and rendering.
+    interface.py               Small, typed, beginner-facing Python API for gbdraw.
+    session.py                 Public canonical session document lifecycle.
+    session_contract.py        The Session document of the current version, declared once.
+    session_drawings.py        Where each drawing of a Session lives: the one owner of the document layout.
+    session_io.py              GUI session JSON loading, validation, materialization, and sidecar building.
+    session_legacy_values.py   Values that older Sessions and schema 1-2 requests wrote, and what they read as now.
+    session_migration.py       Migrations that bring a saved Session's Web-owned fields to the current writer.
+    session_request_codec.py   Internal codec for canonical, CLI-independent render request payloads.
+    session_resources.py       The resources of one Session document, allocated by content.
+  entry points and adapters
+    __init__.py                Public Python interface for gbdraw.
+    _build_support.py          Build-time helpers: package data, the browser wheel and the Pyodide asset config.
+    _web_assets.py             The vendored Web assets: their files, source URLs, versions and notices.
+    circular.py                The gbdraw circular command: its arguments, Session replay and the Circular request.
+    cli.py                     The gbdraw command: it dispatches to the circular, linear, render, setup-losat and gui subcommands.
+    cli_utils/                 CLI module with shared argument definitions and utilities.
+    crop_genbank.py            Crop a GenBank record to a region and shift its features; also runs as a script.
+    linear.py                  The gbdraw linear command: its arguments, Session replay and the Linear request.
+    web_support/               Support helpers shared by the browser UI and offline web asset tooling.
 ```
+<!-- END GENERATED units -->
 
 ## Key Architecture
 

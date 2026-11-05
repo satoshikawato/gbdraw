@@ -1,4 +1,4 @@
-"""Feature parsing / object construction helpers (internal)."""
+"""Feature objects from records: identities, colors, shapes, visibility, lane placement (internal)."""
 
 from .colors import preprocess_color_tables, get_color
 from .factory import (

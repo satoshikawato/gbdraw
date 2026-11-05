@@ -1,3 +1,5 @@
+"""Build-time helpers: package data, the browser wheel and the Pyodide asset config."""
+
 from __future__ import annotations
 
 import hashlib
