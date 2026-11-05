@@ -203,7 +203,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-049](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-049-circular-widthradius-unit-changes) | Circular Width/Radius unit changes | ACCEPTED | tracks.circular-measure-unit-change | 2 | scenario revision 1 | 0 |
 | [PD-OI-050](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-050-circular-auto-unit-preference-lifecycle) | Circular Auto unit preference lifecycle | ACCEPTED | tracks.circular-measure-auto-unit-lifecycle | 1 | — | 0 |
 | [PD-OI-051](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-051-in-flight-comparison-draft-changes) | In-flight comparison draft changes | ACCEPTED | diagram-generation.inflight-comparison-draft | 1 | — | 2 |
-| [PD-OI-052](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-052-matched-decoration-deltas-across-regeneration) | Matched decoration deltas across regeneration | ACCEPTED | web.composition-decoration-continuity | 2 | — | 6 |
+| [PD-OI-052](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-052-matched-decoration-deltas-across-regeneration) | Matched decoration deltas across regeneration | ACCEPTED | web.composition-decoration-continuity | 2 | — | 7 |
 | [PD-OI-053](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-053-explicit-layout-edit-with-discoverable-targets) | Explicit Layout edit with discoverable targets | ACCEPTED | web.layout-edit-affordance | 2 | scenario revision 1 | 1 |
 | [PD-OI-054](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-054-docked-preview-search-and-controls) | Docked Preview search and controls | ACCEPTED | web.preview-search-placement | 2 | scenario revision 1 | 1 |
 | [PD-OI-055](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-055-valid-bindings-after-failed-generate) | Valid bindings after failed Generate | ACCEPTED | web.generate.failed-source-binding-continuation | 1 | — | 0 |
@@ -215,7 +215,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-061](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-061-legend-rename-collisions-for-every-entry) | Legend rename collisions for every entry | ACCEPTED | web.legend.rename-collision | 5 | scenario revision 4 | 10 |
 | [PD-OI-062](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-062-batch-live-edits-projected-on-result-mount) | Batch live edits projected on Result mount | ACCEPTED | web.batch.live-edit-projection | 1 | — | 5 |
 | [PD-OI-063](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-063-legend-order-continuity-across-generate) | Legend order continuity across Generate | ACCEPTED | web.legend.order-continuity | 1 | — | 4 |
-| [PD-OI-064](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-064-canvas-padding-continuity-across-generate) | Canvas padding continuity across Generate | ACCEPTED | web.canvas.padding-continuity | 1 | — | 1 |
+| [PD-OI-064](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-064-canvas-padding-continuity-across-generate) | Canvas padding continuity across Generate | ACCEPTED | web.canvas.padding-continuity | 1 | — | 2 |
 | [PD-OI-065](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-065-label-edits-after-source-replacement) | Label edits after source replacement | ACCEPTED | web.labels.source-replacement-reconciliation | 1 | — | 0 |
 | [PD-OI-066](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-066-live-edit-and-regeneration-parity) | Live-edit and regeneration parity | ACCEPTED | web.live-edit.regeneration-parity | 3 | scenario revision 2 | 17 |
 | [PD-OI-067](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-067-per-record-inferred-linear-definitions) | Per-record inferred Linear definitions | ACCEPTED | web.linear.file-default-definition | 4 | scenario revision 1 | 2 |
@@ -264,7 +264,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-111](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-111-partial-feature-ends-drawn-open) | Partial feature ends drawn open | ACCEPTED | features.partial-ends-open | 1 | — | 0 |
 | [PD-OI-112](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-112-history-step-list) | History step list | ACCEPTED | web.history.step-list | 1 | — | 4 |
 | [PD-OI-113](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-113-web-control-for-the-linear-wrap-length) | Web control for the Linear wrap length | ACCEPTED | web.linear.wrap-length | 3 | scenario revision 2 | 14 |
-| [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size) | Web control for the figure size | ACCEPTED | web.layout.figure-size | 1 | — | 1 |
+| [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size) | Web control for the figure size | ACCEPTED | web.layout.figure-size | 2 | scenario revision 1 | 8 |
 | [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing) | Select region on the drawing | ACCEPTED | web.result.region-select | 1 | — | 6 |
 
 ### Test files that cite each record
@@ -362,6 +362,7 @@ are listed under "Cited ids without a record".
   - `tests/test_linear_composition.py`
   - `tests/web/artifact-slots.test.mjs`
   - `tests/web/composition-layout-real.playwright.spec.js`
+  - `tests/web/live-generate-parity-legend.playwright.spec.js`
   - `tests/web/live-generate-parity-track-data.playwright.spec.js`
   - `tests/web/moved-decoration-canvas.test.mjs`
   - `tests/web/per-mode-results.playwright.spec.js`
@@ -411,6 +412,7 @@ are listed under "Cited ids without a record".
   - `tests/web/specific-color-actions.test.mjs`
 - [PD-OI-064](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-064-canvas-padding-continuity-across-generate)
   - `tests/web/gui-audit-20260930-editor.playwright.spec.js`
+  - `tests/web/legend-edit-leaves.test.mjs`
 - [PD-OI-066](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-066-live-edit-and-regeneration-parity)
   - `tests/web/candidate-render.test.mjs`
   - `tests/web/contracts/live-generate-parity-allowed.json`
@@ -676,7 +678,14 @@ are listed under "Cited ids without a record".
   - `tests/web/session-request.test.mjs`
   - `tests/web/session50-load-resave.test.mjs`
 - [PD-OI-114](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-114-web-control-for-the-figure-size)
+  - `tests/web/drawing-context.test.mjs`
   - `tests/web/drawing-list.test.mjs`
+  - `tests/web/figure-size-form.test.mjs`
+  - `tests/web/figure-size.playwright.spec.js`
+  - `tests/web/helpers/live-work-allowlist.mjs`
+  - `tests/web/legend-edit-leaves.test.mjs`
+  - `tests/web/legend-edit-refit.test.mjs`
+  - `tests/web/live-generate-parity-legend.playwright.spec.js`
 - [PD-OI-115](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-115-select-region-on-the-drawing)
   - `tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.provenance.json`
   - `tests/test_web_record_spans.py`
