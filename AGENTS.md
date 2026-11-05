@@ -30,6 +30,24 @@ Guidance for automated agents working in this repository.
   entry added to a registered baseline or allowlist). Wait for the Owner's
   approval.
 
+## When dev is red
+
+- dev is red when the newest `Tests` run of a push to `dev` that finished
+  with a result failed (`failure`, `timed_out`, or `startup_failure`). Runs
+  that ended `cancelled`, `skipped`, `neutral`, `stale`, or `action_required`
+  do not count. A run being rerun counts by its previous attempt, so a failed
+  run stays red while it reruns. Read the state before you open a pull
+  request, arm auto-merge on one, or merge one (command in the
+  `gbdraw-ship-pr` skill, "Merge").
+- While dev is red, merge only a pull request that fixes the failure: it
+  carries the label `dev-red-fix` and names the failing job and run in its
+  body. Other pull requests may run CI but stay unmerged.
+- The session that finds dev red reruns a job it believes flaky once. If the
+  job fails again, it fixes the failure or tells the session that merged its
+  cause (or the Owner), and records this in its task log.
+- A dev-tier job that fails on a pull request's merge commit is that pull
+  request's author's to fix first.
+
 ## Workspace Cleanup
 
 - GitHub deletes a pull request's head branch when the pull request merges.

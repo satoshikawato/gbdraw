@@ -22,6 +22,13 @@ write-up of a release.
   and a file that starts with a UTF-8 byte order mark.
 - Fixed: grouping orthologs no longer stops with a RecursionError when more
   than about 1,000 proteins join one group in a chain.
+- Added: JSON Schema (draft 2020-12) files for a stored Session and a canonical
+  render request, `docs/REFERENCE/schemas/gbdraw-session.schema.json` and
+  `docs/REFERENCE/schemas/gbdraw-render-request.schema.json`, and a page of
+  structure diagrams beside them (`docs/REFERENCE/schemas/README.md`), all
+  generated from gbdraw's contract descriptions. "Session and request
+  structure" in the Session compatibility reference says what the command line
+  and the Python API refuse outside them and what they read anyway.
 - Added: a Linear figure can be drawn to a requested size with a unit
   (`--figure_width 180mm`, `--figure_height 12cm`; `figure_width` and
   `figure_height` on `LinearOptions`; `canvas.figure_width` and

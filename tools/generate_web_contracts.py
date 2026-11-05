@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Generate the browser's constants and typedefs of persisted contracts."""
+"""Generate the browser's constants and typedefs of persisted contracts, and
+their JSON Schema and model diagrams for the documentation."""
 
 from __future__ import annotations
 
@@ -32,6 +33,12 @@ CONSERVATION_COLORS_TARGET = TARGET.parent.parent / "utils" / "conservation-colo
 RESULT_RECORDS_TARGET = TARGET.parent.parent / "services" / "result-records.generated.js"
 LABEL_FIT_WORDS_TARGET = REPO_ROOT / "tools" / "i18n" / "label-fit-words.generated.mjs"
 COLLINEARITY_WORDS_TARGET = REPO_ROOT / "tools" / "i18n" / "collinearity-words.generated.mjs"
+# Standard JSON Schema of the stored Session and the canonical request, for
+# readers outside gbdraw: documentation, not a Web module.
+SESSION_JSON_SCHEMA_TARGET = REPO_ROOT / "docs" / "REFERENCE" / "schemas" / "gbdraw-session.schema.json"
+REQUEST_JSON_SCHEMA_TARGET = SESSION_JSON_SCHEMA_TARGET.with_name("gbdraw-render-request.schema.json")
+# The page of the schemas, with model diagrams of the same descriptions.
+SCHEMA_README_TARGET = SESSION_JSON_SCHEMA_TARGET.with_name("README.md")
 sys.path.insert(0, str(REPO_ROOT))
 
 # (Web name, Python module that defines the value, Python name). The Web keeps
@@ -475,6 +482,303 @@ def render_derived_result_shape_module() -> str:
     )
 
 
+JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
+_SHAPE_BOUNDS = ("minimum", "exclusiveMinimum", "maximum", "minItems", "pattern")
+
+
+def _runs(values: list[int]) -> list[list[int]]:
+    """Sorted integers as runs of consecutive values."""
+    runs: list[list[int]] = []
+    for value in values:
+        if runs and value == runs[-1][-1] + 1:
+            runs[-1].append(value)
+        else:
+            runs.append([value])
+    return runs
+
+
+def _portable_pattern(pattern: str) -> str:
+    """``pattern`` as an ECMA-262 pattern that matches what Python's ``re.search`` matches.
+
+    ECMA-262, the dialect of JSON Schema, reads ``\\s`` as other characters
+    than Python (it adds U+FEFF and leaves out U+001C-U+001F and U+0085), so
+    ``\\s`` and ``\\S`` are spelled as the characters Python matches; no
+    character above U+FFFF is one. A pattern whose ``\\s`` sits in a class, or
+    whose ``$`` does not end ``\\s*`` (Python's ``$`` also matches before a
+    final newline), has no such spelling here and raises.
+    """
+    if re.search(r"\[[^\]]*\\[sS]|\\\\[sS]|(?<!\\s\*)\$", pattern):
+        raise ValueError(f"No portable spelling of the pattern {pattern!r}.")
+    spaces = [code for code in range(0x10000) if re.fullmatch(r"\s", chr(code))]
+    body = "".join(
+        f"\\u{run[0]:04x}" + (f"-\\u{run[-1]:04x}" if len(run) > 1 else "") for run in _runs(spaces)
+    )
+    return pattern.replace("\\S", f"[^{body}]").replace("\\s", f"[{body}]")
+
+
+def json_schema(shape: Mapping[str, Any]) -> Any:
+    """One shape of ``gbdraw.contract_shapes`` as a JSON Schema 2020-12 subschema.
+
+    A ``ref`` points into ``$defs``; a bound keeps its name, which JSON Schema
+    shares, and a pattern is spelled for ECMA-262 (:func:`_portable_pattern`).
+    Python's checker refuses a number with a fraction (``1.0``) where an
+    integer or a literal is declared; JSON Schema reads ``1.0`` as ``1``.
+    """
+    kind = shape["kind"]
+    bounds = {name: shape[name] for name in _SHAPE_BOUNDS if name in shape}
+    if "pattern" in bounds:
+        bounds["pattern"] = _portable_pattern(bounds["pattern"])
+    if kind == "unknown":
+        return True
+    if kind == "ref":
+        return {"$ref": f"#/$defs/{shape['name']}"}
+    if kind in {"string", "integer", "number", "boolean", "null"}:
+        return {"type": kind, **bounds}
+    if kind == "literal":
+        # A literal with no value admits nothing: an optional field that must be absent.
+        values = shape["values"]
+        return {"const": values[0]} if len(values) == 1 else {"enum": values} if values else False
+    if kind == "union":
+        return {"anyOf": [json_schema(option) for option in shape["options"]]}
+    if kind == "array":
+        return {"type": "array", "items": json_schema(shape["items"]), **bounds}
+    if kind == "tuple":
+        items = [json_schema(item) for item in shape["items"]]
+        prefix = {"prefixItems": items} if items else {}
+        return {"type": "array", **prefix, "minItems": len(items), "maxItems": len(items)}
+    if kind == "record":
+        return {"type": "object", "additionalProperties": json_schema(shape["values"])}
+    if kind != "object":
+        raise TypeError(f"Unsupported contract shape: {kind!r}")
+    defaults = shape.get("defaults", {})
+    properties = {}
+    for name, item in shape["fields"].items():
+        schema = json_schema(item)
+        if name in defaults:
+            schema = {**({} if schema is True else schema), "default": defaults[name]}
+        properties[name] = schema
+    required = [name for name in shape["fields"] if name not in shape["optional"]]
+    return {
+        "type": "object",
+        **({"properties": properties} if properties else {}),
+        **({"required": required} if required else {}),
+        **({} if shape["open"] else {"additionalProperties": False}),
+    }
+
+
+def _json_schema_document(
+    root: Mapping[str, Any], types: Mapping[str, Any], *, title: str, owner: str, about: str
+) -> str:
+    document = {
+        "$schema": JSON_SCHEMA_DIALECT,
+        "$comment": f"Generated by tools/generate_web_contracts.py from {owner}; do not edit manually.",
+        "title": title,
+        "description": about,
+        **root,
+        "$defs": {name: json_schema(shape) for name, shape in types.items()},
+    }
+    return json.dumps(document, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+
+
+def _versions_text(versions: list[int]) -> str:
+    """``[27, 28, 29, 30, 40, 42]`` as ``27–30, 40, 42``."""
+    return ", ".join(f"{run[0]}–{run[-1]}" if len(run) > 2 else ", ".join(map(str, run)) for run in _runs(versions))
+
+
+def render_session_json_schema() -> str:
+    from gbdraw.session_contract import describe_session_admission
+    from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+
+    admission = describe_session_admission()
+    versions = [version for band in admission["bands"] for version in band["versions"]]
+    return _json_schema_document(
+        {"anyOf": [{"$ref": f"#/$defs/{band['root']}"} for band in admission["bands"]]},
+        admission["types"],
+        title=f"gbdraw Session file, versions {_versions_text(versions)}",
+        owner="describe_session_admission() in gbdraw/session_contract.py",
+        about=(
+            "What gbdraw checks of a stored Session before it reads it, with one definition per band of "
+            "versions. The gbdraw command line and Python API refuse a file outside this schema; they also "
+            "check values, references and rules across fields that the schema does not state. A Session 51 "
+            f"drawing's renderRequest of schema {CANONICAL_REQUEST_SCHEMA} follows gbdraw-render-request.schema.json."
+        ),
+    )
+
+
+def render_request_json_schema() -> str:
+    from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, describe_canonical_request
+
+    description = describe_canonical_request()
+    return _json_schema_document(
+        {"$ref": f"#/$defs/{description['root']}"},
+        description["types"],
+        title=f"gbdraw canonical render request, schema {CANONICAL_REQUEST_SCHEMA}",
+        owner="describe_canonical_request() in gbdraw/session_request_codec.py",
+        about=(
+            f"A canonical render request of schema {CANONICAL_REQUEST_SCHEMA} as gbdraw writes it: "
+            f"the renderRequest of a Session drawing. The gbdraw command line and Python API refuse a schema "
+            f"{CANONICAL_REQUEST_SCHEMA} request outside this schema, except a retired value of "
+            "collinearityAnchorMode, which they read as its default with a warning; they also check values and "
+            "references that the schema does not state. A request of an older schema is converted, not described."
+        ),
+    )
+
+
+# A class with more fields than this lists none: the schema holds them.
+_DIAGRAM_MEMBERS = 20
+
+
+def _diagram_type(shape: Mapping[str, Any]) -> str:
+    """A short type text for a diagram member: no character Mermaid reads as syntax."""
+    kind = shape["kind"]
+    if kind == "ref":
+        return shape["name"]
+    if kind == "literal":
+        values = shape["values"]
+        if not values:
+            return "absent"
+        return " or ".join(json.dumps(value).replace('"', "'") for value in values) if len(values) <= 3 else (
+            f"one of {len(values)} values"
+        )
+    if kind == "union":
+        return " or ".join(_diagram_type(option) for option in shape["options"])
+    if kind in {"array", "record"}:
+        items = _diagram_type(shape["items" if kind == "array" else "values"])
+        return f"list of {items}" if kind == "array" else f"map of {items}"
+    if kind == "tuple":
+        return f"{len(shape['items'])} items"
+    return "any" if kind == "unknown" else kind
+
+
+def _class_diagram(
+    types: Mapping[str, Any], roots: list[str], *, external: Mapping[str, Any] | None = None, members: bool = True
+) -> str:
+    """A Mermaid class diagram of the named types reachable from ``roots``.
+
+    A field that refers to a named type is an association labelled with the
+    field; a named union is a class its options specialize. A type of
+    ``external`` is drawn without members (another diagram shows it), and so
+    is every type without ``members``.
+    """
+    lines = ["classDiagram", "  direction LR"]
+    seen: list[str] = []
+    pending = list(roots)
+    while pending:
+        name = pending.pop(0)
+        if name in seen:
+            continue
+        seen.append(name)
+        shape = types[name] if external is None or name not in external else {"kind": "ref"}
+        if shape["kind"] == "ref":
+            lines.append(f"  class {name}")
+            continue
+        if shape["kind"] == "union":
+            lines.append(f"  class {name}")
+            lines.append(f"  <<union>> {name}")
+            options = [option["name"] for option in shape["options"] if option["kind"] == "ref"]
+            lines.extend(f"  {name} <|-- {option}" for option in options)
+            pending.extend(options)
+            continue
+        fields = shape.get("fields", {})
+        listed = [] if not members else [f"    {len(fields)} fields"] if len(fields) > _DIAGRAM_MEMBERS else [
+            f"    +{field}{'?' if field in shape['optional'] else ''} {_diagram_type(item)}"
+            for field, item in fields.items()
+        ]
+        lines.extend([f"  class {name} {{", *listed, "  }"] if listed else [f"  class {name}"])
+        # The fields that refer to each type: one association, named by its fields or their number.
+        joined: dict[str, list[str]] = {}
+        for field, item in fields.items():
+            for target in sorted(_references(item)):
+                joined.setdefault(target, []).append(field)
+        for target, names in joined.items():
+            lines.append(f"  {name} --> {target} : {', '.join(names) if len(names) <= 2 else f'{len(names)} fields'}")
+            pending.append(target)
+    return "\n".join(lines)
+
+
+def _session_bands_diagram(admission: Mapping[str, Any]) -> str:
+    """A flowchart of the version bands: each band's versions, its top level and the keys it requires."""
+    lines = ["flowchart LR"]
+    previous = None
+    for band in admission["bands"]:
+        root = admission["types"][band["root"]]
+        required = ", ".join(sorted(field for field in root["fields"] if field not in root["optional"]))
+        top_level = "open top level" if root["open"] else f"closed top level of {len(root['fields'])} keys"
+        node = f"v{band['minVersion']}"
+        label = f"Session {_versions_text(band['versions'])}<br/>{top_level}<br/>requires {required}"
+        lines.append(f'  {node}["{label}"]')
+        if previous is not None:
+            lines.append(f"  {previous} --> {node}")
+        previous = node
+    return "\n".join(lines)
+
+
+def render_schema_readme() -> str:
+    """The page of the schemas: the files and the model diagrams of their descriptions."""
+    from gbdraw import session_io as sio
+    from gbdraw.session_contract import describe_session_admission, describe_session_document
+    from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, describe_canonical_request
+
+    admission = describe_session_admission()
+    writer = describe_session_document()
+    request = describe_canonical_request()
+    project = admission["bands"][-1]
+    versions = sorted(sio.SUPPORTED_SESSION_VERSIONS)
+    mode_scoped = _versions_text([
+        version for version in versions
+        if sio.MODE_SCOPED_SESSION_MIN_VERSION <= version <= sio.MODE_SCOPED_SESSION_MAX_VERSION
+    ])
+    figures = [
+        (
+            "Version bands of the Session reader",
+            "Each box is a band of `gbdraw-session.schema.json`: the versions it covers and the top-level "
+            "keys it requires (`describe_session_admission()`).",
+            _session_bands_diagram(admission),
+        ),
+        (
+            f"A Session {_versions_text(project['versions'])} file",
+            "The project and its drawings as the reader checks them; it checks each drawing's parts on the "
+            "drawing's one-drawing view (`describe_session_admission()`).",
+            _class_diagram(admission["types"], [project["root"]]),
+        ),
+        (
+            f"A Session {mode_scoped} document",
+            f"The layout that gbdraw writes for a Session {mode_scoped} (`describe_session_document()`); the "
+            f"one-drawing view of a Session {_versions_text(project['versions'])} drawing has this layout. The "
+            "reader checks less than it holds: the Session schema states what. A class with more than "
+            f"{_DIAGRAM_MEMBERS} fields shows only their number.",
+            _class_diagram(writer["types"], [writer["root"]], external=request["types"]),
+        ),
+        (
+            f"Canonical render request, schema {CANONICAL_REQUEST_SCHEMA}",
+            "The types of `gbdraw-render-request.schema.json` and the fields that join them "
+            "(`describe_canonical_request()`); the schema lists every field.",
+            _class_diagram(request["types"], [request["root"]], members=False),
+        ),
+    ]
+    parts = [
+        "[Documentation home](../../DOCS.md) | [Tutorials](../../TUTORIALS/README.md) | "
+        "[Technical documentation](../README.md) | [FAQ](../../FAQ.md)",
+        "",
+        "# Session and request JSON Schema",
+        "",
+        "<!-- Generated by tools/generate_web_contracts.py from gbdraw/session_contract.py and "
+        "gbdraw/session_request_codec.py; do not edit manually. -->",
+        "",
+        f"- [`{SESSION_JSON_SCHEMA_TARGET.name}`]({SESSION_JSON_SCHEMA_TARGET.name}): a stored Session of "
+        f"any supported version ({_versions_text(versions)}).",
+        f"- [`{REQUEST_JSON_SCHEMA_TARGET.name}`]({REQUEST_JSON_SCHEMA_TARGET.name}): a canonical render "
+        f"request of schema {CANONICAL_REQUEST_SCHEMA}.",
+        "",
+        "Both are JSON Schema draft 2020-12. What gbdraw refuses outside them, and what it reads anyway, is in "
+        "[Session and request structure](../session-and-request-compatibility.md#session-and-request-structure).",
+        "",
+    ]
+    for title, caption, diagram in figures:
+        parts += [f"## {title}", "", caption, "", "```mermaid", diagram, "```", ""]
+    return "\n".join(parts)
+
+
 def render_builtin_color_tables_module() -> str:
     """The built-in color tables, by name: each one's title and rows as Python reads them."""
     from gbdraw.io.colors import builtin_color_table_data
@@ -569,7 +873,7 @@ def main() -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Fail if the generated browser contract modules are out of sync.",
+        help="Fail if the generated contract files are out of sync.",
     )
     args = parser.parse_args()
 
@@ -586,6 +890,9 @@ def main() -> int:
         RESULT_RECORDS_TARGET: render_result_records_module(),
         LABEL_FIT_WORDS_TARGET: render_label_fit_words_module(),
         COLLINEARITY_WORDS_TARGET: render_collinearity_words_module(),
+        SESSION_JSON_SCHEMA_TARGET: render_session_json_schema(),
+        REQUEST_JSON_SCHEMA_TARGET: render_request_json_schema(),
+        SCHEMA_README_TARGET: render_schema_readme(),
     }
     if args.check:
         stale = [
@@ -595,7 +902,7 @@ def main() -> int:
         ]
         if stale:
             print(
-                f"Browser contract modules are stale ({', '.join(stale)}). "
+                f"Generated contract files are stale ({', '.join(stale)}). "
                 "Run: python tools/generate_web_contracts.py"
             )
             return 1
