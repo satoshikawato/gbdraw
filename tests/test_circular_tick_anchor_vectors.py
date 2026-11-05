@@ -24,6 +24,7 @@ from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.diagrams.circular.assemble import _serialize_circular_track_slot_geometry
 from gbdraw.diagrams.circular.radial_layout import resolve_circular_radial_layout
+from gbdraw.render.track_slot_metadata import RecordAxisInput
 from gbdraw.tracks import CircularTrackSlot, ScalarSpec
 
 VECTORS = Path(__file__).parent / "fixtures" / "circular_tick_anchor_vectors.json"
@@ -66,12 +67,10 @@ def _compute_case(radius_px: float, layout: str, side: str, width_px: float | No
         feature_dict={"a": _Feature()},
     )
     payload = _serialize_circular_track_slot_geometry(
-        gb_record=record,
+        drawn=RecordAxisInput(record, "record"),
         radial_layout=radial_layout,
         layout_slots=slots,
         base_radius_px=radius_px,
-        record_key="record",
-        record_transform=None,
     )["records"][0]
     geometry = next(slot for slot in payload["slots"] if slot["slotId"] == "ticks")
     resolved = next(slot for slot in radial_layout.slots if slot.id == "ticks")

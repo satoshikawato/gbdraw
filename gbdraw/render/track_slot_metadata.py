@@ -12,9 +12,12 @@ Layout edit move of the record keeps them right.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Literal, Mapping, Sequence, TypedDict
 
-from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from Bio.SeqRecord import SeqRecord
+
+from gbdraw.layout.record_coordinates import RecordDisplayTransform, bound_record_transform
 from gbdraw.svg.circular_arcs import position_angle
 
 
@@ -88,27 +91,53 @@ class RadialExtent(TypedDict):
     outerPx: float
 
 
-def axis_source_map(transform: RecordDisplayTransform, drawn_length: int) -> AxisSourceMap:
-    """The source map of a record drawn by ``transform`` over ``drawn_length`` bases."""
+@dataclass(frozen=True)
+class RecordAxisInput:
+    """One drawn record as its axis is built from: the record, its identity in the
+    Result (``recordKey``), and the transform a plan bound to it (``None``: the one
+    its coordinate map gives)."""
 
-    return {
-        "anchorBase": transform.display_index_to_source_base(0),
-        "recordBase": transform.source_base,
-        "step": transform.source_step,
-        "sourceLength": int(transform.length),
-        "drawnLength": int(drawn_length),
-        "isCircular": bool(transform.is_circular),
-    }
+    record: SeqRecord
+    record_key: str
+    transform: RecordDisplayTransform | None = None
+
+    @classmethod
+    def of_records(
+        cls,
+        records: Sequence[SeqRecord],
+        record_keys: Sequence[str],
+        transforms: Sequence[RecordDisplayTransform] | None,
+    ) -> list[RecordAxisInput]:
+        """One input per drawn record, in drawing order."""
+
+        return [
+            cls(record, str(record_keys[index]), transforms[index] if transforms is not None else None)
+            for index, record in enumerate(records)
+        ]
+
+    def source(self) -> AxisSourceMap:
+        """Which source base each drawn base of the record shows."""
+
+        transform = bound_record_transform(self.record, self.transform)
+        return {
+            "anchorBase": transform.display_index_to_source_base(0),
+            "recordBase": transform.source_base,
+            "step": transform.source_step,
+            "sourceLength": int(transform.length),
+            "drawnLength": len(self.record.seq),
+            "isCircular": bool(transform.is_circular),
+        }
 
 
 def circular_axis_geometry(
+    drawn: RecordAxisInput,
     *,
     radius_px: float,
     feature_bands: Sequence[RadialExtent],
-    source: AxisSourceMap,
 ) -> CircularAxisGeometry:
     """The axis of one Circular record; the band spans ``feature_bands`` (the axis alone without one)."""
 
+    source = drawn.source()
     drawn_length = source["drawnLength"]
     start_angle = position_angle(0, drawn_length)
     return {
@@ -123,11 +152,11 @@ def circular_axis_geometry(
 
 
 def linear_axis_geometry(
+    drawn: RecordAxisInput,
     *,
     rows: Sequence[tuple[float, float, float]],
     row_length_bp: int,
     px_per_bp: float,
-    source: AxisSourceMap,
 ) -> LinearAxisGeometry:
     """The axis of one Linear record from each row's ``(axis y, band top, band bottom)``.
 
@@ -135,6 +164,7 @@ def linear_axis_geometry(
     starts at x 0 of the record's frame.
     """
 
+    source = drawn.source()
     drawn_length = source["drawnLength"]
     payload: list[LinearAxisRow] = []
     for row_index, (axis_y, band_top, band_bottom) in enumerate(rows):
@@ -211,7 +241,7 @@ __all__ = [
     "LinearAxisGeometry",
     "LinearAxisRow",
     "RadialExtent",
-    "axis_source_map",
+    "RecordAxisInput",
     "build_track_slot_geometry_run_metadata",
     "circular_axis_geometry",
     "linear_axis_geometry",

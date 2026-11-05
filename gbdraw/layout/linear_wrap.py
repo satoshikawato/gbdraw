@@ -15,11 +15,10 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.config.models.canvas import LinearWrapLength
 from gbdraw.config.models.root import GbdrawConfig
-from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import VerticalBand
 from gbdraw.layout.linear_multi_record import stable_record_keys
-from gbdraw.layout.record_coordinates import RecordDisplayTransform, wrapped_row_count
+from gbdraw.layout.record_coordinates import RecordDisplayTransform, unset_record_transform, wrapped_row_count
 from gbdraw.layout.record_placement import FeatureAnchorPlacement
 
 
@@ -129,22 +128,6 @@ def drawn_axis_length(record: SeqRecord, transform: RecordDisplayTransform | Non
     return len(record.seq) if transform is None or transform.wrap_length is None else transform.axis_length
 
 
-def bound_record_transform(record: SeqRecord, transform: RecordDisplayTransform | None) -> RecordDisplayTransform:
-    """The transform a record is drawn by: its bound one, else the one its coordinate map gives."""
-
-    return transform if transform is not None else _unset_transform(record)
-
-
-def _unset_transform(record: SeqRecord) -> RecordDisplayTransform:
-    """The transform of a record no plan bound one to, from its coordinate map."""
-
-    base, step = _read_coord_map(record)
-    length = len(record.seq)
-    if step == 1:
-        return RecordDisplayTransform(base + length - 1, base, 1, None, False)
-    return RecordDisplayTransform(max(base, length), base, -1, None, False)
-
-
 def resolve_wrap(
     requested: LinearWrapLength,
     records: Sequence[SeqRecord],
@@ -156,7 +139,7 @@ def resolve_wrap(
     row_length = resolve_wrap_length(requested, lengths)
     if row_length is None:
         return transforms, None
-    bound = transforms if transforms is not None else [_unset_transform(record) for record in records]
+    bound = transforms if transforms is not None else [unset_record_transform(record) for record in records]
     wrapped = tuple(
         transform.with_wrap(row_length, length) if is_cut(length, row_length) else transform
         for transform, length in zip(bound, lengths, strict=True)

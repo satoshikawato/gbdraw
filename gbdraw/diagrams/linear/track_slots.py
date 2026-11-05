@@ -46,6 +46,8 @@ class LinearResolvedSlot:
     # An overlay that spans slots with a body on this record (``_overlay_span``)
     # takes its band from them, not from its own height.
     spans_slots: bool = False
+    # The footprint's ``body_band`` in record coordinates: where a features slot's lanes lie, without labels.
+    body_band: VerticalBand | None = None
 
 @dataclass(frozen=True)
 class LinearRecordVerticalPlan:
@@ -117,6 +119,14 @@ class LinearRecordVerticalPlan:
         from (record coordinates)."""
 
         return next((float(slot.origin_y) for slot in self.slots if slot.renderer == "features"), 0.0)
+
+    @property
+    def feature_lanes_band(self) -> VerticalBand:
+        """Where the record's feature lanes lie, without their labels (record coordinates); the axis band
+        without them."""
+
+        slot = next((slot for slot in self.slots if slot.renderer == "features"), None)
+        return self.axis_band if slot is None or slot.body_band is None else slot.body_band
 
     def slot_by_id(self, slot_id: str) -> LinearResolvedSlot:
         for slot in self.slots:
@@ -424,6 +434,7 @@ def _combine_slot_footprint(
         paint_band=(union_vertical_bands(paint_bands) if paint_bands else None),
         reserve_band=union_vertical_bands(reserve_bands),
         data_available=footprint.data_available,
+        body_band=footprint.body_band,
     )
 
 
@@ -463,6 +474,7 @@ def _resolved_slot(
         data_available=bool(footprint.data_available),
         z=track.z,
         params=dict(track.params),
+        body_band=_translate_optional_band(footprint.body_band, origin_y),
     )
 
 
