@@ -277,3 +277,38 @@ Check each one on the promotion head, or on an ancestor under
   different. Main-saved Sessions are converted once on load.
 - [ ] D-17: a Web PDF is 75% of its former physical size (CSS px converted to
   pt), which now matches CLI PDF and the PNG DPI.
+
+## Hosted site check and rollback
+
+After each push to `main`, the job `Hosted site serves this main commit` in
+`.github/workflows/deploy_web.yml` runs `tools/check-hosted-site.mjs`. It waits
+for the `Workers Builds: gbdraw` check run on the commit, then for the
+production Worker to serve that commit's build stamp (the `title="Commit …"`
+of the version label), and then loads the app once in Chromium. Its job
+summary names the commit, the Cloudflare Version ID, and the startup time. A
+later `main` commit already on the site counts as "superseded", not as a
+failure. The job reports only; it gates nothing.
+
+Cloudflare challenges GitHub runners on https://gbdraw.app/ (HTTP 403,
+`cf-mitigated: challenge`), so the job reads the same Worker at
+https://gbdraw.genome-kawato.workers.dev/. It does not check the custom
+domain's routing; a local run without `--url` checks https://gbdraw.app/.
+
+When the site is broken after a deploy:
+
+1. Find the last good Version ID: the `Version ID:` line of the
+   `Workers Builds: gbdraw` check run on the last good `main` commit
+   (`gh api repos/satoshikawato/gbdraw/commits/<sha>/check-runs`), or the
+   Cloudflare dashboard's Deployments list.
+2. The Owner rolls back; only the Owner has Cloudflare access. In the
+   dashboard: Workers & Pages → gbdraw → Deployments, the three-dot menu of
+   that version → Rollback. Or run
+   `npx wrangler rollback <version-id> --message "<reason>"`. Cloudflare keeps
+   the 100 most recent versions for rollback.
+3. The large Gallery files of the restored version come from
+   raw.githubusercontent.com at that version's commit, so they keep working.
+4. Confirm: dispatch `Verify hosted Web app` with `site_sha` set to the
+   restored version's commit
+   (`gh workflow run deploy_web.yml -f site_sha=<sha>`).
+5. Fix forward. `main` still holds the bad commit, and the next push to
+   `main` deploys again, so the fix goes through `dev` and a promotion.

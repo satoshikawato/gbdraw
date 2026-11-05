@@ -3,7 +3,14 @@ name: Verify hosted Web app
 on:
   push:
     branches: ["main"]
+  # A dispatch with site_sha runs only the hosted-site check against that main commit;
+  # a dispatch without it runs only the Gallery verification.
   workflow_dispatch:
+    inputs:
+      site_sha:
+        description: "Main commit to check on the hosted site (runs only that check)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -15,6 +22,7 @@ concurrency:
 jobs:
   gallery-publication-browser:
     name: Gallery publication browser (exact main SHA)
+    if: github.event_name == 'push' || inputs.site_sha == ''
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -49,3 +57,36 @@ jobs:
           node --test tests/web/gallery-session-publication.test.mjs
           python -m pytest tests/test_gallery_session_semantics.py tests/test_refresh_gallery_sessions.py -q
           python tools/gallery_artifact_manifest.py
+
+  # Reports whether the production Worker serves the Cloudflare build of this commit and
+  # starts (docs/internal/WEB_PERIODIC_AUDIT.md, "Hosted site check and rollback").
+  # Cloudflare challenges GitHub runners on gbdraw.app (HTTP 403, cf-mitigated:
+  # challenge), so the job reads the same production Worker at its workers.dev address.
+  hosted-site:
+    name: Hosted site serves this main commit
+    if: github.event_name == 'push' || inputs.site_sha != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - name: Checkout the workflow commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install Chromium for the startup check
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Check the hosted site
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SITE_SHA: ${{ inputs.site_sha || github.sha }}
+        run: node tools/check-hosted-site.mjs --sha "$SITE_SHA" --url https://gbdraw.genome-kawato.workers.dev/
