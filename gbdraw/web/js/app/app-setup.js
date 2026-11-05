@@ -68,6 +68,8 @@ import {
 import { createDrawingState, drawingHasEdits, state, sessionOperationAvailability } from '../state.js';
 import { createDrawingBar, createDrawingList, createInputReplacement, moveTabFocus } from './drawing-list.js';
 import { createRegionDrawing } from './region-drawing.js';
+import { createRegionSelect } from './region-select.js';
+import { readRegionAxisRecords } from '../services/region-axis.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -7828,6 +7830,25 @@ export const createAppSetup = () => {
     readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
     resultFeatures: shownResultFeatures
   });
+  // Select region reads the axis of the shown Result from its track-slot geometry (Python's), and its popup is the
+  // match frame's (the one Result popup).
+  const regionSelect = createRegionSelect({
+    readAxisRecords: () => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, Number(selectedResultIndex.value) || 0),
+    shownRoot: () => svgContainer.value?.querySelector('svg') ?? null,
+    layoutEdit: layoutRepositionMode,
+    openSelection: () => {
+      const item = clickedPairwiseMatch.value?.previewItem;
+      return item?.kind === 'region' ? item : null;
+    },
+    openRegionPopup: (selection, element, anchor) => featureActions.openPreviewItemPopup({ element, item: selection }, anchor),
+    closeRegionPopup: () => {
+      if (clickedPairwiseMatch.value?.previewItem?.kind === 'region') clickedPairwiseMatch.value = null;
+    },
+    drawnFeatures: () => toRaw(extractedFeatures.value) ?? [],
+    selectFeatures: (featureIds) => featureSelection.replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
+    addRegionAnnotation: annotationEditor.addRegionAnnotation,
+    newDrawingFromRegion: regionDrawings.openWithRegion
+  });
   return {
     hostedBuild: readHostedBuild(document),
     fontSettings,
@@ -7881,6 +7902,12 @@ export const createAppSetup = () => {
     selectDrawing,
     drawingList,
     regionDrawings,
+    regionSelect,
+    regionSelectOn: regionSelect.active,
+    regionSelectAvailable: regionSelect.available,
+    regionOverlay: regionSelect.overlay,
+    regionOverlayMatrix: regionSelect.overlayMatrix,
+    regionPopup: regionSelect.popup,
     drawingBar,
     drawingBarTabs,
     moveTabFocus,

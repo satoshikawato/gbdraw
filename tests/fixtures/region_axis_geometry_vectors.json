@@ -21,6 +21,7 @@
       ],
       "source": {
        "anchorBase": 1,
+       "recordBase": 1,
        "step": 1,
        "sourceLength": 48502,
        "drawnLength": 48502
@@ -33,7 +34,8 @@
         0.0
        ],
        "displayIndex": 0,
-       "sourceBase": 1
+       "sourceBase": 1,
+       "recordOffset": 0
       },
       {
        "point": [
@@ -41,7 +43,8 @@
         0.0
        ],
        "displayIndex": 1,
-       "sourceBase": 2
+       "sourceBase": 2,
+       "recordOffset": 1
       },
       {
        "point": [
@@ -49,7 +52,8 @@
         0.0
        ],
        "displayIndex": 16167,
-       "sourceBase": 16168
+       "sourceBase": 16168,
+       "recordOffset": 16167
       },
       {
        "point": [
@@ -57,7 +61,8 @@
         0.0
        ],
        "displayIndex": 24251,
-       "sourceBase": 24252
+       "sourceBase": 24252,
+       "recordOffset": 24251
       },
       {
        "point": [
@@ -65,7 +70,8 @@
         0.0
        ],
        "displayIndex": 48501,
-       "sourceBase": 48502
+       "sourceBase": 48502,
+       "recordOffset": 48501
       }
      ]
     }
@@ -110,6 +116,7 @@
       ],
       "source": {
        "anchorBase": 48502,
+       "recordBase": 48502,
        "step": -1,
        "sourceLength": 48502,
        "drawnLength": 48502
@@ -122,7 +129,8 @@
         0.0
        ],
        "displayIndex": 0,
-       "sourceBase": 48502
+       "sourceBase": 48502,
+       "recordOffset": 0
       },
       {
        "point": [
@@ -130,7 +138,8 @@
         0.0
        ],
        "displayIndex": 1,
-       "sourceBase": 48501
+       "sourceBase": 48501,
+       "recordOffset": 1
       },
       {
        "point": [
@@ -138,7 +147,8 @@
         0.0
        ],
        "displayIndex": 16167,
-       "sourceBase": 32335
+       "sourceBase": 32335,
+       "recordOffset": 16167
       },
       {
        "point": [
@@ -146,7 +156,8 @@
         135.34375
        ],
        "displayIndex": 24251,
-       "sourceBase": 24251
+       "sourceBase": 24251,
+       "recordOffset": 24251
       },
       {
        "point": [
@@ -154,7 +165,8 @@
         270.6875
        ],
        "displayIndex": 48501,
-       "sourceBase": 1
+       "sourceBase": 1,
+       "recordOffset": 48501
       }
      ]
     }
@@ -181,6 +193,7 @@
       ],
       "source": {
        "anchorBase": 9000,
+       "recordBase": 9000,
        "step": -1,
        "sourceLength": 48502,
        "drawnLength": 8000
@@ -193,7 +206,8 @@
         0.0
        ],
        "displayIndex": 0,
-       "sourceBase": 9000
+       "sourceBase": 9000,
+       "recordOffset": 0
       },
       {
        "point": [
@@ -201,7 +215,8 @@
         0.0
        ],
        "displayIndex": 1,
-       "sourceBase": 8999
+       "sourceBase": 8999,
+       "recordOffset": 1
       },
       {
        "point": [
@@ -209,7 +224,8 @@
         0.0
        ],
        "displayIndex": 2666,
-       "sourceBase": 6334
+       "sourceBase": 6334,
+       "recordOffset": 2666
       },
       {
        "point": [
@@ -217,7 +233,8 @@
         0.0
        ],
        "displayIndex": 4000,
-       "sourceBase": 5000
+       "sourceBase": 5000,
+       "recordOffset": 4000
       },
       {
        "point": [
@@ -225,7 +242,8 @@
         0.0
        ],
        "displayIndex": 7999,
-       "sourceBase": 1001
+       "sourceBase": 1001,
+       "recordOffset": 7999
       }
      ]
     },
@@ -247,6 +265,7 @@
       ],
       "source": {
        "anchorBase": 1,
+       "recordBase": 1,
        "step": 1,
        "sourceLength": 48502,
        "drawnLength": 48502
@@ -259,7 +278,8 @@
         0.0
        ],
        "displayIndex": 0,
-       "sourceBase": 1
+       "sourceBase": 1,
+       "recordOffset": 0
       },
       {
        "point": [
@@ -267,7 +287,8 @@
         0.0
        ],
        "displayIndex": 1,
-       "sourceBase": 2
+       "sourceBase": 2,
+       "recordOffset": 1
       },
       {
        "point": [
@@ -275,7 +296,8 @@
         0.0
        ],
        "displayIndex": 16167,
-       "sourceBase": 16168
+       "sourceBase": 16168,
+       "recordOffset": 16167
       },
       {
        "point": [
@@ -283,7 +305,8 @@
         0.0
        ],
        "displayIndex": 24251,
-       "sourceBase": 24252
+       "sourceBase": 24252,
+       "recordOffset": 24251
       },
       {
        "point": [
@@ -291,7 +314,8 @@
         0.0
        ],
        "displayIndex": 48501,
-       "sourceBase": 48502
+       "sourceBase": 48502,
+       "recordOffset": 48501
       }
      ]
     }
@@ -312,6 +336,7 @@
       "degreesPerBp": 0.021727322107551572,
       "source": {
        "anchorBase": 16000,
+       "recordBase": 1,
        "step": 1,
        "sourceLength": 16569,
        "drawnLength": 16569
@@ -324,7 +349,8 @@
         -367.574993
        ],
        "displayIndex": 0,
-       "sourceBase": 16000
+       "sourceBase": 16000,
+       "recordOffset": 15999
       },
       {
        "point": [
@@ -332,7 +358,8 @@
         -367.574941
        ],
        "displayIndex": 1,
-       "sourceBase": 16001
+       "sourceBase": 16001,
+       "recordOffset": 16000
       },
       {
        "point": [
@@ -340,7 +367,8 @@
         183.847854
        ],
        "displayIndex": 5523,
-       "sourceBase": 4954
+       "sourceBase": 4954,
+       "recordOffset": 4953
       },
       {
        "point": [
@@ -348,7 +376,8 @@
         367.575
        ],
        "displayIndex": 8284,
-       "sourceBase": 7715
+       "sourceBase": 7715,
+       "recordOffset": 7714
       },
       {
        "point": [
@@ -356,7 +385,8 @@
         -367.574993
        ],
        "displayIndex": 16568,
-       "sourceBase": 15999
+       "sourceBase": 15999,
+       "recordOffset": 15998
       }
      ]
     }
@@ -377,6 +407,7 @@
       "degreesPerBp": 0.021727322107551572,
       "source": {
        "anchorBase": 1,
+       "recordBase": 1,
        "step": 1,
        "sourceLength": 16569,
        "drawnLength": 16569
@@ -389,7 +420,8 @@
         -214.839574
        ],
        "displayIndex": 0,
-       "sourceBase": 1
+       "sourceBase": 1,
+       "recordOffset": 0
       },
       {
        "point": [
@@ -397,7 +429,8 @@
         -214.839544
        ],
        "displayIndex": 1,
-       "sourceBase": 2
+       "sourceBase": 2,
+       "recordOffset": 1
       },
       {
        "point": [
@@ -405,7 +438,8 @@
         107.455065
        ],
        "displayIndex": 5523,
-       "sourceBase": 5524
+       "sourceBase": 5524,
+       "recordOffset": 5523
       },
       {
        "point": [
@@ -413,7 +447,8 @@
         214.839578
        ],
        "displayIndex": 8284,
-       "sourceBase": 8285
+       "sourceBase": 8285,
+       "recordOffset": 8284
       },
       {
        "point": [
@@ -421,7 +456,8 @@
         -214.839574
        ],
        "displayIndex": 16568,
-       "sourceBase": 16569
+       "sourceBase": 16569,
+       "recordOffset": 16568
       }
      ]
     },
@@ -437,6 +473,7 @@
       "degreesPerBp": 0.00742237433507853,
       "source": {
        "anchorBase": 1,
+       "recordBase": 1,
        "step": 1,
        "sourceLength": 48502,
        "drawnLength": 48502
@@ -449,7 +486,8 @@
         -367.574999
        ],
        "displayIndex": 0,
-       "sourceBase": 1
+       "sourceBase": 1,
+       "recordOffset": 0
       },
       {
        "point": [
@@ -457,7 +495,8 @@
         -367.574993
        ],
        "displayIndex": 1,
-       "sourceBase": 2
+       "sourceBase": 2,
+       "recordOffset": 1
       },
       {
        "point": [
@@ -465,7 +504,8 @@
         183.794373
        ],
        "displayIndex": 16167,
-       "sourceBase": 16168
+       "sourceBase": 16168,
+       "recordOffset": 16167
       },
       {
        "point": [
@@ -473,7 +513,8 @@
         367.574999
        ],
        "displayIndex": 24251,
-       "sourceBase": 24252
+       "sourceBase": 24252,
+       "recordOffset": 24251
       },
       {
        "point": [
@@ -481,7 +522,8 @@
         -367.574999
        ],
        "displayIndex": 48501,
-       "sourceBase": 48502
+       "sourceBase": 48502,
+       "recordOffset": 48501
       }
      ]
     }

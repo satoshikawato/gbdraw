@@ -92,6 +92,12 @@ def _source_base(source: dict[str, int], index: int) -> int:
     return (source["anchorBase"] - 1 + source["step"] * index) % source["sourceLength"] + 1
 
 
+def _record_offset(source: dict[str, int], base: int) -> int:
+    """The 0-based base of the drawn record (its feature coordinates) that shows source ``base``."""
+
+    return (source["step"] * (base - source["recordBase"])) % source["sourceLength"]
+
+
 def _probe_indexes(drawn_length: int) -> list[int]:
     return sorted({0, 1, drawn_length // 3, drawn_length // 2, drawn_length - 1})
 
@@ -110,8 +116,14 @@ def _probes(axis: dict[str, Any]) -> list[dict[str, Any]]:
             row = next(row for row in axis["rows"] if row["displayStart"] <= index < row["displayEnd"])
             px_per_bp = (row["xEndPx"] - row["xStartPx"]) / (row["displayEnd"] - row["displayStart"])
             point = [row["xStartPx"] + px_per_bp * (index - row["displayStart"] + 0.5), row["yPx"]]
+        base = _source_base(source, index)
         probes.append(
-            {"point": [round(value, 6) for value in point], "displayIndex": index, "sourceBase": _source_base(source, index)}
+            {
+                "point": [round(value, 6) for value in point],
+                "displayIndex": index,
+                "sourceBase": base,
+                "recordOffset": _record_offset(source, base),
+            }
         )
     return probes
 
@@ -169,6 +181,11 @@ def test_source_bases_are_the_input_file_coordinates() -> None:
     assert ends("circular-display-start") == [("mito", 16_000, 15_999)]
     mito = _case("circular-display-start")[0]["axis"]["source"]
     assert _source_base(mito, 569) == 16_569 and _source_base(mito, 570) == 1
+    # The record's own bases count from its first base: display start moves the
+    # drawing, not the feature coordinates; a crop counts from its first base.
+    assert _record_offset(mito, 16_000) == 15_999
+    crop = _case("linear-two-records-crop-reverse")[0]["axis"]["source"]
+    assert _record_offset(crop, 9_000) == 0 and _record_offset(crop, 1_001) == 7_999
 
 
 def _translate(element: ElementTree.Element) -> tuple[float, float]:

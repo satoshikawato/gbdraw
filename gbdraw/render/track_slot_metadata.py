@@ -24,9 +24,13 @@ class AxisSourceMap(TypedDict):
     display index); display index ``i`` shows source base
     ``(anchorBase - 1 + step * i) mod sourceLength + 1`` (1-based, the input
     file's coordinates; ``step`` -1 on a reverse-complemented record).
+    ``recordBase`` is the source base of the drawn record's first base (its
+    feature coordinates count from it): record base ``k`` (0-based) is source
+    base ``(recordBase - 1 + step * k) mod sourceLength + 1``.
     """
 
     anchorBase: int
+    recordBase: int
     step: Literal[-1, 1]
     sourceLength: int
     drawnLength: int
@@ -84,6 +88,7 @@ def axis_source_map(transform: RecordDisplayTransform, drawn_length: int) -> Axi
 
     return {
         "anchorBase": transform.display_index_to_source_base(0),
+        "recordBase": transform.source_base,
         "step": transform.source_step,
         "sourceLength": int(transform.length),
         "drawnLength": int(drawn_length),

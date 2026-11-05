@@ -1386,6 +1386,25 @@
             background: rgba(37, 99, 235, 0.12);
             box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
         }
+        .region-select-band {
+            fill: rgba(37, 99, 235, 0.16);
+            stroke: #2563eb;
+            stroke-width: 1.5;
+            vector-effect: non-scaling-stroke;
+        }
+        .region-select-readout {
+            position: fixed;
+            z-index: 35;
+            pointer-events: none;
+            padding: 0.125rem 0.5rem;
+            border-radius: 0.375rem;
+            background: #1e3a8a;
+            color: #fff;
+            font-size: 0.75rem;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+        .preview-canvas.region-select-on { cursor: crosshair !important; }
         .feature-selection-toolbar {
             position: absolute;
             top: 8.5rem;
@@ -6784,6 +6803,8 @@
                     <div v-if="featureSelectionDrag.active"
                          class="feature-selection-marquee"
                          :style="featureSelectionMarqueeStyle"></div>
+                    <div v-if="regionOverlay && regionOverlay.readout" class="region-select-readout" data-region-select-readout
+                         :style="{ left: `${regionOverlay.readoutX + 14}px`, top: `${regionOverlay.readoutY + 14}px` }">{{ regionOverlay.readout }}</div>
 
                     <!-- Zoom and Canvas controls -->
                     <!-- Preview-only target hint; the toolbar also explains keyboard/touch activation.
@@ -6838,6 +6859,11 @@
                     <div class="preview-canvas absolute inset-0 overflow-auto flex p-2 custom-scrollbar"
                          ref="canvasContainerRef"
                          style="cursor: grab;"
+                         :class="{ 'region-select-on': regionSelectOn }"
+                         @pointerdown.capture="regionSelect.pointerDown"
+                         @pointermove.capture="regionSelect.pointerMove"
+                         @pointerup.capture="regionSelect.pointerUp"
+                         @pointercancel.capture="regionSelect.pointerCancel"
                          @wheel.prevent="handleWheel"
                          @mousedown="startPan"
                          @mousemove="doPan"
@@ -6852,6 +6878,10 @@
                             class="gbdraw-preview-surface shadow-xl bg-white m-auto origin-top">
                         </div>
                     </div>
+                    <!-- The selected region's band, drawn over the Result (never in it) in the record's frame. -->
+                    <svg v-if="regionOverlay" :ref="regionSelect.bindOverlay" class="region-select-overlay absolute inset-0 w-full h-full pointer-events-none z-10" aria-hidden="true">
+                        <path v-if="regionOverlayMatrix" :ref="regionSelect.bindBand" data-region-select-band :transform="regionOverlayMatrix" :d="regionOverlay.path" class="region-select-band"></path>
+                    </svg>
 
                     <Teleport to="body">
                     <!-- Feature Editor Popup -->
@@ -7386,7 +7416,7 @@
                             <color-swatch v-if="!previewItemView || previewItemView.kind === 'legend-entry'"
                                  class="w-4 h-4 shrink-0 rounded mt-1 border border-slate-200"
                                  :color="(previewItemView && previewItemView.color) || clickedPairwiseMatch.fill || '#94a3b8'"></color-swatch>
-                            <i v-else class="ph ph-text-aa text-slate-500 mt-1 shrink-0" aria-hidden="true"></i>
+                            <i v-else class="ph text-slate-500 mt-1 shrink-0" :class="previewItemView && previewItemView.kind === 'region' ? 'ph-selection' : 'ph-text-aa'" aria-hidden="true"></i>
                             <div v-if="previewItemView" class="min-w-0">
                                 <div class="text-base font-bold text-slate-700 line-clamp-2 break-words" data-match-popup-title>{{ previewItemView.title }}</div>
                                 <div v-if="previewItemView.subtitle" class="text-xs text-slate-500 mt-0.5 break-words" data-preview-item-subtitle>{{ previewItemView.subtitle }}</div>
@@ -7488,6 +7518,21 @@
                                         </button>
                                     </div>
                                     <p v-else class="match-muted" data-preview-record-unmatched>{{ previewItemView.editHint }}</p>
+                                </div>
+                                <!-- Region: the features fully inside the span and its actions (app/region-select.js). -->
+                                <div v-else-if="previewItemView && previewItemView.kind === 'region' && regionPopup" :key="`region-popup-${previewItemView.identity}`" v-dialog-focus class="space-y-3" data-preview-item-popup="region">
+                                    <p class="text-xs text-slate-600" tabindex="-1" data-dialog-initial-focus data-region-feature-count>{{ regionPopup.featureText }}</p>
+                                    <div class="match-actions">
+                                        <button type="button" class="match-link" data-history-ignore data-region-select-features
+                                                :disabled="regionPopup.featureCount === 0" @click="regionSelect.selectFeaturesInside()">{{ regionPopup.selectFeaturesText }}</button>
+                                        <button type="button" class="match-link" data-region-add-annotation
+                                                :disabled="!semanticMutationAvailable" @click="regionSelect.addToAnnotationSet()">{{ t('Add to annotation set') }}</button>
+                                        <button type="button" class="match-link" data-history-ignore data-region-new-drawing
+                                                :disabled="!drawingSwitchAvailable || !!regionPopup.newDrawingReason"
+                                                :aria-describedby="regionPopup.newDrawingReason ? 'region-new-drawing-reason' : null"
+                                                @click="regionSelect.newDrawing()">{{ t('New drawing from region') }}</button>
+                                    </div>
+                                    <p v-if="regionPopup.newDrawingReason" id="region-new-drawing-reason" class="match-muted" data-region-new-drawing-reason>{{ regionPopup.newDrawingReason }}</p>
                                 </div>
                                 <p v-else class="match-muted">{{ t('This item is no longer in the diagram.') }}</p>
                             </template>
@@ -8928,7 +8973,7 @@
                             <span>{{ t('Reset Layout') }}</span>
                         </button>
                         <!-- Layout reposition mode toggle -->
-                        <button v-if="svgContent" @click="layoutRepositionMode = !layoutRepositionMode" data-history-ignore
+                        <button v-if="svgContent" @click="regionSelect.toggleLayoutEdit()" data-history-ignore
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
                                 :title="layoutRepositionMode ? t('Layout edit is on: drag a legend, title, or Linear scale to move it. Turn off to pan.') : t('Turn on to move a legend, title, or Linear scale. While off, dragging pans the view.')"
                                 :aria-pressed="layoutRepositionMode"
@@ -8959,6 +9004,21 @@
                             <span>{{ t('Search') }}</span>
                             <span v-if="previewFeatureSearchHiddenMatchCount !== null" class="preview-search-count">· {{ previewFeatureSearchHiddenMatchCount }}</span>
                         </button>
+                        <!-- Select region: a drag along a record's axis selects a span (turning it on turns Layout edit off). -->
+                        <button v-if="svgContent" type="button" @click="regionSelect.toggle()"
+                                data-history-ignore
+                                data-region-select-toggle
+                                class="flex items-center gap-2 px-3 py-2 shadow rounded-lg border hover:bg-slate-100 text-slate-600 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                :class="regionSelectOn ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200'"
+                                :disabled="!regionSelectAvailable"
+                                :title="regionSelectAvailable ? t('Drag along a record to select a region') : t('Generate to enable region selection')"
+                                :aria-pressed="regionSelectOn"
+                                :aria-describedby="regionSelectAvailable ? null : 'region-select-unavailable'"
+                                :aria-label="t('Toggle region selection')">
+                            <i class="ph ph-selection" aria-hidden="true"></i>
+                            <span>{{ t('Select region') }}</span>
+                        </button>
+                        <span v-if="svgContent && !regionSelectAvailable" id="region-select-unavailable" class="sr-only">{{ t('Generate to enable region selection') }}</span>
                         <!-- Zoom controls -->
                         <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
                             <button @click="zoom = Math.min(5, Math.round((zoom + 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" :aria-label="t('Zoom in')"><i class="ph ph-plus" aria-hidden="true"></i></button>

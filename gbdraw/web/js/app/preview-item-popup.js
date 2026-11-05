@@ -3,6 +3,7 @@
 /** @import { LegendRow } from '../services/drawing/paint.js' */
 /** @import { DrawnTrack } from '../services/track-legend-rows.js' */
 /** @import { SettingApplicationId } from '../services/setting-application.js' */
+/** @import { RegionSelection } from '../services/region-axis.js' */
 // The legend-entry and record-definition popups of the preview. A click (or
 // Enter) on a Legend row or a record definition opens the match popup frame
 // with a `previewItem`; this owner derives what the popup shows from the
@@ -17,6 +18,7 @@ import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
 } from '../services/linear-sources.js';
+import { regionSelectionHeading } from '../services/region-axis.js';
 import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js';
 import { msg, t, tn, tm, tx } from '../utils/i18n.js';
 
@@ -24,7 +26,8 @@ import { msg, t, tn, tm, tx } from '../utils/i18n.js';
  * The item a preview popup is about: a Legend row by its key, or the
  * definition of the Result's record at `recordIndex`.
  * @typedef {{ kind: 'legend-entry', key: string }
- *   | { kind: 'record-definition', recordIndex: number, recordId: string }} PreviewItem
+ *   | { kind: 'record-definition', recordIndex: number, recordId: string }
+ *   | RegionSelection} PreviewItem
  * @typedef {{ previewItem?: PreviewItem, matchesReady?: boolean }} PreviewItemPayload
  * @typedef {{ label: string, value: string }} PreviewItemFact
  * @typedef {{ feat?: unknown, qual?: unknown, val?: unknown }} ColorRuleLike
@@ -465,10 +468,19 @@ export const createPreviewItemPopup = ({
     });
   };
 
+  /** The Region popup's heading; its body is the Select region owner's (`app/region-select.js`). @param {RegionSelection} item */
+  const regionView = (item) => ({
+    kind: /** @type {const} */ ('region'),
+    identity: `region:${item.resultIndex}:${item.recordKey}:${item.span.start}:${item.span.length}`,
+    dialogLabel: t('Region'),
+    ...regionSelectionHeading(item)
+  });
+
   const view = computed(() => {
     const opened = state.clickedPairwiseMatch.value;
     const item = opened?.previewItem;
     if (!item) return null;
+    if (item.kind === 'region') return regionView(item);
     return item.kind === 'legend-entry' ? legendView(item.key, Boolean(opened?.matchesReady)) : recordView(item);
   });
 

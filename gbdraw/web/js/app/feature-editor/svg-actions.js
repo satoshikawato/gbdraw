@@ -934,7 +934,8 @@ export const createFeatureSvgActions = ({
 
   // A Legend row or a record definition opens its popup in the match popup
   // frame while Layout edit is off; with it on, a press drags them. A Legend
-  // row opens only when the drawing lists it (not a track-data row).
+  // row opens only when the drawing lists it (not a track-data row). A
+  // selected region (`app/region-select.js`) opens there beside its band.
   /** @param {{ element: Element, item: import('../preview-item-popup.js').PreviewItem }} target @param {{ clientX?: number, clientY?: number }} eventLike */
   const openPreviewItemPopup = ({ element, item }, eventLike) => {
     if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value || previewPopupsHeld()) return false;
@@ -2174,6 +2175,7 @@ export const createFeatureSvgActions = ({
     showFeaturePopupAtFeature,
     preparePairwiseInteractionAffordances,
     preparePreviewItemAffordances,
+    openPreviewItemPopup,
     dispose
   };
 };
