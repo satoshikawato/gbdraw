@@ -62,8 +62,10 @@ class RsyncableGzipWriter(io.BufferedIOBase):
         view = memoryview(data).cast("B")
         self._crc = zlib.crc32(view, self._crc)
         self._size += len(view)
-        self._pending += view
-        self._cut_pending()
+        # In pieces, so one large write is not copied whole into ``_pending``.
+        for start in range(0, len(view), _MAX_PENDING):
+            self._pending += view[start : start + _MAX_PENDING]
+            self._cut_pending()
         return len(view)
 
     def _cut_pending(self) -> None:

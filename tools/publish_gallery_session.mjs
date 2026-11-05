@@ -60,6 +60,8 @@ const runPython = (task, source, args, input) => new Promise((resolve, reject) =
   child.stdout.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
   child.stderr.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
   child.on('error', reject);
+  // A Python that exits before it reads its input (EPIPE) is reported by `close` with its stderr.
+  child.stdin.on('error', () => {});
   child.on('close', (code) => {
     if (code === 0) resolve(stdout);
     else reject(new Error(`Python's ${task} failed (exit ${code}):\n${stderr}`));
