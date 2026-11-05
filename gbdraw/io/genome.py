@@ -294,7 +294,7 @@ def load_fasta(
     The one loader of a FASTA-only input (CLI, Python API, the Web's Worker
     helper). A FASTA file in a GFF3 + FASTA pair is read by
     :func:`parse_gff_fasta` instead, where only the entries the GFF3 names are
-    records. A FASTA record makes no topology claim (``_detected_topology`` gives
+    records. A FASTA record makes no topology claim (``detected_topology`` gives
     ``"unknown"``).
     """
 

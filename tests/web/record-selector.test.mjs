@@ -570,4 +570,44 @@ assert.equal(readyController.optionsFor(reuseState.activeDrawing(), reuseState.l
   assert.equal(perDrawing.statusFor(copy, copy.linearSeqs[0]), 'idle', 'a deleted drawing keeps no state');
 }
 
+// D-37 / OV-2563: a Linear card's annotation catalog source carries the error model its record select
+// stores (catalogStateFor, what app-setup's linearAnnotationSource spreads), so the catalog says what the
+// card says: a refused read is INPUT_UNREADABLE, a parse failure keeps its own code and reason, and the
+// text is the card's apart from the catalog's sequence locator.
+{
+  const { buildAnnotationRecordCatalog } = await import(pathToFileURL(join(sourceRoot, 'annotations', 'record-catalog.js')));
+  const { readFileBytes } = await import(pathToFileURL(join(sourceRoot, '..', 'services', 'file-content-cache.js')));
+  const { diagnosticError, normalizeUserFacingError } = await import(pathToFileURL(join(sourceRoot, '..', 'utils', 'error-normalization.js')));
+  const { errorText } = await import(pathToFileURL(join(sourceRoot, '..', 'utils', 'error-text.js')));
+  const refusedFile = { name: 'gone.gb', async arrayBuffer() { throw new DOMException('gone', 'NotReadableError'); } };
+  const failures = [
+    ['INPUT_UNREADABLE', () => readFileBytes(refusedFile)],
+    ['INPUT_INVALID', async () => { throw { code: 'INPUT_INVALID', operation: 'listSequenceRecords', stage: 'helper', context: { reason: 'NOT_GENBANK' } }; }]
+  ];
+  for (const [code, recordReader] of failures) {
+    const failedState = {
+      mode: ref('linear'),
+      inputType: ref('gb'),
+      linearSeqs: [{ uid: `failed-${code}`, gb: { name: 'input.gb' }, fasta: null, region_record_id: '' }]
+    };
+    const failedController = createLinearRecordSelector({
+      state: withShownDrawing(failedState), reactive: (value) => value, recordReader, logger: { warn: () => {} }
+    });
+    const drawing = failedState.activeDrawing();
+    const [seq] = failedState.linearSeqs;
+    await failedController.refresh(drawing);
+    assert.equal(failedController.errorModelFor(drawing, seq).code, code);
+    const catalog = buildAnnotationRecordCatalog({
+      mode: 'linear',
+      linearSources: [{ sourceKey: seq.uid, selector: '', drawn: true, hasInput: true, ...failedController.catalogStateFor(drawing, seq) }]
+    });
+    const [issue] = catalog.issues;
+    assert.equal(issue.code, code, `the catalog says ${code}, as the card does`);
+    const { inputOrdinal, ...context } = issue.context;
+    assert.equal(inputOrdinal, 1);
+    const catalogText = errorText(normalizeUserFacingError(diagnosticError(issue.code, context)).summaryParts);
+    assert.equal(catalogText, failedController.errorFor(drawing, seq), `${code}: the catalog text is the card text`);
+  }
+}
+
 console.log('record selector tests passed');

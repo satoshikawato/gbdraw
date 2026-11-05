@@ -114,6 +114,7 @@ from gbdraw.labels.filtering import (
     read_qualifier_priority_file,
 )
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_transform import detected_topology
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
 from gbdraw.layout.record_placement import FeatureAnchorPlacement, resolve_record_row_positions
@@ -176,7 +177,6 @@ from .record_planning import (
     ResolvedRecordCollection,
     ResolvedRecordDisplay,
     ResolvedRecordProvenance,
-    _detected_topology,
     _gff_feature_types,
     _load_source_records,
     _prepared_source_cache_spec,
@@ -1663,7 +1663,7 @@ def _coerce_resolved_collection(
                 ),
                 display=record_input.display,
                 source_length=record.annotations.get("gbdraw_source_length"),
-                detected_topology=_detected_topology(record, source_kind),
+                detected_topology=detected_topology(record, source_kind),
                 # The records are the caller's: capture without stamping them.
                 source_features=capture_source_features(record, stamp=False),
             )

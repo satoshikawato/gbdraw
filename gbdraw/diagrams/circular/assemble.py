@@ -81,6 +81,7 @@ from ...labels.circular_types import CircularLabel, CircularLabelCandidate, Circ
 from ...labels.fit import DEFINITION_FONT_PATH, FITS, LabelFit, LabelFitValue, LabelKind
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
+from ...layout.record_transform import bind_record_transforms
 from ...render.track_slot_metadata import RecordAxisInput, circular_axis_geometry
 from ...layout.circular import (
     CircularAxisLayout,
@@ -3116,7 +3117,7 @@ def add_record_on_circular_canvas(
         canvas,
         "_gbdraw_track_slot_geometry",
         _serialize_circular_track_slot_geometry(
-            drawn=RecordAxisInput(record.gb_record, record_key, presentation.record_transform),
+            drawn=RecordAxisInput(record.gb_record, record_key, bind_record_transforms((record.gb_record,), None if presentation.record_transform is None else (presentation.record_transform,))[0]),
             radial_layout=radial_layout,
             layout_slots=layout_slots,
             base_radius_px=float(canvas_config.radius),

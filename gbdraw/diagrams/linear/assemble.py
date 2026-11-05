@@ -131,6 +131,7 @@ from ...layout.linear_multi_record import (
     stable_record_keys,
 )
 from ...layout.record_coordinates import RecordDisplayTransform
+from ...layout.record_transform import bind_record_transforms
 from ...layout.record_placement import FeatureAnchorPlacement, resolve_record_row_positions
 from ...layout.similarity_alignment import (
     AlignmentDecisionStatus,
@@ -4150,7 +4151,8 @@ def _attach_linear_facts(
         "_gbdraw_track_slot_geometry",
         _serialize_linear_track_slot_geometry(
             record_axes=RecordAxisInput.of_records(
-                record_inputs.records, plan.frame.record_keys, record_inputs.record_transforms
+                record_inputs.records, plan.frame.record_keys,
+                bind_record_transforms(record_inputs.records, record_inputs.record_transforms),
             ),
             layout=plan.tracks.linear_track_layout,
             record_plans=plan.vertical.record_vertical_plans,

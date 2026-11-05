@@ -19,7 +19,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import VerticalBand
 from gbdraw.layout.linear_multi_record import stable_record_keys
 from gbdraw.layout.record_coordinates import RecordDisplayTransform, wrapped_row_count
-from gbdraw.layout.record_transform import unset_record_transform
+from gbdraw.layout.record_transform import bind_record_transforms
 from gbdraw.layout.record_placement import FeatureAnchorPlacement
 
 
@@ -140,7 +140,7 @@ def resolve_wrap(
     row_length = resolve_wrap_length(requested, lengths)
     if row_length is None:
         return transforms, None
-    bound = transforms if transforms is not None else [unset_record_transform(record) for record in records]
+    bound = bind_record_transforms(records, transforms)
     wrapped = tuple(
         transform.with_wrap(row_length, length) if is_cut(length, row_length) else transform
         for transform, length in zip(bound, lengths, strict=True)

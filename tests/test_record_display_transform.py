@@ -488,3 +488,86 @@ def test_projection_rejects_out_of_source_domain():
 def test_series_rejects_nonfinite_or_coerced_values(position, value):
     with pytest.raises(ValidationError):
         SeriesPoint(position, value)
+
+
+@pytest.mark.parametrize("topology", ["circular", "linear", None, "CIRCULAR "])
+@pytest.mark.parametrize("coord_map", [None, (200, -1)])
+def test_unbound_transform_is_the_one_the_planner_binds_to_an_in_memory_record(topology, coord_map):
+    # A low-level builder called with no transform (gbdraw.api.diagram's builders, resolve_annotations) draws the
+    # record by the transform the planner binds to it, circularity included: one owner of circularity.
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.api.record_planning import resolve_record_inputs
+    from gbdraw.api.requests import InMemoryRecordSource
+    from gbdraw.layout.record_transform import unset_record_transform
+
+    record = SeqRecord(Seq("ACGT" * 50), id="memory")
+    if topology is not None:
+        record.annotations["topology"] = topology
+    if coord_map is not None:
+        record.annotations["gbdraw_coord_base"], record.annotations["gbdraw_coord_step"] = coord_map
+    planned = resolve_record_inputs(
+        [RecordInput(InMemoryRecordSource(record), record_key="memory")],
+        gff_candidate_features=None,
+        gff_keep_all_features=False,
+    )
+    assert unset_record_transform(record) == planned.transforms[0]
+    assert planned.provenance[0].is_circular is (str(topology).strip().lower() == "circular")
+
+
+@pytest.mark.parametrize("region", ["r:101-400", "r:101-400:rc"])
+def test_unbound_transform_of_a_cropped_record_is_the_planners(region):
+    # A crop records its complete source length; the unbound transform keeps it, as the planner does.
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.api.record_planning import resolve_record_inputs
+    from gbdraw.api.requests import InMemoryRecordSource
+    from gbdraw.io.regions import crop_record_to_region, parse_region_spec
+    from gbdraw.layout.record_transform import unset_record_transform
+
+    source = SeqRecord(Seq("ACGT" * 250), id="r", annotations={"topology": "circular"})
+    cropped = crop_record_to_region(source, parse_region_spec(region))
+    planned = resolve_record_inputs(
+        [RecordInput(InMemoryRecordSource(cropped), record_key="r")],
+        gff_candidate_features=None,
+        gff_keep_all_features=False,
+    )
+    assert unset_record_transform(cropped) == planned.transforms[0]
+    assert unset_record_transform(cropped).length == 1000
+
+
+def test_the_axis_of_a_wrapped_unbound_circular_record_may_cross_its_origin():
+    # The region axis reads circularity from the transform the record is drawn by. With no planner transform, a
+    # circular record's axis said it may cross the origin unwrapped (the file's topology) and may not when wrapped
+    # (the wrap bound a transform that was never circular); both now follow the planner's circularity.
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.layout.linear_wrap import resolve_wrap
+    from gbdraw.layout.record_transform import unset_record_transform
+    from gbdraw.render.track_slot_metadata import RecordAxisInput
+
+    record = SeqRecord(Seq("A" * 1000), id="r", annotations={"topology": "circular"})
+    wrapped, _summary = resolve_wrap(400, [record], None)
+    for transform in (unset_record_transform(record), wrapped[0]):
+        assert RecordAxisInput(record, "r", transform).source()["isCircular"] is True
+
+
+def test_a_wrapped_unbound_circular_record_keeps_its_origin_crossing_annotation():
+    # OV-2564: with no planner transform, the wrap bound a transform that was never circular, so a circular record
+    # refused an origin-crossing annotation when wrapped and drew it when not.
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.annotations.models import AnnotationSet, CoordinateSpan, RegionAnnotation
+    from gbdraw.annotations.resolve import resolve_annotations
+    from gbdraw.layout.linear_wrap import resolve_wrap
+
+    record = SeqRecord(Seq("A" * 1000), id="r", annotations={"topology": "circular"})
+    sets = [AnnotationSet("s", (RegionAnnotation("a", CoordinateSpan(None, 900, 100, wraps_origin=True)),))]
+    wrapped, _summary = resolve_wrap(400, [record], None)
+    for transforms in (None, wrapped):
+        bundle = resolve_annotations(sets, [record], mode="linear", record_transforms=transforms)
+        assert [item.segments for item in bundle.annotations] == [((0, 100), (899, 1000))]

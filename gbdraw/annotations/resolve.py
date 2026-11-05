@@ -21,7 +21,7 @@ from gbdraw.features.selector_values import (
 )
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import spans_may_cross_origin
+from gbdraw.layout.record_transform import bind_record_transforms, spans_may_cross_origin
 
 from .io import annotation_sets_from_dataframe, read_annotation_table
 from .models import (
@@ -288,6 +288,7 @@ def resolve_annotation_set(
         raise ValidationError("Annotation resolver mode must be 'circular' or 'linear'.")
     resolved: list[ResolvedRegionAnnotation] = []
     warnings: list[ResolutionWarning] = []
+    transforms = bind_record_transforms(records, record_transforms)
     for annotation in annotation_set.annotations:
         target = annotation.target
         binding = (
@@ -301,8 +302,7 @@ def resolve_annotation_set(
             else _bind_record(records, target.record)
         )
         record = records[record_index]
-        transform = record_transforms[record_index] if record_transforms is not None else None
-        is_circular = spans_may_cross_origin(record, transform)
+        is_circular = spans_may_cross_origin(record, transforms[record_index])
         clipped = False
         if isinstance(target, CoordinateSpan):
             segments, clipped = _coordinate_segments(target, record, is_circular=is_circular)

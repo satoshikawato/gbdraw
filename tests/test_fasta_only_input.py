@@ -18,11 +18,12 @@ import pytest
 
 import gbdraw
 from gbdraw.api import FastaInputSource
-from gbdraw.api.record_planning import _detected_topology, record_input_manifest_from_table, resolve_record_inputs
+from gbdraw.api.record_planning import record_input_manifest_from_table, resolve_record_inputs
 from gbdraw.circular import circular_main
 from gbdraw.cli_utils.common import add_input_args, validate_input_args
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.genome import load_fasta, load_gff_fasta
+from gbdraw.layout.record_transform import detected_topology
 from gbdraw.linear import linear_main
 from gbdraw.web_support.error_adapter import serialize_web_error
 
@@ -39,7 +40,7 @@ def test_load_fasta_reads_every_entry_as_a_record_without_features(tmp_path: Pat
     ]
     assert records[0].annotations["gbdraw_source_file"] == str(tmp_path / "two.fasta")
     # The file makes no topology claim.
-    assert [_detected_topology(record, "fasta") for record in records] == ["unknown", "unknown"]
+    assert [detected_topology(record, "fasta") for record in records] == ["unknown", "unknown"]
 
 
 def test_load_fasta_reads_gzip_and_applies_selector_and_reverse(tmp_path: Path) -> None:

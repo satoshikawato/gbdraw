@@ -18,7 +18,7 @@ from typing import Any, Literal, Mapping, Sequence, TypedDict
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import bound_record_transform, spans_may_cross_origin
+from gbdraw.layout.record_transform import spans_may_cross_origin
 from gbdraw.svg.circular_arcs import position_angle
 
 
@@ -96,38 +96,38 @@ class RadialExtent(TypedDict):
 @dataclass(frozen=True)
 class RecordAxisInput:
     """One drawn record as its axis is built from: the record, its identity in the
-    Result (``recordKey``), and the transform a plan bound to it (``None``: the one
-    its coordinate map gives)."""
+    Result (``recordKey``), and the transform it is drawn by (the plan's, or
+    ``bind_record_transforms``' for a record no plan bound one to)."""
 
     record: SeqRecord
     record_key: str
-    transform: RecordDisplayTransform | None = None
+    transform: RecordDisplayTransform
 
     @classmethod
     def of_records(
         cls,
         records: Sequence[SeqRecord],
         record_keys: Sequence[str],
-        transforms: Sequence[RecordDisplayTransform] | None,
+        transforms: Sequence[RecordDisplayTransform],
     ) -> list[RecordAxisInput]:
         """One input per drawn record, in drawing order."""
 
         return [
-            cls(record, str(record_keys[index]), transforms[index] if transforms is not None else None)
-            for index, record in enumerate(records)
+            cls(record, str(record_key), transform)
+            for record, record_key, transform in zip(records, record_keys, transforms, strict=True)
         ]
 
     def source(self) -> AxisSourceMap:
         """Which source base each drawn base of the record shows."""
 
-        transform = bound_record_transform(self.record, self.transform)
+        transform = self.transform
         return {
             "anchorBase": transform.display_index_to_source_base(0),
             "recordBase": transform.source_base,
             "step": transform.source_step,
             "sourceLength": int(transform.length),
             "drawnLength": len(self.record.seq),
-            "isCircular": spans_may_cross_origin(self.record, self.transform),
+            "isCircular": spans_may_cross_origin(self.record, transform),
         }
 
 

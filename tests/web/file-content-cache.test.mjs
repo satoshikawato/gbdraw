@@ -123,3 +123,26 @@ assert.equal(bytesToText(await readFileBytes(gzipFile)), 'LOCUS gzipped');
 assert.equal(await readFileText(gzipFile), 'LOCUS gzipped');
 const plainNamedGz = { name: 'plain.gb.gz', async arrayBuffer() { return encoder.encode('LOCUS plain').buffer; } };
 assert.equal(await readFileText(plainNamedGz), 'LOCUS plain');
+
+// OV-2563: a File the browser refuses to read (Chromium rejects arrayBuffer()
+// with NotReadableError for a file changed or removed on disk after it was
+// picked) rejects at the read owner with INPUT_UNREADABLE, so every surface
+// shows "An input could not be read" instead of the unknown failure. Another
+// failure keeps its own error.
+{
+  const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  for (const name of ['NotReadableError', 'NotFoundError', 'SecurityError']) {
+    const refused = { name: 'gone.gb', async arrayBuffer() { throw new DOMException('refused', name); } };
+    const error = await readFileBytes(refused).then(() => null, (cause) => cause);
+    assert.equal(error?.code, 'INPUT_UNREADABLE', name);
+    assert.equal(error?.stage, 'read', name);
+    const model = normalizeUserFacingError(error, { operation: 'input-records', stage: 'helper' });
+    assert.equal(model?.code, 'INPUT_UNREADABLE', name);
+    assert.equal(model?.summary, 'An input could not be read. Replace or reselect it.', name);
+    const textError = await readFileText(refused).then(() => null, (cause) => cause);
+    assert.equal(textError?.code, 'INPUT_UNREADABLE', `${name} through readFileText`);
+  }
+  const aborted = { name: 'other.gb', async arrayBuffer() { throw new DOMException('stopped', 'AbortError'); } };
+  const other = await readFileBytes(aborted).then(() => null, (cause) => cause);
+  assert.equal(other?.name, 'AbortError', 'a failure that is not a refused read keeps its own error');
+}

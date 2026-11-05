@@ -3,7 +3,7 @@
 // placed from the axis Python wrote (services/region-axis.js), so a drag
 // lands where Python says a base is drawn.
 const { test, expect } = require('@playwright/test');
-const { writeFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { HMMT, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
@@ -148,12 +148,32 @@ const expectHeading = async (page, record, span) => {
   await expect(page.locator('[data-region-span]')).toHaveText(span);
 };
 
-test('Circular: a loaded Result without axis disables Select region; after Generate a drag selects a span that Add to annotation set draws', async ({ browser }) => {
+/**
+ * The Gallery Session as a released version (0.14.x) wrote it: its Result's track-slot geometry records carry no
+ * `axis` and no `recordKey` (#1620 added both). Such a Session still loads its Result as saved until its next
+ * Generate (D-36); the Gallery's own Sessions now carry the axis, so the test removes it.
+ * @param {import('@playwright/test').TestInfo} testInfo
+ */
+const sessionWithoutAxis = (testInfo) => {
+  const session = JSON.parse(readFileSync(seeds.circular, 'utf8'));
+  const records = session.drawings[0].runMetadata.trackSlotGeometry.records;
+  expect(records.length).toBeGreaterThan(0);
+  for (const record of records) {
+    expect(record.axis, 'the Gallery Session carries the axis').toBeDefined();
+    delete record.axis;
+    delete record.recordKey;
+  }
+  const path = testInfo.outputPath('HmmtDNA_basic_circular-no-axis.gbdraw-session.json');
+  writeFileSync(path, JSON.stringify(session));
+  return path;
+};
+
+test('Circular: a loaded Result without axis disables Select region; after Generate a drag selects a span that Add to annotation set draws', async ({ browser }, testInfo) => {
   test.setTimeout(420_000);
-  const page = await load(browser, seeds.circular);
+  const page = await load(browser, sessionWithoutAxis(testInfo));
   try {
     const toggle = page.locator('[data-region-select-toggle]');
-    // The Gallery Session was saved before Python wrote the axis: no Python starts at Load.
+    // The Result was saved without the axis: no Python starts at Load.
     await expect(toggle).toBeDisabled();
     await expect(toggle).toHaveAttribute('title', 'Generate to enable region selection');
 
@@ -580,7 +600,8 @@ test('Linear: Add to annotation set whose record read fails adds nothing, takes 
     const status = popup.locator('[data-region-add-status]');
     await expect(status).toBeVisible();
     const { error: listed } = await card();
-    expect(listed).not.toBe('');
+    // A read the browser refuses is the input-unreadable failure, not the unknown one (OV-2563).
+    expect(listed).toContain('An input could not be read. Replace or reselect it.');
     await expect(status).toHaveText(listed);
     await expect(popup.locator('[data-region-add-annotation]')).toBeEnabled();
     expect(await regionRows(page)).toEqual([]);
