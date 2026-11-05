@@ -25,7 +25,8 @@ MIN_CHUNK = 64 * 1024
 # A run with no cut is compressed as it arrives once it is this long, so memory
 # stays bounded; only the last WINDOW bytes are kept for the rolling sum.
 _MAX_PENDING = 1024 * 1024
-# ID1 ID2 CM=deflate FLG=0 MTIME=0 XFL=0 OS=255 (unknown), as gzip.compress(mtime=0) writes at level 6.
+# ID1 ID2 CM=deflate FLG=0 MTIME=0 XFL=0 OS=255 (unknown) on every Python version, so the bytes
+# do not depend on it (gzip.compress(mtime=0) writes OS=3 on Python 3.11 and 3.12).
 _HEADER = b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff"
 
 

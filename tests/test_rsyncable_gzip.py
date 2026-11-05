@@ -13,6 +13,10 @@ import pytest
 from gbdraw.io import rsyncable_gzip
 from gbdraw.io.rsyncable_gzip import MIN_CHUNK, WINDOW, RsyncableGzipWriter
 
+# No file name, mtime 0, OS=255 on every Python version. gzip.compress(mtime=0) is not a
+# reference for it: Python 3.11 and 3.12 write OS=3 there, 3.10 and 3.13+ write 255.
+HEADER = b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff"
+
 
 def _compress(pieces: list[bytes]) -> bytes:
     output = io.BytesIO()
@@ -26,7 +30,7 @@ def _reference(data: bytes) -> bytes:
     """The cut rule written out position by position, as the measured prototype applies it."""
 
     deflate = zlib.compressobj(6, zlib.DEFLATED, -zlib.MAX_WBITS)
-    parts = [gzip.compress(b"", compresslevel=6, mtime=0)[:10]]
+    parts = [HEADER]
     previous = 0
     window_sum = sum(data[:WINDOW])
     for end in range(WINDOW, len(data) + 1):
@@ -65,8 +69,7 @@ def test_output_is_gzip_that_expands_to_the_input(data: bytes) -> None:
     compressed = _compress([data])
 
     assert gzip.decompress(compressed) == data
-    # No file name and mtime 0, as gzip.compress(mtime=0) writes at level 6.
-    assert compressed[:10] == gzip.compress(b"", compresslevel=6, mtime=0)[:10]
+    assert compressed[:10] == HEADER
 
 
 def test_cuts_follow_the_rule() -> None:
