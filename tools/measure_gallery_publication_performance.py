@@ -89,19 +89,11 @@ def enforce_performance_gate(
     operation: str,
     trials: list[Mapping[str, float | int]],
     *,
-    baseline_trials: list[Mapping[str, float | int]] | None = None,
+    baseline_trials: list[Mapping[str, float | int]],
 ) -> dict[str, Any]:
-    expected_trials = baseline_trials or [
-        {"wallSeconds": wall, "peakRssKiB": rss}
-        for wall, rss in zip(
-            baseline["operations"][operation]["wallSeconds"],
-            baseline["operations"][operation]["peakRssKiB"],
-            strict=True,
-        )
-    ]
     ratio = float(baseline["maximumRegressionRatio"])
-    expected_wall_values = [float(trial["wallSeconds"]) for trial in expected_trials]
-    expected_rss_values = [int(trial["peakRssKiB"]) for trial in expected_trials]
+    expected_wall_values = [float(trial["wallSeconds"]) for trial in baseline_trials]
+    expected_rss_values = [int(trial["peakRssKiB"]) for trial in baseline_trials]
     wall_values = [float(trial["wallSeconds"]) for trial in trials]
     rss_values = [int(trial["peakRssKiB"]) for trial in trials]
     summary = {
@@ -143,17 +135,12 @@ def main(argv: list[str] | None = None) -> int:
     baseline = _load_json(BASELINE_PATH)
     if args.baseline_revision and args.baseline_revision != baseline["baseSha"]:
         parser.error("--baseline-revision must match the checked-in fixed base SHA.")
-    baseline_trials = None
-    # The recorded Node 18 measurements predate this projection GC profile.
-    # Always measure its fixed baseline with the same executable and flags.
-    baseline_revision = args.baseline_revision
-    if args.operation == "projection":
-        baseline_revision = baseline["baseSha"]
-    if baseline_revision:
-        baseline_trials = [
-            _run_trial(args.operation, baseline_revision, index + 1)
-            for index in range(args.trials)
-        ]
+    # Measure the fixed base in the same environment, executable and flags as
+    # the head; no recorded measurement stands in for it.
+    baseline_trials = [
+        _run_trial(args.operation, baseline["baseSha"], index + 1)
+        for index in range(args.trials)
+    ]
     trials = [
         _run_trial(args.operation, args.revision, index + 1)
         for index in range(args.trials)
