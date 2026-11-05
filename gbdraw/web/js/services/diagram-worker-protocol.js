@@ -62,6 +62,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   READ_ALL_SEQUENCE_RECORDS: 'readAllSequenceRecords',
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
   READ_FEATURE_OVERRIDE_TABLE: 'readFeatureOverrideTable',
+  READ_RECORD_SPAN_SEQUENCES: 'readRecordSpanSequences',
   RESOLVE_FEATURE_ANCHOR: 'resolveFeatureAnchor',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
   RESOLVE_SIMILARITY_ALIGNMENT: 'resolveSimilarityAlignment',
@@ -97,6 +98,7 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.DECIDE_AUTO_ORIENTATION]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.DERIVE_REGION_DRAWING]: (payload) => payload.canonicalRequest,
+  [DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES]: (payload) => payload.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: (payload) => payload.projection?.canonicalRequest,
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA]: (payload) => payload.recordSource
 });
@@ -188,6 +190,44 @@ const STAGED_HELPER_REFERENCES = Object.freeze({
  */
 
 /** The `deriveRegionDrawing` reply (`RegionDrawingReply`). @typedef {DerivedRegionDrawing | RefusedRegionDrawing} RegionDrawingReply */
+
+/**
+ * One span of `readRecordSpanSequences` (`RecordSpanInput` in gbdraw/web_support/record_spans.py): a record key of the
+ * request and source coordinates, 1-based and inclusive; a start after the end crosses the origin.
+ * @typedef {object} RecordSpanInput
+ * @property {string} recordKey
+ * @property {number} start
+ * @property {number} end
+ */
+
+/**
+ * The payload of `readRecordSpanSequences`: the request the shown Result was made from (the committed request),
+ * whose resources the page stages, and the spans to read.
+ * @typedef {object} RecordSpanSequencesPayload
+ * @property {CanonicalRenderRequest} canonicalRequest
+ * @property {CommittedCanonicalSession['resources']} resources
+ * @property {readonly RecordSpanInput[]} spans
+ */
+
+/**
+ * One span's bases on the source strand (`RecordSpanSequence`), with the FASTA header that names them.
+ * @typedef {object} RecordSpanSequence
+ * @property {string} recordKey
+ * @property {string} recordId
+ * @property {number} start
+ * @property {number} end
+ * @property {number} length
+ * @property {boolean} wrapsOrigin
+ * @property {string} header
+ * @property {string} sequence
+ */
+
+/**
+ * The `readRecordSpanSequences` reply (`RecordSpanSequencesReply`): the spans in the order asked, and their FASTA text.
+ * @typedef {object} RecordSpanSequencesReply
+ * @property {readonly RecordSpanSequence[]} spans
+ * @property {string} fasta
+ */
 
 /** @type {readonly string[]} */
 export const DIAGRAM_HELPER_STAGING_OPERATIONS = Object.freeze(Object.keys(STAGED_HELPER_REFERENCES));

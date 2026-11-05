@@ -68,6 +68,9 @@ import {
 import { createDrawingState, drawingHasEdits, state, sessionOperationAvailability } from '../state.js';
 import { createDrawingBar, createDrawingList, createInputReplacement, moveTabFocus } from './drawing-list.js';
 import { createRegionDrawing } from './region-drawing.js';
+import { createRegionSelect } from './region-select.js';
+import { readRegionAxisRecords } from '../services/region-axis.js';
+import { requestRecordSpanSequences } from '../services/record-span-sequences.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -276,6 +279,7 @@ import {
 } from '../services/linear-comparisons.js';
 import {
   RECORD_SETTINGS_DEFAULTS,
+  bindingKeyOfRequestRecord,
   circularRecordDrawKey,
   circularRecordRequestKeys,
   circularRecordsToDraw,
@@ -2117,7 +2121,12 @@ export const createAppSetup = () => {
   setHeldPreviewViewportReader(() => (similarityAlignmentHoldShown() ? heldPreviewViewport() : null));
   const previewPopupsHeldNow = computed(() => similarityAlignmentTakeover.value !== null);
   const previewPopupsHeld = () => previewPopupsHeldNow.value;
-  const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted, previewPopupsHeld });
+  // The records of the shown Result whose axis Python wrote: Select region and Shift+click range selection read them.
+  const shownAxisRecords = () => readRegionAxisRecords(state.trackSlotResolvedGeometry.value, Number(selectedResultIndex.value) || 0);
+  const featureSelection = createFeatureSelection({
+    state, onMounted, onUnmounted, previewPopupsHeld,
+    axisRecordOf: (recordKey) => shownAxisRecords().find((record) => record.recordKey === recordKey) ?? null
+  });
   // The palette owner comes before the feature editor, whose popup sets a
   // type's default color through it (D-15).
   const resultsManager = createResultsManager({
@@ -5267,6 +5276,16 @@ export const createAppSetup = () => {
     const issue = catalog.issues[0];
     return issue ? diagnosticError(issue.code, issue.context) : diagnosticError('INPUT_UNREADABLE');
   };
+  /**
+   * Why a drawing's record catalog is not ready, as its record list says it: for Linear, the first drawn card's own
+   * read error (its record select's), else the catalog's first issue. Generate and Add to annotation set read it here.
+   * @param {DrawingState} drawing
+   * @param {Pick<AnnotationRecordCatalog, 'issues'>} catalog
+   */
+  const recordCatalogError = (drawing, catalog) => (drawing.mode === 'linear'
+    // A stored '' (no error) has no `code`: the read is undefined, as for null.
+    && drawing.drawnLinearSeqs.value.map(seq => linearRecordSelector.errorModelFor(drawing, seq)).find(error => /** @type {UserFacingError} */ (error)?.code))
+    || catalogIssueError(catalog);
   async function prepareLinearRecordCatalog({ privateCandidate = false } = {}) {
     const drawing = state.activeDrawing();
     if (drawing.mode !== 'linear') return { catalog: null, error: '' };
@@ -5307,14 +5326,7 @@ export const createAppSetup = () => {
       }
       catalog = getAnnotationRecordCatalog(drawing);
     }
-    return catalog.status === 'ready'
-      ? { catalog, error: '' }
-      : {
-          catalog: null,
-          // A stored '' (no error) has no `code`: the read is undefined, as for null.
-          error: drawing.drawnLinearSeqs.value.map(seq => linearRecordSelector.errorModelFor(drawing, seq)).find(error => /** @type {UserFacingError} */ (error)?.code)
-            || catalogIssueError(catalog)
-        };
+    return catalog.status === 'ready' ? { catalog, error: '' } : { catalog: null, error: recordCatalogError(drawing, catalog) };
   }
 
   const runAnalysis = () => {
@@ -7594,6 +7606,15 @@ export const createAppSetup = () => {
       ? askLinearFileRemoval(drawing, plan.retainedSequences, label, (turnOffReaching) => removeLinearSource(drawing, plan, intent, turnOffReaching))
       : null;
   };
+  // After a Session load the records of the shown drawing's inputs are read on demand, as Generate reads them: the
+  // record list and Select region's Add to annotation set ask for them.
+  /** @param {RecordSelectionMode} listMode */
+  const readShownRecords = async (listMode) => {
+    if (listMode === 'linear') return linearRecordSelector.refresh(state.activeDrawing());
+    const drawing = shownDrawingOfMode('circular');
+    if (!drawing) return null;
+    return getCircularRecordDiscoveryState(drawing).status === 'ready' ? null : inspectCircularSourceRecords();
+  };
   const recordSelection = createRecordSelection({
     reactive,
     computed,
@@ -7618,13 +7639,7 @@ export const createAppSetup = () => {
     removeSource: removeRecordSource,
     askRemoveSource: askRecordFileRemoval,
     deleteRecordSettings,
-    // After a Session load the records are read on demand, as Generate reads them.
-    prepareRecords: async (listMode) => {
-      if (listMode === 'linear') return linearRecordSelector.refresh(state.activeDrawing());
-      const drawing = shownDrawingOfMode('circular');
-      if (!drawing) return null;
-      return getCircularRecordDiscoveryState(drawing).status === 'ready' ? null : inspectCircularSourceRecords();
-    },
+    prepareRecords: readShownRecords,
     autoOpenRequests: () => pendingDiscoveryOf(state.activeDrawing()).listRequests
   });
 
@@ -7828,6 +7843,51 @@ export const createAppSetup = () => {
     readRecordSources: () => readDrawingRecordIdentities(state.activeDrawing()),
     resultFeatures: shownResultFeatures
   });
+  // Select region reads the axis of the shown Result from its track-slot geometry (Python's), and its popup is the
+  // match frame's (the one Result popup).
+  const regionSelect = createRegionSelect({
+    readAxisRecords: shownAxisRecords,
+    shownRoot: () => svgContainer.value?.querySelector('svg') ?? null,
+    layoutEdit: layoutRepositionMode,
+    openSelection: () => {
+      const item = clickedPairwiseMatch.value?.previewItem;
+      return item?.kind === 'region' ? item : null;
+    },
+    openRegionPopup: (selection, element, anchor) => featureActions.openPreviewItemPopup({ element, item: selection }, anchor),
+    closeRegionPopup: () => {
+      if (clickedPairwiseMatch.value?.previewItem?.kind === 'region') clickedPairwiseMatch.value = null;
+    },
+    drawnFeatures: () => toRaw(extractedFeatures.value) ?? [],
+    selectFeatures: (featureIds) => featureSelection.replaceSelectedFeatureIds(new Set(featureIds), { anchorId: featureIds[0] ?? '' }),
+    // The row binds its record by the catalog key the record select writes, found from the Result's record key. A
+    // catalog a Load left unread is read first (OV-373); one that cannot be read adds nothing and says why, as the
+    // record list does (`recordCatalogError`), under the operation addRegionAnnotation (OV-2562). The popup
+    // is teleported out of the app root, where the History adapter listens, so the action is its own step.
+    addRegionAnnotation: async ({ recordKey, start, end }) => {
+      const drawing = state.activeDrawing();
+      if (getAnnotationRecordCatalog(drawing).status !== 'ready') await readShownRecords(drawing.mode);
+      const catalog = getAnnotationRecordCatalog(drawing);
+      if (catalog.status !== 'ready') throw recordCatalogError(drawing, catalog);
+      if (drawing !== state.activeDrawing()) return null;
+      return history.runUndoable(msg('Add to annotation set'), () => {
+        const owners = drawing.mode === 'circular'
+          ? circularRecordSettingsOwners(drawing)
+          : drawing.linearSeqs.map((seq) => linearRecordSettingsOwner(drawing, seq));
+        return annotationEditor.addRegionAnnotation({ bindingKey: bindingKeyOfRequestRecord(owners, recordKey), start, end });
+      });
+    },
+    newDrawingFromRegion: regionDrawings.openWithRegion,
+    // Python reads the bases from the committed request, the one the shown Result was made from.
+    readRegionFasta: async ({ recordKey, start, end }) => (await requestRecordSpanSequences(
+      getCommittedCanonicalSession(), [{ recordKey, start, end }],
+      (payload) => runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_RECORD_SPAN_SEQUENCES, { ...payload,
+        resources: /** @type {GenerationPayload['resources']} */ (payload.resources) })
+    )).fasta,
+    // While the tool is on, a touch that misses the tracks pans as a mouse drag does.
+    panStart: startPan,
+    panMove: doPan,
+    panEnd: endPan
+  });
   return {
     hostedBuild: readHostedBuild(document),
     fontSettings,
@@ -7881,6 +7941,13 @@ export const createAppSetup = () => {
     selectDrawing,
     drawingList,
     regionDrawings,
+    regionSelect,
+    regionSelectOn: regionSelect.active,
+    regionSelectAvailable: regionSelect.available,
+    regionSelectUnavailableReason: regionSelect.unavailableReason,
+    regionOverlay: regionSelect.overlay,
+    regionOverlayMatrix: regionSelect.overlayMatrix,
+    regionPopup: regionSelect.popup,
     drawingBar,
     drawingBarTabs,
     moveTabFocus,

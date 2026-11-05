@@ -392,6 +392,18 @@ export const createRegionDrawing = ({
   };
 
   /**
+   * Opens the dialog on a region chosen on the figure (Select region): its record checked with its coordinates, so
+   * Create makes it as the dialog makes any region. A record the dialog does not offer leaves the dialog as `open`
+   * left it.
+   * @param {{ recordKey: string, start: number, end: number }} region Source coordinates, 1-based and inclusive.
+   */
+  const openWithRegion = async ({ recordKey, start, end }) => {
+    await open();
+    if (!dialog.show || !dialog.rows.some((row) => row.recordKey === recordKey)) return undefined;
+    return editRow(recordKey, { checked: true, kind: 'coordinates', start: String(start), end: String(end) });
+  };
+
+  /**
    * Create: the derived drawing as one project step; the dialog closes. While it runs the dialog is 'creating',
    * so a second Create adds nothing; a failure shows its reason and leaves the dialog open.
    */
@@ -411,5 +423,5 @@ export const createRegionDrawing = ({
     }
   };
 
-  return { deriveFromShown, dialog, open, refresh, editRow, setKeepValues, confirm, close };
+  return { deriveFromShown, dialog, open, openWithRegion, refresh, editRow, setKeepValues, confirm, close };
 };

@@ -56,6 +56,18 @@ a records table row with only a `fasta` path. Request schema 9 is unchanged:
 the kind is a new value of the record source's `kind`. Fixture:
 `tests/fixtures/sessions/cli-circular-fasta.v51.gbdraw-session.json.gz`.
 
+Session 51 also adds two keys to each record of a drawing's `runMetadata.trackSlotGeometry` (PD-OI-115):
+`recordKey`, the request's record key, and `axis`, where the record's axis lies in the frame of its drawn group
+(Circular: `radiusPx`, the feature band `bandInnerPx` to `bandOuterPx`, `startAngleDeg`, `degreesPerBp`; Linear: one
+row each with `xStartPx`, `xEndPx`, `yPx`, `bandTopPx`, `bandBottomPx`, `displayStart`, `displayEnd`) and which
+source base each drawn base shows (`source`: `anchorBase`, `recordBase`, `step`, `sourceLength`, `drawnLength`, and
+`isCircular`, whether a selected span may cross the record's origin: the record is circular and has no region
+applied, the annotation resolver's rule).
+Python writes them (`gbdraw/render/track_slot_metadata.py`); the Web app's Select region reads them
+(`services/region-axis.js`). The Session shape keeps `trackSlotGeometry` opaque (`unknown`), so the generated
+contracts and the version do not change. A saved Result without them loads as before, and Select region stays off
+until the next Generate; no reader adds them. Fixture: `tests/fixtures/sessions/HmmtDNA-region-axis.v51-web.*`.
+
 Measured against `main`'s build (0.14.5, 033a3aa89, Session 50): `load_session_document` on each of the four
 `tests/fixtures/sessions/drawings-*.v51.*` fixtures raises `SessionVersionError`: "Session version 51 is newer
 than this gbdraw supports (50).". The wrap length, italic gene names and identity colour scale reached `main` in

@@ -12,6 +12,7 @@ from gbdraw.api.options import LINEAR_DEFAULT_PLOT_TITLE_POSITION
 from gbdraw.features.placement import FeaturePlacementSlot
 from gbdraw.render_stages import render_stage
 from ...layout.linear_wrap import drawn_axis_length, refuse_feature_track_on_the_axis, refuse_wrapped_anchor_moves
+from ...render.track_slot_metadata import RecordAxisInput, linear_axis_geometry
 from ...layout.record_labels import source_ruler_ticks
 
 import copy
@@ -542,7 +543,7 @@ def _sync_legend_table_for_linear_slots(
 
 def _serialize_linear_track_slot_geometry(
     *,
-    records: list[SeqRecord],
+    record_axes: Sequence[RecordAxisInput],
     layout: LinearTrackLayout,
     record_plans: list[LinearRecordVerticalPlan],
     record_offsets: list[float],
@@ -579,7 +580,7 @@ def _serialize_linear_track_slot_geometry(
 
     base_by_id = {slot.id: slot for slot in layout.slots}
     records_payload: list[dict[str, Any]] = []
-    for record_index, record in enumerate(records):
+    for record_index, drawn in enumerate(record_axes):
         axis_y = float(record_offsets[record_index]) if record_index < len(record_offsets) else 0.0
         placement = record_placements[record_index]
         plan = record_plans[record_index]
@@ -603,12 +604,20 @@ def _serialize_linear_track_slot_geometry(
                     "source": "resolved",
                 }
             )
-        record_id = str(getattr(record, "id", "") or "")
+        record_id = str(getattr(drawn.record, "id", "") or "")
+        row_bands = [(row.axis_offset_y, row.plan.feature_lanes_band.translate(row.axis_offset_y)) for row in plan.rows]
         records_payload.append(
             {
                 "recordIndex": int(record_index),
                 "recordId": record_id,
                 "recordLabel": record_id,
+                "recordKey": drawn.record_key,
+                "axis": linear_axis_geometry(
+                    drawn,
+                    rows=[(axis, band.top_y, band.bottom_y) for axis, band in row_bands],
+                    row_length_bp=drawn_axis_length(drawn.record, drawn.transform),
+                    px_per_bp=float(placement.px_per_bp),
+                ),
                 "axisYpx": axis_y,
                 "axisXpx": (
                     float(placement.x)
@@ -3499,7 +3508,7 @@ def assemble_linear_diagram(
             canvas,
             "_gbdraw_track_slot_geometry",
             _serialize_linear_track_slot_geometry(
-                records=records,
+                record_axes=RecordAxisInput.of_records(records, record_keys, record_transforms),
                 layout=linear_track_layout,
                 record_plans=record_vertical_plans,
                 record_offsets=[

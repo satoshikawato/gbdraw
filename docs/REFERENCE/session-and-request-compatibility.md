@@ -40,6 +40,12 @@ A Session 51 drawing's stored config also holds the **figure size** leaves
 The Web app keeps them in each drawing's `config.form.figure_width` and
 `config.form.figure_height` (`null` for Auto) and writes a set side as the leaf.
 A Session without the leaves reads as auto.
+Each record of a Session 51 drawing's saved track-slot geometry
+(`runMetadata.trackSlotGeometry.records[]`) also carries its `recordKey` and its
+`axis` (with `axis.source.isCircular`, whether a selected span may cross the
+record's origin), which the Web app's **Select region** reads. A saved Result without them
+(written before they existed) loads as before; Select region stays off with the
+reason "Generate to enable region selection" until the next Generate.
 
 Session 49 stores the Circular **Show Definition** setting in each Circular
 slice (`modes.circular.config.adv.show_definition`). Off is saved in the

@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `116`
+- Contract revision: `117`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -42,7 +42,7 @@ Status: active Product authority
   `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
   `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, `PD-OI-106`,
   `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, `PD-OI-110`, `PD-OI-111`,
-  `PD-OI-112`, `PD-OI-113`, and `PD-OI-114`
+  `PD-OI-112`, `PD-OI-113`, `PD-OI-114`, and `PD-OI-115`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -4403,6 +4403,44 @@ Status: active Product authority
     pull request. This change is a static Product Contract co-change; the
     Review is `REQUIRED`.
   - No other record is amended or retired.
+- Revision 117 changes: `PD-OI-115` is added (concern
+  `web.result.region-select`, scenario revision `1`; the outcome `A`, the
+  Select region toggle). It comes from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-11-04` in the Claude Code session of the
+  campaign `region-select-seq-search-20261104` (`DECISIONS.md` `D-01`, `D-11`,
+  `D-13`). The receipt was drafted as `PD-OI-114`; that ID went to the Figure
+  size record (Revision 116) first, so it is recorded as `PD-OI-115`. The
+  receipt names no ID of its own and is recorded byte for byte. Each reply is
+  quoted as written.
+  - D-01 (`2026-11-04`). The session offered A, a Select region toggle in the
+    preview toolbar, while it is on a drag along a record's axis selects a
+    span (recommended), B, Alt+drag, or C, a drag that starts on the scale
+    track. Reply: 「推奨通り」.
+  - D-11 (`2026-11-04`). The session showed Before and After images of the
+    tool and its popup in each mode (Circular P1 to P5, Linear P1 to P4).
+    Reply: 「PR-Aこれでいきましょう。承認。」 The popup placement that hides the
+    Legend or the labels is fixed in the implementation.
+  - Q-A0 to Q-A6 (`2026-11-04`). The session listed seven questions with
+    recommendations (`DECISIONS.md` `D-13`): Q-A0 the wording of Rationale,
+    Must preserve, May retire and Accepted residual risk, drafted by the
+    session; Q-A1 a shown Result without axis geometry disables Select region
+    with the reason "Generate to enable region selection", and Load starts no
+    Python; Q-A2 turning Select region or Layout edit on turns the other off;
+    Q-A3 Copy FASTA gives the source strand with the source coordinates in the
+    header; Q-A4 the selection is transient (no History step, not in the
+    Session, not in an export); Q-A5 an action whose feature is not available
+    yet is hidden; Q-A6 a reproduced wrong Shift+click range pick is a bug and
+    moves to the shared converter. Reply: 「推奨どおり」, the recommended
+    option A for each. The four fields of the receipt are the drafted
+    wording, approved exactly as written.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-115` scenario revision `1`
+    `2889b395fe127535582b65f77696afbf380861dd6beb6c94ca19f7d843c82ab4`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -11384,6 +11422,66 @@ Decision date: 2026-11-04
   "mustPreserve": "大きさが Auto のときの描き方、書き出し、request（今と同じ内容）。Auto の描画を保存した Session には空の大きさの欄（null）が 2 つ加わるだけで、読み込んだときの図と設定は今と同じ。同じ設定なら Web と CLI・Python で同じ図になること、ライブプレビューと Generate で同じ図になること。PD-OI-052（装飾の delta とキャンバスの拡大）、PD-OI-072（PDF の物理的な大きさ）、PD-OI-084（凡例の side の即時移動）、PD-OI-113（Wrap Rows の位置と動作）。0.14.5 までに保存した Session の開き方と図。プレビューの Fit・ズーム・パン。",
   "mayRetire": "Web では図の大きさを指定できず、書き出した後に縮めるしかなかった扱い。ラベルの判断の「Make the figure larger.」だけの案内。",
   "acceptedResidualRisk": "小さい大きさではラベルが混み、置けないラベルは今のラベルの判断による。ラベルの多い Circular では、大きさを指定した Generate が何度か描き直すので遅くなる（CPython で 13〜17 秒の例がある。Pyodide の時間は PR で測る）。次の PR で凡例の名前・削除・並べ替えと Canvas padding を Python に渡して合わせるまでは、それらは合わせた後に加わるので、図が枠より大きくなることがあり、Generate しても直らない（凡例の文字を短くするか、指定する大きさを小さくして合わせる）。収まらないときに示すいちばん小さい大きさは、見つけた中でいちばん小さい図からの値で、もっと小さくても収まる場合がある。ラベルの置き方の候補が 1 つもないとき（NO-ROW-WAYS）は、大きさの案を出さない。新しい文言は翻訳バッチまで英語。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-04"
+}
+```
+
+### PD-OI-115: Select region on the drawing
+
+- Concern key: `web.result.region-select`
+- Scenario revision: `1`
+- Supersedes: none. No earlier record fixed how a span is selected by a
+  drag on the drawing; `PD-OI-053` fixes Layout edit and the canvas pan,
+  `PD-OI-090` 〔作成〕 (4) fixes what New drawing from a region creates, and
+  `PD-OI-105` fixes that one Result popup is open at a time. All three stay.
+- Status: `ACCEPTED`
+- Selected outcome: `A`, the Select region toggle
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its JSON representation below.
+- Decision source: the Owner replies of `2026-11-04` quoted in the Revision 117
+  entry above. The receipt and JSON below reproduce the approved fields
+  without translation or additional terms. The runtime that implements it
+  merges with it (static Product Contract co-change); this record supplies no
+  runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `2889b395fe127535582b65f77696afbf380861dd6beb6c94ca19f7d843c82ab4`.
+
+```text
+PRODUCT_DECISION
+Concern: web.result.region-select
+Scenario revision: 1
+Choice: A. Select region toggle.
+  - A "Select region" toggle sits in the preview toolbar, off at first. While it is on, a drag along a record's axis selects a span. Plain drag and Shift+drag keep their current meaning.
+  - The span follows the axis: on Circular an arc sweep, on Linear horizontal within one row (Wrap Rows included), not a screen rectangle.
+  - While dragging, a translucent band covers the span through the drawn feature tracks, with a readout "start-end . N bp".
+  - On release the band stays and a Region popup opens beside it with the record name, the span "start-end (N bp)" (1-based, both ends included), "N features" (features fully inside the span), and the actions Copy FASTA, Select N features, Add to annotation set, New drawing from region, Use as search query.
+  - Add to annotation set adds one coordinate-span row labelled "Region 1" in the default style, drawn on the next Generate.
+  - A span that crosses the origin of a Circular record leaves New drawing from region disabled, with the reason "A region that crosses the origin cannot be drawn on its own."
+  - The popup is placed so that it does not hide the Legend or the labels.
+  - A shown Result without axis geometry (saved before this tool existed) disables Select region, with the reason "Generate to enable region selection". Load starts no Python.
+  - Turning Select region on turns Layout edit off, and turning Layout edit on turns Select region off.
+  - Copy FASTA gives the source strand, with the source coordinates in the header.
+  - The selection is transient: it is no History step, it is not saved in the Session, and it is not in an export.
+  - An action whose feature is not available yet is hidden.
+  - A wrong range pick by Shift+click that is reproduced is a bug, and the range selection moves to the shared pointer-to-position converter.
+Rationale: 図の上のドラッグで領域を選び、座標の確認、FASTA の取り出し、feature の選択、注釈の追加、新しい drawing への切り出し、配列検索の query への利用を、1 つの入口から行えるようにする。
+Must preserve: Layout edit が OFF のときの canvas の移動、ON のときの移動対象のドラッグ、Shift+ドラッグの feature の枠選択、Shift/Ctrl の優先順位（PD-OI-053）。Result の popup は 1 つで、開くと前の popup は閉じること（PD-OI-105）。「選んだ領域から新規」の作り方と、原点をまたぐ領域を切り出さないこと（PD-OI-090 の 〔作成〕 (4) と Accepted residual risk）。領域の座標は入力ファイルの座標で、1 始まり、両端を含むこと。注釈を足す操作は 1 つの History の操作になること。領域の選択は Session に保存せず、図の書き出しに入れないこと。
+May retire: none
+Accepted residual risk: 原点をまたぐ領域は新しい drawing にできない。popup が図の一部を覆うことがある（置き場所は図の Legend とラベルを避ける）。
+Owner: satoshikawato
+Decision date: 2026-11-04
+```
+
+```json
+{
+  "concern": "web.result.region-select",
+  "scenarioRevision": 1,
+  "choice": "A. Select region toggle.\n  - A \"Select region\" toggle sits in the preview toolbar, off at first. While it is on, a drag along a record's axis selects a span. Plain drag and Shift+drag keep their current meaning.\n  - The span follows the axis: on Circular an arc sweep, on Linear horizontal within one row (Wrap Rows included), not a screen rectangle.\n  - While dragging, a translucent band covers the span through the drawn feature tracks, with a readout \"start-end . N bp\".\n  - On release the band stays and a Region popup opens beside it with the record name, the span \"start-end (N bp)\" (1-based, both ends included), \"N features\" (features fully inside the span), and the actions Copy FASTA, Select N features, Add to annotation set, New drawing from region, Use as search query.\n  - Add to annotation set adds one coordinate-span row labelled \"Region 1\" in the default style, drawn on the next Generate.\n  - A span that crosses the origin of a Circular record leaves New drawing from region disabled, with the reason \"A region that crosses the origin cannot be drawn on its own.\"\n  - The popup is placed so that it does not hide the Legend or the labels.\n  - A shown Result without axis geometry (saved before this tool existed) disables Select region, with the reason \"Generate to enable region selection\". Load starts no Python.\n  - Turning Select region on turns Layout edit off, and turning Layout edit on turns Select region off.\n  - Copy FASTA gives the source strand, with the source coordinates in the header.\n  - The selection is transient: it is no History step, it is not saved in the Session, and it is not in an export.\n  - An action whose feature is not available yet is hidden.\n  - A wrong range pick by Shift+click that is reproduced is a bug, and the range selection moves to the shared pointer-to-position converter.",
+  "rationale": "図の上のドラッグで領域を選び、座標の確認、FASTA の取り出し、feature の選択、注釈の追加、新しい drawing への切り出し、配列検索の query への利用を、1 つの入口から行えるようにする。",
+  "mustPreserve": "Layout edit が OFF のときの canvas の移動、ON のときの移動対象のドラッグ、Shift+ドラッグの feature の枠選択、Shift/Ctrl の優先順位（PD-OI-053）。Result の popup は 1 つで、開くと前の popup は閉じること（PD-OI-105）。「選んだ領域から新規」の作り方と、原点をまたぐ領域を切り出さないこと（PD-OI-090 の 〔作成〕 (4) と Accepted residual risk）。領域の座標は入力ファイルの座標で、1 始まり、両端を含むこと。注釈を足す操作は 1 つの History の操作になること。領域の選択は Session に保存せず、図の書き出しに入れないこと。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "原点をまたぐ領域は新しい drawing にできない。popup が図の一部を覆うことがある（置き場所は図の Legend とラベルを避ける）。",
   "owner": "satoshikawato",
   "decisionDate": "2026-11-04"
 }

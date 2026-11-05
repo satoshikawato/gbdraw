@@ -23,7 +23,7 @@ import { ownEntry } from '../../utils/own-entry.js';
 import { normalizeTsvCell } from '../../utils/tsv-cell.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 import {
-  ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, LENGTH_BAR_ID, REGION_LABEL_FRONT_SELECTOR,
+  ANNOTATION_SELECTOR, DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, LABEL_FEATURE_ID_ATTRIBUTE, LENGTH_BAR_ID, REGION_LABEL_FRONT_SELECTOR,
   TICK_GROUPS, trackGroupSelector
 } from '../../services/drawn-groups.js';
 import { joinSentences, msg, t, tm, tn } from '../../utils/i18n.js';
@@ -73,7 +73,6 @@ export const EXCLUDED_GROUP_SELECTOR = [
 const EDITABLE_LABEL_SELECTOR = 'text[data-label-editable="true"]';
 const LABEL_BINDING_SCHEMA_ATTRIBUTE = 'data-gbdraw-label-binding-schema';
 const LABEL_BINDING_SCHEMA = '1';
-const LABEL_FEATURE_ID_ATTRIBUTE = 'data-label-feature-id';
 const LABEL_VISIBILITY_PREVIEW_ATTRIBUTE = 'data-gbdraw-label-visibility-preview';
 // The labels whose visibility a projection sets: the labels the editor bound,
 // and the labels Python bound to their features, which the editor binds only

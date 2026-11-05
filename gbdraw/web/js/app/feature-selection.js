@@ -1,5 +1,7 @@
 // @ts-check
 import { setClassToken } from '../services/svg-serialization.js';
+import { featureParts, onTheWay, partsMidpoint } from '../services/region-axis.js';
+import { capturePointer, holdTextSelection } from '../utils/pointer-gesture.js';
 
 const { computed, reactive } = window.Vue;
 
@@ -30,11 +32,16 @@ const MARQUEE_THRESHOLD_PX = 4;
 const TOOLBAR_EDGE_MARGIN_PX = 8;
 
 /**
+ * @import { RegionAxisRecord } from '../services/region-axis.js'
+ */
+
+/**
  * A listed feature as the selection reads it (the extracted features of
  * `state.js`, whose owner has no typedef).
  * @typedef {{
  *   svg_id?: unknown, fileIdx?: unknown, record_idx?: unknown,
- *   displayRecordId?: unknown, record_id?: unknown, type?: unknown
+ *   displayRecordId?: unknown, record_id?: unknown, type?: unknown,
+ *   record_key?: unknown, start?: unknown, end?: unknown, location_parts?: unknown
  * }} SelectionFeature
  */
 
@@ -273,12 +280,16 @@ const angleOnClockwiseInterval = (startAngle, endAngle, angle) => {
  * @property {FeatureSelectionState} state
  * @property {((callback: () => void) => void) | null} [onMounted] Vue `onMounted`.
  * @property {((callback: () => void) => void) | null} [onUnmounted] Vue `onUnmounted`.
+ * @property {(recordKey: string) => RegionAxisRecord | null} [axisRecordOf] The axis Python wrote for a record of
+ *   the shown Result, else null (a Result saved before Python wrote it).
  * @property {() => boolean} [previewPopupsHeld] While it holds, a selection gesture leaves the feature
  *   and match popups as they are.
  */
 
 /** @param {FeatureSelectionOptions} options */
-export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = null, previewPopupsHeld = () => false }) => {
+export const createFeatureSelection = ({
+  state, onMounted = null, onUnmounted = null, previewPopupsHeld = () => false, axisRecordOf = () => null
+}) => {
   const {
     selectedFeatureIds,
     selectedFeatureAnchorId,
@@ -299,6 +310,8 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
   let statusTimeoutId = null;
   /** @type {{ svg: Element, pointerId: number, startX: number, startY: number, additive: boolean } | null} */
   let pendingDrag = null;
+  /** Ends the marquee's hold on the pointer: its capture and the hold on text selection (OV-2478). */
+  let releaseGesture = () => {};
   /** @type {{ startX: number, startY: number, originX: number, originY: number, minX?: number, maxX?: number, minY?: number, maxY?: number } | null} */
   let activeToolbarDrag = null;
   const toolbarOffset = reactive({ x: 0, y: 0 });
@@ -555,8 +568,25 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     const clickedGeometry = geometries.find((entry) => entry.id === clickedId);
     if (!anchorGeometry || !clickedGeometry) return false;
 
+    // The record's axis orders the features as their bases are drawn (OV-2481). A Result saved before Python wrote
+    // the axis keeps the estimate from the drawn shapes until its next Generate.
+    const axisRecord = typeof anchor.record_key === 'string' ? axisRecordOf(anchor.record_key) : null;
+    /** @type {string[]} */
     let rangeIds = [];
-    if (mode.value === 'circular') {
+    if (axisRecord) {
+      const { axis } = axisRecord;
+      const placed = geometries.flatMap((entry) => {
+        const position = partsMidpoint(axis.source, featureParts(entry.feature));
+        return position === null ? [] : [{ id: entry.id, position }];
+      });
+      const from = placed.find((entry) => entry.id === anchorId);
+      const to = placed.find((entry) => entry.id === clickedId);
+      if (!from || !to) return false;
+      rangeIds = placed
+        .filter((entry) => onTheWay(axis, from.position, to.position, entry.position))
+        .sort((left, right) => left.position - right.position || left.id.localeCompare(right.id))
+        .map((entry) => entry.id);
+    } else if (mode.value === 'circular') {
       const recordBounds = unionRects(geometries.map((entry) => entry.rect));
       if (!recordBounds) return false;
       const centerX = recordBounds.centerX;
@@ -634,13 +664,13 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     featureSelectionDrag.currentX = event.clientX;
     featureSelectionDrag.currentY = event.clientY;
     featureSelectionDrag.additive = pendingDrag.additive;
-    if (typeof svg.setPointerCapture === 'function' && Number.isFinite(event.pointerId)) {
-      try {
-        svg.setPointerCapture(event.pointerId);
-      } catch (_err) {
-        // Pointer capture is best-effort for cross-browser SVG support.
-      }
-    }
+    const releaseText = holdTextSelection();
+    const releaseCapture = capturePointer(svg, event.pointerId);
+    releaseGesture = () => {
+      releaseCapture();
+      releaseText();
+      releaseGesture = () => {};
+    };
     return true;
   };
 
@@ -668,13 +698,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     const wasActive = featureSelectionDrag.active;
     featureSelectionDrag.currentX = Number.isFinite(event.clientX) ? event.clientX : featureSelectionDrag.currentX;
     featureSelectionDrag.currentY = Number.isFinite(event.clientY) ? event.clientY : featureSelectionDrag.currentY;
-    if (typeof pendingDrag.svg?.releasePointerCapture === 'function' && Number.isFinite(event.pointerId)) {
-      try {
-        pendingDrag.svg.releasePointerCapture(event.pointerId);
-      } catch (_err) {
-        // Pointer capture is best-effort for cross-browser SVG support.
-      }
-    }
+    releaseGesture();
     if (wasActive) {
       selectIntersectingFeatures(
         pendingDrag.svg,
@@ -690,13 +714,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
   };
 
   const cancelMarqueePointer = () => {
-    if (pendingDrag?.svg && typeof pendingDrag.svg.releasePointerCapture === 'function') {
-      try {
-        pendingDrag.svg.releasePointerCapture(pendingDrag.pointerId);
-      } catch (_err) {
-        // Pointer capture is best-effort for cross-browser SVG support.
-      }
-    }
+    releaseGesture();
     pendingDrag = null;
     featureSelectionDrag.active = false;
     featureSelectionDrag.committed = false;

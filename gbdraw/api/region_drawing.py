@@ -412,9 +412,7 @@ def _resolve_regions(
         length = int(item.source_length or len(collection.records[item.resolved_index]))
         start, end = _selected_span(selection, item, length)
         if start > end:
-            display = item.resolved_display
-            circular = display.is_circular if display is not None else item.detected_topology == "circular"
-            raise StartAfterEndRegion(selection.record_key, start, end, circular=circular)
+            raise StartAfterEndRegion(selection.record_key, start, end, circular=item.is_circular)
         if start < 1 or end > length:
             raise ValidationError(
                 f"Region {start}..{end} of {selection.record_key!r} is outside 1..{length}.",

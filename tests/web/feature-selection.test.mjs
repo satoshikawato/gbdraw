@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
@@ -17,22 +17,10 @@ globalThis.window = {
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-selection-'));
-// The slice editors and svg-serialization resolve a drawing's ID by its mode.
-await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempDir, 'services', 'drawing-view.js'));
+// A copy of the module tree: feature-selection.js and the modules it imports (svg-serialization.js resolves a
+// drawing's ID by its mode; services/region-axis.js orders a Shift+click range).
+await cp(sourceDir, tempDir, { recursive: true });
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'app'), { recursive: true });
-await mkdir(join(tempDir, 'services'), { recursive: true });
-await writeFile(
-  join(tempDir, 'app', 'feature-selection.js'),
-  await readFile(join(sourceDir, 'app', 'feature-selection.js'), 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'svg-serialization.js'),
-  await readFile(join(sourceDir, 'services', 'svg-serialization.js'), 'utf8'),
-  'utf8'
-);
-await cp(join(sourceDir, 'services', 'preview-affordances.js'), join(tempDir, 'services', 'preview-affordances.js'));
 const featureSelectionUrl = pathToFileURL(join(tempDir, 'app', 'feature-selection.js'));
 const serializationUrl = pathToFileURL(join(tempDir, 'services', 'svg-serialization.js'));
 

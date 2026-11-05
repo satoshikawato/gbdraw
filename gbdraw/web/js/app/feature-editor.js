@@ -302,6 +302,7 @@ export const createFeatureEditor = ({
     preparePairwiseInteractionAffordances:
       featureSvgActions.preparePairwiseInteractionAffordances,
     preparePreviewItemAffordances: featureSvgActions.preparePreviewItemAffordances,
+    openPreviewItemPopup: featureSvgActions.openPreviewItemPopup,
     // The legend-entry popup's feature count: the features a Legend row colors.
     /** @param {string} caption */
     countLegendCaptionFeatures: (caption) => ruleActions.findFeaturesWithSameLegendItem({ svg_id: null }, caption).length,

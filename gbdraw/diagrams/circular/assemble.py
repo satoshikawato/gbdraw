@@ -80,6 +80,7 @@ from ...labels.circular_types import CircularLabel, CircularLabelCandidate, Circ
 from ...labels.fit import DEFINITION_FONT_PATH, FITS, LabelFit, LabelFitValue, LabelKind
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
+from ...render.track_slot_metadata import RecordAxisInput, circular_axis_geometry
 from ...layout.circular import (
     CircularAxisLayout,
     CircularFeatureLaneDirection,
@@ -420,7 +421,7 @@ def _lane_direction_for_feature_slot(
 
 def _serialize_circular_track_slot_geometry(
     *,
-    gb_record: SeqRecord,
+    drawn: RecordAxisInput,
     radial_layout: CircularRadialLayout,
     layout_slots: Sequence[CircularTrackSlot],
     base_radius_px: float,
@@ -458,7 +459,7 @@ def _serialize_circular_track_slot_geometry(
                 "source": "resolved",
             }
         )
-    record_id = str(getattr(gb_record, "id", "") or "")
+    record_id = str(getattr(drawn.record, "id", "") or "")
     return {
         "schema": 1,
         "mode": "circular",
@@ -468,7 +469,17 @@ def _serialize_circular_track_slot_geometry(
                 "recordIndex": int(record_index),
                 "recordId": record_id,
                 "recordLabel": record_id,
+                "recordKey": drawn.record_key,
                 "axisRadiusPx": float(base_radius_px),
+                "axis": circular_axis_geometry(
+                    drawn,
+                    radius_px=float(base_radius_px),
+                    feature_bands=[
+                        {"innerPx": slot.draw_inner_radius_px, "outerPx": slot.draw_outer_radius_px}
+                        for slot in radial_layout.slots
+                        if slot.renderer == "features" and slot.draw_band_px is not None
+                    ],
+                ),
                 "slots": slots_payload,
             }
         ],
@@ -3135,7 +3146,7 @@ def add_record_on_circular_canvas(
         canvas,
         "_gbdraw_track_slot_geometry",
         _serialize_circular_track_slot_geometry(
-            gb_record=gb_record,
+            drawn=RecordAxisInput(gb_record, record_key, record_transform),
             radial_layout=radial_layout,
             layout_slots=layout_slots,
             base_radius_px=float(canvas_config.radius),

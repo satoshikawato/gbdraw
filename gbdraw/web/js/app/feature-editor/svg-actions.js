@@ -348,7 +348,8 @@ export const createFeatureSvgActions = ({
   // OV-371: a popup opened at a clicked point is placed beside it with an
   // expected size; app-setup places it again with its rendered size. `avoid`
   // is the clicked item's rectangle, which the popup leaves uncovered; the
-  // origin's `panel` is the panel it opens beside (OV-503).
+  // origin's `panel` is the panel it opens beside (OV-503), and its `obstacles`
+  // the boxes it keeps clear of as well (a selected region's Legend and labels).
   /**
    * @param {PopupPosition} pos
    * @param {PopupOrigin | null | undefined} eventLike
@@ -360,7 +361,9 @@ export const createFeatureSvgActions = ({
       ? {
           x: Number(eventLike?.clientX), y: Number(eventLike?.clientY),
           avoid: avoid && { left: avoid.left, top: avoid.top, right: avoid.right, bottom: avoid.bottom },
-          panel: eventLike?.panel
+          panel: eventLike?.panel,
+          obstacles: eventLike?.obstacles,
+          within: eventLike?.within
         }
       : null;
     Object.assign(pos, placePopupNearPoint({ point: anchor, width, height: 520, bounds: popupViewportBounds() }), { anchor });
@@ -934,8 +937,9 @@ export const createFeatureSvgActions = ({
 
   // A Legend row or a record definition opens its popup in the match popup
   // frame while Layout edit is off; with it on, a press drags them. A Legend
-  // row opens only when the drawing lists it (not a track-data row).
-  /** @param {{ element: Element, item: import('../preview-item-popup.js').PreviewItem }} target @param {{ clientX?: number, clientY?: number }} eventLike */
+  // row opens only when the drawing lists it (not a track-data row). A
+  // selected region (`app/region-select.js`) opens there beside its band.
+  /** @param {{ element: Element, item: import('../preview-item-popup.js').PreviewItem }} target @param {PopupOrigin} eventLike */
   const openPreviewItemPopup = ({ element, item }, eventLike) => {
     if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value || previewPopupsHeld()) return false;
     if (item.kind === 'legend-entry') {
@@ -2174,6 +2178,7 @@ export const createFeatureSvgActions = ({
     showFeaturePopupAtFeature,
     preparePairwiseInteractionAffordances,
     preparePreviewItemAffordances,
+    openPreviewItemPopup,
     dispose
   };
 };

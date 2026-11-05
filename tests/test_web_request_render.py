@@ -730,8 +730,14 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when the records dropped `drawnLength`, which Python now
     # derives from the source length and region (D-71): with `drawnLength` put
     # back on each record (no region here), the reply has the earlier digest.
-    "similarity_groups": "66a1a9ea7df805fec43c89e8df130031aed4998cfa0b71a4bf615177218e8c61",
-    "collinear": "e1b7e193de2e9e3db42e7e0a85bebfaa33a2600add8767f8cd464f360d30d844",
+    # Updated again when each record's track-slot geometry took its
+    # `recordKey` and `axis` (Select region): with those two keys removed, the
+    # reply has the earlier digest.
+    # Updated again when each axis source took `isCircular` (Select region, a
+    # drag may cross the origin only of a circular record): with that key
+    # removed, the reply has the earlier digest.
+    "similarity_groups": "2d341082e3a5f3e9cd6823ae444e54a0c8d6ab4d27313ce52fc22b5185334749",
+    "collinear": "62084ef5b16d27a9fc2f46e6544e6117d62b915d8a839c01c8c4775ee2477d85",
 }
 
 

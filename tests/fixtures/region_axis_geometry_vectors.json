@@ -1,0 +1,756 @@
+{
+ "cases": [
+  {
+   "name": "linear-single",
+   "records": [
+    {
+     "recordIndex": 0,
+     "recordKey": "lambda",
+     "axis": {
+      "kind": "linear",
+      "rows": [
+       {
+        "xStartPx": 0.0,
+        "xEndPx": 2000.0,
+        "yPx": 0.0,
+        "bandTopPx": -22.5,
+        "bandBottomPx": 22.5,
+        "displayStart": 0,
+        "displayEnd": 48502
+       }
+      ],
+      "source": {
+       "anchorBase": 1,
+       "recordBase": 1,
+       "step": 1,
+       "sourceLength": 48502,
+       "drawnLength": 48502,
+       "isCircular": false
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.020618,
+        0.0
+       ],
+       "displayIndex": 0,
+       "sourceBase": 1,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.061853,
+        0.0
+       ],
+       "displayIndex": 1,
+       "sourceBase": 2,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        666.673539,
+        0.0
+       ],
+       "displayIndex": 16167,
+       "sourceBase": 16168,
+       "recordOffset": 16167
+      },
+      {
+       "point": [
+        1000.020618,
+        0.0
+       ],
+       "displayIndex": 24251,
+       "sourceBase": 24252,
+       "recordOffset": 24251
+      },
+      {
+       "point": [
+        1999.979382,
+        0.0
+       ],
+       "displayIndex": 48501,
+       "sourceBase": 48502,
+       "recordOffset": 48501
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "linear-wrap-reverse",
+   "records": [
+    {
+     "recordIndex": 0,
+     "recordKey": "lambda",
+     "axis": {
+      "kind": "linear",
+      "rows": [
+       {
+        "xStartPx": 0.0,
+        "xEndPx": 2000.0,
+        "yPx": 0.0,
+        "bandTopPx": -54.5,
+        "bandBottomPx": -9.500000000000002,
+        "displayStart": 0,
+        "displayEnd": 20000
+       },
+       {
+        "xStartPx": 0.0,
+        "xEndPx": 2000.0,
+        "yPx": 135.34375,
+        "bandTopPx": 80.84375,
+        "bandBottomPx": 125.84375,
+        "displayStart": 20000,
+        "displayEnd": 40000
+       },
+       {
+        "xStartPx": 0.0,
+        "xEndPx": 850.2,
+        "yPx": 270.6875,
+        "bandTopPx": 216.1875,
+        "bandBottomPx": 261.1875,
+        "displayStart": 40000,
+        "displayEnd": 48502
+       }
+      ],
+      "source": {
+       "anchorBase": 48502,
+       "recordBase": 48502,
+       "step": -1,
+       "sourceLength": 48502,
+       "drawnLength": 48502,
+       "isCircular": false
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.05,
+        0.0
+       ],
+       "displayIndex": 0,
+       "sourceBase": 48502,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.15,
+        0.0
+       ],
+       "displayIndex": 1,
+       "sourceBase": 48501,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        1616.75,
+        0.0
+       ],
+       "displayIndex": 16167,
+       "sourceBase": 32335,
+       "recordOffset": 16167
+      },
+      {
+       "point": [
+        425.15,
+        135.34375
+       ],
+       "displayIndex": 24251,
+       "sourceBase": 24251,
+       "recordOffset": 24251
+      },
+      {
+       "point": [
+        850.15,
+        270.6875
+       ],
+       "displayIndex": 48501,
+       "sourceBase": 1,
+       "recordOffset": 48501
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "linear-two-records-crop-reverse",
+   "records": [
+    {
+     "recordIndex": 0,
+     "recordKey": "crop",
+     "axis": {
+      "kind": "linear",
+      "rows": [
+       {
+        "xStartPx": 0.0,
+        "xEndPx": 329.8833037812874,
+        "yPx": 0.0,
+        "bandTopPx": -22.5,
+        "bandBottomPx": 22.5,
+        "displayStart": 0,
+        "displayEnd": 8000
+       }
+      ],
+      "source": {
+       "anchorBase": 9000,
+       "recordBase": 9000,
+       "step": -1,
+       "sourceLength": 48502,
+       "drawnLength": 8000,
+       "isCircular": false
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.020618,
+        0.0
+       ],
+       "displayIndex": 0,
+       "sourceBase": 9000,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.061853,
+        0.0
+       ],
+       "displayIndex": 1,
+       "sourceBase": 8999,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        109.954229,
+        0.0
+       ],
+       "displayIndex": 2666,
+       "sourceBase": 6334,
+       "recordOffset": 2666
+      },
+      {
+       "point": [
+        164.96227,
+        0.0
+       ],
+       "displayIndex": 4000,
+       "sourceBase": 5000,
+       "recordOffset": 4000
+      },
+      {
+       "point": [
+        329.862686,
+        0.0
+       ],
+       "displayIndex": 7999,
+       "sourceBase": 1001,
+       "recordOffset": 7999
+      }
+     ]
+    },
+    {
+     "recordIndex": 1,
+     "recordKey": "whole",
+     "axis": {
+      "kind": "linear",
+      "rows": [
+       {
+        "xStartPx": 0.0,
+        "xEndPx": 2000.0,
+        "yPx": 0.0,
+        "bandTopPx": -22.5,
+        "bandBottomPx": 22.5,
+        "displayStart": 0,
+        "displayEnd": 48502
+       }
+      ],
+      "source": {
+       "anchorBase": 1,
+       "recordBase": 1,
+       "step": 1,
+       "sourceLength": 48502,
+       "drawnLength": 48502,
+       "isCircular": false
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.020618,
+        0.0
+       ],
+       "displayIndex": 0,
+       "sourceBase": 1,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.061853,
+        0.0
+       ],
+       "displayIndex": 1,
+       "sourceBase": 2,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        666.673539,
+        0.0
+       ],
+       "displayIndex": 16167,
+       "sourceBase": 16168,
+       "recordOffset": 16167
+      },
+      {
+       "point": [
+        1000.020618,
+        0.0
+       ],
+       "displayIndex": 24251,
+       "sourceBase": 24252,
+       "recordOffset": 24251
+      },
+      {
+       "point": [
+        1999.979382,
+        0.0
+       ],
+       "displayIndex": 48501,
+       "sourceBase": 48502,
+       "recordOffset": 48501
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "circular-display-start",
+   "records": [
+    {
+     "recordIndex": 0,
+     "recordKey": "mito",
+     "axis": {
+      "kind": "circular",
+      "radiusPx": 390.0,
+      "bandInnerPx": 349.05000000000007,
+      "bandOuterPx": 386.1,
+      "startAngleDeg": -90.0,
+      "degreesPerBp": 0.021727322107551572,
+      "source": {
+       "anchorBase": 16000,
+       "recordBase": 1,
+       "step": 1,
+       "sourceLength": 16569,
+       "drawnLength": 16569,
+       "isCircular": true
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.069695,
+        -367.574993
+       ],
+       "displayIndex": 0,
+       "sourceBase": 16000,
+       "recordOffset": 15999
+      },
+      {
+       "point": [
+        0.209084,
+        -367.574941
+       ],
+       "displayIndex": 1,
+       "sourceBase": 16001,
+       "recordOffset": 16000
+      },
+      {
+       "point": [
+        318.294435,
+        183.847854
+       ],
+       "displayIndex": 5523,
+       "sourceBase": 4954,
+       "recordOffset": 4953
+      },
+      {
+       "point": [
+        -0.0,
+        367.575
+       ],
+       "displayIndex": 8284,
+       "sourceBase": 7715,
+       "recordOffset": 7714
+      },
+      {
+       "point": [
+        -0.069695,
+        -367.574993
+       ],
+       "displayIndex": 16568,
+       "sourceBase": 15999,
+       "recordOffset": 15998
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "circular-multi-record-canvas",
+   "records": [
+    {
+     "recordIndex": 0,
+     "recordKey": "mito",
+     "axis": {
+      "kind": "circular",
+      "radiusPx": 227.94650216930864,
+      "bandInnerPx": 204.0121194415312,
+      "bandOuterPx": 225.66703714761556,
+      "startAngleDeg": -90.0,
+      "degreesPerBp": 0.021727322107551572,
+      "source": {
+       "anchorBase": 1,
+       "recordBase": 1,
+       "step": 1,
+       "sourceLength": 16569,
+       "drawnLength": 16569,
+       "isCircular": true
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.040735,
+        -214.839574
+       ],
+       "displayIndex": 0,
+       "sourceBase": 1,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.122205,
+        -214.839544
+       ],
+       "displayIndex": 1,
+       "sourceBase": 2,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        186.036162,
+        107.455065
+       ],
+       "displayIndex": 5523,
+       "sourceBase": 5524,
+       "recordOffset": 5523
+      },
+      {
+       "point": [
+        -0.0,
+        214.839578
+       ],
+       "displayIndex": 8284,
+       "sourceBase": 8285,
+       "recordOffset": 8284
+      },
+      {
+       "point": [
+        -0.040735,
+        -214.839574
+       ],
+       "displayIndex": 16568,
+       "sourceBase": 16569,
+       "recordOffset": 16568
+      }
+     ]
+    },
+    {
+     "recordIndex": 1,
+     "recordKey": "lambda",
+     "axis": {
+      "kind": "circular",
+      "radiusPx": 390.0,
+      "bandInnerPx": 349.05000000000007,
+      "bandOuterPx": 386.1,
+      "startAngleDeg": -90.0,
+      "degreesPerBp": 0.00742237433507853,
+      "source": {
+       "anchorBase": 1,
+       "recordBase": 1,
+       "step": 1,
+       "sourceLength": 48502,
+       "drawnLength": 48502,
+       "isCircular": true
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.023809,
+        -367.574999
+       ],
+       "displayIndex": 0,
+       "sourceBase": 1,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.071426,
+        -367.574993
+       ],
+       "displayIndex": 1,
+       "sourceBase": 2,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        318.32532,
+        183.794373
+       ],
+       "displayIndex": 16167,
+       "sourceBase": 16168,
+       "recordOffset": 16167
+      },
+      {
+       "point": [
+        -0.023809,
+        367.574999
+       ],
+       "displayIndex": 24251,
+       "sourceBase": 24252,
+       "recordOffset": 24251
+      },
+      {
+       "point": [
+        -0.023809,
+        -367.574999
+       ],
+       "displayIndex": 48501,
+       "sourceBase": 48502,
+       "recordOffset": 48501
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "circular-linear-topology",
+   "records": [
+    {
+     "recordIndex": 0,
+     "recordKey": "lambda",
+     "axis": {
+      "kind": "circular",
+      "radiusPx": 390.0,
+      "bandInnerPx": 349.05000000000007,
+      "bandOuterPx": 386.1,
+      "startAngleDeg": -90.0,
+      "degreesPerBp": 0.00742237433507853,
+      "source": {
+       "anchorBase": 1,
+       "recordBase": 1,
+       "step": 1,
+       "sourceLength": 48502,
+       "drawnLength": 48502,
+       "isCircular": false
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.023809,
+        -367.574999
+       ],
+       "displayIndex": 0,
+       "sourceBase": 1,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.071426,
+        -367.574993
+       ],
+       "displayIndex": 1,
+       "sourceBase": 2,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        318.32532,
+        183.794373
+       ],
+       "displayIndex": 16167,
+       "sourceBase": 16168,
+       "recordOffset": 16167
+      },
+      {
+       "point": [
+        -0.023809,
+        367.574999
+       ],
+       "displayIndex": 24251,
+       "sourceBase": 24252,
+       "recordOffset": 24251
+      },
+      {
+       "point": [
+        -0.023809,
+        -367.574999
+       ],
+       "displayIndex": 48501,
+       "sourceBase": 48502,
+       "recordOffset": 48501
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "circular-fasta-only",
+   "records": [
+    {
+     "recordIndex": 0,
+     "recordKey": "fasta",
+     "axis": {
+      "kind": "circular",
+      "radiusPx": 390.0,
+      "bandInnerPx": 367.57500000000005,
+      "bandOuterPx": 386.1,
+      "startAngleDeg": -90.0,
+      "degreesPerBp": 0.0014485405953479358,
+      "source": {
+       "anchorBase": 1,
+       "recordBase": 1,
+       "step": 1,
+       "sourceLength": 248526,
+       "drawnLength": 248526,
+       "isCircular": false
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.004764,
+        -376.8375
+       ],
+       "displayIndex": 0,
+       "sourceBase": 1,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.014291,
+        -376.8375
+       ],
+       "displayIndex": 1,
+       "sourceBase": 2,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        326.348466,
+        188.422875
+       ],
+       "displayIndex": 82842,
+       "sourceBase": 82843,
+       "recordOffset": 82842
+      },
+      {
+       "point": [
+        -0.004764,
+        376.8375
+       ],
+       "displayIndex": 124263,
+       "sourceBase": 124264,
+       "recordOffset": 124263
+      },
+      {
+       "point": [
+        -0.004764,
+        -376.8375
+       ],
+       "displayIndex": 248525,
+       "sourceBase": 248526,
+       "recordOffset": 248525
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "circular-whole-crop",
+   "records": [
+    {
+     "recordIndex": 0,
+     "recordKey": "crop",
+     "axis": {
+      "kind": "circular",
+      "radiusPx": 390.0,
+      "bandInnerPx": 349.05000000000007,
+      "bandOuterPx": 386.1,
+      "startAngleDeg": -90.0,
+      "degreesPerBp": 0.021727322107551572,
+      "source": {
+       "anchorBase": 1,
+       "recordBase": 1,
+       "step": 1,
+       "sourceLength": 16569,
+       "drawnLength": 16569,
+       "isCircular": false
+      }
+     },
+     "probes": [
+      {
+       "point": [
+        0.069695,
+        -367.574993
+       ],
+       "displayIndex": 0,
+       "sourceBase": 1,
+       "recordOffset": 0
+      },
+      {
+       "point": [
+        0.209084,
+        -367.574941
+       ],
+       "displayIndex": 1,
+       "sourceBase": 2,
+       "recordOffset": 1
+      },
+      {
+       "point": [
+        318.294435,
+        183.847854
+       ],
+       "displayIndex": 5523,
+       "sourceBase": 5524,
+       "recordOffset": 5523
+      },
+      {
+       "point": [
+        -0.0,
+        367.575
+       ],
+       "displayIndex": 8284,
+       "sourceBase": 8285,
+       "recordOffset": 8284
+      },
+      {
+       "point": [
+        -0.069695,
+        -367.574993
+       ],
+       "displayIndex": 16568,
+       "sourceBase": 16569,
+       "recordOffset": 16568
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
