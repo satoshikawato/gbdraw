@@ -1237,6 +1237,22 @@
       "reason": "gbdraw circular --origin_feature and the Web Rotate to feature 'Start of the record' must put the same base at 12 o'clock for one feature and orientation.",
       "retireWhen": "the popup reads the feature start from Python feature metadata, or the CLI option is removed",
       "source": "user-rescue-20261031 WP-6 (D-50)"
+    },
+    {
+      "id": "vector:tests/fixtures/region_origin_crossing_vectors.json",
+      "concern": "Whether a selected span of a circular record crosses its origin, so New drawing from region cannot draw it",
+      "pythonOwner": [
+        "gbdraw/api/region_drawing.py:_resolve_regions",
+        "gbdraw/api/region_drawing.py:StartAfterEndRegion"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/region-axis.js:sourceSpanOf",
+        "gbdraw/web/js/app/region-select.js:createRegionSelect"
+      ],
+      "vector": "tests/fixtures/region_origin_crossing_vectors.json",
+      "reason": "the Web disables New drawing from region live, during the drag and before Python is asked, when the source span it reads from the axis starts after its end (wrapsOrigin); Python refuses the same span with StartAfterEndRegion (ORIGIN_CROSSING) for the CLI, the Python API and the Web dialog",
+      "retireWhen": "the Web asks Python whether a selected span can be drawn, or Python writes that with the selection",
+      "source": "region-select-seq-search-20261104 REVIEW-2 N1 (D-32 f, D-34)"
     }
   ]
 }

@@ -439,6 +439,39 @@ def test_an_origin_crossing_region_has_its_own_reason(materialize) -> None:
     assert (refusal.value.record_key, refusal.value.start, refusal.value.end) == ("mito", 16000, 200)
 
 
+ORIGIN_CROSSING = json.loads(
+    (REPO / "tests" / "fixtures" / "region_origin_crossing_vectors.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize("case", ORIGIN_CROSSING, ids=lambda case: case["name"])
+def test_python_refuses_exactly_the_spans_the_web_says_cross_the_origin(case: dict[str, Any]) -> None:
+    """The origin-crossing twin (tools/twins.json): tests/web/region-axis.test.mjs reads the same vectors."""
+    from gbdraw.api import RecordDisplayOptions
+    from gbdraw.api.region_drawing import StartAfterEndRegion
+    from gbdraw.api.request_render import plan_request
+
+    axis = case["axisSource"]
+    request = _mito_circular(record={
+        "display": RecordDisplayOptions(start_coordinate=axis["anchorBase"]),
+        "presentation": RecordPresentation(reverse_complement=axis["step"] == -1),
+    })
+    # The vector's axis is the one Python writes for this record and display.
+    [drawn] = plan_request(request).build()._gbdraw_track_slot_geometry["records"]
+    assert drawn["axis"]["source"] == axis
+    span = case["sourceSpan"]
+    selection = [RegionSelection("mito", span["start"], span["end"])]
+    if case["pythonOutcome"] == "ORIGIN_CROSSING":
+        with pytest.raises(StartAfterEndRegion) as refusal:
+            derive_region_request(request, selection)
+        assert refusal.value.reason == "ORIGIN_CROSSING"
+        return
+    assert case["pythonOutcome"] == "accepted"
+    [record] = derive_region_request(request, selection).request.records
+    whole = (span["start"], span["end"]) == (1, axis["sourceLength"])
+    assert (record.region is None) if whole else ((record.region.start, record.region.end) == (span["start"], span["end"]))
+
+
 def test_a_start_after_the_end_of_a_linear_record_is_worded_without_the_origin(tmp_path: Path) -> None:
     """A linear record has no origin to cross: its refusal names the order only."""
     from gbdraw.api import RecordDisplayOptions
