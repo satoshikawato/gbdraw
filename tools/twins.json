@@ -414,6 +414,25 @@
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
+      "id": "vector:tests/fixtures/region_axis_geometry_vectors.json",
+      "concern": "Record axis: display index, source base and record offset of a drawn base, and a point's base",
+      "pythonOwner": [
+        "gbdraw/render/track_slot_metadata.py:axis_source_map",
+        "gbdraw/render/track_slot_metadata.py:circular_axis_geometry",
+        "gbdraw/render/track_slot_metadata.py:linear_axis_geometry"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/region-axis.js:axisPosition",
+        "gbdraw/web/js/services/region-axis.js:sourceBaseAt",
+        "gbdraw/web/js/services/region-axis.js:displayIndexOfRecordOffset"
+      ],
+      "vector": "tests/fixtures/region_axis_geometry_vectors.json",
+      "reason": "the Web maps a pointer to a base live, from the axis Python wrote; the vectors pin the Web's reading to Python's geometry",
+      "retireWhen": "Python returns the base under a point (no Web reading of the axis)",
+      "source": "region-select-seq-search-20261104 PR-A (Web Select region tool)",
+      "pending": true
+    },
+    {
       "id": "vector:tests/fixtures/saved_rule_captions.json",
       "concern": "Saved rule caption read without its color ID suffix",
       "pythonOwner": [
