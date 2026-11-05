@@ -9,7 +9,7 @@
  * @import { DisplaySpan, RegionAxis, RegionAxisRecord, RegionFeatureRow, RegionSelection } from '../services/region-axis.js'
  * @import { PopupBounds } from '../utils/popup-bounds.js'
  */
-import { FEATURE_LABEL_SELECTOR, LEGEND_GROUP_SELECTOR } from '../services/drawn-groups.js';
+import { FEATURE_LABEL_SELECTOR, LEGEND_GROUP_SELECTOR, RECORD_DEFINITION_SELECTOR } from '../services/drawn-groups.js';
 import {
   axisPosition, circularDragSpan, featureParts, linearDragSpan, linearRowPosition, partsInsideSpan, regionAxisFrame,
   regionBandPath, regionSpanText, sourceSpanOf
@@ -59,11 +59,14 @@ const BAND_SLACK_PX = 6;
  */
 
 /**
- * The screen boxes of the shown Result's Legend and feature labels, which the Region popup keeps clear of.
+ * The screen boxes of the shown Result's Legend, feature labels and record definitions, which the Region popup keeps
+ * clear of.
  * @param {SVGSVGElement | null} root
  * @returns {PopupBounds[]}
  */
-const popupObstacles = (root) => Array.from(root?.querySelectorAll(`${LEGEND_GROUP_SELECTOR}, ${FEATURE_LABEL_SELECTOR}`) ?? [])
+const popupObstacles = (root) => Array.from(
+  root?.querySelectorAll(`${LEGEND_GROUP_SELECTOR}, ${FEATURE_LABEL_SELECTOR}, ${RECORD_DEFINITION_SELECTOR}`) ?? []
+)
   .map((element) => element.getBoundingClientRect())
   .filter((box) => box.width > 0 && box.height > 0)
   .map(({ left, right, top, bottom }) => ({ left, right, top, bottom }));

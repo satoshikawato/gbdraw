@@ -32,12 +32,14 @@ export const REGION_LABEL_FOR_ATTRIBUTE = 'data-gbdraw-region-label-for';
 export const ANNOTATION_SELECTOR = `[${ANNOTATION_ID_ATTRIBUTE}]`;
 export const REGION_LABEL_FRONT_SELECTOR = `[${REGION_LABEL_FOR_ATTRIBUTE}]`;
 
-// The Legend is one group in both modes (its composition role), and Python
-// binds each feature label (`text`) to its feature by this attribute. A popup
-// opened beside a selected region keeps clear of both (`app/region-select.js`).
+// The Legend is one group in both modes (its composition role), Python binds
+// each feature label (`text`) to its feature by this attribute, and a record's
+// definition (its name lines) is a group of its own role. A popup opened beside
+// a selected region keeps clear of them (`app/region-select.js`).
 export const LEGEND_GROUP_SELECTOR = '[data-gbdraw-composition-role="legend"]';
 export const LABEL_FEATURE_ID_ATTRIBUTE = 'data-label-feature-id';
 export const FEATURE_LABEL_SELECTOR = `text[${LABEL_FEATURE_ID_ATTRIBUTE}]`;
+export const RECORD_DEFINITION_SELECTOR = '[data-gbdraw-role^="record-definition"]';
 
 // The Linear scale (bar or ruler style) and the plot title are one group each.
 export const LENGTH_BAR_ID = 'length_bar';

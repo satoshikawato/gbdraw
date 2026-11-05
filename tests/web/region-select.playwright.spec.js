@@ -55,7 +55,7 @@ const dragAlong = async (page, recordIndex, positions) => {
 const regionPopup = (page) => page.locator('[data-preview-item-popup="region"]');
 
 /**
- * The Region popup frame covers neither the band, nor the Legend, nor any feature label (D-28). The popup is placed
+ * The Region popup frame covers neither the band, nor the Legend, nor any feature label or record definition (D-28). The popup is placed
  * again once rendered, so the boxes are read when its place has settled.
  * @param {import('@playwright/test').Page} page
  */
@@ -71,7 +71,8 @@ const expectPopupClear = async (page) => {
       popup: box(document.querySelector('[data-preview-item-popup="region"]').closest('.pairwise-match-popup')),
       band: box(document.querySelector('[data-region-select-band]')),
       legend: box(svg.querySelector('[data-gbdraw-composition-role="legend"]')),
-      labels: Array.from(svg.querySelectorAll('text[data-label-feature-id]'), box).filter((label) => label.right > label.left)
+      labels: Array.from(svg.querySelectorAll('text[data-label-feature-id], [data-gbdraw-role^="record-definition"]'), box)
+        .filter((label) => label.right > label.left)
     };
   });
   let last = '';
