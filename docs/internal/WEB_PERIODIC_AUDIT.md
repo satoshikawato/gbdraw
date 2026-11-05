@@ -282,12 +282,17 @@ Check each one on the promotion head, or on an ancestor under
 
 After each push to `main`, the job `Hosted site serves this main commit` in
 `.github/workflows/deploy_web.yml` runs `tools/check-hosted-site.mjs`. It waits
-for the `Workers Builds: gbdraw` check run on the commit, then for
-https://gbdraw.app/ to serve that commit's build stamp (the `title="Commit …"`
+for the `Workers Builds: gbdraw` check run on the commit, then for the
+production Worker to serve that commit's build stamp (the `title="Commit …"`
 of the version label), and then loads the app once in Chromium. Its job
 summary names the commit, the Cloudflare Version ID, and the startup time. A
 later `main` commit already on the site counts as "superseded", not as a
 failure. The job reports only; it gates nothing.
+
+Cloudflare challenges GitHub runners on https://gbdraw.app/ (HTTP 403,
+`cf-mitigated: challenge`), so the job reads the same Worker at
+https://gbdraw.genome-kawato.workers.dev/. It does not check the custom
+domain's routing; a local run without `--url` checks https://gbdraw.app/.
 
 When the site is broken after a deploy:
 

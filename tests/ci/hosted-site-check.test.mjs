@@ -82,6 +82,6 @@ test('the hosted job runs on main pushes and on a dispatch that names site_sha, 
   assert.match(gallery, /\n    if: github\.event_name == 'push' \|\| inputs\.site_sha == ''\n/);
   assert.match(hosted, /\n    permissions:\n      contents: read\n      checks: read\n/);
   assert.match(hosted, /SITE_SHA: \$\{\{ inputs\.site_sha \|\| github\.sha \}\}/);
-  assert.match(hosted, /node tools\/check-hosted-site\.mjs --sha "\$SITE_SHA"/);
+  assert.match(hosted, /node tools\/check-hosted-site\.mjs --sha "\$SITE_SHA" --url https:\/\/gbdraw\.genome-kawato\.workers\.dev\//);
   assert.doesNotMatch(hosted, /pip install|setup-python|managed-losat/);
 });

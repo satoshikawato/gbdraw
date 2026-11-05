@@ -58,8 +58,10 @@ jobs:
           python -m pytest tests/test_gallery_session_semantics.py tests/test_refresh_gallery_sessions.py -q
           python tools/gallery_artifact_manifest.py
 
-  # Reports whether https://gbdraw.app/ serves the Cloudflare build of this commit and
+  # Reports whether the production Worker serves the Cloudflare build of this commit and
   # starts (docs/internal/WEB_PERIODIC_AUDIT.md, "Hosted site check and rollback").
+  # Cloudflare challenges GitHub runners on gbdraw.app (HTTP 403, cf-mitigated:
+  # challenge), so the job reads the same production Worker at its workers.dev address.
   hosted-site:
     name: Hosted site serves this main commit
     if: github.event_name == 'push' || inputs.site_sha != ''
@@ -87,4 +89,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SITE_SHA: ${{ inputs.site_sha || github.sha }}
-        run: node tools/check-hosted-site.mjs --sha "$SITE_SHA"
+        run: node tools/check-hosted-site.mjs --sha "$SITE_SHA" --url https://gbdraw.genome-kawato.workers.dev/
