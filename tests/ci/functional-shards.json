@@ -182,7 +182,8 @@
       "tests/web/session-import-worker.playwright.spec.js",
       "tests/web/sidebar-inputs.playwright.spec.js",
       "tests/web/ui-component-styles.playwright.spec.js",
-      "tests/web/unmanaged-config-overrides.playwright.spec.js"
+      "tests/web/unmanaged-config-overrides.playwright.spec.js",
+      "tests/web/region-select.playwright.spec.js"
     ],
     [
       "tests/web/composite-session-resources.playwright.spec.js",
