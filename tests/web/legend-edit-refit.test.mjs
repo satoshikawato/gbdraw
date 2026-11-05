@@ -22,9 +22,11 @@ const row = (key, caption = key, color = '#cccccc') => ({ caption, originalCapti
 const NO_PADDING = { top: 0, right: 0, bottom: 0, left: 0 };
 const INVENTORY = ['CDS', 'tRNA', 'rRNA'];
 const ENTRIES = [row('CDS'), row('tRNA'), row('rRNA')];
-// The drawing's values as a step left them, with the shown Result's inventory.
+// The drawing's values as a step left them, with the shown Result's inventory and Python's rows of every Result.
 const drawing = (values = {}) => ({
-  legendEntries: ENTRIES, deletedLegendEntries: [], canvasPadding: NO_PADDING, originalLegendOrder: INVENTORY, ...values
+  legendEntries: ENTRIES, deletedLegendEntries: [], canvasPadding: NO_PADDING, originalLegendOrder: INVENTORY, ...values,
+  // Python's rows hold the shown Result's inventory.
+  pythonRowKeys: values.pythonRowKeys ?? values.originalLegendOrder ?? INVENTORY
 });
 const entriesChange = (before, after) => ({ path: ['editorState', 'legend', 'entries'], before, after, beforeHas: true, afterHas: true });
 
@@ -57,6 +59,15 @@ test('a rename, a deletion, a Restore, a Move, and a Sort change what Python dra
   // Restore is the deletion's reverse; its Undo puts the drawing back where the deletion left it.
   const restore = deletion.map((change) => ({ ...change, before: change.after, after: change.before }));
   assert.equal(stepRefitsDrawnLegend(restore, undefined, drawing()), true, 'Restore');
+  // A Circular batch: Result B draws tRNA, the shown Result A does not. The Undo of tRNA's deletion made on B, while A
+  // is shown, changes what the request hides, so the sized figure is fitted again: the check names Python's rows of
+  // every Result, as the request does (`pythonLegendRowKeys`), not only the shown Result's.
+  const shownA = { legendEntries: [row('CDS'), row('rRNA')], originalLegendOrder: ['CDS', 'rRNA'] };
+  const deletedOnB = [{ path: ['editorState', 'legend', 'deletedEntries'], before: [], after: deletedRows, beforeHas: true, afterHas: true }];
+  assert.equal(stepRefitsDrawnLegend(deletedOnB, 'undo', drawing({ ...shownA, pythonRowKeys: [...INVENTORY] })), true,
+    'Undo, on Result A, of a deletion made on Result B');
+  assert.equal(stepRefitsDrawnLegend(deletedOnB, 'undo', drawing({ ...shownA, pythonRowKeys: ['CDS', 'rRNA'] })), false,
+    'a row no Result draws is not Python\'s');
   const recolored = [row('CDS', 'CDS', '#ff0000'), row('tRNA'), row('rRNA')];
   assert.equal(stepRefitsDrawnLegend([entriesChange(ENTRIES, recolored),
     { path: ['editorState', 'legend', 'colorOverrides', 'CDS'], before: undefined, after: '#ff0000', beforeHas: false, afterHas: true }],

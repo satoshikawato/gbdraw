@@ -6,6 +6,14 @@
 /** @typedef {{ top: number, right: number, bottom: number, left: number }} CanvasPadding */
 
 /**
+ * Whether a padding side is one the canvas draws: a finite number of 0 or more. Load reads a stored side by it too
+ * (`readCanvasPadding`), and lists a side it is not.
+ * @param {unknown} number
+ * @returns {number is number}
+ */
+export const isDrawablePaddingSide = (number) => typeof number === 'number' && Number.isFinite(number) && number >= 0;
+
+/**
  * The padding a drawing draws, the one normalizer of it: each side as a
  * number, a side that holds no finite number of 0 or more being 0. The
  * slice's writers store the padding through it (review S2, D-59), so the
@@ -18,7 +26,7 @@ export const normalizeCanvasPadding = (value) => {
   /** @param {'top' | 'right' | 'bottom' | 'left'} side */
   const sideOf = (side) => {
     const number = Number(value?.[side]);
-    return Number.isFinite(number) && number >= 0 ? number : 0;
+    return isDrawablePaddingSide(number) ? number : 0;
   };
   return { top: sideOf('top'), right: sideOf('right'), bottom: sideOf('bottom'), left: sideOf('left') };
 };

@@ -59,7 +59,7 @@ import {
   parseCircularTrackSlotSpecs
 } from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
-import { LEGEND_EDIT_CONFIG_PATHS, legendEditConfigLeaves, pythonLegendKeysOfResults } from './legend-draft-rows.js';
+import { LEGEND_EDIT_CONFIG_PATHS, legendEditConfigLeaves, pythonLegendRowKeys } from './legend-draft-rows.js';
 /** @import { LegendEditConfigLeaves } from './legend-draft-rows.js' */
 import { DEFAULT_LINEAR_OUTPUT_PREFIX, downloadSafeName } from '../utils/download-names.js';
 import { projectCircularMeasureDraft } from './circular-track-measure.js';
@@ -2943,9 +2943,9 @@ export const requestLabelProjection = (state, drawing) => {
 /**
  * The config leaves of the drawing's Legend row edits and canvas padding (`legendEditConfigLeaves`): the one
  * projection Generate's request and the automatic rerender's write (issue #1427). The drawing is the shown one.
- * Python's rows are those of the shown Result's inventory and those Python drew in every Result of the drawing, so
- * the leaves do not depend on which Result of a batch is shown (review S1, D-58). The drawing view a Gallery
- * publication rebuilds holds no paint or canvas slice, and sends none of these leaves.
+ * Python's rows are those of every Result of the drawing (`pythonLegendRowKeys`), so the leaves do not depend on
+ * which Result of a batch is shown. The drawing view a Gallery publication rebuilds holds no paint or canvas slice,
+ * and sends none of these leaves.
  * @param {RequestTableState} state
  * @param {RequestDrawing} drawing
  * @returns {LegendEditConfigLeaves}
@@ -2953,12 +2953,11 @@ export const requestLabelProjection = (state, drawing) => {
 export const requestLegendEditLeaves = (state, drawing) => {
   if (!drawing.slices) return {};
   const inventory = state.originalLegendOrder ? state.originalLegendOrder.value : [];
-  const contents = (state.results ? state.results.value : []).flatMap(({ content }) => (typeof content === 'string' ? [content] : []));
   return legendEditConfigLeaves({
     legendEntries: drawing.legendEntries.value,
     deletedLegendEntries: drawing.deletedLegendEntries.value,
     originalLegendOrder: inventory,
-    pythonRowKeys: [...new Set([...inventory, ...pythonLegendKeysOfResults(contents)])],
+    pythonRowKeys: pythonLegendRowKeys(inventory, state.results ? state.results.value : []),
     rules: drawing.manualSpecificRules,
     canvasPadding: drawing.canvasPadding
   });

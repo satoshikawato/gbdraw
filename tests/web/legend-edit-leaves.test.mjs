@@ -11,11 +11,12 @@ import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
 
-const { legendEditConfigLeaves, pythonLegendKeysOfResults, readLegendEditLeaves } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
+const { legendEditConfigLeaves, pythonLegendRowKeys, readLegendEditLeaves } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
 const { managedConfigOverridePathsForMode, requestLegendEditLeaves } = await import('../../gbdraw/web/js/services/session-request.js');
 const { applyCanvasToSvg } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 const { createLegendLayoutActions } = await import('../../gbdraw/web/js/app/legend/layout-actions.js');
 const { CANVAS_SLICE, setCanvasPaddingSide } = await import('../../gbdraw/web/js/services/drawing/canvas.js');
+const { readCanvasPadding } = await import('../../gbdraw/web/js/services/config-field-readers.js');
 
 const row = (key, caption = key) => ({ caption, originalCaption: key, color: '#cccccc', xPos: 0, yPos: 0, featureIds: [] });
 const NO_PADDING = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -84,6 +85,9 @@ test('D-59: a negative padding side is stored and drawn as 0; Load installs a sa
   CANVAS_SLICE.install(handle, { canvasPadding: { top: -5, right: Number.POSITIVE_INFINITY, bottom: 7, left: 40 } });
   assert.deepEqual({ ...view.canvasPadding }, { top: 0, right: 0, bottom: 7, left: 40 }, 'Load and History install drawable sides');
   assert.deepEqual(leavesOf({ canvasPadding: view.canvasPadding }), { 'canvas.padding': [0, 0, 7, 40] });
+  // Load reads a stored side the canvas cannot draw as 0 and lists it in the Load repair dialog (G2).
+  assert.deepEqual(readCanvasPadding({ top: -7.5, right: 12.5, bottom: 0, left: 0 }),
+    { value: { top: 0, right: 12.5, bottom: 0, left: 0 }, lost: true, leaves: [{ at: '.top', stored: -7.5, used: 0 }] });
   const index = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   for (const side of ['top', 'right', 'bottom', 'left']) {
     assert.match(index, new RegExp(`<input id="canvas-padding-${side}" type="number" min="0" aria-describedby="canvas-padding-help"`),
@@ -175,8 +179,13 @@ test('D-58: a row deleted on one Result of a batch stays hidden in the request w
     canvasPadding: NO_PADDING
   };
   assert.deepEqual(requestLegendEditLeaves(state, drawing), { 'objects.legends.hidden_rows': ['tRNA'] });
-  // The keys Python drew in each Result, the editor's rows left out.
-  assert.deepEqual(pythonLegendKeysOfResults(contents).sort(), ['CDS', 'GC content', 'GC skew (+)', 'GC skew (-)', 'rRNA', 'tRNA']);
+  // The keys Python drew in each Result, the editor's rows left out, with the shown Result's inventory.
+  const results = contents.map((content) => ({ content }));
+  assert.deepEqual(pythonLegendRowKeys(keysOfA, results).sort(), ['CDS', 'GC content', 'GC skew (+)', 'GC skew (-)', 'rRNA', 'tRNA']);
+  // A Result is parsed once while its text stays: a parser that refuses to run proves the second call reads no SVG.
+  const refuse = class { parseFromString() { throw new Error('parsed again'); } };
+  assert.deepEqual(pythonLegendRowKeys(keysOfA, results, /** @type {typeof DOMParser} */ (/** @type {unknown} */ (refuse))).sort(),
+    ['CDS', 'GC content', 'GC skew (+)', 'GC skew (-)', 'rRNA', 'tRNA']);
 });
 
 // Load reads the leaves of a stored request once (`readLegendEditLeaves`): a Web request's overrides, else a CLI or

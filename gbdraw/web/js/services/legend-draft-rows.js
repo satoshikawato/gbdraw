@@ -126,18 +126,43 @@ export const LEGEND_EDIT_CONFIG_PATHS = Object.freeze(/** @type {const} */ ({
  */
 
 /**
- * The keys of the Legend rows Python drew in each Result (`resultLegendRows`; the editor's own rows left out): the
- * rows of every Result of a drawing, which a request names whichever Result is shown (review S1, D-58).
- * @param {readonly string[]} contents The Results' SVG text.
- * @param {typeof DOMParser} [parser]
- * @returns {PythonLegendKey[]}
+ * The keys of the Legend rows Python drew in one Result's SVG text (`resultLegendRows`; the editor's own rows left out).
+ * @param {string} content
+ * @param {typeof DOMParser} parser
+ * @returns {readonly PythonLegendKey[]}
  */
-export const pythonLegendKeysOfResults = (contents, parser = globalThis.DOMParser) => [...new Set(contents.flatMap((content) => {
+const pythonKeysOfResult = (content, parser) => {
   const root = new parser().parseFromString(content, 'image/svg+xml').documentElement;
   // An `image/svg+xml` document's root element is the Result's `<svg>`.
   const svg = root.localName === 'svg' ? /** @type {SVGSVGElement} */ (/** @type {Element} */ (root)) : null;
   return (resultLegendRows(svg) ?? []).filter((row) => !row.editor).map((row) => row.key);
-}))];
+};
+
+// The keys of the Results the last call read, by their text: a Result is parsed again only when its text changed
+// (a six-Result batch of 2.7 MB took about 60 ms to parse in Chromium).
+/** @type {Map<string, readonly PythonLegendKey[]>} */
+let keysByResultText = new Map();
+
+/**
+ * The keys of the Legend rows Python drew in a drawing: the shown Result's inventory and the rows Python drew in every
+ * Result of the drawing, so that a request, and the check whether a step changed what Python draws, name the same rows
+ * whichever Result of a batch is shown. A Result's text may lag behind edits on its mounted root (R1); the keys are
+ * the recorded Python keys, which edits do not change, and the shown Result's inventory covers its rows.
+ * @param {readonly string[]} inventory The shown Result's inventory (`originalLegendOrder`).
+ * @param {readonly { content?: unknown }[]} results The drawing's Results.
+ * @param {typeof DOMParser} [parser]
+ * @returns {PythonLegendKey[]}
+ */
+export const pythonLegendRowKeys = (inventory, results, parser = globalThis.DOMParser) => {
+  /** @type {Map<string, readonly PythonLegendKey[]>} */
+  const read = new Map();
+  for (const { content } of results) {
+    if (typeof content !== 'string' || read.has(content)) continue;
+    read.set(content, keysByResultText.get(content) ?? pythonKeysOfResult(content, parser));
+  }
+  keysByResultText = read;
+  return [...new Set([.../** @type {readonly PythonLegendKey[]} */ (inventory), ...[...read.values()].flat()])];
+};
 
 /**
  * The one projection of a drawing's Legend row edits and canvas padding into the config leaves Python draws them
@@ -177,10 +202,10 @@ export const legendEditConfigLeaves = ({ rules, canvasPadding, pythonRowKeys, ..
  * Python draws, and a rule row's name reaches Python through its rule. The color rules' captions and what they match
  * are part of it (OV-2556: a Legend rename of a feature type row can write rules of the new name, which Python draws as
  * a row the request's leaves do not name). Colors, strokes, and the rows only the Web draws are not part of it.
- * @param {Readonly<Record<RefitField, unknown>> & { originalLegendOrder: readonly string[] }} draft
+ * @param {Readonly<Record<RefitField, unknown>> & DrawnRowsOfDrawing} draft
  * @returns {string}
  */
-const drawnLegendKey = ({ legendEntries, deletedLegendEntries, rules, originalLegendOrder, canvasPadding }) => {
+const drawnLegendKey = ({ legendEntries, deletedLegendEntries, rules, originalLegendOrder, pythonRowKeys, canvasPadding }) => {
   // The paint lists reach `legendEditConfigLeaves` under these local names, and it only reads them. The paint intent
   // writer guard does not follow a local name, so this read-only use is not in its reader list (`SLICE_READERS`).
   /** @type {readonly (LegendEntryInput | null | undefined)[]} */
@@ -193,11 +218,15 @@ const drawnLegendKey = ({ legendEntries, deletedLegendEntries, rules, originalLe
   /** @type {readonly (Partial<SpecificColorRule> | null | undefined)[]} */
   const ruleRows = Array.isArray(rules) ? rules : [];
   return JSON.stringify([legendEditConfigLeaves({
-    // A step edits rows of the shown Result: its inventory names Python's rows.
-    rules: [], canvasPadding: padding, legendEntries: listed, deletedLegendEntries: deleted, originalLegendOrder,
-    pythonRowKeys: originalLegendOrder
+    rules: [], canvasPadding: padding, legendEntries: listed, deletedLegendEntries: deleted, originalLegendOrder, pythonRowKeys
   }), ruleRows.map((rule) => [rule?.feat, rule?.qual, rule?.val, rule?.cap])]);
 };
+
+/**
+ * The rows of a drawing a step is compared by, as its request names them: the shown Result's inventory, and Python's
+ * rows of every Result of the drawing (`pythonLegendRowKeys`).
+ * @typedef {{ originalLegendOrder: readonly string[], pythonRowKeys: readonly string[] }} DrawnRowsOfDrawing
+ */
 
 /**
  * Whether a History step of the shown drawing changed what Python draws and sizes of its Legend rows or its canvas
@@ -206,13 +235,14 @@ const drawnLegendKey = ({ legendEntries, deletedLegendEntries, rules, originalLe
  * automatic rerender to fit the figure again (PD-OI-114 rev 2, Q-D1 A).
  * @param {readonly HistoryChangeLike[] | null | undefined} changes The step's changes.
  * @param {'undo' | 'redo' | undefined} direction Undefined for the step's commit.
- * @param {Readonly<Record<RefitField, unknown>> & { originalLegendOrder: readonly string[] }} current The drawing's
- *   values as the step left them, and the shown Result's inventory.
+ * @param {Readonly<Record<RefitField, unknown>> & DrawnRowsOfDrawing} current The drawing's values as the step left
+ *   them, and its rows as its request names them.
  */
 export const stepRefitsDrawnLegend = (changes, direction, current) => {
   const other = refitFieldsBeforeStep(changes, current, direction === 'undo');
-  return other !== null
-    && drawnLegendKey(current) !== drawnLegendKey({ ...other, originalLegendOrder: current.originalLegendOrder });
+  return other !== null && drawnLegendKey(current) !== drawnLegendKey({
+    ...other, originalLegendOrder: current.originalLegendOrder, pythonRowKeys: current.pythonRowKeys
+  });
 };
 
 /** @param {unknown} value @returns {value is string} */

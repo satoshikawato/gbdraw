@@ -190,7 +190,7 @@ import { placePopupNearPoint, placePopupWithin, popupViewportBounds } from '../u
 /** @import { PopupPlacement } from '../utils/popup-bounds.js' */
 import { formatElapsedMs, reproducibilityLabel, shownRunInfoNoteParts } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
-import { stepRefitsDrawnLegend } from '../services/legend-draft-rows.js';
+import { pythonLegendRowKeys, stepRefitsDrawnLegend } from '../services/legend-draft-rows.js';
 /** @import { HistoryChangeLike } from '../services/setting-application.js' */
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
@@ -3945,7 +3945,9 @@ export const createAppSetup = () => {
     if (undrawn && !direction) return;
     if (!stepRefitsDrawnLegend(changes, direction, {
       legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
-      rules: drawing.manualSpecificRules, canvasPadding: drawing.canvasPadding, originalLegendOrder: originalLegendOrder.value
+      rules: drawing.manualSpecificRules, canvasPadding: drawing.canvasPadding, originalLegendOrder: originalLegendOrder.value,
+      // The rows the request names (`requestLegendEditLeaves`): those Python drew in every Result of the drawing.
+      pythonRowKeys: pythonLegendRowKeys(originalLegendOrder.value, results.value)
     })) return;
     if (featureActions.requestAutomaticRerender() && !direction) history.markLastStepUndrawn();
   };
