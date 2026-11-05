@@ -18,50 +18,22 @@ browser checks.
 
 ## Quick Commands
 
+- Install, test, lint, and reference-output commands:
+  [Development setup](CONTRIBUTING.md#development-setup),
+  [Running the checks CI runs](CONTRIBUTING.md#running-the-checks-ci-runs), and
+  [Changing rendered SVG output](CONTRIBUTING.md#changing-rendered-svg-output)
+  in `CONTRIBUTING.md`.
+- Browser wheel, hosted bundle, and build commands:
+  [Local build and verification](gbdraw/web/CLAUDE.md#local-build-and-verification)
+  in `gbdraw/web/CLAUDE.md`.
+
 ```bash
-# Run tests (fast, excludes slow tests)
-pytest tests/ -v -m "not slow"
-
-# Run all tests including slow
-pytest tests/ -v
-
-# Compare generated SVGs with tracked references (read-only)
-pytest tests/test_output_comparison.py::TestOutputComparison -v
-
-# Update tracked references only for an intentional, reviewed geometry change
-pytest tests/test_output_comparison.py::TestGenerateReferences --update-reference-outputs -v
-
-# Run a single test file
-pytest tests/test_regression.py -v
-
-# Run a single test by name
-pytest tests/ -v -k "circular_basic"
-
-# Run tests by marker
-pytest tests/ -v -m "circular"
-pytest tests/ -v -m "linear"
-
 # Run with coverage
 pytest tests/ --cov=gbdraw --cov-report=html
-
-# Check code formatting (ruff)
-ruff check gbdraw/
 
 # Type-check gbdraw/ with the pinned mypy and compare with the type-debt baseline
 pytest tests/test_type_check_ratchet.py
 mypy  # full error list
-
-# Install in development mode
-pip install -e ".[dev]"
-
-# Prepare the generated browser wheel for offline web packaging/tests
-python tools/prepare_browser_wheel.py
-
-# Prepare the hosted bundle (wheel URL carries the wheel's content hash)
-python tools/prepare_cloudflare_pages.py
-
-# Build distribution
-python -m build
 
 # Basic usage examples
 gbdraw circular --gbk genome.gb -o output
@@ -185,11 +157,9 @@ Architecture changes should keep these entry points convergent:
   performance changes with measurements.
 
 Architecture-bearing changes must follow the
-[architecture fitness-function ratchet](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md).
-Ordinary non-increasing changes record concise owner/path evidence and remove
-superseded paths. Complete before/after OE, PE, and CB sets plus a separate
-maintainer decision are required only for the exception conditions defined by
-that policy.
+[architecture fitness-function ratchet](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md);
+the evidence each change class records is in its
+[Required author evidence](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#required-author-evidence).
 
 ### Persisted-format compatibility
 
@@ -202,11 +172,9 @@ that policy.
   before merge and remove the superseded reader, migrator, fixture, test, and user
   documentation. Do not chain migrations through, or advertise, intermediate
   versions that never reached `main`.
-- A breaking Session change raises `SESSION_VERSION` by one over `main`'s; until
-  that version reaches `main`, later breaking changes keep it and rewrite its
-  history entry and fixtures. The unit is `main`, not a release tag.
-- A change to the generated contracts in `gbdraw/web/js/contracts/` needs the
-  history, reference, and fixture co-changes that the Gate checks; see
+- The `SESSION_VERSION` rule for a breaking Session change (the unit is
+  `main`) and the co-changes that a change to the generated contracts in
+  `gbdraw/web/js/contracts/` needs:
   [Persisted contract co-change](docs/internal/WEB_CHANGE_POLICY.md#persisted-contract-co-change).
 
 ### Working-tree overwrite policy
@@ -250,8 +218,10 @@ The `gbdraw/render/` module has a two-tier architecture:
 
 ### Web UI Structure
 
-- `gbdraw/web/index.html` is the SPA entry point (HTML/CSS/templates + CSP) and loads `gbdraw/web/js/app.js`.
-- JavaScript is split into ES modules under `gbdraw/web/js/` (`state.js`, `config.js`, `components.js`, `services/`, `utils/`, `app/`). Larger UI modules are grouped under `gbdraw/web/js/app/` subfolders (for example `legend/`, `legend-layout/`, `feature-editor/`) while the top-level `app/*.js` files keep the `create*` entry points.
+- The entry point, the ES modules, and their owners:
+  [Non-negotiable properties](gbdraw/web/CLAUDE.md#non-negotiable-properties),
+  [Runtime data flow](gbdraw/web/CLAUDE.md#runtime-data-flow), and
+  [Module ownership](gbdraw/web/CLAUDE.md#module-ownership) in `gbdraw/web/CLAUDE.md`.
 
 ## Coding Conventions
 
@@ -267,11 +237,9 @@ The `gbdraw/render/` module has a two-tier architecture:
 
 ### Type checking
 - The type-debt rule for `gbdraw/` (mypy, `TYPE_DEBT_BASELINE` in
-  `tests/test_type_check_ratchet.py`) is "Type checking" in
-  [the architecture ratchet](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#type-checking).
-  In short: a file's mypy errors plus `# type: ignore` comments stay at or
-  below its entry, a new file has none, and adding or raising an entry needs
-  the Owner's approval.
+  `tests/test_type_check_ratchet.py`):
+  [Type checking](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#type-checking)
+  in the architecture ratchet.
 - Class-body annotations are runtime data. `get_type_hints` reads dataclass
   fields in `gbdraw/config/modify.py` (config overrides) and
   `gbdraw/session_request_codec.py` (canonical request validation), and
@@ -302,7 +270,7 @@ Package configuration, test markers, coverage settings.
 ```
 
 ### Reference Output Tests
-Tests compare generated SVG against `tests/reference_outputs/` files.
+[Changing rendered SVG output](CONTRIBUTING.md#changing-rendered-svg-output) in `CONTRIBUTING.md`.
 
 ### Test Helpers (tests/conftest.py)
 - `GbdrawRunner.run()` - Run either diagram subcommand with optional BLAST inputs
@@ -311,11 +279,10 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 
 ## CI/CD
 
-- **Python versions tested:** 3.10, 3.11, 3.12 (3.13 and 3.14 also in the dev-tier Core matrix)
+- **Tiers, Python versions, and slow tests:** [Validation tiers](docs/internal/SELECTIVE_CI.md#validation-tiers) in `docs/internal/SELECTIVE_CI.md`
 - **Lint job:** Installs the Ruff version pinned in the `dev` extra of `pyproject.toml` and blocks CI on lint failures
 - **Type check:** `Core PR` and `Core` install the `typecheck` extra and run `tests/test_type_check_ratchet.py` (mypy 2.4.1) with the other core tests
 - **CairoSVG:** The Core jobs install the `export` extra (`cairosvg`) with `typecheck`; no workflow installs extra system packages
-- **Slow tests:** Run only in release acceptance (a `workflow_dispatch` of Tests on `dev` with the release profile), not on pull requests or ordinary pushes
 
 ## Dependencies
 
@@ -337,50 +304,18 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 4. **Genome size thresholds:** Window/step sizes auto-adjust (<1M, 1-10M, >10M bp)
 5. **Label filtering:** Supports priority files, blacklists, whitelists
 6. **BLAST comparison:** Linear diagrams only, requires outfmt 6/7
-7. **Browser wheel workflow:** `gbdraw/web/gbdraw-<version>-py3-none-any.whl` is a generated, gitignored asset. Prepare it before wheel-dependent web packaging checks or distribution builds.
+7. **Browser wheel workflow:** [Non-negotiable properties](gbdraw/web/CLAUDE.md#non-negotiable-properties) in `gbdraw/web/CLAUDE.md`.
 
 ## Updating Reference Outputs
 
-When intentional changes affect SVG output, reference files need updating:
-
-```bash
-# 1. Run comparison tests to identify intentional differences. Actual output is
-#    retained under pytest's temporary directory, not reference_outputs/.
-pytest tests/test_output_comparison.py::TestOutputComparison -v
-
-# 2. Review the differences and regenerate only after approving the change.
-pytest tests/test_output_comparison.py::TestGenerateReferences \
-  --update-reference-outputs -v
-
-# 3. Review the tracked SVG diff and verify the new references.
-git diff -- tests/reference_outputs/
-pytest tests/test_output_comparison.py::TestOutputComparison -v
-```
-
-Without `--update-reference-outputs`, reference-generation tests are skipped and
-normal test runs do not write to `tests/reference_outputs/`.
+When intentional changes affect SVG output, follow
+[Changing rendered SVG output](CONTRIBUTING.md#changing-rendered-svg-output) in `CONTRIBUTING.md`.
 
 ## Documentation
 
-- Public documentation has four teaching routes: Tutorials, Technical
-  documentation, FAQ, and Gallery. `docs/DOCS.md` is the navigation authority.
-- Use the fewest public pages that answer distinct reader questions. Coverage
-  does not require one page per capability, workflow, or interface.
-- Before adding a public page, record the reader question, the existing owner,
-  and a `keep`, `merge`, `delete`, or `new` disposition. Add a page only when
-  editing an existing owner cannot answer the question clearly.
-- A Tutorial needs a deliberate learning progression to a finished result.
-  Separate GUI, CLI, or Python evidence does not by itself justify separate
-  public pages.
-- Technical documentation owns exact behavior and contracts. FAQ owns concise
-  decisions and troubleshooting, and links to the technical owner. Gallery is
-  for discovering finished outcomes.
-- Executable scenarios may support one public page or no public page. Do not
-  turn an evidence inventory into a public-page inventory.
-- Keep user- and maintainer-facing prose concise, concrete, and technically
-  accurate. Optimize internal implementation plans for execution fidelity.
-- Preserve exact technical terms, UI labels, CLI options, identifiers, and
-  scientifically necessary qualifications.
+- The documentation rules (four teaching routes, when to add a page, prose,
+  and terms): [Changing documentation](CONTRIBUTING.md#changing-documentation)
+  in `CONTRIBUTING.md`.
 - Main docs: `docs/DOCS.md`
 - Canonical tutorial index: `docs/TUTORIALS/README.md`
 - Current documentation plan:
