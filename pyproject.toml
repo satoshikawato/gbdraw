@@ -45,7 +45,7 @@ dev = [
     "Pillow",
     "playwright==1.64.1",
     "pytest>=7.0",
-    "pytest-cov>=4.0",
+    "pytest-cov>=7.0",
     "pytest-timeout>=2.0",
     "pytest-xdist>=3.6",
     "ruff==0.17.3",
@@ -114,12 +114,17 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["gbdraw"]
+# Count the CLI that tests start as `python -m gbdraw.cli` subprocesses.
+patch = ["subprocess"]
 omit = [
     "tests/*",
     "gbdraw/web/*",
 ]
 
 [tool.coverage.report]
+# Floor for total line coverage in the dev-tier `Core (Python 3.14)` job (0: report only).
+# Set it from dev-tier results and only raise it; lowering it needs the Owner.
+fail_under = 0
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",

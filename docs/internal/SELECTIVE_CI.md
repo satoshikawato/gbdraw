@@ -10,7 +10,7 @@ classification rules.
 | Tier | Trigger | Required coverage |
 | --- | --- | --- |
 | PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; all functional Playwright in eight shards for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Python 3.11 primary |
-| Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10/3.11/3.12; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
+| Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10–3.14, with line coverage on 3.14; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
 | Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), exact-candidate Gallery readiness, complete Web UI translations (`node tools/i18n/sync.mjs status --require-complete`); outside `Release / gate`, the promotion audit jobs (every recipe check, report-only `tools/audit/` sweeps, the user journeys, the random walk, and their summary) |
 
 PR feedback targets 5–8 minutes without functional Playwright and 15–20 minutes
@@ -25,6 +25,17 @@ process. S11 still requires its candidate freeze, package install/offline and
 cross-platform evidence, complete-refresh/performance budgets, and source checks.
 The tag publication workflow and `tools/check_release_source.py` are unchanged;
 passing a tier never authorizes tagging, publication, or deployment.
+
+### Line coverage
+
+`Core (Python 3.14)` runs its selection under pytest-cov, writes the total line
+coverage of `gbdraw/` (without `gbdraw/web/`) to the run summary, and uploads
+`coverage.xml` and `htmlcov/` as the `coverage-<run id>-<attempt>` artifact for
+30 days. `patch = ["subprocess"]` counts the CLI that tests start as
+subprocesses. Its test step fails when the total falls below `fail_under` in
+`[tool.coverage.report]` of `pyproject.toml`. The floor is set from dev-tier
+results and only raised; lowering it needs the Owner. Pull requests do not
+measure coverage.
 
 ### Python-version coverage
 
