@@ -2,9 +2,9 @@
 
 Guidance for automated agents working in this repository.
 
-Each repository rule has one canonical text; a link here points to it. The
-[norms index](docs/internal/NORMS_INDEX.md) lists the design rules and Product
-Contract records with the tests and CI jobs that check them.
+Where another document owns a rule, this file links to it instead of repeating
+it. The [norms index](docs/internal/NORMS_INDEX.md) lists the design rules and
+Product Contract records with the tests and CI jobs that check them.
 
 ## Read First
 - コード1行増やすごとに技術負債が増えると心得よ。負債は行数ではなく、増えた変更点・分岐・重複で数える。
@@ -108,8 +108,11 @@ Contract records with the tests and CI jobs that check them.
 - Audit production-code and test diffs separately before handoff. Optimize for
   fewer change points, branches, and duplicated behavior rather than raw line counts.
 - Follow the [architecture fitness-function ratchet](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md)
-  for every architecture-bearing change; the evidence each change class
-  records is in its [Required author evidence](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#required-author-evidence).
+  for every architecture-bearing change. An ordinary change removes every
+  superseded owner or path in the same change
+  ([Merge acceptance](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#merge-acceptance));
+  the evidence each change class records is in
+  [Required author evidence](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#required-author-evidence).
 - Web UI layout (a single-page app with no build step, ES modules under
   `gbdraw/web/js/`, `create*` entry points in `app/*.js` with larger helpers in
   feature subfolders): [Non-negotiable properties](gbdraw/web/CLAUDE.md#non-negotiable-properties)

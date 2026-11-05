@@ -19,9 +19,10 @@ split, independently implemented, or adopted without merging the submitted
 patch. Contributing does not imply roadmap priority, repository access, a
 merge, or maintainer status.
 
-Each repository rule has one canonical text, and other documents link to it.
-The [norms index](./docs/internal/NORMS_INDEX.md) lists the design rules and
-Product Contract records with the tests and CI jobs that check them.
+Where another document owns a rule, this guide links to it instead of
+repeating it. The [norms index](./docs/internal/NORMS_INDEX.md) lists the
+design rules and Product Contract records with the tests and CI jobs that check
+them.
 
 ## Most useful contributions
 
@@ -266,11 +267,12 @@ pytest tests/ -v -k documentation
 
 ## Branch roles
 
-Approved work starts from the latest merged `dev`. The roles of work branches,
+Approved work starts from the latest merged `dev`, and a maintainer opens the
+promotion pull request from `dev` to `main`. The roles of work branches,
 `dev`, and `main`, what each admits and runs, and the rule that direct `main`
 hotfixes are unsupported are in
 [Delivery lifecycle](./docs/internal/WEB_CHANGE_POLICY.md#delivery-lifecycle)
-of the normative Web change, review, and delivery policy, which also owns
+of the normative Web change, review, and delivery policy, which also defines
 lifecycle ownership and trust boundaries.
 
 For a fork, keep your fork as `origin`, add this repository as `upstream`, and
@@ -304,8 +306,10 @@ Select exactly one change class in the pull request template:
 - `PROMOTION` only for a no-implementation `dev` to `main` release-admission
   pull request.
 
-What an architecture-bearing `STANDARD` change records, and what only
-`ARCHITECTURE_EXCEPTION` needs:
+An ordinary architecture-bearing `STANDARD` change removes every superseded
+owner or path in the same change
+([Merge acceptance](./docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#merge-acceptance)).
+What it records, and what only `ARCHITECTURE_EXCEPTION` needs:
 [Required author evidence](./docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#required-author-evidence).
 
 Apply the `architecture-change` label to a Web implementation that changes an
@@ -348,7 +352,8 @@ corresponding issue. Then:
    effects, scientific-output effects, and any intentional rendering changes.
 7. For an architecture-bearing change, provide the evidence that
    [Required author evidence](./docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#required-author-evidence)
-   lists for its change class.
+   lists for its change class; an ordinary change removes every superseded
+   owner or path in the same change.
 8. If SVG output changes, review the actual output and the reference diff, and
    identify every intentional rendering change.
 

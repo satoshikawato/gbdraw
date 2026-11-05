@@ -157,8 +157,10 @@ Architecture changes should keep these entry points convergent:
   performance changes with measurements.
 
 Architecture-bearing changes must follow the
-[architecture fitness-function ratchet](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md);
-the evidence each change class records is in its
+[architecture fitness-function ratchet](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md).
+An ordinary change removes every superseded owner or path in the same change
+([Merge acceptance](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#merge-acceptance));
+the evidence each change class records is in
 [Required author evidence](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#required-author-evidence).
 
 ### Persisted-format compatibility
