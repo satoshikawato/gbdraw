@@ -338,6 +338,7 @@ def _probe(command: list[str]) -> subprocess.CompletedProcess[str] | None:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=_PROBE_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.SubprocessError):
@@ -504,6 +505,7 @@ def _run_losat_subprocess(
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
     except FileNotFoundError as exc:
         raise ValidationError(

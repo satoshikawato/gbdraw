@@ -195,6 +195,10 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          # coverage.py measures through sys.monitoring by default on 3.14.
+          - python-version: "3.14"
+            coverage: true
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -207,24 +211,42 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install core test dependencies
-        run: python -m pip install -e ".[export,typecheck]" pytest pytest-timeout pytest-xdist Pillow
+        run: python -m pip install -e ".[export,typecheck]" pytest pytest-timeout pytest-xdist "pytest-cov>=7.0" Pillow
 
       - name: Install the managed LOSAT runtime
         uses: ./.github/actions/managed-losat
 
+      # With coverage, pytest-cov fails this step when the total line coverage
+      # falls below fail_under in pyproject.toml.
       - name: Run core tests
         run: >-
           python -m pytest tests/
           -m "not slow and not (recipe or gallery or browser)"
           -n auto --dist loadfile
           --durations=30
+          ${{ matrix.coverage && '--cov --cov-report=xml --cov-report=html' || '' }}
+
+      - name: Report line coverage
+        if: ${{ !cancelled() && matrix.coverage }}
+        run: echo "Line coverage of gbdraw/ is $(python -m coverage report --format=total --fail-under=0)% (floor is fail_under in pyproject.toml; the test step checks it)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: ${{ !cancelled() && matrix.coverage }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            coverage.xml
+            htmlcov/
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Verify reference outputs are unchanged
         if: always()
         run: git diff --exit-code -- tests/reference_outputs/
 
   core-pr:
-    name: Core PR (Python 3.11)
+    name: Core PR (Python 3.10)
     needs: ci-impact
     if: >-
       github.event_name == 'pull_request' && github.base_ref == 'dev' &&
@@ -236,10 +258,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Python 3.11
+      # The oldest supported Python, so a pull request catches newer-only APIs and options.
+      - name: Set up Python 3.10
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.11"
+          python-version: "3.10"
           cache: pip
           cache-dependency-path: pyproject.toml
 
@@ -849,7 +872,8 @@ jobs:
       !cancelled() &&
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'playwright-performance') &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
@@ -1700,6 +1724,7 @@ jobs:
       - web-contracts-pr
       - web-pr-smoke
       - playwright-functional
+      - playwright-performance
     if: >-
       always() &&
       github.event_name == 'pull_request' &&
@@ -1730,12 +1755,17 @@ jobs:
         with:
           node-version-file: .ci-node-version/.node-version
 
+      # Repository, labels, and token are for a trusted-helper check of dev's Tests state;
+      # a helper without that check ignores them.
       - name: Validate required PR evidence
         env:
           CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
           CI_IMPACT_NEEDS_JSON: ${{ toJSON(needs) }}
           CI_IMPACT_EXPECTED_PROFILE: pr
           CI_IMPACT_EXPECTED_WORKFLOW_SHA: ${{ github.sha }}
+          CI_IMPACT_REPOSITORY: ${{ github.repository }}
+          CI_IMPACT_PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: node .ci-trusted-base/tools/ci-impact.mjs gate
 
   dev-staging-gate:

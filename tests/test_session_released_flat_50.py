@@ -53,7 +53,7 @@ def test_replaying_the_released_wrapped_cli_session_draws_wrapped_rows(tmp_path:
     session_path = tmp_path / "released.gbdraw-session.json"
     session_path.write_bytes(gzip.decompress(FIXTURE.read_bytes()))
     replay = subprocess.run(
-        [sys.executable, "-P", "-c", "from gbdraw.cli import main; main()", "linear", "--session", session_path.name,
+        [sys.executable, "-c", "from gbdraw.cli import main; main()", "linear", "--session", session_path.name,
          "-o", "replayed", "-f", "svg"],
         cwd=tmp_path, capture_output=True, text=True, env={"PYTHONPATH": str(REPO), "PATH": "/usr/bin:/bin"},
     )

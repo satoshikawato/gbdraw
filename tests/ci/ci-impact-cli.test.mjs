@@ -783,7 +783,7 @@ test('a failed fast job cancels the rest of its pull request run, never a dev ru
   assert.match(workflow.split('\njobs:\n')[0], /\npermissions:\n  contents: read\n  actions: read\n/);
   assert.deepEqual(gateNeeds(), [
     'ci-impact', 'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint',
-    'web-contracts-pr', 'web-pr-smoke', 'playwright-functional'
+    'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance'
   ]);
 });
 

@@ -11,13 +11,15 @@ expand one, told by its first two bytes, and every reader opens its file there.
 
 from __future__ import annotations
 
+import codecs
 import gzip
 import io
+import locale
 import re
 import zlib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from os import PathLike
-from typing import Literal, TextIO
+from typing import Literal, TextIO, TypeVar
 
 from Bio.SeqFeature import SeqFeature
 
@@ -60,6 +62,8 @@ GZIP_SIGNATURE = b"\x1f\x8b"
 # A reader spreads it into its except tuple: ``except (ValueError, *GZIP_ERRORS)``.
 GZIP_ERRORS = (EOFError, zlib.error, gzip.BadGzipFile)
 
+_Read = TypeVar("_Read")
+
 
 def is_gzip_file(path: str | PathLike[str]) -> bool:
     """Whether the file starts with the gzip signature; its name does not count."""
@@ -69,19 +73,40 @@ def is_gzip_file(path: str | PathLike[str]) -> bool:
 
 
 def open_input_text(
-    path: str | PathLike[str], *, encoding: str | None = None, newline: str | None = None
+    path: str | PathLike[str], *, encoding: str = "utf-8", newline: str | None = None
 ) -> TextIO:
     """An input file opened as text, expanded when it is gzip-compressed.
 
     Every reader of an input file (sequence, annotation, table, depth, Session)
     opens it here, so a gzip file reads wherever a plain one does, streamed as a
     plain one is. Reading a gzip stream that is cut off or damaged raises one of
-    ``GZIP_ERRORS``.
+    ``GZIP_ERRORS``. A sequence or annotation file is read through
+    :func:`read_sequence_text` instead.
     """
 
     if is_gzip_file(path):
         return gzip.open(path, "rt", encoding=encoding, newline=newline)
     return open(path, "r", encoding=encoding, newline=newline)
+
+
+def read_sequence_text(path: str | PathLike[str], read: Callable[[Iterator[str]], _Read]) -> _Read:
+    """What ``read`` makes of the lines (:func:`text_lines`) of a GenBank, EMBL, GFF3 or FASTA file.
+
+    The file is read as UTF-8. One that is not UTF-8 is read again in the
+    locale's encoding, so a file a Windows editor saved in its code page (cp1252,
+    cp932) still reads there. Where the locale is UTF-8 (Linux, macOS, the Web)
+    the UTF-8 error stands. ``read`` takes every line it needs before it returns.
+    """
+
+    try:
+        with open_input_text(path) as handle:
+            return read(text_lines(handle))
+    except UnicodeDecodeError:
+        encoding = locale.getpreferredencoding(False)
+        if codecs.lookup(encoding).name == "utf-8":
+            raise
+        with open_input_text(path, encoding=encoding) as handle:
+            return read(text_lines(handle))
 
 
 def read_input_bytes(path: str | PathLike[str]) -> bytes:
@@ -260,5 +285,6 @@ __all__ = [
     "is_gzip_file",
     "open_input_text",
     "read_input_bytes",
+    "read_sequence_text",
     "text_lines",
 ]

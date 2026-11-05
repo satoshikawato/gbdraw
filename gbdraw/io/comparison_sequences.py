@@ -28,7 +28,7 @@ from Bio.Seq import Seq, UndefinedSequenceError
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.input_text import GZIP_ERRORS, open_input_text
+from gbdraw.io.input_text import GZIP_ERRORS, read_sequence_text
 
 ComparisonSequenceFormat = Literal["fasta", "genbank"]
 
@@ -126,8 +126,7 @@ def read_comparison_sequence_file(path: str | os.PathLike[str]) -> ComparisonSeq
     text_path = os.fspath(path)
     name = os.path.basename(text_path)
     try:
-        with open_input_text(text_path, encoding="utf-8-sig") as handle:
-            text = handle.read()
+        text = read_sequence_text(text_path, "".join)
     except (OSError, UnicodeDecodeError, *GZIP_ERRORS) as exc:
         raise _unreadable(f"Could not read comparison sequence file {name}: {exc}") from exc
     if not text.strip():

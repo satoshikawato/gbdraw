@@ -9,8 +9,8 @@ classification rules.
 
 | Tier | Trigger | Required coverage |
 | --- | --- | --- |
-| PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; all functional Playwright in eight shards for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Python 3.11 primary |
-| Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10/3.11/3.12; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
+| PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; all functional Playwright in eight shards, plus the performance smoke, for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Core on Python 3.10, other jobs on 3.11 |
+| Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10–3.14, with line coverage on 3.14; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
 | Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), exact-candidate Gallery readiness, complete Web UI translations (`node tools/i18n/sync.mjs status --require-complete`); outside `Release / gate`, the promotion audit jobs (every recipe check, report-only `tools/audit/` sweeps, the user journeys, the random walk, and their summary) |
 
 PR feedback targets 5–8 minutes without functional Playwright and 15–20 minutes
@@ -26,15 +26,32 @@ cross-platform evidence, complete-refresh/performance budgets, and source checks
 The tag publication workflow and `tools/check_release_source.py` are unchanged;
 passing a tier never authorizes tagging, publication, or deployment.
 
+### Line coverage
+
+`Core (Python 3.14)` runs its selection under pytest-cov, writes the total line
+coverage of `gbdraw/` (without `gbdraw/web/`) to the run summary, and uploads
+`coverage.xml` and `htmlcov/` as the `coverage-<run id>-<attempt>` artifact for
+30 days. `patch = ["subprocess"]` counts the CLI that tests start as
+subprocesses. Its test step fails when the total falls below `fail_under` in
+`[tool.coverage.report]` of `pyproject.toml`. The floor is set from dev-tier
+results and only raised; lowering it needs the Owner. Pull requests do not
+measure coverage.
+
 ### Python-version coverage
 
-The inexpensive core matrix remains on 3.10/3.11/3.12 because language support,
+The inexpensive core matrix remains on 3.10 to 3.14 because language support,
 TOML loading (`tomli` on 3.10), dependency resolution, and package/Python APIs can
 differ by host interpreter. Browser rendering itself uses the packaged Pyodide
 interpreter, not the runner's Python version. Host-version repetition still tests
 packaging and browser-test adapters, so exhaustive recipe/Gallery/browser version
 coverage remains mandatory in release acceptance. Python 3.11 already runs each
 of those surfaces in the shared functional jobs.
+
+`Core PR` runs on Python 3.10, the oldest supported version, so a pull request
+catches a newer-only interpreter option or API (such as `python -P`) before it
+reaches `dev`; mypy already checks for 3.10 but cannot see interpreter options.
+Python 3.11 still runs on pull requests in the recipe, Gallery, Web contract,
+and Playwright jobs, and the `dev` Core matrix covers 3.10 to 3.14.
 
 All non-browser slow tests move to S11, except the three package-build integration
 checks in `test_web_packaging.py`, which also run in the dev Browser job. Offline
@@ -288,7 +305,8 @@ that run's evidence for the jobs both tiers run with the same command:
 | `playwright-functional` | Same eight shard lists; a pull request plan has no leaf tests, so each shard runs its whole list |
 
 The other dev jobs always run: `core` (three Python versions; pull requests
-run `core-pr` on 3.11), `browser`, `playwright-performance`,
+run `core-pr` on 3.10), `browser`, `playwright-performance` (a pull request
+that runs functional Playwright also runs it, but `dev` keeps its own run),
 `losat-cache-browser-acceptance`, and `web-change-budget` (it checks the
 `dev` push range in its integrated mode, not the pull request range). A job
 is inherited only when the pull request capabilities of the change select it,

@@ -4069,3 +4069,16 @@ def test_a_comparison_interpolates_each_gradient_color_once(monkeypatch: pytest.
     assert len(paths) == 6 and len(calls) == 3
     fills = {path.attribs["data-identity"]: path.attribs["fill"] for path in paths}
     assert len(set(fills.values())) == 3
+
+
+def test_orthogroup_union_find_joins_a_10000_protein_chain() -> None:
+    """Orthogroup joining needs no recursion: a chain of 10,000 proteins, each
+    joined to the previous one, is one set (it raised RecursionError at 1,000)."""
+    union_find = protein_colinearity_module._UnionFind()
+    names = [f"p{index:05d}" for index in range(10_000, 0, -1)]
+    for previous, protein in zip(names, names[1:]):
+        union_find.union(protein, previous)
+
+    assert len({union_find.find(name) for name in names}) == 1
+    union_find.union("q2", "q1")
+    assert union_find.find("q1") == union_find.find("q2") != union_find.find(names[0])

@@ -90,7 +90,8 @@ test('gate accepts metadata, documentation, and full PR routes', () => {
       'lint',
       'web-contracts-pr',
       'web-pr-smoke',
-      'playwright-functional'
+      'playwright-functional',
+      'playwright-performance'
     ]
   ]);
   routes.forEach((impactPlan) => {

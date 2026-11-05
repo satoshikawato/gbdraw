@@ -4127,29 +4127,34 @@ def _comparison_columns_only(hits: DataFrame) -> DataFrame:
 
 
 class _UnionFind:
+    """Disjoint sets of protein ids, without recursion: union by size, path compression.
+
+    A root only keys its set; callers order sets by their members.
+    """
+
     def __init__(self) -> None:
         self._parent: dict[str, str] = {}
-
-    def add(self, item: str) -> None:
-        if item not in self._parent:
-            self._parent[item] = item
+        self._size: dict[str, int] = {}
 
     def find(self, item: str) -> str:
-        self.add(item)
-        parent = self._parent[item]
-        if parent != item:
-            parent = self.find(parent)
-            self._parent[item] = parent
-        return parent
+        root = self._parent.setdefault(item, item)
+        while root != self._parent[root]:
+            root = self._parent[root]
+        while item != root:
+            parent = self._parent[item]
+            self._parent[item] = root
+            item = parent
+        return root
 
     def union(self, left: str, right: str) -> None:
         left_root = self.find(left)
         right_root = self.find(right)
         if left_root == right_root:
             return
-        if right_root < left_root:
+        if self._size.get(left_root, 1) < self._size.get(right_root, 1):
             left_root, right_root = right_root, left_root
         self._parent[right_root] = left_root
+        self._size[left_root] = self._size.get(left_root, 1) + self._size.pop(right_root, 1)
 
 
 def _is_better_member_rank(
