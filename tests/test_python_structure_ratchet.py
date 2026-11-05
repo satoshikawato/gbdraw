@@ -245,7 +245,6 @@ FUNCTION_LINES: dict[str, int] = {
     "gbdraw/diagrams/circular/radial_layout.py::_resolve_circular_radial_layout": 454,
     "gbdraw/diagrams/linear/assemble.py::_build_linear_record_vertical_plans": 160,
     "gbdraw/diagrams/linear/assemble.py::_collect_linear_primary_bounds": 160,
-    "gbdraw/diagrams/linear/assemble.py::assemble_linear_diagram": 1337,
     "gbdraw/diagrams/linear/builders.py::add_record_definition_group": 158,
     "gbdraw/features/factory.py::_build_feature_layers": 155,
     "gbdraw/labels/circular.py::_legacy_improved_label_placement_fc": 183,
