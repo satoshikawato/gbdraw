@@ -464,13 +464,8 @@ test('Generate preserves four canonical pairs and same-value geometry; unit edit
   expect(canonicalSlots(first.request)).toEqual(canonicalSlots(original.request));
   const firstGeometry = await geometry(page);
   const withoutOutputName = value => ({ ...value, records: value.records.map(({ resultName, ...record }) => record) });
-  // The Gallery Result was saved before records carried `axis` and `recordKey`; Generate adds them, so they are
-  // compared only where the loaded record has them. The Gallery Session refresh removes this allowance.
-  const loadedRecords = new Map(originalGeometry.records.map(record => [record.recordId, record]));
-  const asLoaded = value => ({ ...value, records: value.records.map(record => Object.fromEntries(Object.entries(record)
-    .filter(([key]) => !['axis', 'recordKey'].includes(key) || key in loadedRecords.get(record.recordId)))) });
   expect(firstGeometry.records.every(record => record.axis && record.recordKey)).toBe(true);
-  expect(withoutOutputName(asLoaded(firstGeometry))).toEqual(withoutOutputName(originalGeometry));
+  expect(withoutOutputName(firstGeometry)).toEqual(withoutOutputName(originalGeometry));
   const firstSvg = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
   for (const [slot, field, value] of [
     ['plastome_regions', 'Width', '20'], ['plastome_regions', 'Radius', '0.65'],
