@@ -272,7 +272,7 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
 // R11 input matrix (SE-02, SE-03, SE-04): control type x input means x focus
 // state. Every changed control adds exactly one step, and Undo is LIFO. The
 // text, checkbox, and label controls are edited in Circular, so their values
-// are read from the Circular drawing also while Linear is shown (PD-OI-086).
+// are read from the Circular drawing also while Linear is shown (PD-OI-090).
 // The checkbox is a drawing setting: the Rich Feature Popup preference records
 // no step (D-03).
 const controlState = (page) => page.evaluate(async () => {

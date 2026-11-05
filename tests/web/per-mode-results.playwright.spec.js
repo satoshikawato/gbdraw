@@ -200,7 +200,7 @@ test('each mode keeps its own Result, with its Legend drag, across switches', as
   expect((await shown(page)).identity).toBe(linear.identity);
 });
 
-// PR-1 (PD-OI-086): each mode's drawing keeps its own Legend edits. A rename,
+// PR-1 (PD-OI-090): each mode's drawing keeps its own Legend edits. A rename,
 // an added row, and a moved row made on the Circular Result stay in Circular:
 // Linear's first Generate draws its own rows, and the Circular Result keeps the
 // edit when it is shown again, with Sort by default back to its own generated

@@ -263,7 +263,7 @@ test('no-placement Circular and Linear mode round trips remain generatable', asy
   }
 });
 
-// OV-105: annotation sets are kept per mode (PD-OI-086). A target record
+// OV-105: annotation sets are kept per mode (PD-OI-090). A target record
 // picked in one mode belongs to that mode's set: the other mode has no such
 // annotation, so its Generate requests and draws nothing and shows no record
 // selector for it, and the first mode draws it again on its record.

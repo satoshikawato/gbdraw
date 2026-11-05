@@ -472,7 +472,7 @@ for (const [mode, addDepth] of DEPTH_ADDERS) {
   });
 }
 
-// OV-80: Legend styles belong to the drawing of their mode (PD-OI-086). A color
+// OV-80: Legend styles belong to the drawing of their mode (PD-OI-090). A color
 // set on one mode's Result, on a row the other mode does not draw, stays in that
 // mode's drawing only, does not fail the other mode's Generate, and returns with
 // the row. Show Depth is per mode, so the Depth case returns with Depth on.

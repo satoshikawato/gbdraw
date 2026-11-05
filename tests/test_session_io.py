@@ -1023,7 +1023,7 @@ def test_alignment_session_requires_reset_receipt_for_request_schema_8_and_later
 
 def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> None:
     # Design Q4: per-feature edits are identity rows. Session 46 keeps each
-    # mode's rows in its own slice (PD-OI-086), so both modes keep their own
+    # mode's rows in its own slice (PD-OI-090), so both modes keep their own
     # row for `record-1` and a row names no mode.
     payload = build_mode_scoped_session_json(
         SessionBuildContext(

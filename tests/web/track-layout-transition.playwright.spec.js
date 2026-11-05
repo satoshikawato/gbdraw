@@ -144,7 +144,7 @@ test('Linear Use custom stack asks before dropping a Linear lane, and Circular S
     await expect.poll(() => layoutState(page, key)).toEqual(placed);
     await expect(custom).not.toBeChecked();
 
-    // Each mode has its own drawing (PD-OI-086): the Circular panel's Separate
+    // Each mode has its own drawing (PD-OI-090): the Circular panel's Separate
     // Strands is the Circular drawing's, so changing it asks nothing and leaves
     // the Linear Separate Strands and lane placement as they are.
     const linearDraft = () => page.evaluate(async (overrideKey) => {

@@ -145,7 +145,7 @@ const isControl = (element) => {
   return element.tag.includes('-') && !PRESENTATION_COMPONENTS.has(element.tag);
 };
 const isTransient = (element) => [...ancestorsOrSelf(element)].some((node) => node.attributes.get('data-history-scope') === 'transient');
-// An app preference, not a drawing setting (`ui.richFeaturePopup`, PD-OI-086);
+// An app preference, not a drawing setting (`ui.richFeaturePopup`, PD-OI-090);
 // it is not in the Session's drawing request. It takes effect on the next
 // feature click and sets the popup mode of Interactive SVG exports
 // (svg-serialization.js `popupMode`), so no Applies on Generate row fits it.

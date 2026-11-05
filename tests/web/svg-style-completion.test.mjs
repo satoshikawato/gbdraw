@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { fixture } from './helpers/svg-style-fixture.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 
-// OV-108 (PD-OI-086), OV-488: the palette styles a Result with the skew slot
+// OV-108 (PD-OI-090), OV-488: the palette styles a Result with the skew slot
 // colors of the request that drew it, whichever mode is shown; the track slots
 // of neither drawing reach it before Generate (R1).
 test('a palette keeps the skew slot colors of the request that drew the displayed Result (OV-108)', () => {

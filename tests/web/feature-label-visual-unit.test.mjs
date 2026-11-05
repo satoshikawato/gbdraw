@@ -900,7 +900,7 @@ test('a label whose text names an Object.prototype member keeps its text', () =>
 });
 
 // D-36, review C S3: a requested redraw is owed by the drawing it was asked
-// for (each mode has its own, PD-OI-086), so a rerender shown in one mode does
+// for (each mode has its own, PD-OI-090), so a rerender shown in one mode does
 // not pay the other mode's.
 test('a requested redraw stays owed until a rerender of its own drawing is shown', () => {
   const harness = buildHarness();

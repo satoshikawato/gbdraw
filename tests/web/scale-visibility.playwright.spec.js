@@ -292,7 +292,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
     await window.Vue.nextTick();
   }, genbank);
 
-  // Arrow settings are per mode (PD-OI-086): Linear starts at the defaults,
+  // Arrow settings are per mode (PD-OI-090): Linear starts at the defaults,
   // and its controls set its own values.
   const arrowSettings = () => page.evaluate(() => ({
     shape: window.__GBDRAW_APP__.adv.feature_shapes.CDS,

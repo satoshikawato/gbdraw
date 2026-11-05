@@ -1,4 +1,4 @@
-// PD-OI-086 (mode-scoped settings): Circular and Linear each keep their own
+// PD-OI-090 (mode-scoped settings): Circular and Linear each keep their own
 // drawing, with its settings and editor edits. A switch shows the other mode's
 // drawing and writes nothing into either; an edit, a Generate, a Depth source
 // change, Reset Settings, and History act on their own mode's drawing (Reset
