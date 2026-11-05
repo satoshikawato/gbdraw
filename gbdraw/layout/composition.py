@@ -12,9 +12,13 @@ from dataclasses import dataclass
 from enum import Enum
 from itertools import product
 from operator import itemgetter
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from .spatial import Aabb, _validate_padding, union_aabbs
+
+if TYPE_CHECKING:
+    from ..core.figure_length import RequestedFigureSize
+    from ..render.group_content import GroupContent
 
 
 # A request's canvas padding, px per side: top, right, bottom, left (``canvas.padding``).
@@ -173,6 +177,22 @@ def _coerce_title_placement(value: TitlePlacement | str) -> TitlePlacement:
         return TitlePlacement(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"unknown title placement: {value!r}") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class CompositionInputs:
+    """What a diagram is composed with besides its own drawing, the same for both modes.
+
+    The API builds it once from the request: the plot title content (``None``
+    when no title is drawn) and its placement (``TitlePlacement.NONE`` without
+    a title), the requested figure size, and the canvas padding. The assembler
+    places the title and turns these into its ``CompositionRequest``.
+    """
+
+    title_content: GroupContent | None
+    title_placement: TitlePlacement
+    requested_size: RequestedFigureSize
+    canvas_padding: CanvasPaddingSides
 
 
 @dataclass(frozen=True, slots=True)

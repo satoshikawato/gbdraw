@@ -132,6 +132,7 @@ from gbdraw.configurators import (
     GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
+from gbdraw.configurators.bundle import DiagramConfigurators
 from gbdraw.configurators.legend import measure_legend
 from gbdraw.core.color import normalize_hex_color
 from gbdraw.core.figure_length import RequestedFigureSize
@@ -144,8 +145,19 @@ from gbdraw.diagrams.circular.assemble import (
     circular_legend_table,
     plan_circular_annotation_slots,
 )
+from gbdraw.diagrams.circular.parts import (
+    CircularPresentationInputs,
+    CircularRecordData,
+    CircularTrackInputs,
+)
 from gbdraw.diagrams.circular.radial_layout import track_layout_reason
 from gbdraw.diagrams.linear import assemble_linear_diagram
+from gbdraw.diagrams.linear.parts import (
+    LinearAlignmentInputs,
+    LinearComparisonInputs,
+    LinearRecordInputs,
+    LinearTrackInputs,
+)
 from gbdraw.exceptions import LabelLayoutError, LabelsDoNotFitError, ValidationError
 from gbdraw.features.colors import build_default_color_map, build_specific_color_rules
 from gbdraw.features.placement import ResolvedRecordFeatureInputs
@@ -192,6 +204,7 @@ from gbdraw.labels.linear import (
 )
 from gbdraw.layout.composition import (
     NO_CANVAS_PADDING_SIDES,
+    CompositionInputs,
     CompositionItem,
     CompositionRequest,
     CompositionSpacing,
@@ -264,6 +277,7 @@ from gbdraw.render.groups.circular.definition import (
     definition_record_facts,
 )
 from gbdraw.render.groups.circular.legend import circular_legend_content
+from gbdraw.render.groups.linear.plot_title import plot_title_content as linear_plot_title_content
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
@@ -1513,6 +1527,23 @@ def _apply_circular_plot_title_font_size_override(
     )
 
 
+def _linear_plot_title_content(cfg: GbdrawConfig, plot_title: str, font_size: float) -> GroupContent | None:
+    """The Linear plot title content: one centred, mixed-style line.
+
+    None without a title, and when a typed title paints nothing ("<i></i>", OV-1845).
+    """
+
+    if not plot_title:
+        return None
+    return painted_title_content(render_stage(
+        "plot_title_content",
+        linear_plot_title_content,
+        plot_title,
+        font_family=cfg.objects.text.font_family,
+        font_size=float(font_size),
+    ))
+
+
 def _circular_plot_title_content(
     *,
     gb_record: SeqRecord,
@@ -1555,6 +1586,28 @@ def _circular_plot_title_content(
         ),
         definition_group_id="plot_title",
     ))
+
+
+def _composition_inputs(
+    cfg: GbdrawConfig,
+    title_content: GroupContent | None,
+    title_position: str,
+    *,
+    requested_canvas: bool = True,
+) -> CompositionInputs:
+    """The plot title, figure size and canvas padding one drawing is composed with, in either mode.
+
+    The title is placed at ``title_position`` when there is one to draw. A
+    drawing composed inside a larger canvas (``requested_canvas`` false) takes
+    neither the requested size nor the canvas padding: that canvas does.
+    """
+
+    return CompositionInputs(
+        title_content=title_content,
+        title_placement=TitlePlacement(title_position) if title_content is not None else TitlePlacement.NONE,
+        requested_size=cfg.canvas.figure_size if requested_canvas else RequestedFigureSize(),
+        canvas_padding=cfg.canvas.padding if requested_canvas else NO_CANVAS_PADDING_SIDES,
+    )
 
 
 def _resolve_multi_record_scales(
@@ -2422,9 +2475,7 @@ def assemble_linear_diagram_from_records(
         *(resolved_protein_frames.pairs if resolved_protein_frames is not None else ()),
     )
     normalized_plot_title = str(inputs.plot_title or "").strip()
-    normalized_plot_title_position = _resolve_linear_plot_title_position(
-        str(inputs.plot_title_position)
-    )
+    normalized_plot_title_position = _resolve_linear_plot_title_position(str(inputs.plot_title_position))
     resolved_plot_title_font_size = _resolve_plot_title_font_size(inputs.plot_title_font_size)
 
     seq_len_dict = create_dict_for_sequence_lengths(records)
@@ -2508,38 +2559,39 @@ def assemble_linear_diagram_from_records(
         step=resolved_depth_step,
         profile=profile,
     ) if show_depth else None
-    legend_config = LegendDrawingConfigurator(
-        profile=profile,
-        canvas_config=canvas_config,
-    )
 
     canvas = assemble_linear_diagram(
-        record_transforms=_record_transforms,
-        record_presentations=_record_presentations,
-        records=list(records),
-        blast_files=list(inputs.blast_files) if inputs.blast_files else None,
         canvas_config=canvas_config,
+        configurators=DiagramConfigurators(
+            feature=feature_config, gc=gc_config, skew=skew_config, depth=depth_config,
+            legend=LegendDrawingConfigurator(profile=profile, canvas_config=canvas_config),
+        ),
         blast_config=blast_config,
-        feature_config=feature_config,
-        gc_config=gc_config,
-        legend_config=legend_config,
-        skew_config=skew_config,
-        depth_config=depth_config,
-        record_depth_tracks=record_depth_tracks,
-        linear_track_slots=parsed_linear_track_slots,
-        linear_track_axis_index=resolved_linear_track_axis_index,
-        annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
-        plot_title=normalized_plot_title or None,
-        plot_title_position=normalized_plot_title_position,
-        plot_title_font_size=resolved_plot_title_font_size,
-        protein_comparisons=resolved_protein_frames,
-        pairwise_identity_legend=protein_identity_legend,
-        linear_comparisons=list(inputs.linear_comparisons) if inputs.linear_comparisons else None,
-        linear_layout=layout,
-        orthogroups=resolved_orthogroups,
-        similarity_alignment=inputs.similarity_alignment,
-        alignment_anchor_centers=inputs._alignment_anchor_centers,
-        feature_anchor=inputs._feature_anchor,
+        record_inputs=LinearRecordInputs(
+            records=list(records),
+            record_transforms=_record_transforms,
+            record_presentations=_record_presentations,
+            linear_layout=layout,
+        ),
+        track_inputs=LinearTrackInputs(
+            record_depth_tracks=record_depth_tracks,
+            linear_track_slots=parsed_linear_track_slots,
+            linear_track_axis_index=resolved_linear_track_axis_index,
+            annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
+        ),
+        comparison_inputs=LinearComparisonInputs(
+            blast_files=list(inputs.blast_files) if inputs.blast_files else None,
+            linear_comparisons=list(inputs.linear_comparisons) if inputs.linear_comparisons else None,
+            protein_comparisons=resolved_protein_frames,
+            orthogroups=resolved_orthogroups,
+            pairwise_identity_legend=protein_identity_legend,
+        ),
+        alignment=LinearAlignmentInputs(
+            inputs.similarity_alignment, inputs._alignment_anchor_centers, inputs._feature_anchor
+        ),
+        composition=_composition_inputs(
+            cfg, _linear_plot_title_content(cfg, normalized_plot_title, resolved_plot_title_font_size), normalized_plot_title_position
+        ),
         feature_label_rows=inputs._feature_label_rows,
     )
     build_result = LinearDiagramBuildResult(
@@ -2884,10 +2936,8 @@ def assemble_circular_diagram_from_record(
         canvas_config=canvas_config,
     )
 
-    title_content: GroupContent | None = None
-    title_placement = TitlePlacement.NONE
-    if show_plot_title:
-        title_content = _circular_plot_title_content(
+    title_content = (
+        _circular_plot_title_content(
             gb_record=gb_record,
             output_prefix=inputs.output_prefix,
             cfg=cfg,
@@ -2897,51 +2947,51 @@ def assemble_circular_diagram_from_record(
             plot_title=normalized_plot_title or None,
             record_presentation=context.record_presentation,
         )
-        if title_content is not None:
-            title_placement = TitlePlacement(normalized_plot_title_position)
+        if show_plot_title
+        else None
+    )
 
     result = _assemble_circular_diagram_result(
-        record_transform=context.record_transform,
-        record_presentation=context.record_presentation,
-        gb_record=gb_record,
-        canvas_config=canvas_config,
-        gc_df=gc_df,
-        gc_config=gc_config,
-        skew_config=skew_config,
-        feature_config=feature_config,
-        species=inputs.species,
-        strain=inputs.strain,
-        plot_title=(
-            normalized_plot_title or None
-            if effective_definition_profile == "shared_common"
-            else None
+        canvas_config,
+        DiagramConfigurators(
+            feature=feature_config, gc=gc_config, skew=skew_config, legend=legend_config, depth=depth_config
         ),
-        legend_config=legend_config,
-        depth_df=resolved_depth_df,
-        depth_config=depth_config,
-        depth_tracks=resolved_depth_tracks,
-        depth_track_count_value=available_depth_track_count,
-        conservation_tracks=conservation_tracks,
-        conservation_min_identity=float(identity),
-        circular_track_slots=parsed_circular_track_slots,
-        circular_track_axis_index=circular_track_axis_index,
-        annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
-        annotation_record_index=context.annotation_record_index,
-        dinucleotide_content_dataframes=dinucleotide_content_dataframes,
-        dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
-        definition_position="center",
-        definition_profile=effective_definition_profile,
-        # The tracks are placed around the definition drawn without the plot title (OV-1710).
-        layout_definition_profile=(
-            context.definition_profile if context.layout_definition_profile is None else context.layout_definition_profile
+        CircularRecordData(
+            gb_record=gb_record,
+            gc_df=gc_df,
+            depth_df=resolved_depth_df,
+            depth_tracks=resolved_depth_tracks,
+            depth_track_count_value=available_depth_track_count,
+            conservation_tracks=conservation_tracks,
+            conservation_min_identity=float(identity),
+            dinucleotide_content_dataframes=dinucleotide_content_dataframes,
+            dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         ),
-        definition_group_id=context.definition_group_id,
-        center_reserved_radius=inputs.center_reserved_radius,
-        title_content=title_content,
-        title_placement=title_placement,
+        CircularTrackInputs(
+            circular_track_slots=parsed_circular_track_slots,
+            circular_track_axis_index=circular_track_axis_index,
+            annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
+            annotation_record_index=context.annotation_record_index,
+        ),
+        CircularPresentationInputs(
+            species=inputs.species,
+            strain=inputs.strain,
+            plot_title=normalized_plot_title or None if effective_definition_profile == "shared_common" else None,
+            definition_position="center",
+            definition_profile=effective_definition_profile,
+            # The tracks are placed around the definition drawn without the plot title (OV-1710).
+            layout_definition_profile=(
+                context.definition_profile if context.layout_definition_profile is None else context.layout_definition_profile
+            ),
+            definition_group_id=context.definition_group_id,
+            center_reserved_radius=inputs.center_reserved_radius,
+            record_transform=context.record_transform,
+            record_presentation=context.record_presentation,
+        ),
         # A record of a multi-record canvas is composed at its own size; the canvas takes the requested one.
-        requested_size=cfg.canvas.figure_size if context.requested_canvas else RequestedFigureSize(),
-        canvas_padding=cfg.canvas.padding if context.requested_canvas else NO_CANVAS_PADDING_SIDES,
+        _composition_inputs(
+            cfg, title_content, normalized_plot_title_position, requested_canvas=context.requested_canvas
+        ),
     )
     _attach_circular_label_layouts(result.drawing, [result.label_layout])
     return result.drawing

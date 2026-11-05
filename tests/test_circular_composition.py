@@ -10,7 +10,13 @@ from gbdraw.diagrams.circular.assemble import (
     _CircularPlotAssembly,
     _compose_circular_plot,
 )
-from gbdraw.layout.composition import LegendPlacement, TitlePlacement
+from gbdraw.core.figure_length import RequestedFigureSize
+from gbdraw.layout.composition import (
+    NO_CANVAS_PADDING_SIDES,
+    CompositionInputs,
+    LegendPlacement,
+    TitlePlacement,
+)
 from gbdraw.layout.spatial import Aabb, union_aabbs
 from gbdraw.render.group_content import ContentGroup, GroupContent
 
@@ -21,6 +27,14 @@ def _center_x(bounds: Aabb) -> float:
 
 def _center_y(bounds: Aabb) -> float:
     return 0.5 * (bounds.min_y + bounds.max_y)
+
+
+_NO_TITLE = CompositionInputs(
+    title_content=None,
+    title_placement=TitlePlacement.NONE,
+    requested_size=RequestedFigureSize(),
+    canvas_padding=NO_CANVAS_PADDING_SIDES,
+)
 
 
 def _plot(
@@ -93,7 +107,7 @@ def test_circular_composition_uses_exact_dock_gap_and_edge_padding(
 ) -> None:
     plot, primary_target = _plot(side)
 
-    result = _compose_circular_plot(plot)
+    result = _compose_circular_plot(plot, _NO_TITLE)
 
     primary = result.content_bounds
     legend_placement = result.composition_plan.placement_for("legend")
@@ -140,8 +154,12 @@ def test_circular_composition_omits_empty_legend_and_places_title_once() -> None
 
     result = _compose_circular_plot(
         plot,
-        title_content=title_content,
-        title_placement=TitlePlacement.TOP,
+        CompositionInputs(
+            title_content=title_content,
+            title_placement=TitlePlacement.TOP,
+            requested_size=RequestedFigureSize(),
+            canvas_padding=NO_CANVAS_PADDING_SIDES,
+        ),
     )
     title_target = result.title_target
     assert isinstance(title_target, ContentGroup)
@@ -172,7 +190,7 @@ def test_circular_overlay_compatibility_offsets_copy_final_plan(
 ) -> None:
     plot, _primary_target = _plot(side)
 
-    result = _compose_circular_plot(plot)
+    result = _compose_circular_plot(plot, _NO_TITLE)
 
     legend = result.composition_plan.placement_for("legend")
     primary = result.composition_plan.placement_for("primary")
