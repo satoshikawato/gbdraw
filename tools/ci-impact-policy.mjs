@@ -24,12 +24,14 @@ const PARENT_EVIDENCE_BASES = freeze([
   'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', IDENTICAL_TREE_BASIS, LEAF_TEST_BASIS
 ]);
 
-// The full PR tier. Functional Playwright joins it only through the capabilities below.
+// The full PR tier. Functional Playwright, with the performance smoke, joins it only through
+// the capabilities below.
 const PR_FULL_TIER_JOBS = freeze([
   'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint',
   'web-contracts-pr', 'web-pr-smoke'
 ]);
-const PR_JOBS = freeze([...PR_FULL_TIER_JOBS, 'playwright-functional']);
+const PR_PLAYWRIGHT_JOBS = freeze(['playwright-functional', 'playwright-performance']);
+const PR_JOBS = freeze([...PR_FULL_TIER_JOBS, ...PR_PLAYWRIGHT_JOBS]);
 const DEV_JOBS = freeze([
   'web-change-budget', 'core', 'recipes-standard', 'gallery', 'browser',
   'playwright-functional', 'playwright-performance', 'lint',
@@ -49,15 +51,16 @@ const PR_CAPABILITY_JOBS = freeze({
   'tests-only': PR_JOBS,
   'python-core': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
   renderer: freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
-  'web-runtime': freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
-  'session-persistence': freeze(['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
-  gallery: freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
-  'losat-integration': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
+  'web-runtime': freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
+  'session-persistence': freeze(['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
+  gallery: freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
+  'losat-integration': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', ...PR_PLAYWRIGHT_JOBS]),
   packaging: PR_FULL_TIER_JOBS,
   'ci-only': PR_FULL_TIER_JOBS,
   full: PR_JOBS
 });
 // Jobs whose pull request run executes the same command as the dev tier on the same tree.
+// `playwright-performance` stays out: dev runs it on every push (SELECTIVE_CI.md).
 const PR_EVIDENCE_JOBS = freeze(['recipes-standard', 'gallery', 'playwright-functional', 'lint']);
 
 // Runtime changes always receive comprehensive integrated-dev/Gallery validation.

@@ -185,7 +185,8 @@ test('profile job registries are exact and centralized', () => {
     'lint',
     'web-contracts-pr',
     'web-pr-smoke',
-    'playwright-functional'
+    'playwright-functional',
+    'playwright-performance'
   ]);
   assert.deepEqual(requiredJobsFor({
     profile: 'pr', impact: 'ci-only', decision: 'full'
@@ -206,7 +207,8 @@ test('profile job registries are exact and centralized', () => {
     'lint',
     'web-contracts-pr',
     'web-pr-smoke',
-    'playwright-functional'
+    'playwright-functional',
+    'playwright-performance'
   ]);
   assert.deepEqual(knownJobsFor('dev'), [
     'web-change-budget',
@@ -275,16 +277,16 @@ test('representative PR routes require the changed subsystem and cross-layer smo
   for (const [path, expected] of [
     ['README.md', ['recipes-standard']],
     ['gbdraw/render/drawers/linear/features.py', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
-    ['gbdraw/web/js/app/label-editor.js', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']],
-    ['gbdraw/web/js/services/session-request.js', ['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']],
-    ['gbdraw/web/gallery/examples.json', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']],
-    ['gbdraw/web/js/services/losat.js', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']]
+    ['gbdraw/web/js/app/label-editor.js', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']],
+    ['gbdraw/web/js/services/session-request.js', ['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']],
+    ['gbdraw/web/gallery/examples.json', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']],
+    ['gbdraw/web/js/services/losat.js', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']]
   ]) assert.deepEqual(jobsForPaths([{ status: 'M', paths: [path] }]), expected, path);
 });
 
 test('mixed capabilities and both rename endpoints contribute independent required jobs', () => {
   const paths = ['gbdraw/render/drawers/linear/features.py', 'gbdraw/web/gallery/examples.json'];
-  const expected = ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional'];
+  const expected = ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance'];
   for (const changes of [
     paths.map((path) => ({ status: 'M', paths: [path] })),
     [{ status: 'R100', paths }],
@@ -314,7 +316,7 @@ test('documentation-only edits, copies, renames, and deletes use only documentat
 test('control-plane, dependency, unknown and test-only changes cannot select partial coverage', () => {
   for (const impact of ['ci-only', 'packaging', 'full', 'tests-only']) {
     assert.throws(() => requiredJobsFor({ profile: 'pr', impact, decision: 'selective' }), /full coverage/);
-    const fullTier = knownJobsFor('pr').filter((job) => job !== 'playwright-functional');
+    const fullTier = knownJobsFor('pr').filter((job) => !job.startsWith('playwright-'));
     assert.deepEqual(
       requiredJobsFor({ profile: 'pr', impact, decision: 'full' }),
       ['full', 'tests-only'].includes(impact) ? knownJobsFor('pr') : fullTier,
@@ -330,6 +332,12 @@ test('functional Playwright joins PR plans only through runtime-facing capabilit
     'web-runtime', 'session-persistence', 'gallery', 'losat-integration', 'packaging', 'ci-only', 'full'
   ]) {
     const expected = functional.includes(capability);
+    // The performance smoke runs on exactly the pull requests that run functional Playwright.
+    for (const decision of ['full', 'selective']) {
+      if (decision === 'selective' && ['tests-only', 'packaging', 'ci-only', 'full'].includes(capability)) continue;
+      const jobs = requiredJobsFor({ profile: 'pr', impact: capability, decision });
+      assert.equal(jobs.includes('playwright-performance'), jobs.includes('playwright-functional'), `${capability} ${decision}`);
+    }
     // Evidence fallbacks and the architecture-change label use the full decision.
     assert.equal(
       requiredJobsFor({ profile: 'pr', impact: capability, decision: 'full' }).includes('playwright-functional'),
@@ -367,11 +375,11 @@ test('release retains every dev functional job plus supported-version, slow, and
 
 test('capability tampering cannot drop an independent contribution', () => {
   const combined = selectivePlan({ impact: 'web-runtime', capabilities: ['documentation', 'web-runtime'] });
-  assert.deepEqual(combined.requiredJobs, ['web-change-budget', 'recipes-standard', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']);
+  assert.deepEqual(combined.requiredJobs, ['web-change-budget', 'recipes-standard', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']);
   for (const capabilities of [[], ['web-runtime', 'documentation'], ['documentation', 'documentation'], ['future']]) {
     assert.throws(() => validateImpactPlan({ ...combined, capabilities }), /Capabilities/);
   }
-  assert.throws(() => validateImpactPlan({ ...combined, requiredJobs: ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional'] }), /required jobs/);
+  assert.throws(() => validateImpactPlan({ ...combined, requiredJobs: ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance'] }), /required jobs/);
   assert.throws(() => validateImpactPlan({ ...combined, requiredJobs: ['web-change-budget', 'recipes-standard', 'gallery', 'web-contracts-pr', 'web-pr-smoke'] }), /required jobs/);
 });
 
@@ -381,7 +389,7 @@ test('ordinary Web changes stay selective when accompanied by their regression t
     { status: 'M', paths: ['gbdraw/web/js/app/label-editor.js'] },
     { status: 'A', paths: ['tests/web/label-editor.test.mjs'] },
     { status: 'M', paths: ['tests/web/right-drawer.playwright.spec.js'] }
-  ]), ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']);
+  ]), ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional', 'playwright-performance']);
   for (const path of ['tests/web/session-request.test.mjs', 'tests/web/contracts/current-session-lazy-materialization.playwright.spec.js']) {
     assert.equal(classifyPath(path).impact, 'session-persistence', path);
     assert.ok(jobsForPaths([{ status: 'M', paths: [path] }]).includes('core-pr'));
