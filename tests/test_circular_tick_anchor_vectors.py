@@ -70,6 +70,8 @@ def _compute_case(radius_px: float, layout: str, side: str, width_px: float | No
         radial_layout=radial_layout,
         layout_slots=slots,
         base_radius_px=radius_px,
+        record_key="record",
+        record_transform=None,
     )["records"][0]
     geometry = next(slot for slot in payload["slots"] if slot["slotId"] == "ticks")
     resolved = next(slot for slot in radial_layout.slots if slot.id == "ticks")

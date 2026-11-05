@@ -1,8 +1,146 @@
-"""Surface-neutral serialization of resolved track-slot geometry."""
+"""Surface-neutral serialization of resolved track-slot geometry.
+
+Each record's entry also carries its ``recordKey`` and its drawn ``axis``
+(``CircularAxisGeometry`` or ``LinearAxisGeometry``): where the axis lies and
+which source base each drawn base shows, so the Web maps a pointer on the
+drawing to a record position without measuring drawn shapes. The coordinates
+are in the local frame of the record's drawn group (the innermost ``g`` that
+carries ``data-gbdraw-record-index``, outside any record definition), so a
+Layout edit move of the record keeps them right.
+"""
 
 from __future__ import annotations
 
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence, TypedDict
+
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.svg.circular_arcs import position_angle
+
+
+class AxisSourceMap(TypedDict):
+    """Which source base a drawn base shows.
+
+    The drawn bases are numbered 0 to ``drawnLength - 1`` along the axis (the
+    display index); display index ``i`` shows source base
+    ``(anchorBase - 1 + step * i) mod sourceLength + 1`` (1-based, the input
+    file's coordinates; ``step`` -1 on a reverse-complemented record).
+    """
+
+    anchorBase: int
+    step: Literal[-1, 1]
+    sourceLength: int
+    drawnLength: int
+
+
+class CircularAxisGeometry(TypedDict):
+    """A Circular record's axis: centred on the frame's origin.
+
+    Display offset ``d`` (bp from the drawn start) lies at the angle
+    ``startAngleDeg + degreesPerBp * d`` (degrees, SVG orientation). The band
+    ``bandInnerPx``..``bandOuterPx`` is the radial extent of the drawn feature
+    tracks.
+    """
+
+    kind: Literal["circular"]
+    radiusPx: float
+    bandInnerPx: float
+    bandOuterPx: float
+    startAngleDeg: float
+    degreesPerBp: float
+    source: AxisSourceMap
+
+
+class LinearAxisRow(TypedDict):
+    """One drawn row of a Linear record: display offsets ``displayStart``..``displayEnd``
+    run from ``xStartPx`` to ``xEndPx`` on the axis at ``yPx``; the feature tracks
+    lie between ``bandTopPx`` and ``bandBottomPx``."""
+
+    xStartPx: float
+    xEndPx: float
+    yPx: float
+    bandTopPx: float
+    bandBottomPx: float
+    displayStart: int
+    displayEnd: int
+
+
+class LinearAxisGeometry(TypedDict):
+    """A Linear record's axis: one row, or one per Wrap Rows row, top to bottom."""
+
+    kind: Literal["linear"]
+    rows: list[LinearAxisRow]
+    source: AxisSourceMap
+
+
+class RadialExtent(TypedDict):
+    """A drawn track's radial extent (inner and outer radius, px)."""
+
+    innerPx: float
+    outerPx: float
+
+
+def axis_source_map(transform: RecordDisplayTransform, drawn_length: int) -> AxisSourceMap:
+    """The source map of a record drawn by ``transform`` over ``drawn_length`` bases."""
+
+    return {
+        "anchorBase": transform.display_index_to_source_base(0),
+        "step": transform.source_step,
+        "sourceLength": int(transform.length),
+        "drawnLength": int(drawn_length),
+    }
+
+
+def circular_axis_geometry(
+    *,
+    radius_px: float,
+    feature_bands: Sequence[RadialExtent],
+    source: AxisSourceMap,
+) -> CircularAxisGeometry:
+    """The axis of one Circular record; the band spans ``feature_bands`` (the axis alone without one)."""
+
+    drawn_length = source["drawnLength"]
+    start_angle = position_angle(0, drawn_length)
+    return {
+        "kind": "circular",
+        "radiusPx": float(radius_px),
+        "bandInnerPx": min((band["innerPx"] for band in feature_bands), default=float(radius_px)),
+        "bandOuterPx": max((band["outerPx"] for band in feature_bands), default=float(radius_px)),
+        "startAngleDeg": start_angle,
+        "degreesPerBp": position_angle(1, drawn_length) - start_angle,
+        "source": source,
+    }
+
+
+def linear_axis_geometry(
+    *,
+    rows: Sequence[tuple[float, float, float]],
+    row_length_bp: int,
+    px_per_bp: float,
+    source: AxisSourceMap,
+) -> LinearAxisGeometry:
+    """The axis of one Linear record from each row's ``(axis y, band top, band bottom)``.
+
+    Row ``r`` shows the display offsets from ``r * row_length_bp``; every row
+    starts at x 0 of the record's frame.
+    """
+
+    drawn_length = source["drawnLength"]
+    payload: list[LinearAxisRow] = []
+    for row_index, (axis_y, band_top, band_bottom) in enumerate(rows):
+        start = row_index * row_length_bp
+        end = min(drawn_length, start + row_length_bp)
+        payload.append(
+            {
+                "xStartPx": 0.0,
+                "xEndPx": float((end - start) * px_per_bp),
+                "yPx": float(axis_y),
+                "bandTopPx": float(band_top),
+                "bandBottomPx": float(band_bottom),
+                "displayStart": int(start),
+                "displayEnd": int(end),
+            }
+        )
+    return {"kind": "linear", "rows": payload, "source": source}
 
 
 def collect_track_slot_geometry_records(
@@ -57,6 +195,14 @@ def build_track_slot_geometry_run_metadata(
 
 
 __all__ = [
+    "AxisSourceMap",
+    "CircularAxisGeometry",
+    "LinearAxisGeometry",
+    "LinearAxisRow",
+    "RadialExtent",
+    "axis_source_map",
     "build_track_slot_geometry_run_metadata",
+    "circular_axis_geometry",
+    "linear_axis_geometry",
     "collect_track_slot_geometry_records",
 ]

@@ -80,6 +80,8 @@ from ...labels.circular_types import CircularLabel, CircularLabelCandidate, Circ
 from ...labels.fit import DEFINITION_FONT_PATH, FITS, LabelFit, LabelFitValue, LabelKind
 from ...labels.filtering import label_filter_maps
 from ...layout.record_coordinates import RecordDisplayTransform
+from ...layout.linear_wrap import bound_record_transform
+from ...render.track_slot_metadata import axis_source_map, circular_axis_geometry
 from ...layout.circular import (
     CircularAxisLayout,
     CircularFeatureLaneDirection,
@@ -424,6 +426,8 @@ def _serialize_circular_track_slot_geometry(
     radial_layout: CircularRadialLayout,
     layout_slots: Sequence[CircularTrackSlot],
     base_radius_px: float,
+    record_key: str,
+    record_transform: RecordDisplayTransform | None,
     record_index: int = 0,
 ) -> dict[str, Any]:
     source_by_index = {
@@ -468,7 +472,19 @@ def _serialize_circular_track_slot_geometry(
                 "recordIndex": int(record_index),
                 "recordId": record_id,
                 "recordLabel": record_id,
+                "recordKey": record_key,
                 "axisRadiusPx": float(base_radius_px),
+                "axis": circular_axis_geometry(
+                    radius_px=float(base_radius_px),
+                    feature_bands=[
+                        {"innerPx": slot.draw_inner_radius_px, "outerPx": slot.draw_outer_radius_px}
+                        for slot in radial_layout.slots
+                        if slot.renderer == "features" and slot.draw_band_px is not None
+                    ],
+                    source=axis_source_map(
+                        bound_record_transform(gb_record, record_transform), len(gb_record.seq)
+                    ),
+                ),
                 "slots": slots_payload,
             }
         ],
@@ -3139,6 +3155,8 @@ def add_record_on_circular_canvas(
             radial_layout=radial_layout,
             layout_slots=layout_slots,
             base_radius_px=float(canvas_config.radius),
+            record_key=record_key,
+            record_transform=record_transform,
         ),
     )
     gc_content_tick_font_size_override = _gc_content_matches_depth_axis_font_size(

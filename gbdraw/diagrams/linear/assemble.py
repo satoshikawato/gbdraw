@@ -11,7 +11,8 @@ from __future__ import annotations
 from gbdraw.api.options import LINEAR_DEFAULT_PLOT_TITLE_POSITION
 from gbdraw.features.placement import FeaturePlacementSlot
 from gbdraw.render_stages import render_stage
-from ...layout.linear_wrap import drawn_axis_length, refuse_feature_track_on_the_axis, refuse_wrapped_anchor_moves
+from ...layout.linear_wrap import bound_record_transform, drawn_axis_length, refuse_feature_track_on_the_axis, refuse_wrapped_anchor_moves
+from ...render.track_slot_metadata import axis_source_map, linear_axis_geometry
 from ...layout.record_labels import source_ruler_ticks
 
 import copy
@@ -540,6 +541,15 @@ def _sync_legend_table_for_linear_slots(
     return out
 
 
+def _feature_track_band(plan: LinearRecordVerticalPlan) -> VerticalBand:
+    """Where a row's feature tracks are painted (record-axis local), the axis without features."""
+
+    return next(
+        (slot.paint_band for slot in plan.slots if slot.renderer == "features" and slot.paint_band is not None),
+        plan.axis_band,
+    )
+
+
 def _serialize_linear_track_slot_geometry(
     *,
     records: list[SeqRecord],
@@ -551,6 +561,8 @@ def _serialize_linear_track_slot_geometry(
     horizontal_offset_x: float,
     record_collision_bands: list[tuple[CollisionBand, ...]],
     boundary_gap_resolutions: list[AxisGapResolution],
+    record_keys: Sequence[str],
+    record_transforms: Sequence[RecordDisplayTransform] | None,
 ) -> dict[str, Any]:
     def band_payload(band: VerticalBand | None, *, axis_y: float) -> dict[str, float] | None:
         if band is None:
@@ -604,11 +616,24 @@ def _serialize_linear_track_slot_geometry(
                 }
             )
         record_id = str(getattr(record, "id", "") or "")
+        transform = bound_record_transform(
+            record, record_transforms[record_index] if record_transforms is not None else None
+        )
+        row_bands = [
+            (row.axis_offset_y, _feature_track_band(row.plan).translate(row.axis_offset_y)) for row in plan.rows
+        ]
         records_payload.append(
             {
                 "recordIndex": int(record_index),
                 "recordId": record_id,
                 "recordLabel": record_id,
+                "recordKey": str(record_keys[record_index]),
+                "axis": linear_axis_geometry(
+                    rows=[(axis, band.top_y, band.bottom_y) for axis, band in row_bands],
+                    row_length_bp=drawn_axis_length(record, transform),
+                    px_per_bp=float(placement.px_per_bp),
+                    source=axis_source_map(transform, len(record.seq)),
+                ),
                 "axisYpx": axis_y,
                 "axisXpx": (
                     float(placement.x)
@@ -3511,6 +3536,8 @@ def assemble_linear_diagram(
                 horizontal_offset_x=float(canvas_config.horizontal_offset),
                 record_collision_bands=record_collision_bands,
                 boundary_gap_resolutions=boundary_gap_resolutions,
+                record_keys=record_keys,
+                record_transforms=record_transforms,
             ),
         )
     if resolved_feature_slot is not None:

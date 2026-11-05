@@ -129,6 +129,12 @@ def drawn_axis_length(record: SeqRecord, transform: RecordDisplayTransform | Non
     return len(record.seq) if transform is None or transform.wrap_length is None else transform.axis_length
 
 
+def bound_record_transform(record: SeqRecord, transform: RecordDisplayTransform | None) -> RecordDisplayTransform:
+    """The transform a record is drawn by: its bound one, else the one its coordinate map gives."""
+
+    return transform if transform is not None else _unset_transform(record)
+
+
 def _unset_transform(record: SeqRecord) -> RecordDisplayTransform:
     """The transform of a record no plan bound one to, from its coordinate map."""
 
