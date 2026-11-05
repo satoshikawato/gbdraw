@@ -1566,6 +1566,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'recipes-standard',
     'gallery',
     'lint',
+    'rust-engine',
     'web-contracts-pr',
     'web-pr-smoke',
     'playwright-functional'
@@ -1598,6 +1599,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'recipes-standard',
     'gallery',
     'lint',
+    'rust-engine',
     'web-contracts-pr',
     'web-pr-smoke'
   ]) {
@@ -1608,7 +1610,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
       new RegExp(`requiredJobs, '${jobId}'`),
       `${jobId} must read its selection from the plan`
     );
-    if (['web-change-budget', 'recipes-standard', 'gallery', 'lint'].includes(jobId)) {
+    if (['web-change-budget', 'recipes-standard', 'gallery', 'lint', 'rust-engine'].includes(jobId)) {
       assert.match(job, /!cancelled\(\)/, `${jobId} must remain runnable on dev`);
       assert.match(job, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/);
       assert.match(
@@ -1684,6 +1686,7 @@ test('exact dev staging routes every job through the protected-branch plan', () 
     'playwright-functional',
     'playwright-performance',
     'lint',
+    'rust-engine',
     'losat-cache-browser-acceptance'
   ];
   for (const jobId of stagingJobs) {
@@ -1726,6 +1729,7 @@ test('exact dev staging routes every job through the protected-branch plan', () 
     'slow-main',
     'vibrio-generate-release',
     'lint',
+    'rust-engine',
     'losat-cache-browser-acceptance'
   ]);
   assert.match(gate, /\n    name: Dev staging \/ gate\n/);

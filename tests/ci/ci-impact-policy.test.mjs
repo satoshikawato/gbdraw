@@ -183,6 +183,7 @@ test('profile job registries are exact and centralized', () => {
     'recipes-standard',
     'gallery',
     'lint',
+    'rust-engine',
     'web-contracts-pr',
     'web-pr-smoke',
     'playwright-functional'
@@ -195,6 +196,7 @@ test('profile job registries are exact and centralized', () => {
     'recipes-standard',
     'gallery',
     'lint',
+    'rust-engine',
     'web-contracts-pr',
     'web-pr-smoke'
   ]);
@@ -204,6 +206,7 @@ test('profile job registries are exact and centralized', () => {
     'recipes-standard',
     'gallery',
     'lint',
+    'rust-engine',
     'web-contracts-pr',
     'web-pr-smoke',
     'playwright-functional'
@@ -217,6 +220,7 @@ test('profile job registries are exact and centralized', () => {
     'playwright-functional',
     'playwright-performance',
     'lint',
+    'rust-engine',
     'losat-cache-browser-acceptance'
   ]);
   assert.deepEqual(knownJobsFor('gallery'), ['browser', 'performance']);
@@ -274,17 +278,20 @@ const jobsForPaths = (changes) => {
 test('representative PR routes require the changed subsystem and cross-layer smoke', () => {
   for (const [path, expected] of [
     ['README.md', ['recipes-standard']],
-    ['gbdraw/render/drawers/linear/features.py', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
+    ['gbdraw/render/drawers/linear/features.py', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'rust-engine', 'web-contracts-pr', 'web-pr-smoke']],
     ['gbdraw/web/js/app/label-editor.js', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']],
     ['gbdraw/web/js/services/session-request.js', ['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']],
     ['gbdraw/web/gallery/examples.json', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']],
-    ['gbdraw/web/js/services/losat.js', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']]
+    ['gbdraw/web/js/services/losat.js', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'rust-engine', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']],
+    ['gbdraw/web/js/workers/gbdraw-core.js', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'rust-engine', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']],
+    ['rust/engine/src/ribbons.rs', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'rust-engine', 'web-contracts-pr', 'web-pr-smoke']]
   ]) assert.deepEqual(jobsForPaths([{ status: 'M', paths: [path] }]), expected, path);
+  assert.equal(classifyPath('tools/build_gbdraw_core_wasm.py').impact, 'packaging');
 });
 
 test('mixed capabilities and both rename endpoints contribute independent required jobs', () => {
   const paths = ['gbdraw/render/drawers/linear/features.py', 'gbdraw/web/gallery/examples.json'];
-  const expected = ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional'];
+  const expected = ['web-change-budget', 'core-pr', 'gallery', 'lint', 'rust-engine', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional'];
   for (const changes of [
     paths.map((path) => ({ status: 'M', paths: [path] })),
     [{ status: 'R100', paths }],

@@ -1168,6 +1168,68 @@ jobs:
       - name: Check code formatting
         run: ruff check gbdraw/
 
+  rust-engine:
+    name: Rust engine
+    needs: ci-impact
+    if: >-
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'rust-engine') &&
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Install the pinned Rust toolchain
+        working-directory: rust
+        run: rustup toolchain install
+
+      - name: Check Rust formatting
+        working-directory: rust
+        run: cargo fmt --all --check
+
+      - name: Run clippy
+        working-directory: rust
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Run the engine's unit tests
+        working-directory: rust
+        run: cargo test -p gbdraw-engine --locked
+
+      - name: Install test dependencies
+        run: python -m pip install -e . pytest pytest-timeout "maturin>=1.7,<2"
+
+      - name: Install the managed LOSAT runtime
+        uses: ./.github/actions/managed-losat
+
+      - name: Build the extension and the Wasm module
+        run: |
+          maturin build --manifest-path rust/python/Cargo.toml --release --locked --out rust/target/wheels
+          python -m pip install rust/target/wheels/*.whl
+          python tools/build_gbdraw_core_wasm.py
+
+      # The tests skip without gbdraw_core, so the import proves that they ran.
+      - name: Compare the engine with the Python drawer
+        run: |
+          python -c "import gbdraw_core"
+          python -m pytest tests/test_native_pairwise_ribbons.py tests/test_native_ribbons_differential.py -ra
+
   losat-cache-browser-acceptance:
     name: LOSAT cache browser acceptance
     needs: ci-impact
@@ -1697,6 +1759,7 @@ jobs:
       - recipes-standard
       - gallery
       - lint
+      - rust-engine
       - web-contracts-pr
       - web-pr-smoke
       - playwright-functional
@@ -1753,6 +1816,7 @@ jobs:
       - slow-main
       - vibrio-generate-release
       - lint
+      - rust-engine
       - losat-cache-browser-acceptance
     if: >-
       always() && inputs.tier != 'release' &&
@@ -1796,6 +1860,7 @@ jobs:
       - slow-main
       - vibrio-generate-release
       - lint
+      - rust-engine
       - losat-cache-browser-acceptance
     if: >-
       always() && github.event_name == 'workflow_dispatch' &&

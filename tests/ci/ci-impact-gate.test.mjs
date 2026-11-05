@@ -88,6 +88,7 @@ test('gate accepts metadata, documentation, and full PR routes', () => {
       'recipes-standard',
       'gallery',
       'lint',
+      'rust-engine',
       'web-contracts-pr',
       'web-pr-smoke',
       'playwright-functional'
@@ -129,6 +130,7 @@ test('gate accepts metadata, documentation, and full dev staging routes', () => 
       'playwright-functional',
       'playwright-performance',
       'lint',
+      'rust-engine',
       'losat-cache-browser-acceptance'
     ]
   ]);
@@ -507,7 +509,7 @@ test('dev gate accepts a merged pull request tree plan only when the jobs it did
   });
   assert.deepEqual(merged.requiredJobs, [
     'web-change-budget', 'core', 'recipes-standard', 'browser', 'playwright-performance', 'lint',
-    'losat-cache-browser-acceptance'
+    'rust-engine', 'losat-cache-browser-acceptance'
   ]);
   const needs = needsFor(merged);
   assert.equal(needs['playwright-functional'].result, 'skipped');

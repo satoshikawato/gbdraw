@@ -299,6 +299,7 @@ test('dev direct-parent staging failures force the current run to full', async (
       'playwright-functional',
       'playwright-performance',
       'lint',
+      'rust-engine',
       'losat-cache-browser-acceptance'
     ], code);
   }
@@ -454,6 +455,7 @@ test('evidence verifier failures fall back to the full profile', async () => {
     'recipes-standard',
     'gallery',
     'lint',
+    'rust-engine',
     'web-contracts-pr',
     'web-pr-smoke'
   ]);
@@ -509,6 +511,7 @@ test('manual runs and architecture-change labels force full execution', async ()
       'playwright-functional',
       'playwright-performance',
       'lint',
+      'rust-engine',
       'losat-cache-browser-acceptance'
     ]],
     ['gallery', ['browser', 'performance']]
@@ -689,6 +692,7 @@ test('workflow keeps trusted PR routing and activates protected dev routing', ()
     'recipes-standard',
     'gallery',
     'lint',
+    'rust-engine',
     'web-contracts-pr',
     'web-pr-smoke'
   ]) {
@@ -719,6 +723,7 @@ test('workflow keeps trusted PR routing and activates protected dev routing', ()
     'playwright-functional',
     'playwright-performance',
     'lint',
+    'rust-engine',
     'losat-cache-browser-acceptance'
   ];
   for (const jobId of devJobs) {
@@ -783,7 +788,7 @@ test('a failed fast job cancels the rest of its pull request run, never a dev ru
   assert.match(workflow.split('\njobs:\n')[0], /\npermissions:\n  contents: read\n  actions: read\n/);
   assert.deepEqual(gateNeeds(), [
     'ci-impact', 'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint',
-    'web-contracts-pr', 'web-pr-smoke', 'playwright-functional'
+    'rust-engine', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional'
   ]);
 });
 
@@ -946,6 +951,7 @@ test('every job that installs gbdraw from the checkout installs the managed LOSA
     'test.yml:acceptance-supported-main',
     'test.yml:slow-main',
     'test.yml:vibrio-generate-release',
+    'test.yml:rust-engine',
     'test.yml:losat-cache-browser-acceptance',
     'test.yml:promotion-audit-recipes',
     'test.yml:promotion-audit-sweeps',

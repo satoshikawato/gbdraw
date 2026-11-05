@@ -57,12 +57,12 @@ registry unions their contributions, then emits unique jobs in registry order.
 | `metadata` | Existing development-tool allowlist, `.gitignore`, citation/licenses | No test job |
 | `documentation` | Root Markdown and `docs/`, excluding the five exact policy documents below | Recipes |
 | `policy-documentation` | Architecture, Web, Product Impact, Option Integrity, and selective CI policy documents | Web change budget |
-| `python-core` | Known Python core/API/config/I/O owners and data | Architecture, core, lint, Web contracts, browser smoke |
-| `renderer` | Render/SVG/diagram/canvas/features/labels/layout owners | Architecture, core, lint, Web contracts, browser smoke |
+| `python-core` | Known Python core/API/config/I/O owners and data | Architecture, core, lint, Rust engine, Web contracts, browser smoke |
+| `renderer` | Render/SVG/diagram/canvas/features/labels/layout owners, `rust/` | Architecture, core, lint, Rust engine, Web contracts, browser smoke |
 | `web-runtime` | `gbdraw/web/index.html`, first-party JS | Architecture, Web contracts, browser smoke, functional Playwright |
 | `session-persistence` | Python session codecs; JS session/config/history owners | Architecture, core, recipes, lint, Web contracts, browser smoke, functional Playwright |
 | `gallery` | Gallery inputs and their generator owners | Architecture, Gallery, Web contracts, browser smoke, functional Playwright |
-| `losat-integration` | Comparison owners, LOSAT JS/workers/Wasm | Architecture, core, lint, Web contracts, browser smoke, functional Playwright |
+| `losat-integration` | Comparison owners, LOSAT JS/workers/Wasm, the Worker's Rust engine module | Architecture, core, lint, Rust engine, Web contracts, browser smoke, functional Playwright |
 | `tests-only` | Shared fixtures/harness and unclassified tests | Full PR tier, functional Playwright |
 | `packaging` | Dependencies, manifests, vendored runtime, packaging tools | Full PR tier |
 | `ci-only` | Workflows, planner/tests, and Playwright configuration | Full PR tier |
@@ -75,8 +75,8 @@ and `docs/internal/WEB_CHANGE_POLICY.md`. Other `docs/` paths remain ordinary
 documentation, including working templates and acceptance reports.
 
 The full PR tier job IDs are `web-change-budget`, `core-pr`, `recipes-standard`,
-`gallery`, `lint`, `web-contracts-pr`, and `web-pr-smoke`. `playwright-functional`
-is the eighth PR job. The `web-runtime`, `session-persistence`, `gallery`,
+`gallery`, `lint`, `rust-engine`, `web-contracts-pr`, and `web-pr-smoke`.
+`playwright-functional` is the ninth PR job. The `web-runtime`, `session-persistence`, `gallery`,
 `losat-integration`, `tests-only`, and `full` capabilities add it under both the
 selective and the full decision, so an evidence fallback or the
 `architecture-change` label keeps it whenever one of those capabilities is
@@ -85,6 +85,14 @@ present. Other full-tier routes do not run it before merge: `ci-only`,
 Integrated `dev` staging runs it on every push that inherits neither parent
 evidence nor the evidence of the pull request it merges. On pull requests it is the same job, shard matrix, and command
 as in `dev` staging.
+
+`rust-engine` checks the format, lints, and unit tests of `rust/`, builds the
+extension and the Wasm module, and compares what they draw with the Python
+drawer. The Python owners those drawings follow are `python-core`, `renderer`,
+and `losat-integration` paths, so those capabilities run it too. The other jobs
+do not build the engine, and its tests skip there. A pull request is planned by
+its trusted base, so the pull request that adds a job to the registry does not
+run that job; it starts with the `dev` push that merges it.
 
 `web-contracts-pr` groups the existing fast JS contracts and non-slow Python
 browser suite, which together took approximately 65–70 seconds historically.
@@ -288,7 +296,7 @@ that run's evidence for the jobs both tiers run with the same command:
 | `playwright-functional` | Same eight shard lists; a pull request plan has no leaf tests, so each shard runs its whole list |
 
 The other dev jobs always run: `core` (three Python versions; pull requests
-run `core-pr` on 3.11), `browser`, `playwright-performance`,
+run `core-pr` on 3.11), `browser`, `playwright-performance`, `rust-engine`,
 `losat-cache-browser-acceptance`, and `web-change-budget` (it checks the
 `dev` push range in its integrated mode, not the pull request range). A job
 is inherited only when the pull request capabilities of the change select it,

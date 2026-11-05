@@ -26,13 +26,13 @@ const PARENT_EVIDENCE_BASES = freeze([
 
 // The full PR tier. Functional Playwright joins it only through the capabilities below.
 const PR_FULL_TIER_JOBS = freeze([
-  'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint',
+  'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'rust-engine',
   'web-contracts-pr', 'web-pr-smoke'
 ]);
 const PR_JOBS = freeze([...PR_FULL_TIER_JOBS, 'playwright-functional']);
 const DEV_JOBS = freeze([
   'web-change-budget', 'core', 'recipes-standard', 'gallery', 'browser',
-  'playwright-functional', 'playwright-performance', 'lint',
+  'playwright-functional', 'playwright-performance', 'lint', 'rust-engine',
   'losat-cache-browser-acceptance'
 ]);
 const PROFILE_REQUIRED_JOBS = freeze({
@@ -47,12 +47,12 @@ const PR_CAPABILITY_JOBS = freeze({
   documentation: freeze(['recipes-standard']),
   'policy-documentation': freeze(['web-change-budget']),
   'tests-only': PR_JOBS,
-  'python-core': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
-  renderer: freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
+  'python-core': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'rust-engine', 'web-contracts-pr', 'web-pr-smoke']),
+  renderer: freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'rust-engine', 'web-contracts-pr', 'web-pr-smoke']),
   'web-runtime': freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
   'session-persistence': freeze(['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
   gallery: freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
-  'losat-integration': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
+  'losat-integration': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'rust-engine', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
   packaging: PR_FULL_TIER_JOBS,
   'ci-only': PR_FULL_TIER_JOBS,
   full: PR_JOBS
@@ -186,10 +186,11 @@ export const classifyPath = (path) => {
   if (['pyproject.toml', 'setup.py', 'MANIFEST.in', 'package.json', 'package-lock.json',
     'wrangler.toml', 'gbdraw/_build_support.py'].includes(path)
       || path.startsWith('recipe/') || path.startsWith('gbdraw/web/vendor/')
-      || /^tools\/(?:prepare_browser_wheel|prepare_cloudflare_pages|verify_gui_offline|check_release_source)\.py$/.test(path)) {
+      || /^tools\/(?:build_gbdraw_core_wasm|prepare_browser_wheel|prepare_cloudflare_pages|verify_gui_offline|check_release_source)\.py$/.test(path)) {
     return classified('packaging', 'PACKAGE_OR_DEPENDENCY_INPUT');
   }
-  if (path.startsWith('gbdraw/web/wasm/') || /^gbdraw\/web\/js\/.*losat[^/]*\.js$/.test(path)
+  if (path.startsWith('gbdraw/web/wasm/') || path === 'gbdraw/web/js/workers/gbdraw-core.js'
+      || /^gbdraw\/web\/js\/.*losat[^/]*\.js$/.test(path)
       || /^gbdraw\/(?:comparisons|losat)(?:\/|\.)/.test(path)) {
     return classified('losat-integration', 'LOSAT_OWNER');
   }
@@ -204,7 +205,8 @@ export const classifyPath = (path) => {
   if (path === 'gbdraw/web/index.html' || /^gbdraw\/web\/js\/.*\.js$/.test(path)) {
     return classified('web-runtime', 'WEB_SOURCE');
   }
-  if (/^gbdraw\/(?:render|svg|diagrams|canvas|features|labels|legend|layout|tracks)\/.*\.py$/.test(path)) {
+  if (/^gbdraw\/(?:render|svg|diagrams|canvas|features|labels|legend|layout|tracks)\/.*\.py$/.test(path)
+      || path.startsWith('rust/')) {
     return classified('renderer', 'RENDERER_SOURCE');
   }
   if (/^gbdraw\/(?:api|config|configurators|core|io)\/.*\.py$/.test(path)
