@@ -298,7 +298,7 @@ const readBlob = ({ runGitImpl, repositoryRoot, sha, path }) => {
   return result !== null && result.status === 0 ? result.text : null;
 };
 
-const pythonMarkers = (source) => {
+export const pythonMarkers = (source) => {
   if (source === null || UNREADABLE_PYTEST_MARKER.test(source)) return null;
   return Object.freeze([...new Set([...source.matchAll(PYTEST_SELECTION_MARKER)].map((match) => match[1]))].sort());
 };
