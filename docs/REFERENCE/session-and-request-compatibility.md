@@ -13,6 +13,9 @@ Python, once, at Load (the Web app waits for it); a Session 45 is not read.
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
 | Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–51 |
 
+[Session and request structure](#session-and-request-structure) has the JSON
+Schema files and diagrams of both formats.
+
 Session 50 stores the Linear **wrap length** (see
 [Linear wrap length](#linear-wrap-length)): the Linear slice's form key
 `linear_wrap_length` and the config leaf `canvas.linear.wrap_length`. gbdraw
@@ -1038,3 +1041,19 @@ the last successful request and Result. An inactive rotation start stays in the
 draft but is omitted from the effective request. Load restores both states;
 Generate applies the draft. Source replacement invalidates the replaced source's
 bindings, even when its filename or input-card UID is unchanged.
+
+## Session and request structure
+
+The [JSON Schema files](schemas/README.md) (draft 2020-12) describe a stored
+Session of any supported version and a canonical `renderRequest` of the current
+schema; their page also has diagrams of both formats. The command line and the
+Python API refuse a Session outside its schema. They refuse a current-schema
+request outside its schema too, except a retired `collinearityAnchorMode`, which
+they read as `rbh` with a warning (see the removed Collinear values above). They
+also check values, references, and rules across fields that the schemas do not
+state, so a file inside them can still be refused. A request of an older schema
+is converted, not described.
+
+`tools/generate_web_contracts.py` writes the schemas and their page from
+`gbdraw/session_contract.py` and `gbdraw/session_request_codec.py`; do not edit
+them by hand.
