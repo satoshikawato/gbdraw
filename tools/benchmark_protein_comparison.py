@@ -10,6 +10,8 @@ compare-sources times a baseline and a current tree for a base/head decision:
 each of the three samples per tree comes from its own fresh process, and the
 trees take turns (baseline, current, baseline, ...). Samples from one process
 share its state, so more of them do not reduce the spread between processes.
+Its reports save PROCESS_POLICY (noise limit 10%); compare judges every report
+by the policy saved in it.
 """
 from __future__ import annotations
 
@@ -48,6 +50,9 @@ POLICY = {"warmups": 1, "samples": 3, "regressionPct": 10.0,
           "maxNoisePct": 5.0, "noise": "100 * MAD / median",
           "noisyDecision": "inconclusive; no automatic repeat",
           "semanticGate": "exact ordered stage digest, including types and errors"}
+# compare-sources: samples from separate processes carry the spread between processes, so a stage
+# is inconclusive only when that spread exceeds 10%, the regression threshold (Owner 2026-11-05).
+PROCESS_POLICY = {**POLICY, "maxNoisePct": 10.0}
 GALLERIES = ("hepatoplasmataceae_collinear", "hepatoplasmataceae_orthogroup",
              "vibrio-harveyi-group-collinear")
 CASES = ("hsp-edges", "hsp-1", "hsp-1000", "hsp-many", "dense-24", "support-edges",
@@ -948,7 +953,8 @@ def merge_process_reports(reports):
                 or case["stages"].keys() != first["cases"][name]["stages"].keys()
                 for name, case in report["cases"].items()):
             raise ValueError("process reports differ: cases")
-    merged = {**first, "settings": {**first["settings"], "samples": len(reports), "processes": len(reports)},
+    merged = {**first, "settings": {**first["settings"], "policy": PROCESS_POLICY,
+                                    "samples": len(reports), "processes": len(reports)},
               "processMaxRssKiB": max(report["processMaxRssKiB"] for report in reports), "cases": {}}
     for name, case in first["cases"].items():
         stages = {}

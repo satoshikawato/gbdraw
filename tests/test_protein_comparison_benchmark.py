@@ -84,7 +84,14 @@ def test_process_reports_merge_into_one_sample_per_process():
     assert stage["samples"] == [100., 104., 98.]
     assert (stage["median"], stage["mad"], stage["noisePct"]) == (100., 2., 2.)
     assert merged["settings"]["samples"] == merged["settings"]["processes"] == 3
+    assert merged["settings"]["policy"]["maxNoisePct"] == 10.
     assert benchmark.compare_reports(merged, merged)[1] == 0
+    # Spread between processes up to 10% still decides; above it the stage is inconclusive.
+    noisy = benchmark.merge_process_reports([process_report(x) for x in (100., 108., 92.)])
+    assert noisy["cases"]["case"]["stages"]["stage"]["noisePct"] == 8.
+    assert benchmark.compare_reports(merged, noisy)[1] == 0
+    noisier = benchmark.merge_process_reports([process_report(x) for x in (100., 112., 88.)])
+    assert benchmark.compare_reports(merged, noisier)[1] == 2
     slower = benchmark.merge_process_reports([process_report(x) for x in (112., 111., 113.)])
     assert benchmark.compare_reports(merged, slower)[1] == 1
     # Samples from one process and samples from separate processes are not compared.
