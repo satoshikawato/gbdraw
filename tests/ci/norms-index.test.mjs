@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { buildNormsIndex } from '../../tools/generate_norms_index.mjs';
+import { buildNormsIndex, citedAnchors, headingsOf } from '../../tools/generate_norms_index.mjs';
 
 // docs/internal/NORMS_INDEX.md is generated from the guard registry, the rule
 // headings, the CI routing policy, the Product Contract, and the tests that cite
@@ -66,4 +66,22 @@ test('the index lists the tests that cite an id without a record, and the record
   assert.deepEqual(problems, []);
   const missing = text.slice(text.indexOf('### Cited ids without a record'));
   assert.match(missing, new RegExp(`^- \`${RECORD(999)}\`: no record\\. No record mentions it\\.\\n  - \`${spec}\`$`, 'm'));
+});
+
+test('heading anchors follow GitHub: rendered text, no punctuation, numbered repeats, no fenced code', () => {
+  const slugs = (source) => headingsOf(source).map(({ slug }) => slug);
+  assert.deepEqual(slugs('# Leaf tests\n## Leaf tests\n### Leaf tests\n'), ['leaf-tests', 'leaf-tests-1', 'leaf-tests-2']);
+  assert.deepEqual(slugs('## `grid_column` and [the link](page.md) 日本語 _em_ — R14: Typed boundaries\n'), [
+    'grid_column-and-the-link-日本語-em--r14-typed-boundaries'
+  ]);
+  assert.deepEqual(slugs('```js\n# inside\n```\n# after\n'), ['after']);
+  assert.deepEqual(slugs('````\n```\n# inside\n````\n# after\n'), ['after']);
+  assert.deepEqual(slugs('~~~\n```\n# inside\n~~~\n# after\n'), ['after']);
+});
+
+test('a cited anchor is read up to its last anchor character, and a URL is not a citation', () => {
+  const page = ANCHOR('docs/internal/page.md', '日本語-見出し');
+  assert.deepEqual(citedAnchors(`see ${page}, and https://example.org/${ANCHOR('a.md', 'b')}`), [
+    { document: 'docs/internal/page.md', slug: '日本語-見出し' }
+  ]);
 });

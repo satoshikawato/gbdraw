@@ -18,10 +18,13 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
   (`tools/ci-impact-policy.mjs`), and
   `tests/web/architecture-contracts.test.mjs` checks that the job's
   commands run the guard.
-- Dev jobs: the jobs of a dev push that changes only that test
-  (`leafJobsFor`). Any other push runs the whole dev tier.
+- Dev jobs: the jobs of the dev tier that run a test of that kind and its pytest
+  markers (`leafTestKind`, `leafJobsFor`). A dev push may take a job's
+  result from the pull request it merges instead (`docs/internal/SELECTIVE_CI.md`,
+  "Merged pull request inheritance"). A fixture or helper runs with the guards that
+  read it.
 
-| Rule | Guard | Pull request job | Dev jobs (leaf test push) | Retire when |
+| Rule | Guard | Pull request job | Dev jobs | Retire when |
 | --- | --- | --- | --- | --- |
 | [R1](../../gbdraw/web/CLAUDE.md#r1-three-writers-of-the-result) | `tests/web/gui-audit-20260930-editor.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never |
 | [R1](../../gbdraw/web/CLAUDE.md#r1-three-writers-of-the-result) | `tests/web/history-generated-authority.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never |
@@ -34,17 +37,17 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [R2](../../gbdraw/web/CLAUDE.md#r2-lifetime-of-editor-intent) | `tests/web/mode-scoped-feature-edits.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [R2](../../gbdraw/web/CLAUDE.md#r2-lifetime-of-editor-intent) | `tests/web/non-edit-state-diff.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [R2](../../gbdraw/web/CLAUDE.md#r2-lifetime-of-editor-intent) | `tests/web/non-edit-state-preservation.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never |
-| [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/contracts/live-generate-parity-allowed.json` | `playwright-functional` | not a leaf test | never: the walk reads it |
+| [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/contracts/live-generate-parity-allowed.json` | `playwright-functional` | not a test | never: the walk reads it |
 | [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/feature-color-actions.test.mjs` | `web-contracts-pr` | `browser` | never: it pins that each color action shows its edit through the one port showEditorIntent |
 | [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/feature-visibility-actions.test.mjs` | `web-contracts-pr` | `browser` | never: it pins that each visibility action shows its edit through the one port showEditorIntent |
 | [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/gui-audit-20260930-editor.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never |
-| [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/helpers/live-random-walk.mjs` | `playwright-functional` | not a leaf test | never |
-| [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/helpers/live-work-allowlist.mjs` | `playwright-functional` | not a leaf test | never |
+| [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/helpers/live-random-walk.mjs` | `playwright-functional` | not a test | never |
+| [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/helpers/live-work-allowlist.mjs` | `playwright-functional` | not a test | never |
 | [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/live-generate-parity-legend.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never: named regression cases whose setups the pull-request walk does not build |
 | [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/live-generate-parity-track-data.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never: named regression cases whose setups the pull-request walk does not build |
 | [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/live-generate-parity.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never: it holds the work guard and named regression cases; a matrix case leaves when the pull-request walk draws its kind in the states it pinned, which the walk spec asserts |
 | [R3](../../gbdraw/web/CLAUDE.md#r3-one-projection-per-domain) | `tests/web/live-generate-random-walk.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never |
-| [R4](../../gbdraw/web/CLAUDE.md#r4-a-fast-path-matches-the-canonical-reader-or-declines) | `tests/fixtures/record_metadata_inference_cases.json` | `web-contracts-pr` | not a leaf test | never |
+| [R4](../../gbdraw/web/CLAUDE.md#r4-a-fast-path-matches-the-canonical-reader-or-declines) | `tests/fixtures/record_metadata_inference_cases.json` | `web-contracts-pr` | not a test | never |
 | [R4](../../gbdraw/web/CLAUDE.md#r4-a-fast-path-matches-the-canonical-reader-or-declines) | `tests/test_record_metadata.py` | `core-pr` | `core` | never |
 | [R4](../../gbdraw/web/CLAUDE.md#r4-a-fast-path-matches-the-canonical-reader-or-declines) | `tests/web/record-metadata-inference.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [R5](../../gbdraw/web/CLAUDE.md#r5-comparison-frames-and-reuse) | `tests/web/gui-audit-20260930-comparisons.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never |
@@ -52,7 +55,7 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [R6](../../gbdraw/web/CLAUDE.md#r6-the-producer-owns-the-failure-meaning) | `tests/test_web_error_producer_coverage.py` | `core-pr` | `core` | never |
 | [R6](../../gbdraw/web/CLAUDE.md#r6-the-producer-owns-the-failure-meaning) | `tests/web/error-normalization.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [R6](../../gbdraw/web/CLAUDE.md#r6-the-producer-owns-the-failure-meaning) | `tests/web/error-producer-coverage.test.mjs` | `web-contracts-pr` | `browser` | never |
-| [R7](../../gbdraw/web/CLAUDE.md#r7-pythons-typed-layer-owns-value-checks) | `tests/fixtures/option_domain_vectors.json` | `web-contracts-pr` | not a leaf test | never |
+| [R7](../../gbdraw/web/CLAUDE.md#r7-pythons-typed-layer-owns-value-checks) | `tests/fixtures/option_domain_vectors.json` | `web-contracts-pr` | not a test | never |
 | [R7](../../gbdraw/web/CLAUDE.md#r7-pythons-typed-layer-owns-value-checks) | `tests/test_option_domain_parity.py` | `core-pr` | `core` | never |
 | [R7](../../gbdraw/web/CLAUDE.md#r7-pythons-typed-layer-owns-value-checks) | `tests/web/option-input-integrity.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [R8](../../gbdraw/web/CLAUDE.md#r8-the-multi-record-canvas-owns-placement-only) | `tests/test_circular_multi_record_parity.py` | `core-pr` | `core` | never |
@@ -89,14 +92,14 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [R14](../../gbdraw/web/CLAUDE.md#r14-typed-boundaries) | `tests/test_web_contracts_generated.py` | `web-contracts-pr` | `core`, `browser` | never |
 | [R14](../../gbdraw/web/CLAUDE.md#r14-typed-boundaries) | `tests/web/explicit-any-ratchet.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [R14](../../gbdraw/web/CLAUDE.md#r14-typed-boundaries) | `tests/web/typed-boundaries.test.mjs` | `web-contracts-pr` | `browser` | never |
-| [R14](../../gbdraw/web/CLAUDE.md#r14-typed-boundaries) | `tests/web/types/tsconfig.json` | `web-contracts-pr` | not a leaf test | never |
-| [R14](../../gbdraw/web/CLAUDE.md#r14-typed-boundaries) | `tests/web/types/web-globals.d.ts` | `web-contracts-pr` | not a leaf test | never |
+| [R14](../../gbdraw/web/CLAUDE.md#r14-typed-boundaries) | `tests/web/types/tsconfig.json` | `web-contracts-pr` | not a test | never |
+| [R14](../../gbdraw/web/CLAUDE.md#r14-typed-boundaries) | `tests/web/types/web-globals.d.ts` | `web-contracts-pr` | not a test | never |
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/test_mode_scoped_settings.py` | `core-pr` | `core`, `browser` | never |
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/test_mode_split_vectors.py` | `core-pr` | `core` | never |
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/test_session_drawings_vectors.py` | `core-pr` | `core` | a Session 46-50 is no longer read |
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/drawing-context.test.mjs` | `web-contracts-pr` | `browser` | never: its state key classes and drawing-resolution checks stay; the drawing members come from the slices |
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/drawing-slices.test.mjs` | `web-contracts-pr` | `browser` | never |
-| [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/helpers/drawing-state.mjs` | `web-contracts-pr` | not a leaf test | never: the state key classes stay, and it reads the drawing members from the slices |
+| [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/helpers/drawing-state.mjs` | `web-contracts-pr` | not a test | never: the state key classes stay, and it reads the drawing members from the slices |
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/mode-scoped-session.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/mode-scoped-settings.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never |
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/mode-split-vectors.test.mjs` | `web-contracts-pr` | `browser` | services/mode-scoped-migration.js is deleted and Python alone splits a Session 27-44 (boundary-audit M2, multi-drawing X step) |
@@ -105,7 +108,7 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/session-drawings.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [CW](../../gbdraw/web/CLAUDE.md#computation-ownership) | `tests/web/computation-ownership.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never |
 | [CW](../../gbdraw/web/CLAUDE.md#computation-ownership) | `tests/web/computation-ownership.test.mjs` | `web-contracts-pr` | `browser` | never |
-| [CW](../../gbdraw/web/CLAUDE.md#computation-ownership) | `tests/web/helpers/app-lifecycle.cjs` | `playwright-functional` | not a leaf test | never |
+| [CW](../../gbdraw/web/CLAUDE.md#computation-ownership) | `tests/web/helpers/app-lifecycle.cjs` | `playwright-functional` | not a test | never |
 | [TYPE-DEBT](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#type-checking) | `tests/test_type_check_ratchet.py` | `core-pr` | `core` | never |
 | [PY-STRUCTURE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#python-structure) | `tests/test_python_structure_ratchet.py` | `core-pr` | `core` | never |
 

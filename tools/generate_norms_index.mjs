@@ -4,9 +4,9 @@
 //     (tools/web-design-rule-guards.json), each rule's heading in its document;
 //   - the CI jobs, from the CI routing policy (tools/ci-impact-policy.mjs): the
 //     jobs a pull request that changes only the guard requires, which must
-//     include the declared job, and the dev jobs of a leaf-test push
-//     (`leafTestKind`, `leafJobsFor`, with the pytest markers that
-//     tools/ci-impact.mjs reads);
+//     include the declared job, and the dev jobs that run a test of the guard's
+//     kind and pytest markers (`leafTestKind`, `leafJobsFor`, with the markers
+//     that tools/ci-impact.mjs reads);
 //   - the Product Contract records (their headings and fields) and the test
 //     files that cite each record id;
 //   - every `<document>.md#<anchor>` that a tool or a test cites: the anchor must
@@ -46,24 +46,29 @@ const repositoryFiles = (root) => execFileSync(
 
 // GitHub's heading anchor: the rendered text, lower case, without punctuation,
 // with spaces as hyphens; a repeated anchor gets -1, -2, ...
-const slugOf = (text) => text
+export const slugOf = (text) => text
   .replace(/`([^`]*)`/g, '$1')
   .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
   .replace(/<[^>]+>/g, '')
+  .replace(/(^|[^\p{L}\p{N}])_+([^_]+?)_+(?=[^\p{L}\p{N}]|$)/gu, '$1$2')
   .toLowerCase()
   .replace(/[^\p{L}\p{M}\p{N}\p{Pc}\- ]/gu, '')
   .replace(/ /g, '-');
 
-// Headings outside fenced code, in order: { level, text, slug, line }.
-const headingsOf = (source) => {
+// Headings outside fenced code, in order: { level, text, slug, line }. A fence
+// closes on a bare run of its own character at least as long as the opening one.
+export const headingsOf = (source) => {
   const seen = new Map();
   const headings = [];
   let fence = null;
   source.split('\n').forEach((line, index) => {
-    const marker = line.match(/^ {0,3}(`{3,}|~{3,})/);
-    if (marker) {
-      if (fence === null) fence = marker[1][0];
-      else if (marker[1][0] === fence) fence = null;
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (fence !== null) {
+      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = null;
+      return;
+    }
+    if (marker && !(marker[1][0] === '`' && marker[2].includes('`'))) {
+      fence = marker[1];
       return;
     }
     const heading = fence === null && line.match(/^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/);
@@ -93,9 +98,9 @@ const pullRequestJobsFor = (file) => {
   return requiredJobsFor({ profile: 'pr', impact, decision, capabilities });
 };
 
-// The dev jobs of a push that changes only this leaf test; null for a file that is
-// not a leaf test (a fixture or helper keeps the whole dev tier).
-const devLeafJobsFor = (file, read) => {
+// The dev jobs that run a test of this file's kind and pytest markers, as the
+// planner routes a changed leaf test; null for a fixture or helper.
+const devJobsFor = (file, read) => {
   const kind = leafTestKind(file);
   if (kind === null) return null;
   return leafJobsFor({ profile: 'dev', kind, markers: kind === 'python' ? pythonMarkers(read(file)) : null });
@@ -115,10 +120,10 @@ const ruleSection = ({ registry, headingSlug, read, problems }) => {
         problems.push(`${rule.id} ${guard.path}: the registry declares ${guard.job}, `
           + `but a pull request that changes only this file requires ${required.join(', ')}`);
       }
-      const devJobs = devLeafJobsFor(guard.path, read);
+      const devJobs = devJobsFor(guard.path, read);
       guardRows.push([
         ruleCell, code(guard.path), code(guard.job),
-        devJobs === null ? 'not a leaf test' : devJobs.map(code).join(', ') || 'none',
+        devJobs === null ? 'not a test' : devJobs.map(code).join(', ') || 'none',
         guard.retireWhen
       ]);
     });
@@ -136,10 +141,13 @@ const ruleSection = ({ registry, headingSlug, read, problems }) => {
     `  (${code('tools/ci-impact-policy.mjs')}), and`,
     `  ${code('tests/web/architecture-contracts.test.mjs')} checks that the job's`,
     '  commands run the guard.',
-    '- Dev jobs: the jobs of a dev push that changes only that test',
-    `  (${code('leafJobsFor')}). Any other push runs the whole dev tier.`,
+    '- Dev jobs: the jobs of the dev tier that run a test of that kind and its pytest',
+    `  markers (${code('leafTestKind')}, ${code('leafJobsFor')}). A dev push may take a job's`,
+    '  result from the pull request it merges instead (`docs/internal/SELECTIVE_CI.md`,',
+    '  "Merged pull request inheritance"). A fixture or helper runs with the guards that',
+    '  read it.',
     '',
-    ...table(['Rule', 'Guard', 'Pull request job', 'Dev jobs (leaf test push)', 'Retire when'], guardRows),
+    ...table(['Rule', 'Guard', 'Pull request job', 'Dev jobs', 'Retire when'], guardRows),
     '',
     '### Allowlists',
     '',
@@ -224,7 +232,7 @@ const contractSection = ({ read, files, problems }) => {
 };
 
 // `<document>.md#<anchor>` written in a tool or a test, outside a URL.
-const citedAnchors = (source) => [...source.matchAll(/\.md#([\w-]+)/g)].flatMap((match) => {
+export const citedAnchors = (source) => [...source.matchAll(/\.md#([\p{L}\p{M}\p{N}\p{Pc}-]+)/gu)].flatMap((match) => {
   let start = match.index;
   while (start > 0 && /[\w./-]/.test(source[start - 1])) start -= 1;
   const document = `${source.slice(start, match.index)}.md`;
