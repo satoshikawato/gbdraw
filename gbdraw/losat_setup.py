@@ -126,7 +126,9 @@ def _verify_cache(directory: Path, identity: dict) -> Path | None:
             raise ValueError("installation identity differs from the pinned release")
         if binary.stat().st_size != identity["binary_size"] or file_sha256(binary) != identity["binary_sha256"]:
             raise ValueError("binary checksum mismatch")
-        result = subprocess.run([str(binary), "--version"], capture_output=True, text=True, timeout=15, check=False)
+        result = subprocess.run(
+            [str(binary), "--version"], capture_output=True, text=True, encoding="utf-8", timeout=15, check=False
+        )
         if result.returncode or result.stdout.strip() != f"losat {identity['version']}":
             raise ValueError(f"version check failed: {result.stderr.strip() or result.stdout.strip()}")
         return binary

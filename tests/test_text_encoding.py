@@ -1,7 +1,8 @@
 """The encoding gbdraw reads and writes text in.
 
-Every text file gbdraw/ opens names its encoding: without ``encoding=`` Python
-uses the locale's, which differs between machines (cp1252 or cp932 on Windows).
+Every text file gbdraw/ opens, and every program output it reads as text, names
+its encoding: without ``encoding=`` Python uses the locale's, which differs
+between machines (cp1252 or cp932 on Windows).
 A GenBank, EMBL, GFF3 or FASTA file is read as UTF-8, and one that is not UTF-8
 in the locale's encoding.
 """
@@ -27,6 +28,8 @@ PACKAGE = Path(__file__).resolve().parents[1] / "gbdraw"
 _NOT_TEXT_OPENERS = {"os", "tarfile", "webbrowser", "zipfile"}
 # ``open`` of these modules reads bytes unless its mode has a "t".
 _BYTES_UNLESS_T = {"gzip", "bz2", "lzma"}
+# subprocess functions that decode a program's output when ``text`` or ``universal_newlines`` is true.
+_SUBPROCESS_RUNNERS = {"run", "Popen", "call", "check_call", "check_output"}
 
 
 def _mode(call: ast.Call, position: int, default: str) -> str:
@@ -51,10 +54,14 @@ def _opens_text_without_encoding(call: ast.Call) -> bool:
         return False
     if func.attr in {"read_text", "write_text"}:
         return True
-    if func.attr != "open":
-        return False
     module = func.value.id if isinstance(func.value, ast.Name) else None
-    if module in _NOT_TEXT_OPENERS:
+    if module == "subprocess" and func.attr in _SUBPROCESS_RUNNERS:
+        return any(
+            keyword.arg in {"text", "universal_newlines"}
+            and not (isinstance(keyword.value, ast.Constant) and not keyword.value.value)
+            for keyword in call.keywords
+        )
+    if func.attr != "open" or module in _NOT_TEXT_OPENERS:
         return False
     if module in _BYTES_UNLESS_T:
         return "t" in _mode(call, 1, "rb")
@@ -91,6 +98,11 @@ def _offenders(source: str, name: str) -> list[int]:
         ("webbrowser.open(url)", False),
         ("tarfile.open(path, 'r:gz')", False),
         ("write_text(handle, text)", False),
+        ("subprocess.run(command, capture_output=True, text=True)", True),
+        ("subprocess.check_output(command, universal_newlines=True)", True),
+        ("subprocess.run(command, capture_output=True)", False),
+        ("subprocess.run(command, text=False)", False),
+        ("subprocess.run(command, text=True, encoding='utf-8')", False),
     ],
 )
 def test_the_encoding_check_reads_each_form_of_open(call: str, flagged: bool) -> None:
@@ -173,12 +185,12 @@ def test_a_utf8_file_reads_and_crop_genbank_writes_utf8_where_the_locale_is_not_
     genbank = _write(tmp_path, "rec1.gb", GENBANK, "utf-8")
     cropped = tmp_path / "cropped.gb"
     script = (
-        "import sys\n"
+        "import codecs, locale, sys\n"
         "from gbdraw.crop_genbank import gbk_to_seqrecord, write_cropped_genbank\n"
         "from gbdraw.io.genome import read_flat_file_records\n"
         "record = read_flat_file_records(sys.argv[1])[0]\n"
         "write_cropped_genbank(gbk_to_seqrecord(sys.argv[1]), sys.argv[2], 'rec1', 1, 12)\n"
-        "print(ascii((sys.getfilesystemencoding(), record.features[0].qualifiers['product'][0])))\n"
+        "print(ascii((codecs.lookup(locale.getpreferredencoding(False)).name, record.features[0].qualifiers['product'][0])))\n"
     )
     environment = {**os.environ, "LC_ALL": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
     result = subprocess.run(
