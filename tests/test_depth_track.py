@@ -43,6 +43,7 @@ from gbdraw.configurators import DepthConfigurator
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear_comparison import LinearComparison
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 
 
 def _make_record(record_id: str = "rec1", length: int = 120) -> SeqRecord:
@@ -598,10 +599,12 @@ def test_linear_depth_gc_track_offsets_reserve_visual_gap() -> None:
 
     canvas = assemble_linear_diagram_from_records(
         [_make_record()],
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            ),
         ),
     )
     svg = canvas.tostring()
@@ -634,10 +637,12 @@ def test_linear_gc_percent_footprint_reserves_its_drawn_tick_labels() -> None:
 
     canvas = assemble_linear_diagram_from_records(
         [_make_record(length=4000)],
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "objects.gc_content.mode": "percent"}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "objects.gc_content.mode": "percent"}
+            ),
         ),
     )
     drawn_font_sizes = {
@@ -663,17 +668,21 @@ def test_circular_depth_track_is_optional() -> None:
 
     without_depth = assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        CircularAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
         ),
     ).tostring()
     with_depth = assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        CircularAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            ),
         ),
     ).tostring()
 
@@ -686,21 +695,40 @@ def test_circular_depth_track_is_optional() -> None:
 
 
 @pytest.mark.circular
+@pytest.mark.parametrize(
+    "per_record_input",
+    [{"depth_tables": [_depth_table("rec1")]}, {"depth_files": ["rec1.depth.tsv"]}],
+    ids=["depth_tables", "depth_files"],
+)
+def test_single_record_circular_assembly_refuses_per_record_depth_inputs(
+    per_record_input: dict[str, object],
+) -> None:
+    # One entry per record belongs to a multi-record figure; one record is never drawn without it.
+    with pytest.raises(ValidationError, match="depth_tables and depth_files hold one entry per record"):
+        assemble_circular_diagram_from_record(
+            _make_record(),
+            CircularAssemblyInputs(cfg=apply_config_overrides(None, None), legend="none", **per_record_input),
+        )
+
+
+@pytest.mark.circular
 def test_circular_depth_origin_label_requires_explicit_min() -> None:
     record = _make_record()
     svg = assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-            "objects.depth.min_depth": 5,
-        }),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
+        CircularAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.depth.min_depth": 5,
+            }),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
+        ),
     ).tostring()
 
     depth_axis_svg = svg[svg.index('id="depth_axis"') : svg.index('id="depth_axis"') + 900]
@@ -713,15 +741,17 @@ def test_circular_depth_axis_can_be_hidden_without_hiding_depth_track() -> None:
     record = _make_record()
     svg = assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-            "objects.depth.show_axis": False,
-        }),
-        window=10,
-        step=10,
+        CircularAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.depth.show_axis": False,
+            }),
+            window=10,
+            step=10,
+        ),
     ).tostring()
 
     assert 'id="depth"' in svg
@@ -812,13 +842,15 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
 
     assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        CircularAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            ),
+            window=10,
+            step=10,
         ),
-        window=10,
-        step=10,
     )
 
     cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
@@ -901,17 +933,19 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
 
     assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        CircularAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            ),
+            circular_track_slots=[
+                "gc_content:dinucleotide_content@r=0.44,w=12px",
+                "gc_skew:dinucleotide_skew@r=0.24,w=10px",
+            ],
+            window=10,
+            step=10,
         ),
-        circular_track_slots=[
-            "gc_content:dinucleotide_content@r=0.44,w=12px",
-            "gc_skew:dinucleotide_skew@r=0.24,w=10px",
-        ],
-        window=10,
-        step=10,
     )
 
     assert captured["gc_width"] == pytest.approx(12.0)
@@ -925,18 +959,20 @@ def test_circular_depth_axis_uses_record_start_and_tick_options() -> None:
     record = _make_record()
     svg = assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-            "objects.depth.large_tick_interval": 4,
-            "objects.depth.tick_font_size": 11,
-        }),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
+        CircularAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.depth.large_tick_interval": 4,
+                "objects.depth.tick_font_size": 11,
+            }),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
+        ),
     ).tostring()
 
     depth_axis_svg = svg[svg.index('id="depth_axis"') : svg.index('id="depth_axis"') + 900]
@@ -950,19 +986,21 @@ def test_circular_depth_ticks_use_right_side_and_small_ticks_are_unlabeled() -> 
     record = _make_record(length=40)
     svg = assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_table=_constant_depth_table("rec1", 100, length=40),
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-            "objects.depth.normalize": False,
-            "objects.depth.min_depth": 0,
-            "objects.depth.max_depth": 100,
-            "objects.depth.large_tick_interval": 50,
-            "objects.depth.small_tick_interval": 25,
-        }),
-        window=10,
-        step=10,
+        CircularAssemblyInputs(
+            legend="none",
+            depth_table=_constant_depth_table("rec1", 100, length=40),
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.depth.normalize": False,
+                "objects.depth.min_depth": 0,
+                "objects.depth.max_depth": 100,
+                "objects.depth.large_tick_interval": 50,
+                "objects.depth.small_tick_interval": 25,
+            }),
+            window=10,
+            step=10,
+        ),
     ).tostring()
 
     depth_axis_svg = svg[svg.index('id="depth_axis"') : svg.index('id="depth_axis"') + 1400]
@@ -979,15 +1017,17 @@ def test_depth_ticks_can_be_hidden_without_hiding_axes() -> None:
     record = _make_record()
     svg = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-            "objects.depth.show_ticks": False,
-        }),
-        window=10,
-        step=10,
+        LinearAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.depth.show_ticks": False,
+            }),
+            window=10,
+            step=10,
+        ),
     ).tostring()
 
     assert 'id="depth_axis"' in svg
@@ -999,15 +1039,17 @@ def test_depth_axis_can_be_hidden_without_hiding_depth_track() -> None:
     record = _make_record()
     svg = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-            "objects.depth.show_axis": False,
-        }),
-        window=10,
-        step=10,
+        LinearAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.depth.show_axis": False,
+            }),
+            window=10,
+            step=10,
+        ),
     ).tostring()
 
     assert 'id="depth"' in svg
@@ -1020,19 +1062,21 @@ def test_linear_shared_depth_axis_uses_common_auto_max() -> None:
     records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
     svg = assemble_linear_diagram_from_records(
         records,
-        legend="none",
-        depth_tables=[
-            _constant_depth_table("rec1", 10, length=40),
-            _constant_depth_table("rec2", 100, length=40),
-        ],
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-            "objects.depth.share_axis": True,
-            "objects.depth.normalize": False,
-        }),
-        window=10,
-        step=10,
+        LinearAssemblyInputs(
+            legend="none",
+            depth_tables=[
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec2", 100, length=40),
+            ],
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.depth.share_axis": True,
+                "objects.depth.normalize": False,
+            }),
+            window=10,
+            step=10,
+        ),
     ).tostring()
 
     assert svg.count(">100x<") == 2
@@ -1043,19 +1087,21 @@ def test_circular_multi_record_shared_depth_axis_uses_common_auto_max() -> None:
     records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
     svg = assemble_circular_diagram_from_records(
         records,
-        legend="none",
-        depth_tables=[
-            _constant_depth_table("rec1", 10, length=40),
-            _constant_depth_table("rec2", 100, length=40),
-        ],
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-            "objects.depth.share_axis": True,
-            "objects.depth.normalize": False,
-        }),
-        window=10,
-        step=10,
+        CircularAssemblyInputs(
+            legend="none",
+            depth_tables=[
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec2", 100, length=40),
+            ],
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.depth.share_axis": True,
+                "objects.depth.normalize": False,
+            }),
+            window=10,
+            step=10,
+        ),
     ).tostring()
 
     assert svg.count(">100x<") == 2
@@ -1067,17 +1113,21 @@ def test_linear_depth_track_is_optional() -> None:
 
     without_depth = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        LinearAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
         ),
     ).tostring()
     with_depth = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            ),
         ),
     ).tostring()
 
@@ -1095,26 +1145,28 @@ def test_linear_multiple_depth_tracks_have_unique_ids() -> None:
     records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
     canvas = assemble_linear_diagram_from_records(
         records,
-        legend="none",
-        depth_track_tables=[
-            [
-                _constant_depth_table("rec1", 10, length=40),
-                _constant_depth_table("rec1", 20, length=40),
+        LinearAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [
+                    _constant_depth_table("rec1", 10, length=40),
+                    _constant_depth_table("rec1", 20, length=40),
+                ],
+                [
+                    _constant_depth_table("rec2", 30, length=40),
+                    _constant_depth_table("rec2", 40, length=40),
+                ],
             ],
-            [
-                _constant_depth_table("rec2", 30, length=40),
-                _constant_depth_table("rec2", 40, length=40),
-            ],
-        ],
-        depth_track_labels=["Sample A", "Sample B"],
-        depth_track_colors=["#111111", "#222222"],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            depth_track_labels=["Sample A", "Sample B"],
+            depth_track_colors=["#111111", "#222222"],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     )
     svg = canvas.tostring()
 
@@ -1135,21 +1187,23 @@ def test_linear_multiple_depth_track_heights_are_per_track() -> None:
     record = _make_record("rec1", length=40)
     canvas = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_track_tables=[
-            [
-                _constant_depth_table("rec1", 10, length=40),
-                _constant_depth_table("rec1", 40, length=40),
-            ]
-        ],
-        depth_track_heights=[12, 28],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [
+                    _constant_depth_table("rec1", 10, length=40),
+                    _constant_depth_table("rec1", 40, length=40),
+                ]
+            ],
+            depth_track_heights=[12, 28],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     )
     svg = canvas.tostring()
 
@@ -1162,26 +1216,28 @@ def test_linear_custom_depth_slot_uses_track_height_when_slot_height_is_auto() -
     record = _make_record("rec1", length=40)
     svg = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_track_tables=[
-            [
-                _constant_depth_table("rec1", 10, length=40),
-                _constant_depth_table("rec1", 40, length=40),
-            ]
-        ],
-        depth_track_heights=[12, 28],
-        linear_track_slots=[
-            "features:features@side=overlay",
-            "depth_a:depth@track_index=0",
-            "depth_b:depth@track_index=1",
-        ],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [
+                    _constant_depth_table("rec1", 10, length=40),
+                    _constant_depth_table("rec1", 40, length=40),
+                ]
+            ],
+            depth_track_heights=[12, 28],
+            linear_track_slots=[
+                "features:features@side=overlay",
+                "depth_a:depth@track_index=0",
+                "depth_b:depth@track_index=1",
+            ],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     ).tostring()
 
     depth_a_axes = _semantic_depth_axis_groups(svg, "depth_a")
@@ -1197,23 +1253,25 @@ def test_linear_depth_track_tick_options_are_per_track() -> None:
     record = _make_record("rec1", length=40)
     svg = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_track_tables=[
-            [
-                _constant_depth_table("rec1", 10, length=40),
-                _constant_depth_table("rec1", 40, length=40),
-            ]
-        ],
-        depth_track_large_tick_intervals=[5, 20],
-        depth_track_small_tick_intervals=["auto", 10],
-        depth_track_tick_font_sizes=[8, 14],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [
+                    _constant_depth_table("rec1", 10, length=40),
+                    _constant_depth_table("rec1", 40, length=40),
+                ]
+            ],
+            depth_track_large_tick_intervals=[5, 20],
+            depth_track_small_tick_intervals=["auto", 10],
+            depth_track_tick_font_sizes=[8, 14],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     ).tostring()
 
     depth_1_axis = _svg_group(svg, "depth_1_axis")
@@ -1230,21 +1288,23 @@ def test_circular_multiple_depth_tracks_render_distinct_rings() -> None:
     record = _make_record("rec1", length=40)
     svg = assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_track_tables=[
-            [
-                _constant_depth_table("rec1", 10, length=40),
-                _constant_depth_table("rec1", 40, length=40),
-            ]
-        ],
-        depth_track_labels=["Sample A", "Sample B"],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        CircularAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [
+                    _constant_depth_table("rec1", 10, length=40),
+                    _constant_depth_table("rec1", 40, length=40),
+                ]
+            ],
+            depth_track_labels=["Sample A", "Sample B"],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     ).tostring()
 
     assert len(_semantic_slot_groups(svg, "depth_1")) == 1
@@ -1258,25 +1318,27 @@ def test_circular_multiple_depth_auto_slots_do_not_restore_hidden_scale() -> Non
     record = _make_record("rec1", length=40)
     canvas = assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_track_tables=[
-            [
-                _constant_depth_table("rec1", 10, length=40),
-                _constant_depth_table("rec1", 40, length=40),
-            ]
-        ],
-        cfg=apply_config_overrides(
-            None,
-            {
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-                "objects.scale.show": False,
-            },
+        CircularAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [
+                    _constant_depth_table("rec1", 10, length=40),
+                    _constant_depth_table("rec1", 40, length=40),
+                ]
+            ],
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "objects.scale.show": False,
+                },
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     )
     svg = canvas.tostring()
     renderers = {
@@ -1295,25 +1357,27 @@ def test_circular_custom_depth_slot_selects_track_index() -> None:
     record = _make_record("rec1", length=40)
     svg = assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_track_tables=[
-            [
-                _constant_depth_table("rec1", 10, length=40),
-                _constant_depth_table("rec1", 40, length=40),
-            ]
-        ],
-        circular_track_slots=[
-            "features:features",
-            "ticks:ticks",
-            "selected_depth:depth@track_index=1,label=Sample B",
-        ],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        CircularAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [
+                    _constant_depth_table("rec1", 10, length=40),
+                    _constant_depth_table("rec1", 40, length=40),
+                ]
+            ],
+            circular_track_slots=[
+                "features:features",
+                "ticks:ticks",
+                "selected_depth:depth@track_index=1,label=Sample B",
+            ],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     ).tostring()
 
     assert len(_semantic_slot_groups(svg, "selected_depth")) == 1
@@ -1326,26 +1390,28 @@ def test_depth_share_axis_is_per_logical_track() -> None:
     records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
     svg = assemble_linear_diagram_from_records(
         records,
-        legend="none",
-        depth_track_tables=[
-            [
-                _constant_depth_table("rec1", 10, length=40),
-                _constant_depth_table("rec1", 5, length=40),
+        LinearAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [
+                    _constant_depth_table("rec1", 10, length=40),
+                    _constant_depth_table("rec1", 5, length=40),
+                ],
+                [
+                    _constant_depth_table("rec2", 100, length=40),
+                    _constant_depth_table("rec2", 50, length=40),
+                ],
             ],
-            [
-                _constant_depth_table("rec2", 100, length=40),
-                _constant_depth_table("rec2", 50, length=40),
-            ],
-        ],
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-            "objects.depth.share_axis": True,
-        }),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.depth.share_axis": True,
+            }),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
+        ),
     ).tostring()
 
     assert ">100x<" in svg
@@ -1361,19 +1427,21 @@ def test_linear_depth_track_partial_record_rows_are_not_shared() -> None:
     ]
     svg = assemble_linear_diagram_from_records(
         records,
-        legend="none",
-        depth_track_tables=[
-            [_constant_depth_table("rec1", 10, length=40)],
-            [_constant_depth_table("rec2", 20, length=40)],
-            [],
-        ],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [_constant_depth_table("rec1", 10, length=40)],
+                [_constant_depth_table("rec2", 20, length=40)],
+                [],
+            ],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     ).tostring()
 
     assert svg.count('id="depth_record_1"') == 1
@@ -1402,19 +1470,21 @@ def test_linear_custom_depth_slot_skips_leading_or_trailing_missing_record(
 
     canvas = assemble_linear_diagram_from_records(
         records,
-        legend="none",
-        depth_track_tables=depth_rows,
-        linear_track_slots=[
-            f"depth:depth@track_index=0,side={depth_side}",
-            f"features:features@side={feature_side}",
-        ],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_track_tables=depth_rows,
+            linear_track_slots=[
+                f"depth:depth@track_index=0,side={depth_side}",
+                f"features:features@side={feature_side}",
+            ],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     )
     svg = canvas.tostring()
 
@@ -1456,20 +1526,22 @@ def test_sparse_depth_does_not_separate_pairwise_match_from_missing_record_featu
     )
     canvas = assemble_linear_diagram_from_records(
         records,
-        legend="none",
-        depth_track_tables=[[_constant_depth_table("rec1", 25, length=40)], [None]],
-        linear_track_slots=[
-            "depth:depth@track_index=0,side=above",
-            "features:features@side=above",
-        ],
-        linear_comparisons=[comparison],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_track_tables=[[_constant_depth_table("rec1", 25, length=40)], [None]],
+            linear_track_slots=[
+                "depth:depth@track_index=0,side=above",
+                "features:features@side=above",
+            ],
+            linear_comparisons=[comparison],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     )
 
     missing_record = canvas._gbdraw_track_slot_geometry["records"][1]
@@ -1498,21 +1570,23 @@ def test_linear_diagonal_sparse_depth_binding_survives_slot_order_reversal() -> 
         }
         return assemble_linear_diagram_from_records(
             records,
-            legend="none",
-            depth_track_tables=depth_rows,
-            depth_track_labels=["Sample A", "Sample B"],
-            depth_track_colors=["#112233", "#445566"],
-            linear_track_slots=[
-                *(slots[slot_id] for slot_id in depth_slot_ids),
-                "features:features@side=overlay",
-            ],
-            cfg=apply_config_overrides(
-                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            LinearAssemblyInputs(
+                legend="none",
+                depth_track_tables=depth_rows,
+                depth_track_labels=["Sample A", "Sample B"],
+                depth_track_colors=["#112233", "#445566"],
+                linear_track_slots=[
+                    *(slots[slot_id] for slot_id in depth_slot_ids),
+                    "features:features@side=overlay",
+                ],
+                cfg=apply_config_overrides(
+                    None, {"canvas.show_gc": False, "canvas.show_skew": False}
+                ),
+                window=10,
+                step=10,
+                depth_window=10,
+                depth_step=10,
             ),
-            window=10,
-            step=10,
-            depth_window=10,
-            depth_step=10,
         )
 
     original_canvas = render(["depth_a", "depth_b"])
@@ -1550,25 +1624,27 @@ def test_linear_custom_slot_can_select_only_second_logical_depth_track() -> None
 
     svg = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_track_tables=[
-            [
-                _constant_depth_table("rec1", 10, length=40),
-                _constant_depth_table("rec1", 50, length=40),
-            ]
-        ],
-        depth_track_colors=["#112233", "#445566"],
-        linear_track_slots=[
-            "selected_depth:depth@track_index=1,side=below",
-            "features:features@side=overlay",
-        ],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [
+                    _constant_depth_table("rec1", 10, length=40),
+                    _constant_depth_table("rec1", 50, length=40),
+                ]
+            ],
+            depth_track_colors=["#112233", "#445566"],
+            linear_track_slots=[
+                "selected_depth:depth@track_index=1,side=below",
+                "features:features@side=overlay",
+            ],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     ).tostring()
 
     selected_groups = _semantic_slot_groups(svg, "selected_depth")
@@ -1584,24 +1660,26 @@ def test_linear_custom_depth_slot_legend_uses_only_selected_sparse_logical_track
 
     canvas = assemble_linear_diagram_from_records(
         records,
-        legend="right",
-        depth_track_tables=[
-            [_constant_depth_table("rec1", 10, length=40), None],
-            [None, _constant_depth_table("rec2", 50, length=40)],
-        ],
-        depth_track_labels=["Original Sample A", "Original Sample B"],
-        depth_track_colors=["#112233", "#445566"],
-        linear_track_slots=[
-            f"selected_depth:depth@track_index=1,side=below,legend_label={legend_label}",
-            "features:features@side=overlay",
-        ],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        LinearAssemblyInputs(
+            legend="right",
+            depth_track_tables=[
+                [_constant_depth_table("rec1", 10, length=40), None],
+                [None, _constant_depth_table("rec2", 50, length=40)],
+            ],
+            depth_track_labels=["Original Sample A", "Original Sample B"],
+            depth_track_colors=["#112233", "#445566"],
+            linear_track_slots=[
+                f"selected_depth:depth@track_index=1,side=below,legend_label={legend_label}",
+                "features:features@side=overlay",
+            ],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     )
     svg = canvas.tostring()
 
@@ -1631,19 +1709,21 @@ def test_linear_depth_slot_rejects_globally_out_of_range_logical_index() -> None
     ):
         assemble_linear_diagram_from_records(
             [record],
-            legend="none",
-            depth_track_tables=[
-                [
-                    _constant_depth_table("rec1", 10, length=40),
-                    _constant_depth_table("rec1", 50, length=40),
-                ]
-            ],
-            linear_track_slots=[
-                "missing_depth:depth@track_index=2",
-                "features:features@side=overlay",
-            ],
-            cfg=apply_config_overrides(
-                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            LinearAssemblyInputs(
+                legend="none",
+                depth_track_tables=[
+                    [
+                        _constant_depth_table("rec1", 10, length=40),
+                        _constant_depth_table("rec1", 50, length=40),
+                    ]
+                ],
+                linear_track_slots=[
+                    "missing_depth:depth@track_index=2",
+                    "features:features@side=overlay",
+                ],
+                cfg=apply_config_overrides(
+                    None, {"canvas.show_gc": False, "canvas.show_skew": False}
+                ),
             ),
         )
 
@@ -1661,15 +1741,17 @@ def test_circular_multi_record_partial_depth_skips_paint_but_reserves_slot(
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        legend="none",
-        depth_track_tables=depth_rows,
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        CircularAssemblyInputs(
+            legend="none",
+            depth_track_tables=depth_rows,
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     )
     svg = canvas.tostring()
     geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
@@ -1693,20 +1775,22 @@ def test_circular_multi_record_diagonal_sparse_depth_uses_logical_binding() -> N
 
     canvas = assemble_circular_diagram_from_records(
         records,
-        legend="none",
-        depth_track_tables=[
-            [_constant_depth_table("rec1", 10, length=40), None],
-            [None, _constant_depth_table("rec2", 50, length=40)],
-        ],
-        depth_track_labels=["Sample A", "Sample B"],
-        depth_track_colors=["#112233", "#445566"],
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        CircularAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [_constant_depth_table("rec1", 10, length=40), None],
+                [None, _constant_depth_table("rec2", 50, length=40)],
+            ],
+            depth_track_labels=["Sample A", "Sample B"],
+            depth_track_colors=["#112233", "#445566"],
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     )
     svg = canvas.tostring()
     geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
@@ -1732,29 +1816,31 @@ def test_circular_multi_record_depth_auto_slots_do_not_restore_hidden_scale() ->
     records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
     canvas = assemble_circular_diagram_from_records(
         records,
-        legend="none",
-        depth_track_tables=[
-            [
-                _constant_depth_table("rec1", 10, length=40),
-                _constant_depth_table("rec1", 30, length=40),
+        CircularAssemblyInputs(
+            legend="none",
+            depth_track_tables=[
+                [
+                    _constant_depth_table("rec1", 10, length=40),
+                    _constant_depth_table("rec1", 30, length=40),
+                ],
+                [
+                    _constant_depth_table("rec2", 20, length=40),
+                    _constant_depth_table("rec2", 40, length=40),
+                ],
             ],
-            [
-                _constant_depth_table("rec2", 20, length=40),
-                _constant_depth_table("rec2", 40, length=40),
-            ],
-        ],
-        cfg=apply_config_overrides(
-            None,
-            {
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-                "objects.scale.show": False,
-            },
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "objects.scale.show": False,
+                },
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     )
     svg = canvas.tostring()
 
@@ -1773,17 +1859,19 @@ def test_linear_depth_origin_label_requires_explicit_min() -> None:
     record = _make_record()
     svg = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-            "objects.depth.min_depth": 5,
-        }),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
+        LinearAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.depth.min_depth": 5,
+            }),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
+        ),
     ).tostring()
 
     depth_axis_svg = svg[svg.index('id="depth_axis"') : svg.index('id="depth_axis"') + 900]
@@ -1796,16 +1884,18 @@ def test_linear_depth_defaults_to_linear_scale_for_plotting() -> None:
     record = _make_record(length=40)
     svg = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
+        LinearAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
+        ),
     ).tostring()
 
     match = re.search(r'id="depth"[^>]*><path d="([^"]+)"', svg)
@@ -1835,15 +1925,17 @@ def test_linear_depth_window_step_can_differ_from_gc(
 
     assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            ),
+            window=20,
+            step=20,
+            depth_window=10,
+            depth_step=5,
         ),
-        window=20,
-        step=20,
-        depth_window=10,
-        depth_step=5,
     )
 
     assert captured == {"window": 10, "step": 5}
@@ -1868,13 +1960,15 @@ def test_linear_depth_window_step_defaults_to_tenth_of_gc(
 
     assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            ),
+            window=100,
+            step=100,
         ),
-        window=100,
-        step=100,
     )
 
     assert captured == {"window": 100, "step": 10}
@@ -1899,15 +1993,17 @@ def test_circular_depth_window_step_can_differ_from_gc(
 
     assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        CircularAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            ),
+            window=20,
+            step=20,
+            depth_window=10,
+            depth_step=5,
         ),
-        window=20,
-        step=20,
-        depth_window=10,
-        depth_step=5,
     )
 
     assert captured == {"window": 10, "step": 5}
@@ -1932,13 +2028,15 @@ def test_circular_depth_window_step_defaults_to_tenth_of_gc(
 
     assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        CircularAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            ),
+            window=100,
+            step=100,
         ),
-        window=100,
-        step=100,
     )
 
     assert captured == {"window": 100, "step": 10}
@@ -2470,15 +2568,17 @@ def test_linear_depth_dataframe_is_computed_once_per_record(
 
     canvas = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        depth_table=_depth_table("rec1"),
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        LinearAssemblyInputs(
+            legend="none",
+            depth_table=_depth_table("rec1"),
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "canvas.show_skew": True}
+            ),
+            window=10,
+            step=10,
+            depth_window=10,
+            depth_step=10,
         ),
-        window=10,
-        step=10,
-        depth_window=10,
-        depth_step=10,
     )
 
     assert call_count == 1

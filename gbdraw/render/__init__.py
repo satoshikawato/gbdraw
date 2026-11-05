@@ -1,4 +1,4 @@
-"""Rendering backends (internal).
+"""SVG groups and drawers, interactive SVG metadata, and export to other formats (internal).
 
 This package contains:
 - drawers/: Low-level SVG element builders

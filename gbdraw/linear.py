@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
+"""The gbdraw linear command: its arguments, Session replay and the Linear request."""
 
 
 import argparse

@@ -1,4 +1,4 @@
-"""Configurators for drawing and analysis (internal).
+"""Drawing parameters derived from the configuration, per track and for the legend (internal).
 
 These objects collect config-derived parameters used by drawers/groups.
 """

@@ -41,6 +41,7 @@ from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator as CircularFeaturePathGenerator
 from gbdraw.render.drawers.linear.features import FeaturePathGenerator as LinearFeaturePathGenerator
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 
 
 def _build_test_record() -> SeqRecord:
@@ -311,10 +312,12 @@ def test_hmmtdna_origin_spanning_d_loop_arrow_renders_as_single_block() -> None:
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "repeat_region", "D-loop"],
-        feature_shapes={"D-loop": "arrow"},
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "repeat_region", "D-loop"],
+            feature_shapes={"D-loop": "arrow"},
+            legend="none",
+        ),
     )
 
     root = ET.fromstring(canvas.tostring())
@@ -344,9 +347,11 @@ def test_linear_multipart_feature_paths_have_unique_dom_ids_and_shared_feature_i
 
     canvas = assemble_linear_diagram_from_records(
         [record],
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
 
     root = ET.fromstring(canvas.tostring())
@@ -405,9 +410,11 @@ def test_linear_multipart_features_with_shared_first_exon_get_distinct_feature_i
 
     canvas = assemble_linear_diagram_from_records(
         [record],
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["mRNA"],
-        legend="none",
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["mRNA"],
+            legend="none",
+        ),
     )
 
     root = ET.fromstring(canvas.tostring())
@@ -441,9 +448,11 @@ def test_circular_multipart_feature_connector_shares_feature_id() -> None:
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=["CDS"],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     )
 
     root = ET.fromstring(canvas.tostring())

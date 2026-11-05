@@ -1,3 +1,3 @@
-"""Legend table builders (internal)."""
+"""Legend tables, entry metrics and layout for both modes (internal)."""
 
 

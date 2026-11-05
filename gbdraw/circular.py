@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
+"""The gbdraw circular command: its arguments, Session replay and the Circular request."""
 
 import sys
 import argparse

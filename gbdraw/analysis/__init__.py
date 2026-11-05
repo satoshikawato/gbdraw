@@ -1,4 +1,4 @@
-"""Sequence / genome analysis helpers (internal)."""
+"""Sequence analyses: GC content and skew, depth coverage, conservation, collinearity (internal)."""
 
 from .collinearity import (
     CollinearityAnchor,

@@ -35,6 +35,7 @@ from gbdraw.svg.circular_tracks import (
     generate_circular_depth_path_desc,
     generate_circular_scalar_area_path_desc,
 )
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 
 
 def _make_record(record_id: str = "rec1", length: int = 160) -> SeqRecord:
@@ -178,16 +179,18 @@ def test_gc_content_percent_df_preserves_source_percent_and_clips_normalized_val
 def test_circular_gc_content_percent_mode_adds_percent_axis_without_depth_axis() -> None:
     svg = assemble_circular_diagram_from_record(
         _make_record(),
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "canvas.show_skew": False,
-            "objects.gc_content.mode": "percent",
-            "objects.gc_content.min_percent": 0,
-            "objects.gc_content.max_percent": 100,
-            "objects.gc_content.large_tick_interval": 50,
-        }),
-        window=20,
-        step=20,
+        CircularAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "canvas.show_skew": False,
+                "objects.gc_content.mode": "percent",
+                "objects.gc_content.min_percent": 0,
+                "objects.gc_content.max_percent": 100,
+                "objects.gc_content.large_tick_interval": 50,
+            }),
+            window=20,
+            step=20,
+        ),
     ).tostring()
 
     assert 'id="gc_content_axis"' in svg
@@ -203,17 +206,19 @@ def test_circular_gc_content_percent_mode_adds_percent_axis_without_depth_axis()
 def test_linear_gc_content_percent_mode_adds_percent_axis_without_depth_axis() -> None:
     svg = assemble_linear_diagram_from_records(
         [_make_record()],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": True,
-            "canvas.show_skew": False,
-            "objects.gc_content.mode": "percent",
-            "objects.gc_content.min_percent": 0,
-            "objects.gc_content.max_percent": 100,
-            "objects.gc_content.large_tick_interval": 50,
-        }),
-        window=20,
-        step=20,
+        LinearAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": True,
+                "canvas.show_skew": False,
+                "objects.gc_content.mode": "percent",
+                "objects.gc_content.min_percent": 0,
+                "objects.gc_content.max_percent": 100,
+                "objects.gc_content.large_tick_interval": 50,
+            }),
+            window=20,
+            step=20,
+        ),
     ).tostring()
 
     assert 'id="gc_content_axis"' in svg
@@ -253,14 +258,16 @@ def test_linear_gc_content_percent_mode_reserves_full_height_before_gc_skew() ->
 
     canvas = assemble_linear_diagram_from_records(
         [_make_record()],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": True,
-            "canvas.show_skew": True,
-            "objects.gc_content.mode": "percent",
-        }),
-        window=20,
-        step=20,
+        LinearAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": True,
+                "canvas.show_skew": True,
+                "objects.gc_content.mode": "percent",
+            }),
+            window=20,
+            step=20,
+        ),
     )
     svg = canvas.tostring()
     gc_y = _svg_slot_translate_y(svg, "dinucleotide_content")
@@ -279,19 +286,23 @@ def test_linear_gc_content_percent_mode_reserves_full_height_before_gc_skew() ->
 def test_default_gc_content_deviation_mode_does_not_emit_percent_axis() -> None:
     circular_svg = assemble_circular_diagram_from_record(
         _make_record(),
-        legend="none",
-        cfg=apply_config_overrides(None, {"canvas.show_skew": False}),
-        window=20,
-        step=20,
+        CircularAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {"canvas.show_skew": False}),
+            window=20,
+            step=20,
+        ),
     ).tostring()
     linear_svg = assemble_linear_diagram_from_records(
         [_make_record()],
-        legend="none",
-        cfg=apply_config_overrides(
-            None, {"canvas.show_gc": True, "canvas.show_skew": False}
+        LinearAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": True, "canvas.show_skew": False}
+            ),
+            window=20,
+            step=20,
         ),
-        window=20,
-        step=20,
     ).tostring()
 
     assert 'id="gc_content_axis"' not in circular_svg
@@ -306,17 +317,19 @@ def test_default_gc_content_deviation_mode_does_not_emit_percent_axis() -> None:
 def test_circular_gc_content_percent_container_ids_are_slot_scoped() -> None:
     svg = assemble_circular_diagram_from_record(
         _make_record(),
-        legend="none",
-        circular_track_slots=[
-            "gc_content:dinucleotide_content@nt=GC,w=20px",
-            "at_content:dinucleotide_content@nt=AT,w=20px",
-        ],
-        cfg=apply_config_overrides(None, {
-            "objects.gc_content.mode": "percent",
-            "objects.gc_content.show_axis": False,
-        }),
-        window=20,
-        step=20,
+        CircularAssemblyInputs(
+            legend="none",
+            circular_track_slots=[
+                "gc_content:dinucleotide_content@nt=GC,w=20px",
+                "at_content:dinucleotide_content@nt=AT,w=20px",
+            ],
+            cfg=apply_config_overrides(None, {
+                "objects.gc_content.mode": "percent",
+                "objects.gc_content.show_axis": False,
+            }),
+            window=20,
+            step=20,
+        ),
     ).tostring()
 
     root = ET.fromstring(svg)
@@ -383,17 +396,19 @@ def test_circular_gc_content_percent_axis_inherits_depth_tick_font_size() -> Non
 
     svg = assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "canvas.show_depth": True,
-            "canvas.show_skew": False,
-            "objects.gc_content.mode": "percent",
-            "objects.gc_content.large_tick_interval": 50,
-            "objects.depth.tick_font_size": 11,
-        }),
-        depth_table=_make_depth_table(record),
-        window=20,
-        step=20,
+        CircularAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "canvas.show_depth": True,
+                "canvas.show_skew": False,
+                "objects.gc_content.mode": "percent",
+                "objects.gc_content.large_tick_interval": 50,
+                "objects.depth.tick_font_size": 11,
+            }),
+            depth_table=_make_depth_table(record),
+            window=20,
+            step=20,
+        ),
     ).tostring()
 
     assert _axis_font_sizes(svg, "depth_axis") == {"11.0"}
@@ -406,18 +421,20 @@ def test_linear_gc_content_percent_axis_inherits_depth_tick_font_size() -> None:
 
     svg = assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "canvas.show_depth": True,
-            "canvas.show_gc": True,
-            "canvas.show_skew": False,
-            "objects.gc_content.mode": "percent",
-            "objects.gc_content.large_tick_interval": 50,
-            "objects.depth.tick_font_size": 11,
-        }),
-        depth_table=_make_depth_table(record),
-        window=20,
-        step=20,
+        LinearAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "canvas.show_depth": True,
+                "canvas.show_gc": True,
+                "canvas.show_skew": False,
+                "objects.gc_content.mode": "percent",
+                "objects.gc_content.large_tick_interval": 50,
+                "objects.depth.tick_font_size": 11,
+            }),
+            depth_table=_make_depth_table(record),
+            window=20,
+            step=20,
+        ),
     ).tostring()
 
     assert _axis_font_sizes(svg, "depth_axis") == {"11.0"}

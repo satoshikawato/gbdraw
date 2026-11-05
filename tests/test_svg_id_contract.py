@@ -35,6 +35,7 @@ from gbdraw.render.groups.linear.legend import LegendGroup
 from gbdraw.render.interactive_svg import enrich_svg
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 
 _URL_REFERENCE_RE = re.compile(r"url\(#([^)]+)\)")
 
@@ -216,9 +217,9 @@ def test_single_record_definition_id_and_hooks_handle_unsafe_leading_id(
 
     def render() -> str:
         canvas = (
-            assemble_circular_diagram_from_record(record, **common)
+            assemble_circular_diagram_from_record(record, CircularAssemblyInputs(**common))
             if mode == "circular"
-            else assemble_linear_diagram_from_records([record], **common)
+            else assemble_linear_diagram_from_records([record], LinearAssemblyInputs(**common))
         )
         return canvas.tostring()
 
@@ -269,9 +270,9 @@ def test_multi_record_definition_ids_disambiguate_duplicates_and_safe_aliases(
 
     def render() -> str:
         canvas = (
-            assemble_circular_diagram_from_records(records, **common)
+            assemble_circular_diagram_from_records(records, CircularAssemblyInputs(**common))
             if mode == "circular"
-            else assemble_linear_diagram_from_records(records, **common)
+            else assemble_linear_diagram_from_records(records, LinearAssemblyInputs(**common))
         )
         return canvas.tostring()
 
@@ -459,9 +460,9 @@ def test_identical_semantic_features_keep_stable_hooks_and_unique_dom_ids(
         }),
     }
     canvas = (
-        assemble_circular_diagram_from_record(record, **common)
+        assemble_circular_diagram_from_record(record, CircularAssemblyInputs(**common))
         if mode == "circular"
-        else assemble_linear_diagram_from_records([record], **common)
+        else assemble_linear_diagram_from_records([record], LinearAssemblyInputs(**common))
     )
     svg = canvas.tostring()
     _assert_unique_ids_and_resolved_references(svg)
@@ -505,9 +506,9 @@ def test_identical_underlay_features_keep_stable_hooks_and_unique_dom_ids(
         "cfg": apply_config_overrides(None, {label_path: label_value}),
     }
     canvas = (
-        assemble_circular_diagram_from_record(record, **common)
+        assemble_circular_diagram_from_record(record, CircularAssemblyInputs(**common))
         if mode == "circular"
-        else assemble_linear_diagram_from_records([record], **common)
+        else assemble_linear_diagram_from_records([record], LinearAssemblyInputs(**common))
     )
     svg = canvas.tostring()
     _assert_unique_ids_and_resolved_references(svg)
@@ -528,14 +529,16 @@ def test_repeated_circular_record_grid_namespaces_colliding_ids_and_references()
     record = _duplicate_feature_record("same-record")
     canvas = assemble_circular_diagram_from_records(
         [record, copy.deepcopy(record)],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.circular.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": True,
-        }),
-        window=40,
-        step=40,
+        CircularAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": True,
+            }),
+            window=40,
+            step=40,
+        ),
     )
     svg = canvas.tostring()
     _assert_unique_ids_and_resolved_references(svg)
@@ -550,12 +553,14 @@ def test_circular_multi_record_wrappers_expose_record_identity_hooks() -> None:
     ]
     svg = assemble_circular_diagram_from_records(
         records,
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.circular.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
+        CircularAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+        ),
     ).tostring()
 
     wrappers = {
@@ -599,9 +604,9 @@ def test_default_dinucleotide_tracks_expose_canonical_slot_hooks(
         "step": 40,
     }
     canvas = (
-        assemble_circular_diagram_from_record(record, **common)
+        assemble_circular_diagram_from_record(record, CircularAssemblyInputs(**common))
         if mode == "circular"
-        else assemble_linear_diagram_from_records([record], **common)
+        else assemble_linear_diagram_from_records([record], LinearAssemblyInputs(**common))
     )
 
     groups = {
@@ -627,12 +632,14 @@ def test_default_circular_ticks_expose_slot_hooks_without_renaming_group() -> No
     root = _root(
         assemble_circular_diagram_from_record(
             record,
-            legend="none",
-            cfg=apply_config_overrides(None, {
-                "labels.circular.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-            }),
+            CircularAssemblyInputs(
+                legend="none",
+                cfg=apply_config_overrides(None, {
+                    "labels.circular.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                }),
+            ),
         ).tostring()
     )
 
@@ -663,8 +670,8 @@ def test_circular_multi_reserved_record_ids_do_not_collide_with_shared_groups() 
         }),
     }
 
-    first = assemble_circular_diagram_from_records(records, **common).tostring()
-    second = assemble_circular_diagram_from_records(records, **common).tostring()
+    first = assemble_circular_diagram_from_records(records, CircularAssemblyInputs(**common)).tostring()
+    second = assemble_circular_diagram_from_records(records, CircularAssemblyInputs(**common)).tostring()
     assert _ids(first) == _ids(second)
     _assert_unique_ids_and_resolved_references(first)
 
@@ -722,9 +729,9 @@ def test_record_group_ids_do_not_collide_with_renderer_owned_groups(
 
     def render() -> str:
         canvas = (
-            assemble_circular_diagram_from_record(record, **common)
+            assemble_circular_diagram_from_record(record, CircularAssemblyInputs(**common))
             if mode == "circular"
-            else assemble_linear_diagram_from_records([record], **common)
+            else assemble_linear_diagram_from_records([record], LinearAssemblyInputs(**common))
         )
         return canvas.tostring()
 
@@ -761,13 +768,15 @@ def test_linear_record_id_does_not_collide_with_comparison_group() -> None:
 
     canvas = assemble_linear_diagram_from_records(
         records,
-        linear_comparisons=[comparison],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.linear.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
+        LinearAssemblyInputs(
+            linear_comparisons=[comparison],
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+        ),
     )
     svg = canvas.tostring()
     _assert_unique_ids_and_resolved_references(svg)
@@ -802,16 +811,18 @@ def test_annotation_track_prefix_record_id_is_semantic_only() -> None:
     )
     canvas = assemble_linear_diagram_from_records(
         [record],
-        annotation_options=AnnotationOptions(
-            sets=(AnnotationSet("regions", (annotation,)),),
+        LinearAssemblyInputs(
+            annotation_options=AnnotationOptions(
+                sets=(AnnotationSet("regions", (annotation,)),),
+            ),
+            linear_track_slots=("regions:annotations@set_id=regions,h=20px",),
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
         ),
-        linear_track_slots=("regions:annotations@set_id=regions,h=20px",),
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.linear.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
     )
     svg = canvas.tostring()
     _assert_unique_ids_and_resolved_references(svg)
@@ -850,12 +861,14 @@ def test_annotation_track_prefix_record_id_is_semantic_only() -> None:
 def test_interactive_asset_ids_do_not_replace_record_groups(record_id: str) -> None:
     canvas = assemble_linear_diagram_from_records(
         [_duplicate_feature_record(record_id)],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.linear.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
+        LinearAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+        ),
     )
     static_svg = canvas.tostring()
     static_record_group = next(
@@ -909,8 +922,8 @@ def test_linear_user_slot_ids_are_namespaced_without_safe_fragment_aliases() -> 
         "step": 40,
     }
 
-    first = assemble_linear_diagram_from_records([record], **common).tostring()
-    second = assemble_linear_diagram_from_records([record], **common).tostring()
+    first = assemble_linear_diagram_from_records([record], LinearAssemblyInputs(**common)).tostring()
+    second = assemble_linear_diagram_from_records([record], LinearAssemblyInputs(**common)).tostring()
     assert _ids(first) == _ids(second)
     _assert_unique_ids_and_resolved_references(first)
 
@@ -953,29 +966,31 @@ def test_linear_depth_alias_slots_namespace_outer_and_axis_ids() -> None:
     )
     canvas = assemble_linear_diagram_from_records(
         [record],
-        depth_table=depth_table,
-        linear_track_slots=[
-            LinearTrackSlot(
-                "a b",
-                "depth",
-                side="above",
-                params={"track_index": 0},
-            ),
-            LinearTrackSlot(
-                "a_b",
-                "depth",
-                side="below",
-                params={"track_index": 0},
-            ),
-        ],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.linear.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
-        depth_window=40,
-        depth_step=40,
+        LinearAssemblyInputs(
+            depth_table=depth_table,
+            linear_track_slots=[
+                LinearTrackSlot(
+                    "a b",
+                    "depth",
+                    side="above",
+                    params={"track_index": 0},
+                ),
+                LinearTrackSlot(
+                    "a_b",
+                    "depth",
+                    side="below",
+                    params={"track_index": 0},
+                ),
+            ],
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+            depth_window=40,
+            depth_step=40,
+        ),
     )
     svg = canvas.tostring()
     _assert_unique_ids_and_resolved_references(svg)
@@ -1005,29 +1020,31 @@ def test_linear_user_slot_ids_are_record_scoped_in_multi_record_svg() -> None:
     ]
     canvas = assemble_linear_diagram_from_records(
         records,
-        linear_track_slots=[
-            LinearTrackSlot("features", "features", side="overlay"),
-            LinearTrackSlot(
-                "a b",
-                "dinucleotide_skew",
-                side="above",
-                params={"nt": "GC"},
-            ),
-            LinearTrackSlot(
-                "a_b",
-                "dinucleotide_skew",
-                side="below",
-                params={"nt": "AT"},
-            ),
-        ],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.linear.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": True,
-        }),
-        window=40,
-        step=40,
+        LinearAssemblyInputs(
+            linear_track_slots=[
+                LinearTrackSlot("features", "features", side="overlay"),
+                LinearTrackSlot(
+                    "a b",
+                    "dinucleotide_skew",
+                    side="above",
+                    params={"nt": "GC"},
+                ),
+                LinearTrackSlot(
+                    "a_b",
+                    "dinucleotide_skew",
+                    side="below",
+                    params={"nt": "AT"},
+                ),
+            ],
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": True,
+            }),
+            window=40,
+            step=40,
+        ),
     )
     svg = canvas.tostring()
     _assert_unique_ids_and_resolved_references(svg)
@@ -1067,44 +1084,48 @@ def test_annotation_slot_ids_are_namespaced_without_safe_fragment_aliases(
     if mode == "linear":
         canvas = assemble_linear_diagram_from_records(
             [record],
-            cfg=apply_config_overrides(None, None),
-            annotation_options=annotation_options,
-            linear_track_slots=[
-                LinearTrackSlot(
-                    "a b",
-                    "annotations",
-                    side="above",
-                    params={"set_id": "regions", "overflow": "clip"},
-                ),
-                LinearTrackSlot(
-                    "a-b",
-                    "annotations",
-                    side="below",
-                    params={"set_id": "regions", "overflow": "clip"},
-                ),
-            ],
-            legend="none",
+            LinearAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                annotation_options=annotation_options,
+                linear_track_slots=[
+                    LinearTrackSlot(
+                        "a b",
+                        "annotations",
+                        side="above",
+                        params={"set_id": "regions", "overflow": "clip"},
+                    ),
+                    LinearTrackSlot(
+                        "a-b",
+                        "annotations",
+                        side="below",
+                        params={"set_id": "regions", "overflow": "clip"},
+                    ),
+                ],
+                legend="none",
+            ),
         )
     else:
         canvas = assemble_circular_diagram_from_record(
             record,
-            cfg=apply_config_overrides(None, None),
-            annotation_options=annotation_options,
-            circular_track_slots=[
-                CircularTrackSlot(
-                    "a b",
-                    "annotations",
-                    side="outside",
-                    params={"set_id": "regions", "overflow": "clip"},
-                ),
-                CircularTrackSlot(
-                    "a-b",
-                    "annotations",
-                    side="inside",
-                    params={"set_id": "regions", "overflow": "clip"},
-                ),
-            ],
-            legend="none",
+            CircularAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                annotation_options=annotation_options,
+                circular_track_slots=[
+                    CircularTrackSlot(
+                        "a b",
+                        "annotations",
+                        side="outside",
+                        params={"set_id": "regions", "overflow": "clip"},
+                    ),
+                    CircularTrackSlot(
+                        "a-b",
+                        "annotations",
+                        side="inside",
+                        params={"set_id": "regions", "overflow": "clip"},
+                    ),
+                ],
+                legend="none",
+            ),
         )
 
     svg = canvas.tostring()
@@ -1169,8 +1190,8 @@ def test_circular_text_paths_are_deterministic_and_slot_scoped() -> None:
         ],
     }
 
-    first = assemble_circular_diagram_from_record(record, **common).tostring()
-    second = assemble_circular_diagram_from_record(record, **common).tostring()
+    first = assemble_circular_diagram_from_record(record, CircularAssemblyInputs(**common)).tostring()
+    second = assemble_circular_diagram_from_record(record, CircularAssemblyInputs(**common)).tostring()
     assert _ids(first) == _ids(second)
     _assert_unique_ids_and_resolved_references(first)
 
@@ -1241,8 +1262,8 @@ def test_circular_numeric_alias_slots_namespace_outer_and_child_ids() -> None:
         "step": 40,
     }
 
-    first = assemble_circular_diagram_from_record(record, **common).tostring()
-    second = assemble_circular_diagram_from_record(record, **common).tostring()
+    first = assemble_circular_diagram_from_record(record, CircularAssemblyInputs(**common)).tostring()
+    second = assemble_circular_diagram_from_record(record, CircularAssemblyInputs(**common)).tostring()
     assert _ids(first) == _ids(second)
     _assert_unique_ids_and_resolved_references(first)
 
@@ -1290,8 +1311,8 @@ def test_repeated_circular_feature_and_tick_slots_have_unique_deterministic_ids(
         ],
     }
 
-    first = assemble_circular_diagram_from_record(record, **common).tostring()
-    second = assemble_circular_diagram_from_record(record, **common).tostring()
+    first = assemble_circular_diagram_from_record(record, CircularAssemblyInputs(**common)).tostring()
+    second = assemble_circular_diagram_from_record(record, CircularAssemblyInputs(**common)).tostring()
     assert _ids(first) == _ids(second)
     _assert_unique_ids_and_resolved_references(first)
 
@@ -1341,21 +1362,23 @@ def test_reserved_circular_slot_names_are_semantic_only_not_dom_ids() -> None:
     record = _duplicate_feature_record("reserved-slot-record")
     canvas = assemble_circular_diagram_from_record(
         record,
-        legend="right",
-        plot_title="Reserved slot names",
-        plot_title_position="top",
-        cfg=apply_config_overrides(None, {
-            "labels.circular.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
-        circular_track_slots=[
-            "legend:features@side=inside,w=20px",
-            "plot_title:features@side=outside,w=20px",
-            "Axis:ticks@side=inside,tick_label_layout=tick_only",
-            "tick:ticks@side=outside,tick_label_layout=tick_only",
-            "label_text:dinucleotide_content@side=inside,w=20px",
-        ],
+        CircularAssemblyInputs(
+            legend="right",
+            plot_title="Reserved slot names",
+            plot_title_position="top",
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+            circular_track_slots=[
+                "legend:features@side=inside,w=20px",
+                "plot_title:features@side=outside,w=20px",
+                "Axis:ticks@side=inside,tick_label_layout=tick_only",
+                "tick:ticks@side=outside,tick_label_layout=tick_only",
+                "label_text:dinucleotide_content@side=inside,w=20px",
+            ],
+        ),
     )
     svg = canvas.tostring()
     _assert_unique_ids_and_resolved_references(svg)

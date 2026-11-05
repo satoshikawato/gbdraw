@@ -21,6 +21,7 @@ from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
 )
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 
 
 def _make_record(record_id: str = "rec1") -> SeqRecord:
@@ -64,12 +65,14 @@ def test_linear_shared_gc_dataframe_is_computed_once_per_record(
 
     assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "canvas.show_gc": True,
-            "canvas.show_skew": True,
-            "labels.linear.scope": "none",
-        }),
+        LinearAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "canvas.show_gc": True,
+                "canvas.show_skew": True,
+                "labels.linear.scope": "none",
+            }),
+        ),
     )
 
     assert call_count == 1
@@ -91,12 +94,14 @@ def test_circular_no_labels_skips_label_text_lookup(
 
     assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.circular.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
+        CircularAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+        ),
     )
 
     assert call_count == 0
@@ -118,12 +123,14 @@ def test_linear_no_labels_skips_label_text_lookup(
 
     assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.linear.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
+        LinearAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+        ),
     )
 
     assert call_count == 0
@@ -146,12 +153,14 @@ def test_linear_feature_layers_are_built_once_per_record(
 
     assemble_linear_diagram_from_records(
         records,
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.linear.scope": "all",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
+        LinearAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.linear.scope": "all",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+        ),
     )
 
     assert call_count == len(records)
@@ -171,12 +180,14 @@ def test_circular_legend_none_skips_legend_preparation(
 
     assemble_circular_diagram_from_record(
         record,
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.circular.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
+        CircularAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+        ),
     )
 
 
@@ -194,12 +205,14 @@ def test_linear_legend_none_skips_legend_preparation(
 
     assemble_linear_diagram_from_records(
         [record],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.linear.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
+        LinearAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+        ),
     )
 
 

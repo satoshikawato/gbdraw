@@ -33,6 +33,7 @@ from gbdraw.session_request_codec import (
     decode_canonical_request,
     encode_canonical_request,
 )
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 
 def _comparison(query: int, subject: int) -> LinearComparison:
@@ -71,19 +72,21 @@ def test_multiple_sources_for_one_pair_are_merged() -> None:
 def test_explicit_comparison_metadata_uses_selected_endpoints() -> None:
     canvas = assemble_linear_diagram_from_records(
         _records(),
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                },
+            ),
+            linear_comparisons=[_comparison(1, 2)],
+            legend="none",
         ),
-        linear_comparisons=[_comparison(1, 2)],
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),
         ),
-        legend="none",
     )
     svg = canvas.tostring()
     assert 'data-query-record-index="1"' in svg
@@ -103,22 +106,24 @@ def test_comparison_ribbons_keep_four_pixel_clearance_from_painted_occupancy() -
         )
     canvas = assemble_linear_diagram_from_records(
         records,
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-                "canvas.strandedness": True,
-                "canvas.linear.track_layout": "above",
-                "canvas.linear.ruler_on_axis": False,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "canvas.strandedness": True,
+                    "canvas.linear.track_layout": "above",
+                    "canvas.linear.ruler_on_axis": False,
+                },
+            ),
+            linear_comparisons=[_comparison(0, 2)],
+            legend="none",
         ),
-        linear_comparisons=[_comparison(0, 2)],
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1", "#3@2"),
         ),
-        legend="none",
     )
     svg = canvas.tostring()
     root = ET.fromstring(svg)
@@ -221,30 +226,30 @@ def test_comparison_endpoints_follow_gene_tracks_with_labels(
             comparison.matches.loc[:, ["sstart", "send"]] = [110, 20]
     canvas = assemble_linear_diagram_from_records(
         records,
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": label_scope,
-                "labels.linear.placement": "above_feature",
-                "labels.linear.rotation": rotation,
-                "labels.font_size.linear.short": font_size,
-                "objects.features.block_stroke_width.short": 2,
-                "objects.features.line_stroke_width.short": 2,
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-                "canvas.linear.comparison_height": height,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": label_scope,
+                    "labels.linear.placement": "above_feature",
+                    "labels.linear.rotation": rotation,
+                    "labels.font_size.linear.short": font_size,
+                    "objects.features.block_stroke_width.short": 2,
+                    "objects.features.line_stroke_width.short": 2,
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "canvas.linear.comparison_height": height,
+                },
+            ),
+            linear_comparisons=comparisons,
+            pairwise_match_style=style,
+            legend="none",
         ),
-        linear_comparisons=comparisons,
-        layout=(
-            LinearMultiRecordOptions(
+        layout=LinearMultiRecordOptions(
                 multi_record_positions=("#1@1", "#2@2", "#3@3"),
             )
             if multi_record
-            else None
-        ),
-        pairwise_match_style=style,
-        legend="none",
+            else None,
     )
     root = ET.fromstring(canvas.tostring())
     parents = {child: parent for parent in root.iter() for child in parent}
@@ -309,16 +314,18 @@ def test_comparison_endpoints_follow_gene_tracks_with_labels(
 def test_reversed_explicit_endpoints_work_with_legacy_one_record_rows() -> None:
     canvas = assemble_linear_diagram_from_records(
         _records()[:2],
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                },
+            ),
+            linear_comparisons=[_comparison(1, 0)],
+            legend="none",
         ),
-        linear_comparisons=[_comparison(1, 0)],
-        legend="none",
     )
     svg = canvas.tostring()
     assert 'data-query-record-index="1"' in svg
@@ -343,23 +350,25 @@ def test_selected_generated_protein_pairs_keep_explicit_endpoints(monkeypatch) -
     )
     canvas = assemble_linear_diagram_from_records(
         _records(),
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-            },
-        ),
-        losat_search=LosatSearchOptions(
-            program="losatp",
-            losatp_mode="pairwise",
-            pairs=((0, 2), (1, 3)),
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                },
+            ),
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="pairwise",
+                pairs=((0, 2), (1, 3)),
+            ),
+            legend="none",
         ),
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),
         ),
-        legend="none",
     )
     assert calls == [(("r1", "r2", "r3", "r4"), ((0, 2), (1, 3)))]
     svg = canvas.tostring()
@@ -380,12 +389,14 @@ def test_pairwise_without_pairs_searches_every_pair_across_adjacent_rows(monkeyp
     monkeypatch.setattr("gbdraw.api.diagram.build_pairwise_protein_blastp_comparisons", fake_pairwise)
     canvas = assemble_linear_diagram_from_records(
         _records(),
-        cfg=apply_config_overrides(
-            None, {"labels.linear.scope": "none", "canvas.show_gc": False, "canvas.show_skew": False}
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None, {"labels.linear.scope": "none", "canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="pairwise"),
+            legend="none",
         ),
-        losat_search=LosatSearchOptions(program="losatp", losatp_mode="pairwise"),
         layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2")),
-        legend="none",
     )
     assert calls == [((0, 2), (0, 3), (1, 2), (1, 3))]
     assert 'data-subject-record-index=' in canvas.tostring()
@@ -426,20 +437,22 @@ def test_collinear_all_scope_renders_every_cross_row_pair(monkeypatch) -> None:
     )
     canvas = assemble_linear_diagram_from_records(
         _records(),
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                },
+            ),
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="collinear"),
+            collinearity_search_scope="all",
+            legend="none",
         ),
-        losat_search=LosatSearchOptions(program="losatp", losatp_mode="collinear"),
-        collinearity_search_scope="all",
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),
         ),
-        legend="none",
     )
     assert captured_pairs == ((0, 2), (0, 3), (1, 2), (1, 3))
     svg = canvas.tostring()
@@ -471,19 +484,21 @@ def test_resolved_collinearity_result_keeps_multi_row_endpoints(monkeypatch) -> 
     )
     canvas = assemble_linear_diagram_from_records(
         _records(),
-        cfg=apply_config_overrides(
-            None,
-            {
-                "labels.linear.scope": "none",
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-            },
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                },
+            ),
+            collinearity_blocks=CollinearityResult(blocks=()),
+            legend="none",
         ),
-        collinearity_blocks=CollinearityResult(blocks=()),
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),
         ),
-        legend="none",
     )
 
     assert captured_pairs == expected_pairs

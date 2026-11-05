@@ -19,6 +19,7 @@ from gbdraw.core.text import calculate_svg_bbox_dimensions
 from gbdraw.layout.composition import LegendPlacement, TitlePlacement
 from gbdraw.layout.spatial import Aabb, union_aabbs
 from gbdraw.render.groups.linear.plot_title import plot_title_content
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 
 
 _TRANSLATE_RE = re.compile(
@@ -54,11 +55,13 @@ def _assemble(
 ):
     return assemble_linear_diagram_from_records(
         [_record()],
-        cfg=_config(),
-        selected_features_set=["CDS"],
-        legend=legend,
-        plot_title=title,
-        plot_title_position=title_position,
+        LinearAssemblyInputs(
+            cfg=_config(),
+            selected_features_set=["CDS"],
+            legend=legend,
+            plot_title=title,
+            plot_title_position=title_position,
+        ),
     )
 
 
@@ -262,14 +265,16 @@ def test_linear_multi_row_track_metadata_uses_final_primary_translation() -> Non
     records = [_record("record_a"), _record("record_b", length=800)]
     drawing = assemble_linear_diagram_from_records(
         records,
-        cfg=_config(track_layout="above"),
-        selected_features_set=["CDS"],
+        LinearAssemblyInputs(
+            cfg=_config(track_layout="above"),
+            selected_features_set=["CDS"],
+            legend="top",
+            plot_title="Two rows",
+            plot_title_position="top",
+        ),
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@2"),
         ),
-        legend="top",
-        plot_title="Two rows",
-        plot_title_position="top",
     )
     plan = drawing._gbdraw_linear_composition_plan
     primary = plan.placement_for("primary")
@@ -343,10 +348,12 @@ def test_linear_metadata_records_the_scale_bounds(positions: tuple[str, ...] | N
     records = [_record("record_a"), _record("record_b", length=800)][: 1 if positions is None else 2]
     drawing = assemble_linear_diagram_from_records(
         records,
-        cfg=_config(),
-        selected_features_set=["CDS"],
-        legend="right",
-        **({} if positions is None else {"layout": LinearMultiRecordOptions(multi_record_positions=positions)}),
+        LinearAssemblyInputs(
+            cfg=_config(),
+            selected_features_set=["CDS"],
+            legend="right",
+        ),
+        layout=None if positions is None else LinearMultiRecordOptions(multi_record_positions=positions),
     )
     root = ET.fromstring(drawing.tostring())
     metadata = json.loads(root.attrib["data-gbdraw-composition"])
@@ -366,18 +373,26 @@ def test_linear_metadata_records_the_scale_bounds(positions: tuple[str, ...] | N
 def test_linear_metadata_has_no_scale_bounds_without_a_drawn_scale() -> None:
     hidden = assemble_linear_diagram_from_records(
         [_record()],
-        cfg=apply_config_overrides(_config(), {"objects.scale.show": False}),
-        selected_features_set=["CDS"],
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(_config(), {"objects.scale.show": False}),
+            selected_features_set=["CDS"],
+        ),
     )
     multi_record = assemble_linear_diagram_from_records(
         [_record("record_a"), _record("record_b", length=800)],
-        cfg=_config(track_layout="above"),
-        selected_features_set=["CDS"],
+        LinearAssemblyInputs(
+            cfg=_config(track_layout="above"),
+            selected_features_set=["CDS"],
+        ),
         # Two records in one row draw no scale.
         layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1")),
     )
     circular = assemble_circular_diagram_from_record(
-        _record(), cfg=apply_config_overrides(None, None), legend="right"
+        _record(),
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            legend="right",
+        ),
     )
     for drawing in (hidden, multi_record, circular):
         root = ET.fromstring(drawing.tostring())

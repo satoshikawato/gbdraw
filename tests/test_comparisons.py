@@ -39,6 +39,7 @@ from gbdraw.render.groups.linear import build_linear_feature_dom_index
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 from tests.utils.comparison_tables import ribbon_group
 from gbdraw.svg.ids import instance_svg_id
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 
 def _build_record() -> SeqRecord:
@@ -283,9 +284,9 @@ def test_optional_positive_number_shared_contract() -> None:
 def test_build_linear_diagram_forwards_alignment_length(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
-    def fake_assemble(*_args, **kwargs):
-        captured["alignment_length"] = kwargs.get("alignment_length")
-        captured["pairwise_match_style"] = kwargs.get("pairwise_match_style")
+    def fake_assemble(_records, inputs, **_kwargs):
+        captured["alignment_length"] = inputs.alignment_length
+        captured["pairwise_match_style"] = inputs.pairwise_match_style
         return Drawing(filename="dummy.svg")
 
     monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram_from_records", fake_assemble)
@@ -308,8 +309,10 @@ def test_assemble_linear_diagram_rejects_negative_alignment_length() -> None:
     with pytest.raises(ValidationError, match="alignment_length must be an integer >= 0"):
         assemble_linear_diagram_from_records(
             [_build_record()],
-            cfg=apply_config_overrides(None, None),
-            alignment_length=-1,
+            LinearAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                alignment_length=-1,
+            ),
         )
 
 
@@ -318,8 +321,10 @@ def test_assemble_linear_diagram_rejects_invalid_pairwise_match_style() -> None:
     with pytest.raises(ValidationError, match="pairwise_match_style must be one of: ribbon, curve"):
         assemble_linear_diagram_from_records(
             [_build_record()],
-            cfg=apply_config_overrides(None, None),
-            pairwise_match_style="line",
+            LinearAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                pairwise_match_style="line",
+            ),
         )
 
 

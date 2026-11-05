@@ -25,6 +25,7 @@ from gbdraw.config.models.canvas import CANVAS_PADDING_PATH
 from gbdraw.config.models.objects import LEGEND_HIDDEN_ROWS_PATH, LEGEND_ROW_NAMES_PATH, LEGEND_ROW_ORDER_PATH
 from gbdraw.exceptions import ValidationError
 from gbdraw.render.composition import applied_composition_plan
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 INPUTS = Path(__file__).resolve().parent / "test_inputs"
 MITO = INPUTS / "HmmtDNA.gbk"
@@ -194,12 +195,23 @@ def test_a_multi_record_legend_with_every_row_hidden_is_drawn_and_takes_no_room(
 
     records = _mito() + gbdraw.read_genbank(INPUTS / "MERS-CoV.gbk")
     hidden = sorted({key for key, _d, _t in _rows(
-        assemble_circular_diagram_from_records(records, legend="right", cfg=apply_config_overrides(None, None))
+        assemble_circular_diagram_from_records(
+            records,
+            CircularAssemblyInputs(
+                legend="right",
+                cfg=apply_config_overrides(None, None),
+            ),
+        )
         .tostring())})
 
     def draw(legend: str, overrides: dict[str, object] | None = None):
         return assemble_circular_diagram_from_records(
-            records, legend=legend, cfg=apply_config_overrides(None, overrides))
+            records,
+            CircularAssemblyInputs(
+                legend=legend,
+                cfg=apply_config_overrides(None, overrides),
+            ),
+        )
 
     drawing = draw("right", {LEGEND_HIDDEN_ROWS_PATH: hidden})
     rows = _rows(drawing.tostring())
@@ -232,7 +244,12 @@ def test_a_multi_record_canvas_is_padded_once_and_draws_the_edits() -> None:
 
     def draw(overrides: dict[str, object]):
         return assemble_circular_diagram_from_records(
-            records, legend="right", cfg=apply_config_overrides(None, overrides))
+            records,
+            CircularAssemblyInputs(
+                legend="right",
+                cfg=apply_config_overrides(None, overrides),
+            ),
+        )
 
     plain = applied_composition_plan(draw({}))
     edited_drawing = draw({CANVAS_PADDING_PATH: [30, 60, 30, 90], LEGEND_ROW_NAMES_PATH: [["CDS", "Genes"]],

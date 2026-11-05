@@ -27,6 +27,7 @@ from gbdraw.config.models.objects import ConservationColorScheme
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.tracks import CircularTrackSlot
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 TEN = ("#6e91b7", "#f4a251", "#8fc4c0", "#e67577", "#c6bebb", "#77b26f", "#be92b2", "#f0d369", "#ae8e7c", "#ffafb7")
 HUES = ("#8b9cc1", "#c88890", "#62ad9a", "#bf89ab", "#7caa7e", "#bc9464")
@@ -146,11 +147,13 @@ def _ring_colours(svg: str) -> list[str | None]:
 def test_assembly_colours_rings_by_the_configured_scheme() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
-        cfg=apply_config_overrides(None, {SCHEME_PATH: "ten"}),
-        conservation_dataframes=[_frame(), _frame(), _frame()],
-        conservation_reference="subject",
-        conservation_colors=["", "#123456", ""],
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, {SCHEME_PATH: "ten"}),
+            conservation_dataframes=[_frame(), _frame(), _frame()],
+            conservation_reference="subject",
+            conservation_colors=["", "#123456", ""],
+            legend="none",
+        ),
     )
 
     assert _ring_colours(canvas.tostring()) == [TEN[0], "#123456", TEN[2]]
@@ -159,10 +162,12 @@ def test_assembly_colours_rings_by_the_configured_scheme() -> None:
 def test_multi_record_canvas_colours_every_record_alike() -> None:
     canvas = assemble_circular_diagram_from_records(
         [_record("rec1"), _record("rec2")],
-        cfg=apply_config_overrides(None, {SCHEME_PATH: "ten"}),
-        conservation_dataframes=[_frame("rec1"), _frame("rec2")],
-        conservation_reference="subject",
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, {SCHEME_PATH: "ten"}),
+            conservation_dataframes=[_frame("rec1"), _frame("rec2")],
+            conservation_reference="subject",
+            legend="none",
+        ),
     )
 
     assert _ring_colours(canvas.tostring()) == [TEN[0], TEN[1], TEN[0], TEN[1]]
@@ -314,14 +319,16 @@ def _band_stops(block: ET.Element) -> list[str | None]:
 def _draw_legend(scheme: str, colors: list[str] | None = None, *, slots: list[CircularTrackSlot] | None = None) -> str:
     return assemble_circular_diagram_from_record(
         _record(),
-        cfg=apply_config_overrides(None, {SCHEME_PATH: scheme}),
-        conservation_dataframes=[_frame(), _frame(), _frame()],
-        conservation_reference="subject",
-        conservation_labels=["A", "B", "C"],
-        conservation_colors=colors,
-        circular_track_slots=slots,
-        identity=90,
-        legend="right",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, {SCHEME_PATH: scheme}),
+            conservation_dataframes=[_frame(), _frame(), _frame()],
+            conservation_reference="subject",
+            conservation_labels=["A", "B", "C"],
+            conservation_colors=colors,
+            circular_track_slots=slots,
+            identity=90,
+            legend="right",
+        ),
     ).tostring()
 
 
@@ -387,13 +394,15 @@ def test_multi_record_canvas_draws_the_same_ring_block() -> None:
     single = _draw_legend("ten", ["", "#123456", ""])
     multi = assemble_circular_diagram_from_records(
         [_record("rec1"), _record("rec1b")],
-        cfg=apply_config_overrides(None, {SCHEME_PATH: "ten"}),
-        conservation_dataframes=[_frame(), _frame(), _frame()],
-        conservation_reference="subject",
-        conservation_labels=["A", "B", "C"],
-        conservation_colors=["", "#123456", ""],
-        identity=90,
-        legend="right",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, {SCHEME_PATH: "ten"}),
+            conservation_dataframes=[_frame(), _frame(), _frame()],
+            conservation_reference="subject",
+            conservation_labels=["A", "B", "C"],
+            conservation_colors=["", "#123456", ""],
+            identity=90,
+            legend="right",
+        ),
     ).tostring()
 
     assert block_of(multi) == block_of(single)

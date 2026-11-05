@@ -36,6 +36,7 @@ from gbdraw.layout.circular import CircularRadialLayout, CircularResolvedSlot
 from gbdraw.tracks import parse_circular_track_slots
 
 from tests.utils.session_drawing_view import drawing_view
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 pytestmark = pytest.mark.circular
 
@@ -300,10 +301,12 @@ def _drawn_fit(monkeypatch: pytest.MonkeyPatch, overrides: dict[str, object]) ->
     monkeypatch.setattr(circular_assemble_module, "_resolve_radial_layout_fitting_definition", capture)
     assemble_circular_diagram_from_record(
         SeqIO.read(str(MJENMV), "genbank"),
-        cfg=_config(overrides),
-        default_colors=load_default_colors("", palette="default"),
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=_config(overrides),
+            default_colors=load_default_colors("", palette="default"),
+            selected_features_set=SELECTED_FEATURES,
+            legend="none",
+        ),
     )
     return fits[0]
 

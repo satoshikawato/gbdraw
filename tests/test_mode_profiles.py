@@ -279,14 +279,14 @@ def test_none_config_override_is_rejected_for_non_optional_field() -> None:
 def test_builders_forward_resolved_mode_profiles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, dict[str, object]] = {}
+    captured: dict[str, object] = {}
 
-    def fake_circular(_record: SeqRecord, **kwargs: object) -> Drawing:
-        captured["circular"] = kwargs
+    def fake_circular(_record: SeqRecord, inputs: object, **_kwargs: object) -> Drawing:
+        captured["circular"] = inputs
         return Drawing("circular.svg")
 
-    def fake_linear(_records: object, **kwargs: object) -> Drawing:
-        captured["linear"] = kwargs
+    def fake_linear(_records: object, inputs: object, **_kwargs: object) -> Drawing:
+        captured["linear"] = inputs
         return Drawing("linear.svg")
 
     monkeypatch.setattr(
@@ -304,15 +304,12 @@ def test_builders_forward_resolved_mode_profiles(
     api_diagram.build_linear_diagram([_record()])
 
     for mode in ("circular", "linear"):
-        kwargs = captured[mode]
-        assert _threshold_dict(type("Forwarded", (), kwargs)()) == EXPECTED_THRESHOLDS[
-            mode
-        ]
-        assert kwargs["selected_features_set"] == DEFAULT_FEATURE_TYPES
-        assert {"config_dict", "config_overrides"}.isdisjoint(kwargs)
+        inputs = captured[mode]
+        assert _threshold_dict(inputs) == EXPECTED_THRESHOLDS[mode]
+        assert getattr(inputs, "selected_features_set") == DEFAULT_FEATURE_TYPES
 
-    circular_cfg = captured["circular"]["cfg"]
-    linear_cfg = captured["linear"]["cfg"]
+    circular_cfg = getattr(captured["circular"], "cfg")
+    linear_cfg = getattr(captured["linear"], "cfg")
     assert isinstance(circular_cfg, GbdrawConfig)
     assert isinstance(linear_cfg, GbdrawConfig)
     assert circular_cfg.canvas.show_gc is True
@@ -596,7 +593,7 @@ def test_web_circular_track_presets_follow_the_python_lane_owner() -> None:
         CircularTrackPreset,
         circular_feature_lane_direction_for_preset,
     )
-    from gbdraw.mode_profiles import mode_profiles_payload
+    from gbdraw.web_support.mode_profile_data import mode_profiles_payload
 
     table = mode_profiles_payload()["circularTrackPresets"]  # type: ignore[index]
     assert table["presets"] == list(get_args(CircularTrackPreset))

@@ -71,6 +71,7 @@ from tests.utils.comparison_tables import converted_pair_rows, ribbon_group
 from gbdraw.io.record_select import reverse_records
 from gbdraw.linear_comparison import ProteinComparisonFrames
 from tests.utils.session_drawing_view import session_view
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 
 MG1655_START_CODON_SUBSET = (
@@ -4578,8 +4579,10 @@ def test_assemble_linear_diagram_accepts_precomputed_protein_comparisons(
     )
     canvas = assemble_linear_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        protein_comparisons=[comparison],
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            protein_comparisons=[comparison],
+        ),
     )
 
     assert isinstance(canvas, Drawing)
@@ -4646,8 +4649,10 @@ def test_protein_table_renders_alike_from_the_js_and_the_python_encoding(
         decoded = _read_canonical_table(path, context=name)
         canvas = assemble_linear_diagram_from_records(
             [_record("record_a"), _record("record_b")],
-            cfg=apply_config_overrides(None, None),
-            protein_comparisons=[decoded],
+            LinearAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                protein_comparisons=[decoded],
+            ),
         )
         return canvas.tostring()
 
@@ -4662,8 +4667,8 @@ def test_build_linear_diagram_forwards_protein_blastp_options(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
+    def fake_assemble(_records, inputs, **kwargs):
+        captured.update(vars(inputs), **kwargs)
         return Drawing(filename="dummy.svg")
 
     monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram_from_records", fake_assemble)
@@ -4703,8 +4708,8 @@ def test_build_linear_diagram_forwards_ncbi_blastp_bin(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
+    def fake_assemble(_records, inputs, **kwargs):
+        captured.update(vars(inputs), **kwargs)
         return Drawing(filename="dummy.svg")
 
     monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram_from_records", fake_assemble)

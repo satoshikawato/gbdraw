@@ -23,6 +23,7 @@ from gbdraw.render.groups.circular.definition import DefinitionGroup
 from gbdraw.render.groups.circular.labels import LabelsGroup
 from gbdraw.render.groups.circular.seq_record import SeqRecordGroup
 from gbdraw.render.groups.circular.ticks import TickGroup
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 
 def _profile() -> CircularRenderProfile:
@@ -153,8 +154,10 @@ def test_circular_track_groups_are_placed_contents_with_their_slot_ids_inside() 
     record = SeqIO.read(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk", "genbank")
     drawing = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
-        circular_track_slots=["features:features", "ticks:ticks", "gc_content:dinucleotide_content", "gc_skew:dinucleotide_skew"],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
+            circular_track_slots=["features:features", "ticks:ticks", "gc_content:dinucleotide_content", "gc_skew:dinucleotide_skew"],
+        ),
     )
     kinds = {entry.key.kind for entry in group_manifest(drawing)}
     assert {GroupKind.AXIS_CIRCLE, GroupKind.FEATURES, GroupKind.TICKS, GroupKind.GC_CONTENT, GroupKind.GC_SKEW} <= kinds
@@ -180,9 +183,11 @@ def test_circular_conservation_ring_is_a_placed_content_of_its_track() -> None:
     record = SeqIO.read(examples / "MjeNMV.gb", "genbank")
     drawing = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
-        conservation_blast_files=[str(examples / "MjeNMV.MelaMJNV.tblastx.out")],
-        conservation_labels=["MelaMJNV"],
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
+            conservation_blast_files=[str(examples / "MjeNMV.MelaMJNV.tblastx.out")],
+            conservation_labels=["MelaMJNV"],
+        ),
     )
     rings = [
         element

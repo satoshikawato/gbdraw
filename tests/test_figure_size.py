@@ -374,7 +374,7 @@ def _count_assemblies(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     original = diagram_module.assemble_linear_diagram_from_records
 
     def counting(*args, **kwargs):
-        widths.append(kwargs["cfg"].canvas.linear.width)
+        widths.append(args[1].cfg.canvas.linear.width)
         return original(*args, **kwargs)
 
     monkeypatch.setattr(diagram_module, "assemble_linear_diagram_from_records", counting)
@@ -539,7 +539,7 @@ def test_a_circular_size_larger_than_auto_grows_the_map(monkeypatch) -> None:
     original = diagram_module.assemble_circular_diagram_from_record
 
     def counting(*args, **kwargs):
-        radii.append(float(kwargs["cfg"].canvas.circular.radius))
+        radii.append(float(args[1].cfg.canvas.circular.radius))
         return original(*args, **kwargs)
 
     monkeypatch.setattr(diagram_module, "assemble_circular_diagram_from_record", counting)
@@ -564,7 +564,7 @@ def test_label_fit_rows_redraw_the_circular_map_at_the_fitted_radius(monkeypatch
     original = diagram_module.assemble_circular_diagram_from_record
 
     def recording(*args, **kwargs):
-        assemblies.append((float(kwargs["cfg"].canvas.circular.radius), label_capacity_checked()))
+        assemblies.append((float(args[1].cfg.canvas.circular.radius), label_capacity_checked()))
         return original(*args, **kwargs)
 
     monkeypatch.setattr(diagram_module, "assemble_circular_diagram_from_record", recording)

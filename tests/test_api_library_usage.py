@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Mapping
+from dataclasses import fields
 from pathlib import Path
 
 import pandas as pd
@@ -42,6 +43,18 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.io.genome import load_gbks
 from gbdraw.mode_profiles import resolve_mode_profile_overrides
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs, DiagramAssemblyInputs, LinearAssemblyInputs
+
+
+def _assembled_keywords(inputs: DiagramAssemblyInputs, keywords: Mapping[str, object]) -> dict[str, object]:
+    """Every inputs field an assembler received, and its other keywords."""
+    return {**{item.name: getattr(inputs, item.name) for item in fields(inputs)}, **keywords}
+
+
+# The default of every assembly input; a builder leaves the inputs its readers took at these.
+_INPUT_DEFAULTS = {
+    item.name: item.default for inputs_type in (CircularAssemblyInputs, LinearAssemblyInputs) for item in fields(inputs_type)
+}
 
 
 SELECTED_FEATURES = [
@@ -78,9 +91,9 @@ def test_documented_gff3_fasta_fixture_preserves_records_and_cds() -> None:
 def test_api_diagram_options_forward_collinearity_search_scope(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
-    def fake_assemble(records, **kwargs):
+    def fake_assemble(records, inputs, **kwargs):
         captured["records"] = records
-        captured.update(kwargs)
+        captured.update(_assembled_keywords(inputs, kwargs))
         return object()
 
     monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram_from_records", fake_assemble)
@@ -136,10 +149,12 @@ def test_linear_assembler_forwards_normalized_collinearity_anchor_mode(
 
     api_diagram_module.assemble_linear_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        losat_search=LosatSearchOptions(program="losatp", losatp_mode="collinear"),
-        collinearity_anchor_mode=requested,
-        legend="none",
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="collinear"),
+            collinearity_anchor_mode=requested,
+            legend="none",
+        ),
     )
 
     assert captured["edge_mode"] == expected
@@ -194,9 +209,11 @@ def test_each_collinearity_enum_reaches_real_analysis_helper(
             SeqRecord(Seq("ATGC" * 25), id="rec1"),
             SeqRecord(Seq("ATGC" * 25), id="rec2"),
         ],
-        cfg=apply_config_overrides(None, None),
-        legend="none",
-        **options,
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            legend="none",
+            **options,
+        ),
     )
 
     if helper_name == "params":
@@ -235,10 +252,12 @@ def test_each_collinearity_color_mode_reaches_projection_consumer(
             SeqRecord(Seq("ATGC" * 25), id="rec1"),
             SeqRecord(Seq("ATGC" * 25), id="rec2"),
         ],
-        cfg=apply_config_overrides(None, None),
-        collinearity_blocks=CollinearityResult(blocks=()),
-        collinearity_color_mode=color_mode,
-        legend="none",
+        LinearAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            collinearity_blocks=CollinearityResult(blocks=()),
+            collinearity_color_mode=color_mode,
+            legend="none",
+        ),
     )
 
     assert captured["color_mode"] == color_mode
@@ -331,8 +350,8 @@ def test_diagram_options_attach_explicit_label_tables(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
+    def fake_assemble(_records, inputs, **kwargs):
+        captured.update(_assembled_keywords(inputs, kwargs))
         return object()
 
     target = {
@@ -413,8 +432,8 @@ def test_diagram_options_attach_explicit_label_files(
         lambda _path: override,
     )
 
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
+    def fake_assemble(_records, inputs, **kwargs):
+        captured.update(_assembled_keywords(inputs, kwargs))
         return object()
 
     monkeypatch.setattr(
@@ -573,8 +592,8 @@ def _capture_build(
     assembled: dict[str, object] = {}
     read: dict[str, object] = {}
 
-    def fake_assemble(*_args, **kwargs):
-        assembled.update(kwargs)
+    def fake_assemble(_records, inputs, **kwargs):
+        assembled.update(_assembled_keywords(inputs, kwargs))
         return object()
 
     def fake_feature_inputs(**kwargs):
@@ -602,7 +621,7 @@ def _forwarded(assembled: dict[str, object], read: dict[str, object], name: str)
     assert assembled["_resolved_feature_inputs"] is _FEATURE_INPUTS_READ
     assert assembled["depth_tracks"] is _DEPTH_TRACKS_READ
     if name in read:
-        assert name not in assembled
+        assert assembled[name] is _INPUT_DEFAULTS[name]
         return read[name]
     return assembled[name]
 
@@ -769,8 +788,8 @@ def test_diagram_options_forward_circular_only_non_default_values(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
+    def fake_assemble(_records, inputs, **kwargs):
+        captured.update(_assembled_keywords(inputs, kwargs))
         return object()
 
     target = (
@@ -952,9 +971,9 @@ def test_circular_multi_builder_forwards_layout_options(
         SeqRecord(Seq("ATGCATGC"), id="rec2"),
     ]
 
-    def fake_assemble(received_records, **kwargs):
+    def fake_assemble(received_records, inputs, **kwargs):
         captured["records"] = received_records
-        captured.update(kwargs)
+        captured.update(_assembled_keywords(inputs, kwargs))
         return object()
 
     monkeypatch.setattr(
@@ -976,11 +995,14 @@ def test_circular_multi_builder_forwards_layout_options(
     )
 
     assert captured["records"] == records
-    assert captured["multi_record_size_mode"] == "equal"
-    assert captured["multi_record_min_radius_ratio"] == 0.7
-    assert captured["multi_record_column_gap_ratio"] == 0.2
-    assert captured["multi_record_row_gap_ratio"] == 0.1
-    assert captured["multi_record_positions"] == ("#2@1", "#1@2")
+    # The builder hands its layout to the assembler as it is.
+    assert captured["layout"] == CircularMultiRecordOptions(
+        multi_record_size_mode="equal",
+        multi_record_min_radius_ratio=0.7,
+        multi_record_column_gap_ratio=0.2,
+        multi_record_row_gap_ratio=0.1,
+        multi_record_positions=("#2@1", "#1@2"),
+    )
     assert captured["plot_title"] == "Two records"
 
 
@@ -996,12 +1018,14 @@ def test_api_circular_minimal(examples_dir: Path, tmp_path: Path) -> None:
     output_prefix = tmp_path / "api_circular_minimal"
     canvas = assemble_circular_diagram_from_record(
         record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        color_table=color_table,
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        output_prefix=str(output_prefix),
-        legend="right",
+        CircularAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            color_table=color_table,
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            output_prefix=str(output_prefix),
+            legend="right",
+        ),
     )
 
     save_figure_to(canvas, ["svg"])
@@ -1029,13 +1053,15 @@ def test_api_linear_gene_specific_rule_uses_default_fallback_for_legend(
     output_prefix = tmp_path / "api_linear_gene_legend_fallback"
     canvas = assemble_linear_diagram_from_records(
         [record],
-        blast_files=None,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        color_table=color_table,
-        default_colors=default_colors,
-        selected_features_set=["gene"],
-        output_prefix=str(output_prefix),
-        legend="right",
+        LinearAssemblyInputs(
+            blast_files=None,
+            cfg=GbdrawConfig.from_dict(config_dict),
+            color_table=color_table,
+            default_colors=default_colors,
+            selected_features_set=["gene"],
+            output_prefix=str(output_prefix),
+            legend="right",
+        ),
     )
 
     save_figure_to(canvas, ["svg"])
@@ -1060,13 +1086,15 @@ def test_api_linear_minimal(examples_dir: Path, tmp_path: Path) -> None:
     output_prefix = tmp_path / "api_linear_minimal"
     canvas = assemble_linear_diagram_from_records(
         records,
-        blast_files=None,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        color_table=color_table,
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        output_prefix=str(output_prefix),
-        legend="right",
+        LinearAssemblyInputs(
+            blast_files=None,
+            cfg=GbdrawConfig.from_dict(config_dict),
+            color_table=color_table,
+            default_colors=default_colors,
+            selected_features_set=SELECTED_FEATURES,
+            output_prefix=str(output_prefix),
+            legend="right",
+        ),
     )
 
     save_figure_to(canvas, ["svg"])

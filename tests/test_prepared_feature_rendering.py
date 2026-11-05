@@ -23,6 +23,7 @@ from gbdraw.diagrams.circular.builders import (
     add_record_group_on_canvas,
 )
 from gbdraw.diagrams.linear.builders import add_record_group
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs, LinearAssemblyInputs
 
 
 def _record(record_id: str = "record_1") -> SeqRecord:
@@ -100,13 +101,15 @@ def test_circular_groups_receive_the_same_prepared_feature_layers(
 
     assemble_circular_diagram_from_record(
         _record(),
-        selected_features_set=["repeat_region", "CDS"],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.circular.scope": "outer",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
+        CircularAssemblyInputs(
+            selected_features_set=["repeat_region", "CDS"],
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "outer",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+        ),
     )
 
     assert len(built_layers) == 1
@@ -145,13 +148,15 @@ def test_linear_groups_receive_prepared_feature_layers_per_record(
     records = [_record("record_1"), _record("record_2")]
     assemble_linear_diagram_from_records(
         records,
-        selected_features_set=["repeat_region", "CDS"],
-        legend="none",
-        cfg=apply_config_overrides(None, {
-            "labels.linear.scope": "none",
-            "canvas.show_gc": False,
-            "canvas.show_skew": False,
-        }),
+        LinearAssemblyInputs(
+            selected_features_set=["repeat_region", "CDS"],
+            legend="none",
+            cfg=apply_config_overrides(None, {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
+        ),
     )
 
     assert len(built_layers) == len(records)

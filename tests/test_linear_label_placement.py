@@ -56,6 +56,7 @@ from gbdraw.exceptions import LabelLeadersCrossWarning
 from gbdraw.render.drawers.linear.labels import LabelDrawer
 from tests.utils.svg_compare import assert_nested_approx
 from tests.utils.linear_render_context import alone_sequence_widths, make_linear_record_render_context
+from gbdraw.api.assembly_inputs import LinearAssemblyInputs
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
@@ -478,10 +479,12 @@ def test_linear_orthogroup_top_labels_suppress_only_lower_orthogroup_members() -
 
     svg_content = assemble_linear_diagram_from_records(
         records,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        protein_comparisons=comparisons,
-        selected_features_set=["CDS"],
-        legend="none",
+        LinearAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            protein_comparisons=comparisons,
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     ).tostring()
 
     assert "top_orthogroup_label" in svg_content
@@ -528,10 +531,12 @@ def test_linear_orthogroup_top_labels_respect_per_feature_overrides() -> None:
 
     svg_content = assemble_linear_diagram_from_records(
         records,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        protein_comparisons=comparisons,
-        selected_features_set=["CDS"],
-        legend="none",
+        LinearAssemblyInputs(
+            cfg=GbdrawConfig.from_dict(config_dict),
+            protein_comparisons=comparisons,
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     ).tostring()
 
     assert "forced_lower_label" in svg_content
@@ -568,9 +573,11 @@ def test_linear_auto_label_font_size_resolves_once_per_diagram() -> None:
     assert canvas_config.length_param == "long"
     svg_content = assemble_linear_diagram_from_records(
         records,
-        cfg=cfg,
-        selected_features_set=["CDS"],
-        legend="none",
+        LinearAssemblyInputs(
+            cfg=cfg,
+            selected_features_set=["CDS"],
+            legend="none",
+        ),
     ).tostring()
 
     font_sizes = _extract_label_font_sizes(
@@ -1607,7 +1614,7 @@ def test_linear_above_feature_labels_keep_clear_of_the_definition_text(label_rot
     cfg = GbdrawConfig.from_dict(config_dict)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        drawing = assemble_linear_diagram_from_records([record], cfg=cfg, legend="none")
+        drawing = assemble_linear_diagram_from_records([record], LinearAssemblyInputs(cfg=cfg, legend="none"))
     labels, definitions = _svg_text_boxes(drawing.tostring(), cfg)
 
     assert labels and len(definitions) == 2
@@ -1749,8 +1756,14 @@ def test_a_region_label_moves_no_feature_label_over_the_definition_text(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             drawing = assemble_linear_diagram_from_records(
-                [record], cfg=cfg, legend="none", selected_features_set=["CDS"], linear_track_slots=slots,
-                annotation_options=annotations,
+                [record],
+                LinearAssemblyInputs(
+                    cfg=cfg,
+                    legend="none",
+                    selected_features_set=["CDS"],
+                    linear_track_slots=slots,
+                    annotation_options=annotations,
+                ),
             )
         return sum(item.fit.definition_overlaps for item in drawing._gbdraw_linear_label_fit.records)
 
@@ -1824,8 +1837,10 @@ def test_linear_label_keep_clear_box_is_the_drawn_definition_box(
         warnings.simplefilter("ignore")
         assemble_linear_diagram_from_records(
             records,
-            cfg=cfg,
-            legend="none",
+            LinearAssemblyInputs(
+                cfg=cfg,
+                legend="none",
+            ),
             layout=LinearMultiRecordOptions(
                 multi_record_positions=("#1@1", "#2@2", "#3@2") if shared_row else None,
                 record_translations=(LinearRecordTranslation("record-2", x=translation_x),),
@@ -1898,13 +1913,13 @@ def test_linear_horizontal_places_labels_and_vertical_plans_are_solved_once(
         warnings.simplefilter("ignore")
         assemble_linear_diagram_from_records(
             records,
-            cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
-            legend="none",
-            layout=(
-                LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@2", "#3@2"))
-                if shared_row
-                else None
+            LinearAssemblyInputs(
+                cfg=GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")),
+                legend="none",
             ),
+            layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@2", "#3@2"))
+                if shared_row
+                else None,
         )
 
     assert len(horizontal) == 1
@@ -1967,8 +1982,10 @@ def test_linear_row_gap_reads_the_drawn_collision_bands(
         warnings.simplefilter("ignore")
         assemble_linear_diagram_from_records(
             records,
-            cfg=GbdrawConfig.from_dict(config_dict),
-            legend="none",
+            LinearAssemblyInputs(
+                cfg=GbdrawConfig.from_dict(config_dict),
+                legend="none",
+            ),
             layout=LinearMultiRecordOptions(
                 multi_record_positions=("#1@1", "#2@2", "#3@2") if shared_row else None,
                 record_translations=(LinearRecordTranslation("record-2", x=translation_x),),

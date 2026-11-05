@@ -41,6 +41,7 @@ from gbdraw.session_io import (  # noqa: E402
     load_session,
     session_mode,
     validate_session,
+    write_serialized_session,
     write_session_json,
 )
 from gbdraw.session import _keep_resources  # noqa: E402
@@ -1155,21 +1156,11 @@ def _canonicalize_recorded_cli_invocation(
     _edit_staged_session(session_path, canonicalize)
 
 
-def _read_session_file(session_path: Path) -> tuple[dict[str, Any], bool]:
-    """Return a Session file's JSON and whether the file is gzip-compressed."""
+def _read_session_file(session_path: Path) -> dict[str, Any]:
+    """Return a Session file's JSON, plain or gzip-compressed."""
 
     payload = session_path.read_bytes()
-    compressed = payload[:2] == b"\x1f\x8b"
-    return json.loads(gzip.decompress(payload) if compressed else payload), compressed
-
-
-def _write_session_file(session_path: Path, session: Mapping[str, Any], *, compressed: bool) -> None:
-    """Write Session JSON with no time in the gzip header, so equal JSON gives equal bytes."""
-
-    text = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    session_path.write_bytes(
-        gzip.compress(text, compresslevel=6, mtime=0) if compressed else text
-    )
+    return json.loads(gzip.decompress(payload) if payload[:2] == b"\x1f\x8b" else payload)
 
 
 def _gallery_view(document: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
@@ -1223,14 +1214,19 @@ def _one_drawing_document(session: Mapping[str, Any]) -> Mapping[str, Any]:
 def _edit_staged_session(
     session_path: Path, edit: Callable[[dict[str, Any]], int]
 ) -> None:
-    """Rewrite a staged Session file in its own encoding when ``edit`` changes
-    the view of its drawing (:func:`_gallery_view`)."""
+    """Rewrite a staged Session file when ``edit`` changes the view of its
+    drawing (:func:`_gallery_view`), through the Session writer the CLI uses."""
 
-    document, compressed = _read_session_file(session_path)
+    document = _read_session_file(session_path)
     session, drawing_id = _gallery_view(document)
     if edit(session):
-        _write_session_file(
-            session_path, _gallery_document(document, session, drawing_id), compressed=compressed
+        write_serialized_session(
+            session_path,
+            json.dumps(
+                _gallery_document(document, session, drawing_id),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8"),
         )
 
 
@@ -1241,7 +1237,7 @@ def _keep_created_at(tracked_path: Path, staged_path: Path) -> None:
     Session, so two refreshes of one input give the same bytes.
     """
 
-    created_at = _read_session_file(tracked_path)[0]["createdAt"]
+    created_at = _read_session_file(tracked_path)["createdAt"]
 
     def edit(session: dict[str, Any]) -> int:
         if session.get("createdAt") == created_at:

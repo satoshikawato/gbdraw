@@ -29,6 +29,7 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.circular_layout import build_circular_legend_layout
 from gbdraw.render.groups.circular.legend import LegendGroup as CircularLegendGroup
 from gbdraw.tracks import CircularTrackSlot, normalize_circular_track_slots
+from gbdraw.api.assembly_inputs import CircularAssemblyInputs
 
 
 class _BlastConfig:
@@ -424,15 +425,17 @@ def test_sequence_conservation_slot_rejects_overlay_side() -> None:
 def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
-        cfg=apply_config_overrides(None, None),
-        conservation_dataframes=[
-            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
-        ],
-        conservation_reference="subject",
-        conservation_labels=["Reference A"],
-        conservation_ring_width=12,
-        conservation_ring_gap=4,
-        legend="right",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            conservation_dataframes=[
+                _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+            ],
+            conservation_reference="subject",
+            conservation_labels=["Reference A"],
+            conservation_ring_width=12,
+            conservation_ring_gap=4,
+            legend="right",
+        ),
     )
     svg = canvas.tostring()
 
@@ -458,14 +461,16 @@ def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
 def test_circular_api_renders_source_colored_conservation_ring() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
-        cfg=apply_config_overrides(None, None),
-        conservation_dataframes=[
-            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
-        ],
-        conservation_reference="subject",
-        conservation_labels=["barcode13"],
-        conservation_colors=["#E15759"],
-        legend="right",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            conservation_dataframes=[
+                _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+            ],
+            conservation_reference="subject",
+            conservation_labels=["barcode13"],
+            conservation_colors=["#E15759"],
+            legend="right",
+        ),
     )
     svg = canvas.tostring()
 
@@ -518,20 +523,22 @@ def test_circular_api_auto_conservation_inserts_at_explicit_axis(
 ) -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=[],
-        conservation_dataframes=[
-            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
-        ],
-        conservation_reference="subject",
-        conservation_labels=["Axis reference"],
-        circular_track_slots=[
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(id="outer_gap", renderer="spacer"),
-            CircularTrackSlot(id="ticks", renderer="ticks"),
-        ],
-        circular_track_axis_index=axis_index,
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=[],
+            conservation_dataframes=[
+                _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+            ],
+            conservation_reference="subject",
+            conservation_labels=["Axis reference"],
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(id="outer_gap", renderer="spacer"),
+                CircularTrackSlot(id="ticks", renderer="ticks"),
+            ],
+            circular_track_axis_index=axis_index,
+            legend="none",
+        ),
     )
 
     _assert_auto_conservation_axis_geometry(
@@ -549,25 +556,27 @@ def test_circular_multi_record_auto_conservation_inserts_at_explicit_axis(
     records = [_record("rec1"), _record("rec2")]
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(None, None),
-        selected_features_set=[],
-        conservation_dataframes=[
-            _comparison_frame(
-                [
-                    _hit(subject="rec1", sstart=1, send=120),
-                    _hit(subject="rec2", sstart=1, send=120),
-                ]
-            )
-        ],
-        conservation_reference="subject",
-        conservation_labels=["Axis reference"],
-        circular_track_slots=[
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(id="outer_gap", renderer="spacer"),
-            CircularTrackSlot(id="ticks", renderer="ticks"),
-        ],
-        circular_track_axis_index=axis_index,
-        legend="none",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=[],
+            conservation_dataframes=[
+                _comparison_frame(
+                    [
+                        _hit(subject="rec1", sstart=1, send=120),
+                        _hit(subject="rec2", sstart=1, send=120),
+                    ]
+                )
+            ],
+            conservation_reference="subject",
+            conservation_labels=["Axis reference"],
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(id="outer_gap", renderer="spacer"),
+                CircularTrackSlot(id="ticks", renderer="ticks"),
+            ],
+            circular_track_axis_index=axis_index,
+            legend="none",
+        ),
     )
 
     _assert_auto_conservation_axis_geometry(
@@ -827,18 +836,20 @@ def test_circular_api_bottom_multi_conservation_legend_fits_viewbox() -> None:
     ]
     canvas = assemble_circular_diagram_from_record(
         _record(length=500),
-        conservation_dataframes=[
-            _comparison_frame([_hit(subject="rec1", sstart=1, send=500)])
-            for _ in labels
-        ],
-        conservation_reference="subject",
-        conservation_labels=labels,
-        conservation_colors=colors,
-        conservation_ring_width=4,
-        conservation_ring_gap=1,
-        legend="bottom",
-        selected_features_set=[],
-        cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
+        CircularAssemblyInputs(
+            conservation_dataframes=[
+                _comparison_frame([_hit(subject="rec1", sstart=1, send=500)])
+                for _ in labels
+            ],
+            conservation_reference="subject",
+            conservation_labels=labels,
+            conservation_colors=colors,
+            conservation_ring_width=4,
+            conservation_ring_gap=1,
+            legend="bottom",
+            selected_features_set=[],
+            cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
+        ),
     )
     root = ET.fromstring(canvas.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
@@ -858,28 +869,30 @@ def test_circular_api_bottom_multi_conservation_legend_fits_viewbox() -> None:
 def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
-        cfg=apply_config_overrides(None, None),
-        conservation_dataframes=[
-            _comparison_frame([_hit(subject="rec1", sstart=1, send=60)]),
-            _comparison_frame([_hit(subject="rec1", sstart=61, send=120)]),
-        ],
-        conservation_reference="subject",
-        conservation_labels=["Reference A", "Reference B"],
-        circular_track_slots=[
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(id="ticks", renderer="ticks"),
-            CircularTrackSlot(
-                id="conservation_b",
-                renderer="sequence_conservation",
-                params={"source_index": 1},
-            ),
-            CircularTrackSlot(
-                id="conservation_a",
-                renderer="sequence_conservation",
-                params={"source_index": 0},
-            ),
-        ],
-        legend="right",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            conservation_dataframes=[
+                _comparison_frame([_hit(subject="rec1", sstart=1, send=60)]),
+                _comparison_frame([_hit(subject="rec1", sstart=61, send=120)]),
+            ],
+            conservation_reference="subject",
+            conservation_labels=["Reference A", "Reference B"],
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(id="ticks", renderer="ticks"),
+                CircularTrackSlot(
+                    id="conservation_b",
+                    renderer="sequence_conservation",
+                    params={"source_index": 1},
+                ),
+                CircularTrackSlot(
+                    id="conservation_a",
+                    renderer="sequence_conservation",
+                    params={"source_index": 0},
+                ),
+            ],
+            legend="right",
+        ),
     )
     svg = canvas.tostring()
 
@@ -893,20 +906,22 @@ def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
 def test_circular_conservation_auto_slots_do_not_restore_hidden_scale() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
-        cfg=apply_config_overrides(
-            None,
-            {
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-                "objects.scale.show": False,
-            },
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "objects.scale.show": False,
+                },
+            ),
+            conservation_dataframes=[
+                _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+            ],
+            conservation_reference="subject",
+            conservation_labels=["Reference"],
+            legend="none",
         ),
-        conservation_dataframes=[
-            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
-        ],
-        conservation_reference="subject",
-        conservation_labels=["Reference"],
-        legend="none",
     )
     svg = canvas.tostring()
     renderers = {
@@ -923,25 +938,27 @@ def test_circular_multi_record_conservation_auto_slots_do_not_restore_hidden_sca
     records = [_record("rec1"), _record("rec2")]
     canvas = assemble_circular_diagram_from_records(
         records,
-        cfg=apply_config_overrides(
-            None,
-            {
-                "canvas.show_gc": False,
-                "canvas.show_skew": False,
-                "objects.scale.show": False,
-            },
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "objects.scale.show": False,
+                },
+            ),
+            conservation_dataframes=[
+                _comparison_frame(
+                    [
+                        _hit(subject="rec1", sstart=1, send=120),
+                        _hit(subject="rec2", sstart=1, send=120),
+                    ]
+                )
+            ],
+            conservation_reference="subject",
+            conservation_labels=["Reference"],
+            legend="none",
         ),
-        conservation_dataframes=[
-            _comparison_frame(
-                [
-                    _hit(subject="rec1", sstart=1, send=120),
-                    _hit(subject="rec2", sstart=1, send=120),
-                ]
-            )
-        ],
-        conservation_reference="subject",
-        conservation_labels=["Reference"],
-        legend="none",
     )
     svg = canvas.tostring()
 
@@ -964,23 +981,25 @@ def test_circular_multi_record_conservation_auto_slots_do_not_restore_hidden_sca
 def test_circular_api_keeps_axis_derived_side_for_conservation_slot() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
-        cfg=apply_config_overrides(None, None),
-        conservation_dataframes=[
-            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
-        ],
-        conservation_reference="subject",
-        conservation_labels=["Outer conservation"],
-        circular_track_slots=[
-            CircularTrackSlot(
-                id="conservation_outer",
-                renderer="sequence_conservation",
-                params={"source_index": 0},
-            ),
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(id="ticks", renderer="ticks"),
-        ],
-        circular_track_axis_index=1,
-        legend="right",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            conservation_dataframes=[
+                _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+            ],
+            conservation_reference="subject",
+            conservation_labels=["Outer conservation"],
+            circular_track_slots=[
+                CircularTrackSlot(
+                    id="conservation_outer",
+                    renderer="sequence_conservation",
+                    params={"source_index": 0},
+                ),
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(id="ticks", renderer="ticks"),
+            ],
+            circular_track_axis_index=1,
+            legend="right",
+        ),
     )
     svg = canvas.tostring()
 
@@ -993,21 +1012,23 @@ def test_circular_api_keeps_axis_derived_side_for_conservation_slot() -> None:
 def test_disabled_explicit_conservation_slot_suppresses_auto_insert() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
-        cfg=apply_config_overrides(None, None),
-        conservation_dataframes=[
-            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
-        ],
-        conservation_reference="subject",
-        conservation_labels=["Hidden reference"],
-        circular_track_slots=[
-            CircularTrackSlot(id="features", renderer="features"),
-            CircularTrackSlot(
-                id="hidden_conservation",
-                renderer="sequence_conservation",
-                enabled=False,
-            ),
-        ],
-        legend="right",
+        CircularAssemblyInputs(
+            cfg=apply_config_overrides(None, None),
+            conservation_dataframes=[
+                _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+            ],
+            conservation_reference="subject",
+            conservation_labels=["Hidden reference"],
+            circular_track_slots=[
+                CircularTrackSlot(id="features", renderer="features"),
+                CircularTrackSlot(
+                    id="hidden_conservation",
+                    renderer="sequence_conservation",
+                    enabled=False,
+                ),
+            ],
+            legend="right",
+        ),
     )
     svg = canvas.tostring()
 
@@ -1041,12 +1062,14 @@ def test_circular_api_rejects_nonpositive_conservation_geometry() -> None:
     with pytest.raises(ValidationError, match="conservation_ring_gap must be > 0"):
         assemble_circular_diagram_from_record(
             _record(),
-            cfg=apply_config_overrides(None, None),
-            conservation_dataframes=[
-                _comparison_frame([_hit(subject="rec1")])
-            ],
-            conservation_reference="subject",
-            conservation_ring_gap=0,
+            CircularAssemblyInputs(
+                cfg=apply_config_overrides(None, None),
+                conservation_dataframes=[
+                    _comparison_frame([_hit(subject="rec1")])
+                ],
+                conservation_reference="subject",
+                conservation_ring_gap=0,
+            ),
         )
 
 

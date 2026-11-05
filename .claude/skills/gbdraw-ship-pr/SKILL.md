@@ -54,12 +54,15 @@ this skill, they win.
 ## Merge
 
 - Before arming auto-merge, read dev's state (`AGENTS.md`, "When dev is
-  red"). This prints the newest dev `Tests` push run with a result, or a run
-  being rerun:
-  `gh run list -w Tests -b dev -e push -L 20 --json status,conclusion,attempt,url -q '[.[] | select((.status == "completed" and (.conclusion == "success" or .conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "startup_failure")) or (.status != "completed" and .attempt > 1))][0]'`.
-  A rerun counts by its previous attempt
-  (`gh run view <id> --attempt <attempt - 1> --json conclusion`). While dev is
-  red, arm auto-merge only on the fix.
+  red"). This prints the newest dev `Tests` push run with a result, or a
+  rerun run (attempt above 1) without one:
+  `gh run list -w Tests -b dev -e push -L 100 --json status,conclusion,attempt,url -q '[.[] | select((.status == "completed" and (.conclusion == "success" or .conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "startup_failure")) or .attempt > 1)][0]'`.
+  For a rerun run, read its earlier attempts newest first
+  (`gh run view <id> --attempt <n> --json conclusion`), passing over those
+  that ended cancelled or skipped, until one has a result; if none has, go on
+  to the next run. The trusted `PR / gate` check is the authority
+  (`docs/internal/SELECTIVE_CI.md`, "Dev state on pull requests"). While dev
+  is red, arm auto-merge only on the fix.
 - When the PR does not expand authority (see `AGENTS.md`), arm auto-merge:
   `gh pr merge <n> --auto --merge --match-head-commit <full sha>`. The Owner
   allows this for agent PRs into `dev`.

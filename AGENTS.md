@@ -41,7 +41,8 @@ Guidance for automated agents working in this repository.
   `gbdraw-ship-pr` skill, "Merge").
 - While dev is red, merge only a pull request that fixes the failure: it
   carries the label `dev-red-fix` and names the failing job and run in its
-  body. Other pull requests may run CI but stay unmerged.
+  body. Other pull requests may run CI but stay unmerged. `PR / gate` enforces
+  the label ([Dev state on pull requests](docs/internal/SELECTIVE_CI.md#dev-state-on-pull-requests)).
 - The session that finds dev red reruns a job it believes flaky once. If the
   job fails again, it fixes the failure or tells the session that merged its
   cause (or the Owner), and records this in its task log.

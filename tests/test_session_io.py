@@ -5,6 +5,7 @@ import copy
 import gzip
 import json
 import hashlib
+import io
 import os
 import re
 from datetime import datetime
@@ -81,6 +82,7 @@ from gbdraw.session_io import (
     session_to_cli_args,
     validate_current_web_state_field_names,
     validate_session,
+    write_serialized_session,
     write_session_json,
 )
 from tests.utils.session_drawing_view import build_mode_scoped_session_json, drawing_view
@@ -2456,6 +2458,30 @@ def test_session_json_gzip_decompresses_to_the_plain_bytes(tmp_path: Path) -> No
     assert gzip.decompress((tmp_path / "session.json.gz").read_bytes()) == (
         tmp_path / "session.json"
     ).read_bytes()
+
+
+def test_every_session_gz_is_the_rsyncable_writer_output_of_its_json(tmp_path: Path) -> None:
+    from gbdraw.io.rsyncable_gzip import RsyncableGzipWriter
+
+    # Large enough for several content-defined cuts.
+    genbank = b"".join(b"%09d acgtacgtta gcatgcatgc ttaaccggtt\n" % index for index in range(20_000))
+    session = _minimal_session({"c_gb": _file_entry("input.gb", genbank)})
+    write_session_json(tmp_path / "session.json", session)
+    write_session_json(tmp_path / "session.json.gz", session)
+    write_session_json(tmp_path / "again.json.gz", session)
+    plain = (tmp_path / "session.json").read_bytes()
+    write_serialized_session(tmp_path / "serialized.json.gz", plain)
+    write_serialized_session(tmp_path / "serialized.json", plain)
+    expected = io.BytesIO()
+    with RsyncableGzipWriter(expected) as writer:
+        writer.write(plain)
+
+    assert len(plain) > 1_000_000
+    assert (tmp_path / "session.json.gz").read_bytes() == expected.getvalue()
+    assert (tmp_path / "again.json.gz").read_bytes() == expected.getvalue()
+    assert (tmp_path / "serialized.json.gz").read_bytes() == expected.getvalue()
+    assert (tmp_path / "serialized.json").read_bytes() == plain
+    assert load_session(tmp_path / "serialized.json.gz") == session
 
 
 def test_embedded_file_materialization_sanitizes_name(tmp_path: Path) -> None:
