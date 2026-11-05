@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = ["engine", "python", "wasm"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
+# The Worker's module: a panic stops the call, and the caller draws in Python.
+[profile.wasm]
+inherits = "release"
+panic = "abort"

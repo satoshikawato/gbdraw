@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "gbdraw-core"
+version = "0.0.1"
+description = "The optional Rust drawing engine of gbdraw."
+requires-python = ">=3.10"
+license = "MIT"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]

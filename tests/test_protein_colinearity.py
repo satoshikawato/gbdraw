@@ -4526,7 +4526,10 @@ def test_web_losatp_payload_helper_output_follows_explicit_display_pairs(
     assert displayed_only["cache"]["convertedPayloadHit"] is False
 
 
-def test_pairwise_match_group_places_each_end_through_its_record_placement() -> None:
+def test_pairwise_match_group_places_each_end_through_its_record_placement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GBDRAW_NATIVE", "0")  # it reads the Python drawer's elements
     records = [
         _record("record_a", sequence="A" * 1000),
         _record("record_b", sequence="A" * 1000),

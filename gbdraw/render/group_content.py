@@ -221,6 +221,8 @@ def _childless(element: BaseElement) -> BaseElement:
     bare = object.__new__(type(element))
     bare.__dict__.update(element.__dict__)
     bare.elements = []
+    # A copy over no content writes no stored children (``ContentGroup.get_xml``).
+    bare.__dict__.pop("content", None)
     return bare
 
 
@@ -250,6 +252,8 @@ class GroupContent:
     definition: DefinitionMeasurement | None = None
     # svgwrite's per-element parameter (debug flag, profile) of the built group.
     parameter: Parameter | None = field(default=None, repr=False)
+    # The children as text when the native engine wrote them; ``children`` is then empty.
+    serialized_children: str | None = field(default=None, repr=False)
 
     @classmethod
     def of(
@@ -271,7 +275,12 @@ class GroupContent:
             local_bounds=local_bounds,
             definition=definition,
             parameter=getattr(group, "_parameter", None),
+            serialized_children=getattr(group, "serialized_children", None),
         )
+
+    @property
+    def has_children(self) -> bool:
+        return bool(self.children or self.serialized_children)
 
     @cached_property
     def children_text(self) -> str:
@@ -284,6 +293,8 @@ class GroupContent:
         otherwise this raises.
         """
 
+        if self.serialized_children is not None:
+            return require_element_markup(self.serialized_children)
         texts = []
         for child in self.children:
             content = placed_content(child)
@@ -343,6 +354,19 @@ class ContentGroup(Group):
         self.content = content
         self.key = key
 
+    def get_xml(self) -> Element:
+        """The group's tree; children the native engine wrote are parsed for it.
+
+        The document never comes here for them (``placed_content``): only a
+        whole-drawing ``tostring`` does.
+        """
+
+        xml = super().get_xml()
+        content = self.__dict__.get("content")
+        if content is not None and content.serialized_children:
+            xml.extend(etree.fromstring(f"<g>{content.serialized_children}</g>"))
+        return xml
+
     def holds_content_children(self) -> bool:
         """Whether the children are still exactly the content's children."""
 
@@ -367,7 +391,7 @@ def placed_content(element: BaseElement) -> GroupContent | None:
     element, which is serialized as it is."""
 
     group = held_group(element)
-    if group is not None and group.content.children:
+    if group is not None and group.content.has_children:
         return group.content
     return None
 

@@ -20,6 +20,9 @@ from gbdraw.svg.result_records import RESULT_BASE_ATTRIBUTE_PREFIX
 
 
 class Group(container.Group):
+    # The children as text, when the native engine wrote them instead of ``elements``.
+    serialized_children: str | None = None
+
     def __init__(self, *args: Any, **extra: Any) -> None:
         extra.setdefault("debug", False)
         super().__init__(*args, **extra)

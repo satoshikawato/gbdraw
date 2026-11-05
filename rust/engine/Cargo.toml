@@ -1,0 +1,9 @@
+[package]
+name = "gbdraw-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "gbdraw's drawing engine: SVG text of diagram groups."
+
+[dependencies]
+serde_json = { version = "1", features = ["float_roundtrip"] }

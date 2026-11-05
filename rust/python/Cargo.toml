@@ -1,0 +1,13 @@
+[package]
+name = "gbdraw-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "gbdraw_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+gbdraw-engine = { path = "../engine" }
+pyo3 = { version = "0.30", features = ["abi3-py310"] }

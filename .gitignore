@@ -81,3 +81,7 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Rust drawing engine (rust/): build output and the generated Worker module
+rust/target/
+gbdraw/web/wasm/gbdraw-core/

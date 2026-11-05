@@ -13,6 +13,7 @@ import { diagnosticError, normalizeUserFacingError } from '../utils/error-normal
 import { msg } from '../utils/i18n.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { recordSourceFilesOf } from '../services/input-types.js';
+import { registerGbdrawCore } from './gbdraw-core.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
 import {
   fetchPyodideSnapshot, installRuntimePackages, pyodideSnapshotFailureDetail, pyodideSnapshotStep, runtimeWheelDownloads
@@ -395,6 +396,7 @@ const initializeRuntime = async ({
       reportStep(4);
       runtime = await pyodideSnapshotStep(async () => {
         await snapshot.complete(pyodide);
+        await registerGbdrawCore(pyodide);
         return bootedRuntime(pyodide, 'snapshot');
       });
       return runtime;
@@ -410,6 +412,7 @@ const initializeRuntime = async ({
     });
     reportStep(4);
     await pyodide.runPythonAsync(PYTHON_HELPERS);
+    await registerGbdrawCore(pyodide);
     runtime = bootedRuntime(pyodide, 'cold');
     return runtime;
   })();

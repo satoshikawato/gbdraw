@@ -1,0 +1,12 @@
+[package]
+name = "gbdraw-core-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "gbdraw_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+gbdraw-engine = { path = "../engine" }

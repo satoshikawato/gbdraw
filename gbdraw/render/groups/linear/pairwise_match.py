@@ -3,6 +3,8 @@
 
 from gbdraw.exceptions import ComparisonIdentityError
 
+import json
+import logging
 import math
 from typing import Dict, Literal, Sequence, cast
 
@@ -23,7 +25,10 @@ from ....features.ids import DrawnFeatureHash, make_linear_rendered_feature_id
 from ....layout.linear_multi_record import LinearComparisonEndpoint
 from ....layout.record_coordinates import RecordDisplayTransform
 from ....linear_comparison import project_match_endpoints
+from ...native import native_engine
 from .feature_identity import LinearFeatureDomIndex
+
+logger = logging.getLogger(__name__)
 
 
 def _row_value(row: object, name: str, default: object = "") -> object:
@@ -156,6 +161,12 @@ _OPTIONAL_METADATA_ATTRIBUTES = (
     ("subject_locus_id", "data-subject-locus-id"),
     ("query_display_name", "data-query-display-name"),
     ("subject_display_name", "data-subject-display-name"),
+)
+
+
+# Columns that add attributes to a ribbon, move its ends or change its fill: their rows draw in Python.
+_PYTHON_DRAWN_COLUMNS = frozenset(
+    {*_ENDPOINT_IDENTITY_COLUMNS, *(column for column, _attribute in _OPTIONAL_METADATA_ATTRIBUTES)}
 )
 
 
@@ -611,6 +622,72 @@ class PairWiseMatchGroup:
             f"C{path_point(subject_end_x, c2y)} {path_point(query_end_x, c1y)} {path_point(query_end_x, query_end_y)} z"
         )
 
+    def _native_children(self) -> str | None:
+        """The children text by the native engine; ``None`` when Python draws these matches.
+
+        The engine draws plain matches on unmoved records. It refuses anything
+        else it finds in the data (a bad color, a position that is not finite),
+        and Python then draws the group and reports the error in its own terms.
+        """
+
+        engine = native_engine()
+        frame = self.comparison_df
+        transforms = self.record_transforms
+        if (
+            engine is None
+            or frame.empty
+            or not _PYTHON_DRAWN_COLUMNS.isdisjoint(frame.columns)
+            or self.query_placement.attachment_offsets_px
+            or self.subject_placement.attachment_offsets_px
+            or (
+                transforms is not None
+                and any(
+                    transforms[index].start_coordinate is not None
+                    for index in (self.query_record_index, self.subject_record_index)
+                )
+            )
+        ):
+            return None
+        kinds: dict[str, str] = {}
+        data = bytearray()
+        for _attribute, column in _REQUIRED_ROW_ATTRIBUTES:
+            if column not in frame.columns:
+                return None
+            values = frame[column].to_numpy()
+            if values.dtype.kind not in "iuf":
+                return None
+            integer = values.dtype.kind != "f"
+            kinds[column] = "i" if integer else "f"
+            data += values.astype("<i8" if integer else "<f8").tobytes()
+        params = {
+            "rows": len(frame),
+            "columns": kinds,
+            "track_id": self.track_id,
+            "query": self._native_endpoint(self.query_placement, self.query_y),
+            "subject": self._native_endpoint(self.subject_placement, self.subject_y),
+            "identity_domain": [float(self.identity_domain.minimum), float(self.identity_domain.maximum)],
+            "min_color": self.match_min_color,
+            "max_color": self.match_max_color,
+            "fill_opacity": str(self.match_fill_opacity),
+            "stroke": str(self.match_stroke_color),
+            "stroke_width": str(self.match_stroke_width),
+            "style": self.match_style,
+            "curve_tension": self.curve_tension,
+            "endpoints": self._endpoint_attributes,
+        }
+        try:
+            # UTF-8 bytes: a Worker's JS string of this size is slow to bring into Python, and its
+            # JS buffer copies at once only through ``to_bytes``.
+            text = engine.pairwise_ribbons(json.dumps(params), bytes(data))
+            return (text if isinstance(text, bytes) else text.to_bytes()).decode("utf-8")
+        except Exception as reason:  # a native error of any kind only means Python draws the group
+            logger.debug("native ribbons declined: %s", reason)
+            return None
+
+    @staticmethod
+    def _native_endpoint(placement: LinearComparisonEndpoint, y: float) -> dict[str, float]:
+        return {"x": float(placement.x), "px_per_bp": float(placement.px_per_bp), "y": y}
+
     def add_elements_to_group(self) -> Group:
         """
         Adds all the pairwise match paths to the SVG group.
@@ -621,6 +698,9 @@ class PairWiseMatchGroup:
         Returns:
             Group: The SVG group with all match paths added.
         """
+        self.match_group.serialized_children = self._native_children()
+        if self.match_group.serialized_children is not None:
+            return self.match_group
         rows = sorted(self.comparison_df.itertuples(), key=_match_draw_order_key)
         transforms = self.record_transforms
         for index, row in enumerate(rows, start=1):

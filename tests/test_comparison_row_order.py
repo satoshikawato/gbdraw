@@ -77,6 +77,7 @@ def test_reordered_comparison_rows_draw_the_same_matches() -> None:
 def test_row_order_check_fails_when_matches_are_drawn_in_input_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("GBDRAW_NATIVE", "0")  # it replaces the Python drawer's sort key
     monkeypatch.setattr(pairwise_match, "_match_draw_order_key", lambda row: 0)
     expected = _render(_ROWS)
     assert any(_render(rows) != expected for rows in _reorderings())
