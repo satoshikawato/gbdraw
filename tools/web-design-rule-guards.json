@@ -725,6 +725,51 @@
           "kind": "py-count-map"
         }
       ]
+    },
+    {
+      "id": "PY-STRUCTURE",
+      "heading": "Python structure",
+      "rulesPath": "docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md",
+      "guards": [
+        {
+          "path": "tests/test_python_structure_ratchet.py",
+          "rootCause": "new",
+          "job": "core-pr",
+          "retireWhen": "never"
+        }
+      ],
+      "allowlists": [
+        {
+          "path": "tests/test_python_structure_ratchet.py",
+          "symbol": "UPWARD_IMPORTS",
+          "kind": "py-set"
+        },
+        {
+          "path": "tests/test_python_structure_ratchet.py",
+          "symbol": "IMPORT_CYCLE_SIZES",
+          "kind": "py-count-map"
+        },
+        {
+          "path": "tests/test_python_structure_ratchet.py",
+          "symbol": "FUNCTION_LINES",
+          "kind": "py-count-map"
+        },
+        {
+          "path": "tests/test_python_structure_ratchet.py",
+          "symbol": "FUNCTION_PARAMETERS",
+          "kind": "py-count-map"
+        },
+        {
+          "path": "tests/test_python_structure_ratchet.py",
+          "symbol": "MAX_FUNCTION_LINES",
+          "kind": "py-count"
+        },
+        {
+          "path": "tests/test_python_structure_ratchet.py",
+          "symbol": "MAX_FUNCTION_PARAMETERS",
+          "kind": "py-count"
+        }
+      ]
     }
   ]
 }

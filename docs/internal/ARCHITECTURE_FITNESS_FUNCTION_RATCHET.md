@@ -463,6 +463,35 @@ This is the rule `TYPE-DEBT` of `tools/web-design-rule-guards.json`.
 The Web modules have their own type rules (R14 in
 [`gbdraw/web/CLAUDE.md`](../../gbdraw/web/CLAUDE.md)).
 
+## Python structure
+
+This is the rule `PY-STRUCTURE` of `tools/web-design-rule-guards.json`.
+`tests/test_python_structure_ratchet.py` reads `gbdraw/` except `gbdraw/web/`
+and holds the layer table, the limits, and the baselines.
+
+- Layers: `LAYERS` puts each unit (a subpackage of `gbdraw`, a module directly
+  under it, or `__init__`) in a layer. A module imports from its own layer and
+  lower ones. `UPWARD_IMPORTS` lists the upward imports the rule started with,
+  marking those only inside functions, so moving one to module level is new;
+  a new one fails with its file and line. Imports under `if TYPE_CHECKING:` do
+  not count.
+- Cycles: module-level imports form no cycle. An import inside a function can
+  close one; `IMPORT_CYCLE_SIZES` gives each module in such a cycle its size,
+  so no module joins a cycle and no cycle grows.
+- Function size: a function stays within `MAX_FUNCTION_LINES` lines and
+  `MAX_FUNCTION_PARAMETERS` parameters. `FUNCTION_LINES` and
+  `FUNCTION_PARAMETERS` hold the larger functions the rule started with at
+  their size.
+- Adding or raising a baseline entry and raising a limit are authority-only
+  changes that need the Owner's approval. Lowering or removing an entry is
+  optional.
+- `LAYERS` is not registered. The Gate keeps the test file from changing beside
+  production code, but a pull request that changes only `LAYERS` passes it.
+  Moving a unit to another layer loosens the rule for the units it passes, so
+  such a pull request waits for the Owner's approval and does not auto-merge.
+  A new unit goes into `LAYERS` in a pull request without production code,
+  before the code that adds it.
+
 ## Evidence examples
 
 These examples use changed-scope sets. They do not assert repository-wide
