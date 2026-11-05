@@ -187,6 +187,14 @@ test('Circular: a loaded Result without axis disables Select region; after Gener
     expect(drawn).toContain(`data-gbdraw-annotation-id="${rowId}"`);
     // The band is not part of the Result.
     expect(drawn).not.toContain('region-select-band');
+
+    // OV-2482: the drawn region annotation (a group of the record) leaves the record's frame found: a drag still
+    // selects.
+    await page.keyboard.press('Escape');
+    await fitToPreview(page);
+    if (await toggle.getAttribute('aria-pressed') !== 'true') await toggle.click();
+    await dragAlong(page, 0, [8000.5, 8500.5, 9000.5]);
+    await expect(page.locator('[data-preview-item-subtitle]')).toHaveText('8,001-9,001 (1,001 bp)');
   } finally {
     await page.context().close();
   }

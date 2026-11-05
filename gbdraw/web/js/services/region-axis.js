@@ -4,6 +4,7 @@
 // (`gbdraw/render/track_slot_metadata.py`, `axis`); this module only reads it.
 // Points are in the frame of the record's drawn group (`regionAxisFrame`):
 // the Circular centre is (0, 0), a Linear row starts at x 0 on its axis line.
+import { ANNOTATION_SELECTOR } from './drawn-groups.js';
 import { formatGroupedNumber } from './record-options.js';
 import { t } from '../utils/i18n.js';
 
@@ -169,13 +170,15 @@ export const readRegionAxisRecords = (trackSlotGeometry, resultIndex) => {
 
 /**
  * The drawn group whose frame a record's axis is in: the innermost group of the record that is not one of its parts
- * (a definition). Null when the Result does not draw the record.
+ * (a definition, or a drawn annotation, OV-2482). Null when the Result does not draw the record.
  * @param {ParentNode} root The Result's SVG root.
  * @param {number} recordIndex
  * @returns {SVGGraphicsElement | null}
  */
 export const regionAxisFrame = (root, recordIndex) => {
-  const groups = Array.from(root.querySelectorAll(`g[data-gbdraw-record-index="${recordIndex}"]:not([data-gbdraw-role])`));
+  const groups = Array.from(root.querySelectorAll(
+    `g[data-gbdraw-record-index="${recordIndex}"]:not([data-gbdraw-role]):not(${ANNOTATION_SELECTOR})`
+  ));
   const innermost = groups.filter((group) => !groups.some((other) => other !== group && group.contains(other)));
   return innermost.length === 1 ? /** @type {SVGGraphicsElement} */ (innermost[0]) : null;
 };

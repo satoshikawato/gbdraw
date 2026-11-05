@@ -5,7 +5,8 @@ Each record's entry also carries its ``recordKey`` and its drawn ``axis``
 which source base each drawn base shows, so the Web maps a pointer on the
 drawing to a record position without measuring drawn shapes. The coordinates
 are in the local frame of the record's drawn group (the innermost ``g`` that
-carries ``data-gbdraw-record-index``, outside any record definition), so a
+carries ``data-gbdraw-record-index``, outside any record definition and other
+than a drawn annotation's group), so a
 Layout edit move of the record keeps them right.
 """
 
