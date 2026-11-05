@@ -429,8 +429,7 @@
       "vector": "tests/fixtures/region_axis_geometry_vectors.json",
       "reason": "the Web maps a pointer to a base live, from the axis Python wrote; the vectors pin the Web's reading to Python's geometry",
       "retireWhen": "Python returns the base under a point (no Web reading of the axis)",
-      "source": "region-select-seq-search-20261104 PR-A (Web Select region tool)",
-      "pending": true
+      "source": "region-select-seq-search-20261104 PR-A (Web Select region tool)"
     },
     {
       "id": "vector:tests/fixtures/saved_rule_captions.json",
