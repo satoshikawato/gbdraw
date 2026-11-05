@@ -6,7 +6,8 @@
 /** @import { ColorRuleLegendGroup, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { DrawnTrack } from '../../services/track-legend-rows.js' */
 /** @typedef {import('../rule-matching.js').GroupColorEdit['scope']} RuleSynthesisScope */
-import { displayedLegendRowColors, draftLegendRowColors, draftLegendRows, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
+import { displayedLegendRowColors, draftLegendRowColors, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
+import { draftLegendRows } from '../../services/legend-draft-rows.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';

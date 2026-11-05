@@ -996,6 +996,25 @@ export const circularLegendLocalBounds = (layout, colorRectSize) => {
  */
 
 /**
+ * The padding a drawing draws: each side as a number, a side that holds no
+ * finite number of 0 or more being 0. The canvas fit and the request
+ * projection read the padding through it.
+ * @param {Readonly<Partial<Record<string, unknown>>> | null | undefined} value
+ * @returns {CompositionCanvasPaddingPx}
+ */
+export const normalizeCanvasPadding = (value) => {
+  /** @param {'top' | 'right' | 'bottom' | 'left'} side */
+  const sideOf = (side) => {
+    const number = Number(value?.[side]);
+    return Number.isFinite(number) && number >= 0 ? number : 0;
+  };
+  return { top: sideOf('top'), right: sideOf('right'), bottom: sideOf('bottom'), left: sideOf('left') };
+};
+
+/** @param {Readonly<Partial<Record<string, unknown>>> | null | undefined} value */
+export const hasCanvasPadding = (value) => Object.values(normalizeCanvasPadding(value)).some((number) => number !== 0);
+
+/**
  * @typedef {object} CompositionSpacingPx
  * @property {number} edgePaddingPx
  * @property {number} dockGapPx

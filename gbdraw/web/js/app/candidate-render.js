@@ -24,16 +24,8 @@ import {
 } from '../services/svg-result-ingestion.js';
 /** @import { CanonicalFeatureOverride } from '../contracts/request.generated.js' */
 
-/**
- * A Legend entry as the compile reads it: a listed, deleted, or dormant row
- * (`LegendEntry`), or one a Session saved. Every field is unvalidated.
- * @typedef {{ caption?: unknown, originalCaption?: unknown, color?: unknown, xPos?: unknown, yPos?: unknown, featureIds?: unknown }} LegendEntryInput
- */
-
-/**
- * A Legend entry after `normalizedLegendEntries`.
- * @typedef {{ caption: string, originalCaption: string, color: string, xPos: number | null, yPos: number | null, featureIds: readonly string[] }} NormalizedLegendEntry
- */
+import { draftLegendRows, normalizedLegendEntries } from '../services/legend-draft-rows.js';
+/** @import { LegendEntryInput, NormalizedLegendEntry } from '../services/legend-draft-rows.js' */
 
 /**
  * The committed editor state a direct mutation plan compiles. Python and the
@@ -299,46 +291,6 @@ export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features =
   };
 };
 
-// The draft's Legend rows: the listed and the dormant entries, Python's keys
-// of the generated and the deleted rows, and the row a style addresses by its
-// row key (a key of `legendColorOverrides` or `legendStrokeOverrides`, never
-// the name the row shows: two rows may show one name); null for a deleted row.
-// The compile and the feature popup read the rows through it, so a deleted
-// row's stroke reaches no feature in either.
-/**
- * @param {Pick<EditorPlanOptions, 'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'originalLegendOrder'>} legend
- */
-export const draftLegendRows = ({
-  legendEntries = [], deletedLegendEntries = [], dormantLegendEntries = [], originalLegendOrder = []
-}) => {
-  const currentEntries = normalizedLegendEntries(legendEntries);
-  const originalCaptions = new Set(
-    (Array.isArray(originalLegendOrder) ? originalLegendOrder : []).map(text).filter(Boolean)
-  );
-  const deletedCaptions = new Set(
-    (Array.isArray(deletedLegendEntries) ? deletedLegendEntries : [])
-      .map((entry) => text(entry?.originalCaption || entry?.caption))
-      .filter((caption) => originalCaptions.has(caption))
-  );
-  // OV-120: a renamed row an earlier Generate hid (GC off, Show Depth off)
-  // waits in the drawing; this Result may draw it again or still leave it out.
-  const shownOriginals = new Set(currentEntries.map((entry) => entry.originalCaption));
-  const dormantEntries = normalizedLegendEntries(dormantLegendEntries)
-    .filter((entry) => entry.caption !== entry.originalCaption && !shownOriginals.has(entry.originalCaption)
-      && !deletedCaptions.has(entry.originalCaption));
-  const dormantOriginals = new Set(dormantEntries.map((entry) => entry.originalCaption));
-  const entriesByKey = new Map([...dormantEntries, ...currentEntries].map(entry => [entry.originalCaption, entry]));
-  /** @param {string} key */
-  const styledRow = (key) => {
-    if (deletedCaptions.has(key)) return null;
-    const dormant = dormantOriginals.has(key);
-    return {
-      entry: entriesByKey.get(key), dormant, isOriginal: dormant || originalCaptions.has(key), targetCaption: /** @type {PythonLegendKey} */ (key)
-    };
-  };
-  return { currentEntries, originalCaptions, deletedCaptions, dormantEntries, styledRow };
-};
-
 // OV-276, OV-282 (D-26): the swatch color of each Legend panel row that the
 // palette colors, listed and deleted by its row key: a row
 // of Python's without a Legend color of its own that no rule draws takes the
@@ -517,24 +469,6 @@ const identityTargets = (catalogAdmission, row) => (
   resolvedStableTargets(catalogAdmission, biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId))
 );
 
-/**
- * @param {readonly (LegendEntryInput | null | undefined)[] | null | undefined} entries
- * @returns {NormalizedLegendEntry[]}
- */
-const normalizedLegendEntries = (entries) => (
-  Array.isArray(entries)
-    ? entries.map((entry) => ({
-        caption: text(entry?.caption),
-        originalCaption: text(entry?.originalCaption || entry?.caption),
-        color: text(entry?.color),
-        xPos: Number.isFinite(Number(entry?.xPos)) ? Number(entry.xPos) : null,
-        yPos: Number.isFinite(Number(entry?.yPos)) ? Number(entry.yPos) : null,
-        featureIds: Object.freeze([
-          ...new Set((Array.isArray(entry?.featureIds) ? entry.featureIds : []).map(text).filter(Boolean))
-        ])
-      })).filter((entry) => entry.caption)
-    : []
-);
 
 /** @param {EditorPlanOptions} options */
 const compilePlanBundle = ({

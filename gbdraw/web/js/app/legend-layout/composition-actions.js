@@ -4,11 +4,11 @@ import {
   readLeadingTranslate,
   replaceLeadingTranslate
 } from '../../services/svg-transform.js';
-import { planLegendComposition } from '../../services/legend-layout.js';
+import { normalizeCanvasPadding, planLegendComposition } from '../../services/legend-layout.js';
 import { legendPositionOfMode, readLegendPositionOfMode } from '../../services/layout-preferences.js';
 import { LEGEND_POSITIONS } from '../../contracts/schema.generated.js';
 import { LEGEND_GROUP_SELECTOR, LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
-/** @import { LayoutBox, CompositionSpacingPx, CompositionOverlayPolicy, RequestedCanvas } from '../../services/legend-layout.js' */
+/** @import { LayoutBox, CompositionCanvasPaddingPx, CompositionSpacingPx, CompositionOverlayPolicy, RequestedCanvas } from '../../services/legend-layout.js' */
 /** @import { LoadRepair } from '../../utils/load-repairs.js' */
 
 /**
@@ -375,9 +375,32 @@ const validateSpacing = (value) => {
       'composition.spacing.overlayClearancePx'
     ),
     stackGapPx: nonNegativeNumber(value.stackGapPx, 'composition.spacing.stackGapPx'),
-    titleGapPx: nonNegativeNumber(value.titleGapPx, 'composition.spacing.titleGapPx')
+    titleGapPx: nonNegativeNumber(value.titleGapPx, 'composition.spacing.titleGapPx'),
+    // The canvas padding Python drew (`canvas.padding`), recorded only when a side is not 0.
+    ...(value.canvasPadding === undefined ? {} : { canvasPadding: validateCanvasPaddingPx(value.canvasPadding) })
   };
 };
+
+/**
+ * @param {unknown} value
+ * @returns {CompositionCanvasPaddingPx}
+ */
+const validateCanvasPaddingPx = (value) => {
+  if (!isPlainObject(value)) fail('composition.spacing.canvasPadding must be an object.');
+  /** @param {'top' | 'right' | 'bottom' | 'left'} side */
+  const side = (side) => nonNegativeNumber(value[side], `composition.spacing.canvasPadding.${side}`);
+  return { top: side('top'), right: side('right'), bottom: side('bottom'), left: side('left') };
+};
+
+/**
+ * The canvas padding Python drew a Result with (`spacing.canvasPadding` of its composition metadata), the one
+ * reader of it: zero on each side for a Result that records none (one drawn without padding, or saved before
+ * Python drew it).
+ * @param {CompositionBinding | null} binding
+ * @returns {CompositionCanvasPaddingPx}
+ */
+const recordedCanvasPadding = (binding) => binding?.metadata.spacing.canvasPadding
+  ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
 /**
  * @param {unknown} value
@@ -1002,24 +1025,6 @@ const wireBounds = (bounds) => ({
   y: wireNumber(bounds.y)
 });
 
-const CANVAS_PADDING_SIDES = Object.freeze(['top', 'right', 'bottom', 'left']);
-
-/**
- * Normalize editor canvas padding; invalid or negative sides are 0.
- * @param {Partial<Record<string, unknown>> | null | undefined} value
- * @returns {Record<string, number>}
- */
-export const normalizeCanvasPadding = (value) => Object.fromEntries(
-  CANVAS_PADDING_SIDES.map((side) => {
-    const number = Number(value?.[side]);
-    return [side, Number.isFinite(number) && number >= 0 ? number : 0];
-  })
-);
-
-/** @param {Partial<Record<string, unknown>> | null | undefined} value */
-export const hasCanvasPadding = (value) => (
-  Object.values(normalizeCanvasPadding(value)).some((number) => number !== 0)
-);
 
 /**
  * @param {Element} svg
@@ -1162,10 +1167,17 @@ const CANVAS_RECORD_ATTRIBUTES = ['data-original-view-box', 'data-original-width
  * @returns {boolean}
  */
 export const applyCanvasToSvg = (svg, value, { binding = null, refit = true } = {}) => {
-  const padding = normalizeCanvasPadding(value);
+  const bound = binding
+    || (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === String(COMPOSITION_SCHEMA_VERSION) ? bindCompositionMetadata(svg) : null);
+  // PD-OI-064: the padding Python already drew is never applied twice; the Web adds the drawing's padding minus it.
+  const drawn = normalizeCanvasPadding(value);
+  const recorded = recordedCanvasPadding(bound);
+  const padding = {
+    top: drawn.top - recorded.top, right: drawn.right - recorded.right,
+    bottom: drawn.bottom - recorded.bottom, left: drawn.left - recorded.left
+  };
   const padded = Object.values(padding).some((number) => number !== 0);
-  let moved = movedDecorationBounds(binding
-    || (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === String(COMPOSITION_SCHEMA_VERSION) ? bindCompositionMetadata(svg) : null));
+  let moved = movedDecorationBounds(bound);
   const recordedBase = svg.getAttribute('data-original-view-box');
   if (!recordedBase && !padded && !moved.length) return false;
   // A missing viewBox gives NaN below and throws, so `base` is a string past that check.
@@ -1286,10 +1298,14 @@ export const applyCompositionEdit = (svg, options = {}) => {
   let legendPayload = null;
   if (legendTarget && metadata.legend) {
     const placement = plan.placements.legend;
+    // D-36: a shown Legend that lays out no row is an empty item the plan does not place; Python binds it at
+    // [0, 0] (`apply_composition_plan`).
+    const empty = legendSide !== 'none' && legendLocalBox !== null && !placement
+      && legendLocalBox.maxX <= legendLocalBox.minX && legendLocalBox.maxY <= legendLocalBox.minY;
     const automatic = placement
       ? placement.automaticTranslation
-      : metadata.legend.automaticTranslation;
-    if (placement) setLeading(legendTarget, automatic, deltas.legend || [0, 0]);
+      : (empty ? [0, 0] : metadata.legend.automaticTranslation);
+    if (placement || empty) setLeading(legendTarget, automatic, deltas.legend || [0, 0]);
     if (legendSide === 'none') legendTarget.setAttribute('display', 'none');
     else legendTarget.removeAttribute('display');
     legendPayload = targetPayload(

@@ -22,6 +22,9 @@ import { parseCompositionMetadata } from '../legend-layout/composition-actions.j
  * @property {number} [wrapWidth]
  */
 
+/** The local bounds of a Legend that shows no row. @type {LayoutBox} */
+const EMPTY_LEGEND_BOX = Object.freeze({ minX: 0.0, minY: 0.0, maxX: 0.0, maxY: 0.0 });
+
 /** @param {Element | null | undefined} parent */
 const entryGroupsOf = (parent) => Array.from(parent?.children || []).filter(
   (child) => child.localName === 'g' && child.hasAttribute('data-legend-key')
@@ -291,7 +294,9 @@ export const createLegendLayoutActions = ({ readRegisteredFontFaces }) => {
       ? getComparisonLegendGroup(horizontal)
       : childById(legendGroup, 'conservation_identity_legend');
     const rows = [...solid.rows, ...readGradientRows(gradientGroup)];
-    if (rows.length === 0) return null;
+    // D-36: a Legend whose rows are all hidden takes no room, as Python draws it (an empty item, which the
+    // composition planners skip); a Legend group without rows stays unknown.
+    if (rows.length === 0) return entryGroupsOf(featureGroup).length > 0 ? EMPTY_LEGEND_BOX : null;
 
     const sampleLabel = solid.label || gradientGroup?.querySelector('text') || null;
     const options = {
