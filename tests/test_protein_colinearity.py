@@ -4567,7 +4567,7 @@ def test_assemble_linear_diagram_accepts_precomputed_protein_comparisons(
     captured: dict[str, object] = {}
 
     def fake_assemble(*_args, **kwargs):
-        captured["protein_comparisons"] = kwargs.get("protein_comparisons")
+        captured["protein_comparisons"] = kwargs["comparison_inputs"].protein_comparisons
         return Drawing(filename="dummy.svg")
 
     monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram", fake_assemble)

@@ -152,6 +152,12 @@ from gbdraw.diagrams.circular.parts import (
 )
 from gbdraw.diagrams.circular.radial_layout import track_layout_reason
 from gbdraw.diagrams.linear import assemble_linear_diagram
+from gbdraw.diagrams.linear.parts import (
+    LinearAlignmentInputs,
+    LinearComparisonInputs,
+    LinearRecordInputs,
+    LinearTrackInputs,
+)
 from gbdraw.exceptions import LabelLayoutError, LabelsDoNotFitError, ValidationError
 from gbdraw.features.colors import build_default_color_map, build_specific_color_rules
 from gbdraw.features.placement import ResolvedRecordFeatureInputs
@@ -271,6 +277,7 @@ from gbdraw.render.groups.circular.definition import (
     definition_record_facts,
 )
 from gbdraw.render.groups.circular.legend import circular_legend_content
+from gbdraw.render.groups.linear.plot_title import plot_title_content as linear_plot_title_content
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
@@ -1520,6 +1527,23 @@ def _apply_circular_plot_title_font_size_override(
     )
 
 
+def _linear_plot_title_content(cfg: GbdrawConfig, plot_title: str, font_size: float) -> GroupContent | None:
+    """The Linear plot title content: one centred, mixed-style line.
+
+    None without a title, and when a typed title paints nothing ("<i></i>", OV-1845).
+    """
+
+    if not plot_title:
+        return None
+    return painted_title_content(render_stage(
+        "plot_title_content",
+        linear_plot_title_content,
+        plot_title,
+        font_family=cfg.objects.text.font_family,
+        font_size=float(font_size),
+    ))
+
+
 def _circular_plot_title_content(
     *,
     gb_record: SeqRecord,
@@ -2451,9 +2475,7 @@ def assemble_linear_diagram_from_records(
         *(resolved_protein_frames.pairs if resolved_protein_frames is not None else ()),
     )
     normalized_plot_title = str(inputs.plot_title or "").strip()
-    normalized_plot_title_position = _resolve_linear_plot_title_position(
-        str(inputs.plot_title_position)
-    )
+    normalized_plot_title_position = _resolve_linear_plot_title_position(str(inputs.plot_title_position))
     resolved_plot_title_font_size = _resolve_plot_title_font_size(inputs.plot_title_font_size)
 
     seq_len_dict = create_dict_for_sequence_lengths(records)
@@ -2537,38 +2559,39 @@ def assemble_linear_diagram_from_records(
         step=resolved_depth_step,
         profile=profile,
     ) if show_depth else None
-    legend_config = LegendDrawingConfigurator(
-        profile=profile,
-        canvas_config=canvas_config,
-    )
 
     canvas = assemble_linear_diagram(
-        record_transforms=_record_transforms,
-        record_presentations=_record_presentations,
-        records=list(records),
-        blast_files=list(inputs.blast_files) if inputs.blast_files else None,
         canvas_config=canvas_config,
+        configurators=DiagramConfigurators(
+            feature=feature_config, gc=gc_config, skew=skew_config, depth=depth_config,
+            legend=LegendDrawingConfigurator(profile=profile, canvas_config=canvas_config),
+        ),
         blast_config=blast_config,
-        feature_config=feature_config,
-        gc_config=gc_config,
-        legend_config=legend_config,
-        skew_config=skew_config,
-        depth_config=depth_config,
-        record_depth_tracks=record_depth_tracks,
-        linear_track_slots=parsed_linear_track_slots,
-        linear_track_axis_index=resolved_linear_track_axis_index,
-        annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
-        plot_title=normalized_plot_title or None,
-        plot_title_position=normalized_plot_title_position,
-        plot_title_font_size=resolved_plot_title_font_size,
-        protein_comparisons=resolved_protein_frames,
-        pairwise_identity_legend=protein_identity_legend,
-        linear_comparisons=list(inputs.linear_comparisons) if inputs.linear_comparisons else None,
-        linear_layout=layout,
-        orthogroups=resolved_orthogroups,
-        similarity_alignment=inputs.similarity_alignment,
-        alignment_anchor_centers=inputs._alignment_anchor_centers,
-        feature_anchor=inputs._feature_anchor,
+        record_inputs=LinearRecordInputs(
+            records=list(records),
+            record_transforms=_record_transforms,
+            record_presentations=_record_presentations,
+            linear_layout=layout,
+        ),
+        track_inputs=LinearTrackInputs(
+            record_depth_tracks=record_depth_tracks,
+            linear_track_slots=parsed_linear_track_slots,
+            linear_track_axis_index=resolved_linear_track_axis_index,
+            annotations=inputs._resolved_annotations if inputs._resolved_annotations is not None else inputs.annotation_options,
+        ),
+        comparison_inputs=LinearComparisonInputs(
+            blast_files=list(inputs.blast_files) if inputs.blast_files else None,
+            linear_comparisons=list(inputs.linear_comparisons) if inputs.linear_comparisons else None,
+            protein_comparisons=resolved_protein_frames,
+            orthogroups=resolved_orthogroups,
+            pairwise_identity_legend=protein_identity_legend,
+        ),
+        alignment=LinearAlignmentInputs(
+            inputs.similarity_alignment, inputs._alignment_anchor_centers, inputs._feature_anchor
+        ),
+        composition=_composition_inputs(
+            cfg, _linear_plot_title_content(cfg, normalized_plot_title, resolved_plot_title_font_size), normalized_plot_title_position
+        ),
         feature_label_rows=inputs._feature_label_rows,
     )
     build_result = LinearDiagramBuildResult(
