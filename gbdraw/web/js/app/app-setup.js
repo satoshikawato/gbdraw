@@ -3940,9 +3940,12 @@ export const createAppSetup = () => {
       return;
     }
     const drawing = state.activeDrawing();
+    // A commit whose caller asks for the automatic rerender itself (a color rule that adds a Legend row) is fitted
+    // by that rerender; a second request would draw the figure twice.
+    if (undrawn && !direction) return;
     if (!stepRefitsDrawnLegend(changes, direction, {
       legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
-      canvasPadding: drawing.canvasPadding, originalLegendOrder: originalLegendOrder.value
+      rules: drawing.manualSpecificRules, canvasPadding: drawing.canvasPadding, originalLegendOrder: originalLegendOrder.value
     })) return;
     if (featureActions.requestAutomaticRerender() && !direction) history.markLastStepUndrawn();
   };

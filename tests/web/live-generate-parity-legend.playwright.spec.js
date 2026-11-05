@@ -2328,3 +2328,163 @@ test('a stroked rule row deleted, its feature renamed in the popup, restores and
   await settleLive(page);
   await expectLiveEqualsGenerate(page, { label: 'the Restore after the popup rename' });
 });
+
+// PD-OI-114 scenario revision 2 (issue #1427): a Legend rename, deletion,
+// Restore, Move, and Sort, and Canvas padding, reach Python through the
+// request. On a figure drawn to a requested width the automatic rerender then
+// fits the figure with the edit: live (after that rerender) equals Generate,
+// and the figure is the requested width. On Auto nothing is redrawn: the Web
+// lays the Legend out as Python does, so the figure size and the places of the
+// shown rows (`transform`) equal Generate's too. Deleting every row leaves the
+// Legend no room (D-36): the Circular Legend beside the map, so the Auto figure
+// narrows and the map of a sized figure grows; the Linear Legend below the
+// records, so the figure gets lower. In Circular the delete comes first, so the Move and the Sorts
+// run on a Result whose hidden row sits at a shown row's place; no two shown
+// rows may then share a place (PR-D1 review N5).
+const LEGEND_FIT_WIDTH = { circular: '280mm', linear: '600mm' };
+const MM_PX = 96 / 25.4;
+// The displayed figure's size and the places of its shown Legend rows, by
+// their Python key; and the width of the drawn features in figure units.
+const legendPlaces = (page) => page.evaluate(() => {
+  const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  const shown = (element) => {
+    for (let node = element; node && node !== root; node = node.parentNode) {
+      if (node.getAttribute('display') === 'none' || node.style?.display === 'none') return false;
+    }
+    return true;
+  };
+  const numbers = (value) => (String(value || '').match(/-?\d+(\.\d+)?(e-?\d+)?/gi) || []).map(Number);
+  const rows = Object.fromEntries([...root.querySelectorAll('g[data-legend-key]')].filter(shown)
+    .map((row) => [row.getAttribute('data-legend-key'), [...row.children].map((child) => child.getAttribute('transform') || '')]));
+  const viewBox = numbers(root.getAttribute('viewBox'));
+  const box = root.getBoundingClientRect();
+  const parts = [...root.querySelectorAll('[data-gbdraw-feature-id]')].filter(shown).map((element) => element.getBoundingClientRect());
+  const mapWidth = parts.length
+    ? (Math.max(...parts.map((part) => part.right)) - Math.min(...parts.map((part) => part.left))) * viewBox[2] / box.width
+    : 0;
+  return {
+    width: numbers(root.getAttribute('width'))[0],
+    height: numbers(root.getAttribute('height'))[0],
+    viewBox,
+    legend: root.querySelector('#legend')?.getAttribute('transform') ?? null,
+    rows,
+    mapWidth
+  };
+});
+const placeDifferences = (live, generated) => {
+  const numbers = (value) => (String(value || '').match(/-?\d+(\.\d+)?(e-?\d+)?/gi) || []).map(Number);
+  const near = (left, right) => left.length === right.length && left.every((value, index) => Math.abs(value - right[index]) < 0.01);
+  // The Web pads the canvas by moving the viewBox origin (PD-OI-052), Python by moving the content: the Legend's
+  // place is read from the viewBox origin.
+  const at = ({ legend, viewBox }) => (legend === null ? [] : [numbers(legend)[0] - viewBox[0], numbers(legend)[1] - viewBox[1]]);
+  const fields = {
+    width: (snapshot) => [snapshot.width],
+    height: (snapshot) => [snapshot.height],
+    viewBox: (snapshot) => snapshot.viewBox.slice(2),
+    legend: at
+  };
+  const differences = [];
+  for (const [field, read] of Object.entries(fields)) {
+    if (!near(read(live), read(generated))) {
+      differences.push(`${field}: live ${JSON.stringify(live[field])} at ${JSON.stringify(live.viewBox)}, generated ${JSON.stringify(generated[field])} at ${JSON.stringify(generated.viewBox)}`);
+    }
+  }
+  for (const key of [...new Set([...Object.keys(live.rows), ...Object.keys(generated.rows)])]) {
+    const [left, right] = [live.rows[key] || [], generated.rows[key] || []];
+    if (!near(left.flatMap(numbers), right.flatMap(numbers))) {
+      differences.push(`row ${key}: live ${JSON.stringify(left)}, generated ${JSON.stringify(right)}`);
+    }
+  }
+  return differences;
+};
+const legendAction = (page, label, action, ...args) => evaluateWithRetainedPromise(page, ({ name, step, values }) => (
+  window.__GBDRAW_HISTORY__.runUndoable(name, () => window.__GBDRAW_APP__[step](...values))
+), { name: label, step: action, values: args });
+const padLeft = async (page, amount) => {
+  await page.evaluate(() => { window.__GBDRAW_APP__.showCanvasControls = true; });
+  const left = page.locator('#canvas-padding-left');
+  await left.fill(String(amount));
+  await left.press('Tab');
+};
+const deleteEveryRow = async (page, { sized, renders }) => {
+  for (;;) {
+    const caption = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.find((entry) => entry.caption)?.caption ?? null);
+    if (caption === null) return;
+    const before = await renders();
+    await deleteLegendRow(page, caption);
+    if (sized) await expect.poll(renders, { message: `the refit after deleting ${caption}`, timeout: 120_000 }).toBeGreaterThan(before);
+    await settleLive(page);
+  }
+};
+const LEGEND_FIT_JOURNEY = {
+  circular: [
+    ['rename', (page) => renameRow(page, 'CDS', 'Coding sequences')],
+    // A color rule that adds a row asks for the automatic rerender itself, also on Auto; a sized figure is fitted by
+    // that one rerender.
+    ['color rule that adds a Legend row', (page) => addColorRule(page, ALPHA_ROW), { autoRenders: 1 }],
+    ['deletion', (page) => deleteLegendRow(page, 'repeat_region')],
+    ['Move with a hidden row', (page) => legendAction(page, 'Move legend item', 'moveLegendEntry', 0, 2)],
+    ['Sort Z-A with a hidden row', (page) => legendAction(page, 'Sort legend', 'sortLegendEntries', 'desc')],
+    ['Sort by default', (page) => legendAction(page, 'Sort legend', 'sortLegendEntriesByDefault')],
+    ['Restore', (page) => evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.restoreAllDeletedLegendEntries())],
+    ['Canvas padding', (page) => padLeft(page, 40)]
+  ],
+  linear: [
+    ['rename', (page) => renameRow(page, 'CDS', 'Coding sequences')],
+    ['Move', (page) => legendAction(page, 'Move legend item', 'moveLegendEntry', 0, 1)],
+    ['Sort by default', (page) => legendAction(page, 'Sort legend', 'sortLegendEntriesByDefault')],
+    ['Sort Z-A', (page) => legendAction(page, 'Sort legend', 'sortLegendEntries', 'desc')],
+    ['deletion', (page) => deleteLegendRow(page, 'repeat_region')],
+    ['Restore', (page) => evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.restoreAllDeletedLegendEntries())],
+    ['Canvas padding', (page) => padLeft(page, 40)]
+  ]
+};
+for (const mode of ['circular', 'linear']) {
+  for (const sized of [true, false]) {
+    const size = sized ? LEGEND_FIT_WIDTH[mode] : 'Auto';
+    test(`Legend row edits and Canvas padding reach Python: live equals Generate (${mode}, Figure width ${size})`, async ({ page }) => {
+      test.setTimeout(600_000);
+      await open(page, { mode, results: 'single', reflow: 'off' });
+      const requested = sized ? Number.parseFloat(size) * MM_PX : null;
+      if (sized) {
+        await page.evaluate((width) => { window.__GBDRAW_APP__.form.figure_width = width; }, size);
+        await generate(page);
+      }
+      const renders = await countRenders(page);
+      const check = async (label) => {
+        const live = await legendPlaces(page);
+        if (sized) {
+          expect(live.width, `${label}: the refitted figure is the requested width`).toBeCloseTo(requested, 2);
+          expect(live.viewBox[2], `${label}: the viewBox is the requested width`).toBeCloseTo(requested, 2);
+        }
+        const places = Object.values(live.rows).map((transforms) => transforms[0]);
+        expect(new Set(places).size, `${label}: no two shown Legend rows at one place (${JSON.stringify(live.rows)})`)
+          .toBe(places.length);
+        await expectLiveEqualsGenerate(page, { label: `${label} (${mode}, Figure width ${size})` });
+        const generated = await legendPlaces(page);
+        expect(placeDifferences(live, generated), `${label}: the figure size and the Legend row places equal Generate's`).toEqual([]);
+        return { live, generated };
+      };
+      for (const [label, edit, { autoRenders = 0 } = {}] of LEGEND_FIT_JOURNEY[mode]) {
+        const before = await renders();
+        await edit(page);
+        const expected = sized ? 1 : autoRenders;
+        if (expected) await expect.poll(renders, { message: `${label}: the rerender`, timeout: 120_000 }).toBeGreaterThan(before);
+        await settleLive(page);
+        expect(await renders(), sized ? `${label}: one refit` : `${label}: the rerenders of an Auto figure`).toBe(before + expected);
+        await check(label);
+      }
+      const shownBefore = await legendPlaces(page);
+      await deleteEveryRow(page, { sized, renders });
+      const { live } = await check('every row deleted');
+      expect(Object.keys(live.rows), 'no Legend row is shown').toEqual([]);
+      if (mode === 'linear') {
+        expect(live.height, 'the figure loses the room of the Legend below the records').toBeLessThan(shownBefore.height - 1);
+      } else if (sized) {
+        expect(live.mapWidth, 'the map grows into the Legend\'s room').toBeGreaterThan(shownBefore.mapWidth + 1);
+      } else {
+        expect(live.width, 'the figure loses the Legend\'s room').toBeLessThan(shownBefore.width - 1);
+      }
+    });
+  }
+}

@@ -1352,7 +1352,7 @@ export const createHistoryManager = ({
     enforceLimits(entry);
     touch();
     notifyCheckpointCapture(options, 'after-end');
-    settingsStepListener(changes);
+    settingsStepListener(changes, undefined, options.drawn ? !options.drawn.change : false);
     return true;
   };
 
@@ -2087,7 +2087,8 @@ export const createHistoryManager = ({
    * automatic rerender exist (R1 (c), PD-OI-102).
    * @param {(changes: readonly HistoryIntentChange[] | null, direction?: 'undo' | 'redo', undrawn?: boolean) => void} listener
    *   `direction`: set when the call restores an intent step, which way it went. `undrawn`: a checkpoint
-   *   restore whose figure its step said is not the one its state draws.
+   *   restore whose figure its step said is not the one its state draws, or a checkpoint commit whose caller said
+   *   its figure is not (the caller then asks for the automatic rerender itself).
    */
   const setSettingsStepListener = (listener) => { settingsStepListener = listener; };
 

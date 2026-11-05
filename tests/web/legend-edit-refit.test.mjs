@@ -32,7 +32,7 @@ test('the Legend editor and Canvas padding rows are live, name the draft fields 
   const rows = Object.fromEntries(SETTING_APPLICATION.map((entry) => [entry.id, entry]));
   assert.equal(rows['legend-editor'].application, 'live');
   assert.deepEqual(rows['legend-editor'].refitPaths, {
-    'editorState.legend.entries': 'legendEntries', 'editorState.legend.deletedEntries': 'deletedLegendEntries'
+    'editorState.legend.entries': 'legendEntries', 'editorState.legend.deletedEntries': 'deletedLegendEntries', 'config.rules': 'rules'
   });
   assert.equal(rows['canvas-padding'].application, 'live');
   assert.deepEqual(rows['canvas-padding'].refitPaths, { 'ui.canvasPadding': 'canvasPadding' });
@@ -76,6 +76,24 @@ test('a row only the Web draws is not Python\'s to fit; a rule row\'s rename is'
   const renamedRule = [...ENTRIES, row('Kinase', 'Kinases')];
   assert.equal(stepRefitsDrawnLegend([entriesChange(ruled, renamedRule)], undefined,
     drawing({ legendEntries: renamedRule, originalLegendOrder: [...INVENTORY, 'Kinase'] })), true);
+});
+
+// OV-2556: a Legend rename of a feature type row whose features carry other values writes one color rule per value
+// with the new name; the row is then the rule row of that name, and the shown Result's inventory names it so. The
+// rename is a checkpoint step, whose changes compare with the intent History last captured; Generate writes the Legend
+// rows outside History, so that side may hold no rows. The request's leaves are then empty on both sides, but Python
+// draws the row from the rules' caption, so the step fits the figure again.
+test('a rename that writes color rules fits again; a rule color edit does not', () => {
+  const rule = (val, cap, color = '#54bcf8') => ({ feat: 'CDS', qual: 'product', val, color, cap });
+  const ruled = [row('Coding sequences'), row('tRNA'), row('rRNA')];
+  const rules = [rule('^alpha$', 'Coding sequences'), rule('^beta$', 'Coding sequences')];
+  const rename = [entriesChange([], ruled), { path: ['config', 'rules'], before: [], after: rules, beforeHas: true, afterHas: true }];
+  const after = drawing({ legendEntries: ruled, originalLegendOrder: ['Coding sequences', 'tRNA', 'rRNA'], rules });
+  assert.equal(stepRefitsDrawnLegend(rename, undefined, after), true, 'the rename');
+  assert.equal(stepRefitsDrawnLegend(rename, 'undo', drawing({ rules: [] })), true, 'its Undo');
+  const recolored = rules.map((entry) => ({ ...entry, color: '#ff0000' }));
+  assert.equal(stepRefitsDrawnLegend([{ path: ['config', 'rules'], before: rules, after: recolored, beforeHas: true, afterHas: true }],
+    undefined, { ...after, rules: recolored }), false, 'a rule color stays the size');
 });
 
 test('an Undo or a Redo of such a step fits again; the Undo reads the drawing as it was before the step', () => {
@@ -179,6 +197,10 @@ test('a refitted checkpoint step keeps the fitted figure; a restore of an unfitt
   await history.redo();
   assert.deepEqual({ rows, figure }, { rows: 'Long name', figure: 'live-2' });
   assert.deepEqual(heard.at(-1), [null, undefined, true], 'the listener refits it again');
+  // A commit whose caller asks for the automatic rerender itself says so: the listener asks for no second one.
+  await history.runUndoableCheckpoint('Add color rule', () => { rows = 'Alpha'; figure = 'live-3'; },
+    { drawn: { before: () => true, change: false } });
+  assert.deepEqual(heard.at(-1), ['changes', undefined, true]);
   // An intent step has no figure to mark.
   await history.runUndoable('Edit', () => { rows = 'Other'; });
   history.markLastStepUndrawn();

@@ -159,20 +159,26 @@ export const legendEditConfigLeaves = ({ rules, canvasPadding, ...legend }) => {
 /**
  * What Python draws and sizes of a Legend draft and its canvas padding, as the request's config leaves carry it
  * (`legendEditConfigLeaves`), with a rule row's name too: without rules the projection names every renamed row
- * Python draws, and a rule row's name reaches Python through its rule. Colors, strokes, and the rows only the Web
- * draws are not part of it.
+ * Python draws, and a rule row's name reaches Python through its rule. The color rules' captions and what they match
+ * are part of it (OV-2556: a Legend rename of a feature type row can write rules of the new name, which Python draws as
+ * a row the request's leaves do not name). Colors, strokes, and the rows only the Web draws are not part of it.
  * @param {Readonly<Record<RefitField, unknown>> & { originalLegendOrder: readonly string[] }} draft
  * @returns {string}
  */
-const drawnLegendKey = ({ legendEntries, deletedLegendEntries, originalLegendOrder, canvasPadding }) => {
-  /** @param {unknown} value @returns {readonly (LegendEntryInput | null | undefined)[]} */
-  const list = (value) => (Array.isArray(value) ? value : []);
+const drawnLegendKey = ({ legendEntries, deletedLegendEntries, rules, originalLegendOrder, canvasPadding }) => {
+  // Read as lists here, not handed to a helper: the paint intent writer guard counts a paint member passed to a
+  // function it does not know as a write.
+  /** @type {readonly (LegendEntryInput | null | undefined)[]} */
+  const listed = Array.isArray(legendEntries) ? legendEntries : [];
+  /** @type {readonly (LegendEntryInput | null | undefined)[]} */
+  const deleted = Array.isArray(deletedLegendEntries) ? deletedLegendEntries : [];
   const padding = /** @type {Readonly<Partial<Record<keyof CanvasPadding, unknown>>>} */ (
     canvasPadding && typeof canvasPadding === 'object' ? canvasPadding : {});
-  return JSON.stringify(legendEditConfigLeaves({
-    rules: [], canvasPadding: padding,
-    legendEntries: list(legendEntries), deletedLegendEntries: list(deletedLegendEntries), originalLegendOrder
-  }));
+  /** @type {readonly (Partial<SpecificColorRule> | null | undefined)[]} */
+  const ruleRows = Array.isArray(rules) ? rules : [];
+  return JSON.stringify([legendEditConfigLeaves({
+    rules: [], canvasPadding: padding, legendEntries: listed, deletedLegendEntries: deleted, originalLegendOrder
+  }), ruleRows.map((rule) => [rule?.feat, rule?.qual, rule?.val, rule?.cap])]);
 };
 
 /**
