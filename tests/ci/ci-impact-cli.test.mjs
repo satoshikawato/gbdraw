@@ -1646,5 +1646,5 @@ test('pull request runs record the tested tree and planned jobs under the planne
   assert.ok(planner.includes('process.stdout.write(`.${job}`)'));
   assert.ok(planner.includes('name: ${{ steps.pr_record.outputs.name }}\n'));
   assert.match(planner, /overwrite: true/);
-  assert.equal((planner.match(/if: github\.event_name == 'pull_request'\n/g) || []).length, 4);
+  assert.equal((planner.match(/if: github\.event_name == 'pull_request'\n/g) || []).length, 5);
 });

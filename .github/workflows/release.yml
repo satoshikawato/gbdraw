@@ -25,6 +25,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+          # All commits and trees, no old file contents: the release checks read only history.
+          filter: blob:none
           persist-credentials: false
 
       - name: Set up Python
