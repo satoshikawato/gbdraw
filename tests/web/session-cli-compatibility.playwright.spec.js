@@ -5,7 +5,7 @@ const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, generateAndWaitForResult, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, generateAndWaitForResult, openApp, expectSessionLoadedWithoutWarnings, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { drawingIds, shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { chooseCoordinates, openRegionDialog } = require('./helpers/region-drawing.cjs');
@@ -334,4 +334,54 @@ test('Session schema-1 Web binding control still loads', async ({ browser }, tes
   } finally {
     await run.context.close();
   }
+});
+
+// Issue #1427: a CLI Session whose request carries Legend row edits (renames, a hidden row, an edited order of the
+// others) and canvas padding, and no Web editor state for them, opens with the Legend editor and Canvas padding
+// showing them. An edit then keeps the rows Python drew, and a padding edit pads the canvas by its own change only.
+test('Session CLI Legend row edits and canvas padding open in the Legend editor and Canvas padding', async ({ browser }, testInfo) => {
+  test.setTimeout(600_000);
+  const rows = testInfo.outputPath('legend-rows.tsv');
+  await fs.writeFile(rows, 'key\tname\thidden\tposition\ntRNA\t\ttrue\t\nCDS\tGenes\t\t1\nrRNA\tRibosomal RNA\t\t2\n');
+  const hmmt = path.join(root, 'tests/test_inputs/HmmtDNA.gbk');
+  const file = await cli('circular', ['--gbk', hmmt, '--legend_rows', rows, '--canvas_padding', '10,20,30,40'], testInfo, 'legend-rows');
+  const { context, page, errors } = await load(browser, file, { width: 1400, height: 1000 });
+  const read = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { resultLegendRows } = await import('./js/services/legend-svg.js');
+    const drawing = state.activeDrawing();
+    const svg = state.svgContainer.value?.querySelector('svg');
+    return {
+      entries: drawing.legendEntries.value.map((entry) => [entry.originalCaption, entry.caption]),
+      deleted: drawing.deletedLegendEntries.value.map((entry) => entry.originalCaption || entry.caption),
+      padding: { ...drawing.canvasPadding },
+      shown: (resultLegendRows(svg) || []).filter((row) => row.shown).map((row) => row.shownKey),
+      size: ['width', 'height'].map((side) => Number.parseFloat(svg.getAttribute(side)))
+    };
+  });
+  const loaded = await read();
+  const drawnRows = ['Genes', 'Ribosomal RNA', 'GC content', 'GC skew (+)', 'GC skew (-)'];
+  expect(loaded.entries.slice(0, 2)).toEqual([['CDS', 'Genes'], ['rRNA', 'Ribosomal RNA']]);
+  expect(loaded.deleted).toEqual(['tRNA']);
+  expect(loaded.padding).toEqual({ top: 10, right: 20, bottom: 30, left: 40 });
+  expect(loaded.shown).toEqual(drawnRows);
+  // An edit of another Legend row shows the drawing's edits again: the rows Python drew stay.
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'), '#7b2cbf');
+  });
+  await settleLive(page);
+  const recolored = await read();
+  expect(recolored.shown).toEqual(drawnRows);
+  expect(recolored.deleted).toEqual(['tRNA']);
+  expect(recolored.size).toEqual(loaded.size);
+  // A padding edit grows the canvas by its own change, never by less the padding Python drew.
+  await page.evaluate(() => window.__GBDRAW_APP__.setCanvasPaddingSide('top', 15));
+  await settleLive(page);
+  const padded = await read();
+  expect(padded.padding.top).toBe(15);
+  expect(padded.size[0]).toBeCloseTo(loaded.size[0], 3);
+  expect(padded.size[1]).toBeCloseTo(loaded.size[1] + 5, 3);
+  expect(errors).toEqual([]);
+  await context.close();
 });

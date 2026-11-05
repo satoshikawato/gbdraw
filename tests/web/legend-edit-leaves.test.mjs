@@ -11,7 +11,7 @@ import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
 
-const { legendEditConfigLeaves } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
+const { legendEditConfigLeaves, readLegendEditLeaves } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
 const { managedConfigOverridePathsForMode } = await import('../../gbdraw/web/js/services/session-request.js');
 const { applyCanvasToSvg } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 const { createLegendLayoutActions } = await import('../../gbdraw/web/js/app/legend/layout-actions.js');
@@ -127,4 +127,30 @@ test('D-36: a Legend whose rows are all hidden lays out as an empty box, not nul
   const actions = createLegendLayoutActions({ readRegisteredFontFaces: () => [] });
   await actions.prepareLegendLayout();
   assert.deepEqual(actions.layOutLegend(svg), { minX: 0, minY: 0, maxX: 0, maxY: 0 });
+});
+
+// Load reads the leaves of a stored request once (`readLegendEditLeaves`): a Web request's overrides, else a CLI or
+// Python Session's full config; a leaf Python would refuse, and a padding of zeros, is no edit.
+test('a stored request gives its Legend edit leaves from its overrides, else from its full config', () => {
+  const leaves = {
+    'objects.legends.row_names': [['CDS', 'Genes']],
+    'objects.legends.hidden_rows': ['tRNA'],
+    'objects.legends.row_order': ['rRNA', 'CDS'],
+    'canvas.padding': [10, 20, 30, 40]
+  };
+  assert.deepEqual(readLegendEditLeaves({ diagramOptions: { configOverrides: leaves } }), leaves);
+  const config = {
+    canvas: { padding: [10, 20, 30, 40] },
+    objects: { legends: { row_names: [['CDS', 'Genes']], hidden_rows: ['tRNA'], row_order: ['rRNA', 'CDS'] } }
+  };
+  assert.deepEqual(readLegendEditLeaves({ diagramOptions: { config } }), leaves);
+  // The override wins over the full config.
+  assert.deepEqual(readLegendEditLeaves({ diagramOptions: { config, configOverrides: { 'objects.legends.hidden_rows': ['rRNA'] } } })[
+    'objects.legends.hidden_rows'], ['rRNA']);
+  const none = { canvas: { padding: [0, 0, 0, 0] }, objects: { legends: { row_names: [], hidden_rows: null } } };
+  assert.deepEqual(readLegendEditLeaves({ diagramOptions: { config: none } }), {});
+  assert.deepEqual(readLegendEditLeaves({ diagramOptions: { configOverrides: {
+    'objects.legends.row_names': [['CDS']], 'objects.legends.hidden_rows': [' '], 'canvas.padding': [1, 2, -3, 4]
+  } } }), {});
+  assert.deepEqual(readLegendEditLeaves(null), {});
 });

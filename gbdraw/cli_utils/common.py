@@ -264,8 +264,8 @@ def read_legend_rows_table(path: str) -> LegendRowsTable:
 
     ``key`` is the Legend row's key, trimmed as the Web's executor trims a key (JavaScript's ``trim()``); ``name`` the name it is given
     (blank: Python's); ``hidden`` ``true`` or ``false`` (blank: false); ``position`` its 1-based place in the Legend
-    in ASCII digits, on every row or on none (none: Python's order; the rows the table does not list follow the
-    listed ones). A cell is read as written: a quote is part of it. A UTF-8 byte order mark is skipped.
+    in ASCII digits, on every shown row or on none (none: Python's order; the rows the table does not list follow the
+    listed ones); a hidden row may leave it blank, as the Web's edited order lists the shown rows only. A cell is read as written: a quote is part of it. A UTF-8 byte order mark is skipped.
     """
 
     def refuse(message: str) -> argparse.ArgumentTypeError:
@@ -286,6 +286,7 @@ def read_legend_rows_table(path: str) -> LegendRowsTable:
     hidden: list[str] = []
     positions: list[tuple[int, str]] = []
     keys: list[str] = []
+    unplaced_shown = 0
     for number, cells in enumerate(lines[1:], start=2):
         if len(cells) > len(LEGEND_ROWS_COLUMNS) or not cells[0].strip():
             raise refuse(f"line {number} must have a key and at most four columns")
@@ -307,11 +308,13 @@ def read_legend_rows_table(path: str) -> LegendRowsTable:
             if place < 1:
                 raise refuse(f"line {number}: position must be a whole number from 1; got {position!r}")
             positions.append((place, key))
+        elif flag != "true":
+            unplaced_shown += 1
     rows = len(lines) - 1
     if len(set(keys)) != rows:
         raise refuse("each key must be on one row")
-    if positions and len(positions) != rows:
-        raise refuse("give a position on every row or on none")
+    if positions and unplaced_shown:
+        raise refuse("give a position on every shown row or on none")
     if len({place for place, _ in positions}) != len(positions):
         raise refuse("each position must be on one row")
     try:
@@ -644,7 +647,7 @@ def _add_legend_size_args(parser: argparse.ArgumentParser) -> None:
         help=(
             'Legend row edits: a TSV with the header "key\tname\thidden\tposition", one line per Legend row by '
             'its key; name renames the row (blank: keep its name), hidden true hides it, position (1, 2, ...) on '
-            'every row or on none orders the rows. A key the Legend does not draw is ignored.'
+            'every shown row or on none orders the rows. A key the Legend does not draw is ignored.'
         ),
         type=read_legend_rows_table,
         metavar='FILE',

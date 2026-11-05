@@ -24,6 +24,7 @@ import { parseSpecificRules, serializeSpecificRules } from '../services/file-imp
 import { FEATURE_INSTANCE_SEPARATOR, RECORD_SOURCE_FILES } from '../contracts/schema.generated.js';
 import { inputSequenceSource, inputTypeOfSourceKind, recordSourceFilesOf } from '../services/input-types.js';
 import { LINEAR_WRAP_LENGTH_PATH, wrapFormValue } from '../services/linear-wrap-form.js';
+import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
@@ -1206,11 +1207,59 @@ const LINEAR_LENGTH_OPTIONS = Object.freeze({
   'labels.font_size.linear': '--label_font_size'
 });
 
+// A `--legend_rows` cell as `read_legend_rows_table` (gbdraw/cli_utils/common.py) reads it back: the reader splits
+// lines and cells on CR, LF, and tab and keeps a quote, trims a key as JavaScript trims it, and reads a name that is
+// blank as no rename; a control character (U+0000-U+001F, U+0085) is refused, as Python may strip it.
+/** @param {unknown} value @param {boolean} key */
+const legendRowsCell = (value, key) => (
+  typeof value === 'string' && value.trim() !== '' && !/[\u0000-\u001f\u0085]/u.test(value) && (!key || value === value.trim())
+);
+
+/**
+ * The `--legend_rows` table of a request's Legend row edit leaves (null without any), one line per key: the keys of
+ * the edited order with their positions, then the other renamed and hidden keys in the leaves' order. The reader
+ * gives back the names and the hidden keys in line order and the order by position, so a leaf the lines cannot give
+ * back as it is makes the recipe unavailable (R12).
+ * @param {{ names: unknown, hidden: unknown, order: unknown }} leaves
+ * @returns {string | null}
+ */
+const legendRowsTable = ({ names = [], hidden = [], order = [] }) => {
+  const lost = () => recipeUnavailable(msg('the Legend row edits cannot be written as a --legend_rows table.'));
+  const pairs = Array.isArray(names) ? names : null;
+  if (!pairs || !Array.isArray(hidden) || !Array.isArray(order)) throw lost();
+  if (!pairs.every((pair) => Array.isArray(pair) && pair.length === 2 && legendRowsCell(pair[0], true) && legendRowsCell(pair[1], false))
+    || ![...hidden, ...order].every((key) => legendRowsCell(key, true))) throw lost();
+  const nameOf = new Map(pairs.map(([key, name]) => [/** @type {string} */ (key), /** @type {string} */ (name)]));
+  const hiddenKeys = new Set(/** @type {string[]} */ (hidden));
+  if (nameOf.size !== pairs.length || hiddenKeys.size !== hidden.length || new Set(order).size !== order.length) throw lost();
+  const keys = [...new Set([...order, ...nameOf.keys(), ...hiddenKeys])].map(String);
+  if (keys.length === 0) return null;
+  // `position` is on every shown line or on none (OV-2514).
+  if (order.length && keys.some((key) => !order.includes(key) && !hiddenKeys.has(key))) throw lost();
+  const lines = keys.map((key) => [key, nameOf.get(key) ?? '', hiddenKeys.has(key) ? 'true' : '', order.includes(key) ? String(order.indexOf(key) + 1) : '']);
+  const readBack = (/** @type {number} */ column) => lines.filter((line) => line[column]).map((line) => line[0]);
+  if (readBack(1).join('\t') !== [...nameOf.keys()].join('\t') || readBack(2).join('\t') !== [...hiddenKeys].join('\t')) throw lost();
+  return `${[['key', 'name', 'hidden', 'position'], ...lines].map((line) => line.join('\t')).join('\n')}\n`;
+};
+
+// `--canvas_padding TOP,RIGHT,BOTTOM,LEFT` of the `canvas.padding` leaf (four px, each finite and 0 or more); all
+// zeros is no padding, which the CLI writes as no flag.
+/** @param {unknown} value @returns {string | null} */
+const canvasPaddingArg = (value) => {
+  if (value === undefined) return null;
+  if (!Array.isArray(value) || value.length !== 4
+    || !value.every((side) => typeof side === 'number' && Number.isFinite(side) && side >= 0)) {
+    throw recipeUnavailable(msg('the canvas padding is not four px numbers of 0 or more.'));
+  }
+  return value.some((side) => side !== 0) ? value.map(String).join(',') : null;
+};
+
 /**
  * @param {string[]} args
  * @param {CanonicalRenderRequest} request
+ * @param {RecipeFiles} files
  */
-const appendConfigOverrides = (args, request) => {
+const appendConfigOverrides = (args, request, files) => {
   const options = request.diagramOptions || {};
   const overrides = isPlainObject(options.configOverrides) ? options.configOverrides : {};
   const consumed = new Set();
@@ -1255,6 +1304,15 @@ const appendConfigOverrides = (args, request) => {
   appendBooleanOption(args, take('objects.depth.show_ticks'), '--show_depth_ticks', '--hide_depth_ticks');
   appendBooleanOption(args, take('objects.depth.share_axis'), '--share_depth_axis');
   appendBooleanOption(args, take('objects.scale.show'), '', '--hide_scale');
+  appendOption(args, '--canvas_padding', canvasPaddingArg(take(LEGEND_EDIT_CONFIG_PATHS.canvasPadding)));
+  const legendRows = legendRowsTable({
+    names: take(LEGEND_EDIT_CONFIG_PATHS.rowNames),
+    hidden: take(LEGEND_EDIT_CONFIG_PATHS.hiddenRows),
+    order: take(LEGEND_EDIT_CONFIG_PATHS.rowOrder)
+  });
+  if (legendRows) {
+    args.push('--legend_rows', files.generatedTextPath('legend-rows.tsv', legendRows, 'generatedFiles.source_recipe.legend_rows'));
+  }
 
   const blacklist = take('labels.filtering.blacklist_keywords');
   if (Array.isArray(blacklist) && blacklist.length > 0) {
@@ -1977,7 +2035,7 @@ export const buildSourceRecipe = async ({
       : descriptorText(resources, colorTableId)) : null;
     appendDiagramOptions(args, renderRequest, files, cliColorTable === null ? undefined : cliColorTable && files.generatedTextPath(
       'specific-colors.tsv', cliColorTable, 'generatedFiles.source_recipe.specific_colors') || null);
-    appendConfigOverrides(args, renderRequest);
+    appendConfigOverrides(args, renderRequest, files);
     appendLayoutOptions(args, renderRequest, recordsTableUsed);
     return {
       available: true,

@@ -6,7 +6,9 @@
 // the rows Python draws, and the canvas padding, as the config leaves `objects.legends.row_names`,
 // `objects.legends.hidden_rows`, `objects.legends.row_order`, and `canvas.padding` (gbdraw/config/models/objects.py
 // and canvas.py read them; issue #1427, PD-OI-114 scenario revision 2).
-import { isLegendOrderEdited } from './legend-svg.js';
+import {
+  getVisibleFeatureLegendGroup, isLegendOrderEdited, pythonLegendKey, pythonOrderedLegendRows, resultLegendRows
+} from './legend-svg.js';
 import { ruleLegendCaptions } from './specific-color-rules.js';
 import { normalizeCanvasPadding } from './legend-layout.js';
 /** @import { PythonLegendKey } from './legend-svg.js' */
@@ -150,4 +152,98 @@ export const legendEditConfigLeaves = ({ rules, canvasPadding, ...legend }) => {
   if (order.length) leaves[LEGEND_EDIT_CONFIG_PATHS.rowOrder] = order;
   if (sides.some((side) => side !== 0)) leaves[LEGEND_EDIT_CONFIG_PATHS.canvasPadding] = sides;
   return leaves;
+};
+
+/** @param {unknown} value @returns {value is string} */
+const isRowText = (value) => typeof value === 'string' && value.trim() !== '';
+
+/**
+ * The Legend row edit and canvas padding leaves a request carries, by path: its `configOverrides` leaf (a Web
+ * request), else its full `config`'s (a CLI or Python Session's request holds the whole config). The one reader of
+ * the leaves in a stored request. A leaf of another shape is no edit: Python refuses it, so no Result drew it.
+ * @param {unknown} renderRequest
+ * @returns {LegendEditConfigLeaves}
+ */
+export const readLegendEditLeaves = (renderRequest) => {
+  const options = /** @type {{ diagramOptions?: { configOverrides?: unknown, config?: unknown } } | null} */ (
+    renderRequest && typeof renderRequest === 'object' ? renderRequest : null
+  )?.diagramOptions;
+  const overrides = options?.configOverrides && typeof options.configOverrides === 'object' ? options.configOverrides : {};
+  /** @param {string} path @returns {unknown} */
+  const leaf = (path) => {
+    if (Object.hasOwn(overrides, path)) return /** @type {Record<string, unknown>} */ (overrides)[path];
+    /** @type {unknown} */
+    let value = options?.config;
+    for (const segment of path.split('.')) {
+      value = value && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, segment)
+        ? /** @type {Record<string, unknown>} */ (value)[segment] : undefined;
+    }
+    return value;
+  };
+  /** @param {unknown} value @returns {PythonLegendKey[]} */
+  const keys = (value) => (Array.isArray(value) && value.every(isRowText) ? /** @type {PythonLegendKey[]} */ ([...value]) : []);
+  const names = leaf(LEGEND_EDIT_CONFIG_PATHS.rowNames);
+  const padding = leaf(LEGEND_EDIT_CONFIG_PATHS.canvasPadding);
+  /** @type {LegendEditConfigLeaves} */
+  const leaves = {};
+  if (Array.isArray(names) && names.length
+    && names.every((pair) => Array.isArray(pair) && pair.length === 2 && isRowText(pair[0]) && isRowText(pair[1]))) {
+    leaves[LEGEND_EDIT_CONFIG_PATHS.rowNames] = names.map(([key, name]) => /** @type {[PythonLegendKey, string]} */ ([key, name]));
+  }
+  const hidden = keys(leaf(LEGEND_EDIT_CONFIG_PATHS.hiddenRows));
+  if (hidden.length) leaves[LEGEND_EDIT_CONFIG_PATHS.hiddenRows] = hidden;
+  const order = keys(leaf(LEGEND_EDIT_CONFIG_PATHS.rowOrder));
+  if (order.length) leaves[LEGEND_EDIT_CONFIG_PATHS.rowOrder] = order;
+  if (Array.isArray(padding) && padding.length === 4
+    && padding.every((side) => typeof side === 'number' && Number.isFinite(side) && side >= 0) && padding.some((side) => side !== 0)) {
+    leaves[LEGEND_EDIT_CONFIG_PATHS.canvasPadding] = /** @type {[number, number, number, number]} */ ([...padding]);
+  }
+  return leaves;
+};
+
+/**
+ * A Legend row as a Session's `editorState.legend` lists it.
+ * @typedef {{ caption: string, originalCaption: PythonLegendKey, color: string, xPos: number, yPos: number, featureIds: string[] }} LeafLegendEntry
+ */
+
+/**
+ * The Web editor state of a drawing whose Session holds its Legend row edits and canvas padding only as request
+ * leaves (a CLI or Python Session): the Legend lists (`editorState.legend`: the rows Python shows, in their order,
+ * with their names; the hidden rows; Python's order of its rows) when a Legend leaf is set and the shown Result has
+ * a Legend, and the padding (`ui.canvasPadding`) when it is set. Python drew the leaves into the Result, so the
+ * rows, swatches, and order are read from it, and the names and hidden rows from the leaves.
+ * @typedef {object} LeafEditorState
+ * @property {{ entries: LeafLegendEntry[], deletedEntries: LeafLegendEntry[], originalOrder: PythonLegendKey[] } | null} legend
+ * @property {CanvasPadding | null} canvasPadding
+ */
+
+/**
+ * @param {LegendEditConfigLeaves} leaves `readLegendEditLeaves` of the drawing's request.
+ * @param {SVGSVGElement | null} svg The drawing's shown Result.
+ * @returns {LeafEditorState}
+ */
+export const editorStateOfLegendEditLeaves = (leaves, svg) => {
+  const sides = leaves[LEGEND_EDIT_CONFIG_PATHS.canvasPadding];
+  const canvasPadding = sides ? { top: sides[0], right: sides[1], bottom: sides[2], left: sides[3] } : null;
+  const names = new Map(leaves[LEGEND_EDIT_CONFIG_PATHS.rowNames] ?? []);
+  const hidden = leaves[LEGEND_EDIT_CONFIG_PATHS.hiddenRows] ?? [];
+  const group = getVisibleFeatureLegendGroup(svg);
+  const rows = (resultLegendRows(svg) ?? []).filter((row) => !row.editor);
+  if (!group || rows.length === 0 || (names.size === 0 && hidden.length === 0 && !leaves[LEGEND_EDIT_CONFIG_PATHS.rowOrder])) {
+    return { legend: null, canvasPadding };
+  }
+  const hiddenKeys = new Set(hidden);
+  /** @param {typeof rows[number]} row @returns {LeafLegendEntry} */
+  const entryOf = (row) => ({
+    caption: names.get(row.key) ?? row.key, originalCaption: row.key, color: row.color, xPos: row.xPos, yPos: row.yPos, featureIds: []
+  });
+  const rowOf = new Map(rows.map((row) => [row.key, row]));
+  return {
+    legend: {
+      entries: rows.filter((row) => row.pythonShown && !hiddenKeys.has(row.key)).map(entryOf),
+      deletedEntries: [...hiddenKeys].flatMap((key) => { const row = rowOf.get(key); return row ? [entryOf(row)] : []; }),
+      originalOrder: [...new Set(pythonOrderedLegendRows(group).map((row) => /** @type {PythonLegendKey} */ (pythonLegendKey(row))))]
+    },
+    canvasPadding
+  };
 };
