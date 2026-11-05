@@ -1516,7 +1516,8 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   assert.doesNotMatch(TEST_WORKFLOW, /\n    paths(?:-ignore)?:/);
 
   const corePr = workflowJob('core-pr');
-  assert.match(corePr, /\n    name: Core PR \(Python 3\.11\)\n/);
+  assert.match(corePr, /\n    name: Core PR \(Python 3\.10\)\n/);
+  assert.match(corePr, /python-version: "3\.10"/);
   assert.match(corePr, /needs: ci-impact/);
   assert.match(corePr, /needs\.ci-impact\.result == 'success'/);
   assert.match(corePr, /requiredJobs, 'core-pr'/);
@@ -1568,7 +1569,8 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'lint',
     'web-contracts-pr',
     'web-pr-smoke',
-    'playwright-functional'
+    'playwright-functional',
+    'playwright-performance'
   ]);
   assert.match(
     gate,
@@ -1588,6 +1590,10 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   assert.match(gate, /CI_IMPACT_NEEDS_JSON: \$\{\{ toJSON\(needs\) \}\}/);
   assert.match(gate, /CI_IMPACT_EXPECTED_PROFILE: pr/);
   assert.match(gate, /CI_IMPACT_EXPECTED_WORKFLOW_SHA: \$\{\{ github\.sha \}\}/);
+  // The trusted helper reads dev's state itself; the workflow passes only its inputs.
+  assert.match(gate, /CI_IMPACT_REPOSITORY: \$\{\{ github\.repository \}\}/);
+  assert.match(gate, /CI_IMPACT_PR_LABELS_JSON: \$\{\{ toJSON\(github\.event\.pull_request\.labels\.\*\.name\) \}\}/);
+  assert.match(gate, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
   assert.match(gate, /node \.ci-trusted-base\/tools\/ci-impact\.mjs gate/);
   assert.doesNotMatch(gate, /test "\$\{\{ needs\./);
   assert.doesNotMatch(gate, /gh api|curl|check-web-change-budget|pull_request_target/);
@@ -1617,15 +1623,18 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
       );
     }
   }
-  // The trusted plan selects functional Playwright on pull requests; the job is shared with dev.
-  assert.match(
-    workflowJob('playwright-functional'),
-    /\(\(github\.event_name == 'pull_request' && github\.base_ref == 'dev'\) \|\|/
-  );
+  // The trusted plan selects functional Playwright and the performance smoke on pull requests;
+  // both jobs are shared with dev.
+  for (const jobId of ['playwright-functional', 'playwright-performance']) {
+    assert.match(
+      workflowJob(jobId),
+      /\(\(github\.event_name == 'pull_request' && github\.base_ref == 'dev'\) \|\|/,
+      jobId
+    );
+  }
   for (const jobId of [
     'core',
     'browser',
-    'playwright-performance',
     'acceptance-supported-main',
     'slow-main',
     'vibrio-generate-release',
