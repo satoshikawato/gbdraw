@@ -63,6 +63,20 @@ test('a Circular drag across the display origin gives a span that wraps the sour
   assert.deepEqual(sourceSpanOf(axis.source, { start: 16_560, length: 21 }), { start: 15_991, end: 16_011, length: 21, wrapsOrigin: false });
 });
 
+// The origin-crossing twin (tools/twins.json): the Web disables New drawing from region live, from wrapsOrigin;
+// Python refuses the same source span (tests/test_region_drawing.py reads the same vectors).
+const ORIGIN_CROSSING = JSON.parse(readFileSync(new URL('../fixtures/region_origin_crossing_vectors.json', import.meta.url), 'utf8')).cases;
+
+test('a span crosses the origin on the Web exactly when Python refuses it as crossing the origin', () => {
+  assert.ok(ORIGIN_CROSSING.some(({ pythonOutcome }) => pythonOutcome === 'ORIGIN_CROSSING'));
+  assert.ok(ORIGIN_CROSSING.some(({ pythonOutcome }) => pythonOutcome === 'accepted'));
+  for (const { name, axisSource, displaySpan, sourceSpan, pythonOutcome } of ORIGIN_CROSSING) {
+    const source = sourceSpanOf(axisSource, displaySpan);
+    assert.deepEqual(source, sourceSpan, name);
+    assert.equal(source.wrapsOrigin, pythonOutcome === 'ORIGIN_CROSSING', name);
+  }
+});
+
 test('a whole turn selects the whole record, 1 to its length, not a span across the origin', () => {
   const [mito] = caseRecords('circular-display-start');
   const { axis } = mito;

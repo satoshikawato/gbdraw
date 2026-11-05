@@ -1,0 +1,181 @@
+{
+ "description": "New drawing from region on a circular record: a span whose start is after its end crosses the origin and cannot be drawn on its own. The Web (gbdraw/web/js/services/region-axis.js sourceSpanOf, read by gbdraw/web/js/app/region-select.js) turns a dragged display span into a source span and disables the action when wrapsOrigin is true; Python (gbdraw/api/region_drawing.py _resolve_regions) refuses the same source span with StartAfterEndRegion, reason ORIGIN_CROSSING. Each case gives the axis source map Python writes for the 16,569 bp record of tests/test_inputs/HmmtDNA.gbk (anchorBase is the display start, step -1 a reverse-complemented record), a display span (start index, length in bases), the source span the Web gives for it, and Python's outcome for that source span: accepted, or ORIGIN_CROSSING. Read by tests/web/region-axis.test.mjs and tests/test_region_drawing.py.",
+ "cases": [
+  {
+   "name": "a span inside the record",
+   "axisSource": {
+    "anchorBase": 1,
+    "recordBase": 1,
+    "step": 1,
+    "sourceLength": 16569,
+    "drawnLength": 16569,
+    "isCircular": true
+   },
+   "displaySpan": {
+    "start": 99,
+    "length": 801
+   },
+   "sourceSpan": {
+    "start": 100,
+    "end": 900,
+    "length": 801,
+    "wrapsOrigin": false
+   },
+   "pythonOutcome": "accepted"
+  },
+  {
+   "name": "a span across the origin",
+   "axisSource": {
+    "anchorBase": 1,
+    "recordBase": 1,
+    "step": 1,
+    "sourceLength": 16569,
+    "drawnLength": 16569,
+    "isCircular": true
+   },
+   "displaySpan": {
+    "start": 16000,
+    "length": 770
+   },
+   "sourceSpan": {
+    "start": 16001,
+    "end": 201,
+    "length": 770,
+    "wrapsOrigin": true
+   },
+   "pythonOutcome": "ORIGIN_CROSSING"
+  },
+  {
+   "name": "a whole turn of a rotated record is the whole record, 1 to its length",
+   "axisSource": {
+    "anchorBase": 16000,
+    "recordBase": 1,
+    "step": 1,
+    "sourceLength": 16569,
+    "drawnLength": 16569,
+    "isCircular": true
+   },
+   "displaySpan": {
+    "start": 0,
+    "length": 16569
+   },
+   "sourceSpan": {
+    "start": 1,
+    "end": 16569,
+    "length": 16569,
+    "wrapsOrigin": false
+   },
+   "pythonOutcome": "accepted"
+  },
+  {
+   "name": "one base short of a whole turn of a rotated record crosses the origin",
+   "axisSource": {
+    "anchorBase": 16000,
+    "recordBase": 1,
+    "step": 1,
+    "sourceLength": 16569,
+    "drawnLength": 16569,
+    "isCircular": true
+   },
+   "displaySpan": {
+    "start": 0,
+    "length": 16568
+   },
+   "sourceSpan": {
+    "start": 16000,
+    "end": 15998,
+    "length": 16568,
+    "wrapsOrigin": true
+   },
+   "pythonOutcome": "ORIGIN_CROSSING"
+  },
+  {
+   "name": "a reverse-complemented record: a span that does not cross the origin",
+   "axisSource": {
+    "anchorBase": 16569,
+    "recordBase": 16569,
+    "step": -1,
+    "sourceLength": 16569,
+    "drawnLength": 16569,
+    "isCircular": true
+   },
+   "displaySpan": {
+    "start": 100,
+    "length": 500
+   },
+   "sourceSpan": {
+    "start": 15970,
+    "end": 16469,
+    "length": 500,
+    "wrapsOrigin": false
+   },
+   "pythonOutcome": "accepted"
+  },
+  {
+   "name": "a reverse-complemented record: a span across the origin",
+   "axisSource": {
+    "anchorBase": 16569,
+    "recordBase": 16569,
+    "step": -1,
+    "sourceLength": 16569,
+    "drawnLength": 16569,
+    "isCircular": true
+   },
+   "displaySpan": {
+    "start": 16300,
+    "length": 400
+   },
+   "sourceSpan": {
+    "start": 16439,
+    "end": 269,
+    "length": 400,
+    "wrapsOrigin": true
+   },
+   "pythonOutcome": "ORIGIN_CROSSING"
+  },
+  {
+   "name": "a rotated record: a span away from 12 o'clock that crosses the origin",
+   "axisSource": {
+    "anchorBase": 16000,
+    "recordBase": 1,
+    "step": 1,
+    "sourceLength": 16569,
+    "drawnLength": 16569,
+    "isCircular": true
+   },
+   "displaySpan": {
+    "start": 560,
+    "length": 21
+   },
+   "sourceSpan": {
+    "start": 16560,
+    "end": 11,
+    "length": 21,
+    "wrapsOrigin": true
+   },
+   "pythonOutcome": "ORIGIN_CROSSING"
+  },
+  {
+   "name": "a rotated record: a span across 12 o'clock that does not cross the origin",
+   "axisSource": {
+    "anchorBase": 16000,
+    "recordBase": 1,
+    "step": 1,
+    "sourceLength": 16569,
+    "drawnLength": 16569,
+    "isCircular": true
+   },
+   "displaySpan": {
+    "start": 16560,
+    "length": 21
+   },
+   "sourceSpan": {
+    "start": 15991,
+    "end": 16011,
+    "length": 21,
+    "wrapsOrigin": false
+   },
+   "pythonOutcome": "accepted"
+  }
+ ]
+}
