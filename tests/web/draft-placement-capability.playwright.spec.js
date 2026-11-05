@@ -167,7 +167,7 @@ const placeLane = (page, side) => page.evaluate(async (lane) => {
 }, side);
 const placeOutward = (page) => placeLane(page, 'outward');
 // The placements are Circular edits: `row` is the Circular drawing's row, also
-// while Linear is shown (PD-OI-086).
+// while Linear is shown (PD-OI-090).
 const placementState = (page, key) => page.evaluate(async (overrideKey) => {
   const { state } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');

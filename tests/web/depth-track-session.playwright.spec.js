@@ -1042,7 +1042,7 @@ test('Custom Track disclosure and editable IDs preserve transient row identity i
   const result = await page.evaluate(async (drawingIds) => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
-    // Each drawing has its own settings (PD-OI-086): `app.adv` is the shown
+    // Each drawing has its own settings (PD-OI-090): `app.adv` is the shown
     // one, so each part waits until its drawing is shown (a switch waits while busy).
     const showDrawingById = async (drawingId) => {
       for (let tries = 0; tries < 300 && state.activeDrawingId.value !== drawingId; tries += 1) {

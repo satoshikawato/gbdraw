@@ -88,7 +88,7 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
     ];
   }, target.id)).toEqual(['linear', 'auto', 'default', true]);
   // A mode change and the Linear Generate keep the Circular rows in the
-  // Circular drawing (R2, PD-OI-086); the Linear drawing has none.
+  // Circular drawing (R2, PD-OI-090); the Linear drawing has none.
   expect(linear.drafts).toEqual([[], []]);
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');

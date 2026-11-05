@@ -11,7 +11,7 @@ const rename = async (page, text) => {
 
 const labelIntent = state => ({ labels: state.labels, bulk: state.bulkLabels,
   sources: state.labelSources, visibility: state.visibility });
-// Label edits belong to the mode they were made in (PD-OI-086): a mode used
+// Label edits belong to the mode they were made in (PD-OI-090): a mode used
 // for the first time has none.
 const noLabelIntent = { labels: {}, bulk: {}, sources: {}, visibility: {} };
 

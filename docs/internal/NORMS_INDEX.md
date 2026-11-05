@@ -240,7 +240,7 @@ are listed under "Cited ids without a record".
 | [PD-OI-087](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-087-feature-based-display-start-only-in-the-feature-popup) | Feature-based display start only in the feature popup | ACCEPTED | web.record-display.feature-start-shortcuts | 1 | — | 1 |
 | [PD-OI-088](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-088-popup-dialog-busy-until-its-choice-commits) | Popup dialog busy until its choice commits | ACCEPTED | web.popup-dialog-choice-application | 1 | — | 8 |
 | [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette) | Default colors a user edits win over the palette | ACCEPTED | web.default-colors-over-palette | 2 | scenario revision 1 | 2 |
-| [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings) | Project with drawings | ACCEPTED | session.project-drawings | 10 | scenario revision 9 | 36 |
+| [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings) | Project with drawings | ACCEPTED | session.project-drawings | 10 | scenario revision 9 | 47 |
 | [PD-OI-091](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-091-per-record-draw-onoff) | Per-record draw ON/OFF | ACCEPTED | diagram-generation.record-draw-selection | 1 | — | 2 |
 | [PD-OI-092](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-092-settings-pane-section-index) | Settings pane section index | ACCEPTED | web.settings-pane.section-index | 2 | scenario revision 1 | 2 |
 | [PD-OI-093](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-093-settings-pane-display-switch-and-icon-rail) | Settings pane display switch and icon rail | ACCEPTED | web.settings-pane.display | 4 | scenario revision 3 | 1 |
@@ -527,13 +527,18 @@ are listed under "Cited ids without a record".
 - [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings)
   - `tests/test_session_compat.py`
   - `tests/test_session_drawings.py`
+  - `tests/test_session_io.py`
+  - `tests/web/annotation-feature-identity.playwright.spec.js`
   - `tests/web/artifact-slots.test.mjs`
   - `tests/web/auxiliary-file-history.playwright.spec.js`
   - `tests/web/circular-track-measure-input.playwright.spec.js`
   - `tests/web/depth-slot-lifecycle.test.mjs`
+  - `tests/web/depth-track-session.playwright.spec.js`
+  - `tests/web/draft-placement-capability.playwright.spec.js`
   - `tests/web/drawing-bar.playwright.spec.js`
   - `tests/web/drawing-inputs.test.mjs`
   - `tests/web/drawing-list.test.mjs`
+  - `tests/web/feature-label-visual-unit.test.mjs`
   - `tests/web/helpers/app-lifecycle.cjs`
   - `tests/web/helpers/drawing-bar.cjs`
   - `tests/web/helpers/drawing-state.mjs`
@@ -546,8 +551,10 @@ are listed under "Cited ids without a record".
   - `tests/web/history-router-members.test.mjs`
   - `tests/web/history.test.mjs`
   - `tests/web/linear-multi-record.playwright.spec.js`
+  - `tests/web/live-generate-parity-legend.playwright.spec.js`
   - `tests/web/live-setting-application.test.mjs`
   - `tests/web/mode-record-identity.playwright.spec.js`
+  - `tests/web/mode-scoped-feature-edits.playwright.spec.js`
   - `tests/web/mode-scoped-settings.playwright.spec.js`
   - `tests/web/mode-transition-editor-state.playwright.spec.js`
   - `tests/web/mode-transition-result.playwright.spec.js`
@@ -556,11 +563,15 @@ are listed under "Cited ids without a record".
   - `tests/web/per-mode-results.playwright.spec.js`
   - `tests/web/region-drawing.playwright.spec.js`
   - `tests/web/region-drawing.test.mjs`
+  - `tests/web/scale-visibility.playwright.spec.js`
   - `tests/web/session-active-mode.playwright.spec.js`
   - `tests/web/session-loading-feedback.playwright.spec.js`
+  - `tests/web/setting-application.test.mjs`
   - `tests/web/settings-only-session.playwright.spec.js`
   - `tests/web/specific-color-pattern-drafts.playwright.spec.js`
   - `tests/web/stored-request-read.test.mjs`
+  - `tests/web/svg-style-completion.test.mjs`
+  - `tests/web/track-layout-transition.playwright.spec.js`
 - [PD-OI-091](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-091-per-record-draw-onoff)
   - `tests/web/mode-scoped-session.test.mjs`
   - `tests/web/record-draw-selection.playwright.spec.js`
@@ -690,23 +701,6 @@ are listed under "Cited ids without a record".
 - `PD-OI-086`: no record. Records that mention it: [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette), [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings).
   - `tests/fixtures/sessions/two-mode-project.provenance.json`
   - `tests/fixtures/sessions/two-mode-thresholds.provenance.json`
-  - `tests/test_session_io.py`
-  - `tests/web/annotation-feature-identity.playwright.spec.js`
-  - `tests/web/depth-track-session.playwright.spec.js`
-  - `tests/web/draft-placement-capability.playwright.spec.js`
-  - `tests/web/feature-label-visual-unit.test.mjs`
-  - `tests/web/history-inputs.playwright.spec.js`
-  - `tests/web/linear-multi-record.playwright.spec.js`
-  - `tests/web/live-generate-parity-legend.playwright.spec.js`
-  - `tests/web/mode-record-identity.playwright.spec.js`
-  - `tests/web/mode-scoped-feature-edits.playwright.spec.js`
-  - `tests/web/mode-scoped-settings.playwright.spec.js`
-  - `tests/web/mode-transition-editor-state.playwright.spec.js`
-  - `tests/web/per-mode-results.playwright.spec.js`
-  - `tests/web/scale-visibility.playwright.spec.js`
-  - `tests/web/setting-application.test.mjs`
-  - `tests/web/svg-style-completion.test.mjs`
-  - `tests/web/track-layout-transition.playwright.spec.js`
 - `PD-OI-900`: no record. No record mentions it.
   - `tests/web/architecture-contracts.test.mjs`
 

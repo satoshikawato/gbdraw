@@ -308,7 +308,7 @@ test('OV-21: an annotation of a selected Circular feature stays out of Linear re
   expect(await drawnAnnotations(page)).toEqual([]);
   expect(await annotationWarnings(page)).toEqual([]);
   // A mode change and the Linear Generate keep the Circular target in the
-  // Circular drawing (R2, PD-OI-086); the Linear drawing has none.
+  // Circular drawing (R2, PD-OI-090); the Linear drawing has none.
   expect(await annotationTargets(page)).toEqual([]);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');

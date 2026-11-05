@@ -3844,7 +3844,7 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   const linearId = (await shownDrawing(page)).id;
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(({ row }) => row)))
     .toEqual([1, 1, 2, 2, 2]);
-  // Each mode has its own drawing (PD-OI-086): the Circular opt-out is the
+  // Each mode has its own drawing (PD-OI-090): the Circular opt-out is the
   // Circular drawing's, set while Linear is shown.
   await page.evaluate(async (id) => {
     const app = window.__GBDRAW_APP__;
