@@ -21,31 +21,10 @@ WORKFLOW = (
 ).read_text(encoding="utf-8")
 
 
-def test_fixed_gallery_performance_baseline_enforces_125_percent_gate() -> None:
-    for operation, values in BASELINE["operations"].items():
-        trials = [
-            {"wallSeconds": wall, "peakRssKiB": rss}
-            for wall, rss in zip(
-                values["wallSeconds"],
-                values["peakRssKiB"],
-                strict=True,
-            )
-        ]
-        assert enforce_performance_gate(BASELINE, operation, trials)["passed"]
-
-    failing_trials = [
-        {
-            "wallSeconds": BASELINE["operations"]["projection"][
-                "wallMedianSeconds"
-            ]
-            * 1.26,
-            "peakRssKiB": BASELINE["operations"]["projection"][
-                "peakRssMaxKiB"
-            ],
-        }
-    ] * 3
-    with pytest.raises(RuntimeError, match="wall-time regression"):
-        enforce_performance_gate(BASELINE, "projection", failing_trials)
+def test_workflow_measures_the_checked_in_fixed_base() -> None:
+    # The tool refuses a --baseline-revision other than baseSha only when it
+    # runs; this finds a base moved in one file but not the other before then.
+    assert WORKFLOW.count(f"--baseline-revision {BASELINE['baseSha']}") == 2
 
 
 def test_runtime_baseline_compares_trials_from_the_same_environment() -> None:
@@ -95,9 +74,10 @@ def test_complete_refresh_performance_gate_is_manual_only() -> None:
     ) in WORKFLOW
 
 
+@pytest.mark.parametrize("operation", ["projection", "refresh"])
 @pytest.mark.parametrize("metric", ["peakRssKiB", "wallSeconds"])
-def test_projection_failure_retains_all_trials_and_measures_fixed_base(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, metric: str
+def test_gate_failure_retains_all_trials_and_measures_fixed_base(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, metric: str, operation: str
 ) -> None:
     baseline_trials = [
         {"wallSeconds": 1.2, "peakRssKiB": 1_082_000},
@@ -113,21 +93,21 @@ def test_projection_failure_retains_all_trials_and_measures_fixed_base(
             trial[metric] = 1.6
     calls = []
 
-    def run_trial(operation: str, revision: str, index: int) -> dict:
-        calls.append((operation, revision, index))
+    def run_trial(measured: str, revision: str, index: int) -> dict:
+        calls.append((measured, revision, index))
         trials = baseline_trials if revision == BASELINE["baseSha"] else head_trials
         return trials[index - 1]
 
     monkeypatch.setattr(measurement, "_run_trial", run_trial)
     monkeypatch.setattr(measurement.subprocess, "check_output", lambda *a, **kw: "v20.20.2\n")
     output = tmp_path / "failed.json"
-    # Omission of --baseline-revision must not compare the new profile against
-    # historical measurements collected with a different Node/GC configuration.
+    # Without --baseline-revision the tool still measures the fixed base in
+    # this environment; it has no recorded measurements to fall back on.
     assert measurement.main([
-        "projection", "--revision", "candidate", "--output", str(output)
+        operation, "--revision", "candidate", "--output", str(output)
     ]) == 1
     assert calls == [
-        ("projection", revision, index)
+        (operation, revision, index)
         for revision in (BASELINE["baseSha"], "candidate")
         for index in (1, 2, 3)
     ]
@@ -136,7 +116,9 @@ def test_projection_failure_retains_all_trials_and_measures_fixed_base(
     assert report["trials"] == head_trials
     assert report["summary"]["passed"] is False
     assert "regression" in report["summary"]["error"]
-    assert report["nodeVersion"] == "v20.20.2"
+    assert report.get("nodeVersion") == (
+        "v20.20.2" if operation == "projection" else None
+    )
 
 
 @pytest.mark.parametrize("trials", [0, 1, 2, 4])

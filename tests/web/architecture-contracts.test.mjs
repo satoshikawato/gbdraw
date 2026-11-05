@@ -1808,7 +1808,7 @@ test('Gallery readiness routes jobs from direct-parent evidence and aggregates t
   assert.match(performance, /github\.event_name == 'workflow_dispatch' && inputs\.complete_refresh/);
   assert.match(performance, /measure_gallery_publication_performance\.py refresh/);
   assert.equal(
-    [...performance.matchAll(/--baseline-revision 574b33b83962949397839e2aaa862a8b96667625/g)].length,
+    [...performance.matchAll(/--baseline-revision 8b8afec97af3591e36fabba5873970832410f98c/g)].length,
     2
   );
 

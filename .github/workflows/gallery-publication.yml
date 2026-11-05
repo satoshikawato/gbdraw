@@ -114,13 +114,13 @@ jobs:
       - name: Enforce three-trial projection gate
         run: >-
           python tools/measure_gallery_publication_performance.py projection
-          --baseline-revision 574b33b83962949397839e2aaa862a8b96667625
+          --baseline-revision 8b8afec97af3591e36fabba5873970832410f98c
           --revision ${{ github.sha }}
       - name: Enforce three-trial complete-refresh gate
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.complete_refresh }}
         run: >-
           python tools/measure_gallery_publication_performance.py refresh
-          --baseline-revision 574b33b83962949397839e2aaa862a8b96667625
+          --baseline-revision 8b8afec97af3591e36fabba5873970832410f98c
           --revision ${{ github.sha }}
 
   readiness-gate:
