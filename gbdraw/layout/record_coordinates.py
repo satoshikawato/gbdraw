@@ -14,13 +14,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from math import ceil, isfinite
-from typing import TYPE_CHECKING, Literal, Mapping, Sequence, TypeVar, cast
+from typing import Literal, Mapping, Sequence, TypeVar, cast
 
-from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ValidationError
-
-if TYPE_CHECKING:
-    from Bio.SeqRecord import SeqRecord
 
 
 _Coordinate = TypeVar("_Coordinate", int, float)
@@ -608,33 +604,6 @@ class RecordDisplayTransform:
             else span.end - self._anchor_boundary
         )
         return (distance / (span.end - span.start),)
-
-
-def unset_record_transform(record: SeqRecord) -> RecordDisplayTransform:
-    """The transform of a record no plan bound one to, from its coordinate map."""
-
-    base, step = _read_coord_map(record)
-    length = len(record.seq)
-    if step == 1:
-        return RecordDisplayTransform(base + length - 1, base, 1, None, False)
-    return RecordDisplayTransform(max(base, length), base, -1, None, False)
-
-
-def bound_record_transform(record: SeqRecord, transform: RecordDisplayTransform | None) -> RecordDisplayTransform:
-    """The transform a record is drawn by: its bound one, else the one its coordinate map gives."""
-
-    return transform if transform is not None else unset_record_transform(record)
-
-
-def spans_may_cross_origin(record: SeqRecord, transform: RecordDisplayTransform | None) -> bool:
-    """Whether a span of the record may cross its origin: the record is drawn as circular (its transform, else its
-    file's topology) and no region was applied to it (a crop has no origin, even one that keeps every base)."""
-
-    is_circular = (
-        transform.is_circular if transform is not None
-        else str(record.annotations.get("topology", "")).strip().lower() == "circular"
-    )
-    return is_circular and not bool(record.annotations.get("gbdraw_region_applied"))
 
 
 def alignment_cut_breakpoints(

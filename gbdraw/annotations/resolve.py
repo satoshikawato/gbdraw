@@ -20,7 +20,8 @@ from gbdraw.features.selector_values import (
     matches_feature_selector,
 )
 from gbdraw.io.record_select import RecordSelector
-from gbdraw.layout.record_coordinates import RecordDisplayTransform, spans_may_cross_origin
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_transform import spans_may_cross_origin
 
 from .io import annotation_sets_from_dataframe, read_annotation_table
 from .models import (

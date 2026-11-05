@@ -43,7 +43,7 @@ def _compute_case(radius_px: float, layout: str, side: str, width_px: float | No
             {"labels.circular.scope": "none", "canvas.circular.track_type": "tuckin"},
         )
     )
-    record = SimpleNamespace(seq="N" * TOTAL_LENGTH, id="vector")
+    record = SimpleNamespace(seq="N" * TOTAL_LENGTH, id="vector", annotations={})
     canvas = CircularCanvasConfigurator("vector", CircularRenderProfile(cfg), "none", record)
     canvas.radius = radius_px
     ticks = CircularTrackSlot(

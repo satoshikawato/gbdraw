@@ -18,7 +18,8 @@ from gbdraw.config.models.root import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import VerticalBand
 from gbdraw.layout.linear_multi_record import stable_record_keys
-from gbdraw.layout.record_coordinates import RecordDisplayTransform, unset_record_transform, wrapped_row_count
+from gbdraw.layout.record_coordinates import RecordDisplayTransform, wrapped_row_count
+from gbdraw.layout.record_transform import unset_record_transform
 from gbdraw.layout.record_placement import FeatureAnchorPlacement
 
 

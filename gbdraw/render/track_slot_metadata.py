@@ -17,7 +17,8 @@ from typing import Any, Literal, Mapping, Sequence, TypedDict
 
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.layout.record_coordinates import RecordDisplayTransform, bound_record_transform, spans_may_cross_origin
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_transform import bound_record_transform, spans_may_cross_origin
 from gbdraw.svg.circular_arcs import position_angle
 
 
