@@ -7,10 +7,11 @@ path and its line numbers. The public
 [session and request compatibility reference](../REFERENCE/session-and-request-compatibility.md)
 documents current support and what a user does with an older file, including
 the [retired inputs](../REFERENCE/session-and-request-compatibility.md#retired-inputs).
-Release notes record when a format changed. A Session version changes when a
-breaking change enters `main`; a later breaking change made before that version
-reaches `main` goes into its entry
-([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
+Release notes record when a format changed. Each heading below starts with the
+release that first shipped its entry, or with `Unreleased:` while the entry is
+only on `dev`. A Session version changes when a breaking change enters `main`;
+a later breaking change made before that version reaches `main` goes into its
+entry ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
 ## Unreleased: Session 51 stores drawings
 
@@ -83,7 +84,7 @@ and title at the bottom and states them in what it saves. The format does not ch
 request this way before; only the Web's reading changes. Positive fixture:
 `tests/fixtures/sessions/python-linear-absent-output.v51.gbdraw-session.json.gz` (Python `save_session_document`).
 
-## Unreleased: Session 50 stores the Linear wrap length, italic gene names, and the identity colour scale
+## 0.14.5: Session 50 stores the Linear wrap length, italic gene names, and the identity colour scale
 
 Session version 50 adds the config leaf `canvas.linear.wrap_length` (`"none"`,
 `"auto"`, or a positive length in bp) and the Linear slice's
@@ -130,7 +131,7 @@ scale, as a Session without a scale draws. The keys reached no `main` Session
 before 50 and share its version; a Session up to 49 has none and loads without
 a fixed scale, and no reader converts it.
 
-## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
+## 0.14.3: Session 49 stores whether a Circular slice shows the centre definition
 
 Session version 49 adds `adv.show_definition` (boolean, Circular **Show
 Definition**, PD-OI-109) to the Circular slice (`modes.circular.config.adv`),
@@ -153,7 +154,7 @@ current one, so Session 48 keeps its settings-only form. The Gallery and
 test-input Sessions were refreshed to 49 (`tools/refresh_gallery_sessions.py`).
 Positive fixtures of Session 48: `tests/fixtures/sessions/*.v48.*`.
 
-## Unreleased: Collinear defaults and value sets
+## 0.14.4: Collinear defaults and value sets
 
 No Session or request version changes; the generated request description and
 `LEGACY_REQUEST_TABLES` change (`tools/generate_web_contracts.py`).
@@ -222,7 +223,7 @@ draft) (provenance in `BGC0000708-BGC0000713.v49-one-to-one.provenance.json`). I
 `tests/retired_sessions/`, outside the folders the scans of stored Sessions read, because
 they refuse a value outside the description.
 
-## Unreleased: derived LOSATP token v6 for a CDS across the origin in the Web and for score ties ordered by CDS
+## 0.14.5: derived LOSATP token v6 for a CDS across the origin in the Web and for score ties ordered by CDS
 
 No Session, request, or derived envelope version changes. 0.14.4 writes token
 `derived-option-conformance-v4`; the token becomes `derived-option-conformance-v6`
@@ -247,7 +248,7 @@ no search runs again and no reader reads them.
   Web pages. Ties now follow the CDS order (record, then location), so a derived
   entry written before has rows of the old order for the same identity.
 
-## Unreleased: derived LOSATP token v4 for chained Collinear blocks
+## 0.14.4: derived LOSATP token v4 for chained Collinear blocks
 
 No Session, request, or derived envelope version changes. Collinear blocks are
 now the longest compatible chains of anchors (OV-2294..2296), and the block
@@ -259,7 +260,7 @@ reader reads them. Saved `collinearity-result` resources keep their shape:
 `CollinearityBlock` still has `blockEvalue`, `label`, and the `syntenic` kind,
 which the block caller no longer writes.
 
-## Unreleased: LOSAT runtime records without `cli` or `bundled`
+## 0.14.3: LOSAT runtime records without `cli` or `bundled`
 
 No Session or request version changes. The source tree no longer holds a LOSAT
 build, so new CLI and Python writers no longer write the `cli` dialect field in
@@ -275,7 +276,7 @@ whose 12 records are `{source: "bundled", path: "gbdraw/bin/linux-x86_64/losat",
 cli: "v1"}`; `tests/web/run-info.test.mjs` and `tests/web/losat-cache.test.mjs`
 pin how the Web reads them.
 
-## Unreleased: the palette `hearbal_garden` reads as `herbal_garden`
+## 0.14.3: the palette `hearbal_garden` reads as `herbal_garden`
 
 No Session or request version changes. Releases through v0.14.2 shipped the
 packaged palette as `hearbal_garden` (`gbdraw/data/color_palettes.toml`). A
@@ -307,7 +308,7 @@ the former name to it, through `current_palette_name` in Python and
 Fixture: `tests/fixtures/sessions/HmmtDNA-hearbal-garden-cli.v48`, written by
 v0.14.2.
 
-## Unreleased: per-feature rows follow their record to a new key
+## 0.14.3: per-feature rows follow their record to a new key
 
 No Session or request version changes, and no reader changes. A per-feature
 row (`featureOverrides`, `featurePlacementOverrides`, `featureStrokeOverrides`,
@@ -334,7 +335,7 @@ alone no longer keeps a stored `record-<n>` key that names another record.
 Fixture: `tests/fixtures/sessions/record-identity-circular-single.v48`, written
 by `v0.14.2`.
 
-## Unreleased: one comparison-match attribute in saved Results
+## 0.14.2: one comparison-match attribute in saved Results
 
 No Session or request version changes. On the first-parent line of `main`,
 from cc707a5be (#254, 2026-06-18, Session 27) until 7ec9ce7cc (#304,
@@ -355,7 +356,7 @@ Python upgrade drops Results without a feature catalog. Fixtures:
 `cli-linear-protein.v30`; no fixture holds a Session 27, 28, 31 or 32 comparison, which takes
 the same legacy admission (below Session 40).
 
-## Unreleased: Session 48 stores protein results in the search frame, what each file card loaded, and the feature label style
+## 0.14.0: Session 48 stores protein results in the search frame, what each file card loaded, and the feature label style
 
 Session version 48 stores the protein results of a reverse-complemented Linear
 record in the record's search frame (the selected and cropped record on its
@@ -461,7 +462,7 @@ config that holds it loads and draws the new leader width (0.07 em, at least
 1 px); an override of it fails with the unknown-path error. No other field
 changed.
 
-## Unreleased: Session 47 keys the Legend edits by the row key
+## 0.14.0: Session 47 keys the Legend edits by the row key
 
 Session version 47 stores each mode slice's Legend color and stroke edits
 (`editorState.legend.colorOverrides` and `strokeOverrides`) under the row key:
@@ -522,7 +523,7 @@ The multi-drawing format planned as "Session 47" in PD-OI-090 becomes Session
 48 (Owner decision of 2026-10-13, quoted in the Product Contract revision
 that records PD-OI-061 scenario revision 5).
 
-## Unreleased: Session 46 keeps the settings and the Result of each diagram mode
+## 0.14.0: Session 46 keeps the settings and the Result of each diagram mode
 
 In the Web app, Circular and Linear each keep their own settings, edits, and
 Result. A setting or an edit made in one mode, and a Generate, stay in that
@@ -609,7 +610,7 @@ also changes these parts that both sets share:
   them), the protein references are rewritten throughout the Session.
 - Resources that neither set's request nor the Web files name are dropped.
 
-## Unreleased: Web Load of 0.13.0 Sessions
+## 0.14.0: Web Load of 0.13.0 Sessions
 
 Session version 46 is unchanged. Sessions 27–30, written by gbdraw 0.13.0 and
 earlier, have no canonical `renderRequest`. The Web app loads such a Session
@@ -625,7 +626,7 @@ names the field and the track row, and the previous Session stays loaded. The
 current Custom Track Slots use `radius`, `width`, `inner_gap_px`,
 `outer_gap_px`, `side`, and `z`.
 
-## Unreleased: Web Load of Session 31–39 table rows
+## 0.14.0: Web Load of Session 31–39 table rows
 
 Session version 46 is unchanged. The Web writers of Sessions 31–39 stored the
 Default colors, Label whitelist, and Qualifier priority tables without
@@ -644,7 +645,7 @@ as read. Sessions 40 and later are read as before, and table file imports
 still reject such a row. When another table of a Session fails to load, the
 message names the table, for example `Session table: Specific colors.`
 
-## Unreleased: Session 46 and Web feature edits by source identity
+## 0.14.0: Session 46 and Web feature edits by source identity
 
 Session version 46 stores the Web app's Feature visibility, Label visibility,
 and label text edits in each mode's `features.featureOverrides`: one row per
@@ -711,7 +712,7 @@ placement goes to the slice of its side's mode, and a Main placement to both
 slices. The CLI applies the same mapping when it replays such a Session with
 `--session_output` or `--save_session`.
 
-## Unreleased: request schema 9 and feature identity overrides
+## 0.14.0: request schema 9 and feature identity overrides
 
 Session version 44 is unchanged. Canonical request schema 9 adds the required
 `diagramOptions.featureOverrides` array and the `featureIdentity` annotation
@@ -726,7 +727,7 @@ this instead of dropping the edits. An exact Feature placement whose identity
 the source does not have no longer fails the render; it becomes a feature
 identity notice.
 
-## Unreleased: value checks, derived label maps, and definition spacing
+## 0.14.0: value checks, derived label maps, and definition spacing
 
 Session version 44 and request schema 8 are unchanged. Replaying a Session, or
 generating from it, applies the value checks shared with the CLI and Python API:
@@ -760,7 +761,7 @@ an integer, as the definition line interval. This restores the 0.13.0 Web and
 CLI spacing. The rule is applied when the overrides are applied, so the stored
 request is unchanged and replay writes the same overrides back.
 
-## Unreleased: records turned off for drawing
+## 0.14.0: records turned off for drawing
 
 Session version 46 and request schema 9 are unchanged. A slice of `modes` may
 hold `config.recordsOff`, the list of record keys the Web app does not draw: a
@@ -770,7 +771,7 @@ holds only the records that are on, so the request has no new field. A CLI
 `--session` replay draws only the records that are on, and a CLI re-save keeps
 `recordsOff` and the settings of the records that are off.
 
-## Unreleased: default label of a precomputed similarity ring
+## 0.14.0: default label of a precomputed similarity ring
 
 Session version 46 and request schema 9 are unchanged. A Circular ring from a
 BLAST table (`--conservation_blast`, Python `ComparisonRingTrackOptions(source=...)`)
@@ -783,7 +784,7 @@ from the Session's file bindings instead of drawing the temporary copy's name
 (`arg3-<file>`). Web Load of such a Session also shows the full file name; it
 showed the name without the extension before.
 
-## Unreleased: a scale interval of 0 or less
+## 0.14.0: a scale interval of 0 or less
 
 Session version 46 and request schema 9 are unchanged. `--scale_interval` and
 `objects.scale.interval` in the Python option objects (`config` and
@@ -796,7 +797,7 @@ flat `scale_interval` that earlier Web Sessions wrote), and in a Session 27–30
 Diagram** draws the automatic interval, and the Source recipe omits
 `--scale_interval`. A value of 0 or less typed into the field behaves the same.
 
-## Unreleased: CLI and Python LOSATN / TLOSATX results
+## 0.14.0: CLI and Python LOSATN / TLOSATX results
 
 Session version 44 and request schema 8 are unchanged. A Linear run with
 `--losat losatn` or `--losat tlosatx` (Python `losat_search` with those
@@ -815,7 +816,7 @@ as typed. The saved request carries the resolved comparisons, not the search
 intent, so replay needs no LOSAT runtime. A request that still carries the
 search intent cannot be encoded; resolve or render it first.
 
-## Unreleased: CLI LOSATP results in Sessions
+## 0.14.0: CLI LOSATP results in Sessions
 
 Session version 47 and the request schema are unchanged. A Linear LOSATP run
 that writes a Session (`--session_output`, `--save_session`, a Gallery
@@ -826,7 +827,7 @@ stores only the `collinearityResult` (no tables); Pairwise stores nothing, so
 its first Generate still searches (OV-1068). The first Web Generate after Load
 reuses what is stored instead of searching again.
 
-## Unreleased: one LOSAT cache entry per raw key
+## 0.14.0: one LOSAT cache entry per raw key
 
 Session version 44 is unchanged. The Web app saved a raw key once per row, so a
 Session with two Circular rings of one sequence repeated the key and could not
@@ -835,7 +836,7 @@ row, as the CLI does. After a load, the cache list shows one row per raw key
 until the next Generate. A version 39 or later Session that repeats a raw key
 is rejected with an `INPUT_INVALID` Session diagnostic.
 
-## Unreleased: comparison rows in the search frame
+## 0.14.0: comparison rows in the search frame
 
 Session version 44 and request schema 8 are unchanged. Comparison rows stored
 in a Session (`nucleotideBlast` resources, uploaded tables, generated LOSATN
@@ -958,13 +959,9 @@ and reject this variant explicitly; they never fall back to legacy argv.
 
 ## Supported versions
 
-Current writers emit one session and request format:
-
-| Format | Current writer | Accepted by current readers |
-|---|---:|---|
-| gbdraw session | 48 | 27–33, 39–42, 44, and 46–48 |
-| Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–48 |
+The current writer and the versions current readers accept are in the table of
+the public
+[session and request compatibility reference](../REFERENCE/session-and-request-compatibility.md).
 
 Previously written Session 44 documents with request schema 7 or 8 and feature
 catalog schema 4 remain readable. Current saves write request schema 9;

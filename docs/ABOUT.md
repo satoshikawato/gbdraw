@@ -25,6 +25,11 @@ Project links:
   [0.14.0b0 beta history](./RELEASE_NOTES_0.14.0b0.md), and the [full changelog](../CHANGELOG.md)
 - [Contributing](../CONTRIBUTING.md) and the [Code of Conduct](../CODE_OF_CONDUCT.md)
 
+If https://gbdraw.app/ becomes unavailable, you can still make the same
+diagrams: [install gbdraw](./INSTALL.md) with pip or conda, then `gbdraw gui`
+runs the same Web app from the installed package, and
+`gbdraw render --session` draws a saved Session from the command line.
+
 ## Acknowledgments and inspiration
 
 `gbdraw` draws inspiration from a number of genome visualization tools and related projects:

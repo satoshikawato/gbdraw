@@ -1,0 +1,56 @@
+name: Feature request
+description: Describe a problem that gbdraw does not solve yet.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start from the problem, not from an implementation. Agreement that a problem belongs in gbdraw does not approve a particular design: wait for the maintainer to confirm the behavior before you write a pull request ([CONTRIBUTING.md](https://github.com/satoshikawato/gbdraw/blob/main/CONTRIBUTING.md)).
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface
+      multiple: true
+      options:
+        - Web app (https://gbdraw.app/ or gbdraw gui)
+        - Command line
+        - Python API
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Diagram mode
+      options:
+        - Circular
+        - Linear
+        - Both or not specific
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behavior
+      description: What gbdraw does now, and why the existing options are not enough.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you would like gbdraw to do. Use the terms of your field where they matter.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: A minimal input, command, or figure that shows the need. Drag a file here to attach it.
+  - type: textarea
+    id: effects
+    attributes:
+      label: Effects on existing work
+      description: Could the change alter existing figures, saved Sessions, commands, or Python code?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other behaviors that would also solve the problem.

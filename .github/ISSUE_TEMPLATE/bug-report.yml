@@ -1,0 +1,86 @@
+name: Bug report
+description: Report something in gbdraw that does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search the [existing issues](https://github.com/satoshikawato/gbdraw/issues) and the Known issues of the latest release notes first.
+        Issues are public: do not include confidential or unpublished sequences. A synthetic or redacted input that still shows the problem is welcome.
+        Report a security vulnerability privately as [SECURITY.md](https://github.com/satoshikawato/gbdraw/blob/main/SECURITY.md) describes, not here.
+  - type: input
+    id: version
+    attributes:
+      label: gbdraw version
+      description: The output of `gbdraw --version`, or the Version line at the bottom of https://gbdraw.app/.
+      placeholder: 0.14.5
+    validations:
+      required: true
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface
+      options:
+        - Web app (https://gbdraw.app/)
+        - Local GUI (gbdraw gui)
+        - Command line
+        - Python API
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installation method
+      description: Skip this for the Web app at https://gbdraw.app/.
+      options:
+        - Bioconda
+        - PyPI
+        - Source
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Diagram mode
+      options:
+        - Circular
+        - Linear
+        - Both or not specific
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you ran
+      description: The exact command or Python code, or the steps in the Web app.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: What happened instead, with the error message or a screenshot.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system or browser
+      description: Needed when the problem depends on the environment.
+      placeholder: Ubuntu 24.04, Python 3.12; or Chrome 140 on Windows 11
+  - type: dropdown
+    id: current-release
+    attributes:
+      label: Does it happen with the latest release?
+      options:
+        - "Yes"
+        - "No"
+        - Not checked
+  - type: textarea
+    id: input
+    attributes:
+      label: Input
+      description: A minimal input file or a small excerpt that shows the problem. Drag a file here to attach it.

@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Known issues of the latest release
+    url: https://github.com/satoshikawato/gbdraw/releases/latest
+    about: The release notes list the problems already known in the current release.
+  - name: Security vulnerability
+    url: https://github.com/satoshikawato/gbdraw/security/advisories/new
+    about: Report a vulnerability privately. Do not open a public issue for it.
+  - name: Documentation and FAQ
+    url: https://github.com/satoshikawato/gbdraw/blob/main/docs/DOCS.md
+    about: How to install gbdraw and draw Circular and Linear diagrams, with answers to common questions.
