@@ -56,7 +56,7 @@ def runtime_target() -> str:
 
 def read_release_lock() -> dict:
     try:
-        lock = json.loads(resources.files("gbdraw.data").joinpath("losat-release.json").read_text())
+        lock = json.loads(resources.files("gbdraw.data").joinpath("losat-release.json").read_text(encoding="utf-8"))
         validate_release_lock(lock)
         return lock
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -122,11 +122,13 @@ def _verify_cache(directory: Path, identity: dict) -> Path | None:
         receipt = directory / "INSTALL.json"
         if directory.is_symlink() or binary.is_symlink() or receipt.is_symlink():
             raise ValueError("symbolic links are not allowed")
-        if json.loads(receipt.read_text()) != identity:
+        if json.loads(receipt.read_text(encoding="utf-8")) != identity:
             raise ValueError("installation identity differs from the pinned release")
         if binary.stat().st_size != identity["binary_size"] or file_sha256(binary) != identity["binary_sha256"]:
             raise ValueError("binary checksum mismatch")
-        result = subprocess.run([str(binary), "--version"], capture_output=True, text=True, timeout=15, check=False)
+        result = subprocess.run(
+            [str(binary), "--version"], capture_output=True, text=True, encoding="utf-8", timeout=15, check=False
+        )
         if result.returncode or result.stdout.strip() != f"losat {identity['version']}":
             raise ValueError(f"version check failed: {result.stderr.strip() or result.stdout.strip()}")
         return binary
@@ -255,7 +257,7 @@ def setup_losat() -> Path:
                 staged = temporary / "install"
                 staged.mkdir()
                 _unpack_binary(archive, staged, identity)
-                (staged / "INSTALL.json").write_text(json.dumps(identity, indent=2) + "\n")
+                (staged / "INSTALL.json").write_text(json.dumps(identity, indent=2) + "\n", encoding="utf-8")
                 _verify_cache(staged, identity)
                 os.replace(staged, directory)
                 return directory / identity["binary"]
