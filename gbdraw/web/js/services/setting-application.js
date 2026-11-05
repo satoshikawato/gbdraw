@@ -36,8 +36,9 @@ import { msg, t, tm } from '../utils/i18n.js';
  * dotted path in the drawing's History intent (as in `SettingRequestPaths`):
  * on a figure drawn to a requested size, a History step that changes what
  * they draw asks the automatic rerender to fit the figure again (Figure size,
- * PD-OI-114 rev 2; `refitFieldsBeforeStep`), and the help says so.
- * @typedef {{ readonly id: SettingApplicationId, readonly application: SettingApplicationClass, readonly note?: string, readonly partialNote?: string, readonly help?: string, readonly requestPaths?: SettingRequestPaths, readonly refitPaths?: Readonly<Record<string, RefitField>> }} SettingApplicationRow
+ * PD-OI-114 rev 2; `refitFieldsBeforeStep`), and the help says so in
+ * `refitHelp`, which names the edits that do (review S4, D-61).
+ * @typedef {{ readonly id: SettingApplicationId, readonly application: SettingApplicationClass, readonly note?: string, readonly partialNote?: string, readonly help?: string, readonly requestPaths?: SettingRequestPaths, readonly refitPaths?: Readonly<Record<string, RefitField>>, readonly refitHelp?: string }} SettingApplicationRow
  */
 /**
  * A drawing's draft field that Python draws and sizes: the Legend's listed and
@@ -181,10 +182,12 @@ export const SETTING_APPLICATION = Object.freeze([
     help: msg('Live edit: legend text, order, stroke, and removal update the current Result.'),
     refitPaths: Object.freeze({
       'editorState.legend.entries': 'legendEntries', 'editorState.legend.deletedEntries': 'deletedLegendEntries', 'config.rules': 'rules'
-    }) }),
+    }),
+    refitHelp: msg('With a Figure size set, a rename, removal, or reorder then redraws the figure to fit it.') }),
   /** @type {SettingApplicationRow} */ ({ id: 'canvas-padding', application: 'live',
     help: msg('Live edit: the padding updates the current Result.'),
-    refitPaths: Object.freeze({ 'ui.canvasPadding': 'canvasPadding' }) }),
+    refitPaths: Object.freeze({ 'ui.canvasPadding': 'canvasPadding' }),
+    refitHelp: msg('With a Figure size set, the figure is then redrawn to fit it.') }),
   { id: 'features-editor', application: /** @type {const} */ ('live'),
     help: msg('Live edit: feature color, label text, and visibility update the current Result; geometry may rerender automatically.') },
   { id: 'feature-appearance', application: /** @type {const} */ ('live') },
@@ -251,15 +254,14 @@ export const settingClassNote = (application) => noteOf(application, TEXT[applic
 /** The accessible name of the clock: "Applies on Generate". */
 export const settingClockLabel = () => tm(TEXT.generate);
 
-const REFIT_HELP = msg('With a Figure size set, the figure is then redrawn to fit it.');
 /**
  * The opening sentences of an editor tab's help: what its edits change at
- * once, and, for a row with `refitPaths`, that a sized figure is then fitted again.
+ * once, and, for a row with `refitPaths`, which of them fit a sized figure again (`refitHelp`).
  * @param {SettingApplicationId} id
  */
 export const settingApplicationHelp = (id) => {
   const row = rowOf(id);
-  return [row.help || '', row.refitPaths ? REFIT_HELP : ''].filter((text) => text !== '').map((text) => tm(text)).join(' ');
+  return [row.help || '', row.refitHelp || ''].filter((text) => text !== '').map((text) => tm(text)).join(' ');
 };
 
 /** The row's timing inside a help text or a dialog description. @param {SettingApplicationId} id */

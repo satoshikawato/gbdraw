@@ -38,7 +38,7 @@ test('the Legend editor and Canvas padding rows are live, name the draft fields 
   assert.deepEqual(rows['canvas-padding'].refitPaths, { 'ui.canvasPadding': 'canvasPadding' });
   assert.equal(rows['canvas-padding'].requestPaths, undefined, 'editor intent, not a draft setting');
   assert.equal(settingApplicationHelp('legend-editor'),
-    'Live edit: legend text, order, stroke, and removal update the current Result. With a Figure size set, the figure is then redrawn to fit it.');
+    'Live edit: legend text, order, stroke, and removal update the current Result. With a Figure size set, a rename, removal, or reorder then redraws the figure to fit it.');
   assert.equal(settingApplicationHelp('canvas-padding'),
     'Live edit: the padding updates the current Result. With a Figure size set, the figure is then redrawn to fit it.');
   assert.equal(settingApplicationHelp('features-editor').includes('Figure size'), false);

@@ -86,7 +86,8 @@ test('D-59: a negative padding side is stored and drawn as 0; Load installs a sa
   assert.deepEqual(leavesOf({ canvasPadding: view.canvasPadding }), { 'canvas.padding': [0, 0, 7, 40] });
   const index = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   for (const side of ['top', 'right', 'bottom', 'left']) {
-    assert.match(index, new RegExp(`<input id="canvas-padding-${side}" type="number" min="0"`), `the ${side} field offers no negative side`);
+    assert.match(index, new RegExp(`<input id="canvas-padding-${side}" type="number" min="0" aria-describedby="canvas-padding-help"`),
+      `the ${side} field offers no negative side, and the panel's help tip describes it (review N2, R12)`);
   }
 });
 

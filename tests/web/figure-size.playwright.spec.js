@@ -241,7 +241,7 @@ test('a Legend rename and Canvas padding on a sized figure are fitted again by t
   expect(note).toContain('The figure cannot be 160 mm wide');
   expect(await legendTexts(), 'the edit is kept as the Web drew it').toContain(LONG);
   expect(px(refused.root.width)).toBeGreaterThan(MM_160_PX);
-  expect(refused.larger).toBe('Larger than the requested 160 mm width after Legend edits, which the fit does not include.');
+  expect(refused.larger).toBe('Larger than the requested 160 mm width: the edit could not be fitted (see the note above the preview).');
   expect(await undoCount()).toBe(steps + 1);
   await countFrom();
   await undo(page);

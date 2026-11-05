@@ -163,8 +163,9 @@ export const shownFigureSize = ({ widthPx, heightPx, requested }) => {
 const LARGER_PX = 0.5;
 
 /**
- * Web-only additions after Python's fit, which the fit never sees (Owner D-26: until they reach Python): Legend
- * edits (the replan grew the canvas past the box), Canvas padding, and a moved Legend, title, or scale.
+ * What grew a figure drawn to a requested size past its box: Legend edits (the replan grew the canvas past the box)
+ * and Canvas padding, which Python fits the figure to after them (PD-OI-114 rev 2), so either left after the
+ * automatic rerender means Python refused the fit; and a moved Legend, title, or scale, which is never fitted.
  * @typedef {'legend-edits' | 'canvas-padding' | 'moved-items'} FigureGrowthCause
  * @typedef {{ sides: FigureSide[], causes: FigureGrowthCause[] }} FigureGrowth
  */

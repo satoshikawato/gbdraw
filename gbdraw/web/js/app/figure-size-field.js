@@ -33,23 +33,26 @@ import { computed, ref } from '../utils/reactivity.js';
 
 /** Which part of a side an edit comes from. @typedef {'amount' | 'unit'} FigureSizeFieldPart */
 
-/** @type {Record<FigureGrowthCause, string>} */
-const GROWTH_CAUSES = {
-  'legend-edits': msg('Legend edits'),
-  'canvas-padding': msg('Canvas padding'),
-  'moved-items': msg('moves of the Legend, title, or scale')
-};
+const MOVED_ITEMS = msg('moves of the Legend, title, or scale');
+/** The causes Python fits a figure to (PD-OI-114 rev 2): when they leave it larger, the fit was refused. */
+const FITTED_CAUSES = /** @type {readonly FigureGrowthCause[]} */ (['legend-edits', 'canvas-padding']);
 
-/** @param {NonNullable<ShownFigureSize['larger']>} larger */
+/**
+ * Why the shown figure is larger than requested. Python fits a figure drawn to a requested size to its Legend edits
+ * and Canvas padding, so either cause left after the automatic rerender means the fit was refused, which the
+ * rerender's note above the preview explains (review S3, D-60); a move of the Legend, title, or scale is never fitted.
+ * @param {NonNullable<ShownFigureSize['larger']>} larger
+ */
 const largerSentence = ({ sides, causes }) => {
   const size = listText(sides.map(({ side, length }) => (
     side === 'width' ? t('{length} width', { length }) : t('{length} height', { length })
   )));
-  return causes.length === 0
-    ? t('Larger than the requested {size}.', { size })
-    : t('Larger than the requested {size} after {causes}, which the fit does not include.', {
-      size, causes: listText(causes.map((cause) => tm(GROWTH_CAUSES[cause])))
-    });
+  if (causes.some((cause) => FITTED_CAUSES.includes(cause))) {
+    return t('Larger than the requested {size}: the edit could not be fitted (see the note above the preview).', { size });
+  }
+  return causes.includes('moved-items')
+    ? t('Larger than the requested {size} after {causes}, which the fit does not include.', { size, causes: tm(MOVED_ITEMS) })
+    : t('Larger than the requested {size}.', { size });
 };
 
 /** @param {FigureSizeFieldPorts} ports */
