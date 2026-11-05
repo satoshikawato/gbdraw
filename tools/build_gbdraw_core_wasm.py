@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     subprocess.run(
-        ["cargo", "build", "--profile", "wasm", "-p", "gbdraw-core-wasm", "--target", "wasm32-unknown-unknown"],
+        ["cargo", "build", "--profile", "wasm", "--locked", "-p", "gbdraw-core-wasm", "--target", "wasm32-unknown-unknown"],
         cwd=ROOT / "rust",
         check=True,
     )

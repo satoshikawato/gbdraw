@@ -5,11 +5,21 @@
 use crate::svg::{empty_element, format_g, path_point};
 use crate::Unsupported;
 use serde_json::Value;
+use std::cmp::Ordering;
 use std::fmt::Write;
 
 /// The ten row columns, in the order of `_REQUIRED_ROW_ATTRIBUTES`.
 const COLUMNS: [&str; 10] = [
-    "qstart", "qend", "sstart", "send", "identity", "alignment_length", "evalue", "bitscore", "mismatches", "gap_opens",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "identity",
+    "alignment_length",
+    "evalue",
+    "bitscore",
+    "mismatches",
+    "gap_opens",
 ];
 const QSTART: usize = 0;
 const QEND: usize = 1;
@@ -34,7 +44,9 @@ impl Column {
     fn write_text(&self, row: usize, out: &mut String) {
         out.clear();
         match self {
-            Column::Integers(values) => write!(out, "{}", values[row]).expect("a String accepts every write"),
+            Column::Integers(values) => {
+                write!(out, "{}", values[row]).expect("a String accepts every write")
+            }
             Column::Floats(values) if values[row].is_finite() => format_g(out, values[row], 12),
             Column::Floats(_) => out.push(' '),
         }
@@ -46,13 +58,17 @@ fn unsupported(reason: &str) -> Unsupported {
 }
 
 fn read_columns(params: &Value, bytes: &[u8]) -> Result<(usize, Vec<Column>), Unsupported> {
-    let rows = params["rows"].as_u64().ok_or_else(|| unsupported("no row count"))? as usize;
+    let rows = params["rows"]
+        .as_u64()
+        .ok_or_else(|| unsupported("no row count"))? as usize;
     if bytes.len() != rows * 8 * COLUMNS.len() {
         return Err(unsupported("column bytes do not match the row count"));
     }
     let mut columns = Vec::with_capacity(COLUMNS.len());
     for (name, data) in COLUMNS.iter().zip(bytes.chunks_exact((rows * 8).max(1))) {
-        let words = data.chunks_exact(8).map(|word| word.try_into().expect("chunks of 8 bytes"));
+        let words = data
+            .chunks_exact(8)
+            .map(|word| word.try_into().expect("chunks of 8 bytes"));
         columns.push(match params["columns"][name].as_str() {
             Some("i") => Column::Integers(words.map(i64::from_le_bytes).collect()),
             Some("f") => Column::Floats(words.map(f64::from_le_bytes).collect()),
@@ -64,84 +80,161 @@ fn read_columns(params: &Value, bytes: &[u8]) -> Result<(usize, Vec<Column>), Un
 
 /// `_hex_to_rgb`: `#RGB` or `#RRGGBB`.
 fn hex_color(text: &str) -> Result<[i64; 3], Unsupported> {
-    let digits = text.trim().strip_prefix('#').ok_or_else(|| unsupported("not a hex color"))?;
+    let digits = text
+        .trim()
+        .strip_prefix('#')
+        .ok_or_else(|| unsupported("not a hex color"))?;
     if !digits.bytes().all(|b| b.is_ascii_hexdigit()) || !matches!(digits.len(), 3 | 6) {
         return Err(unsupported("not a hex color"));
     }
     let channel = |index: usize| {
-        let pair = if digits.len() == 3 { digits[index..=index].repeat(2) } else { digits[index * 2..index * 2 + 2].to_string() };
+        let pair = if digits.len() == 3 {
+            digits[index..=index].repeat(2)
+        } else {
+            digits[index * 2..index * 2 + 2].to_string()
+        };
         i64::from_str_radix(&pair, 16).expect("two hex digits")
     };
     Ok([channel(0), channel(1), channel(2)])
 }
 
 fn number(params: &Value, pointer: &str) -> Result<f64, Unsupported> {
-    params.pointer(pointer).and_then(Value::as_f64).ok_or_else(|| Unsupported(format!("no number at {pointer}")))
+    params
+        .pointer(pointer)
+        .and_then(Value::as_f64)
+        .ok_or_else(|| Unsupported(format!("no number at {pointer}")))
 }
 
 fn text<'a>(params: &'a Value, pointer: &str) -> Result<&'a str, Unsupported> {
-    params.pointer(pointer).and_then(Value::as_str).ok_or_else(|| Unsupported(format!("no text at {pointer}")))
+    params
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .ok_or_else(|| Unsupported(format!("no text at {pointer}")))
 }
 
 /// `_match_draw_order_key` without collinearity data: a stable sort, as `sorted`.
-fn draw_order(rows: usize, columns: &[Column]) -> Vec<usize> {
+/// Python's order of a NaN key is not defined, so Python draws those matches.
+fn draw_order(rows: usize, columns: &[Column]) -> Result<Vec<usize>, Unsupported> {
     let keys: Vec<[f64; 5]> = (0..rows)
         .map(|row| {
             let at = |column: usize| columns[column].number(row);
             let query_span = (at(QEND) - at(QSTART)).abs();
             let subject_span = (at(SEND) - at(SSTART)).abs();
-            [-(query_span * subject_span), -(query_span + subject_span), at(IDENTITY), at(QSTART), at(SSTART)]
+            [
+                -(query_span * subject_span),
+                -(query_span + subject_span),
+                at(IDENTITY),
+                at(QSTART),
+                at(SSTART),
+            ]
         })
         .collect();
+    if keys.iter().flatten().any(|key| key.is_nan()) {
+        return Err(unsupported("a draw order key is not a number"));
+    }
     let mut order: Vec<usize> = (0..rows).collect();
-    order.sort_by(|a, b| keys[*a].partial_cmp(&keys[*b]).expect("finite keys"));
-    order
+    order.sort_by(|a, b| keys[*a].partial_cmp(&keys[*b]).unwrap_or(Ordering::Equal));
+    Ok(order)
+}
+
+/// `max(0.0, min(1.0, value))` as Python answers it: NaN gives 1.0 and -0.0 gives 0.0.
+fn unit_interval(value: f64) -> f64 {
+    let below_one = if value < 1.0 { value } else { 1.0 };
+    if below_one > 0.0 {
+        below_one
+    } else {
+        0.0
+    }
 }
 
 /// The children text of a comparison group. `params` is the JSON the Python
 /// group writes; `columns` holds `COLUMNS` in order, each `rows` little-endian
 /// 8-byte values.
 pub fn render(params: &str, columns: &[u8]) -> Result<String, Unsupported> {
-    let params: Value = serde_json::from_str(params).map_err(|error| Unsupported(error.to_string()))?;
+    let params: Value =
+        serde_json::from_str(params).map_err(|error| Unsupported(error.to_string()))?;
     let (rows, columns) = read_columns(&params, columns)?;
     for row in 0..rows {
-        if [QSTART, QEND, SSTART, SEND, IDENTITY].iter().any(|column| !columns[*column].number(row).is_finite()) {
+        if [QSTART, QEND, SSTART, SEND, IDENTITY]
+            .iter()
+            .any(|column| !columns[*column].number(row).is_finite())
+        {
             return Err(unsupported("a position or identity is not finite"));
         }
     }
 
-    let (query_x, query_scale, query_y) = (number(&params, "/query/x")?, number(&params, "/query/px_per_bp")?, number(&params, "/query/y")?);
-    let (subject_x, subject_scale, subject_y) = (number(&params, "/subject/x")?, number(&params, "/subject/px_per_bp")?, number(&params, "/subject/y")?);
-    let (minimum, maximum) = (number(&params, "/identity_domain/0")?, number(&params, "/identity_domain/1")?);
-    let (low, high) = (hex_color(text(&params, "/min_color")?)?, hex_color(text(&params, "/max_color")?)?);
-    let (opacity, stroke, stroke_width) = (text(&params, "/fill_opacity")?, text(&params, "/stroke")?, text(&params, "/stroke_width")?);
+    let (query_x, query_scale, query_y) = (
+        number(&params, "/query/x")?,
+        number(&params, "/query/px_per_bp")?,
+        number(&params, "/query/y")?,
+    );
+    let (subject_x, subject_scale, subject_y) = (
+        number(&params, "/subject/x")?,
+        number(&params, "/subject/px_per_bp")?,
+        number(&params, "/subject/y")?,
+    );
+    let (minimum, maximum) = (
+        number(&params, "/identity_domain/0")?,
+        number(&params, "/identity_domain/1")?,
+    );
+    let (low, high) = (
+        hex_color(text(&params, "/min_color")?)?,
+        hex_color(text(&params, "/max_color")?)?,
+    );
+    let (opacity, stroke, stroke_width) = (
+        text(&params, "/fill_opacity")?,
+        text(&params, "/stroke")?,
+        text(&params, "/stroke_width")?,
+    );
     let track = text(&params, "/track_id")?;
     let curve = params["style"].as_str() == Some("curve");
     let style = if curve { "curve" } else { "ribbon" };
-    let tension = if curve { number(&params, "/curve_tension")? } else { 0.0 };
+    let tension = if curve {
+        number(&params, "/curve_tension")?
+    } else {
+        0.0
+    };
     let query_id = text(&params, "/endpoints/data-query-record-id")?;
     let query_index = text(&params, "/endpoints/data-query-record-index")?;
     let subject_id = text(&params, "/endpoints/data-subject-record-id")?;
     let subject_index = text(&params, "/endpoints/data-subject-record-index")?;
 
     let mut out = String::with_capacity(rows * 640);
-    let (mut d, mut match_id, mut fill, mut factor_text) = (String::new(), String::new(), String::new(), String::new());
+    let (mut d, mut match_id, mut fill, mut factor_text) =
+        (String::new(), String::new(), String::new(), String::new());
     let mut cells: [String; 10] = Default::default();
-    for (index, &row) in draw_order(rows, &columns).iter().enumerate() {
+    for (index, &row) in draw_order(rows, &columns)?.iter().enumerate() {
         let identity = columns[IDENTITY].number(row);
         let factor = if minimum >= maximum {
-            if identity >= maximum { 1.0 } else { 0.0 }
+            if identity >= maximum {
+                1.0
+            } else {
+                0.0
+            }
         } else {
-            f64::max(0.0, f64::min(1.0, (identity - minimum) / (maximum - minimum)))
+            unit_interval((identity - minimum) / (maximum - minimum))
         };
         let channel = |i: usize| (low[i] as f64 + (high[i] - low[i]) as f64 * factor) as i64;
         fill.clear();
-        write!(fill, "#{:02x}{:02x}{:02x}", channel(0), channel(1), channel(2)).expect("a String accepts every write");
+        write!(
+            fill,
+            "#{:02x}{:02x}{:02x}",
+            channel(0),
+            channel(1),
+            channel(2)
+        )
+        .expect("a String accepts every write");
 
         let on_query = |position: f64| query_x + position * query_scale;
         let on_subject = |position: f64| subject_x + position * subject_scale;
-        let (q0, q1) = (on_query(columns[QSTART].number(row)), on_query(columns[QEND].number(row)));
-        let (s0, s1) = (on_subject(columns[SSTART].number(row)), on_subject(columns[SEND].number(row)));
+        let (q0, q1) = (
+            on_query(columns[QSTART].number(row)),
+            on_query(columns[QEND].number(row)),
+        );
+        let (s0, s1) = (
+            on_subject(columns[SSTART].number(row)),
+            on_subject(columns[SEND].number(row)),
+        );
         d.clear();
         d.push_str("M ");
         path_point(&mut d, q0, query_y);
@@ -249,5 +342,30 @@ mod tests {
         let mut bytes = columns();
         bytes[4 * 16..4 * 16 + 8].copy_from_slice(&f64::NAN.to_le_bytes());
         assert!(render(PARAMS, &bytes).is_err());
+    }
+
+    #[test]
+    fn refuses_a_draw_order_key_that_is_not_a_number() {
+        let params = PARAMS.replace(r#""qstart":"i","qend":"i""#, r#""qstart":"f","qend":"f""#);
+        let mut bytes = columns();
+        for (cell, value) in [(0, -1e308f64), (1, 0.0), (2, 1e308), (3, 0.0)] {
+            bytes[cell * 8..cell * 8 + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        for cell in 4..8 {
+            bytes[cell * 8..cell * 8 + 8].copy_from_slice(&0i64.to_le_bytes());
+        }
+        assert_eq!(
+            render(&params, &bytes),
+            Err(unsupported("a draw order key is not a number"))
+        );
+    }
+
+    #[test]
+    fn the_unit_interval_follows_python() {
+        assert_eq!(unit_interval(f64::NAN).to_bits(), 1f64.to_bits());
+        assert_eq!(unit_interval(-0.0).to_bits(), 0f64.to_bits());
+        assert_eq!(unit_interval(-1.0), 0.0);
+        assert_eq!(unit_interval(0.25), 0.25);
+        assert_eq!(unit_interval(2.0), 1.0);
     }
 }

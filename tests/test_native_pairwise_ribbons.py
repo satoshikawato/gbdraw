@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -14,6 +15,7 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear import linear_main
+from gbdraw.render import native
 from gbdraw.render.native import native_engine
 
 pytest.importorskip("gbdraw_core")
@@ -49,6 +51,17 @@ def test_the_engine_can_be_turned_off(monkeypatch):
     assert native_engine() is None
     monkeypatch.delenv("GBDRAW_NATIVE")
     assert native_engine() is not None
+
+
+def test_the_engine_has_this_packages_contract():
+    assert native_engine().CONTRACT_VERSION == native.ENGINE_CONTRACT
+
+
+def test_an_engine_with_another_contract_is_left_unused(monkeypatch, caplog):
+    stale = SimpleNamespace(CONTRACT_VERSION=native.ENGINE_CONTRACT + 1)
+    monkeypatch.setattr(native.importlib, "import_module", lambda _name: stale)
+    assert native._loaded_engine.__wrapped__() is None
+    assert "Rebuild or reinstall gbdraw_core" in caplog.text
 
 
 def test_a_refused_comparison_is_drawn_in_python(tmp_path, monkeypatch):

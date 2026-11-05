@@ -6,12 +6,24 @@
 const MODULE_URL = new URL('../../wasm/gbdraw-core/gbdraw_core.wasm', import.meta.url);
 
 /**
- * The `gbdraw_core` module over one instantiated engine (rust/wasm/src/lib.rs).
+ * The exports of rust/wasm/src/lib.rs.
+ * @typedef {object} EngineExports
+ * @property {WebAssembly.Memory} memory
+ * @property {() => number} gbdraw_contract_version
+ * @property {(length: number) => number} gbdraw_alloc
+ * @property {(pointer: number, length: number) => void} gbdraw_free
+ * @property {(params: number, paramsLength: number, columns: number, columnsLength: number) => number} gbdraw_pairwise_ribbons
+ * @property {() => number} gbdraw_result_pointer
+ * @property {() => number} gbdraw_result_length
+ */
+
+/**
+ * The `gbdraw_core` module over one instantiated engine.
  * @param {Uint8Array | ArrayBuffer} wasmBytes
  */
 export const createGbdrawCore = async (wasmBytes) => {
   const { instance } = await WebAssembly.instantiate(wasmBytes);
-  const engine = /** @type {Record<string, any>} */ (instance.exports);
+  const engine = /** @type {EngineExports} */ (/** @type {unknown} */ (instance.exports));
   const encoder = new TextEncoder();
   const copyIn = (/** @type {Uint8Array} */ bytes) => {
     const pointer = engine.gbdraw_alloc(bytes.length);
@@ -19,6 +31,7 @@ export const createGbdrawCore = async (wasmBytes) => {
     return pointer;
   };
   return {
+    CONTRACT_VERSION: engine.gbdraw_contract_version(),
     /**
      * @param {string} params
      * @param {{ toJs(): Uint8Array, destroy(): void }} columns Python bytes
@@ -29,9 +42,14 @@ export const createGbdrawCore = async (wasmBytes) => {
       columns.destroy();
       const paramPointer = copyIn(paramBytes);
       const columnPointer = copyIn(columnBytes);
-      const status = engine.gbdraw_pairwise_ribbons(paramPointer, paramBytes.length, columnPointer, columnBytes.length);
-      engine.gbdraw_free(paramPointer, paramBytes.length);
-      engine.gbdraw_free(columnPointer, columnBytes.length);
+      let status;
+      try {
+        status = engine.gbdraw_pairwise_ribbons(paramPointer, paramBytes.length, columnPointer, columnBytes.length);
+      } finally {
+        // Also after a panic, which traps here and reaches Python as an error.
+        engine.gbdraw_free(paramPointer, paramBytes.length);
+        engine.gbdraw_free(columnPointer, columnBytes.length);
+      }
       // A view of the engine's memory, which Python copies before its next call.
       const result = new Uint8Array(engine.memory.buffer, engine.gbdraw_result_pointer(), engine.gbdraw_result_length());
       if (status !== 0) throw new Error(new TextDecoder().decode(result));

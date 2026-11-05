@@ -5,7 +5,10 @@ use std::fmt::Write;
 
 /// ElementTree's attribute escaping (`_escape_attrib`).
 fn escape_attribute(out: &mut String, value: &str) {
-    if !value.bytes().any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\r' | b'\n' | b'\t')) {
+    if !value
+        .bytes()
+        .any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\r' | b'\n' | b'\t'))
+    {
         out.push_str(value);
         return;
     }
@@ -70,10 +73,18 @@ pub fn format_g(out: &mut String, value: f64, precision: usize) {
         return;
     }
     let scientific = format!("{:.*e}", precision - 1, value);
-    let (mantissa, exponent) = scientific.split_once('e').expect("`e` format writes an exponent");
-    let exponent: i32 = exponent.parse().expect("`e` format writes an integer exponent");
+    let (mantissa, exponent) = scientific
+        .split_once('e')
+        .expect("`e` format writes an exponent");
+    let exponent: i32 = exponent
+        .parse()
+        .expect("`e` format writes an integer exponent");
     let trimmed = |text: &str, out: &mut String| {
-        out.push_str(if text.contains('.') { text.trim_end_matches('0').trim_end_matches('.') } else { text });
+        out.push_str(if text.contains('.') {
+            text.trim_end_matches('0').trim_end_matches('.')
+        } else {
+            text
+        });
     };
     if exponent < -4 || exponent >= precision as i32 {
         trimmed(mantissa, out);
@@ -103,14 +114,39 @@ mod tests {
 
     #[test]
     fn path_numbers_match_python() {
-        for (value, text) in [(0.0, "0"), (-0.0, "0"), (-0.0001, "0"), (1.5, "1.5"), (2.0, "2"), (0.0625, "0.062"), (0.1875, "0.188"), (-12.5625, "-12.562"), (1000.0, "1000")] {
+        for (value, text) in [
+            (0.0, "0"),
+            (-0.0, "0"),
+            (-0.0001, "0"),
+            (1.5, "1.5"),
+            (2.0, "2"),
+            (0.0625, "0.062"),
+            (0.1875, "0.188"),
+            (-12.5625, "-12.562"),
+            (1000.0, "1000"),
+        ] {
             assert_eq!(number(value), text, "{value}");
         }
     }
 
     #[test]
     fn g_format_matches_python() {
-        for (value, precision, text) in [(0.0, 12, "0"), (-0.0, 12, "-0"), (1e-50, 12, "1e-50"), (3.4e-120, 12, "3.4e-120"), (64.871, 12, "64.871"), (1350.0, 12, "1350"), (1e12, 12, "1e+12"), (999999999999.0, 12, "999999999999"), (0.0001, 12, "0.0001"), (0.00001, 12, "1e-05"), (0.64871, 6, "0.64871"), (1.0, 6, "1"), (123456.7, 6, "123457"), (1234567.0, 6, "1.23457e+06")] {
+        for (value, precision, text) in [
+            (0.0, 12, "0"),
+            (-0.0, 12, "-0"),
+            (1e-50, 12, "1e-50"),
+            (3.4e-120, 12, "3.4e-120"),
+            (64.871, 12, "64.871"),
+            (1350.0, 12, "1350"),
+            (1e12, 12, "1e+12"),
+            (999999999999.0, 12, "999999999999"),
+            (0.0001, 12, "0.0001"),
+            (0.00001, 12, "1e-05"),
+            (0.64871, 6, "0.64871"),
+            (1.0, 6, "1"),
+            (123456.7, 6, "123457"),
+            (1234567.0, 6, "1.23457e+06"),
+        ] {
             assert_eq!(g(value, precision), text, "{value}");
         }
     }
@@ -118,8 +154,16 @@ mod tests {
     #[test]
     fn elements_sort_escape_and_skip_empty_values() {
         let mut out = String::new();
-        let mut attributes = [("id", "a&b"), ("d", "M 0,0"), ("fill", ""), ("data-x", "\"<\t>\"")];
+        let mut attributes = [
+            ("id", "a&b"),
+            ("d", "M 0,0"),
+            ("fill", ""),
+            ("data-x", "\"<\t>\""),
+        ];
         empty_element(&mut out, "path", &mut attributes);
-        assert_eq!(out, "<path d=\"M 0,0\" data-x=\"&quot;&lt;&#09;&gt;&quot;\" id=\"a&amp;b\" />");
+        assert_eq!(
+            out,
+            "<path d=\"M 0,0\" data-x=\"&quot;&lt;&#09;&gt;&quot;\" id=\"a&amp;b\" />"
+        );
     }
 }

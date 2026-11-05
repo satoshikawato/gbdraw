@@ -9,27 +9,41 @@ thread_local! {
 }
 
 #[no_mangle]
+pub extern "C" fn gbdraw_contract_version() -> u32 {
+    gbdraw_engine::CONTRACT_VERSION
+}
+
+#[no_mangle]
 pub extern "C" fn gbdraw_alloc(length: usize) -> *mut u8 {
-    let mut buffer = std::mem::ManuallyDrop::new(Vec::<u8>::with_capacity(length));
-    buffer.as_mut_ptr()
+    Box::into_raw(vec![0u8; length].into_boxed_slice()).cast()
 }
 
 /// # Safety
 /// `pointer` and `length` come from one `gbdraw_alloc` call.
 #[no_mangle]
 pub unsafe extern "C" fn gbdraw_free(pointer: *mut u8, length: usize) {
-    drop(Vec::from_raw_parts(pointer, 0, length));
+    drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(
+        pointer, length,
+    )));
 }
 
 /// 0 on success, with the text at `gbdraw_result_pointer`; 1 with the reason there.
 ///
 /// # Safety
-/// The pointers and lengths name valid bytes; `params` is UTF-8.
+/// The pointers and lengths name valid bytes.
 #[no_mangle]
-pub unsafe extern "C" fn gbdraw_pairwise_ribbons(params: *const u8, params_length: usize, columns: *const u8, columns_length: usize) -> u32 {
-    let params = std::str::from_utf8_unchecked(std::slice::from_raw_parts(params, params_length));
+pub unsafe extern "C" fn gbdraw_pairwise_ribbons(
+    params: *const u8,
+    params_length: usize,
+    columns: *const u8,
+    columns_length: usize,
+) -> u32 {
+    let params = std::slice::from_raw_parts(params, params_length);
     let columns = std::slice::from_raw_parts(columns, columns_length);
-    let (status, text) = match gbdraw_engine::ribbons::render(params, columns) {
+    let drawn = std::str::from_utf8(params)
+        .map_err(|error| gbdraw_engine::Unsupported(error.to_string()))
+        .and_then(|params| gbdraw_engine::ribbons::render(params, columns));
+    let (status, text) = match drawn {
         Ok(text) => (0, text),
         Err(reason) => (1, reason.0),
     };
